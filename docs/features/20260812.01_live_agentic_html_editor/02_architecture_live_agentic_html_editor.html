@@ -1771,13 +1771,20 @@ fixed rail.</p>
 by uniqueness, not confidence</h3>
 <p>The mechanism, concretely. When a record is made, the library stores
 the normalized text of its region plus a ring of context around it: the
-normalized text of the neighboring blocks and the nearest heading. To
-find the region again (at replay, or for the agent via the record's
-fields), it searches the page for that text. One hit is a match. More
-than one hit widens the context ring and searches again, until the match
-is unique or the widening runs out, and then it is a surfaced failure,
-never a guess. Two identical list items never get one edit applied to
-the wrong one.</p>
+normalized text of the neighboring blocks and the nearest heading. It
+also records what the page's own source says about the element: an
+existing id or classes, the tag, the position under its parent. Those
+source-authored signals survive repaints, because every render rebuilds
+them from the source, so they serve as tie-breakers when text alone
+matches twice. To find the region again (at replay, or for the agent via
+the record's fields), the library searches the page for the text. One
+hit is a match. More than one hit brings in the tie-breakers and a
+widened context ring, until the match is unique or the widening runs
+out, and then it is a surfaced failure, never a guess (tie-breakers
+corroborate, they never overrule: a position-only match after the
+content moved is exactly the wrong-element bug this rule exists to
+prevent). Two identical list items never get one edit applied to the
+wrong one.</p>
 <p>A generated marker on the element (a unique class name added by the
 library, since ids can already be taken) was considered and rejected as
 the durable identity, for the same reason wrapper elements lost in D8
