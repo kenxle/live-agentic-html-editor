@@ -2,11 +2,15 @@
 // Concatenates the layer into the single artifact `setup` copies into a host
 // application's own static assets.
 //
-// This is DEVELOPMENT TOOLING, not a runtime dependency, which is what keeps it
-// inside the no-build-step rule (architecture D16). A stranger clones the repo
-// and runs setup; they never run this. That is only true because the artifact
-// is COMMITTED, so the gate checks it is current rather than trusting a
-// developer to remember.
+// This is DEVELOPMENT TOOLING, not a runtime dependency (D1: one file in the
+// page, one process beside it). A user clones the repo and adds the built file
+// to a page; they never run this. That is only true because the artifact is
+// COMMITTED, so the gate checks it is current rather than trusting a developer
+// to remember.
+//
+// BUILDERS NEVER COMMIT dist/. A builder may rebuild it locally to run a
+// browser test and must not stage it; the orchestrator rebuilds and commits it
+// once at each checkpoint.
 //
 //   node scripts/build-layer.js          write dist/lahe-layer.js
 //   node scripts/build-layer.js --check  exit non-zero if it is out of date
@@ -14,6 +18,12 @@
 // Order is dependency order and comes from src/shared/manifest.js. There is no
 // module loader in the browser here: a file may only use a namespace entry a
 // file above it already registered.
+//
+// The manifest also names files a later task has not created yet
+// (`planned: true`). Those are skipped rather than being a build failure: the
+// ownership question has to have an answer before the file exists, which is
+// what stopped two tasks implicitly claiming the same work. A manifest entry
+// that is NOT planned and does not exist is still a hard error.
 
 "use strict";
 
@@ -31,10 +41,12 @@ function build() {
   var parts = [];
   var sources = [];
 
-  manifest.LAYER_FILES.forEach(function (entry) {
+  manifest.builtFiles().forEach(function (entry) {
     var full = path.join(root, entry.path);
     if (!fs.existsSync(full)) {
-      throw new Error("manifest names a file that does not exist: " + entry.path);
+      throw new Error(
+        "manifest names a file that does not exist and is not marked planned: " + entry.path
+      );
     }
     var src = fs.readFileSync(full, "utf8");
     sources.push(src);
@@ -96,14 +108,28 @@ function main() {
       );
       process.exit(1);
     }
-    process.stdout.write("layer bundle is current (" + manifest.LAYER_FILES.length + " files)\n");
+    process.stdout.write(
+      "layer bundle is current (" +
+        manifest.builtFiles().length +
+        " files built, " +
+        manifest.plannedFiles().length +
+        " still planned)\n"
+    );
     return;
   }
 
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, contents, "utf8");
   process.stdout.write(
-    "wrote " + manifest.BUNDLE_OUTPUT + " (" + manifest.LAYER_FILES.length + " files, " + contents.length + " bytes)\n"
+    "wrote " +
+      manifest.BUNDLE_OUTPUT +
+      " (" +
+      manifest.builtFiles().length +
+      " files, " +
+      contents.length +
+      " bytes; " +
+      manifest.plannedFiles().length +
+      " files still planned)\n"
   );
 }
 

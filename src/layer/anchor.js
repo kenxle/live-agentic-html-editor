@@ -1,6 +1,6 @@
 // The anchor engine: mint a region reference, resolve it in a changed document.
 //
-// Owner: Task 1C. STUB: the signatures are real and committed. mint returns a
+// Owner: 1C. STUB committed by 0A-kernel: the signatures are real and committed. mint returns a
 // reference with every field the record expects; resolve returns a UNIQUE MATCH
 // on the single-candidate case so downstream tasks can run end to end, and
 // otherwise defers to the shared uniqueness predicate.
@@ -8,7 +8,16 @@
 // The swap 1C makes is one line inside resolve(): replace stubCandidates() with
 // the real DOM candidate search. Everything else, including the whole decision
 // about whether to write, already lives in src/shared/uniqueness.js and does
-// not move.
+// not move (D9: anchors match by uniqueness, not confidence).
+//
+// Two things 1C owns that D9 leaves open, named in the plan so they are not
+// invented per call site: WIDENING HAS A UNIT AND A STOPPING RULE (widen by
+// whole sibling elements, outward from the region, and stop at the containing
+// block; if the region is still not unique when the block is exhausted, mint
+// FAILS HONESTLY rather than widening to the document), and the transformation
+// set it is judged against (whitespace collapse and expansion, sibling
+// reordering, a duplicate paragraph inserted elsewhere, a neighbouring block
+// deleted, and a wrapper element added around the region).
 //
 // This is new work, not a port. The built-doc comment module's locate() is four
 // exact substring probes over the concatenated text, with no whitespace
@@ -47,7 +56,9 @@
   //   prefix    up to CONTEXT_CHARS of normalized text before the region
   //   suffix    up to CONTEXT_CHARS of normalized text after the region
   //   path      a structural path (tag chain plus ordinals). CORROBORATION
-  //             ONLY, per D3 Law 1. It never places a write
+  //             ONLY, per D9: tie-breakers corroborate, they never overrule. A
+  //             position-only match after the content moved is exactly the
+  //             wrong-element bug the rule exists to prevent
   //   heading   the nearest preceding heading's normalized text, corroboration
   //   attr      the author-supplied data-review-region value, when present
   //   minted_at iso timestamp

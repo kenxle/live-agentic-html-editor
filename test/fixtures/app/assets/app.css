@@ -1,0 +1,166 @@
+/* The app fixture's own stylesheet.
+ *
+ * It exists so the fixture looks like an application rather than a wall of
+ * default-styled text: D8 says the library changes nothing about how the page
+ * looks, and a page with no look of its own cannot show that either way. It is
+ * deliberately plain and deliberately not the library's design system.
+ */
+
+:root {
+  --ink: #1c1d20;
+  --muted: #5b6068;
+  --line: #dcdfe4;
+  --paper: #fbfbfa;
+  --accent: #2f5d50;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 16px/1.55 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.app-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1.5rem;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+}
+
+.wordmark {
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+#signed-in-as {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.app-nav ul {
+  display: flex;
+  gap: 1.25rem;
+  margin: 0;
+  padding: 0.7rem 1.5rem;
+  list-style: none;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+}
+
+.app-nav a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.app-nav li.current a {
+  font-weight: 650;
+  text-decoration: underline;
+}
+
+.app-main {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 1.75rem 1.5rem 4rem;
+}
+
+h1 {
+  font-size: 1.6rem;
+  margin: 0 0 0.5rem;
+}
+
+h2 {
+  font-size: 1.1rem;
+  margin: 1.75rem 0 0.5rem;
+}
+
+h3 {
+  font-size: 0.95rem;
+  margin: 0 0 0.35rem;
+  color: var(--muted);
+}
+
+.lede {
+  color: var(--muted);
+  margin-top: 0;
+}
+
+.client-card,
+.feed-item,
+.report {
+  padding: 0.9rem 1rem;
+  margin: 0 0 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.feed-item p {
+  margin: 0;
+}
+
+.program {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0 0 0.4rem;
+}
+
+form {
+  display: grid;
+  gap: 0.4rem;
+  max-width: 32rem;
+}
+
+label {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #fff;
+}
+
+button {
+  justify-self: start;
+  font: inherit;
+  padding: 0.45rem 1rem;
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+#saved-notes {
+  padding-left: 1.1rem;
+}
+
+.saved-note.empty {
+  color: var(--muted);
+}
+
+.error {
+  padding: 0.6rem 0.8rem;
+  border: 1px solid #b3453a;
+  border-radius: 5px;
+  color: #8c2f26;
+  background: #fdf3f2;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+}

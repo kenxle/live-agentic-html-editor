@@ -1,4 +1,6 @@
 // Region label rules and the gesture table.
+//
+// The regions half is unchanged. The gestures half follows D3's vocabulary.
 
 "use strict";
 
@@ -76,82 +78,117 @@ test("a descriptor that produces no label at all fails loud", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Gestures
+// Gestures (D3)
 // ---------------------------------------------------------------------------
 
-function click(overrides) {
-  return gestures.gestureFor(Object.assign({ type: "click", editingEnabled: true }, overrides || {}));
+function key(k, overrides) {
+  return gestures.gestureFor(Object.assign({ type: "keydown", key: k }, overrides || {}));
 }
 
-test("a plain click places the cursor and never fires the page's behavior (R37)", () => {
+function click(overrides) {
+  return gestures.gestureFor(Object.assign({ type: "click" }, overrides || {}));
+}
+
+test("browse is the page untouched: an ordinary click is the page's (R13)", () => {
   const g = click({});
-  assert.equal(g.gesture, gestures.GESTURE.PLACE_CARET);
-  assert.equal(g.passThrough, false);
-  assert.equal(g.preventDefault, true);
-});
-
-test("a plain click on a link still does not navigate", () => {
-  const g = click({ onLink: true });
-  assert.equal(g.gesture, gestures.GESTURE.PLACE_CARET);
-  assert.equal(g.passThrough, false);
-});
-
-test("Alt-click comments on the element and never opens on a plain click (R15)", () => {
-  assert.equal(click({ altKey: true }).gesture, gestures.GESTURE.COMMENT_ON_ELEMENT);
-  assert.notEqual(click({}).gesture, gestures.GESTURE.COMMENT_ON_ELEMENT);
-});
-
-test("Alt-click still comments while the editing toggle is off", () => {
-  const g = click({ altKey: true, editingEnabled: false });
-  assert.equal(g.gesture, gestures.GESTURE.COMMENT_ON_ELEMENT);
-});
-
-test("Cmd-click over a link inside a commentable block follows the link and comments on nothing", () => {
-  const g = click({ metaKey: true, onLink: true });
-  assert.equal(g.gesture, gestures.GESTURE.FOLLOW_LINK);
-  assert.equal(g.passThrough, true);
-  assert.equal(g.preventDefault, false);
-});
-
-test("Ctrl-click is the same gesture as Cmd-click", () => {
-  assert.equal(click({ ctrlKey: true, onLink: true }).gesture, gestures.GESTURE.FOLLOW_LINK);
-});
-
-test("Cmd-click away from a link has nothing to follow, so it places the caret", () => {
-  assert.equal(click({ metaKey: true, onLink: false }).gesture, gestures.GESTURE.PLACE_CARET);
-});
-
-test("the editing toggle gives back an ordinary page (R38)", () => {
-  const g = click({ editingEnabled: false });
   assert.equal(g.gesture, gestures.GESTURE.PAGE_DEFAULT);
   assert.equal(g.passThrough, true);
   assert.equal(g.preventDefault, false);
 });
 
-test("the tool's own overlay is never subject to the page's gesture rules", () => {
-  assert.equal(click({ inOverlay: true, altKey: true }).gesture, gestures.GESTURE.NONE);
+test("the dead gestures are gone: no Alt-click, no place-caret, no editing toggle", () => {
+  const names = Object.keys(gestures.GESTURE).map((k) => gestures.GESTURE[k]);
+  for (const dead of ["place_caret", "comment_on_element", "follow_link", "toggle_editing", "send", "extend_selection"]) {
+    assert.equal(names.includes(dead), false, `${dead} is dead under D3`);
+  }
+  // Alt-click in particular does nothing now: it was undiscoverable.
+  assert.equal(click({ altKey: true }).gesture, gestures.GESTURE.PAGE_DEFAULT);
 });
 
-test("Escape dismisses, and its two meanings are ordered", () => {
-  const g = gestures.gestureFor({ type: "keydown", key: "Escape" });
-  assert.equal(g.gesture, gestures.GESTURE.DISMISS);
-  assert.deepEqual(gestures.ESCAPE_ORDER, ["close_open_compose", "collapse_rail"]);
+test("Cmd-Shift-C with a selection comments on the passage", () => {
+  const g = key("c", { metaKey: true, shiftKey: true, hasSelection: true });
+  assert.equal(g.gesture, gestures.GESTURE.COMMENT_ON_SELECTION);
+  assert.equal(g.preventDefault, true);
 });
 
-test("Cmd-Enter sends", () => {
-  assert.equal(gestures.gestureFor({ type: "keydown", key: "Enter", metaKey: true }).gesture, gestures.GESTURE.SEND);
+test("Cmd-Shift-C with nothing selected enters element-pick mode (R17)", () => {
+  assert.equal(
+    key("c", { metaKey: true, shiftKey: true, hasSelection: false }).gesture,
+    gestures.GESTURE.ENTER_ELEMENT_PICK
+  );
 });
 
-test("an ordinary keystroke is not a layer gesture, so typing works", () => {
-  const g = gestures.gestureFor({ type: "keydown", key: "a" });
+test("Ctrl is the same modifier as Cmd, and the letter case does not matter", () => {
+  assert.equal(key("C", { ctrlKey: true, shiftKey: true, hasSelection: true }).gesture, gestures.GESTURE.COMMENT_ON_SELECTION);
+});
+
+test("Cmd-Shift-C without Shift is not a gesture, so the page keeps Cmd-C", () => {
+  const g = key("c", { metaKey: true, shiftKey: false, hasSelection: true });
+  assert.equal(g.gesture, gestures.GESTURE.NONE);
+  assert.equal(g.passThrough, true);
+});
+
+test("Cmd-Shift-E edits the block under the cursor", () => {
+  assert.equal(key("e", { metaKey: true, shiftKey: true }).gesture, gestures.GESTURE.EDIT_BLOCK);
+});
+
+test("Cmd-Enter marks a comment ready, and only inside a comment box (R7)", () => {
+  assert.equal(key("Enter", { metaKey: true, inCommentBox: true }).gesture, gestures.GESTURE.MARK_READY);
+  const outside = key("Enter", { metaKey: true, inCommentBox: false });
+  assert.equal(outside.gesture, gestures.GESTURE.NONE);
+  assert.equal(outside.passThrough, true, "the page's own Cmd-Enter still works");
+});
+
+test("Esc commits an open edit, cancels a pick, and is otherwise the page's", () => {
+  assert.equal(key("Escape", { editing: true }).gesture, gestures.GESTURE.COMMIT_EDIT);
+  assert.equal(key("Escape", { pickMode: true }).gesture, gestures.GESTURE.CANCEL);
+  assert.equal(key("Escape", { inCommentBox: true }).gesture, gestures.GESTURE.CANCEL);
+  const idle = key("Escape", {});
+  assert.equal(idle.gesture, gestures.GESTURE.NONE);
+  assert.equal(idle.passThrough, true);
+});
+
+test("a click while element-pick mode is open comments on that element", () => {
+  const g = click({ pickMode: true });
+  assert.equal(g.gesture, gestures.GESTURE.PICK_ELEMENT);
+  assert.equal(g.passThrough, false);
+});
+
+test("a click outside an open edit commits it AND still reaches the page", () => {
+  // R1 names navigation, so clicking a link with an edit open cannot be a
+  // losing move: the edit commits and the link is followed.
+  const g = click({ editing: true, inEditedBlock: false });
+  assert.equal(g.gesture, gestures.GESTURE.COMMIT_EDIT);
+  assert.equal(g.passThrough, true);
+  assert.equal(g.preventDefault, false);
+});
+
+test("a click inside the block being edited is not a commit", () => {
+  assert.equal(click({ editing: true, inEditedBlock: true }).gesture, gestures.GESTURE.PAGE_DEFAULT);
+});
+
+test("the library's own overlay is never subject to the page's gesture rules", () => {
+  assert.equal(click({ inOverlay: true, pickMode: true }).gesture, gestures.GESTURE.NONE);
+});
+
+test("ordinary typing is never a library gesture, so the page keeps every key", () => {
+  const g = key("a", {});
   assert.equal(g.gesture, gestures.GESTURE.NONE);
   assert.equal(g.passThrough, true);
   assert.equal(g.preventDefault, false);
 });
 
-test("every gesture in the table has a hover hint, because both escapes are taught on screen", () => {
+test("every gesture has a hint line with its exact keystroke, because AC6 scores that", () => {
+  const lines = gestures.hintLines();
+  assert.equal(lines.length, gestures.TABLE.length);
   for (const row of gestures.TABLE) {
     assert.equal(typeof gestures.hintFor(row.gesture), "string");
     assert.equal(gestures.hintFor(row.gesture).length > 0, true);
+    assert.equal(typeof row.keys, "string");
+    assert.equal(row.keys.length > 0, true);
   }
+});
+
+test("the on-card hint is Ken's copy, word for word", () => {
+  assert.equal(gestures.hintFor(gestures.GESTURE.MARK_READY), "Cmd-Enter when done with this comment.");
 });

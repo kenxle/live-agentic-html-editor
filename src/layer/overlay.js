@@ -1,9 +1,12 @@
-// The rail: the card API and the persistent failures list.
+// The rail: the chrome, the card API, and the persistent failure chips.
 //
-// Owner: Task 1B-i. STUB: every signature is real and committed, and the state
-// each function records is real. What is missing is the DOM. Five tasks import
-// this API (2A-i, 2B, 2C, 2D, 3A), which is why it lands first and why its
-// shape is decided in Phase 0 rather than discovered.
+// Owner: 1B. STUB committed by 0A-kernel: every signature is real and the state
+// each function records is real. What is missing is the DOM.
+//
+// This file holds THE RAIL CHROME ONLY: the tab shell, the status line, the
+// failure chips, and the card API. TAB CONTENTS ARE NOT HERE. They live in
+// three files with one owner each (tab_active.js is 1D's, tab_done.js is 3A's,
+// tab_edits.js is 3D's), so five tasks stop writing one file.
 //
 // ---------------------------------------------------------------------------
 // The law this file owns: THE RAIL UPDATES IN PLACE, AND A CARD THAT HOLDS
@@ -13,34 +16,37 @@
 // The single largest in-page revert mechanism in the tool being replaced is a
 // rail that rebuilds every card on every repaint: a half-reworded comment is
 // destroyed because a removed node never fires blur. Replay makes repaints more
-// frequent, not less. So the API has no render(items) that redraws everything.
-// It has upsertCard, and the mutators below, and that is deliberate: there is
-// no function here whose implementation could reasonably be "rebuild the list".
+// frequent, not less. So this API has no render(items) that redraws everything.
+// It has upsertCard and the mutators below, and that is deliberate: there is no
+// function here whose implementation could reasonably be "rebuild the list".
 //
 // ---------------------------------------------------------------------------
 // How any task attaches something to a card
 // ---------------------------------------------------------------------------
 //
-// Three carriers, matching architecture D15's table. A task picks by whether
-// the reviewer has to do something about it.
+// Four carriers. A task picks by whether the reviewer has to do something.
 //
-//   setCardState(id, state)      the lifecycle chip: outstanding, delivered,
-//                                applied, declined. 3A drives it
+//   setCardState(id, state)      the lifecycle chip: draft, ready, handled,
+//                                not_handled. 3A drives it from folded replies
 //   setCardBadge(id, failure)    a persistent state on the card, from a
-//                                failures.js code. "Cannot be placed here",
-//                                "the content changed", "verification could not
-//                                find your wording". Stays until it is cleared
-//                                by the thing that set it
-//   setAgentMessage(id, reply)   R68: what the agent said about this item,
-//                                rendered as a message on the card with a place
-//                                to answer
+//                                failures.js code: "cannot be placed here",
+//                                "the content changed underneath you". Stays
+//                                until the thing that set it clears it
+//   setAgentMessage(id, reply)   what the agent said about this item (R34).
+//                                A QUESTION IS THE LOUDEST THING ON A CARD, a
+//                                distinct treatment and not a tinted label,
+//                                because a question the reviewer scrolls past
+//                                is a stalled agent
 //   setCardNotice(id, text)      a passing message. Not persistent
 //
 // And separately, not on a card:
 //
-//   failures.add(failure)        the rail's persistent failures list. Sync
-//                                refusals, CSP refusals, storage quota. Stays
-//                                until the reviewer dismisses it (R9)
+//   failures.add(failure)        the rail's dismissible chip list. Sync
+//                                refusals, CSP refusals, a malformed reply
+//                                line. Stays until dismissed (R11)
+//   setStatusLine(state)         one line, always on screen, saying plainly
+//                                what is happening to the reviewer's typing
+//                                (R12): kept locally, stored, agent connected
 //
 // Dual-environment module. See docs/CONTRACTS.md, "How a shared module loads".
 (function (root, factory) {
@@ -48,27 +54,45 @@
   var browser = typeof window !== "undefined" && !!window.document;
   if (browser) {
     root.LAHE = root.LAHE || {};
-    root.LAHE.overlay = factory(root.LAHE.markers, root.LAHE.failures, root.LAHE.lifecycle, root.LAHE.record);
+    root.LAHE.overlay = factory(root.LAHE.markers, root.LAHE.failures, root.LAHE.record);
   } else {
     module.exports = factory(
       require("../shared/markers.js"),
       require("../shared/failures.js"),
-      require("../shared/lifecycle.js"),
       require("../shared/record.js")
     );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, failuresModule, lifecycle, record) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, failuresModule, record) {
   "use strict";
+
+  // D10's three tabs. Contents come from the three tab files; the shell is
+  // here, so a tab can be registered before its file exists.
+  var TAB = { ACTIVE: "active", EDITS: "edits", DONE: "done" };
+  var TABS = [TAB.ACTIVE, TAB.EDITS, TAB.DONE];
+
+  // R12. The status line has states, not strings, so a test asserts the
+  // TRANSITIONS rather than the presence of a sentence. The sentences live here
+  // so two builders cannot write two wordings for the same state.
+  var STATUS = {
+    KEPT_LOCALLY: "kept_locally",
+    STORED: "stored",
+    AGENT_CONNECTED: "agent_connected"
+  };
+  var STATUS_TEXT = {
+    kept_locally: "Kept in this browser. Nothing is lost; it will be stored when the helper is back.",
+    stored: "Stored.",
+    agent_connected: "Stored, and an agent is reading."
+  };
 
   function createRail() {
     var cards = Object.create(null);
-    var failureList = [];
-    var statusLine = null;
-    var presence = null;
+    var chips = [];
+    var status = null;
+    var activeTab = TAB.ACTIVE;
     var collapsed = false;
     var mounted = false;
 
-    // A card handle. The node reference is what 1B-i fills in; the point of
+    // A card handle. The node reference is what 1B fills in; the point of
     // returning a handle rather than an id is that a caller physically cannot
     // "re-render the list" through it.
     function handleFor(id) {
@@ -149,25 +173,40 @@
       return cards[id] ? cards[id].badges.slice() : [];
     }
 
-    // R68. reply is {text, at, files, kind}. The card is where a declined item
-    // gets answered, so the reply is part of the item, not a toast.
+    // R34. reply is {status, agent, reason, text, files, at}. The card is where
+    // a not-handled item gets answered, so the reply is part of the item and
+    // never a toast. The agent's name comes from the reply itself; absent one,
+    // the card says "agent", and that is the whole of agent detection (D10).
     function setAgentMessage(id, reply) {
       if (!cards[id]) return null;
-      cards[id].agentMessage = reply || null;
+      if (!reply) {
+        cards[id].agentMessage = null;
+        return handleFor(id);
+      }
+      cards[id].agentMessage = {
+        status: reply.status || null,
+        agent: reply.agent || "agent",
+        reason: reply.reason || null,
+        text: reply.text || null,
+        files: reply.files || [],
+        at: reply.at || null,
+        // A question is the loudest thing on the card. Stated as data so the
+        // treatment cannot quietly become a tinted label.
+        loud: reply.status === record.REPLY_STATUS.QUESTION
+      };
       return handleFor(id);
     }
 
     // A passing message. Explicitly not persistent, so nothing important can be
-    // routed here by accident: the persistent carriers are badges and the
-    // failures list.
+    // routed here by accident: the persistent carriers are badges and chips.
     function setCardNotice(id, text) {
       if (!cards[id]) return null;
       cards[id].notice = text ? String(text) : null;
       return handleFor(id);
     }
 
-    // STUB: 1B-i answers this from document.activeElement. Returning false here
-    // is the safe stub only because removeCard is the sole consumer and the
+    // STUB: 1B answers this from the shadow root's activeElement. Returning
+    // false here is safe only because removeCard is the sole consumer and the
     // stub creates no DOM to remove.
     function holdsFocus(id) {
       void id;
@@ -179,16 +218,16 @@
     }
 
     // -------------------------------------------------------------------------
-    // The persistent failures list (R9, D14)
+    // The dismissible failure chips (R11)
     // -------------------------------------------------------------------------
 
     var failuresApi = {
-      // Adds a failure. Persistent codes stay until dismissed. A non-persistent
-      // code is still recorded, so a test can assert it happened, and the UI
-      // shows it as a passing message.
+      // Persistent codes stay until dismissed. A non-persistent code is still
+      // recorded, so a test can assert it happened, and the UI shows it as a
+      // passing message.
       add: function (failure) {
         if (!failure || !failure.code) throw new TypeError("failures.add expects a failure object");
-        var existing = failureList.filter(function (f) {
+        var existing = chips.filter(function (f) {
           return f.code === failure.code;
         })[0];
         if (existing) {
@@ -198,60 +237,64 @@
           return existing;
         }
         var entry = Object.assign({}, failure, { count: 1, dismissed: false });
-        failureList.push(entry);
+        chips.push(entry);
         return entry;
       },
+      // Dismissed stays dismissed, across a remount, a navigation, and a replay
+      // pass (ranked test 33). The underlying state is still visible on the
+      // status line, so dismissing hides the chip and never the truth.
       dismiss: function (code) {
-        var n = failureList.length;
-        failureList = failureList.filter(function (f) {
+        var n = chips.length;
+        chips = chips.filter(function (f) {
           return f.code !== code;
         });
-        return failureList.length !== n;
+        return chips.length !== n;
       },
       list: function () {
-        return failureList.slice();
+        return chips.slice();
       },
       count: function () {
-        return failureList.length;
+        return chips.length;
       },
       clear: function () {
-        failureList = [];
+        chips = [];
       }
     };
 
     // -------------------------------------------------------------------------
-    // The rest of the rail
+    // The rest of the chrome
     // -------------------------------------------------------------------------
 
-    // R13: a sentence on screen at all times saying what happens to an edit on
-    // this target and naming the file or route it concerns.
-    function setStatusLine(text) {
-      statusLine = text === null || text === undefined ? null : String(text);
-      return statusLine;
+    // R12: one line on screen at all times saying what is happening to the
+    // reviewer's typing. Takes a STATE, not a sentence.
+    function setStatusLine(state) {
+      if (state === null || state === undefined) {
+        status = null;
+        return null;
+      }
+      if (!Object.prototype.hasOwnProperty.call(STATUS_TEXT, state)) {
+        throw new Error("setStatusLine: unknown status " + String(state) + "; expected one of " + Object.keys(STATUS_TEXT).join(", "));
+      }
+      status = state;
+      return status;
     }
 
     function getStatusLine() {
-      return statusLine;
+      return status;
     }
 
-    // D7: presence is DISPLAYED and is never read by the code that decides
-    // whether send works. It is stored on its own field, deliberately not
-    // reachable from sendEnabled below, so the separation is visible in the
-    // code rather than promised in a comment.
-    function setPresence(value) {
-      presence = value;
-      return presence;
+    function statusText() {
+      return status ? STATUS_TEXT[status] : null;
     }
 
-    function getPresence() {
-      return presence;
+    function selectTab(tab) {
+      if (TABS.indexOf(tab) === -1) throw new Error("selectTab: unknown tab " + String(tab));
+      activeTab = tab;
+      return activeTab;
     }
 
-    // The send button's enabled state. One input: how many items are
-    // outstanding. See lifecycle.isSendEnabled, and plan test 2, which asserts
-    // statically that presence is not among the inputs.
-    function sendEnabled(outstandingCount) {
-      return lifecycle.isSendEnabled(outstandingCount);
+    function currentTab() {
+      return activeTab;
     }
 
     function mount() {
@@ -267,6 +310,8 @@
       return mounted;
     }
 
+    // The collapsed pill never overlaps the open rail (D10). 1B owns the
+    // geometry; the state lives here so a test can drive it.
     function collapse(next) {
       collapsed = next === undefined ? !collapsed : !!next;
       return collapsed;
@@ -277,11 +322,17 @@
     }
 
     return {
+      TAB: TAB,
+      TABS: TABS,
+      STATUS: STATUS,
+      STATUS_TEXT: STATUS_TEXT,
       mount: mount,
       unmount: unmount,
       isMounted: isMounted,
       collapse: collapse,
       isCollapsed: isCollapsed,
+      selectTab: selectTab,
+      currentTab: currentTab,
       upsertCard: upsertCard,
       getCard: getCard,
       removeCard: removeCard,
@@ -296,15 +347,17 @@
       failures: failuresApi,
       setStatusLine: setStatusLine,
       getStatusLine: getStatusLine,
-      setPresence: setPresence,
-      getPresence: getPresence,
-      sendEnabled: sendEnabled
+      statusText: statusText
     };
   }
 
   var shared = createRail();
 
   return {
+    TAB: TAB,
+    TABS: TABS,
+    STATUS: STATUS,
+    STATUS_TEXT: STATUS_TEXT,
     createRail: createRail,
     shared: shared,
     OVERLAY_ROOT_ID: markers.OVERLAY_ROOT_ID,

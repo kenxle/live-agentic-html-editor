@@ -227,3 +227,57 @@ test("targetSlug can never contribute a path separator or a dot segment", () => 
 test("targetSlug is readable for the ordinary case", () => {
   assert.equal(n.targetSlug("/Users/x/docs/02_architecture.html"), "02-architecture-html");
 });
+
+// ---------------------------------------------------------------------------
+// The two comparison modes (ranked test 31)
+// ---------------------------------------------------------------------------
+//
+// Ordinary records compare on normalized text. Format-only records compare on
+// structure, because their whole point is a change the text normalizer is built
+// to ignore. Two modes that are accidentally identical make the entire
+// format-only branch of replay a silent no-op, so the bar is that they
+// DISAGREE on a text-equal, structure-different pair.
+
+test("the two comparison modes disagree on a text-equal structure-different pair", () => {
+  const plain = "<p>The plan is ready now</p>";
+  const bolded = "<p>The plan is <strong>ready</strong> now</p>";
+
+  assert.equal(n.equalsInMode(n.MODE.TEXT, plain, bolded), true, "the text mode sees no change");
+  assert.equal(n.equalsInMode(n.MODE.STRUCTURE, plain, bolded), false, "the structure mode sees the change");
+});
+
+test("the two comparison modes agree on a both-equal pair", () => {
+  const a = "<p>The plan is <em>ready</em> now</p>";
+  const b = "<p>The   plan is <i>ready</i> now</p>";
+  assert.equal(n.equalsInMode(n.MODE.TEXT, a, b), true);
+  assert.equal(n.equalsInMode(n.MODE.STRUCTURE, a, b), true);
+});
+
+test("the structure mode is defined against bold and italic and nothing else in v1", () => {
+  assert.deepEqual(n.STRUCTURAL_TAGS, ["em", "strong"]);
+  // A tag outside the closed list is not a structural difference.
+  assert.equal(
+    n.equalsInMode(n.MODE.STRUCTURE, "<p>a <span class=x>b</span> c</p>", "<p>a b c</p>"),
+    true
+  );
+  // Bold and italic are, in both spellings.
+  assert.equal(n.equalsInMode(n.MODE.STRUCTURE, "<p>a <b>b</b> c</p>", "<p>a <strong>b</strong> c</p>"), true);
+  assert.equal(n.equalsInMode(n.MODE.STRUCTURE, "<p>a <b>b</b> c</p>", "<p>a <em>b</em> c</p>"), false);
+});
+
+test("the structure mode tells apart which words carry the emphasis", () => {
+  assert.equal(
+    n.equalsInMode(n.MODE.STRUCTURE, "<p><strong>a</strong> b</p>", "<p>a <strong>b</strong></p>"),
+    false
+  );
+});
+
+test("modeFor picks structure for a format-only record and text for everything else", () => {
+  assert.equal(n.modeFor("format_only"), n.MODE.STRUCTURE);
+  assert.equal(n.modeFor("edit"), n.MODE.TEXT);
+  assert.equal(n.modeFor("comment"), n.MODE.TEXT);
+});
+
+test("equalsInMode refuses an unknown mode rather than guessing one", () => {
+  assert.throws(() => n.equalsInMode("vibes", "<p>a</p>", "<p>a</p>"), /unknown comparison mode/);
+});
