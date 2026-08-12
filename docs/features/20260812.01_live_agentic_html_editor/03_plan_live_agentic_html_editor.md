@@ -340,7 +340,7 @@ custom header D11 requires and cannot set the JSON content type, so a builder re
 tool either drops the header (silently breaking "no exceptions") or watches the post get refused during
 unload, when nothing is watching. Keepalive fetch carries headers at the cost of a body limit of roughly
 64KB. An edit too large for it is already safe in browser storage and goes to the helper on the next load,
-so the cap costs latency, never work. That fallback is named here and tested in ranked test 8.
+so the cap costs latency, never work. That fallback is named here and tested in ranked test 7 (the oversize unload commit).
 
 **The reply line schema**, the tool's public API to every agent on earth. Field names spelled exactly:
 
@@ -1017,7 +1017,7 @@ Inputs: the merged build, `dist/` rebuilt, `npm run gate` and `npm run gate:all`
 specs re-run green, the 0C app fixture running, and a prepared **fresh user account with an empty HOME**
 for AC6's install walk.
 
-4A runs AC1 through AC8 below, scripting AC1, AC2, and AC3 as checked-in browser specs (ranked test 32),
+4A runs AC1 through AC8 below, scripting AC1, AC2, and AC3 as checked-in browser specs (ranked test 39, the scripted acceptance walks),
 and records a pass or fail per criterion with the observed evidence, not a narrative.
 
 **Done when:** every acceptance criterion has a recorded pass or fail with evidence; the scripted forms of

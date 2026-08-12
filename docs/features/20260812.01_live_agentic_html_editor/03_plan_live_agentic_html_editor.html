@@ -2259,7 +2259,7 @@ when nothing is watching. Keepalive fetch carries headers at the cost of
 a body limit of roughly 64KB. An edit too large for it is already safe
 in browser storage and goes to the helper on the next load, so the cap
 costs latency, never work. That fallback is named here and tested in
-ranked test 8.</p>
+ranked test 7 (the oversize unload commit).</p>
 <p><strong>The reply line schema</strong>, the tool's public API to
 every agent on earth. Field names spelled exactly:</p>
 <pre><code>{&quot;item&quot;:&quot;&lt;item-id&gt;&quot;,&quot;rev&quot;:&lt;n&gt;,&quot;status&quot;:&quot;handled|not_handled|question&quot;,
@@ -3072,8 +3072,9 @@ CP1 and CP2 specs re-run green, the 0C app fixture running, and a
 prepared <strong>fresh user account with an empty HOME</strong> for
 AC6's install walk.</p>
 <p>4A runs AC1 through AC8 below, scripting AC1, AC2, and AC3 as
-checked-in browser specs (ranked test 32), and records a pass or fail
-per criterion with the observed evidence, not a narrative.</p>
+checked-in browser specs (ranked test 39, the scripted acceptance
+walks), and records a pass or fail per criterion with the observed
+evidence, not a narrative.</p>
 <p><strong>Done when:</strong> every acceptance criterion has a recorded
 pass or fail with evidence; the scripted forms of AC1 through AC3 are
 checked in and green; the IME manual check from 2A has a recorded

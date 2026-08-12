@@ -1432,10 +1432,10 @@ hint reads "Cmd-Enter when done with this comment" (Ken's copy)</td>
 </tbody>
 </table></div>
 <p>One modifier family, and every gesture is shown as a hint line on the
-rail so a new user finds them without documentation (R43). Element
-commenting via the no-selection case of the same keystroke avoids
-Alt-click (undiscoverable) and Cmd-click (the browser's own
-open-in-new-tab).</p>
+rail (the library's side panel, designed in D10) so a new user finds
+them without documentation (R43). Element commenting via the
+no-selection case of the same keystroke avoids Alt-click
+(undiscoverable) and Cmd-click (the browser's own open-in-new-tab).</p>
 <h3 id="d4-records-are-the-truth-the-page-is-a-view">D4: Records are the
 truth; the page is a view</h3>
 <p>Everything the reviewer produces is a record:</p>
@@ -1598,9 +1598,11 @@ block's exact text is pinned at plan time, and the standing header
 already in the repo is wrong for this design (it names an authoritative
 JSON file and a command that no longer exists) and gets rewritten, not
 kept.</p>
-<p>The agent answers by appending one JSON line to
-<strong><code>replies.jsonl</code></strong> in the same folder: id, rev,
-status (<code>handled</code> / <code>not_handled</code> with a reason /
+<p>The agent answers by appending one JSON line to its <strong>reply
+file</strong> in the same folder (<code>replies.jsonl</code>, or
+<code>replies-&lt;agent&gt;.jsonl</code> when several agents work at
+once, as the multi-agent paragraph below spells out): id, rev, status
+(<code>handled</code> / <code>not_handled</code> with a reason /
 <code>question</code> with text), an optional agent name (so several
 agents can work at once and the reviewer sees who said what), and what
 it actually changed. Every agent can append a line to a file, which is
@@ -1675,9 +1677,10 @@ href="01_brief_live_agentic_html_editor.html#working-with-the-agent">R36
 liveness half that killed the old tool, and the half that gets the
 heaviest real-browser testing.</p>
 </div>
-<p>Live pages repaint themselves: Turbo morphs, framework re-renders,
-the agent's own landed changes arriving as a refresh. Two mechanisms
-keep the reviewer's work standing through all of it:</p>
+<p>Live pages repaint themselves: Turbo morphs (Rails' way of rewriting
+parts of a page in place), framework re-renders, the agent's own landed
+changes arriving as a refresh. Two mechanisms keep the reviewer's work
+standing through all of it:</p>
 <p><strong>Protected regions.</strong> While the reviewer is actively
 editing a block, the library owns it. Three layers, because the archived
 round-2 review proved restore-after alone cannot save the caret (the
@@ -2199,18 +2202,20 @@ are ever written, the contract is the file; closed</td>
 </table></div>
 <div class="callout callout-question">
 <p><span id="security-q1" class="finding-anchor"></span><strong>Q1: Does the helper start itself?</strong> The library cannot
-start a process, so someone must run the helper once. The install can
-register it to start on login, or the agent can be responsible for
-starting it when a review begins, or it stays a manual one-liner.
-Leaning agent-started with a manual fallback, since the agent is already
-in the loop.</p>
+start a process, so someone must run the helper once.</p>
+<p><strong>Answered (settled at plan time):</strong> the add command
+starts the helper when it is not already running, so adding the library
+to a page is one command and the helper's start rides along with it.
+Manual <code>serve</code> remains for anyone who wants it.</p>
 </div>
 <div class="callout callout-question">
 <p><span id="security-q2" class="finding-anchor"></span><strong>Q2: How does <code>review.md</code> divide by page on a dev
 server?</strong> A static doc is one page; a dev-server review walks
-many URLs. Grouping by pathname with the review spanning them matches
-how Ken actually reviews, but naming and ordering inside the file need a
-concrete shape at plan time.</p>
+many URLs.</p>
+<p><strong>Answered (settled at plan time):</strong> pages are keyed by
+pathname, ordered by first visit, and headed by the page title plus the
+source hint when one was given. The plan's contract task pins the exact
+shape.</p>
 </div>
 <hr class="reviews-divider" style="margin:4.5rem 0 1.5rem;border:0;border-top:3px solid #b0463b">
 

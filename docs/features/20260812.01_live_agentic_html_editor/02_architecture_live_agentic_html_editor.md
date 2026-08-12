@@ -105,7 +105,8 @@ The full gesture vocabulary, designed together as Q1 asked:
 | Cmd-Enter in a comment box | This comment is done and the agent may act on it (R7). The on-card hint reads "Cmd-Enter when done with this comment" (Ken's copy) |
 | Open box at the thread's foot | A note tied to nothing (R18) |
 
-One modifier family, and every gesture is shown as a hint line on the rail so a new user finds them
+One modifier family, and every gesture is shown as a hint line on the rail (the library's side panel,
+designed in D10) so a new user finds them
 without documentation (R43). Element commenting via the no-selection case of the same keystroke avoids
 Alt-click (undiscoverable) and Cmd-click (the browser's own open-in-new-tab).
 
@@ -232,7 +233,9 @@ because the file is still there and still complete. The contract block's exact t
 the repo is wrong for this design (it names an authoritative JSON file and a command that no longer
 exists) and gets rewritten, not kept.
 
-The agent answers by appending one JSON line to **`replies.jsonl`** in the same folder: id, rev,
+The agent answers by appending one JSON line to its **reply file** in the same folder
+(`replies.jsonl`, or `replies-<agent>.jsonl` when several agents work at once, as the multi-agent
+paragraph below spells out): id, rev,
 status (`handled` / `not_handled` with a reason / `question` with text), an optional agent name (so
 several agents can work at once and the reviewer sees who said what), and what it actually changed.
 Every agent can append a line to a file, which is what makes this agent-agnostic. There is no SDK,
@@ -292,7 +295,8 @@ Grounds [R1 (nothing typed is lost) and R5 (unsent work is never silently overwr
 the heaviest real-browser testing.
 :::
 
-Live pages repaint themselves: Turbo morphs, framework re-renders, the agent's own landed changes
+Live pages repaint themselves: Turbo morphs (Rails' way of rewriting parts of a page in place),
+framework re-renders, the agent's own landed changes
 arriving as a refresh. Two mechanisms keep the reviewer's work standing through all of it:
 
 **Protected regions.** While the reviewer is actively editing a block, the library owns it. Three
@@ -577,13 +581,18 @@ Full prose in `02_architecture_live_agentic_html_editor_reviews.md`.
 
 ::: callout-question
 **Q1: Does the helper start itself?** The library cannot start a process, so someone must run the
-helper once. The install can register it to start on login, or the agent can be responsible for
-starting it when a review begins, or it stays a manual one-liner. Leaning agent-started with a manual
-fallback, since the agent is already in the loop.
+helper once.
+
+**Answered (settled at plan time):** the add command starts the helper when it is not already
+running, so adding the library to a page is one command and the helper's start rides along with it.
+Manual `serve` remains for anyone who wants it.
 :::
 
 ::: callout-question
 **Q2: How does `review.md` divide by page on a dev server?** A static doc is one page; a dev-server
-review walks many URLs. Grouping by pathname with the review spanning them matches how Ken actually
-reviews, but naming and ordering inside the file need a concrete shape at plan time.
+review walks many URLs.
+
+**Answered (settled at plan time):** pages are keyed by pathname, ordered by first visit, and headed
+by the page title plus the source hint when one was given. The plan's contract task pins the exact
+shape.
 :::
