@@ -976,7 +976,12 @@ test.describe("CSP fixtures", () => {
     // refusal that must be named distinctly from service-down.
     expect(await page.evaluate(() => typeof window.__cspProbe)).toBe("undefined");
     expect(await page.evaluate(() => typeof window.__lahe)).toBe("undefined");
-    expect(errors.join(" ")).toMatch(/Content Security Policy|Refused to (load|execute)/i);
+    // Three browsers, three wordings for the same refusal. Chromium says
+    // "Refused to load", Firefox says "Content-Security-Policy: ... blocked",
+    // WebKit says "Content Security Policy". The pattern covers all three; the
+    // load-bearing assertions are the two above it, which say the page's own
+    // script and the layer both failed to run at all.
+    expect(errors.join(" ")).toMatch(/Content[- ]Security[- ]Policy|Refused to (load|execute)|blocked/i);
 
     // The document itself is fine. Only the scripts were refused.
     await expect(page.locator("#probe-title")).toHaveText("CSP probe");

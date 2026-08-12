@@ -15,11 +15,28 @@ that stops us repeating that, so two rules are enforced rather than suggested:
 
 - **No jsdom.** It has no layout, no caret rects, no CSP enforcement, and no real
   key events, so every assertion that would catch the three symptoms is
-  impossible in it. Chromium through this harness, or it does not count.
+  impossible in it. A real browser through this harness, or it does not count.
+  `scripts/lint.js` enforces this: no jsdom in `package.json`, and no require or
+  import of it anywhere under `test/`.
 - **No arbitrary sleeps.** Every wait is a condition poll or a counter read.
   `test/unit/no_arbitrary_sleeps.test.js` scans every JS file under `test/` and
   fails the gate on a sleep. A flaky browser test gets its determinism fixed,
   never its assertion loosened.
+
+## Which browsers, and which gate
+
+Three Playwright projects: `chromium`, `firefox`, `webkit`. A bare
+`playwright test` runs **Chromium only**, so a builder's loop stays one browser
+wide; `--project=webkit` runs one lane by name when you are debugging it.
+
+| Command | What it runs |
+| --- | --- |
+| `npm run gate:builder` | lint, unit, Chromium. **This is the one a builder runs.** No `check:layer`, because builders never commit `dist/`. |
+| `npm run gate` | lint, `check:layer`, unit, Chromium. |
+| `npm run gate:all` | lint, `check:layer`, unit, all three browsers. The orchestrator's checkpoint gate. |
+
+Firefox and WebKit need their own download once:
+`npx playwright install firefox webkit`.
 
 ---
 
@@ -45,9 +62,10 @@ Every element a test may target carries `data-region`. The repaint targets carry
 ```js
 await configureFixture(page, {
   target: '[data-repaint-target="live"]',  // which subtree re-renders
-  flavor: "turbo-frame",                    // or "react-text"
+  flavor: "turbo-frame",                    // or "react-text", or "morph"
   intervalMs: 200,                          // for startRepaints
-  protection: "veto"                        // or "permanent", or "off"
+  protection: "veto",                       // or "permanent", or "off"
+  hooks: "on"                               // or "off", the no-hook flavor
 });
 ```
 
@@ -67,6 +85,25 @@ into the new subtree by id, which is `data-turbo-permanent` without the veto.
 `off` ignores protection, which is the pre-fix behavior and what the negative
 self-tests use.
 
+**Two hook flavors, and ranked test 1 needs both.** Protection ships as three
+layers, and the third one exists only because some frameworks offer nothing to
+cooperate with. A fixture that always offers a hook cannot tell a three-layer
+implementation from a one-layer one.
+
+| Flavor | What the page offers | What it scores |
+| --- | --- | --- |
+| `hooks: "on"` (default) | A cancelable `lahe:before-morph-element` on every element it is about to touch, and the `data-lahe-permanent` cooperative-skip attribute honored by carrying the live element across. | Layers one and two. |
+| `hooks: "off"` | Nothing. `innerHTML` replaced wholesale, no event, no attribute, no veto. | Layer three, and only layer three. |
+
+Pick the no-hook flavor before any script runs with
+`fixtureServer.urlFor("repainting.html") + "?repaint=no-hook"`, or switch it at
+runtime with `configureFixture(page, { hooks: "off" })`.
+
+The veto event and the cooperative-skip attribute are **two different framework
+features** (Turbo's `turbo:before-morph-element` and `data-turbo-permanent`). A
+builder can implement one and believe they did both, so the fixture counts them
+separately: `elementVetoes` and `elementsSkippedCooperative`.
+
 The fixture holds a "server" snapshot of every candidate target, taken at load,
 and writes it back on every repaint. That is deliberate: a repaint engine that
 does not actively try to revert what the reviewer typed makes every caret test
@@ -77,13 +114,24 @@ now believes.
 
 ---
 
-## The two hard assertions
+## The three hard assertions
 
-These are the reason this is a module and not a pile of inline `expect`s. If
-either is subtly wrong, every test that leans on it is theatre. Each has a
-self-test in `test/browser/harness_selftest.spec.js` with a **negative half**
-that switches the behavior off and asserts the assertion throws. Do not delete
-the negative halves.
+These are the reason this is a module and not a pile of inline `expect`s. If any
+is subtly wrong, every test that leans on it is theatre. Each has a self-test in
+`test/browser/harness_selftest.spec.js` with a **negative half** that switches
+the behavior off and asserts the assertion throws. Do not delete the negative
+halves.
+
+**Why there are two caret assertions.** Protection ships as three layers. The
+cooperative-skip attribute and the pre-morph veto both keep the reviewer's text
+node alive, so node identity is the right bar and
+`assertCaretSurvivesTyping` is it. The snapshot-and-restore layer cannot meet
+that bar: it restores text after the repaint destroyed the node it lived in, so
+the caret is in a **new node by construction**. Running the node-identity
+assertion there produces a failure no correct code can fix, and the likely next
+move is that the project's best assertion gets quietly weakened for every other
+test too. So layer three has its own assertion, and the node-identity one is left
+exactly as it is.
 
 ### `assertCaretSurvivesTyping(page, options)`
 
@@ -115,11 +163,47 @@ const result = await assertCaretSurvivesTyping(page, {
 });
 ```
 
-### `assertNoSecondWrite(page, { selector, action })`
+### `assertCaretRestoredAcrossRepaints(page, options)`
+
+Plan test #1, protection **layer three**. Types into a region on a page with no
+hook at all, forcing a repaint after every keystroke, and asserts the
+snapshot-and-restore layer put the reviewer's work back every time:
+
+1. The region reads exactly the original text with the typed characters inserted
+   at the caret's offset, checked **after every repaint**, not only at the end.
+   "No characters were lost" is a claim about the whole run: a restore that drops
+   a character and a later keystroke that happens to add one leaves a
+   correct-looking final string.
+2. The caret is at the same **character offset** inside the region, in whatever
+   node now holds those characters. Not the same node.
+3. The caret's node is connected and inside the region. A caret restored into a
+   detached node reads correctly and is dead.
+4. The **restore counter** went up. Text that survived because nothing ever
+   damaged it is not layer three working.
+
+```js
+await page.goto(fixtureServer.urlFor("repainting.html") + "?repaint=no-hook");
+const result = await assertCaretRestoredAcrossRepaints(page, {
+  selector: "#live-note",
+  text: "0123456789",
+  caretOffset: 10,
+  minRestores: 10        // default 1
+});
+```
+
+`restoreCounter` names the counter to read, and defaults to `caretRestores`.
+
+### `assertNoSecondWrite(page, { selector, action, minReplayPasses })`
 
 Plan test #13. Idempotence stated the only way that catches the bug: **the
 absence of a second write, observed through a MutationObserver**, not final-DOM
 equality.
+
+**`minReplayPasses` is required**, and there is no default. The absence of a
+write proves idempotence only if replay actually ran: a paused engine, a
+scheduler that never fired, or an action that quietly did nothing all write
+nothing and would otherwise pass. The right number depends on what the action
+did, so the caller states it.
 
 Final-DOM equality passes when replay rewrites a region with byte-identical text
 on every pass, and that rewrite destroys the caret every time. The observable
@@ -132,6 +216,7 @@ passed.
 await assertNoSecondWrite(page, {
   selector: "#live-note",
   message: "replay is idempotent by comparison",
+  minReplayPasses: 5,
   action: () => replayTimes(page, 5)
 });
 ```
@@ -224,13 +309,31 @@ does not weaken the test: assert on whether the *page's own* script ran
 | Function | Notes |
 | --- | --- |
 | `makeStateDir()` | A throwaway state directory. |
-| `startService({ entry, stateDir, allowedOrigins })` | Waits for readiness, twice over. See below. |
+| `startService({ entry, stateDir, allowedOrigins, reviews })` | Waits for readiness, twice over. `reviews` names the review ids to open; default one. |
+| `handle.tokenFor(id)` | That review's token. `handle.token` is the same thing when there is exactly one review, and throws when there are several. |
+| `handle.itemsUrlFor(id)` | `/reviews/<id>/items`. `handle.itemsUrl` for the single-review case. |
 | `handle.kill9()` | SIGKILL, and waits until the process is reaped **and** the port stops answering. |
+| `handle.suspend()` / `handle.resume()` | SIGSTOP and SIGCONT, each waiting until the OS agrees the process really changed state. |
 | `handle.stop()` | SIGTERM. Only for tests that are about graceful shutdown. |
-| `readEventLog(stateDir)` | The parsed append-only log, for effect assertions. |
+| `readEventLog(stateDir, reviewId)` | One review's parsed log, for effect assertions. |
+| `readEventLogRaw(stateDir, reviewId)` | The raw lines, for a test that means to look at a torn one. |
 
 `kill -9` is the interesting half. A graceful shutdown proves nothing about
 durability, because the service gets to flush. SIGKILL is what AC3 means.
+
+**Suspend is a different failure from kill, and the library has to tell them
+apart.** A killed helper refuses the connection immediately, so the status line
+can say kept-locally within one poll. A suspended one accepts the socket and
+never answers, which is what a laptop coming back from sleep and a paused
+container both look like. A sync client written only against `kill9` blocks the
+reviewer here, and nothing in the test suite would notice.
+
+**The token is per review**, so there is no such thing as "the token" when two
+reviews are open: `tokenFor` throws rather than handing back whichever came
+first, because a test that authenticates against the wrong review passes for the
+wrong reason. `readEventLog` throws the same way when the state directory holds
+several reviews, because reading the wrong path returns an empty array, and an
+empty array is exactly what a passing refusal assertion looks like.
 
 ### Contexts (`contexts.js`)
 
@@ -246,7 +349,7 @@ written for is still there.
 
 ## What a builder has to change when the real layer lands
 
-Four things, and only four. Everything else in `test/helpers/` is
+Five things, and only five. Everything else in `test/helpers/` is
 harness-owned and does not move.
 
 ### 1. The counter contract (`counters.js`)
@@ -256,7 +359,11 @@ The real layer must publish, behind whatever test-hooks flag it wants:
 ```js
 window.__lahe.counters.replayPasses    // ++ once per replay pass, written or not
 window.__lahe.counters.regionsWritten  // ++ once per region replay wrote to the DOM
+window.__lahe.counters.caretRestores   // ++ once per protection-layer-three restore
 ```
+
+`caretRestores` is 2B's, and `assertCaretRestoredAcrossRepaints` reads it. Name
+it something else if you must, and pass `restoreCounter` to the assertion.
 
 `replayPasses` must increment on a pass that wrote nothing. That is what makes it
 possible to assert "replay ran five times and wrote nothing", which is the
@@ -275,12 +382,19 @@ epoch, so either expose a synchronous test hook for the same entry point, or
 rewrite `replayNow` as "trigger a repaint, then wait on the `replayPasses`
 counter". The second is more honest and slower; either is fine.
 
-### 3. The protection marker (`test/fixtures/assets/repaint-engine.js`)
+### 3. The protection markers (`test/fixtures/assets/repaint-engine.js`)
 
-The repaint engine honors `[data-lahe-protected]` and `[data-turbo-permanent]`.
-If the real layer marks a protected region with a different attribute, change the
-two selectors in that file. This is the one fixture change on the list, and it
-exists because the fixture has to know what the app-side veto looks for.
+The repaint engine honors three things a builder can rename:
+
+| What | Spelled here as | Standing in for |
+| --- | --- | --- |
+| The layer's protected-region marker | `data-lahe-protected` | the library's own mark |
+| The cooperative-skip attribute | `data-lahe-permanent` | `data-turbo-permanent` |
+| The cancelable pre-morph event | `lahe:before-morph-element` | `turbo:before-morph-element` |
+
+If the real layer uses different names, change them in that file, which is the
+one fixture on this list. It is here because the fixture has to know what the
+app-side veto looks for.
 
 ### 4. The whole of `stub.js`
 
@@ -299,20 +413,32 @@ still changing it. It is not the contract and no test should assert against it.
 It disappears with the stub. The real layer uses the one normalizer, as
 everything else does.
 
-### And the service entry
+### 5. The service entry (`service.js`)
 
 `test/helpers/service.js` exports `SERVICE_ENTRY` (the real one) and
 `STUB_SERVICE_ENTRY` (the stand-in). Tests currently pass the stub. Once
-`src/service/index.js` is a real server, switch them.
+`src/service/index.js` is a real helper, switch them: that is 1A's one-constant
+change, and nothing else in the harness moves.
 
-**The readiness contract it depends on:** the service writes
-`<stateDir>/service.json`, mode `0600`, containing `{ port, pid, token }`, and the
-helper waits for that file **and** for a TCP connection to the port to succeed.
-Both, because a file written before the listener is up is a lie, and a port that
-answers before state is on disk means the durability tests race. The architecture
-already requires the run token and port in an owner-only file (D9), so this is
-that file. A different filename or shape means changing `SERVICE_READY_FILE` and
-`readReadyFile`, and nothing else in the harness moves.
+**The readiness contract it depends on:** the helper writes
+`<stateDir>/service.json`, mode `0600`, and the harness waits for that file
+**and** for a TCP connection to the port to succeed. Both, because a file written
+before the listener is up is a lie, and a port that answers before state is on
+disk means the durability tests race.
+
+```json
+{ "port": 7817, "pid": 4211,
+  "reviews": { "rev-abc": { "token": "..." } } }
+```
+
+The token is **per review** (D11: loopback is not a boundary, so the page proves
+itself), so `reviews` is a map and not one string, and the map is part of the
+readiness signal: a helper that is listening but has not written its credentials
+yet is not ready for anything a test wants to do next.
+
+**The log lives at `reviews/<id>/events.jsonl`.** A different filename or shape
+means changing `SERVICE_READY_FILE`, `readReadyFile`, `REVIEWS_DIR` and
+`EVENT_LOG_FILE`, and nothing else.
 
 ---
 
@@ -336,5 +462,18 @@ Named rather than left to be discovered:
   `page.evaluate` and the mutation observer's `attributes` mode; the two-width
   screenshot diff needs Playwright's snapshot support configured, which is a
   decision for whoever writes test #24.
-- **No `turbo:morph` or `popstate` events.** The remount contract is Task 2C, and
-  the fixture will need those events added when it lands.
+- **No `turbo:morph` or `popstate` events.** The remount contract is 2D (living
+  in the page), and the fixture will need those events added when it lands. The
+  bfcache path (`pageshow` with `persisted`) is not driven here either.
+- **The repainting fixture is one page.** Navigation, forms, a login, and the
+  multi-page morphing app are 0C's `test/fixtures/app/`, not this file.
+- **The stub's protection layer three is a stand-in, not a design.** It snapshots
+  on `input` and restores from a document-level MutationObserver, keyed by region
+  name rather than by node reference, because the no-hook repaint destroys the
+  region element itself. 2B owns the real one in `src/layer/protect.js`.
+- **`commitOnBlur` exists for a reason worth reading.** A repaint that destroys
+  the focused region fires blur; the stub used to commit a record there, and
+  replay then wrote that record straight back. The page looked repaired, the
+  restore never ran, and layer three scored full marks for someone else's work.
+  The layer-three tests switch it off, and the real layer has the same trap: a
+  commit is the reviewer leaving a region, not the framework yanking the node.
