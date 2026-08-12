@@ -2,419 +2,371 @@
 
 ## Summary
 
-Two things ship. **A library**, one JavaScript file added to a page with a script tag, that draws the
-review surface, captures comments and edits, and writes every change to browser storage the instant it
-happens. **A server**, one small zero-dependency process on loopback, that receives what the library
-sends, appends it to a log, and writes the file an agent reads.
+Two pieces. A **library**: one JavaScript file added to any locally run HTML page, which draws the
+review surface, records everything the reviewer does, and keeps the page fully native the rest of the
+time. A **helper**: one local background process that stores the review durably on disk, gives the
+agent one file to read and one place to answer, and tells the library what the agent said so the page
+can show it.
 
-The library is the product. The server is a sink and a file writer. An agent reads a file. There is no
-third thing.
-
-The idea holding it together: **the reviewer's outstanding feedback is the truth, and the page is a view
-of it.** An edit is not a change made to a document; it is a durable record replayed on top of whatever
-the page currently shows. This is what removes the class of bug where typed text comes back reverted.
-There is nothing to revert to, because the page was never where the text lived.
+The design center is the flow model. There is no send. The reviewer works; each finished thing (a
+confirmed comment, a committed edit) becomes a durable **record** the moment it exists; the agent reads
+records continuously and answers per record; the page shows those answers as they arrive. Reviewer and
+agent run at the same time against the same store, and the store, not the screen, is the truth. The
+screen is a view of the records, which is what makes "the user's work is never clobbered" a property of
+the design rather than a promise.
 
 ```mermaid
 flowchart LR
-    subgraph Page["Any HTML page, in the reviewer's own browser"]
-      Tag["one script tag"] --> Lib["the library<br/>rail, comments, editing, replay<br/>writes to browser storage on every change"]
-      Host["the page's own content<br/>its CSS untouched, its JS unbroken"]
-      Lib -.overlays, never restyles.-> Host
-    end
-
-    subgraph Server["The server, loopback only"]
-      In["receives items"] --> Log[("append-only log")]
-      Log --> Files["review.md + review.json"]
-    end
-
-    subgraph Agent["Any coding agent"]
-      Read["reads the file"] --> Apply["applies items to source"]
-      Apply --> Ack["reports per item, and may write back"]
-    end
-
-    Lib <-->|authorized loopback| In
-    Files --> Read
-    Ack --> In
-    In -->|"applied, declined, replies"| Lib
+    R["Reviewer<br/>comments + edits on the page"] --> L["Library<br/>in the page"]
+    L -->|"every keystroke"| B[("Browser storage")]
+    L -->|"each record, as it happens"| H["Helper<br/>local process"]
+    H --> S[("Review store on disk<br/>append-only log + review.md")]
+    A["Agent(s)<br/>Claude, Codex, anything"] -->|"reads review.md"| S
+    A -->|"appends one reply line per item"| S
+    H -->|"library polls for replies"| L
+    L -->|"card updates, Done tab, highlights clear"| R
 ```
+
+The library works alone: with no helper running, everything is kept in the browser and the copy and
+export buttons carry it out (R8, R10). The helper adds durability beyond the browser and the agent
+loop. Neither piece ever needs the other to be alive at the same moment.
 
 ## What carries over, and what does not
 
-Two working implementations are the input. Both were read line by line, and two of the original reuse
-claims did not survive the reading.
-
-| Existing piece | Carries over | New work |
-| --- | --- | --- |
-| Built-doc comment module (`shared-assets/comment_module.html`) | Immediate synchronous persistence; copy and export with no server; the shape of a probe ladder for anchoring; the whole idea of a review surface that needs nothing alive | **Anchoring itself.** Its `locate()` is four exact substring probes with no whitespace tolerance and no occurrence disambiguation, so a short prefix binds to the first hit. **Storage keying**: it keys by the file's basename, so two same-named pages merge into one bucket. **The docked rail**: it sets a body margin, which is exactly what R3 forbids |
-| Steady Thread dev layer (`_dev_comments.html.erb`) | A library living in the page rather than a proxy; element commenting by Alt-click carrying a CSS path and surrounding context; a draft that survives a morph | **The remount contract.** It re-registers document-level listeners on every morph without removing the old ones, so handlers accumulate for the life of the page. It also survives morphs partly because Rails re-renders the partial, which a script tag does not inherit |
-| human-review | The interaction model: a rail beside the page, an editable document, before-and-after pairs | None of its liveness design |
+From our comments module: the durability posture (keep on every keystroke, depend on nothing being
+alive), the overlay rail, copy and export, the confirm-before-actionable gesture. From human-review:
+the one idea worth keeping, that a page can be edited in place, rebuilt on the opposite storage
+philosophy. From the dead first architecture draft: the protected-region and replay design, the record
+shape, and the data-fencing rules survive; the send model, the click-to-edit interaction, and the
+Chromium default are gone, contradicted by the brief.
 
 ## Key decisions
 
-### D1: The library lives in the page, and that is the whole distribution story
+### D1: One file in the page, one process beside it
 
-One script tag. The page is the reviewer's own page, served by whoever normally serves it, in their own
-browser. That single fact answers most of what made the tool being replaced hard: a page behind a login
-just works because it is the reviewer's logged-in session, client-side routing works because nothing is
-proxied, and free roam works because the tag is in the layout so every page has it.
+::: xref
+Grounds R40, R41, R42 (getting the library and running it).
+:::
 
-For a standalone HTML file, the reviewer adds the tag to the file, or points the server at the file and it
-serves a copy with the tag inserted. Both end in the same place: the library is in the page.
+The library is a single built JavaScript file. Adding it to a page is one `<script>` line, which a
+person or an agent writes; an `add` command in the repo does it for a static file, and for a dev server
+it is one line in a layout. The repo is the one source (GitHub clone, R40); a build script concatenates
+the source modules into the shipped file, so builders work on small files and users add one.
 
-**The costs, stated because they are load-bearing:**
+The helper is a zero-dependency Node process (`node bin/lahe.js serve`). Node 20+ is the only stated
+requirement. Nothing else is platform-specific: the library is standard DOM APIs, the helper is
+standard Node, and macOS, Linux, and Windows all run both. The one browser-support note (Custom
+Highlight API, D10) is stated with its reason per R42, and it holds in current Chrome, Edge, Safari,
+and Firefox.
 
-- The library is in the page's origin, so the page's own scripts can read what it holds. v1 assumes the
-  page is the reviewer's own, which is why reviewing someone else's HTML is a stated non-goal. Isolating
-  the library behind a frame is the known answer the day that changes.
-- Browser storage is the page's origin's storage, so two spellings of the same host are two buckets.
-- A content security policy on the host page can refuse the script or the loopback connection. A refusal
-  looks exactly like the server being down, so the library tells the two apart and says which.
-- The library is never fetched from the server at page load, or a stopped server would mean no library,
-  which contradicts the promise that a stopped server costs nothing.
+### D2: The library never writes the reviewed page's file
 
-### D2: The tool never writes the page it is reviewing
+An edit made in the browser changes the DOM the reviewer is looking at and the record that describes
+it. It never touches the HTML file or the app's templates. Applying the change to source is the agent's
+job, guided by the record's before and after. This is what makes the same design work on a static doc
+and on a dev server page whose "source" is an ERB template three directories away, and it is why an
+agent rewriting a whole file cannot destroy anything: the records still hold everything the reviewer
+did (R2, R4).
 
-Every edit is feedback. No autosave, no save conflicts, no serializing a live DOM back over a file.
+### D3: Two page states, browse and edit, with browse fully native
 
-Most pages worth reviewing are generated from something else, so writing the page is erased by the next
-build, which is worse than not writing it because it looked applied. A running app has no file to write at
-all. Refusing to write makes every page behave identically, which is what makes the on-screen sentence in
-R16 short and honest: your edits go to your agent.
+::: xref
+Grounds R13 (the page keeps working, outranking editing convenience), R24, and answers Q1.
+:::
 
-### D3: Protect the region being edited, replay the ones that are committed
+**Browse is the default and it is the page untouched.** No intercepted clicks, no contentEditable, no
+captured keys beyond the library's own shortcuts. Links navigate, buttons act, forms submit, the app's
+own JavaScript sees every event it would see without the library. This is the direct inversion of
+human-review, which made the whole body editable and then fought the page for every click.
 
-An earlier draft let the page repaint freely and had replay repair the damage afterwards. Walked honestly
-against a page with a two-second polling frame, it fails: the repaint writes the original text back over
-the fix and destroys the text node holding the caret **before replay ever runs**, so replay wakes to a
-region matching nothing it knows and the reviewer watches their sentence disappear. That is the symptom
-this tool exists to remove, rebuilt with better bookkeeping.
+**Edit is entered deliberately, per region.** Cmd-Shift-E (Ken's call, one-handed) makes the block
+under the cursor or selection editable: that one block, nothing else. The rest of the page stays live.
+Esc or clicking outside commits the edit and returns the block to native. While a block is in edit
+state it is visibly framed so the reviewer always knows which state they are in (R12).
 
-So the library does not contest the DOM. It divides it.
+The full gesture vocabulary, designed together as Q1 asked:
 
-**A region being actively edited is protected.** From the first keystroke until the reviewer leaves it,
-the library owns that block: it is marked so a framework will not morph it and the morph is vetoed for it.
-The page's repaints flow around it. On blur the edit commits to a record, protection drops, and the region
-rejoins the page. Nothing ever repaints under the caret, so caret survival is structural rather than
-defended, and text composition is safe for the same reason.
-
-**Replay applies committed records only**, to a page that has just repainted.
-
-```mermaid
-flowchart TD
-    R["A repaint lands"] --> P{"Is this region protected<br/>(being edited right now)?"}
-    P -->|yes| Skip["Untouched. The page could not repaint it anyway"]
-    P -->|no| Find["Find the region"]
-    Find -->|"no unique candidate"| Closed["Write nothing. The record keeps its text.<br/>The card says it cannot be placed here"]
-    Find -->|"unique candidate"| Cmp{"Compare the fresh DOM<br/>against the record itself"}
-    Cmp -->|"equals after"| Done["Already applied. Skip.<br/>This is what makes replay idempotent"]
-    Cmp -->|"equals before"| Apply["The page re-rendered the same content.<br/>Re-apply after"]
-    Cmp -->|"equals neither"| Moved["The content genuinely changed.<br/>Write nothing, surface it on the card"]
-```
-
-**A write needs a unique candidate, not a high score.** An earlier draft had anchoring return a confidence
-that replay thresholded. That is a number with no ground truth to calibrate against, and it fails on the
-case that matters: two identical list items that swapped places match exactly, have symmetric context, and
-score high, so replay binds each record confidently to the other's node. The dangerous errors are not
-low-confidence, they are high-confidence ambiguous. The rule is a predicate instead: write only when the
-normalized text probe finds a candidate that is unique, or that surrounding context leaves as the only
-survivor. A tie fails closed. Structure and heading position corroborate a candidate and never place a
-write.
-
-**Comparison is against the record, not against history.** The three-way comparison above replaces "replay
-only where the DOM matches what replay last wrote", which fails on the first repaint after typing, because
-replay never wrote that region. Checked against the two cases that matter: a polling frame re-renders the
-same content, the DOM equals `before`, so re-apply and the reviewer keeps their fix. A filtered list now
-renders different data in that row, the DOM equals neither, so nothing is written and the card says the
-content changed. One rule, both cases, and **no need to know why the page repainted**, which matters
-because a framework delivers an agent's source rewrite as an in-page morph indistinguishable from the page
-re-rendering itself.
-
-**The reviewer's own actions are not ambient.** Undo reverts the record and redraws deliberately, caret
-included, placing it at the start of the reverted text. Without that exemption undo would be forbidden
-exactly when it is used, since a reviewer almost always undoes the item they are standing in.
-
-**Cross-region gestures decompose.** Selecting across a paragraph boundary and typing merges two blocks in
-the DOM. One record per region, tied by a group id, applied atomically. One record holding merged text
-would make replay rewrite the first and leave the second standing, so the content appears twice and the
-agent is told to duplicate it in source.
-
-### D4: What a record is
-
-| Field | Purpose |
+| Gesture | Meaning |
 | --- | --- |
-| `id` | Minted in the browser at creation |
-| `rev` | Monotonic, incremented on every change to this item |
-| `kind` | `commented`, `edited`, `deleted`, `moved`, `formatted`, `resized`, `note` |
-| `group` | Present when a gesture crossed regions; members apply atomically |
-| `before` / `after` | Plain text, original captured on first touch |
-| `before_html` / `after_html` | Cleaned markup, so a formatting-only change is a change |
-| `moved_after` / `moved_before` | Landing anchors for a relocation |
-| `region` | The reference above, plus its lost-anchor state when it cannot be found |
-| `page` | Which page in the review it belongs to |
-| `state` | The lifecycle below |
-| `reply` | What the agent said about this item, rendered on its card |
+| Cmd-Shift-C with text selected | Comment on the selection (box opens focused) |
+| Cmd-Shift-C with nothing selected | Element-pick mode: hover outlines elements, click one to comment on it, Esc cancels |
+| Cmd-Shift-E | Edit the block under the cursor or selection |
+| Esc / click outside | Commit the edit, back to browse |
+| Cmd-Enter in a comment box | This comment is ready for the agent (R7) |
+| Open box at the thread's foot | A note tied to nothing (R18) |
 
-**`rev` is what stops an ack from swallowing a rewording.** Without it: the reviewer sends an item, rewords
-it, closes the laptop, the agent acks it applied, and on reopen the reconciliation rule discards the
-rewording. Deliveries and acks name `(item, rev)`, and a lifecycle change wins for the revision it names. A
-newer revision survives as outstanding and ships next.
+One modifier family, and every gesture is shown as a hint line on the rail so a new user finds them
+without documentation (R43). Element commenting via the no-selection case of the same keystroke avoids
+Alt-click (undiscoverable) and Cmd-click (the browser's own open-in-new-tab).
 
-**Undo is a record operation**, since once replay has rewritten a region the browser's native undo stack
-for it is gone. Native undo inside a protected region works normally, on top.
+### D4: Records are the truth; the page is a view
 
-**The overall note is an item.** It counts as outstanding and can ship alone, because the note-only send
-bug, where typing a note left the button dead forever, is one of the three symptoms behind this rebuild.
+Everything the reviewer produces is a record:
 
-**The reviewer's words are never mangled on the way out.** The `after` snapshot is taken when text
-composition finishes rather than on every input event, so a send mid-composition cannot ship half-formed
-text as the reviewer's exact wording. Spellcheck, autocorrect, and autocapitalize are off on the editable
-surface, so the platform cannot rewrite a word and have it recorded as intent.
+- **Comment**: quoted subject, anchor (D9), the note, ready-or-draft.
+- **Edit**: anchor, `before` (the wording when the reviewer first touched the region, however many
+  times they retype, R29), `after` (never truncated, R3), plus the same pair as HTML so an agent can
+  see structure without the reviewer reading any (R23).
+- **Delete**, **format-only change**, and **untethered note** are their own kinds (R27, R31, R18).
+
+Each record has a client-minted id and a monotonically increasing **rev**, bumped on every rewording.
+An agent reply names (id, rev), so a reply to rev 2 cannot mark rev 3 handled: the reviewer's later
+rewording stays outstanding (R9, R21). Records are never edited in place in the store; a change is a
+new event for the same id. Nothing is ever taken back by anything except the reviewer's own delete,
+which is itself an event.
 
 ### D5: Durability is browser storage plus an append-only log
 
-Two independent stores, and the reviewer's work is safe if either survives.
+::: xref
+Grounds R1, R8, R22.
+:::
 
-**Browser side.** Every change is written synchronously as it happens, before any network call. This is the
-property that makes the existing comments module trustworthy and it is copied deliberately. Keyed by the
-page identity the script tag declares, partitioned per page.
+Two stores, each sufficient alone:
 
-**Server side.** Every accepted change appends one line to a log. Appending cannot destroy what came
-before, which removes the failure where two processes rewrite a shared state file over each other. State is
-a projection of the log, read on start. No compaction; a review is a few hundred events.
+1. **Browser storage**, written synchronously on every keystroke, including half-written drafts. A
+   reload, a crash, or a sleep costs nothing. Keyed by review id, not by filename, so two pages of one
+   review do not collide and two reviews do not merge.
+2. **The helper's on-disk store**: one folder per review holding `events.jsonl` (append-only, one JSON
+   line per event; appends are atomic at this size, and an interrupted write corrupts at most the last
+   line, never history) and the projections built from it (D6). The library posts each event as it
+   happens and re-posts anything unacknowledged on every reconnect; events are idempotent by id and
+   rev, so re-posting is always safe.
 
-Three rules make two stores safe: events carry a client-minted id and are idempotent by it, so a re-send
-after a failed sync cannot double-count; an item event is a full snapshot of that item rather than a delta;
-and **the browser is authoritative for content until delivery while the server is authoritative for
-lifecycle, per revision.** A second window on the same page is refused with a reason and a way to take
-over, because two windows share one storage key and the loser would write its stale copy over the winner.
+The browser is authoritative for a record's content until the helper has acknowledged it; the store is
+authoritative for lifecycle (handled, replied) always. On load, the library merges both: its own
+undelivered work from browser storage wins on content, the store wins on status.
 
-The sync client retries forever, never blocks the reviewer, and distinguishes a policy refusal from a
-server that is down.
+A second window on the same page joins the same review: same review id, same store, both windows post
+events, and the helper's per-(id, rev) ordering keeps them consistent. This came out cheap because the
+store was already the truth; it is not a separate mechanism.
 
-### D6: Send is a write, not a handshake
+### D6: The agent contract is one readable file, and replies are one appended line
 
-Pressing send appends an event and writes the two files. It does not require, check for, or wait on an
-agent.
+::: xref
+Grounds R6, R7, R33, R34; agent-agnostic per the non-goals.
+:::
+
+The helper maintains **`review.md`**: one file per review, regenerated from the log, human-readable,
+grouped by page. Each item carries its id and rev, its state, the quoted subject or before/after, and
+the reviewer's words verbatim. Only records the reviewer marked ready appear as actionable; drafts do
+not (R7). This is the single file the agent reads, and it reads it in a loop for as long as the review
+runs, so feedback flows while the reviewer keeps working (R6).
+
+The agent answers by appending one JSON line to **`replies.jsonl`** in the same folder: id, rev,
+status (`handled` / `not_handled` with a reason / `question` with text), an optional agent name (so
+several agents can work at once and the reviewer sees who said what), and what it actually changed. A
+file appended to is something every agent on earth can do, which is the whole of the agent-agnostic
+story: no SDK, no protocol, no per-agent adapter. `review.md` opens with a short standing block that
+states this contract, so an agent pointed at the file needs nothing else.
+
+The helper folds replies into the log, re-projects `review.md`, and hands the changes to the library,
+which updates the cards in place: handled items lose their highlight and move to the Done tab, a
+not-handled reason or a question lands on the item's own card, on the page, where the reviewer actually
+is (R34, R35, R37).
 
 ```mermaid
 sequenceDiagram
-    participant R as Reviewer
+    participant K as Reviewer (on the page)
     participant L as Library
-    participant S as Server
-    participant F as review.md + review.json
+    participant H as Helper
     participant A as Agent
 
-    R->>L: comments, types, deletes a block
-    L->>L: write to browser storage immediately
-    L->>S: sync (retries forever, never blocks)
-    S->>S: append to log
-    R->>L: Send
-    L->>L: commit any open compose box, flush anything in flight
-    L->>S: send
-    S->>F: write both files
-    Note over S,A: nothing above needs an agent
-    A->>F: reads
-    A->>A: applies items to source
-    A->>S: per item: applied, or not applied with a reason, plus any reply
-    S-->>L: lifecycle update
-    L->>L: retire applied items, then replay
+    K->>L: types a comment, Cmd-Enter (ready)
+    L->>L: browser storage, every keystroke
+    L->>H: event (id, rev 1)
+    H->>H: append to events.jsonl, re-project review.md
+    A->>H: reads review.md (its own loop)
+    K->>L: keeps reviewing, next screen
+    A->>H: appends reply line (id, rev 1, handled)
+    H->>L: reply (library polls)
+    L->>K: card moves to Done, highlight clears
 ```
 
-Send is enabled whenever anything is outstanding. There is no sent latch: sending marks items delivered and
-anything created afterwards is outstanding immediately. A second send adds to the same queue rather than
-replacing a snapshot. Agent presence is displayed because the brief asks for it, and the law is written
-here so it cannot drift: **presence is never read by the code that decides whether send works.**
+### D7: Protect the active region, replay the committed records
 
-Acks are processed before replay, so an item the agent applied is retired before the repaint its own change
-caused. Honestly, in a live app the source write can arrive as a morph seconds before the ack, so a
-provisional "content changed" may show and then clear when the ack explains it.
+::: xref
+Grounds R1, R5, R15, R36. This is the liveness half that killed the old tool, and the half that gets
+the heaviest real-browser testing.
+:::
 
-### D7: The agent reports per item, and can answer in the page
+Live pages repaint themselves: Turbo morphs, framework re-renders, the agent's own landed changes
+arriving as a refresh. Two mechanisms keep the reviewer's work standing through all of it:
 
-An ack names item ids. Each is applied or not applied with a reason, and either may carry a reply. Anything
-unnamed stays outstanding. Applied items move to a completed list; nothing is deleted.
+**Protected regions.** While the reviewer is actively editing a block, the library owns it. The block
+is marked so cooperative frameworks skip it (Turbo's own opt-out attribute, honored by morphing), and a
+mutation observer restores it if something rewrites it anyway. The caret and the in-progress text
+survive a repaint of everything around them. On commit, the protection lifts and the result is a
+record.
 
-Per-item is what makes the burn-down honest. A batch-level ack clears highlights for items the agent
-skipped, which is worse than losing feedback because it looks handled.
+**Replay.** After any repaint, committed records are re-applied by a single replay pass. For each
+record it finds the anchor (D9) and does a three-way comparison: the DOM already matches `after`, do
+nothing (idempotent); it matches `before`, apply the edit again; it matches neither, the content
+changed underneath the reviewer, so the item is flagged on its card and nothing is written (R5). Replay
+never guesses. A record whose anchor cannot be found uniquely is surfaced as lost, on the page and in
+`review.md`, never silently dropped or moved (R20).
 
-**Everything the library or the agent needs to say arrives where the reviewer is looking.**
+When the agent lands a change and the page updates itself (R36), the same pass runs: the agent's
+change is the new page, the reviewer's outstanding records are re-applied on top, and a collision
+between the two is exactly the neither-matches case, surfaced instead of fought over. This one
+mechanism is what "live editing and agentic editing simultaneously without clobbering each other" is
+implemented as.
 
-| What happened | Where it shows |
-| --- | --- |
-| The agent could not apply an item, applied it differently, or has a question | A message on that item's card, and the item stays outstanding rather than clearing |
-| Replay could not place an edit on this version of the page | A persistent state on that item's card, text intact |
-| Sync refused by policy, server unreachable, storage full | A failures list in the rail that stays until dismissed |
-| Something succeeded and needs no action | A passing message |
+**Undo** (R25, R28) operates on records: undoing one edit reverts that record's region to its
+`before` and retires the record, touching nothing else. The current tool's all-or-nothing discard does
+not exist here.
 
-A reviewer does not go back to a terminal to find out what happened to their feedback, and an agent's turn
-output is not a place they will ever read.
+### D8: Highlights that do not change the page
 
-### D8: The server is not a boundary, so authorization is explicit
+::: xref
+Grounds R14 and part of R15.
+:::
 
-Binding to loopback stops nothing that matters, because the attacker is a page in the reviewer's own
-browser. A cross-origin POST with a simple content type fires no preflight, reaches the handler, and takes
-effect; the browser hides the response, not the effect. Without authorization, any page the reviewer visits
-could write forged items into the file their agent reads and acts on, which is a drive-by write into an
-agent's instruction stream.
+Comment highlights use the CSS Custom Highlight API, which paints a range without inserting anything
+into the DOM. The page's own JavaScript, selectors, and layout see a document identical to the one
+without the library; there are no wrapper elements to break a framework's diffing or to leak into
+quoted text. This is the one capability with a browser floor, and it is why the floor exists: current
+Chrome, Edge, Safari, and Firefox all have it (R42's stated reason).
 
-Three layers: a token held by the server in an owner-only file, an origin allowlist the reviewer adds to
-deliberately, and a required JSON content type plus a custom header on every mutating route so a simple
-request cannot reach a handler at all.
+All library UI (rail, boxes, chips, hints) lives in a shadow root with its own styles, so the page's
+CSS cannot restyle the library and the library's CSS cannot touch the page. The page renders exactly as
+it does without the library, to the pixel, except painted highlights and the fixed rail.
 
-**The deliberate act is the real control.** A script tag in a page cannot read an owner-only file, so the
-library does not carry the server's token. The reviewer authorizes an origin once, at their terminal, and
-that act is the thing a hostile page cannot perform. A library on an authorized origin exchanges its origin
-for a short-lived session; a page on any other origin is refused before the exchange. The token persists
-across server restarts rather than rotating, because rotating it would leave an open page holding a dead
-credential and the drain promise would be false.
+### D9: Anchors match by uniqueness, not confidence
 
-The port is ephemeral and recorded with the token. The same three layers cover the ack, because a forged
-ack would clear the reviewer's screen to empty with nothing looking wrong.
+A record's anchor is the normalized text of its region plus enough surrounding context to make it
+unique on the page. At replay or agent-read time, a match counts only if it is the *only* match; two
+identical list items never get one edit applied to the wrong one, they get a widened context or a
+surfaced failure. One shared normalizer is used everywhere text is compared (recording, replay,
+anchoring): two normalizers that disagree is how a replay engine ends up fighting the reviewer's own
+cursor, so this is a single module by design, not convention.
 
-### D9: Text out of the page is data, never instructions
+### D10: The rail
 
-A reviewed page is often generated by an LLM and may carry text engineered to instruct an agent. That text
-becomes a quote in a comment or a `before` in an edit, lands in a file an agent reads raw, and the agent has
-repository write access.
+One fixed rail, in the shadow root, with three tabs: **Active** (outstanding comments and notes,
+newest visible, the open note box at the foot), **Edits** (every hand edit as before/after rows, kept
+apart from comments per R32, and doubling as the end-of-session style-guide list per R39, exportable),
+and **Done** (handled items with their agent replies, reopenable per R38). Cards update in place; the
+rail never rebuilds itself under a focused text box. Errors are chips on the rail, each dismissible
+(R11), and a persistent one-line status states plainly what is happening to the reviewer's typing:
+kept locally, stored, or agent connected (R12). The collapsed pill never overlaps the open rail's
+content, a nit inherited from the current module and fixed there too.
 
-`before` is the worst carrier: verbatim by design, potentially long, and **the reviewer never reads it**,
-because it is the page's original text and not their words. So every field is classified. Reviewer-authored
-(`feedback`, `after`, the note) is instruction. Page-derived (`quote`, its surrounding context, the element
-description, `before`, `before_html`, the page title) is data, fenced structurally in the markdown with a
-per-file random delimiter and any content line that would close it escaped, under a standing header saying
-these are search keys and never directives. The structured file is authoritative and the markdown is the
-human fallback, because structure survives injection in a way prose does not. `before` is bounded, visibly.
+### D11: Loopback is not a boundary, so the page proves itself
 
-### D10: Style only what we add, and never move the page
+::: xref
+Grounds R44, with no reviewer action beyond adding the library.
+:::
 
-The library's UI lives in an isolated root with its own reset. In the other direction it adds no stylesheet
-to the page, overrides nothing, and never sets a style attribute on a reviewed element.
+Any web page the browser has open can try to talk to a local port, so "it came from localhost" proves
+nothing. Instead: when the library is added to a page, the add step (the command, or the agent doing
+it) embeds a **review token** the helper minted, carried as an attribute on the script line. The helper
+accepts only requests bearing a valid token, requires a custom header so the browser forces a CORS
+preflight (a plain cross-site form post never reaches a handler), and answers preflights only for
+origins it was told about (local files and the named dev server). A random public page has no token and
+no allowed origin, so it can neither read the review nor write into it nor mark items handled. The
+token persists across helper restarts, because rotating it would orphan a page mid-review and violate
+the never-lose-work posture.
 
-**The rail is a fixed overlay that never shifts the page**, and it collapses. This is decided here rather
-than discovered later: the existing comments module docks its panel by setting a body margin, which is
-exactly what R3 forbids, and human-review only gets away with a docked rail because it frames the document.
+### D12: Page text is data; reviewer text is intent
 
-The consequence worth stating: when a reviewer creates something the page's CSS hides, such as a list on a
-page whose reset removes markers, the library does not fix the page's appearance to make the change
-visible. It confirms the change through its own surface. The page keeps looking like the page.
+::: xref
+Grounds R45, R3.
+:::
 
-### D11: Using the page for real
-
-A plain click places the cursor. Two escapes, because both halves of "submission stopped working" are real:
-an editing toggle turns interception off for a stretch and gives back an ordinary page, and Cmd-click
-follows a link without leaving editing. Both are taught by a hover hint.
-
-Leaving a page and returning re-renders it and replays outstanding records, so driving the app costs
-nothing.
-
-### D12: The rail updates in place
-
-**A card holding focus is never re-created.** The largest in-page revert mechanism in the tool being
-replaced is a rail that rebuilds every card on every repaint, so a half-reworded comment is destroyed
-because a removed node never fires blur. Replay makes repaints more frequent, not less, so this is a law
-rather than a careful render loop.
-
-### D13: Runtime
-
-Zero-dependency Node for the server, vanilla JavaScript for the library. Clone, run one command.
-Development tooling may have dependencies, since the browser test runner is a real install and pretending
-otherwise would cost the test strategy that matters most.
-
-Node rather than Python because the audience is more likely to have it and `/usr/bin/python3` on a clean
-Mac is a stub that prompts for Xcode Command Line Tools.
+In `review.md`, everything that came *off the page* (quoted subjects, `before` text, context) is
+fenced as data with delimiters and a standing note that it is content to locate, never instructions to
+follow, so a malicious or merely weird page cannot puppet the agent through a quoted passage. Text the
+*reviewer* wrote (notes, `after`) is their intent, carried verbatim, never truncated, never
+"cleaned up" (the comma that came back as an em dash is the named failure here). Quoted page text may
+be bounded for length, visibly; reviewer text never is.
 
 ## Data and state
 
-Comments, edits, and the note are all items and share one lifecycle, which is what makes per-item
-acknowledgment uniform.
+One folder per review under the helper's data directory:
+
+```
+reviews/<review-id>/
+  events.jsonl     append-only, every event, the source of truth
+  review.md        projection the agent reads; opens with the contract block
+  replies.jsonl    the agent appends one line per answer
+```
+
+Item lifecycle, driven entirely by events:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> outstanding: reviewer creates it
-    outstanding --> outstanding: reviewer rewords, retypes, or undoes (rev increments)
-    outstanding --> delivered: send
-    delivered --> outstanding: reviewer edits it again
-    delivered --> applied: agent acks applied for this rev
-    delivered --> declined: agent acks not applied, with a reason
-    declined --> outstanding: reviewer reopens it
-    applied --> [*]: moves to Completed, never deleted
-    outstanding --> [*]: reviewer deletes it
+    [*] --> draft: reviewer starts typing
+    draft --> ready: Cmd-Enter (comments) / commit (edits)
+    ready --> ready: reviewer rewords (rev bumps, replies to old revs void)
+    ready --> handled: agent reply names (id, current rev)
+    ready --> not_handled: agent reply with reason (stays visible on the card)
+    handled --> ready: reviewer reopens (R38)
+    draft --> [*]: reviewer deletes
+    ready --> [*]: reviewer deletes
 ```
 
-A **review** spans every page the reviewer visits, so walking eight routes produces one review with eight
-pages and one pair of files, not eight of each. A page identifies itself to the server by what the script
-tag declares plus the URL the library finds itself at.
+A **database was considered** for the store (Ken raised it; someone he met built theirs on one) and
+rejected for v1: Node's built-in SQLite is still marked experimental, an external one breaks
+zero-dependency install, and an append-only JSONL log already gives crash-safety, a full history, and
+greppability, while `review.md` gives the readable view a database would need generated anyway. The
+seam is narrow (the helper's store module), so swapping later is contained.
 
 ## Alternatives considered
 
-**Fork human-review.** Rejected. Its storage design is worth learning from, but the symptoms live in its
-liveness design and that design is load-bearing throughout.
-
-**Proxy the page through the server.** Rejected. It carries no session, so a page behind a login lands on a
-login screen. It also requires rewriting every asset URL and shimming history for client routers. A library
-in the page has none of these problems, which is why it is the whole shape.
-
-**Autosave the reviewed page.** Rejected, see D2.
-
-**Rewrite a state file on every change.** Rejected. It is what lets two processes destroy each other's
-feedback.
-
-**Deliver by holding a connection open.** Rejected as the mechanism. Agents end their turns; the tool being
-replaced has a line in its instructions pleading with agents not to, which is a prompt fighting a runtime.
-
-**Isolate the library behind a frame.** Deferred. It is the answer for reviewing pages the reviewer did not
-produce, which v1 does not do. Worth noting that D10's fixed-overlay decision removed most of the layout
-cost a frame was previously priced against.
-
-**A bookmarklet.** Cut. It loads the library into whatever page the reviewer is on, so it becomes script in
-a possibly hostile origin, and no server-side check can enforce local-only when the reviewer's click is the
-selection.
+- **Send/batch delivery** (the first draft): rejected. Ken reviews continuously and the agent should
+  work alongside him; a send button is a gate that holds his work hostage to a control that can break,
+  which is precisely the old tool's failure.
+- **Whole-page contentEditable with intercepted clicks** (human-review's approach): rejected. It makes
+  every native behavior a special case to win back, and R13 ranks the page's behavior above editing
+  convenience.
+- **Wrapper elements for highlights**: rejected for the Custom Highlight API. Wrappers mutate the DOM
+  the page's own scripts and frameworks are diffing, which is a standing source of breakage on live
+  apps (R14, R15).
+- **An MCP server as the agent contract**: rejected as the primary contract. A markdown file plus an
+  appended line works for every agent with no protocol support; MCP could be added later as a
+  convenience without changing the store.
+- **SQLite for the store**: rejected for v1, above.
+- **Writing the reviewed file directly**: rejected (D2); it cannot work on dev-server pages and it
+  hands the library the power to destroy the reviewer's source.
+- **Chromium-only**: rejected. Nothing in the design needs it; the one capability floor (D8) is
+  cross-browser, stated with its reason per R42.
 
 ## Failure modes
 
-| Situation | Behavior |
+| Failure | What happens |
 | --- | --- |
-| The server is not running | The library keeps working from browser storage. Copy and export produce the full set. Sync drains when it returns. The library still loads, because it is not fetched from the server |
-| The page's policy refuses the script or the connection | Named as a policy refusal in the failures list, distinct from server-down, with what to change |
-| The page re-renders its own data | Replay only where the DOM equals the record; otherwise the edit is set aside with its text intact |
-| An agent rewrites the source | Same rule. Acks process first so applied items retire before the repaint they caused |
-| Replay cannot place an edit | Nothing written. The record keeps its text and the card says so |
-| The reviewer is typing when a repaint lands | The region is protected, so it is not repainted at all |
-| A comment's subject no longer exists | The comment stays, is marked, and its lost-anchor state travels to the agent |
-| The reviewer sends with nothing listening | Files are written, send stays available, the next agent gets everything |
-| An ack names something never delivered, or an older revision | Refused, or applied to the revision it names while the newer one ships next |
-| Two windows on the same page | The second is refused with a reason and a way to take over |
-| A repaint arrives mid-keystroke | The change was written on the keystroke, not on a timer |
+| Helper not running | Library keeps everything in browser storage, status line says so, copy/export work; on reconnect every unacknowledged event is re-posted (idempotent) |
+| Helper dies mid-review | Same as above; the log on disk holds everything already delivered |
+| Page repaints during typing | The protected region survives; replay restores committed records around it |
+| Agent lands a change under an outstanding edit | Three-way compare surfaces the collision on the card; nothing is overwritten silently (R5) |
+| Anchor no longer found, or found twice | Item flagged as lost on page and in review.md; never guessed, never dropped (R19, R20) |
+| Stale agent reply (old rev) | Refused; the reworded item stays outstanding (R9) |
+| Browser crash mid-keystroke | Browser storage has everything up to the last keystroke (R1) |
+| A hostile local page probes the helper | No token, no allowed origin: refused at preflight (R44) |
+| The reviewer dismisses an error | It stays dismissed; the underlying state is still visible in the status line (R11) |
 
 ## Test strategy
 
-The tool being replaced has **no browser-level test at all**, and every symptom lives in the part that has
-none. Its careful storage layer is not where it fails. So the interactive surface is the priority, and
-jsdom does not count for any of it: no layout, no caret rects, no policy enforcement, no real key events.
-
-| Layer | What it proves |
-| --- | --- |
-| **Real browser** | Each durability law individually. Type and reload. Type and kill the server. Type while the page repaints. Type half a comment, force a repaint, assert the half-comment survives. Send with nothing listening, add more, send again |
-| **Replay** | Idempotence observed as the absence of a second write, not as final-DOM equality. The caret is never disturbed under a repeating repaint. A non-unique match writes nothing. A re-render of different data sets the edit aside rather than stamping it |
-| **Anchoring** | Survives edits elsewhere, reformatting, rewrapping; picks the right occurrence among repeats; reports honestly when the subject is gone |
-| **Region identity** | Two neighbouring regions never merge; identity survives a repaint and a move |
-| **Protocol** | Per-item ack; stale ack refused; delivered items re-offered until acked; a second send adds; browser and server reconcile with lifecycle winning per revision |
-| **Authorization** | A page on an unauthorized origin can neither write, read, nor forge an ack, judged on effect rather than on a status code |
-| **Non-interference** | The page renders identically with the library present, at two widths, rail open and collapsed, with no host element carrying a style attribute |
-| **End to end** | A full review of a real running page behind a login: comment, type fixes, drive the page, send, have an agent apply and ack, watch the burn-down |
-
-Every law in the brief needs a test that fails without it. That is the acceptance bar, not a coverage
-number.
+Real browser, real pages, per the brief's metric that the interactive parts are tested where the old
+tool was not. The harness already built survives: a repainting fixture page whose engine actively
+reverts typed text on a timer, a caret assertion that requires the same text node by identity after
+five replay passes, and a no-second-write assertion via mutation observation rather than final-DOM
+equality (an idempotence bug is invisible to an end-state check). The top-ranked tests map one-to-one
+to Ken's three original symptoms: typed text reverting, delivery stopping, and the page's own controls
+dying. Replay tests must assert replay actually ran (pass counters), or a do-nothing replay engine
+passes every test.
 
 ## Open Questions
 
 ::: callout-question
-**Q1: One file or several, and does a generated bundle live in the repository?** Carried from the brief,
-because it decides whether separate builders can own separate files.
+**Q1: Does the helper start itself?** The library cannot start a process, so someone must run the
+helper once. The install can register it to start on login, or the agent can be responsible for
+starting it when a review begins, or it stays a manual one-liner. Leaning agent-started with a manual
+fallback, since the agent is already in the loop.
 :::
 
 ::: callout-question
-**Q2: What is the deliberate act that authorizes an origin?** D8 requires one and does not name it. The
-answer sets the friction between adding a script tag and being able to send.
+**Q2: How does `review.md` divide by page on a dev server?** A static doc is one page; a dev-server
+review walks many URLs. Grouping by pathname with the review spanning them matches how Ken actually
+reviews, but naming and ordering inside the file need a concrete shape at plan time.
 :::

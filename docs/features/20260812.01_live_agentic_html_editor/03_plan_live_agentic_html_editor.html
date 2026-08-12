@@ -611,7 +611,11 @@
       background: var(--ink); color: #fff; border: none; border-radius: 24px;
       padding: 10px 18px; font: 700 0.85rem "Inter", sans-serif; cursor: pointer;
       box-shadow: 0 4px 14px rgba(15,23,42,0.25);
+      transition: right 0.15s ease;
     }
+    /* While the panel is open, the pill slides left of it so it never covers
+       the bottom of the comments thread. 340px panel + 20px gap. */
+    body.ffc-open #ffc-fab { right: 360px; }
     #ffc-fab .ffc-dot { width: 8px; height: 8px; border-radius: 50%; background: #94a3b8; }
     #ffc-fab .ffc-dot.on { background: #4ade80; }
     #ffc-add {
