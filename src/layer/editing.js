@@ -585,7 +585,13 @@
       // reads edit state from here on must see it closed.
       session = null;
       var reason = (options || {}).reason || "commit";
-      var immediate = reason === "navigation" ? "navigation" : "ready";
+      // On the unload path the event is QUEUED and nothing else: the transport
+      // at unload is the keepalive post, and onUnload makes it one line below.
+      // Asking for an immediate flush here instead would schedule an ordinary
+      // fetch that races the document's teardown, which is the one transport
+      // protocol.js says not to rely on, and it would hide the body cap by
+      // sometimes beating it.
+      var immediate = reason === "navigation" ? null : "ready";
 
       var block = open.block;
       var after = capture(block);
@@ -1062,13 +1068,21 @@
       frameNode.style.height = rect.height + pad * 2 + "px";
 
       if (barNode) {
-        var barHeight = barNode.getBoundingClientRect().height || 30;
-        var top = rect.top - pad - barHeight - 8;
-        // Above the block, unless there is no room up there, in which case it
-        // sits just below rather than off the top of the window.
-        if (top < 8) top = rect.bottom + pad + 8;
-        barNode.style.top = Math.round(top) + "px";
+        // The bar sits above the block, pinned by its BOTTOM edge, so its own
+        // height never enters the calculation. Measuring the height instead
+        // reads zero on the first frame in some engines, which puts the bar in
+        // one place and then moves it a frame later: the reviewer sees it jump,
+        // and anything aiming at a button can miss it.
+        var viewport = win.innerHeight || 768;
+        var roomAbove = rect.top - pad - 8;
         barNode.style.left = Math.round(Math.max(8, rect.left - pad)) + "px";
+        if (roomAbove >= 44) {
+          barNode.style.bottom = Math.round(viewport - roomAbove) + "px";
+          barNode.style.top = "auto";
+        } else {
+          barNode.style.top = Math.round(rect.bottom + pad + 8) + "px";
+          barNode.style.bottom = "auto";
+        }
       }
       return frameNode;
     }
