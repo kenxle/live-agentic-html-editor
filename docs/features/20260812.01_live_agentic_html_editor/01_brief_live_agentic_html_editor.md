@@ -158,10 +158,11 @@ deliberate.
 :::
 
 ::: callout-req
-**R3: The reviewer's unsent work wins on screen, and collisions are surfaced rather than resolved
-silently.** When an incoming change touches a region the reviewer has unsent work in, that region
-keeps the reviewer's version, and the reviewer is told a conflicting change arrived so they can
-decide.
+**R3: The reviewer's unsent work is never silently overwritten, and collisions are surfaced.** When a
+change to the underlying source touches a region the reviewer has unsent work in, that region keeps the
+reviewer's version and they are told a conflicting change arrived. When the reviewed page re-renders its
+own data instead, the reviewer's edit is set aside with its text intact and its card says the page moved
+on, because stamping their words over live application data would be a lie about their own app.
 :::
 
 ::: callout-req
@@ -231,9 +232,10 @@ marked in the page and the note appears keyed to it.
 :::
 
 ::: callout-req
-**R15: Comment on a whole element** through a modifier gesture, for the common case where the problem
-is not in the words: an image, a diagram, a chart, a card, a section. **A plain click never opens a
-compose box**, because a plain click now places the text cursor.
+**R15: Comment on a whole element** by holding Alt and clicking it, for the common case where the problem
+is not in the words: an image, a diagram, a chart, a card, a section. Alt-click is the gesture the Steady
+Thread layer already uses, so it is already in the reviewer's hands. **A plain click never opens a compose
+box**, because a plain click now places the text cursor.
 :::
 
 ::: callout-req
@@ -274,8 +276,9 @@ text, the text around it, the section it sits under, and a description of the el
 The headline. This is what we do not have today.
 
 ::: callout-req
-**R22: There is no edit mode.** The document is editable from the moment it opens. Click anywhere and
-type. No toggle to find and none to forget.
+**R22: There is no edit mode to find or forget.** The document is editable from the moment it opens.
+Click anywhere and type. There is an explicit escape for driving the app (R38), which is a thing the
+reviewer reaches for deliberately, not a mode they have to remember to leave.
 :::
 
 ::: callout-req
@@ -289,8 +292,10 @@ lists. Nothing beyond that in v1.
 :::
 
 ::: callout-req
-**R25: Images can be resized, moved, and pasted in.** An image the reviewer resizes keeps the size
-they gave it when it lands somewhere else.
+**R25: Images can be resized and moved.** An image the reviewer resizes keeps the size they gave it when
+it lands somewhere else. Pasting a new image is cut from v1: it is the one action that would force the
+tool to write a file, which R44 and the architecture otherwise forbid, and it has no answer at all on a
+running app.
 :::
 
 ::: callout-req
@@ -364,10 +369,10 @@ buttons do not act, forms do not submit, because a plain click places the cursor
 :::
 
 ::: callout-req
-**R38: The reviewer can use the page for real, and it is obvious how.** Following a link, pressing a
-button, filling in and submitting a form, and moving through an app's real flow are all available
-through a gesture the tool teaches on screen rather than in documentation. A reviewer who wants to
-drive the app for a while can turn editing off for a stretch and get an ordinary page back.
+**R38: The reviewer can use the page for real, and it is obvious how.** An editing toggle turns
+interception off for a stretch and gives back an ordinary page, which is what someone moving through a
+real flow actually wants. Holding Cmd (or Ctrl) and clicking a link follows it without leaving editing,
+for the one-off case. Both are taught on screen rather than in documentation.
 :::
 
 ::: callout-req
@@ -410,8 +415,9 @@ feedback stay visible to the reviewer even when they are looking at something el
 :::
 
 ::: callout-req
-**R46: A page that renders itself with JavaScript is reviewable**, and the reviewer is told plainly
-what is happening to their edits on it rather than being left to infer it.
+**R46: A page that renders itself with JavaScript is reviewable.** Nothing needs to be detected about it:
+since the tool never writes any reviewed file, every target gets the same honest sentence from R13 (the
+reviewer always knows where their typing goes).
 :::
 
 ### The reviewed artifact and its source
@@ -438,8 +444,9 @@ their quoted subject and edits with their before and after text.
 :::
 
 ::: callout-req
-**R50: Nothing is truncated on the way through.** A clipped `after` becomes an agent faithfully
-truncating the reviewer's own paragraph.
+**R50: The reviewer's own words are never truncated on the way through.** A clipped `after` becomes an
+agent faithfully truncating the reviewer's own paragraph. Text quoted out of the reviewed document is a
+search key rather than the reviewer's intent, so it may be bounded, visibly.
 :::
 
 ::: callout-req
@@ -539,7 +546,10 @@ pointing out of the reviewed file's folder.
 :::
 
 ::: callout-req
-**R65: A reviewed page cannot reach the tool's own controls or stored feedback.**
+**R65: A reviewed page cannot reach the tool's own controls or stored feedback.** Deferred beyond v1 and
+not claimed: the layer lives in the reviewed page's own origin, which is what buys authenticated routes
+and free roam. It holds the day reviewing HTML the reviewer did not produce comes into scope, and the
+known answer then is an isolating frame.
 :::
 
 ::: callout-req
@@ -549,7 +559,9 @@ carrying executable schemes are refused.
 :::
 
 ::: callout-req
-**R67: Pasted files are limited to image types that cannot carry script.**
+**R67: No file the reviewer drops or pastes ever becomes part of the page or reaches disk.** With image
+paste cut from v1 (R25) this is a refusal rather than an allowlist, and a drop from the desktop must not
+navigate the page away from the review.
 :::
 
 ## Success Metrics
@@ -623,5 +635,12 @@ tool, the feature-forge and research-report skills both change. Also not blockin
 | Q3 (license) is a settled decision | Accepted | Settled as MIT with human-review credited in the README; question removed |
 | Tool imposes its own styling on the reviewed artifact (Ken, live) | Accepted | R34 and R35 added: style only what we add, and never write styles onto the host page |
 | Nothing important should live only in the chat window; an unplaceable edit needs to say so in the page (Ken, live) | Accepted | R68 (the agent writes back onto the item's card) and R69 (the page is the channel back) |
+| Verification cannot match a rendered string to its template | Accepted | Architecture D8 now has a third verdict, not verifiable, rather than a false warning on every interpolated region |
+| R3 did not say what happens on an app re-render as opposed to a source change | Accepted | R3 split: source change collides, app re-render detaches |
+| Image paste forces a write path the design forbids and has no answer on a route | Accepted | Cut from R25; R67 restated as a refusal |
+| R50 read as an absolute covering text the reviewer did not write | Accepted | Bounded to the reviewer's own words |
+| R65 is claimed and not achievable | Accepted | Marked deferred and not claimed |
+| R46 was a leftover from the design where the tool wrote files | Accepted | Folded into R13 |
+| Element comment and pass-through both called a modifier click | Accepted | Alt-click comments, Cmd-click follows a link, plus the R38 toggle |
 | Markdown dropped as a target (Ken, live) | Accepted | R36 and R41 cut; R66 restated without markdown; non-goal added. All remaining targets are HTML |
 | Genuinely open: does the tool write the file, how auth works, which browsers | Split | The first two are architecture decisions per Ken; browsers remain as Q1 |

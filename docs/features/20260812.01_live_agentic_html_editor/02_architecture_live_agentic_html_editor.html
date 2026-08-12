@@ -1,0 +1,2948 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Architecture: Live Agentic HTML Editor</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%94%A8</text></svg>">
+  <style>
+    :root {
+      --ink: #0f172a;
+      --accent: #2563eb;
+      --accent-soft: #eff6ff;
+      --muted: #64748b;
+      --rule: #e2e8f0;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --table-head: #f1f5f9;
+
+      /* Callout types */
+      --req-bg: #f0fdf4;      --req-bar: #16a34a;
+      --nongoal-bg: #f8fafc;  --nongoal-bar: #94a3b8;
+      --metric-bg: #f0f9ff;   --metric-bar: #0284c7;
+      --question-bg: #fffbeb; --question-bar: #d97706;
+      --flag-bg: #fef2f2;     --flag-bar: #dc2626;
+      --suggest-bg: #faf5ff;  --suggest-bar: #7c3aed;
+    }
+
+    html { scroll-behavior: smooth; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+    body {
+      font-family: "Inter", "Helvetica Neue", -apple-system, system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.7;
+      color: var(--ink);
+      background: var(--bg);
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 48px 32px 100px;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    /* Title block (pandoc emits <header id="title-block-header">) */
+    header#title-block-header {
+      border-bottom: 3px solid var(--accent);
+      padding-bottom: 22px;
+      margin-bottom: 8px;
+    }
+    header#title-block-header h1.title {
+      font-size: 2rem;
+      font-weight: 800;
+      margin: 0 0 6px;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+    }
+    header#title-block-header p.subtitle {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin: 0;
+    }
+
+    /* Cross-doc nav (injected by the build before the TOC) */
+    .doc-nav {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin: 24px 0 8px;
+      padding: 12px 16px;
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 10px;
+      font-size: 0.84rem;
+    }
+    .doc-nav .doc-nav-label { color: var(--muted); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
+    .doc-nav a {
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--accent-soft);
+      padding: 4px 12px;
+      border-radius: 16px;
+      text-decoration: none;
+      border: 1px solid rgba(37,99,235,0.18);
+      transition: background 0.15s;
+    }
+    .doc-nav a:hover { background: #dbeafe; }
+    .doc-nav a.current { background: var(--accent); color: #fff; border-color: transparent; cursor: default; }
+
+    /* TOC (pandoc emits <nav id="TOC">) */
+    nav#TOC {
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 12px;
+      padding: 18px 24px;
+      margin: 16px 0 36px;
+      font-size: 0.88rem;
+    }
+    nav#TOC::before {
+      content: "Contents";
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+    nav#TOC ul { list-style: none; padding-left: 0; margin: 0; }
+    nav#TOC ul ul { padding-left: 16px; margin-top: 4px; }
+    nav#TOC li { margin-bottom: 4px; }
+    nav#TOC a { color: var(--ink); text-decoration: none; }
+    nav#TOC a:hover { color: var(--accent); }
+
+    /* Headings */
+    h1, h2, h3, h4 { font-weight: 700; line-height: 1.3; }
+    h2 {
+      font-size: 1.35rem;
+      margin: 52px 0 16px;
+      padding-top: 24px;
+      border-top: 1px solid var(--rule);
+      letter-spacing: -0.01em;
+    }
+    h3 { font-size: 1.1rem; margin: 34px 0 12px; color: var(--accent); }
+    h4 {
+      font-size: 0.9rem; margin: 24px 0 8px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    table + h2, blockquote + h2, ul + h2, ol + h2, pre + h2, .callout + h2 { margin-top: 60px; }
+
+    p { margin: 0 0 16px; }
+
+    a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(37,99,235,0.3); word-break: break-word; }
+    a:hover { border-bottom-color: var(--accent); background: var(--accent-soft); }
+
+    strong { color: var(--ink); font-weight: 700; }
+
+    ul, ol { margin: 0 0 16px; padding-left: 24px; }
+    li { margin: 0 0 6px; }
+    li::marker { color: var(--accent); }
+
+    /* Callout boxes (from ::: callout-* fenced divs) */
+    .callout {
+      border-radius: 0 10px 10px 0;
+      padding: 12px 18px;
+      margin: 18px 0;
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+    .callout > :first-child { margin-top: 0; }
+    .callout > :last-child { margin-bottom: 0; }
+    .callout::before {
+      display: block;
+      font-size: 0.66rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+    .callout-req     { background: var(--req-bg);     border-left: 4px solid var(--req-bar); }
+    .callout-req::before     { content: "Requirement"; color: var(--req-bar); }
+    .callout-nongoal { background: var(--nongoal-bg); border-left: 4px solid var(--nongoal-bar); }
+    .callout-nongoal::before { content: "Non-Goals";   color: var(--nongoal-bar); }
+    .callout-metric  { background: var(--metric-bg);  border-left: 4px solid var(--metric-bar); }
+    .callout-metric::before  { content: "Metrics";     color: var(--metric-bar); }
+    .callout-question { background: var(--question-bg); border-left: 4px solid var(--question-bar); }
+    .callout-question::before { content: "Open Question"; color: var(--question-bar); }
+    .callout-flag    { background: var(--flag-bg);    border-left: 4px solid var(--flag-bar); }
+    .callout-flag::before    { content: "Red Flag";    color: var(--flag-bar); }
+    .callout-suggest { background: var(--suggest-bg); border-left: 4px solid var(--suggest-bar); }
+    .callout-suggest::before { content: "Suggestion";  color: var(--suggest-bar); }
+
+    /* Reviews section: the _reviews.md files are merged into the HTML below this
+       banner (they stay separate files on disk for agents). */
+    .reviews-banner {
+      background: #faf3f2;
+      border: 1px solid #e3b9b3;
+      border-radius: 10px;
+      padding: 12px 18px;
+      margin: 0 0 28px;
+      font-size: 0.9rem;
+      line-height: 1.55;
+      color: #7a3a32;
+    }
+    /* Jump target for spec → review-detail links; offset so the heading clears. */
+    .finding-anchor { display: inline-block; scroll-margin-top: 1.5rem; }
+    td a[href^="#"] { font-weight: 700; text-decoration: none; border-bottom: 1px dotted currentColor; }
+    td a[href^="#"]:hover { text-decoration: none; border-bottom-style: solid; }
+    .reviews-banner::before {
+      display: block;
+      content: "Reviews (full prose)";
+      font-size: 0.66rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+      color: #b0463b;
+    }
+
+    /* Inline xref deep-dive (from ::: xref fenced div) */
+    .xref {
+      font-size: 0.82rem;
+      background: var(--accent-soft);
+      border-left: 3px solid var(--accent);
+      border-radius: 0 7px 7px 0;
+      padding: 9px 14px;
+      margin: 0 0 18px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .xref::before {
+      content: "\21B3  See";
+      font-size: 0.66rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--accent);
+      margin-right: 8px;
+    }
+    .xref > * { display: inline; margin: 0; }
+    .xref a { border-bottom: none; font-weight: 700; color: var(--ink); }
+    .xref a:hover { color: var(--accent); background: none; }
+
+    /* Tables */
+    /* The build wraps every table in .table-scroll so a wide table scrolls
+       inside the reading column instead of spilling past it. The scrolling
+       behavior itself is in shared-assets/doc_fixes.css; this is the look. */
+    .table-scroll {
+      margin: 20px 0 28px;
+      border-radius: 10px;
+      box-shadow: 0 1px 3px rgba(15,23,42,0.06), 0 0 0 1px var(--rule);
+    }
+    .table-scroll table { margin: 0; box-shadow: none; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 20px 0 28px;
+      font-size: 0.88rem;
+      background: var(--card);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(15,23,42,0.06), 0 0 0 1px var(--rule);
+      line-height: 1.5;
+    }
+    thead th {
+      background: var(--table-head);
+      text-align: left;
+      font-weight: 700;
+      padding: 10px 14px;
+      border-bottom: 2px solid var(--accent);
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: var(--muted);
+    }
+    tbody td { padding: 9px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:nth-child(even) { background: #f8fafc; }
+
+    /* Disposition status words rendered by the build (Accepted/Rejected/Deferred) */
+    td .accepted, span.accepted { color: #16a34a; font-weight: 700; }
+    td .rejected, span.rejected { color: #dc2626; font-weight: 700; }
+    td .deferred, span.deferred { color: #d97706; font-weight: 700; }
+
+    /* Inline + block code */
+    code {
+      font-family: "SF Mono", "JetBrains Mono", Menlo, monospace;
+      font-size: 0.82em;
+      background: var(--accent-soft);
+      padding: 2px 6px;
+      border-radius: 5px;
+      color: var(--accent);
+    }
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 16px 20px;
+      border-radius: 10px;
+      overflow-x: auto;
+      margin: 20px 0;
+      line-height: 1.55;
+      /* Wrap long lines instead of forcing a horizontal scroll (readability). */
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    pre code { background: none; color: inherit; padding: 0; font-size: 0.8rem; }
+    /* Mermaid should NOT wrap its source before the script swaps it for SVG. */
+    pre.mermaid { white-space: pre; }
+
+    /* Mermaid blocks: pandoc renders ```mermaid as <pre class="mermaid">; the
+       Mermaid script replaces the text with SVG. Reset the dark pre styling. */
+    pre.mermaid {
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 10px;
+      padding: 20px;
+      text-align: center;
+      color: var(--ink);
+    }
+
+    blockquote {
+      margin: 18px 0;
+      padding: 10px 18px;
+      background: #f8fafc;
+      border-left: 4px solid var(--muted);
+      border-radius: 0 8px 8px 0;
+      color: var(--muted);
+    }
+    blockquote p { margin: 0; }
+
+    hr { border: none; border-top: 1px solid var(--rule); margin: 32px 0; }
+    hr:has(+ h2) { display: none; }
+
+    /* Task-list checkboxes from "- [ ]" lists */
+    ul.task-list { list-style: none; padding-left: 4px; }
+    ul.task-list li input[type="checkbox"] { margin-right: 8px; }
+
+    @page { size: letter; margin: 0.7in 0.65in; }
+    @media (max-width: 620px) {
+      body { padding: 28px 16px 60px; font-size: 15px; }
+      header#title-block-header h1.title { font-size: 1.6rem; }
+      table { font-size: 0.8rem; }
+    }
+    @media print {
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      body { background: #fff; max-width: 100%; font-size: 11pt; padding: 0; }
+      .doc-nav { display: none; }
+      a { color: var(--ink); border-bottom: none; }
+      .callout, table, pre, blockquote { break-inside: avoid; }
+      h2, h3 { break-after: avoid; }
+    }
+  </style>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: false, theme: "neutral", securityLevel: "loose" });
+    /* Pandoc emits ```mermaid blocks as <pre class="mermaid"><code>…</code></pre> with the
+       diagram source HTML-entity-encoded. Mermaid 10 reads innerHTML, so it sees the literal
+       <code> tag and &quot;/&gt; entities and throws syntax errors. Flatten each block to a
+       single decoded text node first (textContent decodes entities and drops the wrapper),
+       then render. Same fix as the personal-repo report builds (commit d525c50 there). */
+    function renderMermaid() {
+      document.querySelectorAll("pre.mermaid").forEach(function (el) {
+        if (!el.dataset.mflattened) {
+          el.textContent = el.textContent;
+          el.dataset.mflattened = "1";
+        }
+      });
+      mermaid.run({ querySelector: "pre.mermaid" });
+    }
+    if (document.readyState === "loading") {
+      window.addEventListener("DOMContentLoaded", renderMermaid);
+    } else {
+      renderMermaid();
+    }
+  </script>
+
+  <!-- The review comment module and the shared document fixes are injected here
+       at build time from ~/.claude/skills/shared-assets/ (comment_module.html +
+       doc_fixes.css) by shared_assets.resolve_header(). Do not paste a copy back
+       into this file. -->
+  <style>
+  /* Shared document fixes: one source for both document builds.
+
+     Injected at build time alongside comment_module.html, in place of the
+     <!-- SHARED_ASSETS --> placeholder in each pandoc header. Because it lands
+     last in <head>, these rules win over the same-specificity rules earlier in a
+     header without needing !important.
+
+     Keep this file to fixes that are true for every document we build. Anything
+     that depends on a skill's own look (colors, radius, shadow) belongs in that
+     skill's header. */
+
+  /* --- Tables: never spill past the reading column (plan Task 4.3, defect 1) ---
+     Two halves to the fix, and both are needed.
+     1. A wide table scrolls inside its wrapper. Both builds wrap every table in
+        <div class="table-scroll">.
+     2. Long unbroken strings (URLs, tokens, absolute paths) wrap instead of
+        setting a min-content width that forces the table wider than the page.
+        Without this the table is simply wider than the wrapper and the text is
+        cut off at the wrapper edge. */
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+  .table-scroll > table { margin: 0; }
+  table { max-width: 100%; }
+  thead th, tbody td { overflow-wrap: anywhere; word-break: break-word; }
+  thead th code, tbody td code,
+  thead th a, tbody td a { overflow-wrap: anywhere; word-break: break-word; }
+
+  /* Print/PDF has no scrollbars, so show the whole table and let it shrink. */
+  @media print {
+    .table-scroll { overflow: visible; }
+  }
+
+  /* --- Charts: never let a chart set the page width (plan Task 4.3, defect 2) ---
+     The label-truncation fix itself is Plotly's automargin, applied in the
+     report header's render script. This is the CSS guard next to it: a chart
+     that computes a wider layout than its column stays inside the column
+     instead of pushing the whole page sideways. */
+  figure.plotly-chart,
+  figure.plotly-chart > div,
+  figure.chart svg,
+  figure.plotly-chart .main-svg { max-width: 100%; }
+
+  </style>
+  <!-- ================================================================
+       Review comment module — THE one source.
+
+       Both document builds inject this file at build time by replacing the
+       <!-- SHARED_ASSETS --> placeholder in their pandoc header:
+         ~/.claude/skills/feature-forge/assets/feature_pandoc_header.html
+         ~/.claude/skills/research-report/assets/report_pandoc_header.html
+       The injector is shared-assets/shared_assets.py. Edit the module here and
+       the next build of either doc set picks it up. Do not copy it back into a
+       header: two copies is the drift this file exists to end.
+
+       What it gives a reader: highlight any passage, press Cmd/Ctrl+Shift+C (or
+       click the Comment button that pops up), and type straight into the
+       auto-focused box. Comments save to localStorage on every keystroke and
+       POST to the comment helper (feature-forge scripts/comment_server.py, port
+       8377) when it is running, which writes comments_<doc>.md next to the doc.
+       Copy for Claude / Export .md cover the no-helper case.
+
+       It styles itself from the host header's --ink / --accent / --rule /
+       --accent-soft variables, which both headers define.
+       ================================================================ -->
+  <style>
+    /* ——— Review comments layer (select text → comment) ——— */
+    body { transition: margin-right 0.25s ease; }
+    /* When the panel is open, reserve its width so it never covers the doc text.
+       margin-left stays auto, so the content re-centers in the remaining space. */
+    body.ffc-open { margin-right: 372px; }
+    mark.ffc-hl { background: #fde68a; padding: 1px 0; border-bottom: 2px solid #f59e0b; cursor: pointer; }
+    mark.ffc-hl.ffc-active { background: #fbbf24; }
+    pre.mermaid.ffc-hl-dia { outline: 3px solid #f59e0b; outline-offset: 4px; border-radius: 6px; cursor: pointer; }
+    pre.mermaid.ffc-hl-dia.ffc-active { box-shadow: 0 0 0 5px #fde68a; }
+    #ffc-fab {
+      position: fixed; right: 20px; bottom: 20px; z-index: 9998;
+      display: flex; align-items: center; gap: 8px;
+      background: var(--ink); color: #fff; border: none; border-radius: 24px;
+      padding: 10px 18px; font: 700 0.85rem "Inter", sans-serif; cursor: pointer;
+      box-shadow: 0 4px 14px rgba(15,23,42,0.25);
+    }
+    #ffc-fab .ffc-dot { width: 8px; height: 8px; border-radius: 50%; background: #94a3b8; }
+    #ffc-fab .ffc-dot.on { background: #4ade80; }
+    #ffc-add {
+      position: absolute; z-index: 9999; display: none;
+      background: var(--accent); color: #fff; border: none; border-radius: 8px;
+      padding: 6px 12px; font: 700 0.78rem "Inter", sans-serif; cursor: pointer;
+      box-shadow: 0 4px 10px rgba(15,23,42,0.3);
+    }
+    #ffc-panel {
+      position: fixed; top: 0; right: 0; bottom: 0; width: 340px; z-index: 9997;
+      background: #fff; border-left: 1px solid var(--rule);
+      box-shadow: -6px 0 24px rgba(15,23,42,0.08);
+      display: none; flex-direction: column;
+    }
+    #ffc-panel.open { display: flex; }
+    .ffc-head { padding: 14px 16px; border-bottom: 1px solid var(--rule); display: flex; align-items: center; gap: 6px; }
+    .ffc-head strong { flex: 1; font-size: 0.9rem; }
+    .ffc-list { flex: 1; overflow-y: auto; padding: 12px; }
+    .ffc-card { border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; background: #fffbeb; }
+    .ffc-card.orphan { background: #f8fafc; }
+    .ffc-card.done { background: #ecfdf5; border-color: #6ee7b7; }
+    .ffc-done-tag { color: #059669; font-weight: 600; }
+    .ffc-sec { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 4px; }
+    .ffc-quote {
+      font-size: 0.78rem; color: var(--muted); border-left: 3px solid #f59e0b;
+      padding-left: 8px; margin: 0 0 8px; max-height: 76px; overflow: hidden; cursor: pointer;
+      background: none; border-radius: 0;
+    }
+    .ffc-card textarea {
+      width: 100%; box-sizing: border-box; min-height: 64px;
+      border: 1px solid var(--rule); border-radius: 7px; padding: 7px 9px;
+      font: 400 0.85rem/1.5 "Inter", sans-serif; resize: vertical;
+    }
+    .ffc-card .ffc-del { background: none; border: none; color: #dc2626; font-size: 0.72rem; cursor: pointer; padding: 2px 0; float: right; }
+    .ffc-btn {
+      background: var(--accent-soft); color: var(--accent);
+      border: 1px solid rgba(37,99,235,0.25); border-radius: 7px;
+      padding: 5px 10px; font: 700 0.72rem "Inter", sans-serif; cursor: pointer;
+    }
+    .ffc-status { font-size: 0.68rem; color: var(--muted); padding: 8px 16px; border-top: 1px solid var(--rule); }
+    #ffc-toast {
+      position: fixed; bottom: 76px; right: 20px; z-index: 9999;
+      background: var(--ink); color: #fff; padding: 8px 14px; border-radius: 8px;
+      font: 600 0.8rem "Inter", sans-serif; opacity: 0; transition: opacity 0.25s; pointer-events: none;
+    }
+    #ffc-toast.show { opacity: 1; }
+    @media print {
+      #ffc-fab, #ffc-panel, #ffc-add, #ffc-toast { display: none !important; }
+      mark.ffc-hl { background: none; border-bottom: none; }
+      pre.mermaid.ffc-hl-dia { outline: none; box-shadow: none; }
+    }
+  </style>
+  <script>
+  /* Review comments layer. Highlights anchor by quoted text + surrounding context.
+     Comments auto-save to localStorage on every keystroke (survives reloads, works
+     on file://) and POST to the comment helper when it is running
+     (feature-forge scripts/comment_server.py, port 8377), which writes
+     comments_<doc>.md next to the doc. Export buttons cover the no-helper case. */
+  (function () {
+    "use strict";
+    if (window.__ffc) return;
+    window.__ffc = true;
+
+    var DOC = decodeURIComponent(location.pathname.split("/").pop() || "doc");
+    var KEY = "ffc:" + DOC;
+    /* One shared helper serves every folder. If this page was opened
+       THROUGH the helper (http://127.0.0.1:<port>/<doc>), talk to that same
+       origin whatever its port; if opened as a file://, fall back to the default
+       port. KEY is by filename, not full path, so localStorage comments follow
+       the doc across file:// and http. */
+    var HELPER = (location.protocol === "http:" && location.hostname === "127.0.0.1")
+      ? location.origin
+      : "http://127.0.0.1:8377";
+    var SKIP = "script,style,svg,pre.mermaid,#ffc-panel,#ffc-fab,#ffc-add,#ffc-toast";
+    var comments = [];
+    var connected = false;
+    var syncTimer = null;
+
+    try { comments = JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) { comments = []; }
+
+    /* Selective clearing: a build may ship window.FFC_DONE = [{t, q}, ...] where
+       t = the comment text (trimmed, exact) and q = the first 40 chars of the
+       quoted passage. Cards matching an entry were applied and are removed at
+       load; a card whose text has changed since (Ken extended it) no longer
+       matches and survives, which is the desired behavior. */
+    (function () {
+      var doneList = window.FFC_DONE;
+      if (!doneList || !doneList.length || !comments.length) return;
+      var before = comments.length;
+      comments = comments.filter(function (c) {
+        return !doneList.some(function (d) {
+          return String(c.text || "").trim() === String(d.t || "") &&
+                 String(c.quote || "").slice(0, 40) === String(d.q || "");
+        });
+      });
+      if (comments.length !== before) {
+        try { localStorage.setItem(KEY, JSON.stringify(comments)); } catch (e) {}
+      }
+    })();
+
+    /* ---------- text model: doc as one string over stable text nodes ---------- */
+
+    function textNodes() {
+      var out = [];
+      var w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+        acceptNode: function (n) {
+          for (var p = n.parentElement; p; p = p.parentElement) {
+            if (p.matches && p.matches(SKIP)) return NodeFilter.FILTER_REJECT;
+          }
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      });
+      var n;
+      while ((n = w.nextNode())) out.push(n);
+      return out;
+    }
+
+    function mermaidBlocks() {
+      return Array.prototype.slice.call(document.querySelectorAll("pre.mermaid"));
+    }
+
+    function markDiagram(dia, id) {
+      if (!dia) return;
+      dia.classList.add("ffc-hl-dia");
+      dia.setAttribute("data-ffc-dia", id);
+    }
+
+    function docText(nodes) {
+      var s = "";
+      for (var i = 0; i < nodes.length; i++) s += nodes[i].nodeValue;
+      return s;
+    }
+
+    function wrapRangeGlobal(s, e, id) {
+      var nodes = textNodes(), segs = [], total = 0, i, n;
+      for (i = 0; i < nodes.length; i++) {
+        n = nodes[i];
+        var len = n.nodeValue.length;
+        var a = Math.max(s, total), b = Math.min(e, total + len);
+        if (a < b) segs.push({ n: n, ls: a - total, le: b - total });
+        total += len;
+      }
+      for (i = 0; i < segs.length; i++) {
+        n = segs[i].n;
+        if (segs[i].ls > 0) n = n.splitText(segs[i].ls);
+        if (segs[i].le - segs[i].ls < n.nodeValue.length) n.splitText(segs[i].le - segs[i].ls);
+        var m = document.createElement("mark");
+        m.className = "ffc-hl";
+        m.setAttribute("data-ffc", id);
+        n.parentNode.insertBefore(m, n);
+        m.appendChild(n);
+      }
+    }
+
+    function locate(c) {
+      var t = docText(textNodes());
+      var probes = [
+        { s: (c.prefix || "") + c.quote + (c.suffix || ""), off: (c.prefix || "").length },
+        { s: c.quote + (c.suffix || ""), off: 0 },
+        { s: (c.prefix || "") + c.quote, off: (c.prefix || "").length },
+        { s: c.quote, off: 0 }
+      ];
+      for (var i = 0; i < probes.length; i++) {
+        if (!probes[i].s) continue;
+        var at = t.indexOf(probes[i].s);
+        if (at >= 0) return at + probes[i].off;
+      }
+      return -1;
+    }
+
+    function anchorAll() {
+      for (var i = 0; i < comments.length; i++) {
+        var c = comments[i];
+        if (c.diagram != null) {
+          var dia = mermaidBlocks()[c.diagram];
+          c.orphan = !dia;
+          markDiagram(dia, c.id);
+          continue;
+        }
+        var at = locate(c);
+        c.orphan = at < 0;
+        if (at >= 0) wrapRangeGlobal(at, at + c.quote.length, c.id);
+      }
+    }
+
+    function sectionFor(node) {
+      var el = node.nodeType === 3 ? node.parentElement : node;
+      var heads = document.querySelectorAll("h1, h2, h3");
+      var best = "";
+      for (var i = 0; i < heads.length; i++) {
+        var pos = heads[i].compareDocumentPosition(el);
+        if (pos & Node.DOCUMENT_POSITION_FOLLOWING) best = heads[i].textContent.trim();
+      }
+      return best;
+    }
+
+    function captureSelection() {
+      var sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
+      var range = sel.getRangeAt(0);
+      if (!document.body.contains(range.commonAncestorContainer)) return null;
+      var panel = document.getElementById("ffc-panel");
+      if (panel && panel.contains(range.commonAncestorContainer)) return null;
+      /* Mermaid diagrams are excluded from the prose text model (SKIP), so they
+         can't anchor by quote. Anchor a diagram comment to the block by index. */
+      var startEl = range.startContainer.nodeType === 3
+        ? range.startContainer.parentElement : range.startContainer;
+      var dia = startEl && startEl.closest ? startEl.closest("pre.mermaid") : null;
+      if (dia) {
+        var di = mermaidBlocks().indexOf(dia);
+        if (di < 0) return null;
+        return {
+          id: "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+          diagram: di,
+          quote: "[Diagram " + (di + 1) + "]",
+          prefix: "",
+          suffix: "",
+          section: sectionFor(dia),
+          text: "",
+          created: new Date().toISOString()
+        };
+      }
+      var nodes = textNodes(), total = 0, s = -1, e = -1;
+      for (var i = 0; i < nodes.length; i++) {
+        var n = nodes[i], len = n.nodeValue.length;
+        if (range.intersectsNode(n)) {
+          if (s < 0) s = total + (n === range.startContainer ? range.startOffset : 0);
+          e = total + (n === range.endContainer ? range.endOffset : len);
+        }
+        total += len;
+      }
+      if (s < 0 || e <= s) return null;
+      var t = docText(nodes);
+      return {
+        id: "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        quote: t.slice(s, e),
+        prefix: t.slice(Math.max(0, s - 40), s),
+        suffix: t.slice(e, e + 40),
+        section: sectionFor(range.startContainer),
+        text: "",
+        created: new Date().toISOString(),
+        _s: s,
+        _e: e
+      };
+    }
+
+    /* ---------- persistence + helper sync ---------- */
+
+    function persist(immediate) {
+      try { localStorage.setItem(KEY, JSON.stringify(comments)); } catch (e) {}
+      var count = document.getElementById("ffc-count");
+      if (count) count.textContent = "Comments (" + comments.length + ")";
+      clearTimeout(syncTimer);
+      if (immediate) { sync(); return; }
+      syncTimer = setTimeout(sync, 600);
+    }
+
+    function pub(c) {
+      return { quote: c.quote, section: c.section, text: c.text, created: c.created, done: !!c.done };
+    }
+
+    function sync() {
+      var payload = JSON.stringify({ doc: DOC, title: document.title, comments: comments.map(pub) });
+      fetch(HELPER + "/comments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload
+      }).then(function (r) { setConnected(r.ok); })
+        .catch(function () { setConnected(false); });
+    }
+
+    function ping() {
+      // ?doc= lets the helper refuse if it is serving a different
+      // folder (the port is fixed, so two parallel reviews can collide).
+      fetch(HELPER + "/ping?doc=" + encodeURIComponent(DOC))
+        .then(function (r) { setConnected(r.ok); })
+        .catch(function () { setConnected(false); });
+    }
+
+    function setConnected(on) {
+      connected = on;
+      var dot = document.querySelector("#ffc-fab .ffc-dot");
+      if (dot) dot.classList.toggle("on", on);
+      updateStatus();
+    }
+
+    function updateStatus() {
+      var st = document.getElementById("ffc-status");
+      if (st) st.textContent = connected
+        ? "Helper connected — comments save next to the doc"
+        : "Saved locally in this browser — use Copy / Export to hand off";
+    }
+
+    /* ---------- export ---------- */
+
+    function exportMd() {
+      var lines = [
+        "# Review comments: " + document.title,
+        "",
+        "_Doc: " + DOC + " · " + comments.length + " comment(s) · exported " + new Date().toISOString() + "_",
+        ""
+      ];
+      comments.forEach(function (c, i) {
+        lines.push("## " + (i + 1) + ". " + (c.section || "(no section)") + (c.done ? " [DONE]" : ""));
+        lines.push("");
+        c.quote.split("\n").forEach(function (q) { lines.push("> " + q); });
+        lines.push("");
+        lines.push(c.text ? c.text : "_(highlight only, no comment text)_");
+        lines.push("");
+      });
+      return lines.join("\n");
+    }
+
+    function fallbackCopy(t) {
+      var ta = document.createElement("textarea");
+      ta.value = t;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); } catch (e) {}
+      document.body.removeChild(ta);
+    }
+
+    function copyExport() {
+      var md = exportMd();
+      var done = function () { toast("Copied " + comments.length + " comment(s) as markdown"); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(md).then(done, function () { fallbackCopy(md); done(); });
+      } else {
+        fallbackCopy(md);
+        done();
+      }
+    }
+
+    function downloadExport() {
+      var stem = DOC.replace(/\.html?$/, "");
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([exportMd()], { type: "text/markdown" }));
+      a.download = "comments_" + stem + ".md";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+      toast("Exported comments_" + stem + ".md");
+    }
+
+    function toast(msg) {
+      var t = document.getElementById("ffc-toast");
+      t.textContent = msg;
+      t.classList.add("show");
+      setTimeout(function () { t.classList.remove("show"); }, 2200);
+    }
+
+    /* ---------- UI ---------- */
+
+    function esc(s) {
+      return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    function isOpen() {
+      return document.getElementById("ffc-panel").classList.contains("open");
+    }
+
+    function togglePanel() {
+      var open = document.getElementById("ffc-panel").classList.toggle("open");
+      document.body.classList.toggle("ffc-open", open);
+    }
+
+    function focusCard(id) {
+      var card = document.querySelector('.ffc-card[data-ffc="' + id + '"]');
+      if (!card) return;
+      card.scrollIntoView({ block: "center", behavior: "smooth" });
+      var ta = card.querySelector("textarea");
+      if (!ta) return;
+      /* Retry focus until it actually sticks. When the panel has just flipped
+         from display:none (or is mid slide-in transition) a synchronous focus,
+         and even a next-frame focus, are silently dropped before layout commits.
+         So keep trying on a short schedule and stop only when activeElement
+         confirms the textarea owns focus. preventScroll keeps the focus from
+         fighting the smooth scrollIntoView above. */
+      var tries = 0;
+      (function tryFocus() {
+        ta.focus({ preventScroll: true });
+        if (document.activeElement === ta || tries >= 12) return;
+        tries += 1;
+        setTimeout(tryFocus, tries < 4 ? 16 : 80);
+      })();
+    }
+
+    function setActive(id, on) {
+      document.querySelectorAll('mark.ffc-hl[data-ffc="' + id + '"]').forEach(function (m) {
+        m.classList.toggle("ffc-active", on);
+      });
+      var dia = document.querySelector('pre.mermaid[data-ffc-dia="' + id + '"]');
+      if (dia) dia.classList.toggle("ffc-active", on);
+    }
+
+    function removeComment(id) {
+      comments = comments.filter(function (c) { return c.id !== id; });
+      document.querySelectorAll('mark.ffc-hl[data-ffc="' + id + '"]').forEach(function (m) {
+        var p = m.parentNode;
+        while (m.firstChild) p.insertBefore(m.firstChild, m);
+        p.removeChild(m);
+        p.normalize();
+      });
+      var dia = document.querySelector('pre.mermaid[data-ffc-dia="' + id + '"]');
+      if (dia) {
+        dia.classList.remove("ffc-hl-dia", "ffc-active");
+        dia.removeAttribute("data-ffc-dia");
+      }
+      persist();
+      renderPanel();
+    }
+
+    function renderPanel() {
+      var list = document.getElementById("ffc-list");
+      list.innerHTML = "";
+      if (!comments.length) {
+        list.innerHTML = '<p style="font-size:0.82rem;color:#64748b;padding:8px;">Select any passage in the doc, then click the Comment button that pops up (or press Cmd/Ctrl+Shift+C).</p>';
+      }
+      comments.forEach(function (c) {
+        var card = document.createElement("div");
+        card.className = "ffc-card" + (c.orphan ? " orphan" : "") + (c.done ? " done" : "");
+        card.setAttribute("data-ffc", c.id);
+        card.innerHTML =
+          '<button class="ffc-del" type="button">delete</button>' +
+          '<div class="ffc-sec">' + esc(c.section || "(no section)") + (c.orphan ? " &middot; passage moved or edited" : "") + (c.done ? ' &middot; <span class="ffc-done-tag">done</span>' : "") + "</div>" +
+          '<blockquote class="ffc-quote" title="Jump to passage">' + esc(c.quote) + "</blockquote>";
+        var ta = document.createElement("textarea");
+        ta.setAttribute("data-ffc", c.id);
+        ta.setAttribute("placeholder", "Your comment…");
+        ta.value = c.text || "";
+        ta.addEventListener("input", function () {
+          c.text = ta.value;
+          if (c.done) { c.done = false; card.classList.remove("done"); }
+          persist();
+        });
+        /* Cmd/Ctrl+Enter marks the comment finished: an explicit, unambiguous
+           signal (instead of inferring "done typing" from a pause) that syncs
+           immediately and stamps a [DONE] marker in the saved markdown. */
+        ta.addEventListener("keydown", function (ev) {
+          if ((ev.metaKey || ev.ctrlKey) && ev.key === "Enter") {
+            ev.preventDefault();
+            c.done = true;
+            card.classList.add("done");
+            persist(true);
+            toast("Marked done");
+            ta.blur();
+          }
+        });
+        card.appendChild(ta);
+        card.querySelector(".ffc-del").addEventListener("click", function () { removeComment(c.id); });
+        card.querySelector(".ffc-quote").addEventListener("click", function () {
+          var m = document.querySelector('mark.ffc-hl[data-ffc="' + c.id + '"]') ||
+                  document.querySelector('pre.mermaid[data-ffc-dia="' + c.id + '"]');
+          if (m) m.scrollIntoView({ block: "center", behavior: "smooth" });
+        });
+        card.addEventListener("mouseenter", function () { setActive(c.id, true); });
+        card.addEventListener("mouseleave", function () { setActive(c.id, false); });
+        list.appendChild(card);
+      });
+      var count = document.getElementById("ffc-count");
+      if (count) count.textContent = "Comments (" + comments.length + ")";
+      updateStatus();
+    }
+
+    function buildUI() {
+      var panel = document.createElement("aside");
+      panel.id = "ffc-panel";
+      panel.innerHTML =
+        '<div class="ffc-head"><strong>Comments</strong>' +
+        '<button class="ffc-btn" id="ffc-copy" type="button">Copy for Claude</button>' +
+        '<button class="ffc-btn" id="ffc-dl" type="button">Export .md</button>' +
+        '<button class="ffc-btn" id="ffc-close" type="button">&#10005;</button></div>' +
+        '<div class="ffc-list" id="ffc-list"></div>' +
+        '<div class="ffc-status" id="ffc-status"></div>';
+      document.body.appendChild(panel);
+
+      var fab = document.createElement("button");
+      fab.id = "ffc-fab";
+      fab.type = "button";
+      fab.innerHTML = '<span class="ffc-dot"></span><span id="ffc-count"></span>';
+      fab.addEventListener("click", togglePanel);
+      document.body.appendChild(fab);
+
+      var add = document.createElement("button");
+      add.id = "ffc-add";
+      add.type = "button";
+      add.innerHTML = "&#128172; Comment";
+      add.title = "Comment (Cmd/Ctrl+Shift+C)";
+      document.body.appendChild(add);
+
+      var toastEl = document.createElement("div");
+      toastEl.id = "ffc-toast";
+      document.body.appendChild(toastEl);
+
+      document.getElementById("ffc-copy").addEventListener("click", copyExport);
+      document.getElementById("ffc-dl").addEventListener("click", downloadExport);
+      document.getElementById("ffc-close").addEventListener("click", togglePanel);
+
+      function addCommentFromSelection() {
+        var c = captureSelection();
+        add.style.display = "none";
+        if (!c) return;
+        if (c.diagram != null) {
+          markDiagram(mermaidBlocks()[c.diagram], c.id);
+        } else {
+          wrapRangeGlobal(c._s, c._e, c.id);
+          delete c._s;
+          delete c._e;
+        }
+        comments.push(c);
+        persist();
+        renderPanel();
+        if (!isOpen()) togglePanel();
+        /* Clear the selection BEFORE focusing: clearing it afterwards can pull
+           focus back off the textarea in some browsers. */
+        window.getSelection().removeAllRanges();
+        focusCard(c.id);
+      }
+
+      add.addEventListener("mousedown", function (ev) { ev.preventDefault(); });
+      add.addEventListener("click", addCommentFromSelection);
+
+      document.addEventListener("mouseup", function (ev) {
+        if (panel.contains(ev.target) || ev.target === add || fab.contains(ev.target)) return;
+        setTimeout(function () {
+          var sel = window.getSelection();
+          if (!sel || sel.isCollapsed || !sel.rangeCount) {
+            add.style.display = "none";
+            return;
+          }
+          if (panel.contains(sel.getRangeAt(0).commonAncestorContainer)) return;
+          /* A diagram selection often carries no plain text (just SVG shapes), so
+             allow it through even when the selection string is empty. */
+          var anc = sel.getRangeAt(0).commonAncestorContainer;
+          var ancEl = anc.nodeType === 3 ? anc.parentElement : anc;
+          var inDia = ancEl && ancEl.closest && ancEl.closest("pre.mermaid");
+          if (!inDia && !String(sel).trim()) {
+            add.style.display = "none";
+            return;
+          }
+          var r = sel.getRangeAt(0).getBoundingClientRect();
+          add.style.left = Math.max(8, window.scrollX + r.left + r.width / 2 - 50) + "px";
+          add.style.top = (window.scrollY + r.bottom + 8) + "px";
+          add.style.display = "block";
+        }, 0);
+      });
+
+      document.addEventListener("click", function (ev) {
+        if (!ev.target.closest) return;
+        var m = ev.target.closest("mark.ffc-hl");
+        var dia = m ? null : ev.target.closest("pre.mermaid.ffc-hl-dia");
+        var id = m ? m.getAttribute("data-ffc") : (dia ? dia.getAttribute("data-ffc-dia") : null);
+        if (id) {
+          if (!isOpen()) togglePanel();
+          focusCard(id);
+        }
+      });
+
+      /* Comment hotkey: Cmd/Ctrl+Shift+C with an active selection adds a
+         comment directly, same as clicking the "Comment" button, so
+         highlight -> hotkey -> type never requires a mouse click. Capture
+         phase + stopPropagation/preventDefault so the browser's default
+         Shift+Cmd+C devtools binding on some platforms never sees it. */
+      document.addEventListener("keydown", function (ev) {
+        if ((ev.metaKey || ev.ctrlKey) && ev.shiftKey && ev.key.toLowerCase() === "c") {
+          var sel = window.getSelection();
+          if (sel && !sel.isCollapsed && sel.rangeCount && String(sel).trim()) {
+            addCommentFromSelection();
+            ev.stopPropagation();
+            ev.preventDefault();
+          }
+        }
+      }, true);
+
+      /* Escape closes the panel. Capture phase so it wins over any other
+         Escape handling on the page. */
+      document.addEventListener("keydown", function (ev) {
+        if (ev.key === "Escape" && isOpen()) {
+          togglePanel();
+          ev.stopPropagation();
+          ev.preventDefault();
+        }
+      }, true);
+    }
+
+    function init() {
+      buildUI();
+      anchorAll();
+      renderPanel();
+      ping();
+      setInterval(ping, 30000);
+    }
+
+    if (document.readyState === "loading") {
+      window.addEventListener("DOMContentLoaded", init);
+    } else {
+      init();
+    }
+  })();
+  </script>
+
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Architecture: Live Agentic HTML Editor</h1>
+</header>
+
+<div class="doc-nav"><span class="doc-nav-label">Docs</span><a href="01_brief_live_agentic_html_editor.html">Brief</a><a href="02_architecture_live_agentic_html_editor.html" class="current">Architecture</a><a href="03_plan_live_agentic_html_editor.html">Plan</a></div>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#summary" id="toc-summary">Summary</a></li>
+<li><a href="#analysis-of-existing-structure"
+id="toc-analysis-of-existing-structure">Analysis of existing
+structure</a></li>
+<li><a href="#components" id="toc-components">Components</a></li>
+<li><a href="#key-decisions" id="toc-key-decisions">Key
+decisions</a></li>
+<li><a href="#data-and-state" id="toc-data-and-state">Data and
+state</a></li>
+<li><a href="#alternatives-considered"
+id="toc-alternatives-considered">Alternatives considered</a></li>
+<li><a href="#failure-modes" id="toc-failure-modes">Failure
+modes</a></li>
+<li><a href="#security-and-privacy"
+id="toc-security-and-privacy">Security and privacy</a></li>
+<li><a href="#test-strategy" id="toc-test-strategy">Test
+strategy</a></li>
+<li><a href="#decisions-resolved" id="toc-decisions-resolved">Decisions
+resolved</a></li>
+<li><a href="#open-questions" id="toc-open-questions">Open
+Questions</a></li>
+<li><a href="#architect-review-disposition"
+id="toc-architect-review-disposition">Architect Review
+Disposition</a></li>
+<li><a href="#security-review-disposition"
+id="toc-security-review-disposition">Security Review
+Disposition</a></li>
+<li><a href="#architecture-reviews"
+id="toc-architecture-reviews">Architecture reviews</a>
+<ul>
+<li><a href="#review-architect-review-round-1"
+id="toc-review-architect-review-round-1">review-architect Review (Round
+1)</a></li>
+<li><a href="#review-security-review-round-1"
+id="toc-review-security-review-round-1">review-security Review (Round
+1)</a></li>
+</ul></li>
+</ul>
+</nav>
+<h2 id="summary">Summary</h2>
+<p>Three parts, each with one job.</p>
+<p>A <strong>review layer</strong> is vanilla JS that runs inside
+whatever page is being reviewed. It draws the comment and edit surface,
+captures what the reviewer does, and writes every change to browser
+storage the instant it happens. It never restyles the reviewed page and
+never writes to the reviewed file.</p>
+<p>A <strong>local service</strong> serves local files with the layer
+injected, accepts feedback over loopback behind real authentication, and
+appends it to a log on disk. State is derived by replaying the log, so
+nothing important lives only in memory.</p>
+<p>An <strong>agent surface</strong> is four commands plus two files on
+disk. The files are the contract; the commands are a convenience. An
+agent that was never running when the reviewer pressed send still gets
+everything, because delivery is a file, not a connection.</p>
+<p>The idea holding it together: <strong>the reviewer's outstanding
+feedback is the truth, and the page is a view of it.</strong> An edit is
+not a change made to a document. It is a durable record replayed on top
+of whatever the page currently shows. This is what removes the class of
+bug where the reviewer's text comes back reverted: there is nothing to
+revert to, because the page was never where the text lived.</p>
+<p>Replay is powerful and therefore dangerous, so it is bounded by three
+laws stated in D3: it never writes on a low-confidence match, it never
+touches a region holding the caret, and it treats an app re-rendering
+its own data differently from a source rewrite. Without those it becomes
+a worse version of the bug it exists to kill.</p>
+<pre class="mermaid"><code>flowchart TB
+    subgraph Browser[&quot;The reviewer&#39;s own browser&quot;]
+      Layer[&quot;Review layer&lt;br/&gt;draws the rail, captures items&lt;br/&gt;writes to browser storage on every change&quot;]
+      Page[&quot;The page being reviewed&lt;br/&gt;its own CSS, untouched&quot;]
+      Layer -.overlays, never restyles.-&gt; Page
+    end
+
+    subgraph Service[&quot;Local service, loopback + token + origin allowlist&quot;]
+      Serve[&quot;serves a local HTML file&lt;br/&gt;with the layer injected&quot;]
+      Ingest[&quot;accepts items, sends, acks&quot;]
+      Log[(&quot;append-only event log&lt;br/&gt;state derived by replay&quot;)]
+      Ingest --&gt; Log
+    end
+
+    subgraph Disk[&quot;What an agent reads&quot;]
+      MD[&quot;review.md&lt;br/&gt;one per review, grouped by page&quot;]
+      JSON[&quot;review.json&lt;br/&gt;the structured contract&quot;]
+    end
+
+    subgraph Agent[&quot;The coding agent&quot;]
+      Read[&quot;reads the files, or `next` returned&quot;]
+      Apply[&quot;applies items to SOURCE, named by a source hint&quot;]
+      Ack[&quot;acks per item, naming files touched,&lt;br/&gt;and writes a message back onto the item&quot;]
+    end
+
+    Layer &lt;--&gt;|authenticated loopback| Ingest
+    Serve --&gt; Layer
+    Log --&gt; MD &amp; JSON
+    MD &amp; JSON --&gt; Read --&gt; Apply --&gt; Ack
+    Ack --&gt; Ingest
+    Ingest --&gt;|applied items| Layer</code></pre>
+<h2 id="analysis-of-existing-structure">Analysis of existing
+structure</h2>
+<p>Nothing is being modified; this is a new repository. Two existing
+implementations are the input, and what actually carries over is
+narrower than it first looks. Both were read line by line for this
+document, and two of the original reuse claims did not survive the
+reading.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Existing piece</th>
+<th>What genuinely carries over</th>
+<th>What is new work</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Built-doc comment module
+(<code>shared-assets/comment_module.html</code>)</td>
+<td>Immediate synchronous persistence on every change; copy and export
+with no server; the <em>idea</em> of a ladder of anchor probes; a helper
+that refuses work for a document it does not own</td>
+<td><strong>Anchoring itself.</strong> Its <code>locate()</code> is four
+exact substring probes over the concatenated text, with no whitespace
+tolerance and no occurrence disambiguation, so a short prefix binds to
+the first hit. R16 (survive reformatting, pick the right occurrence
+among repeats) is not met by it. <strong>Storage keying</strong>: its
+browser key is the file's basename, so two <code>index.html</code> files
+in different folders merge into one bucket</td>
+</tr>
+<tr>
+<td>Steady Thread dev layer (<code>_dev_comments.html.erb</code>)</td>
+<td>Injection into the app's own page rather than a proxy; element
+commenting by modifier-click carrying a CSS path and surrounding
+context; a draft that survives a morph</td>
+<td><strong>The remount contract.</strong> It re-registers
+document-level listeners on every morph without removing the old ones,
+so handlers accumulate for the life of the page. It also survives morphs
+largely because Rails re-renders the partial into the response, which an
+injected script does not inherit. Its draft is one global key, not a
+queue</td>
+</tr>
+<tr>
+<td>human-review</td>
+<td>The interaction model: page beside a rail, editable document,
+before-and-after pairs, per-target grouping</td>
+<td>None of its liveness design</td>
+</tr>
+</tbody>
+</table></div>
+<p>The security floor human-review reached is worth inheriting rather
+than rediscovering: a per-run token compared in constant time, a host
+header check, and containment checked after symlink resolution. Its
+origin split is the one control v1 does not take, for the reason given
+in D5.</p>
+<h2 id="components">Components</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Job</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Review layer</strong></td>
+<td>Everything the reviewer sees and does, and everything the tool or
+agent needs to tell them. Vanilla JS, no build step. Identical however
+it got into the page.</td>
+</tr>
+<tr>
+<td><strong>Overlay renderer</strong></td>
+<td>Draws the rail, highlights, chips, and handles in an isolated root.
+Updates in place; never re-creates a card that holds focus. Owns the
+persistent failures list.</td>
+</tr>
+<tr>
+<td><strong>Anchor engine</strong></td>
+<td>Turns a selection or an element into a durable reference and
+re-resolves it in a changed document, with a confidence score. New
+work.</td>
+</tr>
+<tr>
+<td><strong>Item store (browser)</strong></td>
+<td>Durable queue written synchronously on every change. The source the
+layer renders from.</td>
+</tr>
+<tr>
+<td><strong>Edit recorder</strong></td>
+<td>Turns editing into item records with a kind, plain text, markup, and
+landing anchors.</td>
+</tr>
+<tr>
+<td><strong>Replay engine</strong></td>
+<td>Re-applies outstanding edits after a repaint, under the three laws
+in D3.</td>
+</tr>
+<tr>
+<td><strong>Sync client</strong></td>
+<td>Ships items to the service, retries forever, never blocks, and
+distinguishes refused-by-policy from service-down.</td>
+</tr>
+<tr>
+<td><strong>Local service</strong></td>
+<td>Serves a local HTML file with the layer injected, authenticates,
+accepts items and agent replies, appends to the log.</td>
+</tr>
+<tr>
+<td><strong>Event log</strong></td>
+<td>Append-only. The only durable server-side state.</td>
+</tr>
+<tr>
+<td><strong>Projection</strong></td>
+<td>Reads the log into current state: outstanding, delivered, applied,
+declined.</td>
+</tr>
+<tr>
+<td><strong>Agent commands</strong></td>
+<td><code>open</code>, <code>next</code>, <code>ack</code>,
+<code>setup</code>.</td>
+</tr>
+<tr>
+<td><strong>Attach kit</strong></td>
+<td>Framework-correct guarded snippets emitted by <code>setup</code> for
+a development layout.</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="key-decisions">Key decisions</h2>
+<h3 id="d1-a-review-is-the-unit-not-a-target">D1: A review is the unit,
+not a target</h3>
+<p>One review spans many targets. Walking eight routes of an app
+produces one review containing eight pages, one <code>review.md</code>,
+and one <code>review.json</code>. Items carry the target they belong to;
+target identity is the per-page key inside the review, not the identity
+of the review itself.</p>
+<p>This is the difference between an agent reading one file and an agent
+discovering eight. It is what makes "walk the app and send the whole
+walk at once" true, and it is what makes free roam coherent: a reviewer
+who wanders through screens is doing one review, not one per URL they
+happened to land on.</p>
+<p>A review's files live at a <strong>review root</strong>, which is
+server-side configuration recorded when the reviewer starts a review or
+attaches a project. It is never accepted from a request body. See
+D11.</p>
+<h3
+id="d2-the-tool-never-writes-the-file-being-reviewed-and-it-names-the-source-instead">D2:
+The tool never writes the file being reviewed, and it names the source
+instead</h3>
+<p>Every edit is feedback. There is no autosave, no save conflict, no
+revert-all, no serialization of a live DOM over a source file.</p>
+<p>The reason is specific to what gets reviewed. A built spec doc and a
+research report are generated from markdown, so writing the HTML is
+erased by the next build. A markdown file under review is what the agent
+needs to edit, so two writers collide. A running app has no file to
+write. Writing helps in none of the real cases and is the root of most
+of the reverting bugs in the tool being replaced.</p>
+<p><strong>Refusing to write is not enough on its own.</strong> An agent
+handed a review of a built HTML file will edit that HTML file, the
+verification in D8 will pass, the item will clear from the rail, and the
+next build will erase it. The reviewer watched the burn-down and
+believes the fix landed, which is exactly the failure R47 (a typed fix
+must reach whatever the next build reads) exists to prevent.</p>
+<p>So every target carries a <strong>source hint</strong>: for a
+generated document, the file it is generated from; for a route, the
+project root. <code>setup</code> asks once per project and the answer is
+stored with the review root. The hint travels in both agent-facing
+files, the agent instructions say to edit the generator's input and to
+name what it edited, and D8 verifies against that file.</p>
+<div class="xref">
+<p><a
+href="01_brief_live_agentic_html_editor.html#the-reviewed-artifact-and-its-source">Brief:
+R47, a typed fix must reach whatever the next build reads</a></p>
+</div>
+<h3 id="d3-replay-and-the-three-laws-that-keep-it-safe">D3: Replay, and
+the three laws that keep it safe</h3>
+<p>An item record holds a region reference, the original content
+captured the first time that region was touched, and the current
+content. The page renders, then outstanding edits are applied on
+top.</p>
+<p>Replay is the reason the reliability laws fall out of one mechanism
+instead of needing to be defended one at a time. It is also the most
+dangerous thing in the design, because a replay that writes to the wrong
+place produces a lie about the reviewer's own document. Three laws bound
+it.</p>
+<p><strong>Law 1: replay never writes on a low-confidence match, and it
+fails closed.</strong> A region reference carries several independent
+ways to find its place: an author-supplied name where the document
+offers one, a structural path, the heading it sits under with its
+position among siblings, and its original text. Identity is
+<strong>minted once and re-resolved on every repaint</strong>, because a
+repaint destroys anything stored on a node. Each pass binds a reference
+to at most one node, greedily in document order. Below the confidence
+floor, nothing is written to the DOM. The record keeps its text, and the
+rail says the edit cannot be placed on this version of the page.</p>
+<p>A miss is survivable because the record is the truth. A mis-bind is
+not: stamping paragraph four's text onto paragraph five produces a
+before-and-after pair that is incoherent, and ships it to the agent as
+the reviewer's intent. Fail closed.</p>
+<p><strong>Law 2: replay never disturbs the reviewer.</strong> A region
+whose DOM already equals the record is skipped, which makes replay
+idempotent by comparison rather than by bookkeeping. A region containing
+the caret or the current selection is never rewritten. Those two rules
+together are what stop replay from yanking the cursor out of the
+paragraph being typed in. Steady Thread has a Turbo frame that polls
+every two seconds; without Law 2, replay would fight the reviewer twice
+a second, which is a worse version of the symptom this whole design
+exists to kill.</p>
+<p><strong>Law 3: an app re-rendering its own data is not the same as a
+source rewrite.</strong></p>
+<pre class="mermaid"><code>flowchart TD
+    Repaint[&quot;A repaint happens&quot;] --&gt; Kind{&quot;What caused it?&quot;}
+    Kind --&gt;|&quot;Source repaint:&lt;br/&gt;agent wrote the source,&lt;br/&gt;reviewer reloaded&quot;| Src[&quot;Replay. A region whose underlying&lt;br/&gt;content changed is a collision:&lt;br/&gt;reviewer&#39;s text stays on screen,&lt;br/&gt;incoming version offered on its card&quot;]
+    Kind --&gt;|&quot;App repaint:&lt;br/&gt;the app re-rendered itself&quot;| App[&quot;Replay only where the region&#39;s DOM&lt;br/&gt;still matches what replay last wrote.&lt;br/&gt;Otherwise the edit detaches, keeps its text,&lt;br/&gt;and its card says the page moved on&quot;]
+    Src --&gt; Laws[&quot;Laws 1 and 2 apply to both&quot;]
+    App --&gt; Laws</code></pre>
+<p>The distinction matters most in the target Ken cares about. Filter a
+client roster, come back, and row three is now a different client.
+Treating that as a source rewrite would stamp the reviewer's edit to
+Sarah onto Marcus and call it a collision. The reviewer would be looking
+at a lie about their own app, and D12 (use the app for real) would be
+fighting replay directly.</p>
+<h3 id="d4-what-a-record-is">D4: What a record is</h3>
+<p>Text-only records cannot express most of what the brief asks for, so
+a record carries:</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>kind</code></td>
+<td><code>commented</code>, <code>edited</code>, <code>deleted</code>,
+<code>moved</code>, <code>formatted</code>, <code>resized</code>,
+<code>note</code></td>
+</tr>
+<tr>
+<td><code>before</code> / <code>after</code></td>
+<td>Plain text, original captured on first touch</td>
+</tr>
+<tr>
+<td><code>before_html</code> / <code>after_html</code></td>
+<td>Cleaned markup, so a formatting-only change is a change (R30)</td>
+</tr>
+<tr>
+<td><code>moved_after</code> / <code>moved_before</code></td>
+<td>Landing anchors, so a relocation can be applied without a
+rewrite</td>
+</tr>
+<tr>
+<td><code>region</code></td>
+<td>The reference described in D3</td>
+</tr>
+<tr>
+<td><code>target</code></td>
+<td>Which page in the review it belongs to</td>
+</tr>
+<tr>
+<td><code>state</code></td>
+<td>The lifecycle in the diagram below</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Undo is a record operation.</strong> Per-item undo reverts
+the record and lets replay redraw the region. This is the only version
+of undo that composes with D3, because once replay has rewritten a
+region the browser's native undo stack for it is gone. Native undo
+inside a region is a convenience on top, never the mechanism. This is
+what R27 (every edit undone on its own) requires, and it is the
+requirement that exists because the tool being replaced makes one
+misplaced drag cost an hour of work.</p>
+<p><strong>The overall note is an item</strong> like any other. It
+counts as outstanding, and it can ship alone. This is stated because the
+note-only send bug, where typing a note left the button dead forever, is
+one of the three symptoms that caused this rebuild.</p>
+<h3
+id="d5-one-mode-the-layer-is-a-script-in-the-page-and-there-is-no-proxy">D5:
+One mode. The layer is a script in the page, and there is no proxy</h3>
+<p>Markdown is out of scope, so every target is HTML and there is one
+way in: <strong>the review layer is a script tag in the page being
+reviewed.</strong> How it gets there differs, and nothing downstream
+cares which.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Target</th>
+<th>How the layer gets in</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A built brief or report brief</td>
+<td>Injected at build time, exactly the way the comment module is
+injected into these documents today</td>
+</tr>
+<tr>
+<td>A page on a running dev server</td>
+<td>A guarded script tag in the development layout, exactly the way the
+Steady Thread dev layer works today</td>
+</tr>
+<tr>
+<td>Any other local HTML file</td>
+<td>The <code>open</code> command serves it over loopback with the layer
+injected</td>
+</tr>
+</tbody>
+</table></div>
+<p>This is the model Ken already uses daily in two places, which is the
+strongest argument for it. It also means the service does not need to
+stand between the reviewer and the page: for the first two rows it
+serves nothing at all and only receives feedback. Serving exists for the
+third row and for the convenience of a real origin, since relative
+assets, hash links, and an origin the allowlist can name all work better
+over loopback than over a <code>file://</code> URL.</p>
+<p>This answers authentication, client routing, morphs, and free roam by
+not fighting any of them. The page is the real page, served by whoever
+normally serves it, in the reviewer's own logged-in browser. There is no
+session to forward, no asset URL to rewrite, no router to shim on the
+server side, and no login screen to land on. Free roam falls out for
+free: the layer is on every page the app renders.</p>
+<p><strong>The cost, stated rather than claimed away: there is no
+isolation between the layer and the page.</strong> A script in the page
+can read the layer's state, its storage, and its token. This is
+acceptable because v1's three targets are all the reviewer's own output:
+their build, their build, their app. It is not acceptable for HTML the
+reviewer did not produce, which is why that is a stated non-goal. When
+it comes into scope, the known answer is to serve untrusted files inside
+a frame with an opaque origin and pin the messages across it, which is
+what the tool being replaced does for exactly this reason.</p>
+<p><strong>The other costs of living in the page's origin</strong>, all
+load-bearing:</p>
+<ul>
+<li><strong>The app's CSP can refuse the layer or its sync.</strong>
+<code>script-src</code> blocks the tag; <code>connect-src</code> blocks
+the loopback calls. A CSP refusal looks identical to the service being
+down, which is the one failure this design calls harmless. The sync
+client distinguishes the two and says which, in the persistent failures
+list.</li>
+<li><strong>Browser storage is the page's origin's storage.</strong> So
+R65 (a reviewed page cannot reach the tool's controls or stored
+feedback) is not achievable and is not claimed. It also means
+<code>localhost:3000</code> and <code>127.0.0.1:3000</code> are separate
+storage buckets even though the service treats them as one target, and a
+<code>file://</code> page has an opaque origin, which is why serving is
+preferred over opening from Finder.</li>
+<li><strong>A client-side router gives the layer no event</strong>
+unless it hooks history and framework navigation. The shim moves into
+the layer; it does not disappear.</li>
+<li><strong>A morph can remove the overlay root</strong>, because the
+root is not in the server's HTML. The contract: the root is re-created
+on <code>turbo:morph</code>, <code>turbo:load</code>,
+<code>popstate</code>, and a MutationObserver fallback, every handler is
+de-registered before re-registration, and replay runs after each
+remount. The Steady Thread layer survives morphs partly because Rails
+re-renders its partial into the response, which an injected script does
+not inherit, and its own remount path leaks a listener pair on every
+morph. Neither shape is inherited.</li>
+<li><strong>The layer is never fetched from the service at page
+load.</strong> A stopped service must not mean no layer, or the promise
+that a stopped service costs nothing is false.</li>
+</ul>
+<h3
+id="d6-durability-is-an-append-only-log-plus-a-browser-copy-with-stated-authority">D6:
+Durability is an append-only log plus a browser copy, with stated
+authority</h3>
+<p>Two independent durable stores. The reviewer's work is safe if either
+survives.</p>
+<p><strong>Browser side.</strong> Every change is written to browser
+storage synchronously as it happens, before any network call. This is
+the property that makes the built-doc module trustworthy and it is
+copied deliberately. Its key is the canonical target path, not a
+basename, because a basename key merges two same-named files from
+different folders.</p>
+<p><strong>Service side.</strong> Every accepted change appends one line
+to a log. Appending cannot destroy what came before, which removes the
+failure where two processes rewrite a shared state file over each other.
+State is a projection of the log, read on start. The log is not
+compacted; a review is a few hundred events.</p>
+<p><strong>Three rules make two stores safe:</strong></p>
+<ul>
+<li>Events carry a client-minted id and are idempotent by that id, so a
+re-send after a failed sync cannot double-count.</li>
+<li>An item event is a <strong>full snapshot of that item</strong>,
+never a delta, so replaying events in any order converges.</li>
+<li><strong>The browser is authoritative for item content until
+delivery; the service is authoritative for lifecycle.</strong> The layer
+reconciles against the service projection on every reconnect, and
+lifecycle wins. Without this rule an item acked while the browser was
+closed comes back from browser storage as outstanding and re-ships,
+which breaks apply-once.</li>
+</ul>
+<h3 id="d7-send-is-a-write-not-a-handshake">D7: Send is a write, not a
+handshake</h3>
+<pre class="mermaid"><code>sequenceDiagram
+    participant R as Reviewer
+    participant L as Review layer
+    participant S as Local service
+    participant F as review.md + review.json
+    participant A as Agent
+
+    R-&gt;&gt;L: comments, types, deletes a block
+    L-&gt;&gt;L: write to browser storage immediately
+    L-&gt;&gt;S: sync (retries forever, never blocks)
+    S-&gt;&gt;S: append to log
+    R-&gt;&gt;L: Send
+    L-&gt;&gt;L: flush anything in flight first
+    L-&gt;&gt;S: send
+    S-&gt;&gt;F: write both files for the whole review
+    Note over S,A: nothing above needs an agent
+    A-&gt;&gt;F: reads (or `next` returned)
+    A-&gt;&gt;A: applies items to the SOURCE named by the source hint
+    A-&gt;&gt;S: ack per item: applied (with files touched) or declined (with a reason)
+    S-&gt;&gt;S: verify, then append ack events
+    S--&gt;&gt;L: lifecycle update
+    L-&gt;&gt;L: retire applied items, then replay</code></pre>
+<p>Send is enabled whenever anything is outstanding. There is no sent
+latch: sending marks items delivered, and anything created afterward is
+outstanding immediately. A second send while an earlier one is
+unconfirmed adds to the same queue rather than replacing a snapshot.</p>
+<p>Agent presence is displayed next to the button because the brief asks
+for it, and the law is written here so it cannot drift: <strong>presence
+is never read by the code that decides whether send works.</strong> In
+the tool being replaced, displaying presence is how it became a
+gate.</p>
+<p><strong>Ordering rule:</strong> acks are processed before replay, so
+an item the agent applied is retired before the repaint that its own
+change caused. Otherwise replay stamps the reviewer's wording back over
+a fix that landed and reports a collision that is not one.</p>
+<h3
+id="d8-per-item-ack-and-verifying-the-agent-did-not-rewrite-the-document">D8:
+Per-item ack, and verifying the agent did not rewrite the document</h3>
+<p>An ack names item identifiers. Each is applied, with the file paths
+the agent touched, or declined with a reason. Anything unnamed stays
+outstanding. Applied items move to a completed list; nothing is
+deleted.</p>
+<p>Per-item is what makes the burn-down honest. A batch-level ack clears
+highlights for items the agent skipped, which is worse than losing
+feedback because it looks handled.</p>
+<p>Verification then checks each applied edit against the files the ack
+named, constrained to the review's own project root. Two corrections
+that keep it from causing its own outage:</p>
+<ul>
+<li><strong>Match on normalized text</strong>, whitespace collapsed and
+markup stripped. On a markdown source or an ERB template, the reviewer's
+<code>after</code> is a rendering of the source and will legitimately
+never appear verbatim.</li>
+<li><strong>A miss warns loudly and does not reopen the item.</strong>
+Auto-reopening turns a false positive into an infinite re-ship loop. A
+deletion gets the inverse check: the <code>before</code> text should be
+gone.</li>
+</ul>
+<p>This is the only defense against an agent regenerating a document
+from context and reverting the reviewer's wording. The tool being
+replaced attempted it with a sentence in a prompt file.</p>
+<h3 id="d9-authentication-because-loopback-is-not-a-boundary">D9:
+Authentication, because loopback is not a boundary</h3>
+<p>Binding to loopback stops nothing that matters here, because the
+attacker is a page running in the reviewer's own browser. A cross-origin
+POST with a simple content type fires no preflight, reaches the handler,
+and takes effect; CORS hides the response, not the effect. Without
+authentication, any page the reviewer visits can write forged items into
+the file their agent reads and acts on. That is a drive-by write into an
+agent's instruction stream.</p>
+<p>Three layers, all of them:</p>
+<ol type="1">
+<li><strong>A per-run token</strong>, regenerated each service start,
+required on every route that reads or mutates, sent as a header,
+compared in constant time, recorded in an owner-only file.</li>
+<li><strong>A server-side origin allowlist</strong>, recorded when the
+reviewer attaches a project, with no wildcard and no reflection, applied
+to preflight responses too. A page cannot forge its <code>Origin</code>,
+so this closes the blind-write path that a token alone cannot, since a
+token in a development layout is readable by anything in the app's
+origin.</li>
+<li><strong>A required JSON content type plus a custom header on every
+mutating route</strong>, so a simple request cannot reach a handler and
+a preflight is always forced.</li>
+</ol>
+<p>The port is ephemeral by default and recorded with the token in the
+same owner-only file. Pinning is available and documented as a
+weakening.</p>
+<p>The same three layers cover <code>ack</code>, which mutates the
+burn-down. A forged ack would clear the reviewer's screen to empty with
+nothing looking wrong, which is worse than an error because the whole
+premise is that what is on screen is what is still outstanding.</p>
+<h3 id="d10-reviewed-content-is-data-never-instructions">D10: Reviewed
+content is data, never instructions</h3>
+<p>The reviewed document is often LLM-generated and may carry text
+engineered to instruct an agent. That text becomes a quote in a comment
+or a <code>before</code> in an edit, lands in a file an agent reads raw,
+and the agent has repository write access.</p>
+<p>The <code>before</code> field is the worst carrier: verbatim by
+design, potentially long, and <strong>the reviewer never reads
+it</strong>, because it is the document's original text and not their
+words. An injected instruction can travel through a review the reviewer
+conducted attentively. D8's verification does not help; an instruction
+that makes the agent also touch a second file passes it cleanly.</p>
+<p>The contract:</p>
+<ul>
+<li><strong>Every field is classified.</strong> Reviewer-authored
+(<code>feedback</code>, <code>after</code>, the note) is instruction.
+Document-derived (<code>quote</code>, prefix, suffix, element
+description, <code>before</code>, <code>before_html</code>, page title,
+target string) is data.</li>
+<li><strong>Data fields are fenced structurally</strong> in the
+markdown, with a per-file random delimiter and any content line that
+would close it escaped. Blockquote-prefixing each line is the right
+shape and is not sufficient alone, because a quoted line can still read
+like a directive.</li>
+<li><strong>Every generated markdown file carries a standing
+header</strong> saying that quoted passages and <code>before</code> text
+are content from the reviewed document, are never instructions, and are
+only search keys for locating a region.</li>
+<li><strong>The JSON is authoritative and the markdown is the human
+fallback.</strong> Structure survives injection in a way prose does
+not.</li>
+<li><strong><code>before</code> is bounded</strong> with a visible
+marker. R50's no-truncation rule is right for <code>after</code>, which
+is the reviewer's exact wording, and wrong for <code>before</code>,
+which is arbitrary-length text the reviewer did not write.</li>
+</ul>
+<p>These rules are also what <code>setup</code> writes into the agent
+instruction files, because that is where they have to live to have any
+effect.</p>
+<h3 id="d11-paths-and-what-setup-may-write">D11: Paths, and what setup
+may write</h3>
+<p><strong>Never derive a path component from untrusted text.</strong>
+In attached mode the page supplies the target, so a target-derived
+filename is attacker-controlled. A write into an agent's own
+configuration file is not file corruption; it is agent reconfiguration,
+which is a full compromise of everything the agent can reach.</p>
+<ul>
+<li>The review root is server-side configuration set at
+<code>setup</code> or service start, never accepted from a request
+body.</li>
+<li>File names are a hash of the canonical target plus a slug restricted
+to safe characters and capped in length.</li>
+<li>The destination is checked inside the review root after symlink
+resolution, and refused if it exists and is a symlink.</li>
+<li>Writes go through an exclusively created temp name and a
+rename.</li>
+<li>The log and the token live outside any checkout, in an owner-only
+directory, so a student running <code>git add -A</code> cannot publish
+their review history to a public repository. Setup offers to add the
+review files' pattern to the reviewed project's ignore file.</li>
+</ul>
+<p><strong>Setup writing agent instructions is the highest-privilege
+thing this tool does</strong>, higher than writing feedback, because it
+changes what the agent will do with everything else. It writes a block
+between sentinels and on re-run replaces only what is between them. If
+the sentinels are missing but the file already mentions the tool, it
+reports and touches nothing.</p>
+<p>The attached-mode snippet is guarded <strong>outside</strong> the
+script tag, in the host template's own conditional, because a
+client-side snippet cannot know the server's environment.
+<code>setup</code> emits the framework-correct form. A snippet that
+reached production would run in the production origin, in a real
+visitor's logged-in session, for anyone who binds that loopback port;
+Chrome treats loopback as trustworthy, so mixed-content blocking does
+not save it. A loopback-hostname check inside the layer is a second
+line, not the guard.</p>
+<h3 id="d12-style-only-what-we-add-and-never-move-the-page">D12: Style
+only what we add, and never move the page</h3>
+<p>The layer's UI lives in an isolated root with its own reset. In the
+other direction it adds no stylesheet to the reviewed content, overrides
+no font, color, spacing, or layout, and never sets a style attribute on
+a reviewed element.</p>
+<p><strong>The rail is a fixed overlay that never shifts the host
+page</strong>, and it collapses. This has to be decided here rather than
+discovered during the build: the built-doc module docks its panel by
+setting a body margin, which is precisely what R34 forbids, and
+human-review only gets away with a docked rail because it frames the
+document. Both modes use the same overlay so they look identical, which
+is what D5 claims.</p>
+<p>The consequence worth stating: when a reviewer creates something the
+page's CSS hides, such as a list on a page whose reset removes markers,
+the tool does not fix the page's appearance. It confirms the change
+through its own layer. The artifact keeps looking like the artifact.</p>
+<p>Markdown is the one case needing care. A markdown file has no
+appearance until something gives it one, so rendering it means choosing
+a presentation. That is different from restyling a designed document,
+and the status line says which the reviewer is looking at.</p>
+<h3 id="d13-using-the-app-for-real">D13: Using the app for real</h3>
+<p>A plain click places the text cursor. Two escapes, because Ken hit
+both halves of this:</p>
+<ul>
+<li><strong>A modifier click</strong> passes through to the page: links
+navigate, buttons fire, forms submit. Taught by a hover hint.</li>
+<li><strong>An editing toggle</strong> turns interception off entirely
+for a stretch, giving back an ordinary page for a multi-step flow.
+Commenting stays available. Feedback already left is untouched.</li>
+</ul>
+<p>Leaving a page and returning re-renders it and replays outstanding
+edits, so driving the app costs nothing.</p>
+<h3 id="d14-the-rail-updates-in-place">D14: The rail updates in
+place</h3>
+<p><strong>A card that holds focus is never re-created.</strong> The
+single largest in-page revert mechanism in the tool being replaced is a
+rail that rebuilds every card on every repaint: a half-reworded comment
+is destroyed because a removed node never fires blur. Replay makes
+repaints more frequent, not less, so this law is stated rather than left
+to a careful render loop.</p>
+<p>The rail also owns a <strong>persistent failures list</strong>. Sync
+failures, CSP refusals, storage quota, and verification misses land
+there and stay until dismissed. Every failure in the tool being replaced
+is a three-second toast and then nothing, which is what R9 exists to
+prevent.</p>
+<h3 id="d15-the-page-is-the-channel-back-to-the-reviewer">D15: The page
+is the channel back to the reviewer</h3>
+<p>Everything the tool or the agent needs to say arrives where the
+reviewer is looking, which is the page. A reviewer does not go back to a
+terminal to find out what happened to their feedback, and an agent's
+turn output is not a place they will ever read.</p>
+<p>Three carriers, chosen by whether the reviewer has to do something
+about it:</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>What happened</th>
+<th>Where it shows</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The agent could not apply an item, applied it differently, or has a
+question</td>
+<td>A message from the agent on that item's own card, and the item stays
+outstanding or declined rather than clearing</td>
+</tr>
+<tr>
+<td>Replay could not confidently place an edit on this version of the
+page</td>
+<td>A persistent state on that item's card saying so, with its text
+intact</td>
+</tr>
+<tr>
+<td>Verification could not find the reviewer's wording after an
+apply</td>
+<td>A persistent warning on that item's card</td>
+</tr>
+<tr>
+<td>Sync refused by policy, service unreachable, storage full</td>
+<td>The persistent failures list in the rail, which stays until
+dismissed</td>
+</tr>
+<tr>
+<td>Something succeeded, or something the reviewer does not need to act
+on</td>
+<td>A passing message</td>
+</tr>
+</tbody>
+</table></div>
+<p>So the ack in D8 is not only a status. An agent may attach a
+<strong>reply</strong> to any item: what it did, what it could not do,
+or what it needs answered. The reply is part of the item and is rendered
+on its card, which also gives the reviewer somewhere to respond, since a
+declined item returns to outstanding and ships again with their answer
+attached.</p>
+<p>This is the difference between an agent that reports to a chat window
+nobody reads and an agent that answers in the document. It is also the
+honest home for every failure mode in D3's Law 1: an edit that cannot be
+placed is not a silent no-op, it is a visible card that still holds the
+reviewer's words.</p>
+<h3 id="d16-runtime">D16: Runtime</h3>
+<p>Zero-dependency Node for the service, vanilla JS with no build for
+the layer. <code>git clone</code>, one setup command, run it. No package
+manager for anything the tool needs at runtime, no lockfile, no build
+step. Development tooling is allowed dependencies, since the browser
+test runner is a real install and pretending otherwise would cost the
+test strategy that matters most.</p>
+<p>Node rather than Python, reversing an earlier draft. The audience
+runs coding agents and is more likely to have Node than Python, and
+<code>/usr/bin/python3</code> on a clean Mac is a stub that prompts for
+Xcode Command Line Tools, which is not the two-line README this design
+is trading for. <code>setup</code> verifies the runtime is present and
+prints the exact remedy if it is not, which is the same check R62 asks
+for.</p>
+<p>With Markdown out of scope there is no renderer to vendor and nothing
+to sanitize on the way in, so the runtime genuinely has no dependencies
+rather than nearly none.</p>
+<h2 id="data-and-state">Data and state</h2>
+<h3 id="item-lifecycle">Item lifecycle</h3>
+<p>Comments, edits, and the overall note are all items and share one
+lifecycle, which is what makes per-item acknowledgment uniform.</p>
+<pre class="mermaid"><code>stateDiagram-v2
+    [*] --&gt; outstanding: reviewer creates it
+    outstanding --&gt; outstanding: reviewer rewords, retypes, or undoes
+    outstanding --&gt; delivered: send
+    delivered --&gt; outstanding: reviewer edits it again
+    delivered --&gt; applied: agent acks applied, verification runs
+    delivered --&gt; declined: agent acks declined with a reason
+    declined --&gt; outstanding: reviewer reopens it
+    applied --&gt; [*]: moves to Completed, never deleted
+    outstanding --&gt; [*]: reviewer deletes it</code></pre>
+<p><code>delivered</code> is not terminal and never gates anything. An
+item sent with no agent running sits there and is included in every
+subsequent read until acked.</p>
+<h3 id="target-identity">Target identity</h3>
+<p>A target is a page inside a review. A file resolves through symlinks
+to its real path; a route normalizes host spelling, trailing slash, and
+drops its fragment. An agent naming a target any of the ways a human
+might write it reaches the same page.</p>
+<h3 id="the-two-files">The two files</h3>
+<p>One pair per review, at the review root. The markdown is for a person
+or an agent with no tooling. The JSON is the structured contract and is
+authoritative. Both group items by page, and both carry the source hint
+per page so the agent edits the generator's input rather than the
+artifact.</p>
+<h2 id="alternatives-considered">Alternatives considered</h2>
+<p><strong>Fork human-review and fix it.</strong> Rejected. Its storage
+design is worth learning from, but the symptoms live in its liveness
+design and that design is load-bearing throughout: the blocking poll,
+the memory-only delivery flag, the watcher that clears edit rows, the
+send button gated on a listener. Fixing those is replacing the spine
+while keeping the ribs.</p>
+<p><strong>Proxy the reviewed route.</strong> Rejected. The tool fetches
+the route server-side, carries no session, and lands on a login page,
+which kills the primary use case. It also requires rewriting every asset
+URL, shimming history for client routers, and giving the framed app a
+same-origin relationship with the tool's API. Attached mode has none of
+these because the page is the app's own page.</p>
+<p><strong>Autosave the reviewed file.</strong> Rejected, see D2.</p>
+<p><strong>Rewrite a state file on every change.</strong> Rejected. It
+is what lets two processes destroy each other's feedback, and it means a
+large rewrite twice a second during ordinary typing.</p>
+<p><strong>Deliver feedback by holding a connection open.</strong>
+Rejected as the mechanism, kept as a convenience. Agents end their
+turns. The tool being replaced has a line in its instructions pleading
+with agents not to end their turn while a poll waits, which is a prompt
+fighting a runtime.</p>
+<p><strong>Serving every target through a frame.</strong> Rejected for
+v1 along with Markdown. The frame is what buys isolation between the
+layer and the reviewed page, and it costs a docked-rail layout problem,
+a postMessage protocol, and a second origin. v1's three targets are all
+the reviewer's own output, so the isolation buys little and the cost is
+real. It returns the day reviewing someone else's HTML is in scope.</p>
+<p><strong>A bookmarklet for apps whose source the reviewer will not
+modify.</strong> Cut from v1. It loads the layer into whatever page the
+reviewer is on, so it becomes script in a possibly hostile origin, it
+would have to carry the token to work, and no server-side check can
+enforce local-only when the reviewer's click is the target selection. It
+covers the smallest case and carries the largest blast radius. The
+eventual answer for that case is a browser extension, which is out of
+scope for v1 for its own reasons: a store review, a permissions model,
+and a per-browser build.</p>
+<p><strong>A browser extension instead of an injected layer.</strong>
+Deferred, see above.</p>
+<p><strong>Python instead of Node.</strong> Rejected, see D15. An
+earlier draft chose Python and the reasoning did not survive contact
+with a clean machine.</p>
+<h2 id="failure-modes">Failure modes</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Situation</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The service is not running</td>
+<td>The layer keeps working from browser storage. Copy and export
+produce the full set. Sync drains when the service returns. In attached
+mode the layer is not fetched from the service, so it still loads.</td>
+</tr>
+<tr>
+<td>The app's CSP refuses the layer or its sync</td>
+<td>Named as a policy refusal in the persistent failures list, distinct
+from service-down, with what to change.</td>
+</tr>
+<tr>
+<td>The reviewed page re-renders its own data</td>
+<td>App-repaint rules: replay only where the DOM still matches what
+replay wrote; otherwise the edit detaches and says the page moved
+on.</td>
+</tr>
+<tr>
+<td>The agent rewrites the source</td>
+<td>Source-repaint rules: replay, and mark genuine disagreements as
+collisions on the card. Acks process first so applied items are retired
+before the repaint they caused.</td>
+</tr>
+<tr>
+<td>Replay cannot confidently place an edit</td>
+<td>Nothing is written to the DOM. The record keeps its text and the
+rail says it cannot be placed on this version.</td>
+</tr>
+<tr>
+<td>The reviewer is typing when a repaint lands</td>
+<td>The region holding the caret is never rewritten.</td>
+</tr>
+<tr>
+<td>A comment's subject no longer exists</td>
+<td>The comment stays, is marked, and its lost-anchor state travels in
+the payload so the agent is told rather than sent looking.</td>
+</tr>
+<tr>
+<td>The reviewer sends with nothing listening</td>
+<td>Files are written, send stays available, the next agent to ask gets
+everything.</td>
+</tr>
+<tr>
+<td>The agent acks an item the reviewer edited again</td>
+<td>The item is outstanding again; the ack applies to the delivered
+version and the newer one ships next.</td>
+</tr>
+<tr>
+<td>An ack names something never delivered</td>
+<td>Refused.</td>
+</tr>
+<tr>
+<td>Verification cannot find the reviewer's wording</td>
+<td>Loud warning on the item. The item is not auto-reopened.</td>
+</tr>
+<tr>
+<td>Two windows on the same target</td>
+<td>Both join the same review; state is a projection of one log.</td>
+</tr>
+<tr>
+<td>Two service instances</td>
+<td>The second refuses with an instruction rather than racing.</td>
+</tr>
+<tr>
+<td>A repaint arrives mid-keystroke</td>
+<td>The change was already written on the keystroke, not on a
+timer.</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="security-and-privacy">Security and privacy</h2>
+<p>The controls are D9 (token, origin allowlist, forced preflight,
+ephemeral port), D10 (reviewed content is data), and D11 (path safety,
+state location, setup's sentinel writes). What each covers:</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Enforced by</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R63, local only</td>
+<td>The service refuses non-local targets it serves; the layer refuses
+to initialize on a non-loopback origin; the origin allowlist refuses
+everything else. In attached mode there is no server-side fetch, so
+these three are the boundary rather than a target check</td>
+</tr>
+<tr>
+<td>R64, no reading outside the reviewed folder</td>
+<td>Sibling assets resolved against the reviewed file's directory,
+checked after symlink resolution</td>
+</tr>
+<tr>
+<td>R65, a reviewed page cannot reach the tool</td>
+<td><strong>Not achievable in v1 and not claimed.</strong> The layer
+lives in the page's origin. v1's targets are the reviewer's own build
+and their own app, and reviewing HTML they did not produce is a stated
+non-goal. The frame is the known answer when that changes</td>
+</tr>
+<tr>
+<td>R66, content is not instructions</td>
+<td>D10 end to end. Reviewed text reaches an agent only as fenced data,
+and links and images carrying executable schemes are refused, with
+control characters removed before a scheme is read</td>
+</tr>
+<tr>
+<td>R67, paste restrictions</td>
+<td>Raster image types only, excluding the vector format that can carry
+script</td>
+</tr>
+</tbody>
+</table></div>
+<p>Feedback is the reviewer's words about their own work, written to
+their own disk, displayed as text and never as markup. The log lives
+outside any checkout, owner-only, with a documented retention window and
+a purge command.</p>
+<h2 id="test-strategy">Test strategy</h2>
+<p>The single most important fact from studying the tool being replaced:
+it has <strong>no browser-level test at all</strong>, and every symptom
+Ken hit lives in the part that has none. Its careful, well-tested
+storage layer is not where it fails. The strategy is inverted from the
+one it grew.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>What it proves</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Browser tests, real browser</strong></td>
+<td>Each reliability law, individually. Type and reload. Type and kill
+the service. Type and force an app re-render. Type and have an agent
+rewrite the source. Type half a comment, trigger a repaint, assert the
+half-comment survives. Send with nothing listening, add more, send
+again.</td>
+</tr>
+<tr>
+<td><strong>Replay tests</strong></td>
+<td>Idempotence by comparison; the caret is never disturbed; a
+low-confidence match writes nothing; app repaint and source repaint
+behave differently; collisions surface rather than resolve.</td>
+</tr>
+<tr>
+<td><strong>Anchoring tests</strong></td>
+<td>Survives edits elsewhere, reformatting, rewrapping; picks the right
+occurrence among repeats; reports honestly when the subject is
+gone.</td>
+</tr>
+<tr>
+<td><strong>Region identity tests</strong></td>
+<td>Two neighboring regions never merge; identity survives a repaint and
+a move.</td>
+</tr>
+<tr>
+<td><strong>Protocol tests</strong></td>
+<td>Per-item ack; stale ack refused; delivered items re-offered until
+acked; a second send adds rather than replaces; browser and service
+reconcile with lifecycle winning.</td>
+</tr>
+<tr>
+<td><strong>Security tests</strong></td>
+<td>Cross-origin write refused without a token and without an
+allowlisted origin; forged ack refused; traversal and symlink write
+refused; injected instructions fenced in the markdown; inert markdown;
+refused schemes and paste types.</td>
+</tr>
+<tr>
+<td><strong>The end-to-end one that decides it</strong></td>
+<td>A full review of a real running app behind a login: comment, type
+fixes, drive the app through several screens, send, have an agent apply
+and ack, watch the burn-down, account for every item.</td>
+</tr>
+</tbody>
+</table></div>
+<p>Every reliability law in the brief needs a test that fails without
+it. That is the acceptance bar, not a coverage number.</p>
+<h2 id="decisions-resolved">Decisions resolved</h2>
+<p><strong>Browsers: Chromium only for v1</strong>, stated in the
+README. The editing surface is the entire risk and its cost swings with
+the answer. A second browser gets added when someone reports needing
+one.</p>
+<p><strong>The built-doc comment module stays for v1.</strong> Opening a
+spec doc from Finder with nothing running has to keep working, so this
+tool does not replace the embedded layer yet.</p>
+<p><strong>Where the agent-facing files live</strong> is answered by D1:
+one pair per review at a server-side review root, which removes the
+question rather than answering it per target type.</p>
+<h2 id="open-questions">Open Questions</h2>
+<div class="callout callout-question">
+<p><span id="open-questions-q1" class="finding-anchor"></span><strong>Q1: Which projects does a student attach, and how does the
+tool learn the source hint for a document it did not build?</strong> D2
+has <code>setup</code> ask once per project, which works for Ken's
+repositories where the answer is uniform. A stranger reviewing a single
+HTML file they were emailed has no project and no generator. The
+fallback is probably to say plainly that the source is unknown and let
+the agent decide, but the wording of that fallback is what stops an
+agent from confidently editing the artifact.</p>
+</div>
+<h2 id="architect-review-disposition">Architect Review Disposition</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A target as the unit breaks one-batch review and makes Q2
+unanswerable</td>
+<td><span class="accepted">Accepted</span></td>
+<td>D1: a review spans many targets, one file pair, one review root</td>
+</tr>
+<tr>
+<td>Replay has no confidence floor and no fail-closed rule; identity
+cannot survive a repaint as written</td>
+<td><span class="accepted">Accepted</span></td>
+<td>D3 Law 1, including minted-once and re-resolved-per-repaint</td>
+</tr>
+<tr>
+<td>App re-render and source rewrite treated identically; replay
+destroys the caret</td>
+<td><span class="accepted">Accepted</span></td>
+<td>D3 Laws 2 and 3. This was the most dangerous defect in the
+draft</td>
+</tr>
+<tr>
+<td>Record shape is text-only; undo has no design</td>
+<td><span class="accepted">Accepted</span></td>
+<td>D4, including undo as a record operation</td>
+</tr>
+<tr>
+<td>Verification is unimplementable because the ack carries no file
+paths</td>
+<td><span class="accepted">Accepted</span></td>
+<td>D8, plus normalized matching and warn-do-not-reopen</td>
+</tr>
+<tr>
+<td>Refusing to write does not stop the agent editing the artifact the
+next build erases</td>
+<td><span class="accepted">Accepted</span></td>
+<td>D2 source hint. This closed a real hole in R47</td>
+</tr>
+<tr>
+<td>The xref cites R44 when it means R47</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Corrected</td>
+</tr>
+<tr>
+<td>Attached mode's costs are not admitted</td>
+<td><span class="accepted">Accepted</span></td>
+<td>D5 costs list: CSP, CORS, origin-scoped storage, router shim,
+overlay-root contract, layer not fetched from the service</td>
+</tr>
+<tr>
+<td>Nobody owns the refresh</td>
+<td><span class="accepted">Accepted</span></td>
+<td>D5 per mode, plus the ordering rule in D7</td>
+</tr>
+<tr>
+<td>Nothing protects an open compose box from a rail re-render</td>
+<td><span class="accepted">Accepted</span></td>
+<td>D14</td>
+</tr>
+<tr>
+<td>Two stores with no event identity or stated authority</td>
+<td><span class="accepted">Accepted</span></td>
+<td>D6 three rules</td>
+</tr>
+<tr>
+<td>R9 and R20 have no owner</td>
+<td><span class="accepted">Accepted</span></td>
+<td>D14 failures list; D4 makes the note an item</td>
+</tr>
+<tr>
+<td>Reuse claims do not survive opening the files</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Existing-structure table corrected: anchoring and the remount
+contract are new work</td>
+</tr>
+<tr>
+<td>A docked rail contradicts the no-restyle rule</td>
+<td><span class="accepted">Accepted</span></td>
+<td>D12: fixed overlay, never shifts the host</td>
+</tr>
+<tr>
+<td>Python is not reliably present on a clean Mac</td>
+<td><span class="accepted">Accepted</span></td>
+<td>D15 reversed to Node</td>
+</tr>
+<tr>
+<td>Cut compaction and projection-rebuild as named machinery</td>
+<td><span class="accepted">Accepted</span></td>
+<td>D6 says the log is not compacted</td>
+</tr>
+<tr>
+<td>Cut the agent-presence display</td>
+<td><span class="rejected">Rejected</span></td>
+<td>The brief requires presence to be shown. The risk is real, so D7
+states the law that presence is never read by the send decision</td>
+</tr>
+<tr>
+<td>Collapse six commands to four</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>open</code>, <code>next</code>, <code>ack</code>,
+<code>setup</code></td>
+</tr>
+<tr>
+<td>Browsers should not still be open</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Chromium only for v1</td>
+</tr>
+<tr>
+<td>Runtime has no dependencies, dev tooling may</td>
+<td><span class="accepted">Accepted</span></td>
+<td>D15</td>
+</tr>
+<tr>
+<td>Does the built-doc module stay</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Yes for v1, stated</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="security-review-disposition">Security Review Disposition</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>No authentication; any origin can write to the loopback service</td>
+<td><span class="accepted">Accepted</span></td>
+<td>D9 three layers. This also fixes the same hole in the existing
+<code>comment_server.py</code></td>
+</tr>
+<tr>
+<td>Prompt injection through quoted content into agent-read files</td>
+<td><span class="accepted">Accepted</span></td>
+<td>D10. The vector was absent from the draft entirely</td>
+</tr>
+<tr>
+<td>Path derivation from attacker-controlled target; arbitrary
+write</td>
+<td><span class="accepted">Accepted</span></td>
+<td>D11</td>
+</tr>
+<tr>
+<td>"The snippet carries the guard" is not implementable</td>
+<td><span class="accepted">Accepted</span></td>
+<td>D11: the guard is in the host template, emitted framework-correct by
+setup</td>
+</tr>
+<tr>
+<td>Dropping the frame loses the only isolation boundary in served
+mode</td>
+<td><span class="accepted">Accepted</span></td>
+<td>D5 splits the decision by mode</td>
+</tr>
+<tr>
+<td>Cut the bookmarklet</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Cut from v1, recorded in Alternatives with the conditions under
+which it could return</td>
+</tr>
+<tr>
+<td>Log location, permissions, retention unstated</td>
+<td><span class="accepted">Accepted</span></td>
+<td>D11</td>
+</tr>
+<tr>
+<td>A forged ack silently empties the burn-down</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Closed by D9</td>
+</tr>
+<tr>
+<td>Setup writes agent instructions with no safety story</td>
+<td><span class="accepted">Accepted</span></td>
+<td>D11 sentinel blocks; D10's rules are what it writes</td>
+</tr>
+<tr>
+<td>Local-only has no enforcement point in attached mode</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Security table states the three real controls instead of one
+unenforceable claim</td>
+</tr>
+<tr>
+<td>Verification reads a path the acking party supplies</td>
+<td><span class="accepted">Accepted</span></td>
+<td>D8 constrains it to the review's project root</td>
+</tr>
+<tr>
+<td>A fixed default port weakens everything</td>
+<td><span class="accepted">Accepted</span></td>
+<td>D9 ephemeral by default</td>
+</tr>
+<tr>
+<td>Markdown sanitization described by effect, not mechanism</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Security table: inert by construction, control characters stripped
+before scheme reading, scheme allowlist</td>
+</tr>
+</tbody>
+</table></div>
+<hr class="reviews-divider" style="margin:4.5rem 0 1.5rem;border:0;border-top:3px solid #b0463b">
+
+<div class="reviews-banner">
+<p>The sections below are the full verbatim persona + human reviews for
+this document. They live in a separate <code>_reviews.md</code> file (so
+agents read the lean spec), merged here for review.</p>
+</div>
+<h1 id="architecture-reviews">Architecture reviews</h1>
+<p>Both reviewers read the brief, the PM review, the three research
+files on the tool being replaced, and the two existing implementations
+this design claims to inherit from.</p>
+<hr />
+<h2 id="review-architect-review-round-1">review-architect Review (Round
+1)</h2>
+<h3 id="blockers">Blockers</h3>
+<p><strong>A target as the unit of a review breaks the one-batch
+story.</strong> Free roam across eight routes produces eight reviews and
+eight pairs of files. R45 (feedback accumulates across everything
+visited and sends as one batch naming which page each item belongs to),
+R49 (one structured batch grouped by page), R6 (one queue), R51 (a known
+documented location), and the second user story all break. The agent has
+to discover N files instead of reading one. This is also why Q2 looked
+unanswerable: the question asks where the file for a route goes, when
+the real answer is that a route does not get its own file. <em>Fix:</em>
+make a review the unit. One review spans many targets, items carry a
+target, one <code>review.md</code> plus one <code>review.json</code> per
+review at one location. Target identity stays as the per-page key inside
+it.</p>
+<p><strong>Replay has no confidence floor and no fail-closed rule, and
+the identity ladder is weakest in exactly the case replay exists to
+serve.</strong> After an agent rewrites the source, the structural path
+has shifted, the sibling ordinal has shifted, and the original text is
+the thing that just changed. Three of the four probes are degraded and
+the fourth (an author-supplied name) is present on almost nothing Ken
+reviews. A miss is survivable. A mis-bind is not: replay stamps
+paragraph four's text onto paragraph five, and the before/after pair
+shipped to the agent is now incoherent. The document treats re-finding
+as a solved property inherited from the comment module; it is not.
+<em>Fix:</em> state it as a law. Replay only writes on a high-confidence
+bind, and one region reference binds to at most one node per pass,
+greedily in document order. Anything unbound is not written and appears
+in the rail as unable to be placed, text intact. Add the missing
+corollary: identity is minted once and re-resolved on every repaint,
+because a repaint destroys any attribute or WeakMap you stored it in.
+"Travels with the region" is not true across a repaint and a builder
+will implement the wrong thing.</p>
+<p><strong>Treating an app re-render and a source rewrite identically
+stamps stale text over real application state.</strong> Two failures.
+First, on a live app the incoming version is real data, not a competing
+edit: filter the roster, come back, and your edit to row three (Sarah)
+is replayed onto row three (Marcus), with the reviewer's text winning on
+screen. The reviewer is now looking at a lie about their own app, in the
+target Ken cares most about, and using the app for real fights replay
+directly. Second, replay that rewrites a region's contents destroys the
+caret and the selection. Steady Thread has a Turbo frame that polls
+every two seconds; replay would yank the cursor out of the block being
+typed in, twice a second. That is a worse version of the symptom this
+document exists to kill. <em>Fix:</em> split the two causes. A source
+repaint replays and marks collisions as designed. An app repaint replays
+only where the region's current DOM still matches what replay last
+wrote; otherwise the edit detaches, keeps its text, and says on its card
+that the page moved on. Make replay idempotent by comparison: a region
+whose DOM already equals the record is skipped, and a region containing
+the caret or the selection is never rewritten. That one rule buys
+idempotence and cursor safety together.</p>
+<p><strong>The record shape is text-only, so it cannot represent a
+deletion, a move, a formatting-only change, or an image, and undo is not
+mentioned anywhere.</strong> R26 (blocks deleted and reordered, deletion
+reported as a deletion), R30 (bolding a word is an edit even though the
+plain text is unchanged), R24 (bold, italic, links, lists), and R25
+(images) have no home. Worse, R23 (undo, redo) and R27 (every edit
+undone on its own, which exists because the old tool's only escape costs
+an hour of work) have no design at all, and replay makes undo genuinely
+hard: after replay rewrites a region, the browser's native undo stack
+for it is gone. <em>Fix:</em> give the record a kind, carry cleaned
+markup alongside plain text, and carry landing anchors for a move. Then
+say plainly how undo works: per-item undo reverts the record and lets
+replay redraw, which is the only version that composes with replay.
+Native browser undo is a bonus, not the mechanism.</p>
+<p><strong>Verification is unimplementable because the ack does not
+carry file paths.</strong> The ack is defined as item ids applied or
+declined; verification then checks the text "in the file the agent said
+it changed", which the ack does not carry. Verification is the only
+defense the design has against the failure Ken's own commit in the old
+repo tried to fix with a prompt. Answering the question directly: no,
+the service cannot verify anything, because it does not know what file
+to open. <em>Fix:</em> the ack carries, per applied item, the file paths
+touched. Two further corrections or verification causes its own outage:
+match on normalized text, because on a markdown source or an ERB
+template the reviewer's <code>after</code> is a rendering of the source
+and will legitimately never appear verbatim; and a miss warns loudly
+rather than auto-reopening the item, because auto-reopening turns a
+false positive into an infinite re-ship loop. A deletion needs the
+inverse check.</p>
+<p><strong>Refusing to write the artifact supplies nothing that tells
+the agent where the source is.</strong> Yes, there is a gap, and it is
+the common case. An agent handed a review of
+<code>02_architecture.html</code> will edit
+<code>02_architecture.html</code>, pass the verification check cleanly,
+ack it applied, the item clears from the rail, and the next pandoc build
+erases it. The reviewer watched the burn-down and believes the fix
+landed. That is worse than no fix, which is exactly what R47 says.
+Separately, the document's one xref cites "R44, a typed fix must reach
+whatever the next build reads". R44 is free roam; R47 is the typed-fix
+requirement. The single place this design connects itself to the brief
+points at the wrong requirement. <em>Fix:</em> every target carries a
+source hint in the JSON and a sentence in the markdown. Setup asks once
+per project. The agent instructions say to edit the generator's input
+and name what was edited. Verification then checks that file and the
+loop closes.</p>
+<h3 id="important">Important</h3>
+<p><strong>Attached mode's real costs are not admitted.</strong> The
+layer runs on the app's origin and the service on loopback, so every
+sync is cross-origin: the service needs CORS and the app's CSP
+<code>connect-src</code> must permit it. Rails' generated CSP
+initializer and any Next.js middleware CSP block it, and a CSP block
+looks identical to the service being down, which is the one failure the
+document says is safe. Browser storage is the app's origin's storage, so
+the app's own scripts can read and clear it, which makes R65
+unachievable in attached mode; <code>localhost:3000</code> and
+<code>127.0.0.1:3000</code> are separate buckets, so target identity
+holds server-side and not browser-side. A client-side router gives the
+layer no event unless it patches history and framework navigation, so
+the shim relocates rather than disappears. A Turbo morph removes the
+overlay root, because the root is not in the server's HTML; the Steady
+Thread layer survives morphs largely because Rails re-renders the
+partial, and injecting by script does not inherit that. And if the
+snippet loads the layer from the service, no service means no layer,
+contradicting the failure table's first row. <em>Fix:</em> keep attached
+mode, it is the right call, and add a costs paragraph naming all of it.
+Scope R65 to served mode. State the overlay-root contract with a
+de-registration rule. Make the sync client distinguish policy refusal
+from service-down.</p>
+<p><strong>Nobody owns the refresh.</strong> R56 says the page updates
+itself when the agent lands a change; the document says only "the page
+refreshes" in the passive voice. This is the exact mechanism that
+produced symptom one in the tool being replaced. It also interacts with
+verification: between the agent's write and its ack the item is still
+outstanding, so replay stamps the reviewer's wording back over an edit
+that was in fact applied and reports a collision that is not one.
+<em>Fix:</em> name the mechanism per mode, and state the ordering rule
+that acks are processed before replay.</p>
+<p><strong>Nothing protects an open compose box from the rail being
+re-rendered.</strong> The research names this as the number one in-page
+revert mechanism in the old tool: the rail rebuilds every card on every
+repaint and a partially reworded comment is destroyed, because a removed
+node never blurs. R18 requires rewording to be safe from anything else
+happening at the same time, and replay makes repaints more frequent.
+<em>Fix:</em> one law: the rail updates in place and a card holding
+focus is never re-created. Add a browser test that types half a comment,
+triggers a repaint, and asserts it survives.</p>
+<p><strong>Two durable stores with no event identity, no idempotence
+rule, and no stated authority.</strong> Tracing it: reviewer types,
+browser writes, sync fails, reviewer reloads, browser replays from
+storage and re-sends, and the service appends those events again.
+Whether that double-counts depends on whether events are snapshots or
+deltas and whether they carry ids, and the document says neither. The
+reverse is worse: the agent acks while the browser is closed, and on
+reopen the browser still holds the item as outstanding and re-offers it,
+breaking apply-once. <em>Fix:</em> events carry a client-minted id and
+are idempotent by id; an item event is a full snapshot, never a delta;
+the browser is authoritative for item content until delivery and the
+service is authoritative for lifecycle, with the layer reconciling on
+every reconnect and lifecycle winning.</p>
+<p><strong>R9 has no owner and R20 is absent entirely.</strong> R9
+(failures are loud and persist) answers a named defect in the research,
+where every failure is a three-second toast and then nothing, and no
+component owns error state. R20 (a note tied to nothing is first-class
+feedback) is the requirement that exists because "type a note, press
+Send, button is dead forever" was one of Ken's three symptoms, and the
+architecture never establishes the note as an item, so the bug can be
+rebuilt while satisfying everything the architecture says. <em>Fix:</em>
+give the rail a failures list that persists until dismissed. Add one
+line making the note an item.</p>
+<p><strong>Two reuse claims do not survive opening the files.</strong>
+The built-doc module's <code>locate()</code> is four exact substring
+probes over the concatenated text, with no whitespace-collapsed fallback
+and no repeat disambiguation, so <code>indexOf</code> takes the first
+hit and a short or missing prefix binds to the wrong occurrence:
+anchoring is new work, not a carry-over. Its storage key is the file's
+basename, so two <code>index.html</code> files in different folders
+share one bucket and merge their comments. And the Steady Thread layer
+re-registers document-level <code>mousedown</code> and
+<code>mouseup</code> on every morph with no removal, so handlers
+accumulate for the life of the page, and its draft is a single global
+key rather than a queue. Do not inherit either shape.</p>
+<p><strong>A docked rail cannot honor the no-restyle rule.</strong> The
+built-doc module sets
+<code>body.ffc-open { margin-right: 372px; }</code>, which is exactly
+what R34 forbids, and human-review only avoids it with an iframe. In
+served mode this will be discovered during the build, by which point the
+layout is decided by accident. <em>Fix:</em> decide now. The rail is a
+fixed overlay in an isolated root, it never shifts the host, and it
+collapses. Same for both modes, which is what the mode-parity claim
+requires.</p>
+<h3 id="minor">Minor</h3>
+<p><strong>Python is not reliably present on a clean Mac</strong>, where
+<code>/usr/bin/python3</code> is a stub that prompts for Xcode Command
+Line Tools. That is not the two-line README the design is trading for.
+Meanwhile the audience runs Claude Code, Codex, or Cursor, so Node is
+more likely to be present, which the Alternatives entry appears to
+concede in its first sentence and then reject anyway. The rejection
+reads reversed. <em>Fix:</em> verify the claim on a fresh machine and
+keep Python, or say the real reason plainly and have setup check for the
+runtime and print the exact remedy instead of failing at first use.</p>
+<h3 id="requirements-with-no-home-in-the-document">Requirements with no
+home in the document</h3>
+<p>R18, R20, R23, R24, R25, R26, R27, R30, R33, R56, R61, R62. R47 is
+claimed but not supplied. R65 is claimed but false in attached mode.
+Also undefined: what <code>open</code> does for a route target, given
+there is no proxy.</p>
+<h3 id="over-designed-for-one-reviewer-and-a-few-students">Over-designed
+for one reviewer and a few students</h3>
+<ul>
+<li>Cut compaction and projection-rebuilt-on-start as named machinery. A
+session is a few hundred events.</li>
+<li>Cut the agent-presence display. Presence is already never a gate,
+and showing it is how it became a gate last time.</li>
+<li>Cut the bookmarklet from v1. A second delivery path with its own CSP
+failure mode for a case neither Ken nor a student has on day one.
+Cutting it also repairs the browser-extension rejection, which currently
+leans on it.</li>
+<li>Collapse the six commands. <code>status</code> is <code>next</code>
+with a zero timeout; four covers everything.</li>
+</ul>
+<h3 id="questions">Questions</h3>
+<ol type="1">
+<li>Browsers should not still be open. The editing surface is the entire
+risk and its cost swings with the answer. Recommend Chromium only for
+v1.</li>
+<li>The test strategy demands browser tests and the runtime decision
+forbids a package manager. State the rule: runtime has no dependencies,
+dev tooling may.</li>
+<li>Does the built-doc embedded module stay? The architecture should
+state that v1 does not replace it, otherwise the first student to open a
+spec doc from Finder with no service running gets nothing.</li>
+</ol>
+<hr />
+<h2 id="review-security-review-round-1">review-security Review (Round
+1)</h2>
+<h3 id="blockers-1">Blockers</h3>
+<p><strong>The loopback service has no authentication, and attached mode
+makes it reachable from every origin the reviewer's browser
+visits.</strong> Binding to loopback does not help, because the attacker
+is a page running inside the reviewer's own browser. The host header
+check only defeats DNS rebinding; a page that fetches
+<code>http://127.0.0.1:&lt;port&gt;</code> directly sends a passing host
+header. From there: a cross-origin POST with a simple content type is a
+CORS-simple request, so no preflight fires, the request reaches the
+handler, and the service acts on it. CORS hides the response, not the
+effect. Any page can inject forged comments and edits that land in the
+file an agent reads and acts on, which is a drive-by write into an
+agent's instruction stream. And for the layer to read any response in
+attached mode, the service must send an allow-origin header; if that is
+a wildcard or a reflection, every page on the internet can read the
+reviewer's full feedback set, the quoted passages, the list of every
+file and route reviewed, and local file contents through the asset
+route. The tool being replaced had five controls here; this design keeps
+the weakest two. <em>Fix:</em> three layers, all of them. A per-run
+token, header-only, constant-time compared, in an owner-only file. A
+server-side origin allowlist recorded at attach time, no wildcard and no
+reflection, applied to preflight too, since a page cannot forge its
+origin and a token in a dev layout is readable by anything in the app's
+origin. And a required JSON content type plus a custom header on every
+mutating route, so a simple request cannot reach a handler at all.</p>
+<p><strong>Text from the reviewed document travels verbatim into a file
+an agent reads and acts on, with nothing saying it is
+untrusted.</strong> The full path: a document is generated by an LLM or
+renders content its author did not write, both routine here. The
+reviewer comments on a passage or edits a block, and the layer captures
+the quote, surrounding context, and the block's original text. Those
+land in the markdown, which the document says exists for an agent with
+no tooling, meaning it is read raw straight into context. The agent then
+applies items with repository write access. The <code>before</code>
+field is the worst carrier for three compounding reasons: verbatim by
+design, unbounded because neither file is truncated, and <strong>the
+reviewer never reads it</strong>, since it is the original text and not
+their words. Verification does not cover this: an injected instruction
+that makes the agent also edit a second file or call a tool passes it
+with a clean bill. This repository's own <code>CLAUDE.md</code> already
+carries the rule for proposed lessons, that quoted material is data and
+never instructions, and it is not carried into this design.
+<em>Fix:</em> classify every field as reviewer-authored (instruction) or
+document-derived (data). Fence the data fields structurally with a
+per-file random delimiter and escape any content line that would close
+it; blockquote-prefixing each line is the right shape but does not stop
+a quoted line from reading like a directive. Put a standing header on
+every generated markdown file. Say the JSON is authoritative and the
+markdown is the human fallback, because structure survives injection in
+a way prose does not. And bound <code>before</code>, since the
+no-truncation rule is right for <code>after</code> and wrong for text
+the reviewer did not write.</p>
+<p><strong>The write path for the agent-facing files is derived from a
+target name and a project the reviewer names, and neither is
+constrained.</strong> Four holes in one sentence. Route target identity
+normalizes host spelling, trailing slash, and fragment, and says nothing
+about path segments, percent-decoding, or <code>..</code>, so a filename
+derived from a decoded route path is a traversal primitive. In attached
+mode the page supplies the target, so combined with the authentication
+finding the write path is attacker-controlled. If the project path
+arrives in a request body, the browser is naming an absolute write
+destination, which is arbitrary file write from any origin that can
+reach the service. And the destination file may itself be a pre-planted
+symlink pointing at an agent's configuration file; the design carries
+this lesson for the log and not for these two files. A write into
+<code>~/.claude/settings.json</code> or a repository's
+<code>CLAUDE.md</code> is not file corruption, it is agent
+reconfiguration, which is full compromise of everything the agent can
+reach. <em>Fix:</em> never derive a path component from untrusted text;
+hash the canonical target and use a restricted, length-capped slug.
+Assert the destination is inside the review root after resolution and
+refuse a symlink. Write through an exclusively created temp name and
+rename. And make the review root server-side configuration set at setup
+or service start, never accepted from a request body, which also settles
+Q2.</p>
+<p><strong>"The snippet itself carries the guard" is not
+implementable.</strong> A client-side snippet cannot know the server's
+environment. Steady Thread's guard is three server-side Ruby layers and
+the tool controls none of them. The most a snippet can check at runtime
+is the hostname, which is wrong for a dev server on a LAN IP, an ngrok
+tunnel (which Ken uses for Twilio inbound testing), or a staging
+hostname, and it guards against running rather than against shipping. If
+the snippet ships to production, the page carries a script tag pointing
+at loopback, and for every production visitor who happens to run the
+tool that script executes in the production origin in their logged-in
+session. Chrome treats loopback as potentially trustworthy, so
+mixed-content blocking does not fire on an HTTPS page. <em>Fix:</em> the
+guard goes outside the script tag, in the host template's own
+conditional, and setup emits the framework-correct guarded snippet. Ship
+the Steady Thread three-layer pattern as the documented shape. A
+client-side loopback check is a second line, not the guard.</p>
+<p><strong>Dropping the frame removes the only isolation boundary, and
+the argument for dropping it does not apply to files.</strong> The claim
+that the reviewed page cannot reach the layer or stored feedback has no
+mechanism behind it. In the tool being replaced the mechanism was
+concrete and tested: file and markdown reviews ran in a frame with an
+opaque origin, on an alternate loopback hostname, with postMessage
+pinned in both directions. Injecting into the reviewed document itself
+makes the file's own scripts same-document with the layer, able to read
+and rewrite its state, read the storage queue holding all unsent
+feedback, call the service with whatever credentials the layer holds,
+read sibling files through the asset route, and exfiltrate all of it.
+The reviewed HTML file is not a trusted input; that is the premise of
+the feature. The thing worth noticing is that the entire argument for
+dropping the frame is about running apps, and not one of those points
+applies to a local file on disk. <em>Fix:</em> split the decision.
+Attached mode: no frame, and say plainly that isolation is not
+achievable in the app's own origin, as an accepted tradeoff rather than
+an unbacked claim. Served mode: keep the frame, opaque origin, alternate
+loopback hostname, pinned postMessage. Also note that in attached mode
+the layer's storage lives in the app's origin, so anything that XSSes
+the app reads the reviewer's unsent feedback.</p>
+<h3 id="important-1">Important</h3>
+<p><strong>Cut the bookmarklet.</strong> On a page that is not the
+reviewer's it becomes script in a hostile origin; the page can hook
+fetch before it runs and see every request. If it carries the token it
+hands full authenticated access to the service. The page's crafted text
+becomes a quote or a <code>before</code> and reaches the agent through
+the injection path above. And it drives straight through the local-only
+requirement, which no server-side check can enforce, because the
+reviewer's click is the target selection. It covers the smallest case
+and carries the largest blast radius, and the document already argues
+the extension is the real answer for that case. <em>If it stays:</em> no
+token in the bookmarklet, the layer refuses to initialize off an
+allowlisted origin, and the service mints a grant only after the
+reviewer confirms in the tool's own window. Any design where the page
+can self-authorize is not a design.</p>
+<p><strong>The log's location, permissions, and retention are
+unstated</strong>, and it accumulates quoted document content
+indefinitely on a machine the tool does not own. This is the finding
+most likely to burn a student, because it needs no attacker: if the
+state directory defaults inside the clone, a student's
+<code>git add -A</code> publishes their entire review history to a
+public repository. A world-readable log on a shared lab machine or a
+managed work Mac leaks every document the reviewer has read. Retention
+is answered with compaction, which is a size answer to a privacy
+question; the tool being replaced at least pruned at thirty days. And
+the agent-facing files sit beside the reviewed file, inside the user's
+repository, carrying quoted content and candid feedback, so they get
+committed by accident. <em>Fix:</em> state outside the checkout,
+directory and file permissions owner-only, a shipped ignore entry, a
+setup offer to ignore the review files in the reviewed project, a
+default retention window, and a purge command.</p>
+<p><strong>A forged ack silently erases the burn-down.</strong> The
+design defends against a stale ack, which is the failure the old tool
+actually hit, and not against a forged one. With no token, any page can
+name item identifiers and mark them applied; applied items clear their
+highlights and move to Completed, so the reviewer's screen burns down to
+empty with nothing looking wrong. That is worse than an error, because
+the whole premise is that what is on screen is what is still
+outstanding. <em>Fix:</em> covered by authentication, plus tying an ack
+to a delivery identifier the service issued.</p>
+<p><strong>Setup writes the files that program the agent</strong>, which
+is the highest-privilege thing this tool does, higher than writing
+feedback, because it changes what the agent will do with everything else
+forever. The tool being replaced overwrites them unconditionally and
+without prompting, which is the scar R61 exists for, and the
+architecture lists setup as one of six commands and never says how R61
+is met. This matters twice over, because the injection defenses have to
+live in exactly these files. <em>Fix:</em> write a marked block between
+sentinels and replace only what is between them on re-run. If the
+sentinels are missing but the file mentions the tool, report and touch
+nothing. The written instructions must carry the injection rules.</p>
+<p><strong>Local-only has no enforcement point in attached
+mode.</strong> The check is enforceable when the tool fetches the
+target, which is how the old tool did it. In attached mode the tool
+fetches nothing; the browser is on whatever page it is on and the layer
+reports the URL it finds itself at, so the service can only validate a
+string it was handed and a page can hand it any string. The design
+states the requirement as satisfied; in the mode that is the headline,
+it is a claim about a string. <em>Fix:</em> state what is actually true:
+the service refuses non-local targets it serves, the layer refuses to
+initialize on a non-loopback origin, and the service refuses requests
+whose origin is not on the attach allowlist. Those three together are a
+real boundary.</p>
+<h3 id="minor-1">Minor</h3>
+<p><strong>Verification reads a path the acking party supplies</strong>,
+which for a forged ack becomes a blind content oracle: ask whether a
+string appears in a private key file and read the answer off the item's
+status. Low severity on its own and only reachable because of the
+authentication finding, but the fix is one line: constrain the path to
+the target's project root and report anything outside as a verification
+failure.</p>
+<p><strong>A fixed default port is a meaningful weakening.</strong> A
+page attacking the service does not need to scan if the port is a
+documented constant, and whoever binds it first becomes a script source
+for any page carrying the attached-mode snippet, including a production
+page carrying it by accident. <em>Fix:</em> ephemeral by default,
+recorded with the token in an owner-only file, pinning available and
+documented as a weakening.</p>
+<p><strong>Markdown sanitization and paste restriction are described by
+effect, not mechanism</strong>, and the mechanism is the part that
+failed before: the old tool's first approach was a regex script-strip,
+replaced with a renderer inert by construction. Which of the two this
+design intends is the whole question, and it is sharper because the
+renderer is vendored. The scheme rejection has a specific shape worth
+inheriting: control characters can smuggle a scheme past a naive prefix
+check. <em>Fix:</em> name the mechanism, and say whether sanitization is
+the vendored renderer's job or ours, because "the library handles it" is
+a claim that must be true of the specific library.</p>
+<h3 id="must-be-fixed-before-the-first-line-is-written">Must be fixed
+before the first line is written</h3>
+<p>Authentication; the injection framing of the agent-facing files; path
+derivation and the server-side review root; the served-mode isolation
+decision; state location and permissions. Each changes the shape of the
+code or is a default that is painful to migrate after students have
+installed it. The production snippet finding is a blocker on the
+document rather than the code.</p>
+<h3 id="fine-as-follow-ups">Fine as follow-ups</h3>
+<p>The forged ack closes automatically with authentication. Setup's
+sentinel writing, as long as the injection rules it carries are drafted
+now. The verification path constraint. The ephemeral port. Naming the
+renderer's sanitization posture.</p>
+</body>
+</html>

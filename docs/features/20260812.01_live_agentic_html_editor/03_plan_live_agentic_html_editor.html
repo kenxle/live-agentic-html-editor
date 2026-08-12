@@ -1,0 +1,1721 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Plan: Live Agentic HTML Editor</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%94%A8</text></svg>">
+  <style>
+    :root {
+      --ink: #0f172a;
+      --accent: #2563eb;
+      --accent-soft: #eff6ff;
+      --muted: #64748b;
+      --rule: #e2e8f0;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --table-head: #f1f5f9;
+
+      /* Callout types */
+      --req-bg: #f0fdf4;      --req-bar: #16a34a;
+      --nongoal-bg: #f8fafc;  --nongoal-bar: #94a3b8;
+      --metric-bg: #f0f9ff;   --metric-bar: #0284c7;
+      --question-bg: #fffbeb; --question-bar: #d97706;
+      --flag-bg: #fef2f2;     --flag-bar: #dc2626;
+      --suggest-bg: #faf5ff;  --suggest-bar: #7c3aed;
+    }
+
+    html { scroll-behavior: smooth; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+    body {
+      font-family: "Inter", "Helvetica Neue", -apple-system, system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.7;
+      color: var(--ink);
+      background: var(--bg);
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 48px 32px 100px;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    /* Title block (pandoc emits <header id="title-block-header">) */
+    header#title-block-header {
+      border-bottom: 3px solid var(--accent);
+      padding-bottom: 22px;
+      margin-bottom: 8px;
+    }
+    header#title-block-header h1.title {
+      font-size: 2rem;
+      font-weight: 800;
+      margin: 0 0 6px;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+    }
+    header#title-block-header p.subtitle {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin: 0;
+    }
+
+    /* Cross-doc nav (injected by the build before the TOC) */
+    .doc-nav {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin: 24px 0 8px;
+      padding: 12px 16px;
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 10px;
+      font-size: 0.84rem;
+    }
+    .doc-nav .doc-nav-label { color: var(--muted); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
+    .doc-nav a {
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--accent-soft);
+      padding: 4px 12px;
+      border-radius: 16px;
+      text-decoration: none;
+      border: 1px solid rgba(37,99,235,0.18);
+      transition: background 0.15s;
+    }
+    .doc-nav a:hover { background: #dbeafe; }
+    .doc-nav a.current { background: var(--accent); color: #fff; border-color: transparent; cursor: default; }
+
+    /* TOC (pandoc emits <nav id="TOC">) */
+    nav#TOC {
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 12px;
+      padding: 18px 24px;
+      margin: 16px 0 36px;
+      font-size: 0.88rem;
+    }
+    nav#TOC::before {
+      content: "Contents";
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+    nav#TOC ul { list-style: none; padding-left: 0; margin: 0; }
+    nav#TOC ul ul { padding-left: 16px; margin-top: 4px; }
+    nav#TOC li { margin-bottom: 4px; }
+    nav#TOC a { color: var(--ink); text-decoration: none; }
+    nav#TOC a:hover { color: var(--accent); }
+
+    /* Headings */
+    h1, h2, h3, h4 { font-weight: 700; line-height: 1.3; }
+    h2 {
+      font-size: 1.35rem;
+      margin: 52px 0 16px;
+      padding-top: 24px;
+      border-top: 1px solid var(--rule);
+      letter-spacing: -0.01em;
+    }
+    h3 { font-size: 1.1rem; margin: 34px 0 12px; color: var(--accent); }
+    h4 {
+      font-size: 0.9rem; margin: 24px 0 8px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    table + h2, blockquote + h2, ul + h2, ol + h2, pre + h2, .callout + h2 { margin-top: 60px; }
+
+    p { margin: 0 0 16px; }
+
+    a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(37,99,235,0.3); word-break: break-word; }
+    a:hover { border-bottom-color: var(--accent); background: var(--accent-soft); }
+
+    strong { color: var(--ink); font-weight: 700; }
+
+    ul, ol { margin: 0 0 16px; padding-left: 24px; }
+    li { margin: 0 0 6px; }
+    li::marker { color: var(--accent); }
+
+    /* Callout boxes (from ::: callout-* fenced divs) */
+    .callout {
+      border-radius: 0 10px 10px 0;
+      padding: 12px 18px;
+      margin: 18px 0;
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+    .callout > :first-child { margin-top: 0; }
+    .callout > :last-child { margin-bottom: 0; }
+    .callout::before {
+      display: block;
+      font-size: 0.66rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+    .callout-req     { background: var(--req-bg);     border-left: 4px solid var(--req-bar); }
+    .callout-req::before     { content: "Requirement"; color: var(--req-bar); }
+    .callout-nongoal { background: var(--nongoal-bg); border-left: 4px solid var(--nongoal-bar); }
+    .callout-nongoal::before { content: "Non-Goals";   color: var(--nongoal-bar); }
+    .callout-metric  { background: var(--metric-bg);  border-left: 4px solid var(--metric-bar); }
+    .callout-metric::before  { content: "Metrics";     color: var(--metric-bar); }
+    .callout-question { background: var(--question-bg); border-left: 4px solid var(--question-bar); }
+    .callout-question::before { content: "Open Question"; color: var(--question-bar); }
+    .callout-flag    { background: var(--flag-bg);    border-left: 4px solid var(--flag-bar); }
+    .callout-flag::before    { content: "Red Flag";    color: var(--flag-bar); }
+    .callout-suggest { background: var(--suggest-bg); border-left: 4px solid var(--suggest-bar); }
+    .callout-suggest::before { content: "Suggestion";  color: var(--suggest-bar); }
+
+    /* Reviews section: the _reviews.md files are merged into the HTML below this
+       banner (they stay separate files on disk for agents). */
+    .reviews-banner {
+      background: #faf3f2;
+      border: 1px solid #e3b9b3;
+      border-radius: 10px;
+      padding: 12px 18px;
+      margin: 0 0 28px;
+      font-size: 0.9rem;
+      line-height: 1.55;
+      color: #7a3a32;
+    }
+    /* Jump target for spec → review-detail links; offset so the heading clears. */
+    .finding-anchor { display: inline-block; scroll-margin-top: 1.5rem; }
+    td a[href^="#"] { font-weight: 700; text-decoration: none; border-bottom: 1px dotted currentColor; }
+    td a[href^="#"]:hover { text-decoration: none; border-bottom-style: solid; }
+    .reviews-banner::before {
+      display: block;
+      content: "Reviews (full prose)";
+      font-size: 0.66rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+      color: #b0463b;
+    }
+
+    /* Inline xref deep-dive (from ::: xref fenced div) */
+    .xref {
+      font-size: 0.82rem;
+      background: var(--accent-soft);
+      border-left: 3px solid var(--accent);
+      border-radius: 0 7px 7px 0;
+      padding: 9px 14px;
+      margin: 0 0 18px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .xref::before {
+      content: "\21B3  See";
+      font-size: 0.66rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--accent);
+      margin-right: 8px;
+    }
+    .xref > * { display: inline; margin: 0; }
+    .xref a { border-bottom: none; font-weight: 700; color: var(--ink); }
+    .xref a:hover { color: var(--accent); background: none; }
+
+    /* Tables */
+    /* The build wraps every table in .table-scroll so a wide table scrolls
+       inside the reading column instead of spilling past it. The scrolling
+       behavior itself is in shared-assets/doc_fixes.css; this is the look. */
+    .table-scroll {
+      margin: 20px 0 28px;
+      border-radius: 10px;
+      box-shadow: 0 1px 3px rgba(15,23,42,0.06), 0 0 0 1px var(--rule);
+    }
+    .table-scroll table { margin: 0; box-shadow: none; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 20px 0 28px;
+      font-size: 0.88rem;
+      background: var(--card);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(15,23,42,0.06), 0 0 0 1px var(--rule);
+      line-height: 1.5;
+    }
+    thead th {
+      background: var(--table-head);
+      text-align: left;
+      font-weight: 700;
+      padding: 10px 14px;
+      border-bottom: 2px solid var(--accent);
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: var(--muted);
+    }
+    tbody td { padding: 9px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:nth-child(even) { background: #f8fafc; }
+
+    /* Disposition status words rendered by the build (Accepted/Rejected/Deferred) */
+    td .accepted, span.accepted { color: #16a34a; font-weight: 700; }
+    td .rejected, span.rejected { color: #dc2626; font-weight: 700; }
+    td .deferred, span.deferred { color: #d97706; font-weight: 700; }
+
+    /* Inline + block code */
+    code {
+      font-family: "SF Mono", "JetBrains Mono", Menlo, monospace;
+      font-size: 0.82em;
+      background: var(--accent-soft);
+      padding: 2px 6px;
+      border-radius: 5px;
+      color: var(--accent);
+    }
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 16px 20px;
+      border-radius: 10px;
+      overflow-x: auto;
+      margin: 20px 0;
+      line-height: 1.55;
+      /* Wrap long lines instead of forcing a horizontal scroll (readability). */
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    pre code { background: none; color: inherit; padding: 0; font-size: 0.8rem; }
+    /* Mermaid should NOT wrap its source before the script swaps it for SVG. */
+    pre.mermaid { white-space: pre; }
+
+    /* Mermaid blocks: pandoc renders ```mermaid as <pre class="mermaid">; the
+       Mermaid script replaces the text with SVG. Reset the dark pre styling. */
+    pre.mermaid {
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 10px;
+      padding: 20px;
+      text-align: center;
+      color: var(--ink);
+    }
+
+    blockquote {
+      margin: 18px 0;
+      padding: 10px 18px;
+      background: #f8fafc;
+      border-left: 4px solid var(--muted);
+      border-radius: 0 8px 8px 0;
+      color: var(--muted);
+    }
+    blockquote p { margin: 0; }
+
+    hr { border: none; border-top: 1px solid var(--rule); margin: 32px 0; }
+    hr:has(+ h2) { display: none; }
+
+    /* Task-list checkboxes from "- [ ]" lists */
+    ul.task-list { list-style: none; padding-left: 4px; }
+    ul.task-list li input[type="checkbox"] { margin-right: 8px; }
+
+    @page { size: letter; margin: 0.7in 0.65in; }
+    @media (max-width: 620px) {
+      body { padding: 28px 16px 60px; font-size: 15px; }
+      header#title-block-header h1.title { font-size: 1.6rem; }
+      table { font-size: 0.8rem; }
+    }
+    @media print {
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      body { background: #fff; max-width: 100%; font-size: 11pt; padding: 0; }
+      .doc-nav { display: none; }
+      a { color: var(--ink); border-bottom: none; }
+      .callout, table, pre, blockquote { break-inside: avoid; }
+      h2, h3 { break-after: avoid; }
+    }
+  </style>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: false, theme: "neutral", securityLevel: "loose" });
+    /* Pandoc emits ```mermaid blocks as <pre class="mermaid"><code>…</code></pre> with the
+       diagram source HTML-entity-encoded. Mermaid 10 reads innerHTML, so it sees the literal
+       <code> tag and &quot;/&gt; entities and throws syntax errors. Flatten each block to a
+       single decoded text node first (textContent decodes entities and drops the wrapper),
+       then render. Same fix as the personal-repo report builds (commit d525c50 there). */
+    function renderMermaid() {
+      document.querySelectorAll("pre.mermaid").forEach(function (el) {
+        if (!el.dataset.mflattened) {
+          el.textContent = el.textContent;
+          el.dataset.mflattened = "1";
+        }
+      });
+      mermaid.run({ querySelector: "pre.mermaid" });
+    }
+    if (document.readyState === "loading") {
+      window.addEventListener("DOMContentLoaded", renderMermaid);
+    } else {
+      renderMermaid();
+    }
+  </script>
+
+  <!-- The review comment module and the shared document fixes are injected here
+       at build time from ~/.claude/skills/shared-assets/ (comment_module.html +
+       doc_fixes.css) by shared_assets.resolve_header(). Do not paste a copy back
+       into this file. -->
+  <style>
+  /* Shared document fixes: one source for both document builds.
+
+     Injected at build time alongside comment_module.html, in place of the
+     <!-- SHARED_ASSETS --> placeholder in each pandoc header. Because it lands
+     last in <head>, these rules win over the same-specificity rules earlier in a
+     header without needing !important.
+
+     Keep this file to fixes that are true for every document we build. Anything
+     that depends on a skill's own look (colors, radius, shadow) belongs in that
+     skill's header. */
+
+  /* --- Tables: never spill past the reading column (plan Task 4.3, defect 1) ---
+     Two halves to the fix, and both are needed.
+     1. A wide table scrolls inside its wrapper. Both builds wrap every table in
+        <div class="table-scroll">.
+     2. Long unbroken strings (URLs, tokens, absolute paths) wrap instead of
+        setting a min-content width that forces the table wider than the page.
+        Without this the table is simply wider than the wrapper and the text is
+        cut off at the wrapper edge. */
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+  .table-scroll > table { margin: 0; }
+  table { max-width: 100%; }
+  thead th, tbody td { overflow-wrap: anywhere; word-break: break-word; }
+  thead th code, tbody td code,
+  thead th a, tbody td a { overflow-wrap: anywhere; word-break: break-word; }
+
+  /* Print/PDF has no scrollbars, so show the whole table and let it shrink. */
+  @media print {
+    .table-scroll { overflow: visible; }
+  }
+
+  /* --- Charts: never let a chart set the page width (plan Task 4.3, defect 2) ---
+     The label-truncation fix itself is Plotly's automargin, applied in the
+     report header's render script. This is the CSS guard next to it: a chart
+     that computes a wider layout than its column stays inside the column
+     instead of pushing the whole page sideways. */
+  figure.plotly-chart,
+  figure.plotly-chart > div,
+  figure.chart svg,
+  figure.plotly-chart .main-svg { max-width: 100%; }
+
+  </style>
+  <!-- ================================================================
+       Review comment module — THE one source.
+
+       Both document builds inject this file at build time by replacing the
+       <!-- SHARED_ASSETS --> placeholder in their pandoc header:
+         ~/.claude/skills/feature-forge/assets/feature_pandoc_header.html
+         ~/.claude/skills/research-report/assets/report_pandoc_header.html
+       The injector is shared-assets/shared_assets.py. Edit the module here and
+       the next build of either doc set picks it up. Do not copy it back into a
+       header: two copies is the drift this file exists to end.
+
+       What it gives a reader: highlight any passage, press Cmd/Ctrl+Shift+C (or
+       click the Comment button that pops up), and type straight into the
+       auto-focused box. Comments save to localStorage on every keystroke and
+       POST to the comment helper (feature-forge scripts/comment_server.py, port
+       8377) when it is running, which writes comments_<doc>.md next to the doc.
+       Copy for Claude / Export .md cover the no-helper case.
+
+       It styles itself from the host header's --ink / --accent / --rule /
+       --accent-soft variables, which both headers define.
+       ================================================================ -->
+  <style>
+    /* ——— Review comments layer (select text → comment) ——— */
+    body { transition: margin-right 0.25s ease; }
+    /* When the panel is open, reserve its width so it never covers the doc text.
+       margin-left stays auto, so the content re-centers in the remaining space. */
+    body.ffc-open { margin-right: 372px; }
+    mark.ffc-hl { background: #fde68a; padding: 1px 0; border-bottom: 2px solid #f59e0b; cursor: pointer; }
+    mark.ffc-hl.ffc-active { background: #fbbf24; }
+    pre.mermaid.ffc-hl-dia { outline: 3px solid #f59e0b; outline-offset: 4px; border-radius: 6px; cursor: pointer; }
+    pre.mermaid.ffc-hl-dia.ffc-active { box-shadow: 0 0 0 5px #fde68a; }
+    #ffc-fab {
+      position: fixed; right: 20px; bottom: 20px; z-index: 9998;
+      display: flex; align-items: center; gap: 8px;
+      background: var(--ink); color: #fff; border: none; border-radius: 24px;
+      padding: 10px 18px; font: 700 0.85rem "Inter", sans-serif; cursor: pointer;
+      box-shadow: 0 4px 14px rgba(15,23,42,0.25);
+    }
+    #ffc-fab .ffc-dot { width: 8px; height: 8px; border-radius: 50%; background: #94a3b8; }
+    #ffc-fab .ffc-dot.on { background: #4ade80; }
+    #ffc-add {
+      position: absolute; z-index: 9999; display: none;
+      background: var(--accent); color: #fff; border: none; border-radius: 8px;
+      padding: 6px 12px; font: 700 0.78rem "Inter", sans-serif; cursor: pointer;
+      box-shadow: 0 4px 10px rgba(15,23,42,0.3);
+    }
+    #ffc-panel {
+      position: fixed; top: 0; right: 0; bottom: 0; width: 340px; z-index: 9997;
+      background: #fff; border-left: 1px solid var(--rule);
+      box-shadow: -6px 0 24px rgba(15,23,42,0.08);
+      display: none; flex-direction: column;
+    }
+    #ffc-panel.open { display: flex; }
+    .ffc-head { padding: 14px 16px; border-bottom: 1px solid var(--rule); display: flex; align-items: center; gap: 6px; }
+    .ffc-head strong { flex: 1; font-size: 0.9rem; }
+    .ffc-list { flex: 1; overflow-y: auto; padding: 12px; }
+    .ffc-card { border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; background: #fffbeb; }
+    .ffc-card.orphan { background: #f8fafc; }
+    .ffc-card.done { background: #ecfdf5; border-color: #6ee7b7; }
+    .ffc-done-tag { color: #059669; font-weight: 600; }
+    .ffc-sec { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 4px; }
+    .ffc-quote {
+      font-size: 0.78rem; color: var(--muted); border-left: 3px solid #f59e0b;
+      padding-left: 8px; margin: 0 0 8px; max-height: 76px; overflow: hidden; cursor: pointer;
+      background: none; border-radius: 0;
+    }
+    .ffc-card textarea {
+      width: 100%; box-sizing: border-box; min-height: 64px;
+      border: 1px solid var(--rule); border-radius: 7px; padding: 7px 9px;
+      font: 400 0.85rem/1.5 "Inter", sans-serif; resize: vertical;
+    }
+    .ffc-card .ffc-del { background: none; border: none; color: #dc2626; font-size: 0.72rem; cursor: pointer; padding: 2px 0; float: right; }
+    .ffc-btn {
+      background: var(--accent-soft); color: var(--accent);
+      border: 1px solid rgba(37,99,235,0.25); border-radius: 7px;
+      padding: 5px 10px; font: 700 0.72rem "Inter", sans-serif; cursor: pointer;
+    }
+    .ffc-status { font-size: 0.68rem; color: var(--muted); padding: 8px 16px; border-top: 1px solid var(--rule); }
+    #ffc-toast {
+      position: fixed; bottom: 76px; right: 20px; z-index: 9999;
+      background: var(--ink); color: #fff; padding: 8px 14px; border-radius: 8px;
+      font: 600 0.8rem "Inter", sans-serif; opacity: 0; transition: opacity 0.25s; pointer-events: none;
+    }
+    #ffc-toast.show { opacity: 1; }
+    @media print {
+      #ffc-fab, #ffc-panel, #ffc-add, #ffc-toast { display: none !important; }
+      mark.ffc-hl { background: none; border-bottom: none; }
+      pre.mermaid.ffc-hl-dia { outline: none; box-shadow: none; }
+    }
+  </style>
+  <script>
+  /* Review comments layer. Highlights anchor by quoted text + surrounding context.
+     Comments auto-save to localStorage on every keystroke (survives reloads, works
+     on file://) and POST to the comment helper when it is running
+     (feature-forge scripts/comment_server.py, port 8377), which writes
+     comments_<doc>.md next to the doc. Export buttons cover the no-helper case. */
+  (function () {
+    "use strict";
+    if (window.__ffc) return;
+    window.__ffc = true;
+
+    var DOC = decodeURIComponent(location.pathname.split("/").pop() || "doc");
+    var KEY = "ffc:" + DOC;
+    /* One shared helper serves every folder. If this page was opened
+       THROUGH the helper (http://127.0.0.1:<port>/<doc>), talk to that same
+       origin whatever its port; if opened as a file://, fall back to the default
+       port. KEY is by filename, not full path, so localStorage comments follow
+       the doc across file:// and http. */
+    var HELPER = (location.protocol === "http:" && location.hostname === "127.0.0.1")
+      ? location.origin
+      : "http://127.0.0.1:8377";
+    var SKIP = "script,style,svg,pre.mermaid,#ffc-panel,#ffc-fab,#ffc-add,#ffc-toast";
+    var comments = [];
+    var connected = false;
+    var syncTimer = null;
+
+    try { comments = JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) { comments = []; }
+
+    /* Selective clearing: a build may ship window.FFC_DONE = [{t, q}, ...] where
+       t = the comment text (trimmed, exact) and q = the first 40 chars of the
+       quoted passage. Cards matching an entry were applied and are removed at
+       load; a card whose text has changed since (Ken extended it) no longer
+       matches and survives, which is the desired behavior. */
+    (function () {
+      var doneList = window.FFC_DONE;
+      if (!doneList || !doneList.length || !comments.length) return;
+      var before = comments.length;
+      comments = comments.filter(function (c) {
+        return !doneList.some(function (d) {
+          return String(c.text || "").trim() === String(d.t || "") &&
+                 String(c.quote || "").slice(0, 40) === String(d.q || "");
+        });
+      });
+      if (comments.length !== before) {
+        try { localStorage.setItem(KEY, JSON.stringify(comments)); } catch (e) {}
+      }
+    })();
+
+    /* ---------- text model: doc as one string over stable text nodes ---------- */
+
+    function textNodes() {
+      var out = [];
+      var w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+        acceptNode: function (n) {
+          for (var p = n.parentElement; p; p = p.parentElement) {
+            if (p.matches && p.matches(SKIP)) return NodeFilter.FILTER_REJECT;
+          }
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      });
+      var n;
+      while ((n = w.nextNode())) out.push(n);
+      return out;
+    }
+
+    function mermaidBlocks() {
+      return Array.prototype.slice.call(document.querySelectorAll("pre.mermaid"));
+    }
+
+    function markDiagram(dia, id) {
+      if (!dia) return;
+      dia.classList.add("ffc-hl-dia");
+      dia.setAttribute("data-ffc-dia", id);
+    }
+
+    function docText(nodes) {
+      var s = "";
+      for (var i = 0; i < nodes.length; i++) s += nodes[i].nodeValue;
+      return s;
+    }
+
+    function wrapRangeGlobal(s, e, id) {
+      var nodes = textNodes(), segs = [], total = 0, i, n;
+      for (i = 0; i < nodes.length; i++) {
+        n = nodes[i];
+        var len = n.nodeValue.length;
+        var a = Math.max(s, total), b = Math.min(e, total + len);
+        if (a < b) segs.push({ n: n, ls: a - total, le: b - total });
+        total += len;
+      }
+      for (i = 0; i < segs.length; i++) {
+        n = segs[i].n;
+        if (segs[i].ls > 0) n = n.splitText(segs[i].ls);
+        if (segs[i].le - segs[i].ls < n.nodeValue.length) n.splitText(segs[i].le - segs[i].ls);
+        var m = document.createElement("mark");
+        m.className = "ffc-hl";
+        m.setAttribute("data-ffc", id);
+        n.parentNode.insertBefore(m, n);
+        m.appendChild(n);
+      }
+    }
+
+    function locate(c) {
+      var t = docText(textNodes());
+      var probes = [
+        { s: (c.prefix || "") + c.quote + (c.suffix || ""), off: (c.prefix || "").length },
+        { s: c.quote + (c.suffix || ""), off: 0 },
+        { s: (c.prefix || "") + c.quote, off: (c.prefix || "").length },
+        { s: c.quote, off: 0 }
+      ];
+      for (var i = 0; i < probes.length; i++) {
+        if (!probes[i].s) continue;
+        var at = t.indexOf(probes[i].s);
+        if (at >= 0) return at + probes[i].off;
+      }
+      return -1;
+    }
+
+    function anchorAll() {
+      for (var i = 0; i < comments.length; i++) {
+        var c = comments[i];
+        if (c.diagram != null) {
+          var dia = mermaidBlocks()[c.diagram];
+          c.orphan = !dia;
+          markDiagram(dia, c.id);
+          continue;
+        }
+        var at = locate(c);
+        c.orphan = at < 0;
+        if (at >= 0) wrapRangeGlobal(at, at + c.quote.length, c.id);
+      }
+    }
+
+    function sectionFor(node) {
+      var el = node.nodeType === 3 ? node.parentElement : node;
+      var heads = document.querySelectorAll("h1, h2, h3");
+      var best = "";
+      for (var i = 0; i < heads.length; i++) {
+        var pos = heads[i].compareDocumentPosition(el);
+        if (pos & Node.DOCUMENT_POSITION_FOLLOWING) best = heads[i].textContent.trim();
+      }
+      return best;
+    }
+
+    function captureSelection() {
+      var sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
+      var range = sel.getRangeAt(0);
+      if (!document.body.contains(range.commonAncestorContainer)) return null;
+      var panel = document.getElementById("ffc-panel");
+      if (panel && panel.contains(range.commonAncestorContainer)) return null;
+      /* Mermaid diagrams are excluded from the prose text model (SKIP), so they
+         can't anchor by quote. Anchor a diagram comment to the block by index. */
+      var startEl = range.startContainer.nodeType === 3
+        ? range.startContainer.parentElement : range.startContainer;
+      var dia = startEl && startEl.closest ? startEl.closest("pre.mermaid") : null;
+      if (dia) {
+        var di = mermaidBlocks().indexOf(dia);
+        if (di < 0) return null;
+        return {
+          id: "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+          diagram: di,
+          quote: "[Diagram " + (di + 1) + "]",
+          prefix: "",
+          suffix: "",
+          section: sectionFor(dia),
+          text: "",
+          created: new Date().toISOString()
+        };
+      }
+      var nodes = textNodes(), total = 0, s = -1, e = -1;
+      for (var i = 0; i < nodes.length; i++) {
+        var n = nodes[i], len = n.nodeValue.length;
+        if (range.intersectsNode(n)) {
+          if (s < 0) s = total + (n === range.startContainer ? range.startOffset : 0);
+          e = total + (n === range.endContainer ? range.endOffset : len);
+        }
+        total += len;
+      }
+      if (s < 0 || e <= s) return null;
+      var t = docText(nodes);
+      return {
+        id: "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        quote: t.slice(s, e),
+        prefix: t.slice(Math.max(0, s - 40), s),
+        suffix: t.slice(e, e + 40),
+        section: sectionFor(range.startContainer),
+        text: "",
+        created: new Date().toISOString(),
+        _s: s,
+        _e: e
+      };
+    }
+
+    /* ---------- persistence + helper sync ---------- */
+
+    function persist(immediate) {
+      try { localStorage.setItem(KEY, JSON.stringify(comments)); } catch (e) {}
+      var count = document.getElementById("ffc-count");
+      if (count) count.textContent = "Comments (" + comments.length + ")";
+      clearTimeout(syncTimer);
+      if (immediate) { sync(); return; }
+      syncTimer = setTimeout(sync, 600);
+    }
+
+    function pub(c) {
+      return { quote: c.quote, section: c.section, text: c.text, created: c.created, done: !!c.done };
+    }
+
+    function sync() {
+      var payload = JSON.stringify({ doc: DOC, title: document.title, comments: comments.map(pub) });
+      fetch(HELPER + "/comments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload
+      }).then(function (r) { setConnected(r.ok); })
+        .catch(function () { setConnected(false); });
+    }
+
+    function ping() {
+      // ?doc= lets the helper refuse if it is serving a different
+      // folder (the port is fixed, so two parallel reviews can collide).
+      fetch(HELPER + "/ping?doc=" + encodeURIComponent(DOC))
+        .then(function (r) { setConnected(r.ok); })
+        .catch(function () { setConnected(false); });
+    }
+
+    function setConnected(on) {
+      connected = on;
+      var dot = document.querySelector("#ffc-fab .ffc-dot");
+      if (dot) dot.classList.toggle("on", on);
+      updateStatus();
+    }
+
+    function updateStatus() {
+      var st = document.getElementById("ffc-status");
+      if (st) st.textContent = connected
+        ? "Helper connected — comments save next to the doc"
+        : "Saved locally in this browser — use Copy / Export to hand off";
+    }
+
+    /* ---------- export ---------- */
+
+    function exportMd() {
+      var lines = [
+        "# Review comments: " + document.title,
+        "",
+        "_Doc: " + DOC + " · " + comments.length + " comment(s) · exported " + new Date().toISOString() + "_",
+        ""
+      ];
+      comments.forEach(function (c, i) {
+        lines.push("## " + (i + 1) + ". " + (c.section || "(no section)") + (c.done ? " [DONE]" : ""));
+        lines.push("");
+        c.quote.split("\n").forEach(function (q) { lines.push("> " + q); });
+        lines.push("");
+        lines.push(c.text ? c.text : "_(highlight only, no comment text)_");
+        lines.push("");
+      });
+      return lines.join("\n");
+    }
+
+    function fallbackCopy(t) {
+      var ta = document.createElement("textarea");
+      ta.value = t;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); } catch (e) {}
+      document.body.removeChild(ta);
+    }
+
+    function copyExport() {
+      var md = exportMd();
+      var done = function () { toast("Copied " + comments.length + " comment(s) as markdown"); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(md).then(done, function () { fallbackCopy(md); done(); });
+      } else {
+        fallbackCopy(md);
+        done();
+      }
+    }
+
+    function downloadExport() {
+      var stem = DOC.replace(/\.html?$/, "");
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([exportMd()], { type: "text/markdown" }));
+      a.download = "comments_" + stem + ".md";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+      toast("Exported comments_" + stem + ".md");
+    }
+
+    function toast(msg) {
+      var t = document.getElementById("ffc-toast");
+      t.textContent = msg;
+      t.classList.add("show");
+      setTimeout(function () { t.classList.remove("show"); }, 2200);
+    }
+
+    /* ---------- UI ---------- */
+
+    function esc(s) {
+      return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    function isOpen() {
+      return document.getElementById("ffc-panel").classList.contains("open");
+    }
+
+    function togglePanel() {
+      var open = document.getElementById("ffc-panel").classList.toggle("open");
+      document.body.classList.toggle("ffc-open", open);
+    }
+
+    function focusCard(id) {
+      var card = document.querySelector('.ffc-card[data-ffc="' + id + '"]');
+      if (!card) return;
+      card.scrollIntoView({ block: "center", behavior: "smooth" });
+      var ta = card.querySelector("textarea");
+      if (!ta) return;
+      /* Retry focus until it actually sticks. When the panel has just flipped
+         from display:none (or is mid slide-in transition) a synchronous focus,
+         and even a next-frame focus, are silently dropped before layout commits.
+         So keep trying on a short schedule and stop only when activeElement
+         confirms the textarea owns focus. preventScroll keeps the focus from
+         fighting the smooth scrollIntoView above. */
+      var tries = 0;
+      (function tryFocus() {
+        ta.focus({ preventScroll: true });
+        if (document.activeElement === ta || tries >= 12) return;
+        tries += 1;
+        setTimeout(tryFocus, tries < 4 ? 16 : 80);
+      })();
+    }
+
+    function setActive(id, on) {
+      document.querySelectorAll('mark.ffc-hl[data-ffc="' + id + '"]').forEach(function (m) {
+        m.classList.toggle("ffc-active", on);
+      });
+      var dia = document.querySelector('pre.mermaid[data-ffc-dia="' + id + '"]');
+      if (dia) dia.classList.toggle("ffc-active", on);
+    }
+
+    function removeComment(id) {
+      comments = comments.filter(function (c) { return c.id !== id; });
+      document.querySelectorAll('mark.ffc-hl[data-ffc="' + id + '"]').forEach(function (m) {
+        var p = m.parentNode;
+        while (m.firstChild) p.insertBefore(m.firstChild, m);
+        p.removeChild(m);
+        p.normalize();
+      });
+      var dia = document.querySelector('pre.mermaid[data-ffc-dia="' + id + '"]');
+      if (dia) {
+        dia.classList.remove("ffc-hl-dia", "ffc-active");
+        dia.removeAttribute("data-ffc-dia");
+      }
+      persist();
+      renderPanel();
+    }
+
+    function renderPanel() {
+      var list = document.getElementById("ffc-list");
+      list.innerHTML = "";
+      if (!comments.length) {
+        list.innerHTML = '<p style="font-size:0.82rem;color:#64748b;padding:8px;">Select any passage in the doc, then click the Comment button that pops up (or press Cmd/Ctrl+Shift+C).</p>';
+      }
+      comments.forEach(function (c) {
+        var card = document.createElement("div");
+        card.className = "ffc-card" + (c.orphan ? " orphan" : "") + (c.done ? " done" : "");
+        card.setAttribute("data-ffc", c.id);
+        card.innerHTML =
+          '<button class="ffc-del" type="button">delete</button>' +
+          '<div class="ffc-sec">' + esc(c.section || "(no section)") + (c.orphan ? " &middot; passage moved or edited" : "") + (c.done ? ' &middot; <span class="ffc-done-tag">done</span>' : "") + "</div>" +
+          '<blockquote class="ffc-quote" title="Jump to passage">' + esc(c.quote) + "</blockquote>";
+        var ta = document.createElement("textarea");
+        ta.setAttribute("data-ffc", c.id);
+        ta.setAttribute("placeholder", "Your comment…");
+        ta.value = c.text || "";
+        ta.addEventListener("input", function () {
+          c.text = ta.value;
+          if (c.done) { c.done = false; card.classList.remove("done"); }
+          persist();
+        });
+        /* Cmd/Ctrl+Enter marks the comment finished: an explicit, unambiguous
+           signal (instead of inferring "done typing" from a pause) that syncs
+           immediately and stamps a [DONE] marker in the saved markdown. */
+        ta.addEventListener("keydown", function (ev) {
+          if ((ev.metaKey || ev.ctrlKey) && ev.key === "Enter") {
+            ev.preventDefault();
+            c.done = true;
+            card.classList.add("done");
+            persist(true);
+            toast("Marked done");
+            ta.blur();
+          }
+        });
+        card.appendChild(ta);
+        card.querySelector(".ffc-del").addEventListener("click", function () { removeComment(c.id); });
+        card.querySelector(".ffc-quote").addEventListener("click", function () {
+          var m = document.querySelector('mark.ffc-hl[data-ffc="' + c.id + '"]') ||
+                  document.querySelector('pre.mermaid[data-ffc-dia="' + c.id + '"]');
+          if (m) m.scrollIntoView({ block: "center", behavior: "smooth" });
+        });
+        card.addEventListener("mouseenter", function () { setActive(c.id, true); });
+        card.addEventListener("mouseleave", function () { setActive(c.id, false); });
+        list.appendChild(card);
+      });
+      var count = document.getElementById("ffc-count");
+      if (count) count.textContent = "Comments (" + comments.length + ")";
+      updateStatus();
+    }
+
+    function buildUI() {
+      var panel = document.createElement("aside");
+      panel.id = "ffc-panel";
+      panel.innerHTML =
+        '<div class="ffc-head"><strong>Comments</strong>' +
+        '<button class="ffc-btn" id="ffc-copy" type="button">Copy for Claude</button>' +
+        '<button class="ffc-btn" id="ffc-dl" type="button">Export .md</button>' +
+        '<button class="ffc-btn" id="ffc-close" type="button">&#10005;</button></div>' +
+        '<div class="ffc-list" id="ffc-list"></div>' +
+        '<div class="ffc-status" id="ffc-status"></div>';
+      document.body.appendChild(panel);
+
+      var fab = document.createElement("button");
+      fab.id = "ffc-fab";
+      fab.type = "button";
+      fab.innerHTML = '<span class="ffc-dot"></span><span id="ffc-count"></span>';
+      fab.addEventListener("click", togglePanel);
+      document.body.appendChild(fab);
+
+      var add = document.createElement("button");
+      add.id = "ffc-add";
+      add.type = "button";
+      add.innerHTML = "&#128172; Comment";
+      add.title = "Comment (Cmd/Ctrl+Shift+C)";
+      document.body.appendChild(add);
+
+      var toastEl = document.createElement("div");
+      toastEl.id = "ffc-toast";
+      document.body.appendChild(toastEl);
+
+      document.getElementById("ffc-copy").addEventListener("click", copyExport);
+      document.getElementById("ffc-dl").addEventListener("click", downloadExport);
+      document.getElementById("ffc-close").addEventListener("click", togglePanel);
+
+      function addCommentFromSelection() {
+        var c = captureSelection();
+        add.style.display = "none";
+        if (!c) return;
+        if (c.diagram != null) {
+          markDiagram(mermaidBlocks()[c.diagram], c.id);
+        } else {
+          wrapRangeGlobal(c._s, c._e, c.id);
+          delete c._s;
+          delete c._e;
+        }
+        comments.push(c);
+        persist();
+        renderPanel();
+        if (!isOpen()) togglePanel();
+        /* Clear the selection BEFORE focusing: clearing it afterwards can pull
+           focus back off the textarea in some browsers. */
+        window.getSelection().removeAllRanges();
+        focusCard(c.id);
+      }
+
+      add.addEventListener("mousedown", function (ev) { ev.preventDefault(); });
+      add.addEventListener("click", addCommentFromSelection);
+
+      document.addEventListener("mouseup", function (ev) {
+        if (panel.contains(ev.target) || ev.target === add || fab.contains(ev.target)) return;
+        setTimeout(function () {
+          var sel = window.getSelection();
+          if (!sel || sel.isCollapsed || !sel.rangeCount) {
+            add.style.display = "none";
+            return;
+          }
+          if (panel.contains(sel.getRangeAt(0).commonAncestorContainer)) return;
+          /* A diagram selection often carries no plain text (just SVG shapes), so
+             allow it through even when the selection string is empty. */
+          var anc = sel.getRangeAt(0).commonAncestorContainer;
+          var ancEl = anc.nodeType === 3 ? anc.parentElement : anc;
+          var inDia = ancEl && ancEl.closest && ancEl.closest("pre.mermaid");
+          if (!inDia && !String(sel).trim()) {
+            add.style.display = "none";
+            return;
+          }
+          var r = sel.getRangeAt(0).getBoundingClientRect();
+          add.style.left = Math.max(8, window.scrollX + r.left + r.width / 2 - 50) + "px";
+          add.style.top = (window.scrollY + r.bottom + 8) + "px";
+          add.style.display = "block";
+        }, 0);
+      });
+
+      document.addEventListener("click", function (ev) {
+        if (!ev.target.closest) return;
+        var m = ev.target.closest("mark.ffc-hl");
+        var dia = m ? null : ev.target.closest("pre.mermaid.ffc-hl-dia");
+        var id = m ? m.getAttribute("data-ffc") : (dia ? dia.getAttribute("data-ffc-dia") : null);
+        if (id) {
+          if (!isOpen()) togglePanel();
+          focusCard(id);
+        }
+      });
+
+      /* Comment hotkey: Cmd/Ctrl+Shift+C with an active selection adds a
+         comment directly, same as clicking the "Comment" button, so
+         highlight -> hotkey -> type never requires a mouse click. Capture
+         phase + stopPropagation/preventDefault so the browser's default
+         Shift+Cmd+C devtools binding on some platforms never sees it. */
+      document.addEventListener("keydown", function (ev) {
+        if ((ev.metaKey || ev.ctrlKey) && ev.shiftKey && ev.key.toLowerCase() === "c") {
+          var sel = window.getSelection();
+          if (sel && !sel.isCollapsed && sel.rangeCount && String(sel).trim()) {
+            addCommentFromSelection();
+            ev.stopPropagation();
+            ev.preventDefault();
+          }
+        }
+      }, true);
+
+      /* Escape closes the panel. Capture phase so it wins over any other
+         Escape handling on the page. */
+      document.addEventListener("keydown", function (ev) {
+        if (ev.key === "Escape" && isOpen()) {
+          togglePanel();
+          ev.stopPropagation();
+          ev.preventDefault();
+        }
+      }, true);
+    }
+
+    function init() {
+      buildUI();
+      anchorAll();
+      renderPanel();
+      ping();
+      setInterval(ping, 30000);
+    }
+
+    if (document.readyState === "loading") {
+      window.addEventListener("DOMContentLoaded", init);
+    } else {
+      init();
+    }
+  })();
+  </script>
+
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Plan: Live Agentic HTML Editor</h1>
+</header>
+
+<div class="doc-nav"><span class="doc-nav-label">Docs</span><a href="01_brief_live_agentic_html_editor.html">Brief</a><a href="02_architecture_live_agentic_html_editor.html">Architecture</a><a href="03_plan_live_agentic_html_editor.html" class="current">Plan</a></div>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#shape-of-the-build" id="toc-shape-of-the-build">Shape of
+the build</a></li>
+<li><a href="#phase-0-contracts" id="toc-phase-0-contracts">Phase 0:
+Contracts</a></li>
+<li><a href="#phase-1-the-four-foundations-in-parallel"
+id="toc-phase-1-the-four-foundations-in-parallel">Phase 1: The four
+foundations, in parallel</a></li>
+<li><a href="#phase-2-the-three-hard-parts-in-parallel"
+id="toc-phase-2-the-three-hard-parts-in-parallel">Phase 2: The three
+hard parts, in parallel</a></li>
+<li><a href="#phase-3-closing-the-loop-in-parallel"
+id="toc-phase-3-closing-the-loop-in-parallel">Phase 3: Closing the loop,
+in parallel</a></li>
+<li><a href="#phase-4-the-tests-that-decide-it"
+id="toc-phase-4-the-tests-that-decide-it">Phase 4: The tests that decide
+it</a></li>
+<li><a href="#phase-5-a-public-repository"
+id="toc-phase-5-a-public-repository">Phase 5: A public
+repository</a></li>
+<li><a href="#acceptance-criteria"
+id="toc-acceptance-criteria">Acceptance criteria</a></li>
+<li><a href="#test-list" id="toc-test-list">Test list</a></li>
+<li><a href="#open-questions" id="toc-open-questions">Open
+Questions</a></li>
+</ul>
+</nav>
+<h2 id="shape-of-the-build">Shape of the build</h2>
+<p>Six phases. Phase 0 is one agent and everything waits on it, because
+it pins the contracts every other task reads and writes. Phases 1
+through 3 fan out to parallel builders in their own worktrees. Phase 4
+is the test suite that decides whether this shipped. Phase 5 is what
+makes it a public repository.</p>
+<pre class="mermaid"><code>flowchart TD
+    P0[&quot;Phase 0: contracts&lt;br/&gt;one agent, everything waits&quot;]
+    P0 --&gt; A[&quot;1A Service:&lt;br/&gt;auth, log, projection, endpoints&quot;]
+    P0 --&gt; B[&quot;1B Layer shell:&lt;br/&gt;rail, store, sync, failures list&quot;]
+    P0 --&gt; C[&quot;1C Anchor engine:&lt;br/&gt;pure, no DOM ownership&quot;]
+    P0 --&gt; D[&quot;1D Agent surface:&lt;br/&gt;CLI, files, fencing, setup&quot;]
+    A &amp; B --&gt; E[&quot;2A Editing:&lt;br/&gt;recorder, formatting, blocks, undo&quot;]
+    B &amp; C --&gt; F[&quot;2B Replay engine:&lt;br/&gt;the three laws&quot;]
+    A &amp; B --&gt; G[&quot;2C In the page:&lt;br/&gt;injection, remount, routing, CSP&quot;]
+    A &amp; D --&gt; H[&quot;3A Burn-down:&lt;br/&gt;ack, replies on cards, auto-refresh&quot;]
+    A &amp; D --&gt; I[&quot;3B Verification + source hints&quot;]
+    G --&gt; J[&quot;3C Wiring:&lt;br/&gt;build-time injection, Steady Thread snippet&quot;]
+    E &amp; F &amp; G &amp; H &amp; I &amp; J --&gt; K[&quot;Phase 4: the tests that decide it&quot;]
+    K --&gt; L[&quot;Phase 5: README, license, setup polish&quot;]</code></pre>
+<p>Two rules for every builder, because they are the rules this tool
+exists to enforce on itself:</p>
+<ul>
+<li><strong>A test that fails without the behavior, or the behavior is
+not done.</strong> Every reliability law in the brief has one. That is
+the acceptance bar, not a coverage number.</li>
+<li><strong>Nothing silently swallowed.</strong> A failure surfaces in
+the page, per R69 (the page is the channel back to the reviewer). A
+builder that catches an error and moves on has written a bug.</li>
+</ul>
+<h2 id="phase-0-contracts">Phase 0: Contracts</h2>
+<p>One agent. Nothing else starts until this lands, and everything else
+reads it rather than inventing.</p>
+<div class="callout callout-req">
+<p><strong>Task 0.1: Pin the shapes.</strong> The item record and every
+field in it, per D4. The event envelope with its client-minted id. The
+wire protocol: routes, methods, required headers, and error shapes. The
+review file formats, both of them, including the fencing and the
+standing header from D10. The state directory layout. Write it as one
+reference document in the repo plus the shared constants module both the
+service and the layer import, so there is one definition and not two
+that drift.</p>
+</div>
+<p>Done when: a builder can implement either side of any boundary from
+this document alone, and the constants module is the only place a field
+name is spelled.</p>
+<h2 id="phase-1-the-four-foundations-in-parallel">Phase 1: The four
+foundations, in parallel</h2>
+<h3 id="task-1a-the-service">Task 1A: The service</h3>
+<div class="callout callout-req">
+<p>Node, zero runtime dependencies. Ephemeral port, token and port
+recorded in an owner-only file, state directory outside any checkout.
+Every route requires the token in a header compared in constant time,
+requires a JSON content type and a custom header so no simple request
+reaches a handler, and checks the origin against a server-side allowlist
+recorded when the reviewer attaches. Append-only event log, projection
+read on start, no compaction. Serving a local HTML file with the layer
+injected. The endpoints Phase 0 pinned, including the stream the layer
+listens on for lifecycle changes.</p>
+</div>
+<p>Tests that must fail without it: a cross-origin POST without a token
+is refused; with a token but an unallowed origin is refused; a simple
+content type never reaches a handler; two events with the same id apply
+once; a killed and restarted service serves the same projection; the
+port is not a constant.</p>
+<h3 id="task-1b-the-layer-shell">Task 1B: The layer shell</h3>
+<div class="callout callout-req">
+<p>The overlay in an isolated root that host CSS cannot reach and that
+reaches nothing in the host. The rail as a <strong>fixed overlay that
+never shifts the host page</strong>, collapsible, per D12. Comment
+creation on selected text and on a modifier click, never on a plain
+click. The item store writing synchronously on every change, keyed by
+canonical target path. The sync client that retries forever, never
+blocks, and tells policy refusal apart from service-down. The persistent
+failures list. Copy and export with no service running. The overall note
+as an item.</p>
+</div>
+<p>The law this task owns: <strong>the rail updates in place and a card
+holding focus is never re-created.</strong> This is the single largest
+in-page revert mechanism in the tool being replaced, and it is one
+careless render loop away from being rebuilt.</p>
+<p>Tests: type half a comment, force a repaint, the half-comment
+survives. Kill the service mid-session, everything still captured, copy
+produces the full set. Two files with the same basename in different
+folders do not share a store.</p>
+<h3 id="task-1c-the-anchor-engine">Task 1C: The anchor engine</h3>
+<div class="callout callout-req">
+<p>Pure functions over a document, no ownership of the DOM and no UI.
+Turn a selection or an element into a region reference carrying its
+independent locators. Re-resolve a reference in a changed document and
+<strong>return a confidence</strong>, because D3's Law 1 is a caller
+decision and this task supplies the number it is made from.
+Whitespace-tolerant matching, occurrence disambiguation by surrounding
+context, honest failure.</p>
+</div>
+<p>This is new work, not a port. The built-doc module's version is four
+exact substring probes with no whitespace tolerance and no
+disambiguation, so it binds a short prefix to the first hit.</p>
+<p>Tests: survives edits elsewhere; survives reformatting and
+rewrapping; picks the right occurrence among repeats; reports failure
+rather than guessing when the subject is gone; two neighboring regions
+never resolve to the same node in one pass.</p>
+<h3 id="task-1d-the-agent-surface">Task 1D: The agent surface</h3>
+<div class="callout callout-req">
+<p>Four commands: <code>open</code>, <code>next</code>,
+<code>ack</code>, <code>setup</code>. The two review files, written per
+review and not per target, at the server-side review root, through an
+exclusively created temp name and a rename, refusing a symlinked
+destination, with names derived from a hash and a restricted slug and
+never from untrusted text. The fencing and standing header from D10,
+with reviewer-authored and document-derived fields classified and
+<code>before</code> bounded. <code>setup</code> writing agent
+instructions between sentinels, replacing only what is between them, and
+reporting rather than touching a file that mentions the tool without
+them.</p>
+</div>
+<p>Tests: a target string containing traversal or encoded segments
+cannot move the write; a pre-planted symlink at the destination is
+refused; a fenced field containing the delimiter is escaped; re-running
+setup twice leaves one block and preserves text outside the sentinels;
+<code>next</code> returns outstanding items with no service connection
+held open.</p>
+<h2 id="phase-2-the-three-hard-parts-in-parallel">Phase 2: The three
+hard parts, in parallel</h2>
+<h3 id="task-2a-editing">Task 2A: Editing</h3>
+<div class="callout callout-req">
+<p>No edit mode; the page is editable from the moment the layer loads.
+Ordinary typing, bold, italic, links, bulleted and numbered lists.
+Images resized, moved keeping their rendered size, and pasted with the
+allowed types only. Blocks deleted and reordered, a deletion recorded as
+a deletion. Every change becomes a record with a kind, plain text,
+cleaned markup when formatting changed, and landing anchors for a move.
+<strong>Per-item undo that reverts the record and lets replay
+redraw</strong>, since native undo does not survive replay rewriting a
+region.</p>
+<p>Nothing the layer adds may appear in a quote, a before, an after, or
+any field handed to the agent.</p>
+</div>
+<p>Tests: a formatting-only change is a change; a deletion is a deletion
+and not an empty edit; undoing one edit leaves the others untouched; two
+edits to neighboring blocks stay two records; the layer's own markup
+never appears in a payload.</p>
+<h3 id="task-2b-replay">Task 2B: Replay</h3>
+<div class="callout callout-req">
+<p>Re-apply outstanding edits after a repaint, under D3's three laws,
+with the confidence number from 1C:</p>
+<ul>
+<li><strong>Law 1, fail closed.</strong> Below the confidence floor
+nothing is written to the DOM. The record keeps its text and the item's
+card says it cannot be placed on this version of the page. One reference
+binds to at most one node per pass, greedily in document order.</li>
+<li><strong>Law 2, never disturb the reviewer.</strong> A region whose
+DOM already equals the record is skipped, which is what makes replay
+idempotent. A region holding the caret or the selection is never
+rewritten.</li>
+<li><strong>Law 3, a source repaint is not an app repaint.</strong> A
+source repaint replays and marks genuine disagreements as collisions
+with the incoming version offered on the card. An app repaint replays
+only where the DOM still matches what replay last wrote, and otherwise
+detaches the edit with its text intact and says the page moved on.</li>
+</ul>
+</div>
+<p>This task is the one most able to produce a worse version of the bug
+the tool exists to kill. Steady Thread has a Turbo frame polling every
+two seconds, so Law 2 is not theoretical.</p>
+<p>Tests: type into a region, fire a repaint every 200ms, the caret
+never moves and the text is never disturbed; a low-confidence document
+writes nothing and says so; replay twice equals replay once; an app
+repaint that changes a region's data detaches rather than stamping; a
+source repaint that changes the same region raises a collision.</p>
+<h3 id="task-2c-living-in-the-page">Task 2C: Living in the page</h3>
+<div class="callout callout-req">
+<p>The layer loads from a script tag and never fetches itself from the
+service at page load. The overlay root is re-created on
+<code>turbo:morph</code>, <code>turbo:load</code>,
+<code>popstate</code>, and a MutationObserver fallback, <strong>with
+every handler de-registered before re-registration</strong>, and replay
+runs after each remount. Client-side navigation is detected by hooking
+history and framework events, so the target follows the route. CSP
+refusal of the script or of the loopback connection is detected and
+named as a policy refusal, distinct from service-down.
+<code>setup</code> emits framework-correct guarded snippets, with the
+guard outside the script tag in the host template's own conditional.</p>
+</div>
+<p>The Steady Thread layer leaks a listener pair on every morph; do not
+inherit that shape.</p>
+<p>Tests: a hundred simulated morphs leave one set of handlers and a
+working layer; a client-side route change moves the target without a
+page load; a CSP that blocks the connection produces a named policy
+refusal in the failures list; a stopped service leaves the layer fully
+functional.</p>
+<h2 id="phase-3-closing-the-loop-in-parallel">Phase 3: Closing the loop,
+in parallel</h2>
+<h3 id="task-3a-the-burn-down-and-the-return-channel">Task 3A: The
+burn-down and the return channel</h3>
+<div class="callout callout-req">
+<p>Per-item ack processing: applied with the files touched, or declined
+with a reason, anything unnamed stays outstanding. Applied items lose
+their highlight, leave the active list, and move to a completed list
+that keeps them. <strong>Agent replies attached to an item and rendered
+on its card</strong>, per R68, so a reviewer never goes to a terminal to
+find out what happened. Auto-refresh when the agent lands a change, with
+acks processed before replay so an applied item is retired before the
+repaint it caused. A stale ack is refused; a forged one cannot pass
+Phase 1A's auth.</p>
+</div>
+<p>Tests: an ack naming three of five items clears three and leaves two;
+a declined item stays visible with its reason; an item edited after
+delivery is outstanding again and the ack applies to the delivered
+version; a completed item is still readable at the end of a session; the
+burn-down cannot be emptied by an ack for something never delivered.</p>
+<h3 id="task-3b-verification-and-source-hints">Task 3B: Verification and
+source hints</h3>
+<div class="callout callout-req">
+<p>Every target carries a source hint: for a built document, the file it
+is generated from; for a route, the project root. Setup asks once per
+project. Both review files carry it and the agent instructions say to
+edit the generator's input and name what was edited. Verification then
+checks the reviewer's wording against the files the ack named,
+constrained to the project root, <strong>matching on normalized
+text</strong> because the reviewer's wording is a rendering of the
+source and will not appear verbatim in a template. A miss warns loudly
+on the item and does not reopen it.</p>
+</div>
+<p>Tests: an agent that edits the built HTML instead of its source is
+caught; a match through an ERB template is not a false miss; a path
+outside the project root is a verification failure, not a read; a
+deletion is verified by absence.</p>
+<h3 id="task-3c-wiring-it-into-the-real-workflows">Task 3C: Wiring it
+into the real workflows</h3>
+<div class="callout callout-req">
+<p>Build-time injection of the layer into feature-forge and
+research-report documents, the way the comment module is injected today.
+The guarded snippet for the Steady Thread development layout. Both are
+the same layer with no per-surface variation.</p>
+</div>
+<p>Tests: a built brief carries the layer and renders identically
+without the service running; the Steady Thread snippet is inert outside
+development.</p>
+<h2 id="phase-4-the-tests-that-decide-it">Phase 4: The tests that decide
+it</h2>
+<div class="callout callout-req">
+<p>The browser suite against a real browser, which is the thing the tool
+being replaced does not have and the reason every symptom Ken hit went
+unnoticed. Plus the end-to-end that is the actual acceptance bar.</p>
+</div>
+<h2 id="phase-5-a-public-repository">Phase 5: A public repository</h2>
+<div class="callout callout-req">
+<p>README that a stranger follows without help: what it is, the two-line
+install, the three ways the layer gets into a page, and the honest
+statement of what v1 does not do. MIT license with human-review credited
+as prior art. The state directory and review file patterns in the
+shipped ignore file.</p>
+</div>
+<h2 id="acceptance-criteria">Acceptance criteria</h2>
+<p>Judged by evaluators who did not build the code, on the running tool,
+as user stories rather than unit assertions.</p>
+<div class="callout callout-metric">
+<p><strong>AC1, the brief.</strong> Ken opens a built brief, fixes three
+sentences by typing, comments on a diagram, writes an overall note, and
+sends with no agent running. An agent started afterwards receives all
+five items, edits the <strong>markdown source</strong> rather than the
+built HTML, and acks. The items clear from Ken's page and appear in his
+completed list without him touching anything.</p>
+<p><strong>AC2, the running app.</strong> Ken attaches to the Steady
+Thread dev server, walks three screens behind the login, comments on two
+and types a fix on a third, uses the app for real in between by clicking
+a button that navigates, and sends the whole walk as one batch naming
+all three routes.</p>
+<p><strong>AC3, nothing is taken back.</strong> In the middle of typing,
+each of these happens and Ken loses nothing: a browser reload, the
+service killed and restarted, the app re-rendering the block he is
+typing in, and an agent rewriting the source underneath him. The
+Turbo-frame case is explicit: with a frame polling every two seconds,
+his cursor never moves and his text is never disturbed.</p>
+<p><strong>AC4, send always works.</strong> Send is available whenever
+anything is outstanding, with no agent ever running. He sends, adds one
+more note, and sends again, and both reach the agent.</p>
+<p><strong>AC5, the agent talks back in the page.</strong> An agent that
+cannot apply an item says so on that item's card, in words Ken reads
+without leaving the page. An edit replay cannot place says so on its
+card with its text intact. Neither is a silent clear and neither
+requires a terminal.</p>
+<p><strong>AC6, the artifact is untouched.</strong> A built brief
+reviewed and sent looks pixel-identical to the same brief opened without
+the tool. No injected stylesheet, no shifted layout, no style attribute
+on any reviewed element.</p>
+<p><strong>AC7, it cannot be driven from outside.</strong> A page on
+another origin can neither write an item, nor read the feedback set, nor
+forge an ack.</p>
+<p><strong>AC8, a stranger can run it.</strong> A clone plus the setup
+command produces a working review on a machine that has never run it,
+with the agent instructions installed for the agent that machine
+actually uses.</p>
+</div>
+<h2 id="test-list">Test list</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Test</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Durability</td>
+<td>Reload mid-keystroke loses nothing</td>
+</tr>
+<tr>
+<td>Durability</td>
+<td>Service killed mid-session loses nothing; sync drains on return</td>
+</tr>
+<tr>
+<td>Durability</td>
+<td>Copy and export produce the full set with no service</td>
+</tr>
+<tr>
+<td>Durability</td>
+<td>Two same-named files in different folders keep separate stores</td>
+</tr>
+<tr>
+<td>Replay</td>
+<td>Idempotent by comparison</td>
+</tr>
+<tr>
+<td>Replay</td>
+<td>Caret and selection never disturbed, including under a 2s
+repaint</td>
+</tr>
+<tr>
+<td>Replay</td>
+<td>Low-confidence match writes nothing and says so</td>
+</tr>
+<tr>
+<td>Replay</td>
+<td>App repaint detaches; source repaint collides</td>
+</tr>
+<tr>
+<td>Anchoring</td>
+<td>Survives edits elsewhere, reformatting, rewrapping</td>
+</tr>
+<tr>
+<td>Anchoring</td>
+<td>Picks the right occurrence among repeats</td>
+</tr>
+<tr>
+<td>Anchoring</td>
+<td>Honest failure, carried into the payload</td>
+</tr>
+<tr>
+<td>Identity</td>
+<td>Neighboring regions never merge</td>
+</tr>
+<tr>
+<td>Identity</td>
+<td>Identity survives a repaint and a move</td>
+</tr>
+<tr>
+<td>Editing</td>
+<td>Formatting-only change is a change</td>
+</tr>
+<tr>
+<td>Editing</td>
+<td>Deletion is a deletion</td>
+</tr>
+<tr>
+<td>Editing</td>
+<td>Per-item undo leaves other edits untouched</td>
+</tr>
+<tr>
+<td>Editing</td>
+<td>Layer markup never appears in a payload</td>
+</tr>
+<tr>
+<td>Rail</td>
+<td>A focused card is never re-created</td>
+</tr>
+<tr>
+<td>Rail</td>
+<td>Failures persist until dismissed</td>
+</tr>
+<tr>
+<td>Send</td>
+<td>Available whenever anything is outstanding, no agent needed</td>
+</tr>
+<tr>
+<td>Send</td>
+<td>Note-only send works, and a second send after it works</td>
+</tr>
+<tr>
+<td>Send</td>
+<td>Send flushes anything in flight first</td>
+</tr>
+<tr>
+<td>Protocol</td>
+<td>Per-item ack; unnamed items stay outstanding</td>
+</tr>
+<tr>
+<td>Protocol</td>
+<td>Stale ack refused; forged ack refused</td>
+</tr>
+<tr>
+<td>Protocol</td>
+<td>Delivered items re-offered until acked</td>
+</tr>
+<tr>
+<td>Protocol</td>
+<td>Browser and service reconcile with lifecycle winning</td>
+</tr>
+<tr>
+<td>Return channel</td>
+<td>Agent reply renders on the item's card</td>
+</tr>
+<tr>
+<td>Verification</td>
+<td>Editing the artifact instead of the source is caught</td>
+</tr>
+<tr>
+<td>Verification</td>
+<td>A template match is not a false miss</td>
+</tr>
+<tr>
+<td>Security</td>
+<td>Cross-origin write refused without token and allowed origin</td>
+</tr>
+<tr>
+<td>Security</td>
+<td>Simple content type never reaches a handler</td>
+</tr>
+<tr>
+<td>Security</td>
+<td>Traversal and symlink writes refused</td>
+</tr>
+<tr>
+<td>Security</td>
+<td>Fenced fields escape a delimiter collision</td>
+</tr>
+<tr>
+<td>Security</td>
+<td>Setup preserves text outside its sentinels</td>
+</tr>
+<tr>
+<td>In the page</td>
+<td>100 morphs leave one handler set</td>
+</tr>
+<tr>
+<td>In the page</td>
+<td>Client-side route change moves the target</td>
+</tr>
+<tr>
+<td>In the page</td>
+<td>CSP refusal is named, not reported as service-down</td>
+</tr>
+<tr>
+<td>Non-interference</td>
+<td>Reviewed page renders identically with the layer present</td>
+</tr>
+<tr>
+<td>End to end</td>
+<td>AC1 and AC2 walked in a real browser</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="open-questions">Open Questions</h2>
+<div class="callout callout-question">
+<p><span id="open-questions-q1" class="finding-anchor"></span><strong>Q1: Does a review need a name, or is one review per project
+enough?</strong> D1 makes a review span many targets, which raises
+whether Ken reviewing two features in one day wants them separated. One
+review per project per session is the simplest answer and is probably
+right, but it decides how <code>next</code> picks what to return.</p>
+</div>
+</body>
+</html>

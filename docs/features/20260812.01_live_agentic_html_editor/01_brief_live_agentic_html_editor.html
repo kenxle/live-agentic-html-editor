@@ -1,0 +1,2301 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Feature Brief: Live Agentic HTML Editor</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%94%A8</text></svg>">
+  <style>
+    :root {
+      --ink: #0f172a;
+      --accent: #2563eb;
+      --accent-soft: #eff6ff;
+      --muted: #64748b;
+      --rule: #e2e8f0;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --table-head: #f1f5f9;
+
+      /* Callout types */
+      --req-bg: #f0fdf4;      --req-bar: #16a34a;
+      --nongoal-bg: #f8fafc;  --nongoal-bar: #94a3b8;
+      --metric-bg: #f0f9ff;   --metric-bar: #0284c7;
+      --question-bg: #fffbeb; --question-bar: #d97706;
+      --flag-bg: #fef2f2;     --flag-bar: #dc2626;
+      --suggest-bg: #faf5ff;  --suggest-bar: #7c3aed;
+    }
+
+    html { scroll-behavior: smooth; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+    body {
+      font-family: "Inter", "Helvetica Neue", -apple-system, system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.7;
+      color: var(--ink);
+      background: var(--bg);
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 48px 32px 100px;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    /* Title block (pandoc emits <header id="title-block-header">) */
+    header#title-block-header {
+      border-bottom: 3px solid var(--accent);
+      padding-bottom: 22px;
+      margin-bottom: 8px;
+    }
+    header#title-block-header h1.title {
+      font-size: 2rem;
+      font-weight: 800;
+      margin: 0 0 6px;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+    }
+    header#title-block-header p.subtitle {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin: 0;
+    }
+
+    /* Cross-doc nav (injected by the build before the TOC) */
+    .doc-nav {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin: 24px 0 8px;
+      padding: 12px 16px;
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 10px;
+      font-size: 0.84rem;
+    }
+    .doc-nav .doc-nav-label { color: var(--muted); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
+    .doc-nav a {
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--accent-soft);
+      padding: 4px 12px;
+      border-radius: 16px;
+      text-decoration: none;
+      border: 1px solid rgba(37,99,235,0.18);
+      transition: background 0.15s;
+    }
+    .doc-nav a:hover { background: #dbeafe; }
+    .doc-nav a.current { background: var(--accent); color: #fff; border-color: transparent; cursor: default; }
+
+    /* TOC (pandoc emits <nav id="TOC">) */
+    nav#TOC {
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 12px;
+      padding: 18px 24px;
+      margin: 16px 0 36px;
+      font-size: 0.88rem;
+    }
+    nav#TOC::before {
+      content: "Contents";
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+    nav#TOC ul { list-style: none; padding-left: 0; margin: 0; }
+    nav#TOC ul ul { padding-left: 16px; margin-top: 4px; }
+    nav#TOC li { margin-bottom: 4px; }
+    nav#TOC a { color: var(--ink); text-decoration: none; }
+    nav#TOC a:hover { color: var(--accent); }
+
+    /* Headings */
+    h1, h2, h3, h4 { font-weight: 700; line-height: 1.3; }
+    h2 {
+      font-size: 1.35rem;
+      margin: 52px 0 16px;
+      padding-top: 24px;
+      border-top: 1px solid var(--rule);
+      letter-spacing: -0.01em;
+    }
+    h3 { font-size: 1.1rem; margin: 34px 0 12px; color: var(--accent); }
+    h4 {
+      font-size: 0.9rem; margin: 24px 0 8px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    table + h2, blockquote + h2, ul + h2, ol + h2, pre + h2, .callout + h2 { margin-top: 60px; }
+
+    p { margin: 0 0 16px; }
+
+    a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(37,99,235,0.3); word-break: break-word; }
+    a:hover { border-bottom-color: var(--accent); background: var(--accent-soft); }
+
+    strong { color: var(--ink); font-weight: 700; }
+
+    ul, ol { margin: 0 0 16px; padding-left: 24px; }
+    li { margin: 0 0 6px; }
+    li::marker { color: var(--accent); }
+
+    /* Callout boxes (from ::: callout-* fenced divs) */
+    .callout {
+      border-radius: 0 10px 10px 0;
+      padding: 12px 18px;
+      margin: 18px 0;
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+    .callout > :first-child { margin-top: 0; }
+    .callout > :last-child { margin-bottom: 0; }
+    .callout::before {
+      display: block;
+      font-size: 0.66rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+    .callout-req     { background: var(--req-bg);     border-left: 4px solid var(--req-bar); }
+    .callout-req::before     { content: "Requirement"; color: var(--req-bar); }
+    .callout-nongoal { background: var(--nongoal-bg); border-left: 4px solid var(--nongoal-bar); }
+    .callout-nongoal::before { content: "Non-Goals";   color: var(--nongoal-bar); }
+    .callout-metric  { background: var(--metric-bg);  border-left: 4px solid var(--metric-bar); }
+    .callout-metric::before  { content: "Metrics";     color: var(--metric-bar); }
+    .callout-question { background: var(--question-bg); border-left: 4px solid var(--question-bar); }
+    .callout-question::before { content: "Open Question"; color: var(--question-bar); }
+    .callout-flag    { background: var(--flag-bg);    border-left: 4px solid var(--flag-bar); }
+    .callout-flag::before    { content: "Red Flag";    color: var(--flag-bar); }
+    .callout-suggest { background: var(--suggest-bg); border-left: 4px solid var(--suggest-bar); }
+    .callout-suggest::before { content: "Suggestion";  color: var(--suggest-bar); }
+
+    /* Reviews section: the _reviews.md files are merged into the HTML below this
+       banner (they stay separate files on disk for agents). */
+    .reviews-banner {
+      background: #faf3f2;
+      border: 1px solid #e3b9b3;
+      border-radius: 10px;
+      padding: 12px 18px;
+      margin: 0 0 28px;
+      font-size: 0.9rem;
+      line-height: 1.55;
+      color: #7a3a32;
+    }
+    /* Jump target for spec → review-detail links; offset so the heading clears. */
+    .finding-anchor { display: inline-block; scroll-margin-top: 1.5rem; }
+    td a[href^="#"] { font-weight: 700; text-decoration: none; border-bottom: 1px dotted currentColor; }
+    td a[href^="#"]:hover { text-decoration: none; border-bottom-style: solid; }
+    .reviews-banner::before {
+      display: block;
+      content: "Reviews (full prose)";
+      font-size: 0.66rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+      color: #b0463b;
+    }
+
+    /* Inline xref deep-dive (from ::: xref fenced div) */
+    .xref {
+      font-size: 0.82rem;
+      background: var(--accent-soft);
+      border-left: 3px solid var(--accent);
+      border-radius: 0 7px 7px 0;
+      padding: 9px 14px;
+      margin: 0 0 18px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .xref::before {
+      content: "\21B3  See";
+      font-size: 0.66rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--accent);
+      margin-right: 8px;
+    }
+    .xref > * { display: inline; margin: 0; }
+    .xref a { border-bottom: none; font-weight: 700; color: var(--ink); }
+    .xref a:hover { color: var(--accent); background: none; }
+
+    /* Tables */
+    /* The build wraps every table in .table-scroll so a wide table scrolls
+       inside the reading column instead of spilling past it. The scrolling
+       behavior itself is in shared-assets/doc_fixes.css; this is the look. */
+    .table-scroll {
+      margin: 20px 0 28px;
+      border-radius: 10px;
+      box-shadow: 0 1px 3px rgba(15,23,42,0.06), 0 0 0 1px var(--rule);
+    }
+    .table-scroll table { margin: 0; box-shadow: none; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 20px 0 28px;
+      font-size: 0.88rem;
+      background: var(--card);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(15,23,42,0.06), 0 0 0 1px var(--rule);
+      line-height: 1.5;
+    }
+    thead th {
+      background: var(--table-head);
+      text-align: left;
+      font-weight: 700;
+      padding: 10px 14px;
+      border-bottom: 2px solid var(--accent);
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: var(--muted);
+    }
+    tbody td { padding: 9px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:nth-child(even) { background: #f8fafc; }
+
+    /* Disposition status words rendered by the build (Accepted/Rejected/Deferred) */
+    td .accepted, span.accepted { color: #16a34a; font-weight: 700; }
+    td .rejected, span.rejected { color: #dc2626; font-weight: 700; }
+    td .deferred, span.deferred { color: #d97706; font-weight: 700; }
+
+    /* Inline + block code */
+    code {
+      font-family: "SF Mono", "JetBrains Mono", Menlo, monospace;
+      font-size: 0.82em;
+      background: var(--accent-soft);
+      padding: 2px 6px;
+      border-radius: 5px;
+      color: var(--accent);
+    }
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 16px 20px;
+      border-radius: 10px;
+      overflow-x: auto;
+      margin: 20px 0;
+      line-height: 1.55;
+      /* Wrap long lines instead of forcing a horizontal scroll (readability). */
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    pre code { background: none; color: inherit; padding: 0; font-size: 0.8rem; }
+    /* Mermaid should NOT wrap its source before the script swaps it for SVG. */
+    pre.mermaid { white-space: pre; }
+
+    /* Mermaid blocks: pandoc renders ```mermaid as <pre class="mermaid">; the
+       Mermaid script replaces the text with SVG. Reset the dark pre styling. */
+    pre.mermaid {
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 10px;
+      padding: 20px;
+      text-align: center;
+      color: var(--ink);
+    }
+
+    blockquote {
+      margin: 18px 0;
+      padding: 10px 18px;
+      background: #f8fafc;
+      border-left: 4px solid var(--muted);
+      border-radius: 0 8px 8px 0;
+      color: var(--muted);
+    }
+    blockquote p { margin: 0; }
+
+    hr { border: none; border-top: 1px solid var(--rule); margin: 32px 0; }
+    hr:has(+ h2) { display: none; }
+
+    /* Task-list checkboxes from "- [ ]" lists */
+    ul.task-list { list-style: none; padding-left: 4px; }
+    ul.task-list li input[type="checkbox"] { margin-right: 8px; }
+
+    @page { size: letter; margin: 0.7in 0.65in; }
+    @media (max-width: 620px) {
+      body { padding: 28px 16px 60px; font-size: 15px; }
+      header#title-block-header h1.title { font-size: 1.6rem; }
+      table { font-size: 0.8rem; }
+    }
+    @media print {
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      body { background: #fff; max-width: 100%; font-size: 11pt; padding: 0; }
+      .doc-nav { display: none; }
+      a { color: var(--ink); border-bottom: none; }
+      .callout, table, pre, blockquote { break-inside: avoid; }
+      h2, h3 { break-after: avoid; }
+    }
+  </style>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: false, theme: "neutral", securityLevel: "loose" });
+    /* Pandoc emits ```mermaid blocks as <pre class="mermaid"><code>…</code></pre> with the
+       diagram source HTML-entity-encoded. Mermaid 10 reads innerHTML, so it sees the literal
+       <code> tag and &quot;/&gt; entities and throws syntax errors. Flatten each block to a
+       single decoded text node first (textContent decodes entities and drops the wrapper),
+       then render. Same fix as the personal-repo report builds (commit d525c50 there). */
+    function renderMermaid() {
+      document.querySelectorAll("pre.mermaid").forEach(function (el) {
+        if (!el.dataset.mflattened) {
+          el.textContent = el.textContent;
+          el.dataset.mflattened = "1";
+        }
+      });
+      mermaid.run({ querySelector: "pre.mermaid" });
+    }
+    if (document.readyState === "loading") {
+      window.addEventListener("DOMContentLoaded", renderMermaid);
+    } else {
+      renderMermaid();
+    }
+  </script>
+
+  <!-- The review comment module and the shared document fixes are injected here
+       at build time from ~/.claude/skills/shared-assets/ (comment_module.html +
+       doc_fixes.css) by shared_assets.resolve_header(). Do not paste a copy back
+       into this file. -->
+  <style>
+  /* Shared document fixes: one source for both document builds.
+
+     Injected at build time alongside comment_module.html, in place of the
+     <!-- SHARED_ASSETS --> placeholder in each pandoc header. Because it lands
+     last in <head>, these rules win over the same-specificity rules earlier in a
+     header without needing !important.
+
+     Keep this file to fixes that are true for every document we build. Anything
+     that depends on a skill's own look (colors, radius, shadow) belongs in that
+     skill's header. */
+
+  /* --- Tables: never spill past the reading column (plan Task 4.3, defect 1) ---
+     Two halves to the fix, and both are needed.
+     1. A wide table scrolls inside its wrapper. Both builds wrap every table in
+        <div class="table-scroll">.
+     2. Long unbroken strings (URLs, tokens, absolute paths) wrap instead of
+        setting a min-content width that forces the table wider than the page.
+        Without this the table is simply wider than the wrapper and the text is
+        cut off at the wrapper edge. */
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+  .table-scroll > table { margin: 0; }
+  table { max-width: 100%; }
+  thead th, tbody td { overflow-wrap: anywhere; word-break: break-word; }
+  thead th code, tbody td code,
+  thead th a, tbody td a { overflow-wrap: anywhere; word-break: break-word; }
+
+  /* Print/PDF has no scrollbars, so show the whole table and let it shrink. */
+  @media print {
+    .table-scroll { overflow: visible; }
+  }
+
+  /* --- Charts: never let a chart set the page width (plan Task 4.3, defect 2) ---
+     The label-truncation fix itself is Plotly's automargin, applied in the
+     report header's render script. This is the CSS guard next to it: a chart
+     that computes a wider layout than its column stays inside the column
+     instead of pushing the whole page sideways. */
+  figure.plotly-chart,
+  figure.plotly-chart > div,
+  figure.chart svg,
+  figure.plotly-chart .main-svg { max-width: 100%; }
+
+  </style>
+  <!-- ================================================================
+       Review comment module — THE one source.
+
+       Both document builds inject this file at build time by replacing the
+       <!-- SHARED_ASSETS --> placeholder in their pandoc header:
+         ~/.claude/skills/feature-forge/assets/feature_pandoc_header.html
+         ~/.claude/skills/research-report/assets/report_pandoc_header.html
+       The injector is shared-assets/shared_assets.py. Edit the module here and
+       the next build of either doc set picks it up. Do not copy it back into a
+       header: two copies is the drift this file exists to end.
+
+       What it gives a reader: highlight any passage, press Cmd/Ctrl+Shift+C (or
+       click the Comment button that pops up), and type straight into the
+       auto-focused box. Comments save to localStorage on every keystroke and
+       POST to the comment helper (feature-forge scripts/comment_server.py, port
+       8377) when it is running, which writes comments_<doc>.md next to the doc.
+       Copy for Claude / Export .md cover the no-helper case.
+
+       It styles itself from the host header's --ink / --accent / --rule /
+       --accent-soft variables, which both headers define.
+       ================================================================ -->
+  <style>
+    /* ——— Review comments layer (select text → comment) ——— */
+    body { transition: margin-right 0.25s ease; }
+    /* When the panel is open, reserve its width so it never covers the doc text.
+       margin-left stays auto, so the content re-centers in the remaining space. */
+    body.ffc-open { margin-right: 372px; }
+    mark.ffc-hl { background: #fde68a; padding: 1px 0; border-bottom: 2px solid #f59e0b; cursor: pointer; }
+    mark.ffc-hl.ffc-active { background: #fbbf24; }
+    pre.mermaid.ffc-hl-dia { outline: 3px solid #f59e0b; outline-offset: 4px; border-radius: 6px; cursor: pointer; }
+    pre.mermaid.ffc-hl-dia.ffc-active { box-shadow: 0 0 0 5px #fde68a; }
+    #ffc-fab {
+      position: fixed; right: 20px; bottom: 20px; z-index: 9998;
+      display: flex; align-items: center; gap: 8px;
+      background: var(--ink); color: #fff; border: none; border-radius: 24px;
+      padding: 10px 18px; font: 700 0.85rem "Inter", sans-serif; cursor: pointer;
+      box-shadow: 0 4px 14px rgba(15,23,42,0.25);
+    }
+    #ffc-fab .ffc-dot { width: 8px; height: 8px; border-radius: 50%; background: #94a3b8; }
+    #ffc-fab .ffc-dot.on { background: #4ade80; }
+    #ffc-add {
+      position: absolute; z-index: 9999; display: none;
+      background: var(--accent); color: #fff; border: none; border-radius: 8px;
+      padding: 6px 12px; font: 700 0.78rem "Inter", sans-serif; cursor: pointer;
+      box-shadow: 0 4px 10px rgba(15,23,42,0.3);
+    }
+    #ffc-panel {
+      position: fixed; top: 0; right: 0; bottom: 0; width: 340px; z-index: 9997;
+      background: #fff; border-left: 1px solid var(--rule);
+      box-shadow: -6px 0 24px rgba(15,23,42,0.08);
+      display: none; flex-direction: column;
+    }
+    #ffc-panel.open { display: flex; }
+    .ffc-head { padding: 14px 16px; border-bottom: 1px solid var(--rule); display: flex; align-items: center; gap: 6px; }
+    .ffc-head strong { flex: 1; font-size: 0.9rem; }
+    .ffc-list { flex: 1; overflow-y: auto; padding: 12px; }
+    .ffc-card { border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; background: #fffbeb; }
+    .ffc-card.orphan { background: #f8fafc; }
+    .ffc-card.done { background: #ecfdf5; border-color: #6ee7b7; }
+    .ffc-done-tag { color: #059669; font-weight: 600; }
+    .ffc-sec { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 4px; }
+    .ffc-quote {
+      font-size: 0.78rem; color: var(--muted); border-left: 3px solid #f59e0b;
+      padding-left: 8px; margin: 0 0 8px; max-height: 76px; overflow: hidden; cursor: pointer;
+      background: none; border-radius: 0;
+    }
+    .ffc-card textarea {
+      width: 100%; box-sizing: border-box; min-height: 64px;
+      border: 1px solid var(--rule); border-radius: 7px; padding: 7px 9px;
+      font: 400 0.85rem/1.5 "Inter", sans-serif; resize: vertical;
+    }
+    .ffc-card .ffc-del { background: none; border: none; color: #dc2626; font-size: 0.72rem; cursor: pointer; padding: 2px 0; float: right; }
+    .ffc-btn {
+      background: var(--accent-soft); color: var(--accent);
+      border: 1px solid rgba(37,99,235,0.25); border-radius: 7px;
+      padding: 5px 10px; font: 700 0.72rem "Inter", sans-serif; cursor: pointer;
+    }
+    .ffc-status { font-size: 0.68rem; color: var(--muted); padding: 8px 16px; border-top: 1px solid var(--rule); }
+    #ffc-toast {
+      position: fixed; bottom: 76px; right: 20px; z-index: 9999;
+      background: var(--ink); color: #fff; padding: 8px 14px; border-radius: 8px;
+      font: 600 0.8rem "Inter", sans-serif; opacity: 0; transition: opacity 0.25s; pointer-events: none;
+    }
+    #ffc-toast.show { opacity: 1; }
+    @media print {
+      #ffc-fab, #ffc-panel, #ffc-add, #ffc-toast { display: none !important; }
+      mark.ffc-hl { background: none; border-bottom: none; }
+      pre.mermaid.ffc-hl-dia { outline: none; box-shadow: none; }
+    }
+  </style>
+  <script>
+  /* Review comments layer. Highlights anchor by quoted text + surrounding context.
+     Comments auto-save to localStorage on every keystroke (survives reloads, works
+     on file://) and POST to the comment helper when it is running
+     (feature-forge scripts/comment_server.py, port 8377), which writes
+     comments_<doc>.md next to the doc. Export buttons cover the no-helper case. */
+  (function () {
+    "use strict";
+    if (window.__ffc) return;
+    window.__ffc = true;
+
+    var DOC = decodeURIComponent(location.pathname.split("/").pop() || "doc");
+    var KEY = "ffc:" + DOC;
+    /* One shared helper serves every folder. If this page was opened
+       THROUGH the helper (http://127.0.0.1:<port>/<doc>), talk to that same
+       origin whatever its port; if opened as a file://, fall back to the default
+       port. KEY is by filename, not full path, so localStorage comments follow
+       the doc across file:// and http. */
+    var HELPER = (location.protocol === "http:" && location.hostname === "127.0.0.1")
+      ? location.origin
+      : "http://127.0.0.1:8377";
+    var SKIP = "script,style,svg,pre.mermaid,#ffc-panel,#ffc-fab,#ffc-add,#ffc-toast";
+    var comments = [];
+    var connected = false;
+    var syncTimer = null;
+
+    try { comments = JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) { comments = []; }
+
+    /* Selective clearing: a build may ship window.FFC_DONE = [{t, q}, ...] where
+       t = the comment text (trimmed, exact) and q = the first 40 chars of the
+       quoted passage. Cards matching an entry were applied and are removed at
+       load; a card whose text has changed since (Ken extended it) no longer
+       matches and survives, which is the desired behavior. */
+    (function () {
+      var doneList = window.FFC_DONE;
+      if (!doneList || !doneList.length || !comments.length) return;
+      var before = comments.length;
+      comments = comments.filter(function (c) {
+        return !doneList.some(function (d) {
+          return String(c.text || "").trim() === String(d.t || "") &&
+                 String(c.quote || "").slice(0, 40) === String(d.q || "");
+        });
+      });
+      if (comments.length !== before) {
+        try { localStorage.setItem(KEY, JSON.stringify(comments)); } catch (e) {}
+      }
+    })();
+
+    /* ---------- text model: doc as one string over stable text nodes ---------- */
+
+    function textNodes() {
+      var out = [];
+      var w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+        acceptNode: function (n) {
+          for (var p = n.parentElement; p; p = p.parentElement) {
+            if (p.matches && p.matches(SKIP)) return NodeFilter.FILTER_REJECT;
+          }
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      });
+      var n;
+      while ((n = w.nextNode())) out.push(n);
+      return out;
+    }
+
+    function mermaidBlocks() {
+      return Array.prototype.slice.call(document.querySelectorAll("pre.mermaid"));
+    }
+
+    function markDiagram(dia, id) {
+      if (!dia) return;
+      dia.classList.add("ffc-hl-dia");
+      dia.setAttribute("data-ffc-dia", id);
+    }
+
+    function docText(nodes) {
+      var s = "";
+      for (var i = 0; i < nodes.length; i++) s += nodes[i].nodeValue;
+      return s;
+    }
+
+    function wrapRangeGlobal(s, e, id) {
+      var nodes = textNodes(), segs = [], total = 0, i, n;
+      for (i = 0; i < nodes.length; i++) {
+        n = nodes[i];
+        var len = n.nodeValue.length;
+        var a = Math.max(s, total), b = Math.min(e, total + len);
+        if (a < b) segs.push({ n: n, ls: a - total, le: b - total });
+        total += len;
+      }
+      for (i = 0; i < segs.length; i++) {
+        n = segs[i].n;
+        if (segs[i].ls > 0) n = n.splitText(segs[i].ls);
+        if (segs[i].le - segs[i].ls < n.nodeValue.length) n.splitText(segs[i].le - segs[i].ls);
+        var m = document.createElement("mark");
+        m.className = "ffc-hl";
+        m.setAttribute("data-ffc", id);
+        n.parentNode.insertBefore(m, n);
+        m.appendChild(n);
+      }
+    }
+
+    function locate(c) {
+      var t = docText(textNodes());
+      var probes = [
+        { s: (c.prefix || "") + c.quote + (c.suffix || ""), off: (c.prefix || "").length },
+        { s: c.quote + (c.suffix || ""), off: 0 },
+        { s: (c.prefix || "") + c.quote, off: (c.prefix || "").length },
+        { s: c.quote, off: 0 }
+      ];
+      for (var i = 0; i < probes.length; i++) {
+        if (!probes[i].s) continue;
+        var at = t.indexOf(probes[i].s);
+        if (at >= 0) return at + probes[i].off;
+      }
+      return -1;
+    }
+
+    function anchorAll() {
+      for (var i = 0; i < comments.length; i++) {
+        var c = comments[i];
+        if (c.diagram != null) {
+          var dia = mermaidBlocks()[c.diagram];
+          c.orphan = !dia;
+          markDiagram(dia, c.id);
+          continue;
+        }
+        var at = locate(c);
+        c.orphan = at < 0;
+        if (at >= 0) wrapRangeGlobal(at, at + c.quote.length, c.id);
+      }
+    }
+
+    function sectionFor(node) {
+      var el = node.nodeType === 3 ? node.parentElement : node;
+      var heads = document.querySelectorAll("h1, h2, h3");
+      var best = "";
+      for (var i = 0; i < heads.length; i++) {
+        var pos = heads[i].compareDocumentPosition(el);
+        if (pos & Node.DOCUMENT_POSITION_FOLLOWING) best = heads[i].textContent.trim();
+      }
+      return best;
+    }
+
+    function captureSelection() {
+      var sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
+      var range = sel.getRangeAt(0);
+      if (!document.body.contains(range.commonAncestorContainer)) return null;
+      var panel = document.getElementById("ffc-panel");
+      if (panel && panel.contains(range.commonAncestorContainer)) return null;
+      /* Mermaid diagrams are excluded from the prose text model (SKIP), so they
+         can't anchor by quote. Anchor a diagram comment to the block by index. */
+      var startEl = range.startContainer.nodeType === 3
+        ? range.startContainer.parentElement : range.startContainer;
+      var dia = startEl && startEl.closest ? startEl.closest("pre.mermaid") : null;
+      if (dia) {
+        var di = mermaidBlocks().indexOf(dia);
+        if (di < 0) return null;
+        return {
+          id: "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+          diagram: di,
+          quote: "[Diagram " + (di + 1) + "]",
+          prefix: "",
+          suffix: "",
+          section: sectionFor(dia),
+          text: "",
+          created: new Date().toISOString()
+        };
+      }
+      var nodes = textNodes(), total = 0, s = -1, e = -1;
+      for (var i = 0; i < nodes.length; i++) {
+        var n = nodes[i], len = n.nodeValue.length;
+        if (range.intersectsNode(n)) {
+          if (s < 0) s = total + (n === range.startContainer ? range.startOffset : 0);
+          e = total + (n === range.endContainer ? range.endOffset : len);
+        }
+        total += len;
+      }
+      if (s < 0 || e <= s) return null;
+      var t = docText(nodes);
+      return {
+        id: "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        quote: t.slice(s, e),
+        prefix: t.slice(Math.max(0, s - 40), s),
+        suffix: t.slice(e, e + 40),
+        section: sectionFor(range.startContainer),
+        text: "",
+        created: new Date().toISOString(),
+        _s: s,
+        _e: e
+      };
+    }
+
+    /* ---------- persistence + helper sync ---------- */
+
+    function persist(immediate) {
+      try { localStorage.setItem(KEY, JSON.stringify(comments)); } catch (e) {}
+      var count = document.getElementById("ffc-count");
+      if (count) count.textContent = "Comments (" + comments.length + ")";
+      clearTimeout(syncTimer);
+      if (immediate) { sync(); return; }
+      syncTimer = setTimeout(sync, 600);
+    }
+
+    function pub(c) {
+      return { quote: c.quote, section: c.section, text: c.text, created: c.created, done: !!c.done };
+    }
+
+    function sync() {
+      var payload = JSON.stringify({ doc: DOC, title: document.title, comments: comments.map(pub) });
+      fetch(HELPER + "/comments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload
+      }).then(function (r) { setConnected(r.ok); })
+        .catch(function () { setConnected(false); });
+    }
+
+    function ping() {
+      // ?doc= lets the helper refuse if it is serving a different
+      // folder (the port is fixed, so two parallel reviews can collide).
+      fetch(HELPER + "/ping?doc=" + encodeURIComponent(DOC))
+        .then(function (r) { setConnected(r.ok); })
+        .catch(function () { setConnected(false); });
+    }
+
+    function setConnected(on) {
+      connected = on;
+      var dot = document.querySelector("#ffc-fab .ffc-dot");
+      if (dot) dot.classList.toggle("on", on);
+      updateStatus();
+    }
+
+    function updateStatus() {
+      var st = document.getElementById("ffc-status");
+      if (st) st.textContent = connected
+        ? "Helper connected — comments save next to the doc"
+        : "Saved locally in this browser — use Copy / Export to hand off";
+    }
+
+    /* ---------- export ---------- */
+
+    function exportMd() {
+      var lines = [
+        "# Review comments: " + document.title,
+        "",
+        "_Doc: " + DOC + " · " + comments.length + " comment(s) · exported " + new Date().toISOString() + "_",
+        ""
+      ];
+      comments.forEach(function (c, i) {
+        lines.push("## " + (i + 1) + ". " + (c.section || "(no section)") + (c.done ? " [DONE]" : ""));
+        lines.push("");
+        c.quote.split("\n").forEach(function (q) { lines.push("> " + q); });
+        lines.push("");
+        lines.push(c.text ? c.text : "_(highlight only, no comment text)_");
+        lines.push("");
+      });
+      return lines.join("\n");
+    }
+
+    function fallbackCopy(t) {
+      var ta = document.createElement("textarea");
+      ta.value = t;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); } catch (e) {}
+      document.body.removeChild(ta);
+    }
+
+    function copyExport() {
+      var md = exportMd();
+      var done = function () { toast("Copied " + comments.length + " comment(s) as markdown"); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(md).then(done, function () { fallbackCopy(md); done(); });
+      } else {
+        fallbackCopy(md);
+        done();
+      }
+    }
+
+    function downloadExport() {
+      var stem = DOC.replace(/\.html?$/, "");
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([exportMd()], { type: "text/markdown" }));
+      a.download = "comments_" + stem + ".md";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+      toast("Exported comments_" + stem + ".md");
+    }
+
+    function toast(msg) {
+      var t = document.getElementById("ffc-toast");
+      t.textContent = msg;
+      t.classList.add("show");
+      setTimeout(function () { t.classList.remove("show"); }, 2200);
+    }
+
+    /* ---------- UI ---------- */
+
+    function esc(s) {
+      return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    function isOpen() {
+      return document.getElementById("ffc-panel").classList.contains("open");
+    }
+
+    function togglePanel() {
+      var open = document.getElementById("ffc-panel").classList.toggle("open");
+      document.body.classList.toggle("ffc-open", open);
+    }
+
+    function focusCard(id) {
+      var card = document.querySelector('.ffc-card[data-ffc="' + id + '"]');
+      if (!card) return;
+      card.scrollIntoView({ block: "center", behavior: "smooth" });
+      var ta = card.querySelector("textarea");
+      if (!ta) return;
+      /* Retry focus until it actually sticks. When the panel has just flipped
+         from display:none (or is mid slide-in transition) a synchronous focus,
+         and even a next-frame focus, are silently dropped before layout commits.
+         So keep trying on a short schedule and stop only when activeElement
+         confirms the textarea owns focus. preventScroll keeps the focus from
+         fighting the smooth scrollIntoView above. */
+      var tries = 0;
+      (function tryFocus() {
+        ta.focus({ preventScroll: true });
+        if (document.activeElement === ta || tries >= 12) return;
+        tries += 1;
+        setTimeout(tryFocus, tries < 4 ? 16 : 80);
+      })();
+    }
+
+    function setActive(id, on) {
+      document.querySelectorAll('mark.ffc-hl[data-ffc="' + id + '"]').forEach(function (m) {
+        m.classList.toggle("ffc-active", on);
+      });
+      var dia = document.querySelector('pre.mermaid[data-ffc-dia="' + id + '"]');
+      if (dia) dia.classList.toggle("ffc-active", on);
+    }
+
+    function removeComment(id) {
+      comments = comments.filter(function (c) { return c.id !== id; });
+      document.querySelectorAll('mark.ffc-hl[data-ffc="' + id + '"]').forEach(function (m) {
+        var p = m.parentNode;
+        while (m.firstChild) p.insertBefore(m.firstChild, m);
+        p.removeChild(m);
+        p.normalize();
+      });
+      var dia = document.querySelector('pre.mermaid[data-ffc-dia="' + id + '"]');
+      if (dia) {
+        dia.classList.remove("ffc-hl-dia", "ffc-active");
+        dia.removeAttribute("data-ffc-dia");
+      }
+      persist();
+      renderPanel();
+    }
+
+    function renderPanel() {
+      var list = document.getElementById("ffc-list");
+      list.innerHTML = "";
+      if (!comments.length) {
+        list.innerHTML = '<p style="font-size:0.82rem;color:#64748b;padding:8px;">Select any passage in the doc, then click the Comment button that pops up (or press Cmd/Ctrl+Shift+C).</p>';
+      }
+      comments.forEach(function (c) {
+        var card = document.createElement("div");
+        card.className = "ffc-card" + (c.orphan ? " orphan" : "") + (c.done ? " done" : "");
+        card.setAttribute("data-ffc", c.id);
+        card.innerHTML =
+          '<button class="ffc-del" type="button">delete</button>' +
+          '<div class="ffc-sec">' + esc(c.section || "(no section)") + (c.orphan ? " &middot; passage moved or edited" : "") + (c.done ? ' &middot; <span class="ffc-done-tag">done</span>' : "") + "</div>" +
+          '<blockquote class="ffc-quote" title="Jump to passage">' + esc(c.quote) + "</blockquote>";
+        var ta = document.createElement("textarea");
+        ta.setAttribute("data-ffc", c.id);
+        ta.setAttribute("placeholder", "Your comment…");
+        ta.value = c.text || "";
+        ta.addEventListener("input", function () {
+          c.text = ta.value;
+          if (c.done) { c.done = false; card.classList.remove("done"); }
+          persist();
+        });
+        /* Cmd/Ctrl+Enter marks the comment finished: an explicit, unambiguous
+           signal (instead of inferring "done typing" from a pause) that syncs
+           immediately and stamps a [DONE] marker in the saved markdown. */
+        ta.addEventListener("keydown", function (ev) {
+          if ((ev.metaKey || ev.ctrlKey) && ev.key === "Enter") {
+            ev.preventDefault();
+            c.done = true;
+            card.classList.add("done");
+            persist(true);
+            toast("Marked done");
+            ta.blur();
+          }
+        });
+        card.appendChild(ta);
+        card.querySelector(".ffc-del").addEventListener("click", function () { removeComment(c.id); });
+        card.querySelector(".ffc-quote").addEventListener("click", function () {
+          var m = document.querySelector('mark.ffc-hl[data-ffc="' + c.id + '"]') ||
+                  document.querySelector('pre.mermaid[data-ffc-dia="' + c.id + '"]');
+          if (m) m.scrollIntoView({ block: "center", behavior: "smooth" });
+        });
+        card.addEventListener("mouseenter", function () { setActive(c.id, true); });
+        card.addEventListener("mouseleave", function () { setActive(c.id, false); });
+        list.appendChild(card);
+      });
+      var count = document.getElementById("ffc-count");
+      if (count) count.textContent = "Comments (" + comments.length + ")";
+      updateStatus();
+    }
+
+    function buildUI() {
+      var panel = document.createElement("aside");
+      panel.id = "ffc-panel";
+      panel.innerHTML =
+        '<div class="ffc-head"><strong>Comments</strong>' +
+        '<button class="ffc-btn" id="ffc-copy" type="button">Copy for Claude</button>' +
+        '<button class="ffc-btn" id="ffc-dl" type="button">Export .md</button>' +
+        '<button class="ffc-btn" id="ffc-close" type="button">&#10005;</button></div>' +
+        '<div class="ffc-list" id="ffc-list"></div>' +
+        '<div class="ffc-status" id="ffc-status"></div>';
+      document.body.appendChild(panel);
+
+      var fab = document.createElement("button");
+      fab.id = "ffc-fab";
+      fab.type = "button";
+      fab.innerHTML = '<span class="ffc-dot"></span><span id="ffc-count"></span>';
+      fab.addEventListener("click", togglePanel);
+      document.body.appendChild(fab);
+
+      var add = document.createElement("button");
+      add.id = "ffc-add";
+      add.type = "button";
+      add.innerHTML = "&#128172; Comment";
+      add.title = "Comment (Cmd/Ctrl+Shift+C)";
+      document.body.appendChild(add);
+
+      var toastEl = document.createElement("div");
+      toastEl.id = "ffc-toast";
+      document.body.appendChild(toastEl);
+
+      document.getElementById("ffc-copy").addEventListener("click", copyExport);
+      document.getElementById("ffc-dl").addEventListener("click", downloadExport);
+      document.getElementById("ffc-close").addEventListener("click", togglePanel);
+
+      function addCommentFromSelection() {
+        var c = captureSelection();
+        add.style.display = "none";
+        if (!c) return;
+        if (c.diagram != null) {
+          markDiagram(mermaidBlocks()[c.diagram], c.id);
+        } else {
+          wrapRangeGlobal(c._s, c._e, c.id);
+          delete c._s;
+          delete c._e;
+        }
+        comments.push(c);
+        persist();
+        renderPanel();
+        if (!isOpen()) togglePanel();
+        /* Clear the selection BEFORE focusing: clearing it afterwards can pull
+           focus back off the textarea in some browsers. */
+        window.getSelection().removeAllRanges();
+        focusCard(c.id);
+      }
+
+      add.addEventListener("mousedown", function (ev) { ev.preventDefault(); });
+      add.addEventListener("click", addCommentFromSelection);
+
+      document.addEventListener("mouseup", function (ev) {
+        if (panel.contains(ev.target) || ev.target === add || fab.contains(ev.target)) return;
+        setTimeout(function () {
+          var sel = window.getSelection();
+          if (!sel || sel.isCollapsed || !sel.rangeCount) {
+            add.style.display = "none";
+            return;
+          }
+          if (panel.contains(sel.getRangeAt(0).commonAncestorContainer)) return;
+          /* A diagram selection often carries no plain text (just SVG shapes), so
+             allow it through even when the selection string is empty. */
+          var anc = sel.getRangeAt(0).commonAncestorContainer;
+          var ancEl = anc.nodeType === 3 ? anc.parentElement : anc;
+          var inDia = ancEl && ancEl.closest && ancEl.closest("pre.mermaid");
+          if (!inDia && !String(sel).trim()) {
+            add.style.display = "none";
+            return;
+          }
+          var r = sel.getRangeAt(0).getBoundingClientRect();
+          add.style.left = Math.max(8, window.scrollX + r.left + r.width / 2 - 50) + "px";
+          add.style.top = (window.scrollY + r.bottom + 8) + "px";
+          add.style.display = "block";
+        }, 0);
+      });
+
+      document.addEventListener("click", function (ev) {
+        if (!ev.target.closest) return;
+        var m = ev.target.closest("mark.ffc-hl");
+        var dia = m ? null : ev.target.closest("pre.mermaid.ffc-hl-dia");
+        var id = m ? m.getAttribute("data-ffc") : (dia ? dia.getAttribute("data-ffc-dia") : null);
+        if (id) {
+          if (!isOpen()) togglePanel();
+          focusCard(id);
+        }
+      });
+
+      /* Comment hotkey: Cmd/Ctrl+Shift+C with an active selection adds a
+         comment directly, same as clicking the "Comment" button, so
+         highlight -> hotkey -> type never requires a mouse click. Capture
+         phase + stopPropagation/preventDefault so the browser's default
+         Shift+Cmd+C devtools binding on some platforms never sees it. */
+      document.addEventListener("keydown", function (ev) {
+        if ((ev.metaKey || ev.ctrlKey) && ev.shiftKey && ev.key.toLowerCase() === "c") {
+          var sel = window.getSelection();
+          if (sel && !sel.isCollapsed && sel.rangeCount && String(sel).trim()) {
+            addCommentFromSelection();
+            ev.stopPropagation();
+            ev.preventDefault();
+          }
+        }
+      }, true);
+
+      /* Escape closes the panel. Capture phase so it wins over any other
+         Escape handling on the page. */
+      document.addEventListener("keydown", function (ev) {
+        if (ev.key === "Escape" && isOpen()) {
+          togglePanel();
+          ev.stopPropagation();
+          ev.preventDefault();
+        }
+      }, true);
+    }
+
+    function init() {
+      buildUI();
+      anchorAll();
+      renderPanel();
+      ping();
+      setInterval(ping, 30000);
+    }
+
+    if (document.readyState === "loading") {
+      window.addEventListener("DOMContentLoaded", init);
+    } else {
+      init();
+    }
+  })();
+  </script>
+
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Feature Brief: Live Agentic HTML Editor</h1>
+</header>
+
+<div class="doc-nav"><span class="doc-nav-label">Docs</span><a href="01_brief_live_agentic_html_editor.html" class="current">Brief</a><a href="02_architecture_live_agentic_html_editor.html">Architecture</a><a href="03_plan_live_agentic_html_editor.html">Plan</a></div>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#context" id="toc-context">Context</a></li>
+<li><a href="#goal--problem" id="toc-goal--problem">Goal /
+Problem</a></li>
+<li><a href="#non-goals" id="toc-non-goals">Non-Goals</a></li>
+<li><a href="#user-stories" id="toc-user-stories">User Stories</a></li>
+<li><a href="#requirements" id="toc-requirements">Requirements</a></li>
+<li><a href="#success-metrics" id="toc-success-metrics">Success
+Metrics</a></li>
+<li><a href="#open-questions" id="toc-open-questions">Open
+Questions</a></li>
+<li><a href="#pm-review-disposition" id="toc-pm-review-disposition">PM
+Review Disposition</a></li>
+<li><a href="#brief-reviews" id="toc-brief-reviews">Brief reviews</a>
+<ul>
+<li><a href="#review-pm-review-round-1"
+id="toc-review-pm-review-round-1">review-pm Review (Round 1)</a></li>
+</ul></li>
+</ul>
+</nav>
+<h2 id="context">Context</h2>
+<p>Ken reviews a lot of agent-written work: feature specs, research
+reports, landing pages, and running features on a dev server. Two tools
+cover that today, and each does half the job.</p>
+<p><strong>Our comments module</strong> is the reliable half. It exists
+in two shapes, and they are not equally capable:</p>
+<ul>
+<li>The layer baked into built spec docs and research reports
+(<code>~/.claude/skills/shared-assets/comment_module.html</code>).
+Highlight a passage, press a key, type a note. This is the one that is
+genuinely hard to break, for a specific reason: <strong>it does not
+depend on anything being alive.</strong> Notes save to the browser on
+every keystroke, post to a local helper when one is running, and can be
+copied or exported to a file when one is not.</li>
+<li>The layer injected into every page of the Steady Thread dev server
+(<code>steady-thread/code/app/views/shared/_dev_comments.html.erb</code>
+and its controller). Select text or alt-click any element, type, send.
+It survives Hotwire morphs and keeps a draft through a reload. It has no
+offline path: a sent comment needs the app's endpoint to be up, and
+there is no copy and no export.</li>
+</ul>
+<p>Both are comment-only. Neither lets Ken fix the wording by typing the
+better wording.</p>
+<p><strong>human-review</strong> (Peter Yang's tool, MIT,
+github.com/petergyang/human-review) is the other half, and it
+established the shape worth having. It put the reviewed page beside a
+feedback rail, made the whole document editable so you fix a sentence by
+typing it rather than describing it, and handed the agent structured
+before and after pairs. That is the piece we have been missing. Typing
+the correction is faster than writing a comment about the correction,
+and it carries Ken's exact wording instead of a paraphrase an agent then
+has to interpret.</p>
+<p>In practice it has not held up. Three symptoms, repeatedly:
+<strong>text Ken typed came back reverted, the send control stopped
+working, the reviewed app stopped responding to clicks, and agents did
+not reliably pick the feedback up.</strong> A close read says these are
+not random. The reviewer's work lives in short-lived places, and several
+routine events empty those places without asking. An agent writing a
+file clears the reviewer's pending edits, which is deliberate behavior
+with a test asserting it. The send button is disabled whenever no agent
+process happens to be blocked on a read, which is the least reliable
+condition in the system, and that disabled state persists to disk. Every
+click inside a reviewed page is cancelled so clicks can mean
+place-the-cursor, which makes a reviewed app read as broken. Delivery
+depends on an agent holding a foreground process open across a turn,
+which agents do not do.</p>
+<div class="callout callout-flag">
+<p>The lesson worth carrying: their <strong>storage</strong> design is
+careful and well tested. Their <strong>liveness</strong> design, the
+part deciding when work moves from the screen into storage, has no
+browser-level test at all, and every symptom lives there. Our built-doc
+comment module survives because it barely has a liveness layer.</p>
+</div>
+<p>So this is not a fork and not a patch. It is our comments module,
+which we trust, grown into a full review surface by adding live editing,
+released as its own public repository that Ken's students and anyone
+else can clone and use.</p>
+<p>Two constraints shape the work. Ken wants a working tool the same
+day, so the plan phases the build rather than pretending everything
+lands at once. And the repository is public from the first commit, so it
+has to be something a stranger can clone and understand.</p>
+<pre class="mermaid"><code>flowchart LR
+  subgraph Have[&quot;What we have&quot;]
+    C1[&quot;Comments on built docs&lt;br/&gt;no server needed, copy and export&quot;]
+    C2[&quot;Comments on the live dev server&lt;br/&gt;select or alt-click any route&quot;]
+  end
+  subgraph Learned[&quot;What human-review showed us&quot;]
+    E1[&quot;Type the fix into the page&quot;]
+    E2[&quot;Before and after pairs for the agent&quot;]
+    E3[&quot;One rail beside the document&quot;]
+  end
+  subgraph New[&quot;live-agentic-html-editor&quot;]
+    N1[&quot;Comment and edit&quot;]
+    N2[&quot;Docs, markdown, and running apps&quot;]
+    N3[&quot;Feedback that cannot be taken back&quot;]
+  end
+  C1 --&gt; N1
+  C2 --&gt; N1
+  E1 --&gt; N1
+  E2 --&gt; N1
+  E3 --&gt; N1
+  N1 --&gt; N2 --&gt; N3</code></pre>
+<h2 id="goal--problem">Goal / Problem</h2>
+<p>Build one tool that opens anything a person reviews in a browser,
+lets them <strong>comment on it and edit it directly</strong>, and hands
+every comment and every edit to their coding agent in a form the agent
+can apply without guessing. It has to work on a standalone HTML file, on
+a markdown file, and on a page served by a running local app, because
+that last case is how Ken reviews shipped features.</p>
+<p>The bar is not features. It is trust. A reviewer has to spend an hour
+leaving feedback and never once wonder whether it survived.</p>
+<h2 id="non-goals">Non-Goals</h2>
+<div class="callout callout-nongoal">
+<ul>
+<li>Not multiplayer. One reviewer, one outbox. No replies, no threads,
+no second author, no resolve workflow.</li>
+<li>Not a CMS or a page builder. It edits the words and the arrangement
+of a page that already exists. It does not create pages, add sections
+from a palette, or restyle anything.</li>
+<li>Not a design tool. No color pickers, no spacing controls, no CSS
+editing, and no theming of the page being reviewed.</li>
+<li>Not a hosted service. Everything runs on the reviewer's own machine
+against their own files.</li>
+<li>Not published to a package registry for v1. A git clone plus a setup
+command is the whole install story. Keeping one distribution channel is
+deliberate: maintaining a published package alongside a repository is
+what let the two drift apart in the tool being replaced.</li>
+<li>Not targeting Windows in v1. macOS first, Linux where it falls out
+for free. The tool being replaced spent four separate rounds of work on
+Windows and weakened its own test suite each time.</li>
+<li>Not Markdown files. Cut on Ken's call: a Markdown file is already
+easy to edit in an editor. The three targets that matter are built
+briefs, built report briefs, and pages on a running dev server, and all
+three are HTML. This removes a renderer, a sanitizer, and a whole second
+content type.</li>
+<li>Not reviewing HTML the reviewer did not produce. v1 assumes the
+reviewed page is the reviewer's own build or their own app. See the
+architecture's note on isolation.</li>
+<li>Not mobile.</li>
+<li>Not an agent. It collects feedback and hands it off. Applying it is
+the agent's job.</li>
+</ul>
+</div>
+<h2 id="user-stories">User Stories</h2>
+<ul>
+<li><strong>As Ken reviewing a spec an agent wrote</strong>, I want to
+fix a clumsy sentence by typing the better sentence into the page, so
+the agent gets my exact words instead of a note describing them.</li>
+<li><strong>As Ken reviewing a shipped feature on his dev
+server</strong>, I want to move through the real screens leaving
+comments and typed fixes as I go, and send the whole walk at once, so I
+stay in flow instead of stopping to write tickets.</li>
+<li><strong>As Ken reviewing a feature that needs a login</strong>, I
+want the pages behind that login to be reviewable, because they are the
+entire product.</li>
+<li><strong>As Ken mid-review</strong>, I want to click a button in the
+app to get to the next screen without leaving the review or losing what
+I have typed.</li>
+<li><strong>As Ken mid-review</strong>, I want certainty that closing my
+laptop, an agent saving a file, or a server restarting cannot take back
+anything I already typed.</li>
+<li><strong>As Ken with no agent running</strong>, I want to send anyway
+and have it waiting when I next start one, so the tool never tells me to
+come back later.</li>
+<li><strong>As Ken watching an agent work through my feedback</strong>,
+I want handled items to clear themselves off the page so what is left on
+screen is what is still outstanding.</li>
+<li><strong>As a coding agent</strong>, I want feedback as a structured
+batch that names each page, quotes what each comment is about, and gives
+before and after text for each edit, so I make targeted changes instead
+of regenerating a document.</li>
+<li><strong>As a coding agent that finished</strong>, I want to report
+which items I applied and which I could not and why, so nothing is
+marked handled that was not.</li>
+<li><strong>As one of Ken's students</strong>, I want to clone the repo,
+run one setup command, and have my own agent know how to use it.</li>
+</ul>
+<h2 id="requirements">Requirements</h2>
+<h3 id="reliability-laws">Reliability laws</h3>
+<p>These are the reason for the rebuild. Each names a specific way the
+current tool loses work, and each needs a test that fails without
+it.</p>
+<div class="callout callout-req">
+<p><strong>R1: Nothing the reviewer types is lost.</strong> A browser
+reload, a tab close, a navigation to another page, a restart of the
+tool, or a machine sleep immediately after a keystroke never loses that
+keystroke.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R2: An agent writing to the reviewed material never discards
+the reviewer's pending feedback.</strong> When what is being reviewed
+changes underneath the reviewer, their unsent comments and edits survive
+it. This is the single largest cause of lost work in the current tool,
+where discarding them is deliberate.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R3: The reviewer's unsent work wins on screen, and collisions
+are surfaced rather than resolved silently.</strong> When an incoming
+change touches a region the reviewer has unsent work in, that region
+keeps the reviewer's version, and the reviewer is told a conflicting
+change arrived so they can decide.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R4: Sending never depends on an agent being present.</strong>
+Send is available whenever unsent feedback exists. Whether an agent is
+listening is information shown to the reviewer, never a gate. Feedback
+sent with nothing listening waits and goes to the next agent that
+asks.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R5: Send sends everything currently on screen</strong>,
+including the sentence typed a moment before pressing it.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R6: Outstanding feedback is one queue, not a frozen
+snapshot.</strong> Sending again while an earlier send is unconfirmed
+adds to what is outstanding rather than replacing it.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R7: An agent reports per item, not per batch.</strong> It
+names which items it applied and which it did not, with a reason for
+each it did not. An item nobody applied stays outstanding.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R8: Feedback is offered until an agent confirms it, and
+applied once.</strong> A confirmation for something that was never
+delivered is refused, so a stale confirmation cannot erase newer
+feedback.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R9: Failures are loud and they persist.</strong> A save that
+failed, a session that ended, an agent that cannot be reached: each
+stays visible in a state the reviewer can still see a minute later. The
+tool never shows a success state for something that did not succeed.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R10: There is always a path that needs no server.</strong>
+The reviewer can copy every comment and edit to the clipboard as text
+and export them as a file with nothing running but the browser. The
+built-doc comment module has this today and it is what makes it
+trustworthy. On the live-app path this is new work, not a
+carry-over.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R11: One target is one review, however it was
+addressed.</strong> A path reached through a symlink, a URL with or
+without a trailing slash, and the <code>localhost</code> and
+<code>127.0.0.1</code> spellings of one address all resolve to the same
+review. An agent asking about a target the reviewer is working on finds
+it.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R12: A second window on the same target joins the same
+review</strong>, or is refused with a reason that says what to do
+instead. Two windows never accumulate separate feedback that overwrite
+each other.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R13: The reviewer always knows where their typing
+goes.</strong> A sentence on screen at all times says what happens to an
+edit on this target and names the file or route it concerns.</p>
+</div>
+<h3 id="leaving-comments">Leaving comments</h3>
+<p>The two existing comment layers are the specification for this
+section and neither should regress. What follows is what has to be true,
+including the few things that change because the document is now
+editable.</p>
+<div class="callout callout-req">
+<p><strong>R14: Comment on selected text.</strong> Select a passage,
+take one action, type a note. The passage is marked in the page and the
+note appears keyed to it.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R15: Comment on a whole element</strong> through a modifier
+gesture, for the common case where the problem is not in the words: an
+image, a diagram, a chart, a card, a section. <strong>A plain click
+never opens a compose box</strong>, because a plain click now places the
+text cursor.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R16: A comment holds on when the document changes around
+it.</strong> Anchoring survives edits elsewhere, reformatting, and
+rewrapping. When the same phrase appears more than once, the surrounding
+text decides which was meant.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R17: A comment that cannot find its subject says so, and says
+so to the agent too.</strong> It is marked on screen and its lost-anchor
+state travels in the payload, so the agent knows the quote may no longer
+be in the file rather than being told to find it.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R18: A comment can be reworded or deleted before it is
+sent</strong>, and rewording it is safe from anything else happening on
+the page at the same time.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R19: An in-progress comment survives interruption</strong>: a
+reload, the page re-rendering underneath it, and navigating away and
+back.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R20: A note tied to nothing is first-class feedback.</strong>
+The reviewer can write a note about the whole review, it counts as
+unsent feedback for the purposes of R4 (send is available whenever
+unsent feedback exists), and it can be sent on its own with no comments
+and no edits.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R21: Every comment carries enough context for an agent to
+find its subject in source</strong>: the quoted text, the text around
+it, the section it sits under, and a description of the element.</p>
+</div>
+<h3 id="editing-the-page">Editing the page</h3>
+<p>The headline. This is what we do not have today.</p>
+<div class="callout callout-req">
+<p><strong>R22: There is no edit mode.</strong> The document is editable
+from the moment it opens. Click anywhere and type. No toggle to find and
+none to forget.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R23: Ordinary text editing works the way text editing
+works.</strong> Type, select and replace, delete, paste text, undo,
+redo.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R24: The formatting a reviewer actually reaches for</strong>:
+bold, italic, links, bulleted and numbered lists. Nothing beyond that in
+v1.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R25: Images can be resized, moved, and pasted in.</strong> An
+image the reviewer resizes keeps the size they gave it when it lands
+somewhere else.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R26: Whole blocks can be deleted and reordered</strong>: a
+paragraph, a list item, a card, a section. Deleting a block is feedback
+in itself and is reported as a deletion, not as an edit to nothing.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R27: Every edit can be undone on its own</strong>, without
+disturbing any other edit. The current tool's only escape is discarding
+every edit at once, so one misplaced drag costs an hour of work.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R28: An edit is reported as a before and an after, keyed to a
+named region.</strong> The before is the wording as it was when the
+reviewer first touched it, however many times they retype it
+afterwards.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R29: Region names are stable and distinct.</strong> Two
+separate edits never collapse into one row, and no edit is silently
+overwritten by another that happened to be named the same.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R30: Formatting-only changes are reported as
+changes.</strong> Bolding a word or adding a link is an edit even though
+the plain text is unchanged.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R31: The reviewer can see every edit they have made</strong>,
+listed by region with what kind of change it was, without leaving the
+page or opening a diff.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R32: Typed text survives the reviewed page updating
+itself.</strong> On a page whose own code re-renders parts of the DOM,
+which is every Hotwire and React app, what the reviewer typed is not
+silently replaced. Where it genuinely cannot be preserved, the tool says
+so loudly rather than letting the text disappear.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R33: Nothing the tool adds to the page can end up in the
+reviewer's feedback.</strong> Highlights, chips, handles, and panels are
+never part of a quoted passage, an edit's before or after, or anything
+handed to the agent.</p>
+</div>
+<h3 id="leaving-the-artifact-alone">Leaving the artifact alone</h3>
+<div class="callout callout-req">
+<p><strong>R34: The tool styles only the elements it adds.</strong> It
+never changes how the reviewed page looks. No stylesheet is injected
+over the content, no fonts, colors, spacing, or layout of the reviewed
+material are overridden, and the document is never re-themed. What the
+reviewer sees is what the artifact looks like standalone, which is the
+whole point of reviewing it in a browser.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R35: The tool never writes styles onto the reviewed page's
+own elements</strong>, including to make its own changes more visible.
+Where an edit would be hard to see because of the page's CSS, the tool
+confirms it happened through its own layer, not by restyling the
+reviewed content. The tool being replaced pins bullets and underlines
+onto the host page when it decides they would be invisible, which
+quietly changes the artifact.</p>
+</div>
+<h3 id="using-the-page-while-reviewing-it">Using the page while
+reviewing it</h3>
+<p>Ken hit both readings of "submission stopped working": the tool's own
+send going dead, and the reviewed app refusing to respond. R4 covers the
+first. These cover the second.</p>
+<div class="callout callout-req">
+<p><strong>R37: A plain click while editing does not fire the page's own
+behavior.</strong> Links do not navigate, buttons do not act, forms do
+not submit, because a plain click places the cursor.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R38: The reviewer can use the page for real, and it is
+obvious how.</strong> Following a link, pressing a button, filling in
+and submitting a form, and moving through an app's real flow are all
+available through a gesture the tool teaches on screen rather than in
+documentation. A reviewer who wants to drive the app for a while can
+turn editing off for a stretch and get an ordinary page back.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R39: Leaving a page to use the app does not cost the reviewer
+anything.</strong> Feedback left on a page survives navigating away from
+it, and returning shows it still there.</p>
+</div>
+<h3 id="what-can-be-reviewed">What can be reviewed</h3>
+<p>All three targets are HTML. Markdown was cut from scope, which is why
+R36 and R41 no longer appear.</p>
+<div class="callout callout-req">
+<p><strong>R40: A standalone HTML file</strong>, rendered exactly as it
+renders on its own, with its sibling images, stylesheets, and fonts
+loading normally.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R42: A page served by a running local development
+server</strong>, showing the real route with the app's own styles and
+assets. This is the live-review case and it is not a second-class
+target: commenting and editing both work here as they do on a file.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R43: Routes that require a login are reviewable.</strong>
+Ken's dev server needs a session, and the pages behind it are the
+product. A tool that only reaches the login screen is of no use for the
+case it was built for.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R44: The reviewer can attach the tool to a running app once
+and then wander.</strong> Free-roam is how live reviews actually go: Ken
+clicks into whatever screen he lands on and comments there, without
+having opened that screen as a target first. The existing Steady Thread
+layer works this way and the replacement cannot lose it.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R45: Several pages or routes in one pass.</strong> Feedback
+accumulates across everything the reviewer visits and sends as one batch
+that names which page each item belongs to. Pages holding unsent
+feedback stay visible to the reviewer even when they are looking at
+something else.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R46: A page that renders itself with JavaScript is
+reviewable</strong>, and the reviewer is told plainly what is happening
+to their edits on it rather than being left to infer it.</p>
+</div>
+<h3 id="the-reviewed-artifact-and-its-source">The reviewed artifact and
+its source</h3>
+<div class="callout callout-req">
+<p><strong>R47: A typed fix reaches whatever the next build
+reads.</strong> Most of what Ken reviews is generated: the spec HTML
+comes from markdown, the report HTML comes from markdown, the dev-server
+page comes from templates and components. A fix that lands only in the
+generated artifact is erased by the next build, which makes it worse
+than no fix because it looked applied. The tool never leaves the
+reviewer believing a change is safe when the next build will remove
+it.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R48: The tool never corrupts what it was pointed at.</strong>
+Whatever it does or does not write, the reviewed material is never left
+in a state its author did not intend: no reformatting as a side effect,
+no partial write, no silent overwrite of a newer version.</p>
+</div>
+<h3 id="handing-feedback-to-the-agent">Handing feedback to the
+agent</h3>
+<div class="callout callout-req">
+<p><strong>R49: Feedback reaches the agent as one structured
+batch</strong>, grouped by page, listing comments with their quoted
+subject and edits with their before and after text.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R50: Nothing is truncated on the way through.</strong> A
+clipped <code>after</code> becomes an agent faithfully truncating the
+reviewer's own paragraph.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R51: Every send also writes a plain markdown record on disk
+at a known, documented location</strong>, readable by a person or any
+agent with no tool involved. This includes reviews of a running app,
+where there is no reviewed file to sit next to. The current comments
+module has always worked this way and it is why feedback has never been
+lost.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R52: An agent can wait for feedback, and an agent that was
+not waiting still collects it.</strong> Waiting is a convenience. An
+agent starting fresh an hour later gets everything outstanding.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R53: Each item is keyed so that the correct action is a
+targeted change.</strong> The agent is given what it needs to change one
+region and is told not to regenerate the document. The tool being
+replaced tried to get this with a prompt rule and nothing else.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R54: After an agent applies a batch, the tool checks the
+reviewer's exact wording is present in the result, and says so loudly
+when it is not.</strong> This is the only defense against an agent
+quietly rewriting a document and reverting the reviewer's edits in the
+process.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R55: The reviewer can end a review explicitly</strong>,
+releasing any waiting agent with an instruction to stop, and keeping
+anything unsent for next time.</p>
+</div>
+<h3 id="keeping-up-with-the-agent">Keeping up with the agent</h3>
+<div class="callout callout-req">
+<p><strong>R68: The agent can write back to the reviewer, in the
+page.</strong> When an agent cannot apply an item, or applied it
+differently than asked, or has a question about it, it attaches a
+message to that item and the reviewer reads it on the item's own card.
+The reviewer is not expected to return to a terminal or a chat window to
+find out what happened to their feedback.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R69: The page is the channel back to the reviewer.</strong>
+Anything the tool or the agent needs to tell the reviewer arrives in the
+page they are looking at. Something that needs their attention persists
+on the item it concerns; something transient can be a passing message.
+Nothing important lives only in a log, a terminal, or a chat transcript,
+because that is not where the reviewer is.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R56: The page updates itself when the agent lands a
+change.</strong> The reviewer does not reload to find out whether a fix
+arrived. Nothing unsent is discarded to make this happen, which is R2
+(an agent write never discards pending feedback) applied to this
+path.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R57: Applied feedback clears itself from the page.</strong>
+When an agent reports an item applied, its highlight disappears from the
+document and it leaves the active list. The working surface burns down
+as the agent works, so what is on screen is what is still
+outstanding.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R58: Cleared means moved, not deleted.</strong> A completed
+list holds every item the agent applied, with what it was, so the
+reviewer can look back over the session, confirm a fix landed, and
+reopen it if it did not.</p>
+</div>
+<h3 id="install-and-distribution">Install and distribution</h3>
+<div class="callout callout-req">
+<p><strong>R59: Install is a git clone plus one setup command.</strong>
+No package registry, no build step, no background service left
+behind.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R60: Setup teaches the reviewer's agent how to use the
+tool</strong>, writing instructions where Claude Code, Codex, and Cursor
+each look for them.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R61: Setup never silently overwrites instructions a user has
+customized.</strong></p>
+</div>
+<div class="callout callout-req">
+<p><strong>R62: The command a person is told to run works when they run
+it</strong>, verified by setup rather than printed on faith.</p>
+</div>
+<h3 id="safety">Safety</h3>
+<div class="callout callout-req">
+<p><strong>R63: Local only.</strong> The tool listens on the loopback
+interface, reviews only local files and local development servers, and
+refuses remote addresses.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R64: A reviewed page cannot read anything the reviewer did
+not open</strong>, including through a symlink pointing out of the
+reviewed file's folder.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R65: A reviewed page cannot reach the tool's own controls or
+stored feedback.</strong></p>
+</div>
+<div class="callout callout-req">
+<p><strong>R66: Reviewed content is content, never
+instructions.</strong> Text taken out of a reviewed page and put in
+front of an agent is data the agent may search on, never a directive it
+may follow. Links and images carrying executable schemes are
+refused.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R67: Pasted files are limited to image types that cannot
+carry script.</strong></p>
+</div>
+<h2 id="success-metrics">Success Metrics</h2>
+<div class="callout callout-metric">
+<ul>
+<li><strong>Zero lost feedback across a real review session.</strong>
+Ken runs a full live review of a Steady Thread feature, with an agent
+applying fixes while he keeps working, and every comment and edit is
+accounted for at the end. This is the metric that decides whether it
+ships.</li>
+<li><strong>Send is never unavailable while unsent feedback
+exists</strong>, verified by test rather than by observation.</li>
+<li><strong>A review survives a browser reload, a tool restart, and a
+laptop sleep</strong> with all pending feedback intact, verified by test
+for each of the three.</li>
+<li><strong>Ken reviews a page behind a login and drives the app through
+it</strong>, clicking into at least three screens and leaving feedback
+on each, without the review breaking or the app becoming unusable.</li>
+<li><strong>A student clones the repository and completes a review with
+their own agent</strong> with no help from Ken.</li>
+<li><strong>The interactive surface is tested against a real
+browser.</strong> The tool being replaced has no browser-level test at
+all, and every symptom Ken hit lives in the untested part. Comment,
+edit, send, and recover paths are exercised for real.</li>
+</ul>
+</div>
+<h2 id="open-questions">Open Questions</h2>
+<div class="callout callout-question">
+<p><span id="open-questions-q1" class="finding-anchor"></span><strong>Q1: Which browsers does v1 support?</strong> The answer
+changes how much of the editing surface has to be implemented by hand
+rather than relying on the browser, and it changes the test matrix. A
+single target browser is a legitimate answer for a tool Ken uses
+himself, and a poor one for a public repo students will clone.</p>
+</div>
+<div class="callout callout-question">
+<p><span id="open-questions-q2" class="finding-anchor"></span><strong>Q2: Does this replace the Steady Thread in-page dev comments
+layer, or sit beside it?</strong> R44 (attach once and wander any route)
+means the capability is covered, so the question is only whether Steady
+Thread keeps its own copy. This does not block the build and belongs on
+the Steady Thread board once the tool exists.</p>
+</div>
+<div class="callout callout-question">
+<p><span id="open-questions-q3" class="finding-anchor"></span><strong>Q3: Do built research reports and spec docs keep their
+embedded comment layer?</strong> They work today with nothing running at
+all, which is a real property to give up. If they instead open through
+this tool, the feature-forge and research-report skills both change.
+Also not blocking.</p>
+</div>
+<h2 id="pm-review-disposition">PM Review Disposition</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Batch-level confirmation cannot drive item-level clearing</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R7 makes the item the unit of confirmation; R57 and R58 depend on
+it</td>
+</tr>
+<tr>
+<td>Nothing says who wins when an agent rewrites a block being
+edited</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R3 names the rule: the reviewer's version stays, the collision is
+surfaced</td>
+</tr>
+<tr>
+<td>Brief never says whether the tool writes the reviewed file</td>
+<td>Reframed</td>
+<td>Ken's call: this is an architecture decision. The brief states the
+requirement that makes it decidable (R47, a fix must reach what the next
+build reads; R48, never corrupt the target) without picking the
+mechanism</td>
+</tr>
+<tr>
+<td>Localhost review says nothing about authentication</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R43 makes authenticated routes a requirement</td>
+</tr>
+<tr>
+<td>Nothing covers the app's own re-renders eating typed text</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R32</td>
+</tr>
+<tr>
+<td>No requirement for a free-text note tied to nothing</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R20, explicitly tied to R4 so the note-only-send bug cannot be
+rebuilt</td>
+</tr>
+<tr>
+<td>Free-roam is a capability question, not a Steady Thread
+question</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R44 makes it a requirement; Q2 is reduced to whether Steady Thread
+keeps its own layer</td>
+</tr>
+<tr>
+<td>Element comment and caret placement collide on the click
+gesture</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R15 names a modifier gesture and forbids plain-click compose</td>
+</tr>
+<tr>
+<td>R1's second sentence is unfalsifiable</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Rewritten as an observable</td>
+</tr>
+<tr>
+<td>Context overclaims what carries over from the comments module</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Context now distinguishes the two layers; R10 says the offline path
+is new work on the live-app side</td>
+</tr>
+<tr>
+<td>"Features like submission" may mean the reviewed app, not Send</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Ken confirmed both, at different times. R37, R38, R39 added</td>
+</tr>
+<tr>
+<td>Five requirements are welded together</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Split throughout; post-apply verification promoted to R54</td>
+</tr>
+<tr>
+<td>Nothing says what a second window does</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R12</td>
+</tr>
+<tr>
+<td>Nothing says what a second send does while one is unconfirmed</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R6</td>
+</tr>
+<tr>
+<td>Sequence into four releases</td>
+<td>Deferred to plan</td>
+<td>Ken's call: phasing belongs in the plan, and he wants a working tool
+today</td>
+</tr>
+<tr>
+<td>Markdown record location undefined for a URL target</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R51 requires a known documented location including for running
+apps</td>
+</tr>
+<tr>
+<td>Self-rendering detection sets no bar on false positives</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R46 reduced to a reviewer-facing honesty requirement; detection
+quality is an architecture concern</td>
+</tr>
+<tr>
+<td>No supported platforms stated</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Non-goal: macOS first, Windows out of v1</td>
+</tr>
+<tr>
+<td>Collapse the six commenting requirements into one</td>
+<td>Partially accepted</td>
+<td>Section preamble points at the two existing layers as the
+specification; individual requirements kept because each is separately
+falsifiable</td>
+</tr>
+<tr>
+<td>Cut "not a code editor" and "not reviewing others' sites"</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Both removed; the second is R63</td>
+</tr>
+<tr>
+<td>Cut the typing-over-commenting success metric</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Nothing collects that ratio</td>
+</tr>
+<tr>
+<td>Cut the unfalsifiable student metric</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Now: completes a review with no help from Ken</td>
+</tr>
+<tr>
+<td>Paste restriction constrains a capability never granted</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R25 now grants image paste; R67 constrains it</td>
+</tr>
+<tr>
+<td>Q3 (license) is a settled decision</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Settled as MIT with human-review credited in the README; question
+removed</td>
+</tr>
+<tr>
+<td>Tool imposes its own styling on the reviewed artifact (Ken,
+live)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R34 and R35 added: style only what we add, and never write styles
+onto the host page</td>
+</tr>
+<tr>
+<td>Nothing important should live only in the chat window; an
+unplaceable edit needs to say so in the page (Ken, live)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R68 (the agent writes back onto the item's card) and R69 (the page
+is the channel back)</td>
+</tr>
+<tr>
+<td>Markdown dropped as a target (Ken, live)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R36 and R41 cut; R66 restated without markdown; non-goal added. All
+remaining targets are HTML</td>
+</tr>
+<tr>
+<td>Genuinely open: does the tool write the file, how auth works, which
+browsers</td>
+<td>Split</td>
+<td>The first two are architecture decisions per Ken; browsers remain as
+Q1</td>
+</tr>
+</tbody>
+</table></div>
+<hr class="reviews-divider" style="margin:4.5rem 0 1.5rem;border:0;border-top:3px solid #b0463b">
+
+<div class="reviews-banner">
+<p>The sections below are the full verbatim persona + human reviews for
+this document. They live in a separate <code>_reviews.md</code> file (so
+agents read the lean spec), merged here for review.</p>
+</div>
+<h1 id="brief-reviews">Brief reviews</h1>
+<h2 id="review-pm-review-round-1">review-pm Review (Round 1)</h2>
+<h3 id="blockers">Blockers</h3>
+<p><strong>R5 and R27 collide: batch-level confirmation cannot drive
+item-level clearing.</strong> R5 makes the agent confirm a batch; R27
+clears an individual comment's highlight when "the agent has handled"
+it, and nothing in the brief lets the tool know which items inside a
+batch were applied. The burn-down will clear items the agent silently
+skipped, which is worse than losing feedback because it looks handled.
+Or R27 is simply unbuildable and gets quietly dropped. <em>Fix:</em>
+Make the item the unit of confirmation and the batch just the envelope.
+The agent names what it applied and what it declined, with a reason.
+R28's completed list is the applied set; anything declined stays active
+on screen.</p>
+<p><strong>R2 and R26 collide: nothing says who wins when the agent
+rewrites a block the reviewer is editing.</strong> R2 says an agent
+write never discards pending feedback; R26 says the page refreshes
+itself when the agent lands a change. The brief never says what happens
+when both apply to the same block. This is the exact collision behind
+Ken's first symptom. The reviewer has an unsent edit to paragraph 4, the
+agent rewrites paragraph 4, the page repaints. Whose text is on screen?
+A builder will pick the easy answer (the agent's) and reproduce the bug
+the brief was written to kill. <em>Fix:</em> State the rule in one
+product-level sentence. Something like: a block the reviewer has unsent
+work in is never repainted; the incoming change is shown on that block's
+card as a collision for the reviewer to resolve. Any rule is fine, but
+name one.</p>
+<p><strong>The brief never says whether the tool writes the reviewed
+file.</strong> R9 implies two modes exist; R30, R31 and R33 say three
+target types are never written; nothing says a static HTML file is
+written, and no requirement covers what happens when a save conflicts.
+Writing files is the root of most of the reverting research: the save
+baseline advancing before confirmation, one conflict permanently killing
+saves for a tab, whole-file re-serialization making diffs unreviewable,
+a stale frame writing over the agent's newer file. A builder facing
+silence will guess, and the guess is the hard version. <em>Fix:</em>
+Decide it here. Recommend: v1 never writes the reviewed file, everything
+is feedback. That deletes a whole class of the reverting bug, makes R2
+nearly free, makes every target type behave identically (which R31
+already demands), and makes R33 unnecessary. If Ken wants autosave, it
+needs its own requirement and its own conflict rule, not silence.</p>
+<p><strong>R31 promises localhost review and says nothing about
+authentication.</strong> Ken's stated main use is reviewing a shipped
+Steady Thread feature on localhost:3000, and Steady Thread requires a
+login. The reviewed route is fetched by the tool, not by Ken's logged-in
+browser, so it carries no session. The first real review session ends at
+a login page. The research confirms the coverage here is one happy-path
+GET. <em>Fix:</em> Say how an authenticated route is reviewed, or make
+it an explicit v1 non-goal in the brief so it is discovered now instead
+of in the demo.</p>
+<p><strong>No requirement covers the reviewed app's own re-renders
+replacing text the reviewer typed.</strong> Steady Thread is Hotwire and
+morphs the DOM constantly. Ken's existing dev comments layer needed a
+MutationObserver remount just to keep its own panel alive through a
+morph, and that trick does not extend to typed content. The research
+says the old tool stops watching for scripted DOM changes after the
+first user edit, so a re-render that eats typing is never even noticed.
+R31 promises the hardest thing in the document with nothing behind it.
+<em>Fix:</em> Add a requirement that typed text on a self-updating page
+survives the app's own re-renders, or is loudly reported when it cannot
+be, and bound R31 by it.</p>
+<h3 id="important">Important</h3>
+<p><strong>No requirement for a free-text note not tied to any passage
+or page.</strong> Both existing tools have one, and the note-only send
+bug (Send dead forever after typing a note) is literally one of Ken's
+three reported symptoms. R3 says send is available whenever there is
+unsent feedback, but the brief never establishes that a note is
+feedback, so the bug can be rebuilt while satisfying every written
+requirement. <em>Fix:</em> One requirement: a note not tied to any
+passage is a first-class item, counts as unsent feedback, and ships in
+the batch on its own.</p>
+<p><span id="review-pm-q1" class="finding-anchor"></span><strong>Q1 is a capability question wrongly scoped as a Steady Thread
+question.</strong> The Steady Thread dev layer's defining property is
+that you can be on any route and comment with nothing opened first. That
+is how Ken's live-review sessions work. R31 and R32 both require opening
+a target and navigating inside it. Deferring the question means the tool
+ships without the capability and nobody notices until the first live
+review. <em>Fix:</em> Resolve it in this brief. Either add a requirement
+that the reviewer can attach the tool to a running app once and wander,
+or add a non-goal saying this tool does not replace the free-roam dev
+layer. Then delete Q1.</p>
+<p><strong>R11 and R16 collide on the click gesture.</strong> R16 makes
+the whole document editable so a plain click places the caret; R11 says
+the reviewer points at an element to comment on it. The brief names no
+gesture for either and lets the two collide. This is the source of the
+old tool's constant rail flicker and of half-typed comments
+auto-committing on a stray click, because every mouse-up opened a
+compose card. Ken's dev layer already solved it with Alt-click, and that
+gesture is in his muscle memory. The brief throws the solution away by
+not naming it. <em>Fix:</em> R11 names a modifier gesture. Add that a
+plain click never opens a compose card. Note separately that the bare
+"c" hotkey from the dev layer cannot survive R16 and something has to
+replace it.</p>
+<p><strong>R1's second sentence is unfalsifiable and is a debounce
+window in disguise.</strong> "The gap between typing something and it
+being durable is bounded and short enough that no realistic interruption
+lands inside it." No test fails without it. It also smuggles a mechanism
+into a brief that is otherwise clean of them. <em>Fix:</em> Replace with
+an observable: a reload, a tab close, or a page change immediately after
+a keystroke never loses that keystroke. Let the architecture pick the
+window.</p>
+<p><strong>The Context paragraph overclaims what carries over from the
+comments module.</strong> The brief credits the comments module with
+saving to the browser on every keystroke, posting to a local helper, and
+copy/export when one is not running. That describes the built-doc module
+only. The Steady Thread dev layer has no offline path at all: an unsent
+comment is a localStorage draft, a sent one requires the Rails endpoint
+to be up, and there is no copy and no export. R7 rests on this claim and
+says the property "carries over unchanged." On the live-app path it does
+not carry over, it is new work. The brief understates its own scope.
+<em>Fix:</em> Name which of the two implementations has the property.
+State R7 as an addition on the live-app path, not a carry-over.</p>
+<p><strong>Challenge: "features like submission stop working" may not
+mean the Send button.</strong> The brief reads Ken's complaint as the
+tool's Send button and never considers the other reading. The research
+flags it explicitly: inside a review, every click on a link, button, and
+form submit in the reviewed page is cancelled, so a reviewed app reads
+as broken. "Features like submission" sounds more like the app than the
+button. The brief picks one reading, drops the other, and then turns the
+dropped one into a requirement (R25) framed as desirable. <em>Fix:</em>
+Ask Ken which he meant. If he meant the reviewed app, R25 ships his
+complaint as a feature and the escape gesture needs to be far more
+prominent than a hover hint.</p>
+<p><strong>Five requirements are two or three requirements welded
+together.</strong> A welded requirement gets a partial implementation
+and a passing review. R25 is three (clicks are inert / one gesture works
+/ the gesture is taught on hover, which is a design call, not a
+requirement). R40 is three. R43 is two unrelated security properties
+(asset containment, frame isolation). R44 is three sanitization rules.
+R37 is the worst case: the payload shape gets the headline and the
+post-apply verification is a subordinate clause, when the verification
+is the only requirement in the whole brief that defends against an agent
+rewriting the document wholesale. <em>Fix:</em> Split them. Promote
+R37's second half to its own requirement: after an agent applies a
+batch, the tool checks the reviewer's exact wording is present in the
+result and says so loudly when it is not. That is the requirement Ken's
+own commit in the old repo tried to get with a prompt rule and no
+code.</p>
+<p><strong>Nothing says what happens when a second window or instance
+opens the same target.</strong> The research has this as a shipped bug
+in the old tool twice: two servers wiped each other's comments, and two
+tabs are two visited sets where the second Send overwrites the first's
+bookkeeping. Ken's built-doc helper already runs on a fixed port, so two
+parallel reviews collide today. Students will double-open on day one.
+<em>Fix:</em> One requirement: a second window on the same target joins
+the same review, or is refused with a reason. Either is fine; silence is
+not.</p>
+<p><strong>Nothing says what happens when the reviewer sends again while
+an earlier batch is unconfirmed.</strong> This is Ken's most common
+case, because he sends before an agent is running. In the old tool the
+second send replaced the first's record and comments re-shipped forever.
+R3 promises the wait, R5 promises redelivery, and the two together do
+not describe a queue. <em>Fix:</em> One sentence: outstanding feedback
+is a single queue, not a frozen snapshot. A second send adds to what is
+outstanding rather than replacing it.</p>
+<p><strong>This is four releases described as one feature, and the
+riskiest third is the part added last.</strong> Forty-four requirements
+with no sequencing means the durability laws (R1 to R9), which are the
+entire reason for the rebuild, get built in parallel with the
+auto-refresh pair (R26, R27) that reintroduces exactly the mechanism
+that caused symptom one. The proof that the foundation holds arrives at
+the same time as the thing most likely to break it. <em>Fix:</em>
+Sequence it in user value:</p>
+<ul>
+<li>v1, "everything I leave reaches my agent and nothing I type can be
+taken away": comment and type the fix, on a built doc and a markdown
+file, nothing ever written to the reviewed file, send never gated,
+markdown record on disk, copy and export with no server running.</li>
+<li>v2, "I can review the running app the same way I review a doc":
+localhost routes, authentication, walking several routes in one pass,
+surviving the app's own re-renders.</li>
+<li>v3, "my review burns down while the agent works": auto-refresh,
+applied items clearing, the completed list, item-level
+confirmation.</li>
+<li>v4, "someone other than me can use it": public repo, setup,
+instructions for three agents.</li>
+</ul>
+<p>Ken's three late additions split across v1 (live editing, which
+belongs in v1) and v3 (auto-update and clearing, which should follow the
+durability laws rather than ship beside them).</p>
+<h3 id="minor">Minor</h3>
+<p><strong>R35's "markdown record on disk, next to the reviewed
+material" has no meaning for a localhost route.</strong> That is the
+target Ken cares most about, so the requirement is undefined exactly
+where it is most load-bearing. <em>Fix:</em> Name the location for a URL
+target. The dev layer's pattern of one known file already works and Ken
+already reads it.</p>
+<p><strong>R33's "pages that render themselves with JavaScript are
+recognized as such" sets no bar on false positives.</strong> In the old
+tool this is a one-way latch fired by any early DOM change: a lazy
+image, a font swap, an analytics script. It silently demoted pages and
+contradicted the tool's own documented promise. "Recognized" as written
+is satisfied by a detector that is wrong most of the time. <em>Fix:</em>
+If the tool never writes files, cut R33 entirely and fold it into R9. If
+it does write, require that the demotion is shown to the reviewer with
+its reason and is never silent.</p>
+<p><strong>Nothing says which operating systems v1 supports</strong>,
+for a tool being launched publicly to students. The research shows four
+separate commits of pure Windows tax on the tool being replaced, and the
+fix each time was to weaken the test structure. A builder facing silence
+will attempt Windows and pay that tax inside this build. <em>Fix:</em> A
+non-goal naming the supported platforms for v1.</p>
+<h3 id="cut">Cut</h3>
+<ul>
+<li><strong>R10 through R15 as six requirements.</strong> They are one
+requirement: do not regress the two existing comment layers, which are
+the specification. Point at both files and list only what changes
+(element commenting now needs a modifier gesture, and orphaned comments
+must carry their orphan state into the agent payload, which R12 promises
+on the card and R34 drops from the batch).</li>
+<li><strong>Non-goal "Not a code editor."</strong> Nobody was going
+to.</li>
+<li><strong>Non-goal "Not a way to review a site that is not the
+reviewer's own."</strong> That is R42 restated. A requirement is not a
+non-goal.</li>
+<li><strong>Success metric "Ken reaches for typing over commenting for
+wording fixes."</strong> Nothing collects the ratio and no requirement
+adds instrumentation. It is a post-launch observation, not a ship
+gate.</li>
+<li><strong>Success metric "without asking a question that the README
+should have answered."</strong> Not falsifiable. Make it: a student
+completes a review with no help from Ken.</li>
+<li><strong>R44's "pasted files are restricted to image types."</strong>
+It constrains a capability the requirements never grant. Either add
+pasting an image as a requirement or drop the clause.</li>
+</ul>
+<h3 id="non-goals-that-would-do-real-work-and-are-missing">Non-goals
+that would do real work and are missing</h3>
+<p>Not writing the reviewed file. No revert-all. No reviewing
+authenticated routes in v1. No Windows in v1. No mobile.</p>
+<h3 id="open-questions-verdict">Open Questions verdict</h3>
+<ul>
+<li><span id="review-pm-q1" class="finding-anchor"></span><strong>Q1</strong> is a real question wrongly scoped. Answer the
+capability half in the brief and move the Steady Thread half to the
+board.</li>
+<li><span id="review-pm-q2" class="finding-anchor"></span><strong>Q2</strong> is mostly a skills question that is downstream
+of this tool existing. The part that belongs here, whether the tool
+needs a no-server embedded mode, is already half-answered by R7. Move
+the rest.</li>
+<li><span id="review-pm-q3" class="finding-anchor"></span><strong>Q3</strong> is a settled decision dressed as a question.
+MIT, credit human-review in the README. It blocks nothing. Delete
+it.</li>
+<li><strong>Genuinely open and absent:</strong> does the tool write the
+reviewed file at all; how is an authenticated localhost route reviewed;
+which browsers are supported. Those are the three that should carry Q
+numbers.</li>
+</ul>
+</body>
+</html>
