@@ -3,431 +3,380 @@
 ## Context
 
 Ken reviews a lot of pages: specs and reports his agents wrote, landing pages, and features running on a
-dev server. The tool he uses today is a **comments module**, a script that lives in the page. Highlight a
-passage, press a key, type a note. It exists in two shapes, one baked into built documents and one
-injected into every page of the Steady Thread dev server, and it is reliable for one specific reason:
-**it does not depend on anything being alive.** Notes save to the browser on every keystroke, post to a
-local helper when one is running, and can be copied or exported when one is not.
+dev server. The tool he uses today is a **comments module** that lives in the page. Highlight a passage,
+press a key, type a note. It is reliable for one reason worth naming: **it does not depend on anything
+being alive.** Notes are kept the instant they are typed, they reach an agent when one is around, and
+they can be copied or exported when nothing is.
 
 What it cannot do is let him fix the wording by typing the better wording.
 
 **human-review** (Peter Yang's tool, MIT, github.com/petergyang/human-review) can. It makes the page
-editable, so a reviewer corrects a sentence by typing it rather than describing it, and hands the agent
-before-and-after pairs. That is the missing half: typing the correction is faster than writing a comment
-about the correction, and it carries the reviewer's exact words instead of a paraphrase.
+editable, so a reviewer corrects a sentence by typing it rather than describing it. That is the missing
+half: typing the correction is faster than writing a comment about the correction, and it carries the
+reviewer's exact words instead of a paraphrase.
 
 It has not held up. Text Ken typed came back reverted, the send control stopped working, the reviewed app
-stopped responding to clicks, and agents did not reliably collect the feedback. Those are not random. The
-reviewer's work lives in short-lived places and routine events empty them: an agent writing a file clears
-pending edits by design, the send button is disabled whenever no agent process is blocked on a read, and
-delivery depends on an agent holding a foreground process open across a turn, which agents do not do.
-
-::: callout-flag
-Their **storage** design is careful and well tested. Their **liveness** design, the part deciding when
-work moves from the screen into storage, has no browser-level test at all, and every symptom lives there.
-Our comments module survives because it barely has a liveness layer.
-:::
+stopped responding to clicks, and agents did not reliably collect the feedback. Its tests are careful in
+one half of the tool and absent in the other, and every symptom lives in the untested half. Being well
+tested is not the same as being well designed, and the lesson to take is narrower than "write tests":
+the reviewer's work lived in short-lived places, and routine events emptied them.
 
 ## Goal / Problem
 
-Build **a standalone JavaScript library that anyone adds to any HTML page with one script tag**, to
-comment on that page and edit it live, plus a small local server the library posts to. Everything the
-reviewer leaves is written to a file their coding agent reads.
+Build a library that can be added to any locally run HTML page, by anyone, that allows for **live
+editing**, **commenting that an agent reads on its own**, and **agent communication that appears on the
+page** rather than in a chat window that scrolls and buries the agent's important questions.
 
-That is the whole product. One script tag, one background process, one file the agent reads. It is our
-comments module with live editing added, packaged so Ken, his students, and anyone else can wire it into
-their own pages.
+The library has to let a human and an agent edit the same page at the same time **without clobbering
+each other's work**. That is the hard part and it is the reason this exists.
 
-The bar is not features, it is trust. A reviewer has to spend an hour leaving feedback and never once
-wonder whether it survived.
+Trust is the bar. Reviewers work hard leaving feedback and making edits, and we cannot lose their work
+or overwrite it.
 
 ## Non-Goals
 
 ::: callout-nongoal
-- **Not a workflow tool.** It does not know about feature-forge, research reports, build pipelines, or
-  any particular document type. A page is a page.
-- **Not something that writes into an agent's configuration.** No installing skill files, no editing
-  instruction files, no assumptions about which agent the reviewer uses. The agent contract is a file on
-  disk; how a reviewer points their agent at it is their business.
-- **Not a build-step dependency.** Adding the library to a page must not require the host page to have a
-  bundler, a package manager, or a build.
-- Not multiplayer. One reviewer, one outbox. No replies, no threads, no second author.
+- **Not dependent on our existing tooling.** It does not require feature-forge, research-report, or any
+  other skill. Those skills, and anyone else's, should be able to drop this into a locally run or opened
+  HTML page easily.
+- **Not tied to one agent.** Claude, Codex, and anything else a person uses should be able to work with
+  it.
+- Not multiplayer in the human sense. One human reviewer. It may well be working with several agents at
+  once, since a coordinating agent may hand work to others.
 - Not a CMS, a page builder, or a design tool. It edits the words and arrangement of a page that already
-  exists. No color pickers, no spacing controls, no CSS editing, and no theming of the reviewed page.
-- Not a hosted service. Everything runs on the reviewer's own machine against their own pages.
-- Not Markdown. Cut on Ken's call: a Markdown file is already easy to edit in an editor. Every target is
-  HTML.
-- Not reviewing pages the reviewer did not produce. v1 assumes the page is the reviewer's own.
-- Not mobile, and not Windows in v1. macOS first, Chromium only.
-- Not an agent. It collects feedback and hands it off. Applying it is the agent's job.
+  exists. No color pickers, no spacing controls, no CSS editing, and no restyling of the page.
+- Not a hosted service. It runs on the reviewer's own machine against pages on that machine.
+- Not Markdown. Cut on Ken's call: a Markdown file is already easy to edit in an editor.
+- Not an agent. It collects feedback, carries it, and shows the agent's answers. Doing the work is the
+  agent's job.
 :::
 
 ## User Stories
 
-- **As Ken reviewing a built spec his agent wrote**, I want to fix a clumsy sentence by typing the better
-  sentence into the page, so the agent gets my exact words instead of a note describing them.
+- **As Ken reviewing a page his agent wrote**, I want to fix a clumsy sentence by typing the better
+  sentence, so the agent gets my exact words rather than a description of them.
+- **As Ken**, I want my exact words to stay on the page. I do not want an agent rewriting them back in
+  and changing them on the way; a comma I typed has come back as an em dash before.
 - **As Ken reviewing a feature on his dev server**, I want to move through real screens behind a login,
-  leaving comments and typed fixes, and send the whole walk at once.
-- **As Ken mid-review**, I want to click a button in the app to reach the next screen without leaving the
-  review or losing what I typed.
-- **As Ken mid-review**, I want certainty that closing my laptop, an agent saving a file, or a server
+  leaving comments and typed fixes, with those reaching the agent as I go so I can keep exploring rather
+  than waiting.
+- **As Ken mid-review**, I want every link, button, and piece of interactivity on the page to keep
+  working, so I can reach the next screen without leaving the review or losing what I typed.
+- **As Ken mid-review**, I want certainty that closing my laptop, an agent working, or a process
   restarting cannot take back anything I already typed.
-- **As Ken with no agent running**, I want to send anyway and have it waiting when I next start one.
-- **As Ken watching an agent work**, I want handled items to clear off the page so what is left on screen
-  is what is still outstanding.
-- **As a coding agent**, I want feedback as a file naming each page, quoting what each comment is about,
-  and giving before and after text for each edit, so I make targeted changes instead of regenerating a
-  document.
-- **As a coding agent that finished**, I want to report which items I applied and which I could not, and
-  why, so nothing is marked handled that was not.
-- **As one of Ken's students**, I want to add one script tag to my own page, start one process, and be
-  reviewing, without learning a workflow.
+- **As Ken with nothing running**, I want to grab my comments and take them somewhere else.
+- **As Ken watching an agent work**, I want a finished item's highlight to disappear and the item to
+  leave the active thread, so the thread gets shorter as work gets done.
+- **As Ken at the end of a session**, I want a list of every edit I made by hand, so we can look for
+  patterns worth adding to the writing style guide and compound what we learn.
+- **As any new user**, I want an install I can do quickly, or hand to my agent, and a page I can figure
+  out without reading instructions.
+- **As a coding agent**, I want feedback that names what each comment is about and gives before and
+  after text for each edit, so I make targeted changes instead of regenerating a document.
+- **As a coding agent that could not complete something**, I want to report that back onto the page,
+  where the reviewer will actually see it.
 
 ## Requirements
 
-### The library
+### The reviewer's work is never clobbered
+
+The reason this is being built. Each names a way the current tool loses work.
 
 ::: callout-req
-**R1: One script tag, any HTML page.** Adding the library is one line in the page's markup. It needs no
-bundler, no package manager, and no build step in the host page.
+**R1: Nothing the reviewer types is lost.** A reload, a tab close, a navigation, a restart of anything
+the library talks to, or a machine sleep immediately after a keystroke never loses that keystroke.
 :::
 
 ::: callout-req
-**R2: Configuration travels on the tag.** Where the server is, and which review this page belongs to, are
-attributes on the script tag. There is no config file to create and no project to register.
+**R2: An agent working on the page never discards the reviewer's pending feedback.** In the current tool
+discarding it is deliberate, and it is the single largest cause of lost work.
 :::
 
 ::: callout-req
-**R3: The library does not disturb the page it is in.** It adds no stylesheet over the content, overrides
-no font, color, spacing, or layout, never sets a style attribute on a reviewed element, and never shifts
-the page's layout. What the reviewer sees is what the page looks like without it.
+**R3: The reviewer's own words stay exactly as typed.** Nothing rewrites them: not on the page, not on
+the way to the agent, and not when the agent applies them somewhere else.
 :::
 
 ::: callout-req
-**R4: The library does not fight the page's own JavaScript.** It does not break the host page's event
-handling, its framework, or its routing, and it survives the page re-rendering parts of itself.
+**R4: An agent never rewrites the whole document.** Changes are targeted at what the reviewer raised, and
+nothing they did not raise is touched.
 :::
 
 ::: callout-req
-**R5: Nothing the library adds can end up in the reviewer's feedback.** Its own markup, highlights,
-chips, and panels are never part of a quoted passage, an edit, or anything handed to the agent.
-:::
-
-### Nothing is ever taken back
-
-The reason for the rebuild. Each names a specific way the current tool loses work, and each needs a test
-that fails without it.
-
-::: callout-req
-**R6: Nothing the reviewer types is lost.** A browser reload, a tab close, a navigation, a restart of the
-server, or a machine sleep immediately after a keystroke never loses that keystroke.
+**R5: The reviewer's unsent work is never silently overwritten.** When the content under an edit changes,
+their version is not replaced without them being told.
 :::
 
 ::: callout-req
-**R7: An agent changing the underlying source never discards pending feedback.** This is the single
-largest cause of lost work in the current tool, where discarding it is deliberate.
+**R6: Feedback reaches the agent as the reviewer works.** The reviewer does not stop, batch, or wait for
+a round trip before continuing, and an agent can be working through earlier items while they keep going.
 :::
 
 ::: callout-req
-**R8: The reviewer's unsent work is never silently overwritten.** When the content under an edit changes,
-the reviewer's version is not replaced without them being told. When the page re-renders different data
-in the same place, the edit is set aside with its text intact rather than stamped over live content.
+**R7: The reviewer decides when a comment is ready to act on**, so a half-written thought is not picked
+up as an instruction.
 :::
 
 ::: callout-req
-**R9: Sending never depends on an agent being present.** Send is available whenever unsent feedback
-exists. Agent presence is information shown to the reviewer, never a gate.
+**R8: Work reaches the agent even when nothing is running to receive it**, and is there when something
+starts.
 :::
 
 ::: callout-req
-**R10: Send sends everything on screen**, including the sentence typed a moment before pressing it.
+**R9: The same feedback is never acted on twice**, and something the agent has not actually handled is
+never treated as handled.
 :::
 
 ::: callout-req
-**R11: Outstanding feedback is one queue, not a frozen snapshot.** Sending again while an earlier send is
-unconfirmed adds to what is outstanding rather than replacing it.
+**R10: There is always a way to take the work elsewhere with nothing running**: copy it, or export it as
+a file. This is what makes the current module trustworthy and it is not being given up.
 :::
 
 ::: callout-req
-**R12: Feedback is offered until an agent confirms it, and applied once.** A confirmation naming
-something never delivered is refused, so a stale confirmation cannot erase newer feedback.
+**R11: Failures say so, and the reviewer can dismiss them.** Nothing shows a success state for something
+that did not succeed, and nothing that the reviewer has decided not to care about keeps nagging them.
 :::
 
 ::: callout-req
-**R13: Failures are loud and they persist.** A failed send, a server that cannot be reached, an item that
-could not be placed: each stays visible in a state the reviewer can still see a minute later. The library
-never shows a success state for something that did not succeed.
+**R12: The reviewer always knows what is happening to their typing.**
+:::
+
+### The page keeps working
+
+::: callout-req
+**R13: The library does not break anything on the page.** Links, buttons, forms, interactivity,
+JavaScript event handling, and routing all keep working. **This outranks the convenience of editing.**
+If editing has to be entered deliberately so the page stays usable, that is the right trade.
 :::
 
 ::: callout-req
-**R14: There is always a path that needs no server.** The reviewer can copy everything to the clipboard
-and export it as a file with nothing running but the browser. This is what makes the current comments
-module trustworthy.
+**R14: The library does not change how the page looks.** It adds nothing to the page's own styling,
+moves nothing, and leaves the page rendering exactly as it does without the library.
 :::
 
 ::: callout-req
-**R15: A second window on the same page does not cost the reviewer work.** It joins the same review or is
-refused with a reason, and never accumulates separate feedback that overwrites.
-:::
-
-::: callout-req
-**R16: The reviewer always knows where their typing goes.** A sentence on screen at all times says what
-happens to an edit on this page.
+**R15: The library keeps working while the page changes underneath it**, including on pages that
+re-render parts of themselves.
 :::
 
 ### Commenting
 
 ::: callout-req
-**R17: Comment on selected text.** Select a passage, take one action, type a note. The passage is marked
-in the page and the note appears keyed to it.
+**R16: Comment on a selected passage.** One action, whether a key or a click, and the comment box is
+ready to type into immediately. The passage is marked on the page and the comment is tied to it.
 :::
 
 ::: callout-req
-**R18: Comment on a whole element** by holding Alt and clicking it, for when the problem is not in the
-words: an image, a diagram, a chart, a card, a section. **A plain click never opens a compose box**,
-because a plain click places the text cursor.
+**R17: Comment on a whole element**, for when the problem is not in the words: an image, a diagram, a
+chart, a card, a section.
 :::
 
 ::: callout-req
-**R19: A comment holds on when the page changes around it.** Anchoring survives edits elsewhere,
-reformatting, and rewrapping, and when the same phrase appears more than once the surrounding text
-decides which was meant.
+**R18: Leave a note that is not tied to anything**, for something about the page as a whole.
 :::
 
 ::: callout-req
-**R20: A comment that cannot find its subject says so, on screen and to the agent**, so the agent is told
-the quote may no longer be there rather than sent looking for it.
+**R19: A comment holds onto its subject when the page changes around it**, and when the same phrase
+appears more than once it stays on the one that was meant.
 :::
 
 ::: callout-req
-**R21: A comment can be reworded or deleted before it is sent**, safe from anything else happening on the
-page at the same time.
+**R20: A comment that can no longer find its subject says so**, on the page and to the agent, rather
+than being dropped or silently moved.
 :::
 
 ::: callout-req
-**R22: An in-progress comment survives interruption**: a reload, the page re-rendering underneath it, and
-navigating away and back.
+**R21: A comment can be reworded or deleted before an agent acts on it**, safe from anything else
+happening on the page at the same time.
 :::
 
 ::: callout-req
-**R23: A note tied to nothing is first-class feedback.** It counts as unsent feedback for R9 (send is
-available whenever unsent feedback exists) and can be sent alone with no comments and no edits.
+**R22: A comment survives interruption while it is being written**: a reload, the page re-rendering
+underneath it, navigating away and back.
 :::
 
 ::: callout-req
-**R24: Every comment carries enough context for an agent to find its subject in source**: the quoted
-text, the text around it, the section it sits under, and a description of the element.
+**R23: A comment carries enough for an agent to find its subject in the source**, without the reviewer
+having to read anything technical in the comments thread.
 :::
 
-### Editing the page
+### Editing
 
 ::: callout-req
-**R25: There is no edit mode to find or forget.** The page is editable from the moment the library loads.
-Click anywhere and type.
-:::
-
-::: callout-req
-**R26: Ordinary text editing works the way text editing works.** Type, select and replace, delete, paste
-text, undo, redo.
+**R24: Edit the text of the page directly**, entered deliberately enough that R13 (the page keeps
+working) holds.
 :::
 
 ::: callout-req
-**R27: The formatting a reviewer reaches for**: bold, italic, links, bulleted and numbered lists. Nothing
-beyond that in v1.
+**R25: Ordinary text editing works the way text editing works**, including undo.
 :::
 
 ::: callout-req
-**R28: Images can be resized and moved**, keeping the size the reviewer gave them. Pasting a new image is
-cut from v1: it is the one action that would force the library to write a file.
+**R26: Basic formatting only.** Anything beyond the basics can be asked of the agent instead and is not
+worth the complexity here.
 :::
 
 ::: callout-req
-**R29: Whole blocks can be deleted and reordered.** Deleting a block is feedback in itself and is
-reported as a deletion.
+**R27: Delete a block.** Deleting is feedback in itself and reads as a deletion rather than an empty
+edit.
 :::
 
 ::: callout-req
-**R30: Every edit can be undone on its own**, without disturbing any other edit. The current tool's only
-escape is discarding every edit at once, so one misplaced drag costs an hour.
+**R28: Every edit can be undone on its own**, without disturbing the others. The current tool's only
+escape is discarding every edit at once, so one mistake costs an hour.
 :::
 
 ::: callout-req
-**R31: An edit is reported as a before and an after, keyed to a named region.** The before is the wording
-as it was when the reviewer first touched it, however many times they retype it after.
+**R29: An edit is carried as a before and an after, tied to a place on the page.** The before is the
+wording as it was when the reviewer first touched it, however many times they retype it after.
 :::
 
 ::: callout-req
-**R32: Region names are stable and distinct.** Two separate edits never collapse into one, and no edit is
-silently overwritten by another that happened to be named the same.
+**R30: Two separate edits stay two separate edits**, and no edit silently overwrites another.
 :::
 
 ::: callout-req
-**R33: Formatting-only changes are reported as changes.** Bolding a word is an edit even though the plain
-text is unchanged.
+**R31: A change to formatting alone still counts as a change.**
 :::
 
 ::: callout-req
-**R34: The reviewer can see every edit they have made**, listed by region, without leaving the page.
+**R32: The reviewer can see the edits they have made by hand**, kept apart from the comment thread so
+neither buries the other.
 :::
 
-### Using the page while reviewing it
+### Working with the agent
 
 ::: callout-req
-**R35: A plain click while editing does not fire the page's own behavior.** Links do not navigate,
-buttons do not act, forms do not submit, because a plain click places the cursor.
-:::
-
-::: callout-req
-**R36: The reviewer can use the page for real, and it is obvious how.** An editing toggle turns
-interception off for a stretch and gives back an ordinary page. Holding Cmd and clicking a link follows
-it. Both are taught on screen rather than in documentation.
+**R33: The agent reports on each item.** Handled, or not handled with a reason. Anything it does not
+speak to is still outstanding.
 :::
 
 ::: callout-req
-**R37: Leaving a page to use the app costs nothing.** Feedback left on a page survives navigating away,
-and returning shows it still there.
-:::
-
-### What the agent gets
-
-::: callout-req
-**R38: One file per review, readable by a person.** Every send writes a plain markdown record at a
-documented location, grouped by page, listing comments with their quoted subject and edits with their
-before and after. This is the whole handoff contract.
+**R34: An agent that cannot do something says so on the page**, where the reviewer will see it, because
+the reviewer is not reading the chat window.
 :::
 
 ::: callout-req
-**R39: A structured file alongside it** carrying the same content with identifiers, for an agent that
-would rather parse than read.
+**R35: Anything the reviewer needs to know arrives on the page they are looking at.** Nothing important
+lives only in a log, a terminal, or a chat transcript.
 :::
 
 ::: callout-req
-**R40: The reviewer's own words are never truncated on the way through.** A clipped `after` becomes an
-agent faithfully truncating the reviewer's own paragraph. Text quoted out of the page is a search key
-rather than the reviewer's intent, so it may be bounded, visibly.
+**R36: The page updates itself as the agent lands changes**, without the reviewer reloading and without
+losing anything of theirs.
 :::
 
 ::: callout-req
-**R41: Delivery needs no live connection.** An agent that was not running when the reviewer sent still
-gets everything outstanding whenever it next looks.
+**R37: A handled item loses its highlight and leaves the active thread**, so what is left on screen is
+what is still outstanding and the thread gets shorter as work gets done.
 :::
 
 ::: callout-req
-**R42: Each item is keyed so the correct action is a targeted change**, never a document rewrite.
+**R38: Handled items are kept, not deleted**, somewhere the reviewer can look back over to confirm a fix
+landed and reopen it if it did not.
 :::
 
 ::: callout-req
-**R43: The agent reports per item.** Applied, or not applied with a reason. Anything it does not name
-stays outstanding.
+**R39: At the end of a session the reviewer can see every edit they made by hand**, as a list, so
+patterns worth adding to a style guide can be spotted.
+:::
+
+### Getting it and running it
+
+::: callout-req
+**R40: Install is easy, and an agent can do it.** Clone and run a command, or ask an agent to make it
+ready. One place it comes from, so there is nothing to keep in sync.
 :::
 
 ::: callout-req
-**R44: The agent can write back to the reviewer, in the page.** When it cannot apply an item, applied it
-differently, or has a question, it attaches a message the reviewer reads on that item's own card.
+**R41: Adding it to a page is something a person or their agent does in one step.**
 :::
 
 ::: callout-req
-**R45: The page is the channel back to the reviewer.** Anything the library or the agent needs to tell
-them arrives in the page they are looking at. Nothing important lives only in a log, a terminal, or a
-chat transcript, because that is not where the reviewer is.
-:::
-
-### Keeping up with the agent
-
-::: callout-req
-**R46: The page updates itself when the agent lands a change**, without the reviewer reloading, and
-without discarding anything unsent.
+**R42: The requirements to run it are stated plainly**, and it does not depend on anything unusual. Any
+constraint on browsers or platforms has to be a real technical need, stated with its reason, rather than
+a default.
 :::
 
 ::: callout-req
-**R47: Applied feedback clears itself from the page.** Its highlight disappears and it leaves the active
-list, so what is on screen is what is still outstanding.
+**R43: A new user can work out how to use it from the page itself**, without reading documentation.
+:::
+
+### Safety
+
+::: callout-req
+**R44: Only the reviewer's own review can reach their work.** Something the reviewer did not put on the
+page cannot read their feedback, write feedback as them, or tell their agent an item was handled. This
+takes no action from the reviewer beyond having added the library.
 :::
 
 ::: callout-req
-**R48: Cleared means moved, not deleted.** A completed list holds every item the agent applied, so the
-reviewer can confirm a fix landed and reopen it if it did not.
-:::
-
-### Install and safety
-
-::: callout-req
-**R49: Install is a git clone and one command to start the server.** No package registry, no build step,
-no background service left behind.
-:::
-
-::: callout-req
-**R50: Local only.** The server listens on the loopback interface and refuses remote addresses.
-:::
-
-::: callout-req
-**R51: A page cannot drive the server just by being open in the reviewer's browser.** Any page the
-reviewer visits can attempt to reach a loopback server, so reaching it takes more than being in the
-browser. A page the reviewer did not authorize can neither write feedback, read it, nor confirm items on
-an agent's behalf.
-:::
-
-::: callout-req
-**R52: Text taken out of a reviewed page is data, never instructions.** It reaches an agent as something
-to search on, clearly marked, and never as a directive the agent might follow.
-:::
-
-::: callout-req
-**R53: Nothing the reviewer drops or pastes reaches disk**, and a file dropped from the desktop does not
-navigate the page away from the review.
+**R45: Text taken off the page is context, never instructions.** Quoted passages and original wording are
+there for an agent to search on and understand, and are never followed as directives.
 :::
 
 ## Success Metrics
 
 ::: callout-metric
-- **Zero lost feedback across a real review session.** Ken runs a full review of a Steady Thread feature,
-  with an agent applying fixes while he keeps working, and every comment and edit is accounted for at the
-  end. This decides whether it ships.
-- **Send is never unavailable while unsent feedback exists**, verified by test.
-- **A review survives a browser reload, a server restart, and a laptop sleep** with all pending feedback
-  intact, verified by test for each.
-- **Ken reviews a page behind a login and drives the app through it**, clicking into at least three
-  screens and leaving feedback on each, without the review breaking or the app becoming unusable.
-- **A student adds the script tag to their own page and completes a review** with no help from Ken.
-- **The interactive surface is tested against a real browser.** The tool being replaced has no
-  browser-level test at all, and every symptom Ken hit lives in the untested part.
+- **Zero lost or altered work across a real review session.** Ken runs a full review of a Steady Thread
+  feature with an agent working alongside him, and at the end every comment and every edit is accounted
+  for and his words read exactly as he typed them. This decides whether it ships.
+- **He never stops to wait for the agent.** He can keep commenting and exploring while earlier items are
+  being worked.
+- **Nothing on the page stops working** while he reviews it: he drives the app through at least three
+  screens behind a login.
+- **The review survives a reload, a restart, and a laptop sleep** with everything intact.
+- **The thread gets shorter as the agent works**, and he can still find what was handled.
+- **A new user adds it to their own page and completes a review** with no help.
+- **The interactive parts are tested against a real browser**, since the tool being replaced has no such
+  test and every symptom lives where the tests are not.
 :::
 
 ## Open Questions
 
 ::: callout-question
-**Q1: Does the library ship as one file or several?** One file is the simplest thing to add to a page and
-the easiest to host anywhere. Several files are easier to work on and let separate builders own separate
-diffs. A concatenation step gives both, at the cost of a generated artifact in the repository.
+**Q1: What is the gesture for entering an inline edit, and for commenting on a whole element?** R13 (the
+page keeps working) means editing cannot simply be "click and type", and element commenting needs
+something a new user will find. Both need to be worked out together rather than picked separately, since
+they share the same small vocabulary of clicks and keys.
 :::
 
 ::: callout-question
-**Q2: How does a page authorize itself to the server?** R51 says being open in the browser is not enough.
-The reviewer has to do something deliberate once, and what that something is decides how much friction
-sits between adding the script tag and being able to send.
+**Q2: How much rearranging of a page is worth supporting?** Deleting a block is clearly useful and
+clearly safe. Reordering blocks is neither, and doing it badly could break the page. Resizing an image is
+worth having only if it works well.
 :::
 
-## Review Disposition
+## Ken's Review, Round 1
 
-Findings from the PM review of the first draft, and from the four reviews that followed on the
-architecture and plan. The scope correction, from a workflow tool to a standalone library, came from Ken
-directly and is what this draft is.
+Sixty-two comments on the first draft. The full record is in
+`01_brief_live_agentic_html_editor_reviews_ken_round1.md`.
 
 | Finding | Disposition | Notes |
 | --- | --- | --- |
-| The product had drifted into a workflow tool: a setup command writing agent skill files, build-system source hints, per-project review roots, a four-command CLI (Ken, live) | Accepted | Rewritten as a library plus a small server. Those requirements are gone rather than reworded |
-| Batch-level confirmation cannot drive item-level clearing | Accepted | R43 makes the item the unit; R47 and R48 depend on it |
-| Nothing said who wins when an agent rewrites a region being edited | Accepted | R8 |
-| Reviewing a running app said nothing about authentication | Resolved by shape | A library in the page runs in the reviewer's own logged-in browser, so there is no session to forward |
-| Nothing covered the page's own re-renders eating typed text | Accepted | R4 and R8 |
-| No requirement for a free-text note tied to nothing | Accepted | R23, tied to R9 so the note-only-send bug cannot be rebuilt |
-| Element comment and pass-through both called a modifier click | Accepted | Alt-click comments, Cmd-click follows a link, plus the R36 toggle |
-| Verification cannot match a rendered string to its template | Accepted | Verification is cut from v1 along with the source-hint machinery; R42 and R43 carry the intent |
-| Image paste forces a write path the design forbids | Accepted | Cut from R28 |
-| Truncation read as an absolute covering text the reviewer did not write | Accepted | R40 bounded to the reviewer's own words |
-| Nothing said what a second window does | Accepted | R15 |
-| Nothing said what a second send does while one is unconfirmed | Accepted | R11 |
-| Nothing important should live only in the chat window (Ken, live) | Accepted | R44 and R45 |
-| The tool imposed its own styling on the reviewed page (Ken, live) | Accepted | R3 |
-| Markdown dropped as a target (Ken, live) | Accepted | Every target is HTML |
-| Sequence the build into releases | Deferred to plan | Phasing belongs in the plan |
+| The brief was full of implementation detail, against the skill's own rule (raised on eleven separate passages) | Accepted | Goal, non-goals, and requirements rewritten as what rather than how. Script tags, servers, file formats, bundlers, and file counts are all gone |
+| The send-and-wait model is wrong; the current module works continuously and the reviewer should not wait | Accepted | R6, R7, R8. Send as a concept is gone from the brief |
+| Everything on the page must keep working, and that outranks click-to-edit | Accepted | R13 says so explicitly, R24 defers to it, and Q1 carries the open gesture question |
+| The reviewer's exact words must stay on the page, not be rewritten back in by an agent | Accepted | R3, and the user story that names the comma-to-em-dash case |
+| Never rewrite the whole document | Accepted | R4, promoted to its own requirement |
+| A simple install is wanted; the non-goal misread the earlier instruction | Accepted | R40, R41 |
+| Agent agnostic, and possibly several agents at once | Accepted | Non-goals |
+| Reviewing a document someone else sent is fine as long as it is local | Accepted | That non-goal is removed |
+| Chromium-only and platform limits need a real reason | Accepted | R42 makes the reason a requirement rather than a default. The architecture has to justify any limit |
+| Completed items leave the thread; hand edits belong apart from comments | Accepted | R32, R37, R38 |
+| New story: an end-of-session list of hand edits to feed the style guide | Accepted | R39 and its user story |
+| Trust framing reworded | Accepted | Ken's wording used in the goal |
+| "Well tested does not mean well designed" | Accepted | Context reworded |
+| Lists are not needed; keep formatting basic | Accepted | R26 |
+| Reordering blocks needs thought and could break things; image resize can slip | Accepted | Q2 |
+| "Region" was never defined, so the requirement was hazy | Accepted | R29 and R30 now say it in plain words |
+| Unclear why library markup must be kept out of feedback | Accepted | Folded into R23, which says what the reviewer should not have to read |
+| Errors should be dismissible | Accepted | R11 |
+| Element commenting by Alt-click is hard to discover | Accepted | Moved to Q1 rather than fixed in the brief |
+| A comment box should take focus immediately | Accepted | R16 |
+| An untethered note needs somewhere to live | Accepted | R18 |
+| Authorization should need no user action beyond adding the library | Accepted | R44 |
+| Two files for the agent contradicted each other | Accepted | Both removed as implementation |
+| Two windows on one page: is it worth the complexity | Deferred | Left out of the brief; the architecture can decide whether it is cheap |
+| A database is worth considering for storage | Deferred | Architecture |
+| The visible banner text at the top of built docs | Fixed | An HTML comment cannot nest, and the module's banner contained a literal comment. Fixed at the source, so every doc built from now on is clean |

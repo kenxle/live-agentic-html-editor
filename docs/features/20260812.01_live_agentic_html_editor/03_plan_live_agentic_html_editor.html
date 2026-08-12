@@ -575,7 +575,10 @@
        Review comment module — THE one source.
 
        Both document builds inject this file at build time by replacing the
-       <!-- SHARED_ASSETS --> placeholder in their pandoc header:
+       SHARED_ASSETS placeholder in their pandoc header. Write that placeholder
+       without its comment delimiters here: an HTML comment cannot nest, so a
+       literal one inside this banner ends the banner early and the remaining
+       lines render as visible text on every built doc.
          ~/.claude/skills/feature-forge/assets/feature_pandoc_header.html
          ~/.claude/skills/research-report/assets/report_pandoc_header.html
        The injector is shared-assets/shared_assets.py. Edit the module here and
@@ -1222,500 +1225,425 @@
 <ul>
 <li><a href="#shape-of-the-build" id="toc-shape-of-the-build">Shape of
 the build</a></li>
-<li><a href="#phase-0-contracts" id="toc-phase-0-contracts">Phase 0:
-Contracts</a></li>
-<li><a href="#phase-1-the-four-foundations-in-parallel"
-id="toc-phase-1-the-four-foundations-in-parallel">Phase 1: The four
-foundations, in parallel</a></li>
-<li><a href="#phase-2-the-three-hard-parts-in-parallel"
-id="toc-phase-2-the-three-hard-parts-in-parallel">Phase 2: The three
-hard parts, in parallel</a></li>
-<li><a href="#phase-3-closing-the-loop-in-parallel"
-id="toc-phase-3-closing-the-loop-in-parallel">Phase 3: Closing the loop,
-in parallel</a></li>
-<li><a href="#phase-4-the-tests-that-decide-it"
-id="toc-phase-4-the-tests-that-decide-it">Phase 4: The tests that decide
-it</a></li>
-<li><a href="#phase-5-a-public-repository"
-id="toc-phase-5-a-public-repository">Phase 5: A public
-repository</a></li>
+<li><a href="#what-already-exists" id="toc-what-already-exists">What
+already exists</a></li>
+<li><a href="#phase-0-contracts-and-kernel"
+id="toc-phase-0-contracts-and-kernel">Phase 0: Contracts and
+kernel</a></li>
+<li><a href="#phase-1" id="toc-phase-1">Phase 1</a></li>
+<li><a href="#phase-2" id="toc-phase-2">Phase 2</a></li>
+<li><a href="#phase-3" id="toc-phase-3">Phase 3</a></li>
+<li><a href="#the-cut-line" id="toc-the-cut-line">The cut line</a></li>
 <li><a href="#acceptance-criteria"
 id="toc-acceptance-criteria">Acceptance criteria</a></li>
-<li><a href="#test-list" id="toc-test-list">Test list</a></li>
+<li><a href="#tests-ranked" id="toc-tests-ranked">Tests, ranked</a></li>
 <li><a href="#open-questions" id="toc-open-questions">Open
-Questions</a></li>
+questions</a></li>
+<li><a href="#cleanup-needed" id="toc-cleanup-needed">Cleanup
+needed</a></li>
 </ul>
 </nav>
 <h2 id="shape-of-the-build">Shape of the build</h2>
-<p>Six phases. Phase 0 is one agent and everything waits on it, because
+<p>Five phases. Phase 0 is one agent and everything waits on it, because
 it pins the contracts every other task reads and writes. Phases 1
-through 3 fan out to parallel builders in their own worktrees. Phase 4
-is the test suite that decides whether this shipped. Phase 5 is what
-makes it a public repository.</p>
+through 3 fan out to parallel builders. Phase 4 is the tests that decide
+whether this shipped, plus what makes it a public repository.</p>
+<p>The lesson that shaped this plan, from four reviews of an earlier
+draft: <strong>the expensive part is never the feature surface, it is
+the seams between parallel builders.</strong> The tool being replaced
+took 45 commits over two and a half weeks and its cost was concentrated
+in cross-cutting integration.</p>
+<p>The sharpest example, because it is the trap this exact build could
+fall into: three separate tasks need to normalize text. The recorder
+mints a record's plain text, replay compares DOM to record to decide
+"already equal, skip", and the anchor engine does whitespace-tolerant
+matching. If replay's comparison normalizes even slightly differently
+from the recorder's minting, no region ever compares equal, replay
+rewrites every region on every pass, and the reviewer's cursor gets
+fought. <strong>Parallelizing this work is itself capable of
+manufacturing the exact bug the tool exists to kill.</strong> One
+normalizer, in Phase 0, imported by all three.</p>
 <pre class="mermaid"><code>flowchart TD
-    P0[&quot;Phase 0: contracts&lt;br/&gt;one agent, everything waits&quot;]
-    P0 --&gt; A[&quot;1A Service:&lt;br/&gt;auth, log, projection, endpoints&quot;]
-    P0 --&gt; B[&quot;1B Layer shell:&lt;br/&gt;rail, store, sync, failures list&quot;]
-    P0 --&gt; C[&quot;1C Anchor engine:&lt;br/&gt;pure, no DOM ownership&quot;]
-    P0 --&gt; D[&quot;1D Agent surface:&lt;br/&gt;CLI, files, fencing, setup&quot;]
-    A &amp; B --&gt; E[&quot;2A Editing:&lt;br/&gt;recorder, formatting, blocks, undo&quot;]
-    B &amp; C --&gt; F[&quot;2B Replay engine:&lt;br/&gt;the three laws&quot;]
-    A &amp; B --&gt; G[&quot;2C In the page:&lt;br/&gt;injection, remount, routing, CSP&quot;]
-    A &amp; D --&gt; H[&quot;3A Burn-down:&lt;br/&gt;ack, replies on cards, auto-refresh&quot;]
-    A &amp; D --&gt; I[&quot;3B Verification + source hints&quot;]
-    G --&gt; J[&quot;3C Wiring:&lt;br/&gt;build-time injection, Steady Thread snippet&quot;]
-    E &amp; F &amp; G &amp; H &amp; I &amp; J --&gt; K[&quot;Phase 4: the tests that decide it&quot;]
-    K --&gt; L[&quot;Phase 5: README, license, setup polish&quot;]</code></pre>
-<p>Two rules for every builder, because they are the rules this tool
-exists to enforce on itself:</p>
+    P0[&quot;Phase 0: contracts and kernel&lt;br/&gt;shapes, normalizer, stubs, gesture table&quot;]
+    P0 --&gt; A[&quot;1A Server&lt;br/&gt;authorize, log, files&quot;]
+    P0 --&gt; B[&quot;1B Library shell&lt;br/&gt;rail, comments, store, sync&quot;]
+    P0 --&gt; C[&quot;1C Anchor engine&lt;br/&gt;pure, uniqueness predicate&quot;]
+    A &amp; B &amp; C --&gt; CP1{&quot;Checkpoint: merge, gate,&lt;br/&gt;load a real page and use it&quot;}
+    CP1 --&gt; D[&quot;2A Editing&lt;br/&gt;text, formatting, records, undo&quot;]
+    CP1 --&gt; E[&quot;2B Replay and protected regions&quot;]
+    CP1 --&gt; F[&quot;2C Using the page&lt;br/&gt;click interception, toggle, remount&quot;]
+    D &amp; E &amp; F --&gt; CP2{&quot;Checkpoint: same,&lt;br/&gt;plus the durability walk by hand&quot;}
+    CP2 --&gt; G[&quot;3A Burn-down and the return channel&quot;]
+    CP2 --&gt; H[&quot;3B Blocks and images&quot;]
+    G &amp; H --&gt; I[&quot;Phase 4: end-to-end, README, license&quot;]</code></pre>
+<p>Two rules for every builder, and the first is a deliverable rather
+than a hope:</p>
 <ul>
-<li><strong>A test that fails without the behavior, or the behavior is
-not done.</strong> Every reliability law in the brief has one. That is
-the acceptance bar, not a coverage number.</li>
-<li><strong>Nothing silently swallowed.</strong> A failure surfaces in
-the page, per R69 (the page is the channel back to the reviewer). A
-builder that catches an error and moves on has written a bug.</li>
+<li><strong>A test that fails without the behavior.</strong>
+Demonstrated, not asserted: the builder pastes the test failing against
+a one-line deliberate revert, with the output, into their progress file.
+Stating a rule without enforcing it is what the tool being replaced did
+with its "never rewrite the document" prompt, and it is why that rule
+never held.</li>
+<li><strong>No jsdom</strong> for anything in the library. It has no
+layout, no caret rects, no policy enforcement, and no real key events,
+so every assertion that would catch the three symptoms is impossible in
+it.</li>
 </ul>
-<h2 id="phase-0-contracts">Phase 0: Contracts</h2>
-<p>One agent. Nothing else starts until this lands, and everything else
-reads it rather than inventing.</p>
+<h2 id="what-already-exists">What already exists</h2>
+<p>The repository skeleton, <code>npm run gate</code> (lint, Node's test
+runner, Playwright against Chromium), and the browser test harness are
+built and green. The harness ships the fixture pages every task needs,
+including a page that re-renders itself on a knob the test controls, a
+page served with a real content security policy, and a page with an
+aggressive CSS reset. It also ships the two hardest assertions with
+self-tests: the behavioral caret assertion and idempotence observed as
+the absence of a second write.</p>
+<p>A partial contracts module exists from a stopped agent and carries
+pieces built against the earlier, wrong product shape. Phase 0 rescopes
+it; those pieces go on the cleanup list rather than being deleted
+mid-build.</p>
+<h2 id="phase-0-contracts-and-kernel">Phase 0: Contracts and kernel</h2>
+<p>One agent. Nothing else starts until it lands.</p>
 <div class="callout callout-req">
-<p><strong>Task 0.1: Pin the shapes.</strong> The item record and every
-field in it, per D4. The event envelope with its client-minted id. The
-wire protocol: routes, methods, required headers, and error shapes. The
-review file formats, both of them, including the fencing and the
-standing header from D10. The state directory layout. Write it as one
-reference document in the repo plus the shared constants module both the
-service and the layer import, so there is one definition and not two
-that drift.</p>
+<p><strong>Shapes.</strong> The item record with every field from
+architecture D4, including <code>rev</code>, <code>group</code>, the
+region reference as named fields, the lost-anchor state, and
+<code>reply</code>. The event envelope with its client-minted id. The
+lifecycle transition table naming which side may make each
+transition.</p>
+<p><strong>The one normalizer</strong>, plus cleaned-markup helpers,
+with tests. Every later task imports it and no task defines its own.
+This is the highest-value hour in the build.</p>
+<p><strong>Stubbed signatures, committed, that later tasks fill
+in</strong>: anchor mint and resolve (the stub returns a unique match),
+the replay entry point and the ordering of its callers (the stub is a
+no-op), the item store, the rail's card API including how any task
+attaches state, a badge, or an agent message to a card, the
+failures-list API, a listener registry with a count so handler leaks are
+observable, the marker identifying library-added nodes, and the caret
+and selection accessor.</p>
+<p><strong>The script tag contract</strong>: which attributes configure
+the library, what a page declares about its identity, and what happens
+when an attribute is missing.</p>
+<p><strong>The wire</strong>: routes, methods, required headers, error
+shapes, the session exchange for an authorized origin, and what the
+library does on a refusal mid-session.</p>
+<p><strong>The two files</strong> an agent reads, including the fencing
+and standing header from architecture D9.</p>
+<p><strong>The gesture table</strong>, complete: plain click places the
+cursor, Alt-click comments on an element, Cmd-click follows a link, the
+editing toggle, send, escape.</p>
+<p><strong>Region label rules</strong>: the attribute an author can
+supply, the fallback chain, that a label is pinned at first touch and
+never recomputed, and that record identity is the region reference and
+never the display label. Two paragraphs in different containers under
+one heading must produce two records.</p>
+<p><strong>The uniqueness predicate</strong> from architecture D3, as a
+function contract, plus the fixture corpus it is judged against: text
+and path unchanged (bind), rewrapped and reformatted (bind), a sibling
+inserted above (bind), region text fully rewritten (no bind), region
+deleted (no bind), the same paragraph duplicated (no bind,
+ambiguous).</p>
+<p><strong>Two decisions written down</strong> so two builders do not
+guess differently: the formatting mechanism (<code>execCommand</code>
+with normalization on capture, versus manual range surgery, given
+Chromium only), and the write-epoch rule that stops replay's own
+mutations from retriggering the observer that schedules replay.</p>
 </div>
-<p>Done when: a builder can implement either side of any boundary from
-this document alone, and the constants module is the only place a field
-name is spelled.</p>
-<h2 id="phase-1-the-four-foundations-in-parallel">Phase 1: The four
-foundations, in parallel</h2>
-<h3 id="task-1a-the-service">Task 1A: The service</h3>
-<div class="callout callout-req">
-<p>Node, zero runtime dependencies. Ephemeral port, token and port
-recorded in an owner-only file, state directory outside any checkout.
-Every route requires the token in a header compared in constant time,
-requires a JSON content type and a custom header so no simple request
-reaches a handler, and checks the origin against a server-side allowlist
-recorded when the reviewer attaches. Append-only event log, projection
-read on start, no compaction. Serving a local HTML file with the layer
-injected. The endpoints Phase 0 pinned, including the stream the layer
-listens on for lifecycle changes.</p>
-</div>
-<p>Tests that must fail without it: a cross-origin POST without a token
-is refused; with a token but an unallowed origin is refused; a simple
-content type never reaches a handler; two events with the same id apply
-once; a killed and restarted service serves the same projection; the
-port is not a constant.</p>
-<h3 id="task-1b-the-layer-shell">Task 1B: The layer shell</h3>
-<div class="callout callout-req">
-<p>The overlay in an isolated root that host CSS cannot reach and that
-reaches nothing in the host. The rail as a <strong>fixed overlay that
-never shifts the host page</strong>, collapsible, per D12. Comment
-creation on selected text and on a modifier click, never on a plain
-click. The item store writing synchronously on every change, keyed by
-canonical target path. The sync client that retries forever, never
-blocks, and tells policy refusal apart from service-down. The persistent
-failures list. Copy and export with no service running. The overall note
-as an item.</p>
-</div>
-<p>The law this task owns: <strong>the rail updates in place and a card
-holding focus is never re-created.</strong> This is the single largest
-in-page revert mechanism in the tool being replaced, and it is one
-careless render loop away from being rebuilt.</p>
-<p>Tests: type half a comment, force a repaint, the half-comment
-survives. Kill the service mid-session, everything still captured, copy
-produces the full set. Two files with the same basename in different
-folders do not share a store.</p>
-<h3 id="task-1c-the-anchor-engine">Task 1C: The anchor engine</h3>
-<div class="callout callout-req">
-<p>Pure functions over a document, no ownership of the DOM and no UI.
-Turn a selection or an element into a region reference carrying its
-independent locators. Re-resolve a reference in a changed document and
-<strong>return a confidence</strong>, because D3's Law 1 is a caller
-decision and this task supplies the number it is made from.
-Whitespace-tolerant matching, occurrence disambiguation by surrounding
-context, honest failure.</p>
-</div>
-<p>This is new work, not a port. The built-doc module's version is four
-exact substring probes with no whitespace tolerance and no
-disambiguation, so it binds a short prefix to the first hit.</p>
-<p>Tests: survives edits elsewhere; survives reformatting and
-rewrapping; picks the right occurrence among repeats; reports failure
-rather than guessing when the subject is gone; two neighboring regions
-never resolve to the same node in one pass.</p>
-<h3 id="task-1d-the-agent-surface">Task 1D: The agent surface</h3>
-<div class="callout callout-req">
-<p>Four commands: <code>open</code>, <code>next</code>,
-<code>ack</code>, <code>setup</code>. The two review files, written per
-review and not per target, at the server-side review root, through an
-exclusively created temp name and a rename, refusing a symlinked
-destination, with names derived from a hash and a restricted slug and
-never from untrusted text. The fencing and standing header from D10,
-with reviewer-authored and document-derived fields classified and
-<code>before</code> bounded. <code>setup</code> writing agent
-instructions between sentinels, replacing only what is between them, and
-reporting rather than touching a file that mentions the tool without
-them.</p>
-</div>
-<p>Tests: a target string containing traversal or encoded segments
-cannot move the write; a pre-planted symlink at the destination is
-refused; a fenced field containing the delimiter is escaped; re-running
-setup twice leaves one block and preserves text outside the sentinels;
-<code>next</code> returns outstanding items with no service connection
-held open.</p>
-<h2 id="phase-2-the-three-hard-parts-in-parallel">Phase 2: The three
-hard parts, in parallel</h2>
-<h3 id="task-2a-editing">Task 2A: Editing</h3>
-<div class="callout callout-req">
-<p>No edit mode; the page is editable from the moment the layer loads.
-Ordinary typing, bold, italic, links, bulleted and numbered lists.
-Images resized, moved keeping their rendered size, and pasted with the
-allowed types only. Blocks deleted and reordered, a deletion recorded as
-a deletion. Every change becomes a record with a kind, plain text,
-cleaned markup when formatting changed, and landing anchors for a move.
-<strong>Per-item undo that reverts the record and lets replay
-redraw</strong>, since native undo does not survive replay rewriting a
-region.</p>
-<p>Nothing the layer adds may appear in a quote, a before, an after, or
-any field handed to the agent.</p>
-</div>
-<p>Tests: a formatting-only change is a change; a deletion is a deletion
-and not an empty edit; undoing one edit leaves the others untouched; two
-edits to neighboring blocks stay two records; the layer's own markup
-never appears in a payload.</p>
-<h3 id="task-2b-replay">Task 2B: Replay</h3>
-<div class="callout callout-req">
-<p>Re-apply outstanding edits after a repaint, under D3's three laws,
-with the confidence number from 1C:</p>
-<ul>
-<li><strong>Law 1, fail closed.</strong> Below the confidence floor
-nothing is written to the DOM. The record keeps its text and the item's
-card says it cannot be placed on this version of the page. One reference
-binds to at most one node per pass, greedily in document order.</li>
-<li><strong>Law 2, never disturb the reviewer.</strong> A region whose
-DOM already equals the record is skipped, which is what makes replay
-idempotent. A region holding the caret or the selection is never
-rewritten.</li>
-<li><strong>Law 3, a source repaint is not an app repaint.</strong> A
-source repaint replays and marks genuine disagreements as collisions
-with the incoming version offered on the card. An app repaint replays
-only where the DOM still matches what replay last wrote, and otherwise
-detaches the edit with its text intact and says the page moved on.</li>
-</ul>
-</div>
-<p>This task is the one most able to produce a worse version of the bug
-the tool exists to kill. Steady Thread has a Turbo frame polling every
-two seconds, so Law 2 is not theoretical.</p>
-<p>Tests: type into a region, fire a repaint every 200ms, the caret
-never moves and the text is never disturbed; a low-confidence document
-writes nothing and says so; replay twice equals replay once; an app
-repaint that changes a region's data detaches rather than stamping; a
-source repaint that changes the same region raises a collision.</p>
-<h3 id="task-2c-living-in-the-page">Task 2C: Living in the page</h3>
-<div class="callout callout-req">
-<p>The layer loads from a script tag and never fetches itself from the
-service at page load. The overlay root is re-created on
-<code>turbo:morph</code>, <code>turbo:load</code>,
-<code>popstate</code>, and a MutationObserver fallback, <strong>with
-every handler de-registered before re-registration</strong>, and replay
-runs after each remount. Client-side navigation is detected by hooking
-history and framework events, so the target follows the route. CSP
-refusal of the script or of the loopback connection is detected and
-named as a policy refusal, distinct from service-down.
-<code>setup</code> emits framework-correct guarded snippets, with the
-guard outside the script tag in the host template's own conditional.</p>
-</div>
-<p>The Steady Thread layer leaks a listener pair on every morph; do not
-inherit that shape.</p>
-<p>Tests: a hundred simulated morphs leave one set of handlers and a
-working layer; a client-side route change moves the target without a
-page load; a CSP that blocks the connection produces a named policy
-refusal in the failures list; a stopped service leaves the layer fully
-functional.</p>
-<h2 id="phase-3-closing-the-loop-in-parallel">Phase 3: Closing the loop,
-in parallel</h2>
-<h3 id="task-3a-the-burn-down-and-the-return-channel">Task 3A: The
-burn-down and the return channel</h3>
-<div class="callout callout-req">
-<p>Per-item ack processing: applied with the files touched, or declined
-with a reason, anything unnamed stays outstanding. Applied items lose
-their highlight, leave the active list, and move to a completed list
-that keeps them. <strong>Agent replies attached to an item and rendered
-on its card</strong>, per R68, so a reviewer never goes to a terminal to
-find out what happened. Auto-refresh when the agent lands a change, with
-acks processed before replay so an applied item is retired before the
-repaint it caused. A stale ack is refused; a forged one cannot pass
-Phase 1A's auth.</p>
-</div>
-<p>Tests: an ack naming three of five items clears three and leaves two;
-a declined item stays visible with its reason; an item edited after
-delivery is outstanding again and the ack applies to the delivered
-version; a completed item is still readable at the end of a session; the
-burn-down cannot be emptied by an ack for something never delivered.</p>
-<h3 id="task-3b-verification-and-source-hints">Task 3B: Verification and
-source hints</h3>
-<div class="callout callout-req">
-<p>Every target carries a source hint: for a built document, the file it
-is generated from; for a route, the project root. Setup asks once per
-project. Both review files carry it and the agent instructions say to
-edit the generator's input and name what was edited. Verification then
-checks the reviewer's wording against the files the ack named,
-constrained to the project root, <strong>matching on normalized
-text</strong> because the reviewer's wording is a rendering of the
-source and will not appear verbatim in a template. A miss warns loudly
-on the item and does not reopen it.</p>
-</div>
-<p>Tests: an agent that edits the built HTML instead of its source is
-caught; a match through an ERB template is not a false miss; a path
-outside the project root is a verification failure, not a read; a
-deletion is verified by absence.</p>
-<h3 id="task-3c-wiring-it-into-the-real-workflows">Task 3C: Wiring it
-into the real workflows</h3>
-<div class="callout callout-req">
-<p>Build-time injection of the layer into feature-forge and
-research-report documents, the way the comment module is injected today.
-The guarded snippet for the Steady Thread development layout. Both are
-the same layer with no per-surface variation.</p>
-</div>
-<p>Tests: a built brief carries the layer and renders identically
-without the service running; the Steady Thread snippet is inert outside
-development.</p>
-<h2 id="phase-4-the-tests-that-decide-it">Phase 4: The tests that decide
-it</h2>
-<div class="callout callout-req">
-<p>The browser suite against a real browser, which is the thing the tool
-being replaced does not have and the reason every symptom Ken hit went
-unnoticed. Plus the end-to-end that is the actual acceptance bar.</p>
-</div>
-<h2 id="phase-5-a-public-repository">Phase 5: A public repository</h2>
-<div class="callout callout-req">
-<p>README that a stranger follows without help: what it is, the two-line
-install, the three ways the layer gets into a page, and the honest
-statement of what v1 does not do. MIT license with human-review credited
-as prior art. The state directory and review file patterns in the
-shipped ignore file.</p>
-</div>
+<p>Also closed here: <span id="phase-0-contracts-and-kernel-q1" class="finding-anchor"></span><strong>Q1</strong>, the library ships as several
+source files concatenated into one artifact, with the artifact committed
+so a page can point at it with no build; and <span id="phase-0-contracts-and-kernel-q2" class="finding-anchor"></span><strong>Q2</strong>, a
+reviewer authorizes an origin by running one command at their terminal
+naming it, which is the deliberate act a hostile page cannot
+perform.</p>
+<h2 id="phase-1">Phase 1</h2>
+<p><strong>1A, the server.</strong> Zero runtime dependencies. Loopback
+only. A persistent token in an owner-only file, an origin allowlist, a
+required content type and custom header, an ephemeral port recorded with
+the token. Append-only log, projection on start. Writes the two files on
+send. Serving a local HTML file with the script tag inserted, for the
+standalone-file case. A second instance refuses with an instruction.</p>
+<p><strong>1B, the library shell.</strong> The overlay in an isolated
+root that host CSS cannot reach and that touches nothing in the host.
+<strong>A fixed overlay that never shifts the page</strong>,
+collapsible. Comment creation on selection and on Alt-click, never on a
+plain click. The card API. The persistent failures list. The status
+line. The edit list by region. The item store, written synchronously on
+every change and partitioned per page. The sync client: retries forever,
+never blocks, tells a policy refusal from a server that is down. Copy
+and export with no server. The overall note as an item. <strong>The law
+this task owns: the rail updates in place and a card holding focus is
+never re-created.</strong></p>
+<p><strong>1C, the anchor engine.</strong> Pure functions, no DOM
+ownership, no UI. Mint a region reference; resolve it in a changed page
+returning a unique match or an honest failure with a reason.
+Whitespace-tolerant matching, context-based rival elimination, no scalar
+threshold. Judged against Phase 0's fixture corpus. This is new work:
+the existing comments module's version is four exact substring probes
+that bind a short prefix to the first hit.</p>
+<h2 id="phase-2">Phase 2</h2>
+<p><strong>2A, editing.</strong> Typing, formatting per Phase 0's
+decision, the record kinds, cleaned markup, per-item undo as a record
+operation, the composition-end deferral, spellcheck and autocorrect off,
+and the rule that no library markup ever reaches a payload.</p>
+<p><strong>2B, replay and protected regions.</strong> The highest-risk
+task. Protection of the actively edited region including the framework
+morph veto, commit on blur, and replay of committed records under
+architecture D3: the uniqueness predicate, the three-way comparison
+against the record, atomic groups, and the undo exemption.</p>
+<p><strong>2C, using the page.</strong> Plain click does not navigate,
+submit, or fire the page's handlers. The editing toggle restores an
+ordinary page. Cmd-click follows a link. The hover hint. The overlay
+root re-created on framework morph and navigation events with every
+handler de-registered through the registry first. Policy refusal named
+distinctly from server-down.</p>
+<h2 id="phase-3">Phase 3</h2>
+<p><strong>3A, the burn-down and the return channel.</strong> Per-item
+ack, applied and not-applied, unnamed items stay outstanding. Applied
+items lose their highlight and move to Completed. Agent replies rendered
+on cards. The page updating itself when the agent lands a change, with
+acks processed before replay.</p>
+<p><strong>3B, blocks and images.</strong> Delete and reorder with
+landing anchors, resize and move. Image paste is cut.</p>
+<h2 id="the-cut-line">The cut line</h2>
+<p>If the day runs out, this is a coherent tool and it is the order to
+protect: Phase 0, 1C, 1B, 1A, 2A, 2B, 2C, and the ack half of 3A. That
+gives: add the tag to a page, comment, type fixes, use the page, lose
+nothing across a reload or a killed server, copy and export with nothing
+running, send with no agent, an agent that reads the file, and items
+that retire instead of re-shipping forever.</p>
+<p><strong>Do not half-ship these:</strong> 2A without 2B, because typed
+edits vanish on the first repaint; 2C without 2B's protected regions,
+because attaching to a page with a polling frame without them is the
+bug; and 3B before 2B, because moved blocks depend on replay.</p>
 <h2 id="acceptance-criteria">Acceptance criteria</h2>
-<p>Judged by evaluators who did not build the code, on the running tool,
-as user stories rather than unit assertions.</p>
+<p>Judged by evaluators who did not build the code, on the running tool.
+Each names what failure looks like, because a walk with no failure line
+gets a generous pass.</p>
 <div class="callout callout-metric">
-<p><strong>AC1, the brief.</strong> Ken opens a built brief, fixes three
-sentences by typing, comments on a diagram, writes an overall note, and
-sends with no agent running. An agent started afterwards receives all
-five items, edits the <strong>markdown source</strong> rather than the
-built HTML, and acks. The items clear from Ken's page and appear in his
-completed list without him touching anything.</p>
-<p><strong>AC2, the running app.</strong> Ken attaches to the Steady
-Thread dev server, walks three screens behind the login, comments on two
-and types a fix on a third, uses the app for real in between by clicking
-a button that navigates, and sends the whole walk as one batch naming
-all three routes.</p>
-<p><strong>AC3, nothing is taken back.</strong> In the middle of typing,
-each of these happens and Ken loses nothing: a browser reload, the
-service killed and restarted, the app re-rendering the block he is
-typing in, and an agent rewriting the source underneath him. The
-Turbo-frame case is explicit: with a frame polling every two seconds,
-his cursor never moves and his text is never disturbed.</p>
-<p><strong>AC4, send always works.</strong> Send is available whenever
-anything is outstanding, with no agent ever running. He sends, adds one
-more note, and sends again, and both reach the agent.</p>
+<p><strong>AC1, a built page.</strong> Ken adds the script tag to a
+built spec, fixes three sentences by typing, comments on a diagram,
+writes an overall note, and sends with no agent running. An agent
+started afterwards receives all five items from the file. <em>Fails
+if:</em> any item is missing, or the page's layout differs by a pixel
+from the same page without the tag.</p>
+<p><strong>AC2, a running app.</strong> Ken adds the tag to a dev
+layout, walks three screens behind a login, comments on two, types a fix
+on a third, and uses the app for real in between by clicking a button
+that navigates. Sends the whole walk as one review naming all three
+pages. <em>Fails if:</em> a plain click on that same button navigates,
+or the app stops responding.</p>
+<p><strong>AC3, nothing is taken back.</strong> Loses nothing means:
+item count identical, every item's text byte-identical, no item changed
+state, and the caret assertion held. Tested against a browser reload, a
+<code>kill -9</code> of the server, the page re-rendering the block he
+is typing in, and an agent rewriting the source, the last run twice,
+once in a region he is typing in and once in a region he is not.</p>
+<p><strong>AC4, send always works.</strong> Available whenever anything
+is outstanding with no agent ever running. Assert the button's enabled
+state and label at each step: fresh, note-only, after a send, after
+adding one more note, after a second send.</p>
 <p><strong>AC5, the agent talks back in the page.</strong> An agent that
-cannot apply an item says so on that item's card, in words Ken reads
-without leaving the page. An edit replay cannot place says so on its
-card with its text intact. Neither is a silent clear and neither
-requires a terminal.</p>
-<p><strong>AC6, the artifact is untouched.</strong> A built brief
-reviewed and sent looks pixel-identical to the same brief opened without
-the tool. No injected stylesheet, no shifted layout, no style attribute
-on any reviewed element.</p>
-<p><strong>AC7, it cannot be driven from outside.</strong> A page on
-another origin can neither write an item, nor read the feedback set, nor
-forge an ack.</p>
-<p><strong>AC8, a stranger can run it.</strong> A clone plus the setup
-command produces a working review on a machine that has never run it,
-with the agent instructions installed for the agent that machine
-actually uses.</p>
+cannot apply an item says so on that item's card. An edit replay cannot
+place says so with its text intact. <em>Fails if:</em> either clears
+silently.</p>
+<p><strong>AC6, the page is untouched.</strong> Screenshot diff at two
+widths with the rail open and collapsed, zero diff outside the rail's
+bounds; <code>scrollHeight</code> and every host block's rect identical
+with and without the library; zero host elements carrying a style
+attribute or a library class after a session that created a list and a
+link on a page with a CSS reset.</p>
+<p><strong>AC7, it cannot be driven from outside.</strong> From a real
+second origin in a real browser: no item written, no feedback read, no
+ack forged. Judged on effect, the log has no new entries, not on a
+status code.</p>
+<p><strong>AC8, a stranger can run it.</strong> Clone, start the server,
+add the tag to their own page, complete a review. Under a fresh user
+account with no existing state.</p>
 </div>
-<h2 id="test-list">Test list</h2>
+<h2 id="tests-ranked">Tests, ranked</h2>
+<p>The top six are written first because each maps to a symptom Ken
+actually hit. The full list against a real browser is more than a day of
+test writing on its own, so the ranking is the plan, not a
+preference.</p>
 <div class="table-scroll"><table>
 <thead>
 <tr>
-<th>Area</th>
+<th>#</th>
 <th>Test</th>
+<th>Task</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Durability</td>
-<td>Reload mid-keystroke loses nothing</td>
+<td>1</td>
+<td>Caret survives: type ten characters one per 50ms while the page
+repaints every 200ms; the paragraph reads exactly as before with the ten
+inserted contiguously; the replay-pass counter incremented</td>
+<td>2B</td>
 </tr>
 <tr>
-<td>Durability</td>
-<td>Service killed mid-session loses nothing; sync drains on return</td>
+<td>2</td>
+<td>Send enablement walked through the UI with real clicks, asserting
+<code>disabled</code> and label at every step, with no agent ever; plus
+a static assertion that agent presence is not among the enablement
+inputs</td>
+<td>1B</td>
 </tr>
 <tr>
-<td>Durability</td>
-<td>Copy and export produce the full set with no service</td>
+<td>3</td>
+<td>An agent rewrites the source touching one region; all five
+outstanding items across four regions survive byte-identical and
+unchanged in state, exactly one marked; run again with the server
+down</td>
+<td>2B</td>
 </tr>
 <tr>
-<td>Durability</td>
-<td>Two same-named files in different folders keep separate stores</td>
+<td>4</td>
+<td>Reload and <code>kill -9</code> durability, asserted synchronously
+in the same task as the final keystroke</td>
+<td>1B</td>
 </tr>
 <tr>
-<td>Replay</td>
-<td>Idempotent by comparison</td>
+<td>5</td>
+<td>Fail-closed paired with positive placement: three non-unique
+fixtures write nothing, three unique ones place correctly</td>
+<td>1C, 2B</td>
 </tr>
 <tr>
-<td>Replay</td>
-<td>Caret and selection never disturbed, including under a 2s
-repaint</td>
+<td>6</td>
+<td>Cross-origin write and forged ack from a real second origin,
+asserted on effect</td>
+<td>1A</td>
 </tr>
 <tr>
-<td>Replay</td>
-<td>Low-confidence match writes nothing and says so</td>
+<td>7</td>
+<td>Copy and export with no server running</td>
+<td>1B</td>
 </tr>
 <tr>
-<td>Replay</td>
-<td>App repaint detaches; source repaint collides</td>
+<td>8</td>
+<td>Acks processed before replay: the agent acks and rewrites in one
+motion, the item is in Completed, nothing is flagged</td>
+<td>3A</td>
 </tr>
 <tr>
-<td>Anchoring</td>
-<td>Survives edits elsewhere, reformatting, rewrapping</td>
+<td>9</td>
+<td>Anchoring against a mechanically generated transformation set,
+targeting occurrence four of five, re-resolving after occurrence two is
+deleted</td>
+<td>1C</td>
 </tr>
 <tr>
-<td>Anchoring</td>
-<td>Picks the right occurrence among repeats</td>
+<td>10</td>
+<td>Two neighbouring regions never merge into one record, resolved in
+both orders</td>
+<td>1C, 2A</td>
 </tr>
 <tr>
-<td>Anchoring</td>
-<td>Honest failure, carried into the payload</td>
+<td>11</td>
+<td>A focused card is never re-created: node identity,
+<code>activeElement</code>, and typing through 20 repaints</td>
+<td>1B</td>
 </tr>
 <tr>
-<td>Identity</td>
-<td>Neighboring regions never merge</td>
+<td>12</td>
+<td>Replay idempotence asserted as the absence of a second write</td>
+<td>2B</td>
 </tr>
 <tr>
-<td>Identity</td>
-<td>Identity survives a repaint and a move</td>
+<td>13</td>
+<td>Cross-region gesture decomposes into per-region records applied
+atomically</td>
+<td>2A, 2B</td>
 </tr>
 <tr>
-<td>Editing</td>
-<td>Formatting-only change is a change</td>
+<td>14</td>
+<td>Undo reverts one record with the caret in the region, leaving other
+edits untouched</td>
+<td>2A, 2B</td>
 </tr>
 <tr>
-<td>Editing</td>
-<td>Deletion is a deletion</td>
+<td>15</td>
+<td>Plain click does not navigate or submit; Cmd-click does; the toggle
+restores an ordinary page</td>
+<td>2C</td>
 </tr>
 <tr>
-<td>Editing</td>
-<td>Per-item undo leaves other edits untouched</td>
+<td>16</td>
+<td>Two windows on one page: the second is refused with a reason</td>
+<td>1B, 1A</td>
 </tr>
 <tr>
-<td>Editing</td>
-<td>Layer markup never appears in a payload</td>
+<td>17</td>
+<td>An item reworded after delivery survives an ack naming the older
+revision</td>
+<td>1B, 1A</td>
 </tr>
 <tr>
-<td>Rail</td>
-<td>A focused card is never re-created</td>
+<td>18</td>
+<td>100 morphs: the listener registry count is unchanged, one overlay
+root, one gesture makes one item</td>
+<td>2C</td>
 </tr>
 <tr>
-<td>Rail</td>
-<td>Failures persist until dismissed</td>
+<td>19</td>
+<td>A policy refusal from a real header is named distinctly from
+server-down</td>
+<td>2C</td>
 </tr>
 <tr>
-<td>Send</td>
-<td>Available whenever anything is outstanding, no agent needed</td>
+<td>20</td>
+<td>Failures persist through a remount, a navigation, and a replay
+pass</td>
+<td>1B</td>
 </tr>
 <tr>
-<td>Send</td>
-<td>Note-only send works, and a second send after it works</td>
+<td>21</td>
+<td>Non-interference per AC6's three assertions</td>
+<td>1B, 2A</td>
 </tr>
 <tr>
-<td>Send</td>
-<td>Send flushes anything in flight first</td>
+<td>22</td>
+<td>No truncation of <code>after</code> through a large item;
+<code>before</code> bounded with its marker in the same test</td>
+<td>1A</td>
 </tr>
 <tr>
-<td>Protocol</td>
-<td>Per-item ack; unnamed items stay outstanding</td>
+<td>23</td>
+<td>A fenced field containing the delimiter is escaped</td>
+<td>1A</td>
 </tr>
 <tr>
-<td>Protocol</td>
-<td>Stale ack refused; forged ack refused</td>
+<td>24</td>
+<td>Blocks delete and reorder with landing anchors; images keep rendered
+size on move</td>
+<td>3B</td>
 </tr>
 <tr>
-<td>Protocol</td>
-<td>Delivered items re-offered until acked</td>
+<td>25</td>
+<td>A dropped desktop file does not navigate the page and does not reach
+disk</td>
+<td>2A</td>
 </tr>
 <tr>
-<td>Protocol</td>
-<td>Browser and service reconcile with lifecycle winning</td>
-</tr>
-<tr>
-<td>Return channel</td>
-<td>Agent reply renders on the item's card</td>
-</tr>
-<tr>
-<td>Verification</td>
-<td>Editing the artifact instead of the source is caught</td>
-</tr>
-<tr>
-<td>Verification</td>
-<td>A template match is not a false miss</td>
-</tr>
-<tr>
-<td>Security</td>
-<td>Cross-origin write refused without token and allowed origin</td>
-</tr>
-<tr>
-<td>Security</td>
-<td>Simple content type never reaches a handler</td>
-</tr>
-<tr>
-<td>Security</td>
-<td>Traversal and symlink writes refused</td>
-</tr>
-<tr>
-<td>Security</td>
-<td>Fenced fields escape a delimiter collision</td>
-</tr>
-<tr>
-<td>Security</td>
-<td>Setup preserves text outside its sentinels</td>
-</tr>
-<tr>
-<td>In the page</td>
-<td>100 morphs leave one handler set</td>
-</tr>
-<tr>
-<td>In the page</td>
-<td>Client-side route change moves the target</td>
-</tr>
-<tr>
-<td>In the page</td>
-<td>CSP refusal is named, not reported as service-down</td>
-</tr>
-<tr>
-<td>Non-interference</td>
-<td>Reviewed page renders identically with the layer present</td>
-</tr>
-<tr>
-<td>End to end</td>
-<td>AC1 and AC2 walked in a real browser</td>
+<td>26</td>
+<td>End-to-end walks of AC1 and AC2</td>
+<td>Phase 4</td>
 </tr>
 </tbody>
 </table></div>
-<h2 id="open-questions">Open Questions</h2>
-<div class="callout callout-question">
-<p><span id="open-questions-q1" class="finding-anchor"></span><strong>Q1: Does a review need a name, or is one review per project
-enough?</strong> D1 makes a review span many targets, which raises
-whether Ken reviewing two features in one day wants them separated. One
-review per project per session is the simplest answer and is probably
-right, but it decides how <code>next</code> picks what to return.</p>
-</div>
+<h2 id="open-questions">Open questions</h2>
+<p>None blocking. Both prior open questions were closed in Phase 0.</p>
+<h2 id="cleanup-needed">Cleanup needed</h2>
+<ul>
+<li><code>src/shared/cli_contract.js</code> and any command surface
+beyond what the agent needs to read and acknowledge, from the stopped
+agent's work against the earlier product shape.</li>
+<li><code>test/fixtures/sample.html</code> and
+<code>test/browser/sample.spec.js</code>, the trivial browser test
+superseded by the harness.</li>
+</ul>
 </body>
 </html>
