@@ -148,8 +148,11 @@
     "--good:#2c6f52;--shadow:0 1px 2px rgba(18,20,26,.06),0 14px 34px rgba(18,20,26,.13);",
     "--radius:14px;--radius-sm:10px}",
     "@media (prefers-color-scheme:dark){:host{",
-    "--ink:#e9ebf0;--ink-soft:#a8b0be;--ink-faint:#7b8496;--paper:#171a20;--surface:#1d2129;",
-    "--sunken:#141116;--sunken:#12151a;--line:#2b303a;--line-soft:#232830;--accent:#93a7ea;",
+    // Dark keeps the same relationship light has: the card and the rail are the
+    // lit surface, the pane behind them is the ground. Inverting that is what
+    // makes a dark UI read as a stack of holes.
+    "--ink:#e9ebf0;--ink-soft:#a8b0be;--ink-faint:#7b8496;--paper:#1c2028;--surface:#14171c;",
+    "--sunken:#0f1216;--line:#2c313b;--line-soft:#242932;--accent:#93a7ea;",
     "--accent-ink:#b7c4f2;--accent-wash:rgba(147,167,234,.14);--warn:#dfae6a;",
     "--warn-wash:rgba(223,174,106,.14);--good:#7fc4a2;",
     "--shadow:0 1px 2px rgba(0,0,0,.4),0 16px 40px rgba(0,0,0,.45)}}",
@@ -215,6 +218,14 @@
     ".card__body{font-size:13.5px;line-height:1.5;color:var(--ink);display:flex;",
     "flex-direction:column;gap:8px}",
     ".card__body:empty{display:none}",
+    // A text box a tab owner hosts in a card reads as part of the card rather
+    // than as a form control dropped into one. 1D owns the box; the rail owns
+    // how anything inside its own surface looks, and specificity this low is
+    // overridable by the owner.
+    ".card__body textarea,.card__body input[type='text']{width:100%;border:0;background:transparent;",
+    "resize:none;min-height:3.2em;font:inherit;font-size:13.5px;line-height:1.5;color:var(--ink);",
+    "outline:0;padding:0}",
+    ".card__body textarea::placeholder{color:var(--ink-faint)}",
     ".card__badges{display:flex;flex-direction:column;gap:5px}",
     ".card__badges:empty{display:none}",
     ".badge{font-size:12px;color:var(--warn);background:var(--warn-wash);border-radius:7px;",
@@ -1092,6 +1103,7 @@
     STATUS: STATUS,
     STATUS_TEXT: STATUS_TEXT,
     STATUS_SHORT: STATUS_SHORT,
+    LIMIT_SEPARATE_STORAGE_NO_HELPER: LIMIT_SEPARATE_STORAGE_NO_HELPER,
     createRail: createRail,
     shared: shared,
     OVERLAY_ROOT_ID: markers.OVERLAY_ROOT_ID,

@@ -160,7 +160,10 @@
       });
     },
     addChip: function (code) {
-      return rail.failures.add(LAHE.failures.failure(code, null)).code;
+      // Null is the answer for a code the reviewer already dismissed. It is a
+      // real answer, not a miss, so it is passed through rather than smoothed.
+      var got = rail.failures.add(LAHE.failures.failure(code, null));
+      return got ? got.code : null;
     },
     dismissChip: function (code) {
       return rail.failures.dismiss(code);
