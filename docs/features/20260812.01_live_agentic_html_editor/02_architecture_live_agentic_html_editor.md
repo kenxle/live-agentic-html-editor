@@ -95,7 +95,7 @@ The full gesture vocabulary, designed together as Q1 asked:
 | Cmd-Shift-C with nothing selected | Element-pick mode: hover outlines elements, click one to comment on it, Esc cancels |
 | Cmd-Shift-E | Edit the block under the cursor or selection |
 | Esc / click outside | Commit the edit, back to browse |
-| Cmd-Enter in a comment box | This comment is ready for the agent (R7) |
+| Cmd-Enter in a comment box | This comment is done and the agent may act on it (R7). The on-card hint reads "Cmd-Enter when done with this comment" (Ken's copy) |
 | Open box at the thread's foot | A note tied to nothing (R18) |
 
 One modifier family, and every gesture is shown as a hint line on the rail so a new user finds them
