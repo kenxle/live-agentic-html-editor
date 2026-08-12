@@ -321,9 +321,13 @@ events.
 - An item event is a **full snapshot of that item**, never a delta, so replaying events in any order
   converges.
 - **The browser is authoritative for item content until delivery; the service is authoritative for
-  lifecycle.** The layer reconciles against the service projection on every reconnect, and lifecycle
-  wins. Without this rule an item acked while the browser was closed comes back from browser storage
-  as outstanding and re-ships, which breaks apply-once.
+  lifecycle, per revision.** The layer reconciles against the service projection on load and on every
+  reconnect. A lifecycle change wins for the `rev` it names, so an ack cannot discard a rewording made
+  after the delivery it acknowledges.
+- **A second tab on the same target is refused, with a reason and a way to take over.** Two tabs share
+  one browser-storage key, and the loser writes its stale array over the winner's. A per-item merge on
+  storage events is the elegant answer and a lock with an honest refusal is the one that fits a day, so
+  v1 refuses. R12 asks for exactly this alternative.
 
 ### D7: Send is a write, not a handshake
 
@@ -425,8 +429,24 @@ So in attached mode **the origin allowlist is the control and the session token 
 same-origin script can read anything the layer holds, which D5 already concedes. In served mode the
 service injects the token directly and both controls are real.
 
+**The run token persists across service restarts** rather than rotating on every start. Rotating it
+contradicts the promise that a stopped service costs nothing: a page open across a restart would hold a
+dead token, every sync would return 401 forever, and the failure would be neither of the two states the
+sync client knows how to report. The token is regenerated only when the reviewer asks for it. That is a
+stated, small weakening bought with the drain promise being true.
+
 The port is ephemeral by default and recorded with the run token in the same owner-only file. Pinning is
-available and documented as a weakening.
+available and documented as a weakening. The attach snippet reads the current port and mints its session
+server-side at render time, which is what "framework-correct" means for the emitted snippet.
+
+**In served mode the credential is scoped per target and cannot be read by the page.** It is delivered
+as an HttpOnly, SameSite-strict cookie rather than a value in the document, and the service enforces that
+a credential minted for one target touches only that target's items. A script inside a served document
+still has ambient authority over its own review, which is unavoidable without a frame, but it can never
+exfiltrate the credential, never read another review, and never forge an ack for a different target. This
+turns "the inside is conceded" into "the inside is conceded per document", which is the honest posture for
+v1. The browser store is likewise partitioned per target, since every served document shares one origin and
+would otherwise share one bucket with every other review.
 
 The same three layers cover `ack`, which mutates the burn-down. A forged ack would clear the
 reviewer's screen to empty with nothing looking wrong, which is worse than an error because the whole

@@ -352,3 +352,114 @@ snippet finding is a blocker on the document rather than the code.
 The forged ack closes automatically with authentication. Setup's sentinel writing, as long as the
 injection rules it carries are drafted now. The verification path constraint. The ephemeral port. Naming
 the renderer's sanitization posture.
+
+
+---
+
+## Deep architecture review, high-capability pass (Round 2)
+
+Run after the architect and security rounds were integrated, on the question of whether the design's
+load-bearing idea survives contact with a real page. Verdict: replay is sound as a durability idea and
+was unsound as written in three places, all in the live-app path.
+
+### The walk that failed
+
+The reviewer types into a paragraph inside Steady Thread's two-second polling Turbo frame. Per keystroke
+the DOM holds the new text, the record updates, storage is written. Then the morph fires:
+
+1. The morph compares server HTML to the DOM, decides the DOM is wrong, and writes the original text
+   back. The fix visibly vanishes.
+2. The morph destroys the text node holding the caret. The selection collapses. **The caret is dead
+   before replay runs.**
+3. Replay runs. Law 2 forbade rewriting the region holding the caret; there is no caret there anymore,
+   so the write is permitted.
+4. The app-repaint rule said replay only where the DOM matches what replay last wrote. Replay never
+   wrote this region, the reviewer typed it and the morph reverted it, so the DOM matches nothing.
+   **The edit detaches.**
+
+Result: text reverted, edit bumped to the rail, caret lost. That is AC3's exact scenario, and it is
+symptom one of the tool being replaced with better bookkeeping.
+
+### Must fix before building
+
+**The comparator is wrong.** Compare against the record, three ways, normalized: DOM equals `after`,
+skip; equals `before`, the app re-rendered the same content, re-apply; equals neither, the content
+changed, surface and do not write. Checked against the roster case (row three now renders Marcus,
+matching neither) it detaches, correctly. Checked against the poll (frame re-rendered `before`) it
+re-applies, correctly. One rule, both cases.
+
+**The repaint classifier is unimplementable and, once the comparator is content-based, unnecessary.**
+Hotwire-spark delivers an agent's source rewrite as an in-page morph indistinguishable from the app
+re-rendering itself, so any load-versus-mutation heuristic mislabels the primary target. Demote the
+cause to card copy or delete it.
+
+**Nothing restores the caret, and no law owns the problem.** Law 2 defends the caret against replay; the
+thing that kills it is the repaint, which replay does not control. Needs a region-relative selection
+snapshot restored after a rewrite, and for Turbo an active veto via `turbo:before-morph-element` so the
+edited region is never repainted at all. Without the veto, even perfect restore gives a flicker and an
+interrupted word every two seconds, which is not "never disturbed".
+
+**Cross-region gestures corrupt intent silently.** Selecting across a paragraph boundary and typing
+merges two blocks. One record holding the merged text means replay rewrites the first and leaves the
+second standing, so the content appears twice on screen and the agent is told to duplicate it in source.
+Decompose into one record per touched region with an atomic group id.
+
+**Undo contradicts Law 2 at the moment of use.** The reviewer almost always undoes the item they are
+standing in, so the caret shield forbids the redraw, nothing visible happens, and the text snaps back
+later when the caret wanders off. Exempt user-initiated replay and place the caret deliberately.
+
+**Confidence is a fiction.** There is no ground truth to calibrate against, and the dangerous errors are
+high-confidence ambiguous rather than low-confidence: two identical list items that swapped places match
+exactly with symmetric context and bind confidently to each other's node. Replace the scalar with a
+uniqueness predicate. A tie fails closed. Structure corroborates and never places.
+
+**No `rev` field, so an ack can swallow a rewording.** Reviewer sends an item, rewords it, closes the
+laptop; the agent acks it applied; on reopen "lifecycle wins" discards the rewording. That breaks R2 by
+specification, and it contradicts the online behavior of the same race, which the design gets right.
+Deliveries and acks name `(item, rev)`.
+
+**Two tabs clobber the shared browser bucket.** Same origin, same target, one key, no storage-event
+handling and no lock specified. R12 has a server story and no browser story.
+
+**Token rotation contradicts the sync-drain promise.** Regenerating on every service start leaves an open
+page holding a dead token, so sync never drains and the failure is neither of the two states the client
+knows how to report.
+
+**The built-doc module and the new layer would both ship in every new brief.** "Decisions resolved" keeps
+the embedded comment module for v1; the plan's wiring task injects the new layer into the same builds.
+Both intercept selection, both draw a rail, and the old one binds its hotkey in capture phase.
+
+**The served-mode credential is readable by the served page.** A hostile or mangled script in a served
+document holds token plus allowlisted origin, so it can forge items and acks. All served docs also share
+one origin and therefore one storage bucket, so any served doc can read every other review's unsent
+feedback, which the opaque-origin frame used to prevent.
+
+### The cheaper third option on isolation
+
+Scope the credential per target rather than isolating the page: an HttpOnly, SameSite-strict cookie
+minted per serve, with the service enforcing that a credential for target A touches only target A. Ambient
+authority within a document is unavoidable without a frame, but exfiltration and cross-review access both
+close. Also note that D12's fixed-overlay decision deleted the docked-rail cost the frame was priced
+against, so the frame is cheaper than the earlier accounting says; worth recording for the day someone
+else's HTML comes into scope.
+
+### The top-level alternative, adopted
+
+Protect the region being edited instead of repairing it afterwards. While a region is actively edited the
+layer owns it, marked `data-turbo-permanent` and vetoed in `turbo:before-morph-element`; the app's
+repaints flow around it; on blur the edit commits and protection drops. The caret problem disappears
+structurally, the IME problem disappears, and the caret law becomes a container check. Replay keeps its
+whole role for committed records and stops having to work while someone is typing, which is where every
+failing walk broke. It costs a commit seam on blur and it degrades on frameworks that fight a foreign
+wrapper, which lands almost entirely on a target v1 does not have.
+
+### Follow-ups, boarded rather than built
+
+IME deferral and the spellcheck line (both taken into D4 immediately). One shared normalizer named in the
+contracts task. Verification tiered honestly for route targets, authoritative for built docs and advisory
+for routes. An honest definition of agent presence derived from when an agent last read, rather than a
+liveness bit. Ack-ordering honesty: in attached mode the source write arrives as a morph seconds before
+the ack, so a provisional collision may show and then clear. Export scope: with the service down, copy
+covers the current origin's slice rather than a multi-origin review. A `mousedown`-era write-epoch rule so
+replay's own mutations do not retrigger the observer. The formatting implementation choice, `execCommand`
+versus manual range surgery, written down rather than left to two builders.
