@@ -1311,8 +1311,8 @@ can take a record back.</p>
     R[&quot;Reviewer&lt;br/&gt;comments + edits on the page&quot;] --&gt; L[&quot;Library&lt;br/&gt;in the page&quot;]
     L --&gt;|&quot;every keystroke&quot;| B[(&quot;Browser storage&quot;)]
     L --&gt;|&quot;each record, as it happens&quot;| H[&quot;Helper&lt;br/&gt;local process&quot;]
-    H --&gt; S[(&quot;Review store on disk&lt;br/&gt;append-only log + review.md&quot;)]
-    A[&quot;Agent(s)&lt;br/&gt;Claude, Codex, anything&quot;] --&gt;|&quot;reads review.md&quot;| S
+    H --&gt; S[(&quot;Review store on disk&lt;br/&gt;append-only log + review.json&quot;)]
+    A[&quot;Agent(s)&lt;br/&gt;Claude, Codex, anything&quot;] --&gt;|&quot;reads review.json&quot;| S
     A --&gt;|&quot;appends one reply line per item&quot;| S
     L --&gt;|&quot;polls the helper for replies&quot;| H
     L --&gt;|&quot;card updates, Done tab, highlights clear&quot;| R</code></pre>
@@ -1557,8 +1557,8 @@ closing step, so the payoff the list exists for happens at the natural
 moment. Retention (Data and state) ages out only ended and abandoned
 reviews, never a live one.</p>
 <h3
-id="d6-the-agent-contract-is-one-readable-file-and-replies-are-one-appended-line">D6:
-The agent contract is one readable file, and replies are one appended
+id="d6-the-agent-contract-is-one-json-file-and-replies-are-one-appended-line">D6:
+The agent contract is one JSON file, and replies are one appended
 line</h3>
 <div class="xref">
 <p>Grounds <a
@@ -1571,14 +1571,19 @@ cannot do something)</a>; agent-agnostic per <a
 href="01_brief_live_agentic_html_editor.html#non-goals">the
 non-goals</a>.</p>
 </div>
-<p>The helper maintains <strong><code>review.md</code></strong>: one
+<p>The helper maintains <strong><code>review.json</code></strong>: one
 file per review, regenerated from the log (atomically: written beside,
-then renamed), human-readable, grouped by page. The name cannot collide
-when several docs are open at once, because the file lives inside its
-own review's folder (<code>reviews/&lt;review-id&gt;/</code>, the layout
-in Data and state): docs in one review share one file grouped by page,
-and separate reviews have separate folders. Each page's header carries
-an optional <strong>source hint</strong> given at add time, so an agent
+then renamed), pretty-printed, grouped by page. JSON rather than prose
+is the whole injection defense in one move: everything copied off a
+reviewed page sits inside named data fields, where an agent cannot
+mistake it for an instruction, so a document someone else sent cannot
+talk to the reviewer's agent through a quoted passage (this was Ken's
+call, and it is also the standard posture). The name cannot collide when
+several docs are open at once, because the file lives inside its own
+review's folder (<code>reviews/&lt;review-id&gt;/</code>, the layout in
+Data and state): docs in one review share one file grouped by page, and
+separate reviews have separate folders. Each page's header carries an
+optional <strong>source hint</strong> given at add time, so an agent
 working a dev-server review edits the template the page came from rather
 than built output the next build overwrites. Each item carries its id
 and rev, its state, the quoted subject or before/after, and the
@@ -1586,22 +1591,23 @@ reviewer's words verbatim. Only records the reviewer marked ready appear
 as actionable; drafts do not (R7).</p>
 <p>This is the single file the agent reads, and "the agent reads it in a
 loop" is not left as a hope, since agents failing to collect feedback is
-one of the three symptoms being fixed. The contract block at the top of
-the file tells the agent both ways to keep up: re-read the file between
-work items, or run the helper's <strong>wait command</strong>, which
-blocks until something new is ready (or a timeout) and prints it. The
-wait command <strong>consumes nothing</strong>. It is a read with a
-watermark: the caller says where it left off. It never acknowledges
-anything, so a killed wait, a repeated wait, and two agents waiting at
-once are all harmless. An agent says it handled an item only by writing
-a reply. The file is the contract, and the wait command is a convenience
-that makes the loop cheap for agents that can run a command. If the wait
-dies, and an agent's turn ending does kill a foreground wait, nothing is
-lost, because the file is still there and still complete. The contract
-block's exact text is pinned at plan time, and the standing header
-already in the repo is wrong for this design (it names an authoritative
-JSON file and a command that no longer exists) and gets rewritten, not
-kept.</p>
+one of the three symptoms being fixed. The file's own top-level
+<strong>contract field</strong> holds the standing instructions (plain
+sentences an agent reads once), and tells the agent both ways to keep
+up: re-read the file between work items, or run the helper's
+<strong>wait command</strong>, which blocks until something new is ready
+(or a timeout) and prints it. The wait command <strong>consumes
+nothing</strong>. It is a read with a watermark: the caller says where
+it left off. It never acknowledges anything, so a killed wait, a
+repeated wait, and two agents waiting at once are all harmless. An agent
+says it handled an item only by writing a reply. The file is the
+contract, and the wait command is a convenience that makes the loop
+cheap for agents that can run a command. If the wait dies, and an
+agent's turn ending does kill a foreground wait, nothing is lost,
+because the file is still there and still complete. The contract field's
+exact text is pinned at plan time, and the standing header already in
+the repo is wrong for this design (it names a command that no longer
+exists) and gets rewritten, not kept.</p>
 <p>The agent answers by appending one JSON line to its <strong>reply
 file</strong> in the same folder (<code>replies.jsonl</code>, or
 <code>replies-&lt;agent&gt;.jsonl</code> when several agents work at
@@ -1609,35 +1615,32 @@ once, as the multi-agent paragraph below spells out): id, rev, status
 (<code>handled</code> / <code>not_handled</code> with a reason /
 <code>question</code> with text), an optional agent name (so several
 agents can work at once and the reviewer sees who said what), and what
-it actually changed. Every agent can append a line to a file, which is
-what makes this agent-agnostic. There is no SDK, protocol, or per-agent
-adapter to write. <code>review.md</code> opens with a short standing
-block that states this contract, so an agent pointed at the file needs
-nothing else.</p>
+it actually changed. Every agent can read JSON and append a line to a
+file, which is what makes this agent-agnostic. There is no SDK,
+protocol, or per-agent adapter to write. <code>review.json</code>'s
+contract field states all of this, so an agent pointed at the file needs
+nothing else. The reviewer never reads this file: the rail is their
+view, and copy and export produce human-readable text formatted by the
+library (R10 is untouched by the file being JSON).</p>
 <p>The helper folds replies into the log, re-projects
-<code>review.md</code>, and hands the changes to the library, which
+<code>review.json</code>, and hands the changes to the library, which
 updates the cards in place: handled items lose their highlight and move
 to the Done tab, a not-handled reason or a question lands on the item's
 own card, on the page, where the reviewer actually is (R34, R35,
 R37).</p>
-<p><strong>One agent-facing file is a deliberate deviation</strong> from
-the usual "JSON is authoritative" posture, on Ken's call: agents get one
-readable file, and the structured truth stays in
-<code>events.jsonl</code> underneath it, available to any agent that
-would rather parse but never required. <strong>The replies file is not
-authenticated</strong>, and cannot usefully be: anything running as the
-user can write files, so the trust boundary for file writers is the user
-account itself. What the design does instead is treat agent-authored
-text as its own trust class: reply text is rendered as plain text only,
-bounded, labeled with the agent's name, never presented as an
-instruction to the reviewer, and fenced as data whenever it is
-re-projected into <code>review.md</code> for other agents to read. Web
-pages cannot write files at all, so the forgery a hostile page could
-attempt runs through the helper, where D11's per-request checks stop it.
-Verification of an agent's "handled" claim (checking the change actually
-landed) is deliberately cut from v1; the reply line carries an optional
-list of files touched so verification can be added later without
-changing the contract.</p>
+<p><strong>The replies file is not authenticated</strong>, and cannot
+usefully be: anything running as the user can write files, so the trust
+boundary for file writers is the user account itself. What the design
+does instead is treat agent-authored text as its own trust class: reply
+text is rendered as plain text only, bounded, labeled with the agent's
+name, never presented as an instruction to the reviewer, and carried as
+a plain data field when it is re-projected into <code>review.json</code>
+for other agents to read. Web pages cannot write files at all, so the
+forgery a hostile page could attempt runs through the helper, where
+D11's per-request checks stop it. Verification of an agent's "handled"
+claim (checking the change actually landed) is deliberately cut from v1;
+the reply line carries an optional list of files touched so verification
+can be added later without changing the contract.</p>
 <p><strong>Several agents at once</strong> is the orchestrator's
 problem, on purpose. Ken's multi-agent case is one coordinating agent
 handing items to subagents, and that coordinator already decides who
@@ -1661,8 +1664,8 @@ that is a coordination problem this tool does not own.</p>
     K-&gt;&gt;L: types a comment, Cmd-Enter (ready)
     L-&gt;&gt;L: browser storage, every keystroke
     L-&gt;&gt;H: event (id, rev 1)
-    H-&gt;&gt;H: append to events.jsonl, re-project review.md
-    A-&gt;&gt;H: reads review.md (its own loop)
+    H-&gt;&gt;H: append to events.jsonl, re-project review.json
+    A-&gt;&gt;H: reads review.json (its own loop)
     K-&gt;&gt;L: keeps reviewing, next screen
     A-&gt;&gt;H: appends reply line (id, rev 1, handled)
     L-&gt;&gt;H: poll for replies
@@ -1725,7 +1728,7 @@ the reviewer's and the page's, and the reviewer picks which one stands
 (Ken's call at the wireframe: no "see theirs" indirection, both texts
 are right there). Replay never guesses. A record whose anchor cannot be
 found uniquely is surfaced as lost, on the page and in
-<code>review.md</code>, never silently dropped or moved (R20). Two
+<code>review.json</code>, never silently dropped or moved (R20). Two
 record kinds compare on their own terms: a <strong>format-only</strong>
 change compares on structure rather than normalized text (whose whole
 job is to ignore formatting), and a <strong>delete</strong> is
@@ -1766,51 +1769,90 @@ without the library, to the pixel, except painted highlights and the
 fixed rail.</p>
 <h3 id="d9-anchors-match-by-uniqueness-not-confidence">D9: Anchors match
 by uniqueness, not confidence</h3>
-<p>A record's anchor is the normalized text of its region plus enough
-surrounding context to make it unique on the page. At replay or
-agent-read time, a match counts only if it is the <em>only</em> match;
-two identical list items never get one edit applied to the wrong one,
-they get a widened context or a surfaced failure. One shared normalizer
-is used everywhere text is compared (recording, replay, anchoring): two
-normalizers that disagree is how a replay engine ends up fighting the
-reviewer's own cursor, so this is a single module by design, not
-convention.</p>
+<p>The mechanism, concretely. When a record is made, the library stores
+the normalized text of its region plus a ring of context around it: the
+normalized text of the neighboring blocks and the nearest heading. To
+find the region again (at replay, or for the agent via the record's
+fields), it searches the page for that text. One hit is a match. More
+than one hit widens the context ring and searches again, until the match
+is unique or the widening runs out, and then it is a surfaced failure,
+never a guess. Two identical list items never get one edit applied to
+the wrong one.</p>
+<p>A generated marker on the element (a unique class name added by the
+library, since ids can already be taken) was considered and rejected as
+the durable identity, for the same reason wrapper elements lost in D8
+(highlights that do not change the page): it mutates the DOM that the
+page's own framework is diffing, and it does not survive the moments
+that matter, since a repaint rebuilds the element without our class and
+a dev-server page is rebuilt from source on every reload. Content is the
+only identity that survives the page being replaced. Transient marking
+is different and fine: while a region is actively being edited, the
+library does tag the element (the protection attribute in D7), because
+that tag only has to live as long as the edit.</p>
+<p>One shared normalizer is used everywhere text is compared (recording,
+replay, anchoring): two normalizers that disagree is how a replay engine
+ends up fighting the reviewer's own cursor, so this is a single module
+by design, not convention.</p>
 <h3 id="d10-the-rail">D10: The rail</h3>
-<p>One fixed rail, in the shadow root, with three tabs:
-<strong>Active</strong> (outstanding comments and notes, newest visible,
-the open note box at the foot), <strong>Edits</strong> (every hand edit
-as before/after rows, kept apart from comments per R32, and doubling as
-the end-of-session style-guide list per R39, exportable), and
-<strong>Done</strong> (handled items with their agent replies,
-reopenable per R38). The rail is Ken's chosen shape, an evolution of the
-comments module he already uses, and his notes on it are folded in here.
-<strong>The wireframe settled structure only, and it is not a visual
-target.</strong> Whoever builds the rail is expected to design it
-properly: considered type, spacing, and hierarchy, a surface that looks
-like a product someone cared about, judged as if by a staff designer.
-Copying the sketch's grey-box styling into the build is wrong; so is
-inventing decoration. The constraint that stands is D10's own: the
-library styles only what it adds, quietly enough to sit over anyone's
-page. <strong>Copy and export are always visible</strong>, not only when
+<p>One fixed rail, in the shadow root. It is Ken's chosen shape from the
+wireframes, an evolution of the comments module he already uses. Three
+tabs:</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Tab</th>
+<th>Holds</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Active</strong></td>
+<td>Outstanding comments and notes, newest visible</td>
+<td>The open note box sits at the foot (R18, a note tied to
+nothing)</td>
+</tr>
+<tr>
+<td><strong>Edits</strong></td>
+<td>Every hand edit as before/after rows</td>
+<td>Kept apart from comments (R32) and doubling as the end-of-session
+style-guide list (R39); exportable</td>
+</tr>
+<tr>
+<td><strong>Done</strong></td>
+<td>Handled items with their agent replies</td>
+<td>Reopenable (R38, handled items are kept)</td>
+</tr>
+</tbody>
+</table></div>
+<p>How the rail behaves:</p>
+<ul>
+<li><strong>Copy and export are always visible</strong>, not only when
 nothing is connected: the review may need to go to a different agent,
 and when something is wrong is exactly when the reviewer cannot tell.
-<strong>An agent's question is the loudest thing on a card</strong>, a
-distinct treatment rather than a tinted label, because a question the
-reviewer scrolls past is a stalled agent. The agent's name on a reply
-comes from the reply itself (the agent states its own name in the reply
-line; absent, the card says "agent"), which is the whole of agent
-detection. The keyboard hints are readable, not fine print. Cards update
-in place; the rail never rebuilds itself under a focused text box.
-Errors are chips on the rail, each dismissible (R11), and a persistent
-one-line status states plainly what is happening to the reviewer's
-typing: kept locally, stored, or agent connected (R12). The collapsed
-pill never overlaps the open rail's content, a nit inherited from the
-current module and fixed there too.</p>
-<p>Copy and export cover the whole review when the helper is reachable,
-and say so when they cannot: with nothing running, the export carries
-what this browser holds and is labeled as this page's slice of the
-review, never passed off as the whole (R10, R11's no-false-success rule
-applied to export).</p>
+They cover the whole review when the helper is reachable; with nothing
+running, the export carries what this browser holds and is labeled as
+this page's slice, never passed off as the whole.</li>
+<li><strong>An agent's question is the loudest thing on a card</strong>:
+a distinct treatment, not a tinted label, because a question the
+reviewer scrolls past is a stalled agent.</li>
+<li><strong>The agent's name comes from its own reply</strong> (absent,
+the card says "agent"). That is the whole of agent detection.</li>
+<li><strong>Cards update in place.</strong> The rail never rebuilds
+itself under a focused text box.</li>
+<li><strong>Errors are dismissible chips</strong> (R11), and a
+persistent one-line status says plainly what is happening to the
+reviewer's typing: kept locally, stored, or agent connected (R12).</li>
+<li><strong>The keyboard hints are readable</strong>, not fine print,
+and the collapsed pill never overlaps the open rail's content.</li>
+</ul>
+<p><strong>The wireframe settled structure only; it is not a visual
+target.</strong> Whoever builds the rail designs it properly: considered
+type, spacing, and hierarchy, a surface that looks like a product
+someone cared about, judged as if by a staff designer. Copying the
+sketch's grey boxes is wrong, and so is inventing decoration. The
+standing constraint: the library styles only what it adds, quietly
+enough to sit over anyone's page.</p>
 <h3 id="d11-loopback-is-not-a-boundary-so-the-page-proves-itself">D11:
 Loopback is not a boundary, so the page proves itself</h3>
 <div class="xref">
@@ -1852,12 +1894,14 @@ data; reviewer text is intent</h3>
 href="01_brief_live_agentic_html_editor.html#the-users-work-is-never-clobbered">R3
 (the reviewer's words stay exactly as typed)</a>.</p>
 </div>
-<p>In <code>review.md</code>, everything that came <em>off the page</em>
-(quoted subjects, <code>before</code> text, context) is fenced as data
-with random per-item delimiters (so page content cannot close its own
-fence) and a standing note that it is content to locate, never
-instructions to follow. A malicious or merely weird page cannot puppet
-the agent through a quoted passage.</p>
+<p>In <code>review.json</code>, everything that came <em>off the
+page</em> (quoted subjects, <code>before</code> text, context) lives in
+fields named as data, and the contract field says plainly that those
+fields are content to locate, never instructions to follow. Because the
+file is JSON, that separation is structural: a hostile sentence inside a
+quoted passage is just the value of a <code>quote</code> field, with
+nowhere to stand as an instruction. A malicious or merely weird page
+cannot puppet the agent through a quoted passage.</p>
 <p>The line between data and intent is drawn at <strong>what the
 reviewer actually vetted, not who a field belongs to</strong>. An edited
 region's full <code>after</code> text is mostly the page's own words
@@ -1865,29 +1909,30 @@ with the reviewer's changes mixed in, and the brief allows reviewing a
 document someone else sent, so carrying that whole text as intent would
 let a sender's hidden text ride the reviewer's edit into the instruction
 channel. So: the reviewer's typed notes and the specific changes they
-made are intent, carried verbatim, never truncated, never "cleaned up"
-(the comma that came back as an em dash is the named failure here). The
-full before and after of the region ride along fenced as data, for the
-agent to locate and apply against. Quoted page text may be bounded for
-length, visibly, and reviewer-typed text never is. Agent reply text has
-its own trust class (D6, the agent contract).</p>
+made are the intent fields, carried verbatim, never truncated, never
+"cleaned up" (the comma that came back as an em dash is the named
+failure here). The full before and after of the region ride along in
+data fields, for the agent to locate and apply against. Quoted page text
+may be bounded for length, with the bound marked, and reviewer-typed
+text never is. Agent reply text has its own trust class (D6, the agent
+contract).</p>
 <h2 id="data-and-state">Data and state</h2>
 <p>One folder per review under the helper's data directory:</p>
 <pre><code>reviews/&lt;review-id&gt;/
   events.jsonl     append-only, every event, the source of truth
-  review.md        projection the agent reads; opens with the contract block
+  review.json      projection the agent reads; carries the contract field
   replies.jsonl    the agent appends one line per answer</code></pre>
 <p>The helper's whole filesystem footprint is this data directory plus
 the specific pages the add command was pointed at; it reads and writes
 nothing else, follows no symlinks inside its data directory, and writes
 projections atomically (write beside, then rename) so a crash never
-leaves a half-written <code>review.md</code>. Review ids are constrained
-to a plain safe character set, because they are path components. The
-data directory and its files are readable by the owner only. The
-append-only log grows for the life of a review and is bounded by
-retention, not rotation: finished reviews age out on a stated schedule
-rather than silently losing history mid-review. The library's own UI
-lives in a closed shadow root.</p>
+leaves a half-written <code>review.json</code>. Review ids are
+constrained to a plain safe character set, because they are path
+components. The data directory and its files are readable by the owner
+only. The append-only log grows for the life of a review and is bounded
+by retention, not rotation: finished reviews age out on a stated
+schedule rather than silently losing history mid-review. The library's
+own UI lives in a closed shadow root.</p>
 <p>Item lifecycle, driven entirely by events:</p>
 <pre class="mermaid"><code>stateDiagram-v2
     [*] --&gt; draft: reviewer starts typing
@@ -1903,7 +1948,7 @@ it; someone he met built theirs on one) and rejected for v1: Node's
 built-in SQLite is still marked experimental, an external one breaks
 zero-dependency install, and an append-only JSONL log already gives
 crash-safety, a full history, and greppability, while
-<code>review.md</code> gives the readable view a database would need
+<code>review.json</code> gives the readable view a database would need
 generated anyway. The seam is narrow (the helper's store module), so
 swapping later is contained.</p>
 <h2 id="the-code-already-in-the-repo">The code already in the repo</h2>
@@ -1981,8 +2026,8 @@ overwritten silently (R5)</td>
 </tr>
 <tr>
 <td>Anchor no longer found, or found twice</td>
-<td>Item flagged as lost on page and in review.md; never guessed, never
-dropped (R19, R20)</td>
+<td>Item flagged as lost on page and in review.json; never guessed,
+never dropped (R19, R20)</td>
 </tr>
 <tr>
 <td>Stale agent reply (old rev)</td>
@@ -2098,7 +2143,7 @@ absence</td>
 </tr>
 <tr>
 <td>One replies file with N uncoordinated writers is not atomic; no
-conflict rule; review.md not written atomically</td>
+conflict rule; review.json not written atomically</td>
 <td><span class="accepted">Accepted</span></td>
 <td>D6: per-agent reply files, helper as single reader, rev-then-latest
 conflict rule; atomic projection writes</td>
@@ -2158,10 +2203,11 @@ shadow root in Data and state</td>
 </tr>
 <tr>
 <td>Markdown-only agent contract weakens the injection posture</td>
-<td>Accepted with a deviation</td>
-<td>One agent-facing file stays, on Ken's explicit call. The structured
-log remains the truth underneath, fencing uses random per-item
-delimiters, and the deviation is stated in D6</td>
+<td>Accepted, and later superseded</td>
+<td>Ken talked it through and chose a single JSON file as the whole
+agent contract, which is the strongest form of what this finding asked
+for: page text sits in named data fields and cannot read as
+instructions. D6 and D12 carry it</td>
 </tr>
 <tr>
 <td>Nothing authenticates the replies file</td>
@@ -2220,7 +2266,7 @@ to a page is one command and the helper's start rides along with it.
 Manual <code>serve</code> remains for anyone who wants it.</p>
 </div>
 <div class="callout callout-question">
-<p><span id="security-q2" class="finding-anchor"></span><strong>Q2: How does <code>review.md</code> divide by page on a dev
+<p><span id="security-q2" class="finding-anchor"></span><strong>Q2: How does <code>review.json</code> divide by page on a dev
 server?</strong> A static doc is one page; a dev-server review walks
 many URLs.</p>
 <p><strong>Answered (settled at plan time):</strong> pages are keyed by
@@ -2252,6 +2298,18 @@ gone from the prose (the "What carries over" section now states only
 what the design is). The xref "grounds" notes are links into the brief.
 Two were observations needing no change (D1 packs several small
 decisions; element-pick mode is accepted for images).</p>
+<p>Round 4 (comments 21 and 22, same file, plus the comment-18
+conversation): the agent contract is now <strong>one JSON file</strong>
+(<code>review.json</code>), Ken's call after talking the tradeoffs
+through: he asked why keep markdown at all when the human reads the
+rail, and there was no good answer. Page text sits in named data fields,
+so the injection defense is structural. D9 (anchors) now states the
+concrete mechanism (normalized text plus a widening context ring, unique
+match or surfaced failure) and records why a generated class-name marker
+was rejected as durable identity (repaints and reloads strip it) while
+transient marking during an active edit stays. D10 (the rail) is
+restructured from a wall of text into a tab table plus behavior
+bullets.</p>
 <p>Round 3 (comments 17 through 20, same file): review.md collisions
 cannot happen and D6 now says why (the file lives inside its review's
 own folder); the polling arrows in both diagrams now point from the

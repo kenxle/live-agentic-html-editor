@@ -1,6 +1,6 @@
 # Review comments: Architecture: Live Agentic HTML Editor
 
-_Doc: 02_architecture_live_agentic_html_editor.html · saved 2026-08-12T16:40:21 · 21 comment(s)_
+_Doc: 02_architecture_live_agentic_html_editor.html · saved 2026-08-12T16:45:07 · 22 comment(s)_
 
 ## 1. Summary
 
@@ -257,5 +257,44 @@ do not change the page
 > reviewer's own cursor, so this is a single module by design, not
 > convention.
 
-yes to the principle. what is the mechanism? since we can edit dom properties, should we add a unique 
+yes to the principle. what is the mechanism? since we can edit dom properties, should we add a unique classname to an element so we have an identifier? we can't really use html IDs because there's only one per element and it may already be in use, but we can add to classes and use a unique name we generated. maybe this is defined later but i haven't seen the mechanism described yet
+
+**[DONE]**
+
+## 22. D10: The rail
+
+> One fixed rail, in the shadow root, with three tabs:
+> Active (outstanding comments and notes, newest visible,
+> the open note box at the foot), Edits (every hand edit
+> as before/after rows, kept apart from comments per R32, and doubling as
+> the end-of-session style-guide list per R39, exportable), and
+> Done (handled items with their agent replies,
+> reopenable per R38). The rail is Ken's chosen shape, an evolution of the
+> comments module he already uses, and his notes on it are folded in here.
+> The wireframe settled structure only, and it is not a visual
+> target. Whoever builds the rail is expected to design it
+> properly: considered type, spacing, and hierarchy, a surface that looks
+> like a product someone cared about, judged as if by a staff designer.
+> Copying the sketch's grey-box styling into the build is wrong; so is
+> inventing decoration. The constraint that stands is D10's own: the
+> library styles only what it adds, quietly enough to sit over anyone's
+> page. Copy and export are always visible, not only when
+> nothing is connected: the review may need to go to a different agent,
+> and when something is wrong is exactly when the reviewer cannot tell.
+> An agent's question is the loudest thing on a card, a
+> distinct treatment rather than a tinted label, because a question the
+> reviewer scrolls past is a stalled agent. The agent's name on a reply
+> comes from the reply itself (the agent states its own name in the reply
+> line; absent, the card says "agent"), which is the whole of agent
+> detection. The keyboard hints are readable, not fine print. Cards update
+> in place; the rail never rebuilds itself under a focused text box.
+> Errors are chips on the rail, each dismissible (R11), and a persistent
+> one-line status states plainly what is happening to the reviewer's
+> typing: kept locally, stored, or agent connected (R12). The collapsed
+> pill never overlaps the open rail's content, a nit inherited from the
+> current module and fixed there too.
+
+this is a brutal wall of text. can i get some bullets or a table or something here?
+
+**[DONE]**
 

@@ -15,6 +15,15 @@ thinking is gone from the prose (the "What carries over" section now states only
 The xref "grounds" notes are links into the brief. Two were observations needing no change (D1 packs
 several small decisions; element-pick mode is accepted for images).
 
+Round 4 (comments 21 and 22, same file, plus the comment-18 conversation): the agent contract is now
+**one JSON file** (`review.json`), Ken's call after talking the tradeoffs through: he asked why keep
+markdown at all when the human reads the rail, and there was no good answer. Page text sits in named
+data fields, so the injection defense is structural. D9 (anchors) now states the concrete mechanism
+(normalized text plus a widening context ring, unique match or surfaced failure) and records why a
+generated class-name marker was rejected as durable identity (repaints and reloads strip it) while
+transient marking during an active edit stays. D10 (the rail) is restructured from a wall of text
+into a tab table plus behavior bullets.
+
 Round 3 (comments 17 through 20, same file): review.md collisions cannot happen and D6 now says why
 (the file lives inside its review's own folder); the polling arrows in both diagrams now point from
 the poller to the polled; D7 no longer reads as Rails-assuming (framework-free protection with Rails
