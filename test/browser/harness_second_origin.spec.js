@@ -36,13 +36,13 @@ test.describe("second origin", () => {
 
       // 1. A simple request. No preflight is sent, so it reaches the handler.
       //    This is the one that matters: CORS hides the response, not the effect.
-      await page.evaluate((url) => window.__attack.simplePost(url + "/items", { forged: "item" }), service.url);
+      await page.evaluate((url) => window.__attack.simplePost(url, { forged: "item" }), service.itemsUrl);
 
       // 2. sendBeacon, same story, and it outlives the page.
-      await page.evaluate((url) => window.__attack.beacon(url + "/items", { forged: "beacon" }), service.url);
+      await page.evaluate((url) => window.__attack.beacon(url, { forged: "beacon" }), service.itemsUrl);
 
       // 3. A preflighted request with a guessed token.
-      await page.evaluate((url) => window.__attack.corsPost(url + "/items", { forged: "ack" }), service.url);
+      await page.evaluate((url) => window.__attack.corsPost(url, { forged: "ack" }), service.itemsUrl);
 
       // The effect, which is the only thing worth asserting.
       expect(readEventLog(stateDir)).toHaveLength(0);
@@ -63,7 +63,7 @@ test.describe("second origin", () => {
       await page.goto(fixtureServer.urlFor("built-doc.html"));
       const status = await page.evaluate(
         async (args) => {
-          const res = await fetch(args.url + "/items", {
+          const res = await fetch(args.url, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -74,7 +74,7 @@ test.describe("second origin", () => {
           });
           return res.status;
         },
-        { url: service.url, token: service.token }
+        { url: service.itemsUrl, token: service.token }
       );
 
       expect(status).toBe(200);
