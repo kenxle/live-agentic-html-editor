@@ -77,15 +77,16 @@
   var browser = typeof window !== "undefined" && !!window.document;
   if (browser) {
     root.LAHE = root.LAHE || {};
-    root.LAHE.overlay = factory(root.LAHE.markers, root.LAHE.failures, root.LAHE.record);
+    root.LAHE.overlay = factory(root.LAHE.markers, root.LAHE.failures, root.LAHE.record, root.LAHE.highlight);
   } else {
     module.exports = factory(
       require("../shared/markers.js"),
       require("../shared/failures.js"),
-      require("../shared/record.js")
+      require("../shared/record.js"),
+      require("./highlight.js")
     );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, failuresModule, record) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, failuresModule, record, highlightModule) {
   "use strict";
 
   // D10's three tabs. Contents come from the three tab files; the shell is
@@ -161,7 +162,11 @@
     ":focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}",
 
     // --- the rail -----------------------------------------------------------
+    // pointer-events comes back on here: the ONE page-level host is
+    // pointer-events:none so the page stays clickable through it, and the two
+    // things the rail actually draws turn it back on.
     ".rail{position:fixed;top:16px;right:16px;bottom:16px;width:clamp(320px,26vw,392px);",
+    "pointer-events:auto;",
     "display:flex;flex-direction:column;background:var(--paper);color:var(--ink);",
     "border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);",
     "overflow:hidden;font-size:13px;line-height:1.45;letter-spacing:.005em}",
@@ -288,7 +293,7 @@
     // --- the collapsed pill --------------------------------------------------
     // It never overlaps the open rail because it only exists while the rail is
     // hidden. Two elements that are never on screen together cannot overlap.
-    ".pill{position:fixed;right:16px;bottom:16px;display:flex;align-items:center;gap:8px;",
+    ".pill{position:fixed;right:16px;bottom:16px;pointer-events:auto;display:flex;align-items:center;gap:8px;",
     "height:38px;padding:0 14px;border-radius:999px;background:var(--paper);color:var(--ink);",
     "border:1px solid var(--line);box-shadow:var(--shadow);font-size:12.5px;font-weight:550}",
     ".pill[hidden]{display:none}",
@@ -308,6 +313,11 @@
     var doc = opts.document || (typeof document !== "undefined" ? document : null);
     var store = opts.store || null;
     var reviewId = opts.reviewId || null;
+    // The library's ONE page-level host is highlight.js's surface, and the rail
+    // mounts inside it rather than adding a second element to the page. The
+    // default is the shared instance for the same reason: two instances would
+    // be two hosts.
+    var highlights = opts.highlights || highlightModule.shared;
 
     var cards = Object.create(null);
     var chips = [];
@@ -343,8 +353,16 @@
       loadChips();
       if (!doc || !doc.body) return { rootId: markers.OVERLAY_ROOT_ID, headless: true };
 
+      // The page-level host is highlight.js's, created once, id
+      // markers.OVERLAY_ROOT_ID. This file adds NOTHING to the page: it mounts
+      // its own scope element inside that surface's closed root, and the rail's
+      // CSS (:host{all:initial}, the tokens) applies to that scope rather than
+      // to the shared host it does not own.
+      var surface = highlights.surface();
+      var surfaceRoot = surface.root || surface.host;
+      if (!surfaceRoot) return { rootId: markers.OVERLAY_ROOT_ID, headless: true };
+
       var host = doc.createElement("div");
-      host.id = markers.OVERLAY_ROOT_ID;
       markers.markChrome(host);
       // CLOSED, per D8. Nothing outside the library can reach in, which is also
       // why this module answers holdsFocus and activeElementInfo itself.
@@ -454,7 +472,7 @@
 
       shadow.appendChild(rail);
       shadow.appendChild(pill);
-      doc.body.appendChild(host);
+      surfaceRoot.appendChild(host);
 
       // A held pane move lands the moment focus leaves the card.
       shadow.addEventListener("focusout", function () {

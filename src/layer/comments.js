@@ -180,7 +180,14 @@
     var hasDoc = Object.prototype.hasOwnProperty.call(opts, "document");
     var doc = hasDoc ? opts.document : typeof document !== "undefined" ? document : null;
     var win = opts.window || (typeof window !== "undefined" ? window : null);
-    var highlights = opts.highlights || (doc ? highlightModule.createHighlights({ document: doc }) : null);
+    // The shared instance when this is the real document, because the library
+    // has ONE surface host on a page and a second instance would create a
+    // second one. A caller working on some other document (a test, a frame)
+    // gets its own.
+    var isRealDocument = doc && typeof document !== "undefined" && doc === document;
+    var highlights =
+      opts.highlights ||
+      (isRealDocument ? highlightModule.shared : doc ? highlightModule.createHighlights({ document: doc }) : null);
     var defaultPage = opts.page || null;
 
     // id -> handle
@@ -241,6 +248,23 @@
       surfaceRoot = got.root || got.host;
       highlights.addSurfaceStyle("comments", BOX_STYLE);
       return surfaceRoot;
+    }
+
+    // A box the rail hosts lives in the RAIL's root, not in the surface root
+    // the styles above went into, and a shadow root's styles stop at its own
+    // boundary. So the box carries its stylesheet to whichever root it lands
+    // in, once per root.
+    var styledRoots = [];
+    function ensureBoxStyleIn(host) {
+      if (!doc || !host || typeof host.getRootNode !== "function") return null;
+      var rootNode = host.getRootNode();
+      if (!rootNode || rootNode === doc) return null;
+      if (styledRoots.indexOf(rootNode) !== -1) return null;
+      styledRoots.push(rootNode);
+      var style = doc.createElement("style");
+      style.textContent = BOX_STYLE;
+      rootNode.appendChild(style);
+      return style;
     }
 
     // ------------------------------------------------------------------------
@@ -329,6 +353,7 @@
 
       if (doc) {
         var host = (src && src.host) || surface();
+        ensureBoxStyleIn(host);
         node = doc.createElement("div");
         node.className = BOX_CLASS;
         // Marked as the library's own chrome, so nothing here can reach a

@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+2c0f5e5696ea
+ * version 0.0.0+668490b0c850
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+2c0f5e5696ea";
+  g.LAHE.version = "0.0.0+668490b0c850";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -48,9 +48,12 @@
   // Every class token starting with this prefix is stripped on capture.
   var TOOL_CLASS_PREFIX = "lahe-";
 
-  // The overlay root's id. One per page (Task 2C asserts exactly one after
-  // 100 morphs).
-  var OVERLAY_ROOT_ID = "lahe-overlay-root";
+  // The id of the ONE element the library puts in the page: a chrome-marked
+  // div holding a closed shadow root, in which everything the library draws
+  // lives (the rail, comment boxes, the pick outline). One per page (Task 2C
+  // asserts exactly one after 100 morphs). The element is created in one place,
+  // highlight.js's surface module, and it reads its id from here.
+  var OVERLAY_ROOT_ID = "lahe-surface-root";
 
   // Set on a region while the reviewer is editing it (architecture D3). Turbo
   // reads data-turbo-permanent natively; the tool's own attribute is what the
@@ -6109,7 +6112,12 @@
   // The shadow host. Fixed and zero-weight in layout terms: a fixed element is
   // out of flow, so it cannot move a block or change scrollHeight, and pointer
   // events pass through it except where the library actually draws something.
-  var SURFACE_ID = "lahe-surface-root";
+  //
+  // The id is markers.OVERLAY_ROOT_ID, not a second spelling of the same idea.
+  // There is ONE host on the page and this module owns it: the rail mounts
+  // inside this root rather than creating a host of its own, which is also the
+  // one host 2D's remount contract re-creates.
+  var SURFACE_ID = markers.OVERLAY_ROOT_ID;
 
   // Highlight colors, as light a touch as a highlight can be and still read.
   // Written with color-mix-free plain rgba so a page-level stylesheet cannot
@@ -6281,6 +6289,19 @@
       if (surfaceRoot && surfaceHost && surfaceHost.parentNode) {
         return { host: surfaceHost, root: surfaceRoot };
       }
+      // ONE HOST, and it fails loud rather than quietly becoming two. A second
+      // host means two closed roots, two rails, and a remount that re-creates
+      // one of them; none of that is diagnosable from the outside, because a
+      // closed root cannot be read back off the element.
+      var already = doc.getElementById(SURFACE_ID);
+      if (already) {
+        throw new Error(
+          "highlight.surface: the page already holds " +
+            SURFACE_ID +
+            ", so this would be the second one. Everything the library draws goes in the ONE surface: " +
+            "pass the same highlights instance around (highlight.shared), or call teardown() first."
+        );
+      }
       var host = doc.createElement("div");
       host.id = SURFACE_ID;
       markers.markChrome(host);
@@ -6446,15 +6467,16 @@
   var browser = typeof window !== "undefined" && !!window.document;
   if (browser) {
     root.LAHE = root.LAHE || {};
-    root.LAHE.overlay = factory(root.LAHE.markers, root.LAHE.failures, root.LAHE.record);
+    root.LAHE.overlay = factory(root.LAHE.markers, root.LAHE.failures, root.LAHE.record, root.LAHE.highlight);
   } else {
     module.exports = factory(
       require("../shared/markers.js"),
       require("../shared/failures.js"),
-      require("../shared/record.js")
+      require("../shared/record.js"),
+      require("./highlight.js")
     );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, failuresModule, record) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, failuresModule, record, highlightModule) {
   "use strict";
 
   // D10's three tabs. Contents come from the three tab files; the shell is
@@ -6530,7 +6552,11 @@
     ":focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}",
 
     // --- the rail -----------------------------------------------------------
+    // pointer-events comes back on here: the ONE page-level host is
+    // pointer-events:none so the page stays clickable through it, and the two
+    // things the rail actually draws turn it back on.
     ".rail{position:fixed;top:16px;right:16px;bottom:16px;width:clamp(320px,26vw,392px);",
+    "pointer-events:auto;",
     "display:flex;flex-direction:column;background:var(--paper);color:var(--ink);",
     "border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);",
     "overflow:hidden;font-size:13px;line-height:1.45;letter-spacing:.005em}",
@@ -6657,7 +6683,7 @@
     // --- the collapsed pill --------------------------------------------------
     // It never overlaps the open rail because it only exists while the rail is
     // hidden. Two elements that are never on screen together cannot overlap.
-    ".pill{position:fixed;right:16px;bottom:16px;display:flex;align-items:center;gap:8px;",
+    ".pill{position:fixed;right:16px;bottom:16px;pointer-events:auto;display:flex;align-items:center;gap:8px;",
     "height:38px;padding:0 14px;border-radius:999px;background:var(--paper);color:var(--ink);",
     "border:1px solid var(--line);box-shadow:var(--shadow);font-size:12.5px;font-weight:550}",
     ".pill[hidden]{display:none}",
@@ -6677,6 +6703,11 @@
     var doc = opts.document || (typeof document !== "undefined" ? document : null);
     var store = opts.store || null;
     var reviewId = opts.reviewId || null;
+    // The library's ONE page-level host is highlight.js's surface, and the rail
+    // mounts inside it rather than adding a second element to the page. The
+    // default is the shared instance for the same reason: two instances would
+    // be two hosts.
+    var highlights = opts.highlights || highlightModule.shared;
 
     var cards = Object.create(null);
     var chips = [];
@@ -6712,8 +6743,16 @@
       loadChips();
       if (!doc || !doc.body) return { rootId: markers.OVERLAY_ROOT_ID, headless: true };
 
+      // The page-level host is highlight.js's, created once, id
+      // markers.OVERLAY_ROOT_ID. This file adds NOTHING to the page: it mounts
+      // its own scope element inside that surface's closed root, and the rail's
+      // CSS (:host{all:initial}, the tokens) applies to that scope rather than
+      // to the shared host it does not own.
+      var surface = highlights.surface();
+      var surfaceRoot = surface.root || surface.host;
+      if (!surfaceRoot) return { rootId: markers.OVERLAY_ROOT_ID, headless: true };
+
       var host = doc.createElement("div");
-      host.id = markers.OVERLAY_ROOT_ID;
       markers.markChrome(host);
       // CLOSED, per D8. Nothing outside the library can reach in, which is also
       // why this module answers holdsFocus and activeElementInfo itself.
@@ -6823,7 +6862,7 @@
 
       shadow.appendChild(rail);
       shadow.appendChild(pill);
-      doc.body.appendChild(host);
+      surfaceRoot.appendChild(host);
 
       // A held pane move lands the moment focus leaves the card.
       shadow.addEventListener("focusout", function () {
@@ -8748,7 +8787,14 @@
     var hasDoc = Object.prototype.hasOwnProperty.call(opts, "document");
     var doc = hasDoc ? opts.document : typeof document !== "undefined" ? document : null;
     var win = opts.window || (typeof window !== "undefined" ? window : null);
-    var highlights = opts.highlights || (doc ? highlightModule.createHighlights({ document: doc }) : null);
+    // The shared instance when this is the real document, because the library
+    // has ONE surface host on a page and a second instance would create a
+    // second one. A caller working on some other document (a test, a frame)
+    // gets its own.
+    var isRealDocument = doc && typeof document !== "undefined" && doc === document;
+    var highlights =
+      opts.highlights ||
+      (isRealDocument ? highlightModule.shared : doc ? highlightModule.createHighlights({ document: doc }) : null);
     var defaultPage = opts.page || null;
 
     // id -> handle
@@ -8809,6 +8855,23 @@
       surfaceRoot = got.root || got.host;
       highlights.addSurfaceStyle("comments", BOX_STYLE);
       return surfaceRoot;
+    }
+
+    // A box the rail hosts lives in the RAIL's root, not in the surface root
+    // the styles above went into, and a shadow root's styles stop at its own
+    // boundary. So the box carries its stylesheet to whichever root it lands
+    // in, once per root.
+    var styledRoots = [];
+    function ensureBoxStyleIn(host) {
+      if (!doc || !host || typeof host.getRootNode !== "function") return null;
+      var rootNode = host.getRootNode();
+      if (!rootNode || rootNode === doc) return null;
+      if (styledRoots.indexOf(rootNode) !== -1) return null;
+      styledRoots.push(rootNode);
+      var style = doc.createElement("style");
+      style.textContent = BOX_STYLE;
+      rootNode.appendChild(style);
+      return style;
     }
 
     // ------------------------------------------------------------------------
@@ -8897,6 +8960,7 @@
 
       if (doc) {
         var host = (src && src.host) || surface();
+        ensureBoxStyleIn(host);
         node = doc.createElement("div");
         node.className = BOX_CLASS;
         // Marked as the library's own chrome, so nothing here can reach a
@@ -10034,7 +10098,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+2c0f5e5696ea";
+  var VERSION = "0.0.0+668490b0c850";
 
   function isLoopbackOrigin(origin) {
     if (typeof origin !== "string" || !origin) return false;

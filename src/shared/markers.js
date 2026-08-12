@@ -31,9 +31,12 @@
   // Every class token starting with this prefix is stripped on capture.
   var TOOL_CLASS_PREFIX = "lahe-";
 
-  // The overlay root's id. One per page (Task 2C asserts exactly one after
-  // 100 morphs).
-  var OVERLAY_ROOT_ID = "lahe-overlay-root";
+  // The id of the ONE element the library puts in the page: a chrome-marked
+  // div holding a closed shadow root, in which everything the library draws
+  // lives (the rail, comment boxes, the pick outline). One per page (Task 2C
+  // asserts exactly one after 100 morphs). The element is created in one place,
+  // highlight.js's surface module, and it reads its id from here.
+  var OVERLAY_ROOT_ID = "lahe-surface-root";
 
   // Set on a region while the reviewer is editing it (architecture D3). Turbo
   // reads data-turbo-permanent natively; the tool's own attribute is what the

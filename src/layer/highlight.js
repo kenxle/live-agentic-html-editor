@@ -77,7 +77,12 @@
   // The shadow host. Fixed and zero-weight in layout terms: a fixed element is
   // out of flow, so it cannot move a block or change scrollHeight, and pointer
   // events pass through it except where the library actually draws something.
-  var SURFACE_ID = "lahe-surface-root";
+  //
+  // The id is markers.OVERLAY_ROOT_ID, not a second spelling of the same idea.
+  // There is ONE host on the page and this module owns it: the rail mounts
+  // inside this root rather than creating a host of its own, which is also the
+  // one host 2D's remount contract re-creates.
+  var SURFACE_ID = markers.OVERLAY_ROOT_ID;
 
   // Highlight colors, as light a touch as a highlight can be and still read.
   // Written with color-mix-free plain rgba so a page-level stylesheet cannot
@@ -248,6 +253,19 @@
       if (!doc) return { host: null, root: null };
       if (surfaceRoot && surfaceHost && surfaceHost.parentNode) {
         return { host: surfaceHost, root: surfaceRoot };
+      }
+      // ONE HOST, and it fails loud rather than quietly becoming two. A second
+      // host means two closed roots, two rails, and a remount that re-creates
+      // one of them; none of that is diagnosable from the outside, because a
+      // closed root cannot be read back off the element.
+      var already = doc.getElementById(SURFACE_ID);
+      if (already) {
+        throw new Error(
+          "highlight.surface: the page already holds " +
+            SURFACE_ID +
+            ", so this would be the second one. Everything the library draws goes in the ONE surface: " +
+            "pass the same highlights instance around (highlight.shared), or call teardown() first."
+        );
       }
       var host = doc.createElement("div");
       host.id = SURFACE_ID;
