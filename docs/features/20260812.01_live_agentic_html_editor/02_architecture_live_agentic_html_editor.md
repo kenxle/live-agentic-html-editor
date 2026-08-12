@@ -303,7 +303,15 @@ cursor, so this is a single module by design, not convention.
 One fixed rail, in the shadow root, with three tabs: **Active** (outstanding comments and notes,
 newest visible, the open note box at the foot), **Edits** (every hand edit as before/after rows, kept
 apart from comments per R32, and doubling as the end-of-session style-guide list per R39, exportable),
-and **Done** (handled items with their agent replies, reopenable per R38). Cards update in place; the
+and **Done** (handled items with their agent replies, reopenable per R38). Ken reviewed three
+wireframed directions and chose this rail shape, the evolution of the module he already uses; his
+notes are folded in here. **Copy and export are always visible**, not only when nothing is connected:
+the review may need to go to a different agent, and when something is wrong is exactly when the
+reviewer cannot tell. **An agent's question is the loudest thing on a card**, a distinct treatment
+rather than a tinted label, because a question the reviewer scrolls past is a stalled agent. The
+agent's name on a reply comes from the reply itself (the agent states its own name in the reply line;
+absent, the card says "agent"), which is the whole of agent detection. The keyboard hints are
+readable, not fine print. Cards update in place; the
 rail never rebuilds itself under a focused text box. Errors are chips on the rail, each dismissible
 (R11), and a persistent one-line status states plainly what is happening to the reviewer's typing:
 kept locally, stored, or agent connected (R12). The collapsed pill never overlaps the open rail's

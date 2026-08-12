@@ -6,6 +6,22 @@ click-to-edit, Chromium default) and its reviews are archived:
 
 Reviews of this version land below as they return.
 
+## Wireframe reaction (Ken, 2026-08-12)
+
+Three directions were drawn and opened (side rail, bottom dock, margin annotations), same content in
+each. Ken chose the **side rail** (direction A): "just like what we've got already from my module,
+which is perfect." His notes, all folded into D10 (the rail):
+
+- Fine as long as it is a rough wireframe and not a stylistic direction. It is; no styling was taken
+  from it.
+- The hotkey tips at the rail's foot were too small to read. Legibility is now stated in D10.
+- Copy and export were missing. They are always visible, for sending the review to a different agent
+  and for the case where something is wrong and the reviewer cannot tell.
+- "claude asks" needs more than a colored label. Agent questions get a distinct, prominent card
+  treatment.
+- On agent-agnostic naming: the agent states its own name in its reply line; no detection, generic
+  "agent" fallback.
+
 ## review-security (Round 1, on v2)
 
 Condensed here; dispositions are in the architecture doc. Full text follows.

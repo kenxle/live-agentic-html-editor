@@ -1251,6 +1251,9 @@ Review</a></li>
 <li><a href="#architecture-reviews"
 id="toc-architecture-reviews">Architecture reviews</a>
 <ul>
+<li><a href="#wireframe-reaction-ken-2026-08-12"
+id="toc-wireframe-reaction-ken-2026-08-12">Wireframe reaction (Ken,
+2026-08-12)</a></li>
 <li><a href="#review-security-round-1-on-v2"
 id="toc-review-security-round-1-on-v2">review-security (Round 1, on
 v2)</a></li>
@@ -1655,13 +1658,23 @@ the open note box at the foot), <strong>Edits</strong> (every hand edit
 as before/after rows, kept apart from comments per R32, and doubling as
 the end-of-session style-guide list per R39, exportable), and
 <strong>Done</strong> (handled items with their agent replies,
-reopenable per R38). Cards update in place; the rail never rebuilds
-itself under a focused text box. Errors are chips on the rail, each
-dismissible (R11), and a persistent one-line status states plainly what
-is happening to the reviewer's typing: kept locally, stored, or agent
-connected (R12). The collapsed pill never overlaps the open rail's
-content, a nit inherited from the current module and fixed there
-too.</p>
+reopenable per R38). Ken reviewed three wireframed directions and chose
+this rail shape, the evolution of the module he already uses; his notes
+are folded in here. <strong>Copy and export are always visible</strong>,
+not only when nothing is connected: the review may need to go to a
+different agent, and when something is wrong is exactly when the
+reviewer cannot tell. <strong>An agent's question is the loudest thing
+on a card</strong>, a distinct treatment rather than a tinted label,
+because a question the reviewer scrolls past is a stalled agent. The
+agent's name on a reply comes from the reply itself (the agent states
+its own name in the reply line; absent, the card says "agent"), which is
+the whole of agent detection. The keyboard hints are readable, not fine
+print. Cards update in place; the rail never rebuilds itself under a
+focused text box. Errors are chips on the rail, each dismissible (R11),
+and a persistent one-line status states plainly what is happening to the
+reviewer's typing: kept locally, stored, or agent connected (R12). The
+collapsed pill never overlaps the open rail's content, a nit inherited
+from the current module and fixed there too.</p>
 <p>Copy and export cover the whole review when the helper is reachable,
 and say so when they cannot: with nothing running, the export carries
 what this browser holds and is labeled as this page's slice of the
@@ -2089,6 +2102,26 @@ draft (send model, click-to-edit, Chromium default) and its reviews are
 archived: <code>archive_architecture_v1_send_model_draft.md</code>,
 <code>archive_architecture_v1_reviews.md</code>.</p>
 <p>Reviews of this version land below as they return.</p>
+<h2 id="wireframe-reaction-ken-2026-08-12">Wireframe reaction (Ken,
+2026-08-12)</h2>
+<p>Three directions were drawn and opened (side rail, bottom dock,
+margin annotations), same content in each. Ken chose the <strong>side
+rail</strong> (direction A): "just like what we've got already from my
+module, which is perfect." His notes, all folded into D10 (the
+rail):</p>
+<ul>
+<li>Fine as long as it is a rough wireframe and not a stylistic
+direction. It is; no styling was taken from it.</li>
+<li>The hotkey tips at the rail's foot were too small to read.
+Legibility is now stated in D10.</li>
+<li>Copy and export were missing. They are always visible, for sending
+the review to a different agent and for the case where something is
+wrong and the reviewer cannot tell.</li>
+<li>"claude asks" needs more than a colored label. Agent questions get a
+distinct, prominent card treatment.</li>
+<li>On agent-agnostic naming: the agent states its own name in its reply
+line; no detection, generic "agent" fallback.</li>
+</ul>
 <h2 id="review-security-round-1-on-v2">review-security (Round 1, on
 v2)</h2>
 <p>Condensed here; dispositions are in the architecture doc. Full text
