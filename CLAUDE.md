@@ -45,7 +45,7 @@ src/
   cli/       The helper's commands (serve, add, the blocking wait)
 test/
   unit/      node:test unit tests
-  browser/   Playwright tests (Chromium only)
+  browser/   Playwright tests (Chromium by default, three lanes on gate:all)
   fixtures/  Static HTML pages used as review targets in tests
 ```
 
@@ -55,17 +55,31 @@ needs an update, not that `src/` needs a new top-level folder.
 
 ## Running the gate
 
-```
-npm run gate
-```
+**A builder runs `npm run gate:builder`.** Three gates exist and they are not
+interchangeable:
 
-Runs lint, unit tests, and browser tests, in that order, and exits non-zero
-on any failure. Run it before every commit that touches `src/` or `test/`.
-`npm run lint`, `npm run test:unit`, and `npm run test:browser` also run
-individually.
+| Command | lint | `check:layer` | unit | browsers |
+| --- | --- | --- | --- | --- |
+| `npm run gate:builder` | yes | **no** | yes | Chromium |
+| `npm run gate` | yes | yes | yes | Chromium |
+| `npm run gate:all` | yes | yes | yes | Chromium, Firefox, WebKit |
 
-Browser tests need Chromium installed once: `npx playwright install
-chromium`.
+`check:layer` fails when the committed bundle `dist/lahe-layer.js` is stale.
+**Builders never commit `dist/`**: it is generated, and four parallel branches
+rebuilding it means a machine-generated conflict at every checkpoint. Rebuild it
+locally if you need it for a browser test, but do not stage it. The orchestrator
+rebuilds and commits it once per checkpoint, then runs `gate` and `gate:all`.
+
+`lint` is three checks, not just syntax: `node --check` over every tracked `.js`
+file, **no jsdom** (not in `package.json`, not imported anywhere under `test/`),
+and **manifest completeness** (every file under `src/` appears exactly once
+across `src/shared/manifest.js`'s lists). `npm run test:unit` and
+`npm run test:browser` also run individually.
+
+Browsers install once: `npx playwright install chromium`, plus
+`npx playwright install firefox webkit` for the lanes. A bare `playwright test`
+is Chromium only, so the inner loop stays one browser wide; `--project=webkit`
+runs a single lane by name.
 
 ## Platform and browser target
 
@@ -73,8 +87,9 @@ Cross-platform: macOS, Linux, and Windows all run the helper (standard
 Node), and the layer is standard DOM APIs that current Chrome, Edge,
 Safari, and Firefox all support. The one capability floor is the CSS
 Custom Highlight API, stated with its reason in the architecture doc. The
-Playwright test suite runs on Chromium as its harness browser; that is a
-test-infrastructure choice, not a product support statement.
+Playwright suite has all three lanes (Chromium, Firefox, WebKit) and runs them
+on `npm run gate:all` at every checkpoint; a builder's default run is Chromium,
+which is a loop-speed choice rather than a support statement.
 
 ## Commit conventions
 

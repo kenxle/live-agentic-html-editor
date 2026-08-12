@@ -1,28 +1,31 @@
 #!/usr/bin/env node
-// Stub local service, for the browser test harness only.
+// Stub local helper, for the browser test harness only.
 //
-// This is NOT the real service (src/service/). It exists so the service
-// helpers in test/helpers/service.js have something to start, probe, and
-// kill -9 before the real service lands, and so the cross-origin assertion can
-// be written now and pointed at the real thing later.
+// This is NOT the real helper (src/service/). It exists so the service helpers
+// in test/helpers/service.js have something to start, probe, suspend and kill -9
+// before the real one lands, and so the second-origin assertion can be written
+// now and pointed at the real thing later.
 //
 // It implements exactly the contract the helpers depend on and nothing else:
 //
 //   1. It binds an ephemeral port on 127.0.0.1.
 //   2. It writes <stateDir>/service.json, mode 0600, containing
-//      { port, pid, token }. That file is the readiness signal AND the way a
-//      test learns the token. The real service records the run token and port in
-//      an owner only file per D9; the helper polls for exactly this shape.
-//   3. GET  /health            -> 200 {"ok":true}, no auth. Liveness only.
-//   4. POST /items             -> appends one line to <stateDir>/events.log,
-//      but only behind all three of D9's layers: the token header, the origin
-//      allowlist, and a JSON content type plus a custom header so a simple
-//      request can never reach the handler.
+//      { port, pid, reviews: { "<id>": { token } } }. That file is the readiness
+//      signal AND the way a test learns a review's token. The token is PER
+//      REVIEW (architecture D11: loopback is not a boundary, so the page proves
+//      itself), which is why this is a map and not one string.
+//   3. GET  /health                       -> 200 {"ok":true}, no auth. Liveness.
+//   4. POST /reviews/<id>/items           -> appends one line to
+//      <stateDir>/reviews/<id>/events.jsonl, but only behind all of D11's
+//      checks: that review's token, the origin allowlist, a JSON content type,
+//      and a custom header so a simple request can never reach the handler.
 //   5. Anything refused appends nothing. That is what "asserted on effect"
-//      means: the test reads events.log off disk, not a status code.
+//      means: the test reads the log off disk, not a status code.
 //
 // Env: LAHE_STATE_DIR (required), LAHE_ALLOWED_ORIGINS (comma separated),
-//      LAHE_TOKEN (optional, otherwise generated).
+//      LAHE_REVIEWS (comma separated review ids, default review-1),
+//      LAHE_TOKEN (optional; used for every review, for a test that wants a
+//      token it can predict).
 
 "use strict";
 
@@ -38,7 +41,29 @@ if (!stateDir) {
 }
 fs.mkdirSync(stateDir, { recursive: true });
 
-const token = process.env.LAHE_TOKEN || crypto.randomBytes(24).toString("hex");
+const DEFAULT_REVIEW_ID = "review-1";
+// Review ids are path components, so they are constrained here the same way the
+// real helper constrains them. A stub that accepted anything would let a
+// path-traversal test pass against the harness and fail against the helper.
+const SAFE_REVIEW_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
+const reviewIds = (process.env.LAHE_REVIEWS || DEFAULT_REVIEW_ID)
+  .split(",")
+  .map(function (value) {
+    return value.trim();
+  })
+  .filter(Boolean);
+
+const reviews = {};
+reviewIds.forEach(function (id) {
+  if (!SAFE_REVIEW_ID.test(id)) {
+    process.stderr.write("stub-service: unsafe review id: " + id + "\n");
+    process.exit(2);
+  }
+  reviews[id] = { token: process.env.LAHE_TOKEN || crypto.randomBytes(24).toString("hex") };
+  fs.mkdirSync(path.join(stateDir, "reviews", id), { recursive: true, mode: 0o700 });
+});
+
 const allowedOrigins = (process.env.LAHE_ALLOWED_ORIGINS || "")
   .split(",")
   .map(function (value) {
@@ -46,12 +71,15 @@ const allowedOrigins = (process.env.LAHE_ALLOWED_ORIGINS || "")
   })
   .filter(Boolean);
 
-const logPath = path.join(stateDir, "events.log");
 const readyPath = path.join(stateDir, "service.json");
+
+function eventLogPath(reviewId) {
+  return path.join(stateDir, "reviews", reviewId, "events.jsonl");
+}
 
 function originAllowed(origin) {
   // No wildcard and no reflection. A page cannot forge its Origin header, which
-  // is what makes this the control that a readable token cannot be.
+  // is what makes this the control a readable token cannot be.
   return !!origin && allowedOrigins.indexOf(origin) !== -1;
 }
 
@@ -62,8 +90,8 @@ function constantTimeEquals(a, b) {
   return crypto.timingSafeEqual(left, right);
 }
 
-function appendEvent(event) {
-  fs.appendFileSync(logPath, JSON.stringify(event) + "\n", { mode: 0o600 });
+function appendEvent(reviewId, event) {
+  fs.appendFileSync(eventLogPath(reviewId), JSON.stringify(event) + "\n", { mode: 0o600 });
 }
 
 function send(res, status, body, extraHeaders) {
@@ -88,6 +116,13 @@ function readBody(req) {
   });
 }
 
+// /reviews/<id>/items, and nothing else routes.
+function itemsRoute(pathname) {
+  const match = /^\/reviews\/([^/]+)\/items$/.exec(pathname);
+  if (!match) return null;
+  return decodeURIComponent(match[1]);
+}
+
 const server = http.createServer(async function (req, res) {
   const url = new URL(req.url, "http://127.0.0.1");
   const origin = req.headers.origin;
@@ -107,23 +142,28 @@ const server = http.createServer(async function (req, res) {
   }
 
   if (req.method === "GET" && url.pathname === "/health") {
-    send(res, 200, { ok: true, pid: process.pid });
+    send(res, 200, { ok: true, pid: process.pid, reviews: Object.keys(reviews) });
     return;
   }
 
-  if (req.method === "POST" && url.pathname === "/items") {
+  const reviewId = req.method === "POST" ? itemsRoute(url.pathname) : null;
+  if (reviewId !== null) {
     const body = await readBody(req);
     const contentType = String(req.headers["content-type"] || "");
+    const review = SAFE_REVIEW_ID.test(reviewId) ? reviews[reviewId] : null;
     const refusal =
+      (!review && "unknown_review") ||
       (!originAllowed(origin) && "origin_not_allowed") ||
       (contentType.indexOf("application/json") !== 0 && "content_type_required") ||
       (!req.headers["x-lahe-request"] && "custom_header_required") ||
-      (!constantTimeEquals(req.headers["x-lahe-token"] || "", token) && "bad_token") ||
+      (!constantTimeEquals(req.headers["x-lahe-token"] || "", review.token) && "bad_token") ||
       null;
 
     if (refusal) {
       // Nothing is appended. The whole point of the assertion is that the log is
-      // unchanged, so a refusal must not leave a trace either.
+      // unchanged, so a refusal must not leave a trace in it either. The real
+      // helper names the failed check in its OWN log (D11); this stub has no
+      // helper log, and 1A adds one when it builds the real thing.
       send(res, 403, { error: refusal });
       return;
     }
@@ -135,7 +175,12 @@ const server = http.createServer(async function (req, res) {
       send(res, 400, { error: "bad_json" });
       return;
     }
-    appendEvent({ kind: "item", at: new Date().toISOString(), payload: parsed });
+    appendEvent(reviewId, {
+      kind: "item",
+      review: reviewId,
+      at: new Date().toISOString(),
+      payload: parsed
+    });
     send(res, 200, { ok: true }, { "Access-Control-Allow-Origin": origin, "Vary": "Origin" });
     return;
   }
@@ -145,7 +190,12 @@ const server = http.createServer(async function (req, res) {
 
 server.listen(0, "127.0.0.1", function () {
   const port = server.address().port;
-  const payload = { port: port, pid: process.pid, token: token, startedAt: new Date().toISOString() };
+  const payload = {
+    port: port,
+    pid: process.pid,
+    reviews: reviews,
+    startedAt: new Date().toISOString()
+  };
   const temp = readyPath + "." + process.pid + ".tmp";
   fs.writeFileSync(temp, JSON.stringify(payload), { mode: 0o600 });
   fs.renameSync(temp, readyPath);

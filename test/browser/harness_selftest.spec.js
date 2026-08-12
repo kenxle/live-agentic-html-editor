@@ -16,6 +16,7 @@ const {
   test,
   expect,
   assertCaretSurvivesTyping,
+  assertCaretRestoredAcrossRepaints,
   assertNoSecondWrite,
   assertCaretUnmoved,
   captureCaret,
@@ -23,8 +24,9 @@ const {
   compareCaret,
   typeInto,
   focusRegion,
-  enableEditing,
-  commitRegion,
+  editBlock,
+  commitEdit,
+  isBlockProtected,
   configureStub,
   replayTimes,
   regionText,
@@ -42,13 +44,25 @@ const {
 
 const TEN = "0123456789";
 
+// `edit` names the block to enter edit state on, and there is no default.
+// Edit state is per block and entered deliberately (D3), so a page-wide "make
+// everything editable" does not exist any more: a test says which block it means,
+// and a test that only pokes the DOM says nothing and gets a page in browse mode.
+//
+// Order matters for the negative halves: entering edit state marks the block, so
+// a test that means "nothing protects this region" switches the layers off first
+// and calls editBlock itself afterwards.
 async function openRepainting(page, fixtureServer, knobs = {}) {
+  const fixtureKnobs = Object.assign({}, knobs);
+  const edit = fixtureKnobs.edit;
+  delete fixtureKnobs.edit;
+
   await page.goto(fixtureServer.urlFor("repainting.html"));
   await page.waitForFunction(function () {
     return !!(window.__lahe && window.__lahe.ready && window.__lahe.fixture);
   });
-  await configureFixture(page, Object.assign({ target: '[data-repaint-target="live"]' }, knobs));
-  await enableEditing(page);
+  await configureFixture(page, Object.assign({ target: '[data-repaint-target="live"]' }, fixtureKnobs));
+  if (edit) await editBlock(page, edit);
   return page;
 }
 
@@ -176,7 +190,7 @@ test.describe("forceRepaint flavors", () => {
     await page.evaluate(() => {
       document.querySelector("#live-note").firstChild.nodeValue = "reviewer text two";
     });
-    const original = await page.evaluate(() => window.__lahe.stub.records().length >= 0);
+    const original = await page.evaluate(() => window.__lahe.stub.items().length >= 0);
     expect(original).toBe(true);
     await forceRepaint(page, { flavor: "react-text" });
     // Same node, and the reviewer's text is gone anyway. This is why node
@@ -186,7 +200,7 @@ test.describe("forceRepaint flavors", () => {
   });
 
   test("a vetoed repaint still counts, so a test can tell veto from breakage", async ({ page, fixtureServer }) => {
-    await openRepainting(page, fixtureServer, { protection: "veto" });
+    await openRepainting(page, fixtureServer, { protection: "veto", edit: "live-note" });
 
     await focusRegion(page, "#live-note");
     await placeCaret(page, { selector: "#live-note", offset: 4 });
@@ -208,7 +222,7 @@ test.describe("forceRepaint flavors", () => {
 
 test.describe("assertCaretUnmoved", () => {
   test("passes across a repaint of a subtree the caret is not in", async ({ page, fixtureServer }) => {
-    await openRepainting(page, fixtureServer, { protection: "off", target: '[data-repaint-target="sidebar"]' });
+    await openRepainting(page, fixtureServer, { protection: "off", target: '[data-repaint-target="sidebar"]', edit: "live-note" });
 
     await focusRegion(page, "#live-note");
     await placeCaret(page, { selector: "#live-note", offset: 10 });
@@ -220,7 +234,7 @@ test.describe("assertCaretUnmoved", () => {
   });
 
   test("passes across a repaint the protection vetoes", async ({ page, fixtureServer }) => {
-    await openRepainting(page, fixtureServer, { protection: "veto" });
+    await openRepainting(page, fixtureServer, { protection: "veto", edit: "live-note" });
 
     await focusRegion(page, "#live-note");
     await placeCaret(page, { selector: "#live-note", offset: 10 });
@@ -234,6 +248,10 @@ test.describe("assertCaretUnmoved", () => {
 
   test("throws when a repaint destroys the node the caret was in", async ({ page, fixtureServer }) => {
     await openRepainting(page, fixtureServer, { protection: "off" });
+    // Every layer off before the block is marked, so the repaint really does get
+    // to destroy the node the caret is in. That is the whole point of this half.
+    await configureStub(page, { cooperativeSkip: false, veto: false });
+    await editBlock(page, "live-note");
 
     await focusRegion(page, "#live-note");
     await placeCaret(page, { selector: "#live-note", offset: 10 });
@@ -271,7 +289,7 @@ test.describe("assertCaretUnmoved", () => {
 
 test.describe("assertCaretSurvivesTyping", () => {
   test("ten characters at 50ms survive a 200ms turbo-frame repaint", async ({ page, fixtureServer }) => {
-    await openRepainting(page, fixtureServer, { protection: "veto", flavor: "turbo-frame" });
+    await openRepainting(page, fixtureServer, { protection: "veto", flavor: "turbo-frame", edit: "live-note" });
 
     const result = await assertCaretSurvivesTyping(page, {
       selector: "#live-note",
@@ -287,7 +305,7 @@ test.describe("assertCaretSurvivesTyping", () => {
   });
 
   test("and survives a real per-element morph, where the rest of the frame does re-render", async ({ page, fixtureServer }) => {
-    await openRepainting(page, fixtureServer, { protection: "veto", flavor: "morph" });
+    await openRepainting(page, fixtureServer, { protection: "veto", flavor: "morph", edit: "live-note" });
 
     // Change the neighbouring paragraph so the morph has real work to do inside
     // the same frame. If the frame were being skipped wholesale, this would
@@ -313,7 +331,7 @@ test.describe("assertCaretSurvivesTyping", () => {
   });
 
   test("and survives a react-text repaint too", async ({ page, fixtureServer }) => {
-    await openRepainting(page, fixtureServer, { protection: "veto", flavor: "react-text" });
+    await openRepainting(page, fixtureServer, { protection: "veto", flavor: "react-text", edit: "live-note" });
 
     const result = await assertCaretSurvivesTyping(page, {
       selector: "#live-note",
@@ -328,7 +346,10 @@ test.describe("assertCaretSurvivesTyping", () => {
 
   test("throws under a morph when nothing vetoes the edited region", async ({ page, fixtureServer }) => {
     await openRepainting(page, fixtureServer, { protection: "off", flavor: "morph" });
-    await configureStub(page, { protectOnEdit: false });
+    // Layers one and two off BEFORE edit state is entered, so the block is never
+    // marked and nothing flows around it. This is the deliberate revert.
+    await configureStub(page, { cooperativeSkip: false, veto: false });
+    await editBlock(page, "live-note");
 
     let thrown = null;
     try {
@@ -351,7 +372,8 @@ test.describe("assertCaretSurvivesTyping", () => {
 
   test("throws when the repaint is allowed to run under the caret", async ({ page, fixtureServer }) => {
     await openRepainting(page, fixtureServer, { protection: "off", flavor: "turbo-frame" });
-    await configureStub(page, { protectOnEdit: false });
+    await configureStub(page, { cooperativeSkip: false, veto: false });
+    await editBlock(page, "live-note");
 
     let thrown = null;
     try {
@@ -370,7 +392,7 @@ test.describe("assertCaretSurvivesTyping", () => {
   });
 
   test("throws when replay never runs, so a no-op implementation cannot pass", async ({ page, fixtureServer }) => {
-    await openRepainting(page, fixtureServer, { protection: "veto", flavor: "turbo-frame" });
+    await openRepainting(page, fixtureServer, { protection: "veto", flavor: "turbo-frame", edit: "live-note" });
 
     // Freeze the replay pass counter: the layer is present and the text will be
     // perfect, because nothing ever repaints under it. Only the counter check
@@ -401,14 +423,14 @@ test.describe("assertCaretSurvivesTyping", () => {
   });
 
   test("the edit survives commit and replay after the caret leaves", async ({ page, fixtureServer }) => {
-    await openRepainting(page, fixtureServer, { protection: "veto", flavor: "turbo-frame" });
+    await openRepainting(page, fixtureServer, { protection: "veto", flavor: "turbo-frame", edit: "live-note" });
 
     const original = await regionText(page, "#live-note");
     const offset = 10;
     const expected = original.slice(0, offset) + TEN + original.slice(offset);
 
     await typeInto(page, { selector: "#live-note", text: TEN, caretOffset: offset, delayMs: 20 });
-    await commitRegion(page, "live-note");
+    await commitEdit(page, "live-note");
 
     // The caret is gone from the region and protection has dropped, so the
     // repaint reverts it and replay has to put it back. Poll the counter rather
@@ -428,10 +450,10 @@ test.describe("assertCaretSurvivesTyping", () => {
 
 test.describe("assertNoSecondWrite", () => {
   test("five replay passes over an applied region write nothing", async ({ page, fixtureServer }) => {
-    await openRepainting(page, fixtureServer, { protection: "veto" });
+    await openRepainting(page, fixtureServer, { protection: "veto", edit: "live-note" });
 
     await typeInto(page, { selector: "#live-note", text: TEN, caretOffset: 10, delayMs: 20 });
-    await commitRegion(page, "live-note");
+    await commitEdit(page, "live-note");
     // Blur alone does not move the selection out of the region in Chromium, and
     // the caret shield would then be the reason nothing is written. Clear the
     // selection so this test is about idempotence and only about idempotence.
@@ -445,20 +467,22 @@ test.describe("assertNoSecondWrite", () => {
     const outcome = await assertNoSecondWrite(page, {
       selector: "#live-note",
       message: "replay is idempotent by comparison",
+      minReplayPasses: 5,
       action: () => replayTimes(page, 5)
     });
 
     expect(outcome.records).toHaveLength(0);
+    expect(outcome.replayPasses).toBeGreaterThanOrEqual(5);
     const counters = await readCounters(page);
     expect(counters.regionsSkippedIdentical).toBeGreaterThanOrEqual(5);
     expect(counters.replayPasses).toBeGreaterThanOrEqual(5);
   });
 
   test("throws when replay rewrites the same content, which final-DOM equality would miss", async ({ page, fixtureServer }) => {
-    await openRepainting(page, fixtureServer, { protection: "veto" });
+    await openRepainting(page, fixtureServer, { protection: "veto", edit: "live-note" });
 
     await typeInto(page, { selector: "#live-note", text: TEN, caretOffset: 10, delayMs: 20 });
-    await commitRegion(page, "live-note");
+    await commitEdit(page, "live-note");
     await page.evaluate(() => document.querySelector("#live-note").blur());
 
     const textBefore = await regionText(page, "#live-note");
@@ -471,6 +495,7 @@ test.describe("assertNoSecondWrite", () => {
     try {
       await assertNoSecondWrite(page, {
         selector: "#live-note",
+        minReplayPasses: 5,
         action: () => replayTimes(page, 5)
       });
     } catch (err) {
@@ -487,10 +512,10 @@ test.describe("assertNoSecondWrite", () => {
   });
 
   test("a repeated identical rewrite really does destroy the caret", async ({ page, fixtureServer }) => {
-    await openRepainting(page, fixtureServer, { protection: "veto" });
+    await openRepainting(page, fixtureServer, { protection: "veto", edit: "live-note" });
 
     await typeInto(page, { selector: "#live-note", text: TEN, caretOffset: 10, delayMs: 20 });
-    await commitRegion(page, "live-note");
+    await commitEdit(page, "live-note");
     await configureStub(page, { idempotent: false, respectCaret: false });
 
     await placeCaret(page, { selector: "#live-note", offset: 5 });
@@ -505,6 +530,60 @@ test.describe("assertNoSecondWrite", () => {
       thrown = err;
     }
     expect(thrown, "the rewrite must be observable as caret damage, not just as records").not.toBeNull();
+  });
+
+  test("it refuses to run at all without minReplayPasses", async ({ page, fixtureServer }) => {
+    await openRepainting(page, fixtureServer, { protection: "veto", edit: "live-note" });
+
+    // Not a style preference. Without the number, the assertion cannot tell
+    // "replay ran five times and chose not to write" from "replay never ran",
+    // and those are the pass and the failure it exists to separate.
+    let thrown = null;
+    try {
+      await assertNoSecondWrite(page, {
+        selector: "#live-note",
+        action: async () => {}
+      });
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown, "a missing minReplayPasses must be refused, not defaulted").not.toBeNull();
+    expect(thrown.message).toContain("minReplayPasses is required");
+  });
+
+  test("throws when replay never ran, which is the hole a paused engine walks through", async ({
+    page,
+    fixtureServer
+  }) => {
+    await openRepainting(page, fixtureServer, { protection: "veto", edit: "live-note" });
+
+    await typeInto(page, { selector: "#live-note", text: TEN, caretOffset: 10, delayMs: 20 });
+    await commitEdit(page, "live-note");
+    await page.evaluate(() => {
+      document.querySelector("#live-note").blur();
+      document.getSelection().removeAllRanges();
+    });
+
+    const textBefore = await regionText(page, "#live-note");
+
+    // The engine is paused: the action does nothing at all. No writes land, the
+    // DOM is untouched, and every part of this assertion except the counter is
+    // perfectly happy.
+    let thrown = null;
+    try {
+      await assertNoSecondWrite(page, {
+        selector: "#live-note",
+        minReplayPasses: 5,
+        message: "a paused replay engine",
+        action: async () => "nothing happened"
+      });
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown, "a paused engine must not pass an idempotence assertion").not.toBeNull();
+    expect(thrown.message).toContain("replay pass counter only went up by 0");
+    expect(await regionText(page, "#live-note")).toBe(textBefore);
   });
 
   test("the observer catches a write that the final DOM also shows", async ({ page, fixtureServer }) => {
@@ -523,8 +602,9 @@ test.describe("assertNoSecondWrite", () => {
   });
 
   test("the observer can be scoped to attributes, for the host-stays-clean assertions", async ({ page, fixtureServer }) => {
+    // Browse mode, no edit state anywhere: this test is about the observer, and
+    // the page it watches is the page as the reviewer first sees it.
     await page.goto(fixtureServer.urlFor("css-reset.html"));
-    await enableEditing(page);
 
     const observer = await observeMutations(page, {
       selector: "#reset-scratch",
@@ -542,12 +622,251 @@ test.describe("assertNoSecondWrite", () => {
 });
 
 // ---------------------------------------------------------------------------
+// THE HOOK FLAVORS (what protection layers one and two have to hold on to)
+// ---------------------------------------------------------------------------
+
+test.describe("repaint hooks", () => {
+  test("the cooperative-skip attribute carries the live element across a rebuild", async ({
+    page,
+    fixtureServer
+  }) => {
+    await openRepainting(page, fixtureServer, { protection: "off", flavor: "turbo-frame" });
+    await configureStub(page, { cooperativeSkip: false, veto: false });
+
+    // Layer one on its own: no listener, no veto, just the attribute. This is
+    // data-turbo-permanent, and it is a DIFFERENT framework feature from the
+    // cancelable event below.
+    await page.evaluate(() => {
+      const el = document.querySelector("#live-note");
+      el.setAttribute("data-lahe-permanent", "");
+      el.firstChild.nodeValue = "the reviewer typed this";
+    });
+
+    const before = await readCounters(page);
+    await forceRepaint(page);
+    const after = await readCounters(page);
+
+    expect(await regionText(page, "#live-note")).toBe("the reviewer typed this");
+    expect(after.elementsSkippedCooperative).toBeGreaterThan(before.elementsSkippedCooperative);
+    // The rest of the frame did re-render, so this is a skip and not a no-op.
+    expect(await regionText(page, "#live-second")).toBe(
+      "Dana moved her long run to Saturday because of the weather."
+    );
+  });
+
+  test("a listener can veto one element's morph, and the counter says it did", async ({
+    page,
+    fixtureServer
+  }) => {
+    await openRepainting(page, fixtureServer, { protection: "off", flavor: "morph" });
+    await configureStub(page, { cooperativeSkip: false, veto: false });
+
+    // Layer two on its own: no attribute, a listener that refuses the event in
+    // the moment. This is turbo:before-morph-element.
+    await page.evaluate(() => {
+      document.addEventListener("lahe:before-morph-element", (event) => {
+        if (event.target.id === "live-note") event.preventDefault();
+      });
+      document.querySelector("#live-note").firstChild.nodeValue = "vetoed by a listener";
+      document.querySelector("#live-second").firstChild.nodeValue = "not vetoed";
+    });
+
+    const before = await readCounters(page);
+    await forceRepaint(page);
+    const after = await readCounters(page);
+
+    expect(await regionText(page, "#live-note")).toBe("vetoed by a listener");
+    expect(after.elementVetoes).toBeGreaterThan(before.elementVetoes);
+    expect(await regionText(page, "#live-second")).toBe(
+      "Dana moved her long run to Saturday because of the weather."
+    );
+  });
+
+  test("the no-hook flavor offers nothing: no event, no attribute, no veto", async ({
+    page,
+    fixtureServer
+  }) => {
+    // Picked in the URL, before any script runs, which is how a test gets a page
+    // whose framework never offered a hook in the first place.
+    await page.goto(fixtureServer.urlFor("repainting.html") + "?repaint=no-hook");
+    await page.waitForFunction(() => !!(window.__lahe && window.__lahe.ready && window.__lahe.fixture));
+    await configureFixture(page, { target: '[data-repaint-target="live"]' });
+    await configureStub(page, { cooperativeSkip: false, veto: false });
+
+    expect((await page.evaluate(() => window.__lahe.fixture.state())).hooks).toBe("off");
+
+    let sawEvent = false;
+    await page.evaluate(() => {
+      window.__sawMorphEvent = false;
+      document.addEventListener("lahe:before-morph-element", () => {
+        window.__sawMorphEvent = true;
+      });
+      const el = document.querySelector("#live-note");
+      el.setAttribute("data-lahe-permanent", "");
+      el.setAttribute("data-lahe-protected", "");
+      el.firstChild.nodeValue = "the reviewer typed this";
+    });
+
+    const before = await readCounters(page);
+    await forceRepaint(page);
+    const after = await readCounters(page);
+    sawEvent = await page.evaluate(() => window.__sawMorphEvent);
+
+    // Everything a cooperative framework offers is absent, and the reviewer's
+    // text is gone. Only a restore afterwards can save this page.
+    expect(sawEvent).toBe(false);
+    expect(after.elementVetoes).toBe(before.elementVetoes);
+    expect(after.elementsSkippedCooperative).toBe(before.elementsSkippedCooperative);
+    expect(after.repaintsVetoed).toBe(before.repaintsVetoed);
+    expect(await regionText(page, "#live-note")).not.toContain("the reviewer typed this");
+  });
+
+  test("configure switches the flavor at runtime too", async ({ page, fixtureServer }) => {
+    await openRepainting(page, fixtureServer, { protection: "veto", edit: "live-note" });
+    expect((await page.evaluate(() => window.__lahe.fixture.state())).hooks).toBe("on");
+    await configureFixture(page, { hooks: "off" });
+    expect((await page.evaluate(() => window.__lahe.fixture.state())).hooks).toBe("off");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PROTECTION LAYER THREE (plan test #1, the layer the other assertion cannot score)
+// ---------------------------------------------------------------------------
+
+async function openNoHook(page, fixtureServer, stubPatch = {}) {
+  await page.goto(fixtureServer.urlFor("repainting.html") + "?repaint=no-hook");
+  await page.waitForFunction(() => !!(window.__lahe && window.__lahe.ready && window.__lahe.fixture));
+  await configureFixture(page, { target: '[data-repaint-target="live"]' });
+  // No cooperation at all: no cooperative-skip attribute, no veto, no hook. The
+  // only thing standing between the reviewer and a lost sentence is the restore.
+  // commitOnBlur off as well: a repaint that destroys the focused region fires
+  // blur, and a committed record would then be replayed back into the page,
+  // repairing it for the wrong reason and leaving the restore unscored.
+  await configureStub(
+    page,
+    Object.assign({ cooperativeSkip: false, veto: false, snapshotRestore: true, commitOnBlur: false }, stubPatch)
+  );
+  // Edit state last, so the layers that are switched off are switched off before
+  // the block is ever marked.
+  await editBlock(page, "live-note");
+  return page;
+}
+
+test.describe("assertCaretRestoredAcrossRepaints", () => {
+  test("text and caret come back after every repaint on a page with no hook", async ({
+    page,
+    fixtureServer
+  }) => {
+    await openNoHook(page, fixtureServer);
+
+    const result = await assertCaretRestoredAcrossRepaints(page, {
+      selector: "#live-note",
+      text: TEN,
+      caretOffset: 10,
+      minRestores: 10
+    });
+
+    expect(result.actual).toBe(result.expected);
+    // One repaint per keystroke plus the trailing ones, every one of them
+    // destroying the region and every one of them repaired.
+    expect(result.repaints).toBeGreaterThanOrEqual(TEN.length);
+    expect(result.restores).toBeGreaterThanOrEqual(TEN.length);
+  });
+
+  test("the node-identity assertion fails on the same page, which is why this one exists", async ({
+    page,
+    fixtureServer
+  }) => {
+    await openNoHook(page, fixtureServer);
+
+    // Layer three is working here. assertCaretSurvivesTyping still fails,
+    // because the restored caret is in a new node by construction. Running the
+    // wrong assertion on this layer produces a failure no correct code can fix,
+    // and the usual next move is to weaken the assertion for every other test.
+    let thrown = null;
+    try {
+      await assertCaretSurvivesTyping(page, {
+        selector: "#live-note",
+        text: TEN,
+        caretOffset: 10,
+        keystrokeDelayMs: 20,
+        repaintIntervalMs: 100,
+        minReplayPasses: 3,
+        timeoutMs: 6000
+      });
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown, "node identity cannot be met by a restore, by construction").not.toBeNull();
+    expect(thrown.message).toMatch(/DIFFERENT node|removed from the document/);
+  });
+
+  test("throws when nothing restores, and names the keystroke the text was lost at", async ({
+    page,
+    fixtureServer
+  }) => {
+    await openNoHook(page, fixtureServer, { snapshotRestore: false });
+
+    let thrown = null;
+    try {
+      await assertCaretRestoredAcrossRepaints(page, {
+        selector: "#live-note",
+        text: TEN,
+        caretOffset: 10,
+        repaintTimeoutMs: 1000
+      });
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown, "an unprotected no-hook repaint must fail this assertion").not.toBeNull();
+    expect(thrown.message).toContain("did not come back");
+    expect(thrown.message).toContain("after keystroke 1 of 10");
+  });
+
+  test("throws when the restore counter never moves, so a do-nothing page cannot pass", async ({
+    page,
+    fixtureServer
+  }) => {
+    await openNoHook(page, fixtureServer);
+
+    // The restore still works, so the text and the caret are perfect. Only the
+    // counter check catches this, and without it a page that never damaged the
+    // region at all would score full marks for a layer it does not have.
+    await page.evaluate(() => {
+      const counters = window.__lahe.counters;
+      const frozen = counters.restores;
+      Object.defineProperty(counters, "restores", {
+        value: frozen,
+        writable: false,
+        configurable: true
+      });
+    });
+
+    let thrown = null;
+    try {
+      await assertCaretRestoredAcrossRepaints(page, {
+        selector: "#live-note",
+        text: "abc",
+        caretOffset: 10
+      });
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown, "a frozen restore counter must fail the assertion").not.toBeNull();
+    expect(thrown.message).toContain("counter went up by 0");
+
+    // The text is fine. That is the point.
+    expect(await regionText(page, "#live-note")).toContain("abc");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Typing, counters, contexts
 // ---------------------------------------------------------------------------
 
 test.describe("typing and counters", () => {
   test("typeInto fires real key events", async ({ page, fixtureServer }) => {
-    await openRepainting(page, fixtureServer);
+    await openRepainting(page, fixtureServer, { edit: "live-note" });
 
     await page.evaluate(() => {
       window.__seen = { keydown: 0, beforeinput: 0, input: 0, keyup: 0 };
@@ -568,23 +887,63 @@ test.describe("typing and counters", () => {
     expect(seen.keyup).toBe(3);
   });
 
-  test("editing surfaces have spellcheck and autocorrect off", async ({ page, fixtureServer }) => {
-    await openRepainting(page, fixtureServer);
+  test("a block in edit state has spellcheck and autocorrect off, and its neighbour is untouched", async ({
+    page,
+    fixtureServer
+  }) => {
+    await openRepainting(page, fixtureServer, { edit: "live-note" });
     const attrs = await page.evaluate(() => {
       const el = document.querySelector("#live-note");
+      const neighbour = document.querySelector("#live-second");
       return {
         editable: el.getAttribute("contenteditable"),
         spellcheck: el.getAttribute("spellcheck"),
         autocorrect: el.getAttribute("autocorrect"),
-        autocapitalize: el.getAttribute("autocapitalize")
+        autocapitalize: el.getAttribute("autocapitalize"),
+        neighbourEditable: neighbour.getAttribute("contenteditable")
       };
     });
+    // R3: the platform must not quietly rewrite a word and have it recorded as
+    // the reviewer's intent. And D3: THAT ONE BLOCK, nothing else. A page-wide
+    // contentEditable is the inversion this design exists to remove, so the
+    // neighbour being untouched is the half of this test that matters.
     expect(attrs).toEqual({
       editable: "true",
       spellcheck: "false",
       autocorrect: "off",
-      autocapitalize: "off"
+      autocapitalize: "off",
+      neighbourEditable: null
     });
+  });
+
+  test("committing an edit gives the block back to the page", async ({ page, fixtureServer }) => {
+    await openRepainting(page, fixtureServer, { edit: "live-note" });
+
+    expect(await isBlockProtected(page, "live-note")).toBe(true);
+    await typeInto(page, { selector: "#live-note", text: "XY", caretOffset: 10, delayMs: 10 });
+    const item = await commitEdit(page, "live-note");
+
+    // The item is the kernel's record shape, and the transition draft -> ready
+    // is the reviewer's (src/shared/lifecycle.js).
+    expect(item.kind).toBe("edit");
+    expect(item.state).toBe("ready");
+    expect(item.rev).toBe(1);
+    expect(item.before).not.toContain("XY");
+    expect(item.after).toContain("XY");
+    expect(item.after_history).toHaveLength(1);
+    expect(item.page_path).toContain("repainting.html");
+
+    // Protection lifted, edit state gone, and the block is the page's again.
+    expect(await isBlockProtected(page, "live-note")).toBe(false);
+    const after = await page.evaluate(() => {
+      const el = document.querySelector("#live-note");
+      return {
+        editable: el.getAttribute("contenteditable"),
+        permanent: el.hasAttribute("data-lahe-permanent"),
+        protectedAttr: el.hasAttribute("data-lahe-protected")
+      };
+    });
+    expect(after).toEqual({ editable: null, permanent: false, protectedAttr: false });
   });
 
   test("waitForCounter polls rather than sleeping", async ({ page, fixtureServer }) => {
@@ -680,7 +1039,12 @@ test.describe("CSP fixtures", () => {
     // refusal that must be named distinctly from service-down.
     expect(await page.evaluate(() => typeof window.__cspProbe)).toBe("undefined");
     expect(await page.evaluate(() => typeof window.__lahe)).toBe("undefined");
-    expect(errors.join(" ")).toMatch(/Content Security Policy|Refused to (load|execute)/i);
+    // Three browsers, three wordings for the same refusal. Chromium says
+    // "Refused to load", Firefox says "Content-Security-Policy: ... blocked",
+    // WebKit says "Content Security Policy". The pattern covers all three; the
+    // load-bearing assertions are the two above it, which say the page's own
+    // script and the layer both failed to run at all.
+    expect(errors.join(" ")).toMatch(/Content[- ]Security[- ]Policy|Refused to (load|execute)|blocked/i);
 
     // The document itself is fine. Only the scripts were refused.
     await expect(page.locator("#probe-title")).toHaveText("CSP probe");
