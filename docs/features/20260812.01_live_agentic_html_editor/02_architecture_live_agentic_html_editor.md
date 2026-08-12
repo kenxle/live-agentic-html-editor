@@ -132,83 +132,118 @@ input and to name what it edited, and D8 verifies against that file.
 [Brief: R47, a typed fix must reach whatever the next build reads](01_brief_live_agentic_html_editor.html#the-reviewed-artifact-and-its-source)
 :::
 
-### D3: Replay, and the three laws that keep it safe
+### D3: Protect the region being edited, replay the ones that are committed
 
-An item record holds a region reference, the original content captured the first time that region was
-touched, and the current content. The page renders, then outstanding edits are applied on top.
+The hardest machinery in an earlier draft existed because the page and the reviewer contest the same
+DOM: the page repaints, the reviewer's text is gone, and replay tries to repair it afterwards. Walking
+that honestly against Steady Thread's two-second polling Turbo frame, it fails. The morph writes the
+server's text back over the fix and destroys the text node holding the caret **before replay ever
+runs**, so replay wakes to a region matching nothing it knows and the reviewer watches their sentence
+disappear. That is the symptom this tool exists to remove, rebuilt with better bookkeeping.
 
-Replay is the reason the reliability laws fall out of one mechanism instead of needing to be defended
-one at a time. It is also the most dangerous thing in the design, because a replay that writes to the
-wrong place produces a lie about the reviewer's own document. Three laws bound it.
+So the design does not contest the DOM. It divides it.
 
-**Law 1: replay never writes on a low-confidence match, and it fails closed.**
-A region reference carries several independent ways to find its place: an author-supplied name where
-the document offers one, a structural path, the heading it sits under with its position among
-siblings, and its original text. Identity is **minted once and re-resolved on every repaint**, because
-a repaint destroys anything stored on a node. Each pass binds a reference to at most one node, greedily
-in document order. Below the confidence floor, nothing is written to the DOM. The record keeps its
-text, and the rail says the edit cannot be placed on this version of the page.
+**A region being actively edited is protected.** From the first keystroke until the reviewer leaves it,
+the layer owns that block: it is marked so Turbo will not morph it (`data-turbo-permanent`) and the
+morph is vetoed for it (`turbo:before-morph-element`), both of which Turbo supports natively. The app's
+repaints flow around it. On blur the edit commits to a record, the protection drops, and the region
+rejoins the page.
 
-A miss is survivable because the record is the truth. A mis-bind is not: stamping paragraph four's
-text onto paragraph five produces a before-and-after pair that is incoherent, and ships it to the
-agent as the reviewer's intent. Fail closed.
+Nothing ever repaints under the caret, so the caret problem is structural rather than defended: there
+is no snapshot to restore and no flicker every two seconds. Composition, which Chromium abandons when
+the DOM under it changes, is safe for the same reason.
 
-**Law 2: replay never disturbs the reviewer.**
-A region whose DOM already equals the record is skipped, which makes replay idempotent by comparison
-rather than by bookkeeping. A region containing the caret or the current selection is never rewritten.
-Those two rules together are what stop replay from yanking the cursor out of the paragraph being typed
-in. Steady Thread has a Turbo frame that polls every two seconds; without Law 2, replay would fight
-the reviewer twice a second, which is a worse version of the symptom this whole design exists to kill.
-
-**Law 3: an app re-rendering its own data is not the same as a source rewrite.**
-
-The signal has to be named or the law cannot be tested and a builder will invent a heuristic. A repaint
-is a **source repaint** only when the tool knows the source changed: it has just processed an ack, or
-the service has told it the target's source changed on disk. Everything else is an **app repaint**.
-
-**App repaint is the safe default**, and when the two are ambiguous the tool picks it. The worst outcome
-of a wrong detach is that the reviewer is told their edit could not be placed while holding its full
-text, which is recoverable and visible. The worst outcome of a wrong collision is the reviewer's words
-stamped over live application data, which is a lie about their own app and is the thing D3 exists to
-prevent. Losing a collision is a smaller harm than inventing one.
+**Replay applies committed records only**, to a page that has just repainted.
 
 ```mermaid
 flowchart TD
-    Repaint["A repaint happens"] --> Kind{"What caused it?"}
-    Kind -->|"Source repaint:<br/>agent wrote the source,<br/>reviewer reloaded"| Src["Replay. A region whose underlying<br/>content changed is a collision:<br/>reviewer's text stays on screen,<br/>incoming version offered on its card"]
-    Kind -->|"App repaint:<br/>the app re-rendered itself"| App["Replay only where the region's DOM<br/>still matches what replay last wrote.<br/>Otherwise the edit detaches, keeps its text,<br/>and its card says the page moved on"]
-    Src --> Laws["Laws 1 and 2 apply to both"]
-    App --> Laws
+    R["A repaint lands"] --> P{"Is this region protected<br/>(being edited right now)?"}
+    P -->|yes| Skip["Untouched. The page could not repaint it anyway"]
+    P -->|no| Find["Find the region: Law 1"]
+    Find -->|"no unique candidate"| Closed["Write nothing. The record keeps its text.<br/>The card says it cannot be placed here"]
+    Find -->|"unique candidate"| Cmp{"Compare the fresh DOM<br/>against the record itself"}
+    Cmp -->|"equals after"| Done["Already applied. Skip.<br/>This is what makes replay idempotent"]
+    Cmp -->|"equals before"| Apply["The page re-rendered the same content.<br/>Re-apply after"]
+    Cmp -->|"equals neither"| Moved["The content genuinely changed.<br/>Write nothing, surface it on the card"]
 ```
 
-The distinction matters most in the target Ken cares about. Filter a client roster, come back, and
-row three is now a different client. Treating that as a source rewrite would stamp the reviewer's edit
-to Sarah onto Marcus and call it a collision. The reviewer would be looking at a lie about their own
-app, and D12 (use the app for real) would be fighting replay directly.
+**Law 1: a write needs a unique candidate, not a high score.** An earlier draft had the anchor engine
+return a confidence and replay threshold it. That is a fiction that gets tuned into meaninglessness,
+and it fails on the case that matters: two visually identical list items that swapped places match
+exactly, have symmetric context, and score high on any plausible scalar, so replay binds each record
+confidently to the other's node. The dangerous errors are not low-confidence, they are high-confidence
+ambiguous.
+
+The rule instead is a predicate. Replay writes only when the normalized text probe finds a candidate
+that is **unique**: exactly one occurrence exists, or the surrounding context eliminates every rival
+outright. A tie, a near-tie, or a candidate found only by structure fails closed. Structure and heading
+position corroborate a candidate; they never place a write. Every branch of that is testable without a
+tuned number. A score may still ride along on the record as diagnostic metadata for the agent, but no
+decision reads it.
+
+**Law 2: comparison is against the record, not against history.** The three-way comparison in the
+diagram replaces "replay only where the DOM matches what replay last wrote", which fails on the first
+repaint after typing, because replay never wrote that region. Checking it against the two cases that
+matter: a polling frame re-renders the same content, the DOM equals `before`, so re-apply, and the
+reviewer keeps their fix. A filtered roster now renders a different client in row three, the DOM equals
+neither `before` nor `after`, so nothing is written and the card says the content changed. One rule,
+both cases, and no need to know why the page repainted.
+
+That last part is worth stating, because an earlier draft leaned on telling a source rewrite from an
+app re-render. **That distinction is not reliably observable and the design no longer depends on it.**
+On Steady Thread, hotwire-spark delivers an agent's source rewrite as an in-page morph indistinguishable
+from the app re-rendering itself. The cause now only chooses the wording on the card, and where it is
+unknown the card says the content under this edit changed, which is true either way.
+
+**Law 3: the reviewer's own actions are not ambient.** Undo reverts the record and redraws the region
+deliberately, including when the caret is in it, and places the caret at the start of the reverted text.
+Without this exemption undo would be forbidden exactly when it is used, since a reviewer almost always
+undoes the item they are standing in, and the screen and the record would disagree until the caret
+wandered away and the text snapped back unexpectedly.
+
+**Cross-region gestures decompose.** Selecting from the end of one paragraph through the start of the
+next and typing merges two blocks in the DOM. One record per region, never one record holding both:
+otherwise replay rewrites the first with merged text, leaves the second standing, and the page shows
+that content twice while the agent is told to duplicate it in source. So a gesture crossing regions
+mints one record per touched region, tied by a group id, and replay applies a group atomically. If any
+member fails Law 1, none apply.
 
 ### D4: What a record is
 
-Text-only records cannot express most of what the brief asks for, so a record carries:
-
 | Field | Purpose |
 | --- | --- |
+| `id` | Minted in the browser at creation |
+| `rev` | Monotonic, incremented on every change to this item. See below |
 | `kind` | `commented`, `edited`, `deleted`, `moved`, `formatted`, `resized`, `note` |
+| `group` | Present when a gesture crossed regions; members apply atomically |
 | `before` / `after` | Plain text, original captured on first touch |
-| `before_html` / `after_html` | Cleaned markup, so a formatting-only change is a change (R30) |
-| `moved_after` / `moved_before` | Landing anchors, so a relocation can be applied without a rewrite |
-| `region` | The reference described in D3 |
+| `before_html` / `after_html` | Cleaned markup, so a formatting-only change is a change |
+| `moved_after` / `moved_before` | Landing anchors for a relocation |
+| `region` | The reference in D3, plus its lost-anchor state when it cannot be found |
 | `target` | Which page in the review it belongs to |
-| `state` | The lifecycle in the diagram below |
+| `state` | The lifecycle below |
+| `reply` | What the agent said about this item, rendered on its card |
 
-**Undo is a record operation.** Per-item undo reverts the record and lets replay redraw the region.
-This is the only version of undo that composes with D3, because once replay has rewritten a region the
-browser's native undo stack for it is gone. Native undo inside a region is a convenience on top, never
-the mechanism. This is what R27 (every edit undone on its own) requires, and it is the requirement that
-exists because the tool being replaced makes one misplaced drag cost an hour of work.
+**`rev` is what stops an ack from swallowing a rewording.** Without it: the reviewer sends an item,
+rewords it, and closes the laptop; the agent acks it applied; on reopen the reconciliation rule says
+lifecycle wins and the rewording is silently discarded. That breaks R2, by specification, and it
+contradicts the online behavior of the same race, which the design already gets right. Deliveries and
+acks name `(item, rev)`, and lifecycle wins **for the revision it names**. A newer revision survives as
+outstanding and ships next.
 
-**The overall note is an item** like any other. It counts as outstanding, and it can ship alone. This
-is stated because the note-only send bug, where typing a note left the button dead forever, is one of
-the three symptoms that caused this rebuild.
+**Undo is a record operation.** Per-item undo reverts the record and lets replay redraw, which is the
+only version that composes with D3, since once replay has rewritten a region the browser's native undo
+stack for it is gone. Native undo inside a protected region works normally and is a convenience on top.
+
+**The overall note is an item** like any other. It counts as outstanding and can ship alone. This is
+stated because the note-only send bug, where typing a note left the button dead forever, is one of the
+three symptoms that caused this rebuild.
+
+**The reviewer's own words are never mangled on the way out.** The `after` snapshot is taken on
+`compositionend` rather than on every input event, so a send during IME composition cannot ship
+half-composed text as the reviewer's exact wording. Spellcheck, autocorrect, and autocapitalize are
+turned off on the editable surface, so the platform cannot quietly rewrite a word and have it recorded
+as the reviewer's intent.
 
 ### D5: One mode. The layer is a script in the page, and there is no proxy
 
