@@ -263,7 +263,25 @@ test("transformation: a duplicate paragraph inserted elsewhere", () => {
   append(page.root, el("p", { text: "An unrelated closing for the appendix." }));
 
   const verdict = anchor.resolve(ref, page.root);
-  assertSameNodeOrHonestFailure(verdict, target, "duplicate inserted elsewhere");
+  assertSameNodeOrHonestFailure(verdict, target, "duplicate appended after the region");
+});
+
+test("transformation: a duplicate paragraph inserted BEFORE the region", () => {
+  // The same transformation from the other side, which is the half that catches
+  // an engine taking the first match: here the first match is the copy.
+  const origin = pageOf(corpus.ORIGINAL);
+  const ref = mintBlock(origin, 1);
+
+  const page = pageOf(corpus.ORIGINAL);
+  const target = page.blocks[1];
+  insertAt(page.root, el("p", { text: "An unrelated opening for the summary." }), 0);
+  insertAt(page.root, el("p", { text: corpus.REFERENCE.probe }), 1);
+  insertAt(page.root, el("p", { text: "An unrelated closing for the summary." }), 2);
+
+  const verdict = anchor.resolve(ref, page.root);
+  assertSameNodeOrHonestFailure(verdict, target, "duplicate inserted before the region");
+  assert.equal(verdict.bound, true, "the stored context still names only the original: " + verdict.reason);
+  assert.equal(verdict.element, target);
 });
 
 test("transformation: a neighbouring block deleted", () => {
