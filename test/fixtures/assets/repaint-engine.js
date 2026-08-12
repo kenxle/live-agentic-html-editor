@@ -32,8 +32,36 @@
 //   off         protection is ignored. This is the pre-fix behavior, and it is
 //               what the negative self-tests use to prove the assertions bite.
 //
+// TWO HOOK FLAVORS, and this is what ranked test 1 (typed text does not revert)
+// needs both of. 2B ships three protection layers, and the third one exists only
+// because some frameworks offer nothing to cooperate with. A fixture that always
+// offers a hook cannot tell a three-layer implementation from a one-layer one.
+//
+//   hooks "on"   (default) the engine behaves like a cooperative framework. It
+//                fires a CANCELABLE pre-morph event on every element it is about
+//                to touch (standing in for Turbo's turbo:before-morph-element),
+//                and it honors a cooperative-skip attribute (standing in for
+//                data-turbo-permanent) by carrying the live element over instead
+//                of rebuilding it.
+//   hooks "off"  the no-hook flavor. innerHTML is replaced wholesale, no events
+//                are fired, no attribute is honored, and nothing can be vetoed.
+//                Everything the reviewer typed is destroyed unless something
+//                puts it back afterwards. This is the only flavor that scores
+//                protection layer three.
+//
+// The veto event and the cooperative-skip attribute are TWO DIFFERENT framework
+// features. A builder can implement one and believe they did both, so they are
+// separate here, separately counted, and separately testable:
+//
+//   lahe:before-morph-element   cancelable, dispatched on the element
+//   data-lahe-permanent         the cooperative-skip attribute
+//
+// Switchable two ways: ?repaint=no-hook in the fixture URL (so a test can pick
+// the flavor before any script runs), or configure({ hooks: "off" }).
+//
 // Controls: window.__lahe.fixture.* (see test/helpers/repaint.js).
-// Counters: window.__lahe.counters.repaints and .repaintsVetoed.
+// Counters: window.__lahe.counters.repaints, .repaintsVetoed, .elementVetoes,
+//           .elementsSkippedCooperative.
 
 (function () {
   "use strict";
@@ -42,14 +70,62 @@
   const counters = ns.counters || (ns.counters = {});
   counters.repaints = 0;
   counters.repaintsVetoed = 0;
+  counters.elementVetoes = 0;
+  counters.elementsSkippedCooperative = 0;
+
+  // Standing in for Turbo's cancelable turbo:before-morph-element and for
+  // data-turbo-permanent. Named here once so the harness README, the stub, and
+  // whoever builds src/layer/protect.js all spell them the same way.
+  const BEFORE_MORPH_ELEMENT = "lahe:before-morph-element";
+  const SKIP_ATTRIBUTE = "data-lahe-permanent";
+
+  // ?repaint=no-hook picks the flavor before any other script runs, which is how
+  // a test gets a page whose framework never offered a hook in the first place.
+  function hooksFromLocation() {
+    try {
+      const asked = new URL(window.location.href).searchParams.get("repaint");
+      return asked === "no-hook" ? "off" : "on";
+    } catch (err) {
+      return "on";
+    }
+  }
 
   const state = {
     flavor: "turbo-frame",
     intervalMs: 200,
     target: "[data-repaint-target]",
     protection: "veto",
+    hooks: hooksFromLocation(),
     timer: null
   };
+
+  function hooksOn() {
+    return state.hooks !== "off";
+  }
+
+  /**
+   * The cancelable pre-morph event, on one element.
+   *
+   * Returns false when a listener called preventDefault, which is the veto: the
+   * element and its whole subtree are left exactly as they are. Turbo's own
+   * event works this way, and this is layer two of the three.
+   */
+  function morphAllowed(el) {
+    if (!hooksOn()) return true;
+    const event = new CustomEvent(BEFORE_MORPH_ELEMENT, {
+      bubbles: true,
+      cancelable: true,
+      detail: { flavor: state.flavor }
+    });
+    const allowed = el.dispatchEvent(event);
+    if (!allowed) counters.elementVetoes += 1;
+    return allowed;
+  }
+
+  /** The cooperative-skip attribute, which is layer one and not layer two. */
+  function cooperativelySkipped(el) {
+    return hooksOn() && el.nodeType === 1 && el.hasAttribute(SKIP_ATTRIBUTE);
+  }
 
   let server = new WeakMap();
 
@@ -102,9 +178,37 @@
     return el.hasAttribute("data-lahe-protected") || !!el.querySelector("[data-lahe-protected]");
   }
 
+  // The no-hook flavor: innerHTML, wholesale, no events, no attributes honored,
+  // nothing skippable. A framework that offers a review tool nothing at all.
+  function repaintNoHook(el, snap) {
+    el.innerHTML = snap.html;
+  }
+
+  // Carry every cooperatively-skipped element across into the new subtree by id,
+  // exactly as data-turbo-permanent does. The live node is MOVED, not copied, so
+  // whatever the reviewer typed into it comes with it.
+  function carryCooperativeSkips(el, staging) {
+    if (!hooksOn()) return;
+    const kept = {};
+    Array.prototype.slice
+      .call(el.querySelectorAll("[" + SKIP_ATTRIBUTE + "][id]"))
+      .forEach(function (node) {
+        kept[node.id] = node;
+      });
+    if (el.nodeType === 1 && el.hasAttribute(SKIP_ATTRIBUTE)) return;
+    Array.prototype.slice.call(staging.querySelectorAll("[id]")).forEach(function (candidate) {
+      const live = kept[candidate.id];
+      if (live) {
+        candidate.replaceWith(live);
+        counters.elementsSkippedCooperative += 1;
+      }
+    });
+  }
+
   function repaintTurboFrame(el, snap) {
     const staging = document.createElement("div");
     staging.innerHTML = snap.html;
+    carryCooperativeSkips(el, staging);
     if (state.protection === "permanent") {
       const kept = {};
       Array.from(el.querySelectorAll("[data-lahe-protected][id]")).forEach(function (node) {
@@ -139,6 +243,20 @@
 
       if (l && l.nodeType === 1 && state.protection !== "off" && l.hasAttribute("data-lahe-protected")) {
         // Vetoed. Not removed, not re-inserted, not descended into.
+        counters.repaintsVetoed += 1;
+        continue;
+      }
+
+      // Layer one: the cooperative-skip attribute. The framework flows around
+      // the element because it was asked to, with no event and no listener.
+      if (l && cooperativelySkipped(l)) {
+        counters.elementsSkippedCooperative += 1;
+        continue;
+      }
+
+      // Layer two: the cancelable event. A listener gets to refuse this element
+      // in the moment, which is the only layer that can decide per repaint.
+      if (l && l.nodeType === 1 && !morphAllowed(l)) {
         counters.repaintsVetoed += 1;
         continue;
       }
@@ -185,6 +303,15 @@
     const limit = Math.min(nodes.length, snap.text.length);
     for (let i = 0; i < limit; i += 1) {
       const node = nodes[i];
+      const owner0 = node.parentElement;
+      if (owner0 && hooksOn() && owner0.closest("[" + SKIP_ATTRIBUTE + "]")) {
+        counters.elementsSkippedCooperative += 1;
+        continue;
+      }
+      if (owner0 && owner0.nodeType === 1 && !morphAllowed(owner0)) {
+        counters.repaintsVetoed += 1;
+        continue;
+      }
       if (state.protection !== "off") {
         const owner = node.parentElement;
         if (owner && owner.closest("[data-lahe-protected]")) continue;
@@ -198,9 +325,21 @@
     targets().forEach(function (el) {
       const snap = server.get(el);
       if (!snap) return;
+      if (!hooksOn()) {
+        // No hook, no event, no attribute, no veto. Whatever is in there goes.
+        repaintNoHook(el, snap);
+        return;
+      }
       if (kind === "morph") {
         // The morph vetoes per element, so it is never skipped wholesale.
         repaintMorph(el, snap);
+        return;
+      }
+      // The frame-level veto. A listener on the frame refusing the event stops
+      // the whole subtree from being rebuilt, which is what a turbo-frame
+      // replacement gives a listener the chance to do.
+      if (!morphAllowed(el)) {
+        counters.repaintsVetoed += 1;
         return;
       }
       if (state.protection === "veto" && hasProtected(el)) {
@@ -246,6 +385,7 @@
       intervalMs: state.intervalMs,
       target: state.target,
       protection: state.protection,
+      hooks: state.hooks,
       running: !!state.timer
     };
   }
@@ -253,6 +393,8 @@
   snapshot();
 
   ns.fixture = {
+    BEFORE_MORPH_ELEMENT: BEFORE_MORPH_ELEMENT,
+    SKIP_ATTRIBUTE: SKIP_ATTRIBUTE,
     configure: configure,
     snapshot: snapshot,
     start: start,
@@ -264,6 +406,7 @@
         intervalMs: state.intervalMs,
         target: state.target,
         protection: state.protection,
+        hooks: state.hooks,
         running: !!state.timer
       };
     }

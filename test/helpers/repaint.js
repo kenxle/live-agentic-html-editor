@@ -23,6 +23,19 @@
 //               data-turbo-permanent on its own, without the veto.
 //   off         protection ignored. The pre-fix behavior, used by the negative
 //               self-tests to prove the assertions bite.
+//
+// Hook flavors, because 2B ships three protection layers and only one of them
+// works on a framework that offers nothing:
+//
+//   hooks "on"   (default) a cancelable lahe:before-morph-element on every
+//                element, and the data-lahe-permanent cooperative-skip
+//                attribute honored. Standing in for Turbo.
+//   hooks "off"  innerHTML replaced wholesale. No events, no attributes, no
+//                veto. Only a snapshot-and-restore layer survives this.
+//
+// Pick the no-hook flavor before any script runs with
+// `fixtureServer.urlFor("repainting.html") + "?repaint=no-hook"`, or switch it
+// at runtime with configureFixture(page, { hooks: "off" }).
 
 "use strict";
 
@@ -48,9 +61,9 @@ async function fixtureCall(page, method, arg) {
  * Set the repaint engine's knobs.
  *
  * @param {import('@playwright/test').Page} page
- * @param {{flavor?: 'turbo-frame'|'react-text', intervalMs?: number,
+ * @param {{flavor?: 'turbo-frame'|'react-text'|'morph', intervalMs?: number,
  *          target?: string, protection?: 'veto'|'permanent'|'off',
- *          resnapshot?: boolean}} patch
+ *          hooks?: 'on'|'off', resnapshot?: boolean}} patch
  *   `target` is the subtree selector. Changing it does NOT change what the
  *   server believes: every candidate subtree was snapshotted at load, so a test
  *   can point the engine somewhere else without blessing whatever it just
