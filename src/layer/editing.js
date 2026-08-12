@@ -472,7 +472,10 @@
       };
 
       applyEditableAttrs(block);
-      protect.mark(block, { reason: "edit" });
+      // The record goes on the mark. Protection is then able to answer "which
+      // record is the reviewer in" for replay, instead of replay inferring it
+      // from the node it last bound that record to (2C's CP2-mid ask).
+      protect.mark(block, { reason: "edit", item: item[record.FIELD.ID] });
       bindBlock(block);
       drawFrame(block);
       if (typeof block.focus === "function") block.focus();
@@ -498,6 +501,32 @@
           block.removeAttribute(name);
         });
       });
+    }
+
+    /**
+     * The open block came back as a NEW element and the session has to move
+     * onto it. This is the seam 2B's protection asked for: layer three restores
+     * the reviewer's words into a node the repaint built, and everything this
+     * file holds about the block (the input listener, the editing attributes,
+     * the element-to-record memory) is attached to the node that was destroyed.
+     * Without this the text on screen is right and the next keystroke goes
+     * nowhere: nothing records it, and the reviewer only finds out later.
+     *
+     * It is NOT a commit and not a re-entry. `before` is untouched, the record
+     * is untouched, and edit state stays exactly as open as it was.
+     *
+     * @param {Element} el the element the block came back as
+     * @returns {boolean} true when the session moved
+     */
+    function rebind(el) {
+      if (!session || !el) return false;
+      if (session.block === el) return false; // same node, same listeners
+      session.block = el;
+      applyEditableAttrs(el);
+      bindBlock(el);
+      remember(el, session.itemId);
+      positionFrame();
+      return true;
     }
 
     function sessionInfo() {
@@ -598,11 +627,23 @@
 
       unbindBlock();
       clearEditableAttrs(block);
-      protect.release(block);
       hideFrame();
 
+      // WHY PROTECTION LIFTS LAST, and not here.
+      //
+      // protect.release runs the commit pass, synchronously and immediately.
+      // Releasing before the record is written means that pass reads a DRAFT,
+      // and a draft is not outstanding, so replay skips the one record the pass
+      // exists for: the reviewer's commit is not compared against the page at
+      // all, and a change the page made to the block underneath them is
+      // swallowed exactly as if the seam were not wired. Found at CP2-mid, with
+      // real records; every earlier test drove protection and replay directly
+      // and could not see it. So: write the record, THEN lift protection.
       var item = store.readItem(requireReview(), open.itemId);
-      if (!item) return null;
+      if (!item) {
+        protect.release(block);
+        return null;
+      }
 
       var verdict = kindFor(open.before, after);
       if (!verdict.changed) {
@@ -614,7 +655,7 @@
           forget(open.itemId);
           emit(item, "discarded");
         }
-        scheduleReplay("commit");
+        protect.release(block);
         return null;
       }
 
@@ -646,10 +687,12 @@
       }
 
       remember(block, committed[record.FIELD.ID]);
-      // Protection has lifted, so a change the page tried to make to this block
-      // while it was protected surfaces through replay's neither-matches branch
-      // rather than being silently swallowed. 2C owns that seam.
-      scheduleReplay("commit");
+      // Protection lifts on the committed record, and lifting it runs the
+      // commit pass: a change the page tried to make to this block while it was
+      // protected surfaces through replay's neither-matches branch rather than
+      // being silently swallowed. 2B calls it, 2C owns that seam, and it is the
+      // only pass this commit schedules.
+      protect.release(block);
       return committed;
     }
 
@@ -1251,6 +1294,7 @@
       onChange: onChange,
       bind: bind,
       unbind: unbind,
+      rebind: rebind,
       teardown: teardown,
       editBlock: editBlock,
       editBlockAtCaret: editBlockAtCaret,

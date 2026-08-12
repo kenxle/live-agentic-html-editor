@@ -314,8 +314,18 @@
       element: el,
       key: key,
       reason: (options || {}).reason || null,
+      // The record this block is being edited under. 2C asked for it at
+      // CP2-mid: replay was answering "is the reviewer in this record's
+      // region" from the node it last bound the record to, and the side that
+      // actually knows the id is this one. Optional, because a caller that
+      // marks a block outside an edit session has no record.
+      item: (options || {}).item || null,
       at: Date.now(),
-      snapshot: null
+      snapshot: null,
+      // The last thing the page tried to say in this block while it was
+      // protected, taken off the page by layer three's restore. See
+      // displacedChange() below.
+      displaced: null
     };
 
     if (enabled(LAYER.SNAPSHOT_RESTORE)) snapshot(el);
@@ -536,6 +546,27 @@
 
     var rebuilt = !!active && active.element !== el && !active.element.isConnected;
     var placed = false;
+
+    // WHAT THE PAGE TRIED TO SAY, kept before it is written over.
+    //
+    // Layer three is the only place a page's change to a protected block is
+    // taken back off the page with its text still readable. Everywhere else the
+    // change either never happened (layer two vetoed it) or never reached this
+    // block. If that text is thrown away here, an agent that rewrote this very
+    // block while the reviewer was in it is swallowed silently: the reviewer
+    // commits, the page holds their own words, replay compares their words
+    // against their words, and nothing ever tells them the source moved. So the
+    // text is kept, and `release` hands it to replay, which decides whether it
+    // is a collision. Last write wins: the newest thing the page tried to say
+    // is the one the reviewer has to reconcile against.
+    if (active && active.element === el) {
+      active.displaced = {
+        text: typeof el.textContent === "string" ? el.textContent : "",
+        html: el.innerHTML,
+        at: Date.now()
+      };
+    }
+
     restoring = true;
     try {
       epoch.write("protect_restore", function () {
@@ -687,6 +718,16 @@
     if (el && active.element !== el) return false;
 
     var element = active.element;
+    // What the commit pass is told about this block, built before `active` is
+    // dropped. The element saves replay an anchor resolve it does not need
+    // (2C's ask), and `observed` is the page's own attempt at this block, which
+    // only protection ever saw.
+    var commit = {
+      item: active.item,
+      element: element,
+      observed: active.displaced ? active.displaced.text : null,
+      observedHtml: active.displaced ? active.displaced.html : null
+    };
     if (element && typeof element.removeAttribute === "function") {
       element.removeAttribute(PROTECTED_ATTRIBUTE);
       removeSkipAttributes(element);
@@ -703,8 +744,42 @@
           "Load src/layer/replay.js beside protect.js."
       );
     }
-    replay.schedule(replay.REASON.COMMIT, { immediate: true });
+    runCommitPass(replay, commit);
     return true;
+  }
+
+  /**
+   * Run the commit pass, AFTER the write epoch the caller is inside has closed.
+   *
+   * This is not a nicety. `epoch.write` closes on a microtask, not when its
+   * function returns, so a caller that just wrote to the DOM is still "inside" a
+   * write epoch for the rest of the synchronous turn. `replay.schedule` refuses
+   * while the epoch is open, by design, because replay's own writes must not
+   * schedule replay. The editing surface commits by taking contenteditable back
+   * off (a write) and then releasing protection in the same turn, so the commit
+   * pass was refused every single time: protection lifted, no pass ran, and a
+   * change the page made to the block underneath the reviewer was swallowed
+   * exactly as if this seam had never been wired.
+   *
+   * Nobody could see it before CP2-mid. 2B's specs call release() straight, with
+   * no epoch open, and pass; 2A's specs scheduled their own pass afterwards from
+   * a microtask, which hid it from that side too. It took the two real surfaces
+   * on one page.
+   *
+   * A microtask is the right amount of waiting: the epoch's own close is queued
+   * as one, so ours runs immediately after it, still in the same task and still
+   * before anything paints.
+   */
+  function runCommitPass(replay, commit) {
+    function run() {
+      replay.schedule(replay.REASON.COMMIT, { immediate: true, commit: commit });
+    }
+    if (!epoch.isWriting()) {
+      run();
+      return;
+    }
+    if (typeof queueMicrotask === "function") queueMicrotask(run);
+    else Promise.resolve().then(run);
   }
 
   return {
@@ -727,6 +802,17 @@
     isProtected: isProtected,
     touches: touches,
     protectedElement: protectedElement,
+    // The record the protected block is being edited under, or null. Replay
+    // asks this first, because an id from the side that knows it beats replay's
+    // own memory of the node a record was last bound to.
+    protectedItemId: function () {
+      return active ? active.item : null;
+    },
+    // The last change the page made to the protected block that layer three
+    // took back off, or null. Read by release(); a caller may read it too.
+    displacedChange: function () {
+      return active ? active.displaced : null;
+    },
     veto: veto,
     snapshot: snapshot,
     restore: restore,
