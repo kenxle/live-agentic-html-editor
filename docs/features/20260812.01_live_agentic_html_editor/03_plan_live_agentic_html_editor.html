@@ -1263,20 +1263,18 @@ needed</a></li>
 on three tracks that start at hour zero, not one serial bottleneck.
 Phases 1 through 3 fan out to parallel builders in their own worktrees,
 with a stitch-back checkpoint between each and one extra integration
-point in the middle of Phase 2. Phase 4 is the acceptance walks and the
-batched cleanup, and it is two real tasks with owners and done bars
-rather than a box on a diagram.</p>
-<p>The lesson that shaped the phasing, carried forward from the previous
-plan and still true: the expensive part is never the feature surface, it
-is the seams between parallel builders. The sharpest example is text
-normalization. The edit recorder mints a record's plain text, replay
-compares the live DOM against a record to decide "already equal, skip",
-and the anchor engine does whitespace-tolerant matching. If replay
-normalizes even slightly differently from the recorder, no region ever
-compares equal, replay rewrites every region on every pass, and the
-reviewer's caret gets fought twice a second. Parallelizing this work is
-itself capable of manufacturing the exact bug the tool exists to kill.
-One normalizer, settled in Phase 0, imported by all three.</p>
+point in the middle of Phase 2. Phase 4 is two tasks, each with an owner
+and a done bar: the acceptance walks and the batched cleanup.</p>
+<p>The phasing is shaped by one fact: the expensive part is never the
+feature surface, it is the seams between parallel builders. The sharpest
+example is text normalization. The edit recorder mints a record's plain
+text, replay compares the live DOM against a record to decide "already
+equal, skip", and the anchor engine does whitespace-tolerant matching.
+If replay normalizes even slightly differently from the recorder, no
+region ever compares equal, replay rewrites every region on every pass,
+and the reviewer's caret gets fought twice a second. Parallelizing this
+work is itself capable of manufacturing the exact bug the tool exists to
+kill. One normalizer, settled in Phase 0, imported by all three.</p>
 <p>The second seam is the pair of stores. The browser is authoritative
 for a record's content until the helper acknowledges it, and the store
 is authoritative for lifecycle at a given revision (D5, durability is
@@ -1284,13 +1282,12 @@ browser storage plus an append-only log). Two builders who each invent
 half of that merge rule produce a tool where an agent's stale "handled"
 retires a comment the reviewer just reworded. That rule is code in Phase
 0, not prose.</p>
-<p>The third seam is the one three reviewers found in the first draft of
-this plan: <strong>the contracts were named but not specified.</strong>
-An event line, a reply line, the contract block an outside agent reads,
-the script tag's attributes, and the wait command's exit codes are all
-public API, and all of them were a noun phrase. They are written out
-below, in this document, because a Sonnet-tier builder given a noun
-phrase invents a schema, and five builders invent five.</p>
+<p>The third seam is the contracts themselves. An event line, a reply
+line, the contract block an outside agent reads, the script tag's
+attributes, and the wait command's exit codes are all public API. Every
+one of them is written out below, byte for byte, because a Sonnet-tier
+builder given a noun phrase invents a schema, and five builders invent
+five.</p>
 <pre class="mermaid"><code>flowchart TD
     K[&quot;0A-kernel Contract half&lt;br/&gt;records incl. page, lifecycle, merge rule,&lt;br/&gt;normalizer modes, gestures, stubs, ownership map&quot;]
     W[&quot;0A-wire Wire half&lt;br/&gt;events + reply + review.md schemas,&lt;br/&gt;request checks, wait, script tag&quot;]
@@ -1492,9 +1489,7 @@ replay branch three needs (D4, records are the truth)</td>
 the four in the architecture's diagram: draft, ready, handled,
 not_handled. <code>question</code> is a <strong>reply status</strong>
 that leaves the item in ready, and <code>reopened</code> is a
-<strong>transition</strong> from handled back to ready, not a state
-(this reconciles the plan's earlier six-state list with the
-architecture's diagram)</td>
+<strong>transition</strong> from handled back to ready, not a state</td>
 </tr>
 <tr>
 <td><code>shared/protocol.js</code></td>
@@ -1513,9 +1508,9 @@ a boundary). Adds the reply-poll cursor shape</td>
 change: <code>review.json</code> as an authoritative file is gone and
 <code>review.md</code> grouped by page replaces it; delimiters become
 <strong>per item, not per file</strong> (the module today says "the
-per-file delimiter is passed in", and D12 requires per-item); and the
-field classification <strong>flips</strong>, because D12 now makes the
-full <code>after</code> of a region data, not intent.
+per-file delimiter is passed in", and D12, page text is data, requires
+per-item); and the field classification <strong>flips</strong>, because
+D12 now makes the full <code>after</code> of a region data, not intent.
 <code>STANDING_HEADER</code> is replaced wholesale with the contract
 block pinned in 0A-wire, because the one in the repo names an
 authoritative JSON file and an acknowledge command, both of which are
@@ -1586,7 +1581,8 @@ replaced with the real DOM search</td>
 <td>Rework</td>
 <td>1B</td>
 <td>The synchronous-write-on-every-change law survives intact. Add
-drafts, revisions, and keying by review id (D5)</td>
+drafts, revisions, and keying by review id (D5, browser storage plus an
+append-only log)</td>
 </tr>
 <tr>
 <td><code>layer/sync.js</code></td>
@@ -1649,7 +1645,8 @@ built-doc case, which is a supported primary case</td>
 <td>Outside-any-checkout, owner-only, and the safe-id rule stay. The
 layout becomes
 <code>reviews/&lt;id&gt;/{events.jsonl, review.md, replies*.jsonl}</code>
-and the token becomes per-review (D11)</td>
+and the token becomes per-review (D11, the helper checks every
+request)</td>
 </tr>
 <tr>
 <td><code>service/review_writer.js</code></td>
@@ -1673,7 +1670,8 @@ verification</td>
 <td>1A</td>
 <td>One-line stub. Becomes the per-request server-side check block from
 D11, and appends a <strong>named refusal reason</strong> to the helper
-log on every refusal (this is what makes AC8 judgeable)</td>
+log on every refusal (this is what makes AC8, outside cannot get in,
+judgeable)</td>
 </tr>
 <tr>
 <td><code>service/index.js</code></td>
@@ -1746,8 +1744,8 @@ it</td>
 </tr>
 </tbody>
 </table></div>
-<p><strong>New files, and who creates them.</strong> These do not exist
-today and every one of them was unowned in the previous draft:</p>
+<p><strong>New files, and who creates them.</strong> None of these exist
+today:</p>
 <div class="table-scroll"><table>
 <thead>
 <tr>
@@ -2137,15 +2135,15 @@ format_only, note); <code>draft</code> or ready; the anchor reference as
 named fields; <code>before</code> and <code>after</code> in text and in
 HTML; the lost-anchor state; the reply. Every builder imports a field
 name and never types the string.</li>
-<li><strong>The page fields on every record</strong>, which the previous
-draft omitted and without which <code>review.md</code> cannot be grouped
-by page at all: <code>page_path</code> (query string and fragment
-collapsed away), <code>page_title</code>, <code>page_seq</code>
-(first-visit order), and the optional <code>source_hint</code>. A
-<code>file://</code> review carries the file's basename as
-<code>page_path</code>. The section key is <strong>origin plus
-pathname</strong>, not pathname alone, so two dev servers both serving
-<code>/dashboard</code> do not collapse into one section.</li>
+<li><strong>The page fields on every record.</strong> Without them
+<code>review.md</code> cannot be grouped by page: <code>page_path</code>
+(query string and fragment collapsed away), <code>page_title</code>,
+<code>page_seq</code> (first-visit order), and the optional
+<code>source_hint</code>. A <code>file://</code> review carries the
+file's basename as <code>page_path</code>. The section key is
+<strong>origin plus pathname</strong>, not pathname alone, so two dev
+servers both serving <code>/dashboard</code> do not collapse into one
+section.</li>
 <li><strong>The applied-<code>after</code> history on every
 record.</strong> Replay's branch three (an earlier revision's text
 landed somewhere) has nothing to compare against unless the record
@@ -2361,8 +2359,7 @@ higher <code>seq</code> and prints the highest <code>seq</code> it
 printed, which is the caller's next cursor. <strong>It stores nothing
 and consumes nothing.</strong> It is a read, never an acknowledgment. A
 killed wait, a repeated wait, and two agents waiting at once are all
-harmless, and the cut acknowledge model cannot come back through
-it.</li>
+harmless. Nothing about <code>wait</code> acknowledges anything.</li>
 <li><strong>What counts as new:</strong> an item newly ready, an item
 reworded to a higher revision, an item flagged as lost, and a reply from
 another agent. Drafts never count.</li>
@@ -2444,8 +2441,8 @@ file, <code>readEventLog</code>'s new path, and <code>suspend()</code> /
 law is enforced by the helper rather than by builder discipline. Today
 only a hand-written line in the harness self-test asserts the counters,
 and a paused replay engine passes the idempotence assertion.</li>
-<li>Add the <strong>restore-layer caret assertion</strong> (see 2B for
-why it exists and what it asserts).</li>
+<li>Add the <strong>restore-layer caret assertion</strong> (see 2B,
+protection, for why it exists and what it asserts).</li>
 <li>Grow <code>repaint-engine.js</code> a cancelable pre-morph event and
 a no-hook flavor, both switchable.</li>
 <li>Add Firefox and WebKit Playwright projects. Add
@@ -2460,9 +2457,8 @@ leaving the default <code>playwright test</code> on Chromium.</li>
 <p><strong>Timeboxed.</strong> If all three browser lanes are not green
 in one working day, 0B closes green on Chromium, the Firefox and WebKit
 lanes move to Phase 4A (acceptance walks), and the cross-browser product
-claim is verified by hand at CP2. Twelve builders must not wait on
-open-ended WebKit debugging that the cut line already says is
-droppable.</p>
+claim is verified by hand at CP2. No builder should wait on open-ended
+WebKit debugging that the cut line already says is droppable.</p>
 <p><strong>Done when:</strong> <code>npm run gate:builder</code> is
 green, the harness self-tests pass on Chromium with both halves,
 <code>gate:all</code> is green on three browsers or the timebox has been
@@ -2472,8 +2468,8 @@ jsdom require.</p>
 <p>One agent, hour zero, no dependencies on anything. This is the
 fixture that 2D (living in the page), 3A's per-page grouping, 3B's
 dev-server path, ranked test 4 (the page's own controls keep working),
-and AC2 (Ken's dev-server story) all require and that nothing in the
-previous draft built.</p>
+and AC2 (Ken's dev-server story) all require. Nothing in the repo builds
+it today.</p>
 <p>What exists today is <code>repainting.html</code> (one page, a
 timer-driven revert) and <code>built-doc.html</code> (one static
 document). Neither has a link that navigates, a form that submits, a
@@ -2505,7 +2501,7 @@ and the four lifecycle states with their actor column.</p>
 <p>The gate's lint is <code>node --check</code>, a syntax check, so "the
 gate is green" means very little for a task that is almost entirely
 contract definition. This read is the only thing standing between a
-wrong field name and twelve builders importing it. Every item on it is
+wrong field name and every builder importing it. Every item on it is
 cheap to fix here and expensive to fix at CP2.</p>
 <p>At CP0 the orchestrator also <strong>freezes</strong> three shared
 surfaces for the rest of the build: <code>shared/review_format.js</code>
@@ -2740,14 +2736,14 @@ normalizer is otherwise inside 2C (replay), where a whitespace or
 context-widening disagreement would be diagnosed as a replay bug.</p>
 <h2 id="phase-2-four-parallel-builders">Phase 2: four parallel
 builders</h2>
-<p>2B (protection) and 2C (replay) were one task in the previous draft.
-Split, because that one task carried three protection layers, a
-four-branch history-aware replay, structural comparison,
-delete-by-absence, lost-anchor surfacing, the post-commit pass, and both
-of the top-two ranked tests, and "give it the strongest builder" is
-staffing, not structure. Splitting the task does not violate the rule
-against shipping protection with two of its three layers, which is about
-shipping, not about who writes what.</p>
+<p>2B (protection) and 2C (replay) are two tasks, not one. Between them
+they carry three protection layers, a four-branch history-aware replay,
+structural comparison, delete-by-absence, lost-anchor surfacing, the
+post-commit pass, and both of the top-two ranked tests. That is too much
+for one builder, and answering it with "give it the strongest builder"
+is staffing, not structure. Splitting the work does not weaken the rule
+that protection ships with all three layers or not at all. That rule is
+about what ships, not about who writes it.</p>
 <h3 id="2a-editing">2A: Editing</h3>
 <div class="xref">
 <p>Implements D3's edit state (edit is entered deliberately, per region)
@@ -2933,8 +2929,8 @@ the source under a different region and confirm nothing else moved. Like
 CP1, it re-runs at every later checkpoint.</p>
 <h2 id="phase-3-four-parallel-builders">Phase 3: four parallel
 builders</h2>
-<p>3C (copy and export) is split out from the Edits tab, because the cut
-line protects one and can drop the other.</p>
+<p>3C (copy and export) is its own task, separate from the Edits tab,
+because the cut line protects one and can drop the other.</p>
 <h3 id="3a-the-agent-loop">3A: The agent loop</h3>
 <div class="xref">
 <p>Implements D6 (the agent contract is one readable file and replies
@@ -3099,10 +3095,9 @@ checkpoint specs are green after the removal.</p>
 (comments and gestures), 2A (editing), 2B (protection), 2C (replay), 2D
 (living in the page), <strong>3B (install and add)</strong>, <strong>3C
 (copy and export)</strong>, then the reply half of 3A (agent loop).</p>
-<p>3B and 3C are inside the line now because the previous draft's cut
-line dropped both and then described a surviving tool that could be
-installed and could export. A tool that cannot be added to a page is not
-a tool.</p>
+<p>3B (install and add) and 3C (copy and export) are inside the line
+because the surviving tool still has to be installable and still has to
+export. A tool that cannot be added to a page is not a tool.</p>
 <p>That is a coherent tool: add the library to a page, comment, type
 fixes, use the page for real, lose nothing across a reload or a killed
 helper, copy and export with nothing running, an agent that reads one
@@ -3223,10 +3218,9 @@ versions in full, and writes nothing</td>
 across a helper that is killed with <code>kill -9</code> at record four
 and restarted at record seven. All ten are in <code>events.jsonl</code>
 exactly once, byte-identical, and all ten are in <code>review.md</code>.
-Plus the behavioral control that replaces the previous draft's
-unreviewable "static assertion": with the helper <strong>never started
-at all</strong>, all ten records complete, appear on the rail, and
-export carries all ten</td>
+Plus the behavioral control: with the helper <strong>never started at
+all</strong>, all ten records complete, appear on the rail, and export
+carries all ten</td>
 <td>Symptom: delivery stopping</td>
 <td>CP1</td>
 <td>1A, 1B</td>
@@ -3599,15 +3593,14 @@ re-run at every later checkpoint</td>
 </tr>
 </tbody>
 </table></div>
-<p><strong>Cut from the previous draft:</strong> the file-drop test ("a
-file dropped onto the page does not navigate and does not reach disk").
-No requirement in the brief mentions drag and drop; making it true
-requires intercepting <code>dragover</code> and <code>drop</code> on the
-page, which is the exact opposite of D3's browse-is-untouched law that
-R13 (the page keeps working) ranks above editing convenience; and "does
-not reach disk" is a property of the helper, which the library cannot
-affect. It was a test with no requirement behind it and a design
-contradiction inside it.</p>
+<p><strong>There is deliberately no file-drop test</strong> ("a file
+dropped onto the page does not navigate and does not reach disk"). No
+requirement in the brief mentions drag and drop. Making it true requires
+intercepting <code>dragover</code> and <code>drop</code> on the page,
+which is the opposite of D3's rule that browse mode is the page
+untouched, and R13 (the page keeps working) ranks that rule above
+editing convenience. And "does not reach disk" is a property of the
+helper, which the library cannot affect.</p>
 <h2 id="acceptance-criteria">Acceptance criteria</h2>
 <p>Scored by an evaluator who did not build the code, on the running
 tool in a real browser, in Phase 4A. Each names what failure looks like,

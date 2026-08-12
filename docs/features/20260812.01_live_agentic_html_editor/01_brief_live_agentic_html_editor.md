@@ -47,12 +47,12 @@ we cannot lose their work or clobber their work.
 - Not a CMS, a page builder, or a design tool. It edits the words and arrangement of a page that already
   exists. No color pickers, no spacing controls, no CSS editing, and no restyling of the page.
 - Not a hosted service. It runs on the reviewer's own machine against pages on that machine.
-- Not Markdown. Cut on Ken's call: a Markdown file is already easy to edit in an editor.
+- Not Markdown. A Markdown file is already easy to edit in an editor.
 - Not an agent. It collects feedback, carries it, and shows the agent's answers. Doing the work is the
   agent's job.
-- **Not reordering blocks by hand, in v1.** Ken asks for reordering often, so this is a real need rather
-  than one nobody wants, and it is the first thing to revisit. It is out for now because doing it badly
-  breaks pages, and asking the agent to reorder something works today.
+- **Not reordering blocks by hand, in v1.** Ken asks for reordering often, so it is the first thing to
+  revisit. It is out for now because doing it badly breaks pages, and asking the agent to reorder
+  something works today.
 :::
 
 ## User Stories
@@ -85,7 +85,7 @@ we cannot lose their work or clobber their work.
 
 ### The user's work is never clobbered
 
-The reason this is being built. Each names a way the current tool loses work.
+Each of these names a way the current tool loses the reviewer's work.
 
 ::: callout-req
 **R1: Nothing the reviewer types is lost.** A reload, a tab close, a navigation, a restart of anything

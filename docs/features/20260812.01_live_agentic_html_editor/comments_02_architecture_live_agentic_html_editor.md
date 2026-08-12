@@ -1,6 +1,6 @@
 # Review comments: Architecture: Live Agentic HTML Editor
 
-_Doc: 02_architecture_live_agentic_html_editor.html · saved 2026-08-12T16:22:02 · 12 comment(s)_
+_Doc: 02_architecture_live_agentic_html_editor.html · saved 2026-08-12T16:31:01 · 17 comment(s)_
 
 ## 1. Summary
 
@@ -136,6 +136,71 @@ Two page states, browse and edit, with browse fully native
 > it, Esc cancels
 
 this is how we do images and stuff? ok i guess that works
+
+**[DONE]**
+
+## 13. D5:
+Durability is browser storage plus an append-only log
+
+> An open edit
+> commits automatically on navigation or unload (kept
+> synchronously in browser storage, handed to the helper on the way out),
+> because browse mode is fully native and a link click is one click: R1
+> names navigation, so navigation cannot be a losing move.
+
+maybe if a comment is uncommitted for awhile and the agent sees it's been sitting there iwthout the confirmation it can respond into the thread saying hey you didn't submit this yet. (we've already got the yellow color helping but this could help a noob, and would be pretty magical)
+
+**[DONE]**
+
+## 14. D5:
+Durability is browser storage plus an append-only log
+
+> The browser is authoritative for a record's content until the helper
+> has acknowledged it; the store is authoritative for lifecycle at
+> a given rev: a handled that names rev 1 retires rev 1, and a
+> reviewer who reworded to rev 2 offline still has rev 2 outstanding after
+> the merge. On load, the library merges both: its own undelivered work
+> from browser storage wins on content, the store wins on per-rev
+> status.
+
+not sure i understand this fully. would a diagram help?
+
+**[DONE]**
+
+## 15. D5:
+Durability is browser storage plus an append-only log
+
+> A second window on the same page is refused with a
+> reason pointing at the first. Joining looked cheap until drafts
+> entered the picture: two windows sharing one draft bucket is
+> last-keystroke-wins, which is silent loss. Refusal costs the reviewer
+> nothing and loses nothing.
+
+ah i get it. maybe we have a button that says "move to this tab" and will cause the other tab to deactivate. that way they don't have to go find it in 1000 tabs they have open lol
+
+**[DONE]**
+
+## 16. D5:
+Durability is browser storage plus an append-only log
+
+> A review starts when the add step mints it and
+> ends when the reviewer archives it from the rail;
+> retention (Data and state) ages out only archived and abandoned reviews,
+> never a live one.
+
+maybe there's an end review button so we can trigger a review of the human written edits and see if there's style updates to be made. did we end up adding that requirement? i asked but didn't double check to see it got added
+
+**[DONE]**
+
+## 17. D6:
+The agent contract is one readable file, and replies are one appended
+line
+
+> The helper maintains review.md: one
+> file per review, regenerated from the log (atomically: written beside,
+> then renamed), human-readable, grouped by page.
+
+do we want a unique naming convention to prevent collisions when multiple docs are open?
 
 **[DONE]**
 

@@ -15,6 +15,12 @@ thinking is gone from the prose (the "What carries over" section now states only
 The xref "grounds" notes are links into the brief. Two were observations needing no change (D1 packs
 several small decisions; element-pick mode is accepted for images).
 
+Round 2 (comments 13 through 16, same file): a stale draft now gets a gentle nudge on its own card
+(from the library, since drafts never reach the agent; reads the same to a new user); the offline
+reword merge rule got its diagram; the second-window refusal carries a "Review here instead" button
+that deactivates the other tab; and ending a review surfaces the hand-edit list (confirming Ken's
+earlier ask did land as R39, the end-of-session list of hand edits).
+
 ## Wireframe reaction (Ken, 2026-08-12)
 
 Three directions were drawn and opened (side rail, bottom dock, margin annotations), same content in
