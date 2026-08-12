@@ -585,6 +585,7 @@
           badges: [],
           agentMessage: null,
           notice: null,
+          attached: [],
           created: true
         };
         buildCardNode(cards[id]);
@@ -631,6 +632,11 @@
       card.node = node;
       card.bodyNode = body;
       card.parts = { kind: kind, state: state, quote: quote, badges: badges, agent: agent, notice: notice };
+      // A remount rebuilds the card's node, so anything a tab owner attached
+      // goes back into the new body rather than being silently dropped.
+      (card.attached || []).forEach(function (attachedNode) {
+        body.appendChild(attachedNode);
+      });
       return node;
     }
 
@@ -713,6 +719,34 @@
     // The element a tab-content owner fills for this card.
     function cardBody(id) {
       return cards[id] ? cards[id].bodyNode : null;
+    }
+
+    /**
+     * Put a tab owner's node inside a card, so the card really holds it.
+     *
+     * This is what makes holdsFocus(id) true for contents a tab file rendered:
+     * the text box the reviewer is typing into is inside the card's own node,
+     * which is the guard that stops a focused card being removed or re-parented.
+     * A tab owner that renders its rows somewhere else keeps the rail's model in
+     * sync while the rail holds no node, and the guard can never fire.
+     *
+     * The law holds here too: a node already in the card is left where it is,
+     * and nothing is moved into a card that currently holds focus, because
+     * re-parenting blurs a focused element in every engine.
+     *
+     * @returns {object|null} the card handle, or null when there is no such
+     *   card, no node, or the move would have blurred the reviewer
+     */
+    function attachCardNode(id, node) {
+      if (!cards[id] || !node) return null;
+      var body = cards[id].bodyNode;
+      cards[id].attached = cards[id].attached || [];
+      if (cards[id].attached.indexOf(node) === -1) cards[id].attached.push(node);
+      if (!body) return handleFor(id);
+      if (node.parentNode === body) return handleFor(id);
+      if (holdsFocus(id)) return null;
+      body.appendChild(node);
+      return handleFor(id);
     }
 
     // The element a tab owner fills with that tab's contents.
@@ -1092,6 +1126,7 @@
       getCard: getCard,
       cardNode: cardNode,
       cardBody: cardBody,
+      attachCardNode: attachCardNode,
       removeCard: removeCard,
       setCardState: setCardState,
       setCardBadge: setCardBadge,

@@ -176,7 +176,12 @@
       : null;
     var rail = opts.overlay || overlayModule.shared;
     var highlights = opts.highlights || comments.highlights || null;
+    // The rail's Active pane, when 1B's rail is what this tab lives in. With a
+    // host, this file draws the tab's CONTENTS and nothing else: no panel of
+    // its own, no pill, no chrome. Without one it falls back to its own panel
+    // in the library's shadow surface, which is what makes 1D scoreable alone.
     var providedHost = opts.host || null;
+    var hosted = !!providedHost;
 
     var panel = null;
     var listEl = null;
@@ -192,6 +197,8 @@
     var rows = Object.create(null);
 
     function surfaceRoot() {
+      // PANEL_STYLE draws the standalone panel, so it is not added when the
+      // rail is the panel.
       if (providedHost) return providedHost;
       if (!doc || !highlights) return null;
       highlights.addSurfaceStyle("tab_active", PANEL_STYLE);
@@ -214,6 +221,8 @@
         mounted = true;
         return handle();
       }
+
+      if (hosted) return mountInRail(host);
 
       panel = el("section", PANEL_CLASS);
       panel.setAttribute(PANEL_ATTR, "");
@@ -254,6 +263,30 @@
       return handle();
     }
 
+    // Inside the rail's Active pane. The rail owns the panel, the counts, the
+    // status line and the collapsed pill, so none of that is built here; what
+    // is left is the tab's own contents, which is the note box at the foot, the
+    // gesture hints, and a body inside each of the rail's own cards.
+    //
+    // The foot is kept last by flex ORDER rather than by re-appending it after
+    // every change: the rail appends new cards to the same pane, and moving the
+    // foot would re-parent the note box the reviewer may be typing in.
+    function mountInRail(host) {
+      footEl = el("footer", "lahe-rail-foot");
+      footEl.style.order = "9";
+      footEl.appendChild(el("span", "lahe-rail-footlabel", "A note about the page, tied to nothing"));
+      host.appendChild(footEl);
+      footEl.appendChild(hintList());
+
+      openNoteBox();
+      unsubscribe = comments.onChange(function (item, event) {
+        onItemChanged(item, event);
+      });
+      mounted = true;
+      refresh();
+      return handle();
+    }
+
     // The note box at the foot of the thread: an open box tied to nothing
     // (R18). It is created once and replaced only when the reviewer finishes
     // the one that is there.
@@ -277,7 +310,8 @@
     }
 
     function hintText() {
-      if (!panel) {
+      var container = panel || footEl;
+      if (!container) {
         return gestures
           .hintLines()
           .map(function (line) {
@@ -285,7 +319,7 @@
           })
           .join("\n");
       }
-      return panel.querySelector(".lahe-rail-hints").textContent;
+      return container.querySelector(".lahe-rail-hints").textContent;
     }
 
     function onItemChanged(item, event) {
@@ -306,7 +340,8 @@
     // In place, always. New items get a row at the top (newest visible without
     // scrolling); existing rows are updated where they are.
     function refresh() {
-      if (!listEl) return handle();
+      if (!mounted && !listEl) return handle();
+      if (!listEl && !hosted) return handle();
       var items = comments.outstanding().filter(function (item) {
         return !noteHandle || item[record.FIELD.ID] !== noteHandle.id || !record.isDraft(item);
       });
@@ -319,7 +354,10 @@
         rail.setCardState(id, item[record.FIELD.STATE]);
         if (!rows[id]) {
           rows[id] = buildRow(item);
-          listEl.insertBefore(rows[id], listEl.firstChild);
+          // Inside the rail's own card, so the card really holds what the
+          // reviewer is looking at and holdsFocus(id) can be true for it.
+          if (hosted) rail.attachCardNode(id, rows[id]);
+          else listEl.insertBefore(rows[id], listEl.firstChild);
         }
         updateRow(rows[id], item);
       });
@@ -328,8 +366,10 @@
         if (!seen[id]) dropRow(id);
       });
 
-      emptyEl.hidden = items.length > 0;
-      if (emptyEl.parentNode !== listEl) listEl.appendChild(emptyEl);
+      if (emptyEl) {
+        emptyEl.hidden = items.length > 0;
+        if (emptyEl.parentNode !== listEl) listEl.appendChild(emptyEl);
+      }
       refreshCount();
       return handle();
     }
@@ -346,14 +386,18 @@
       row.setAttribute("data-lahe-item", id);
       row.setAttribute("data-kind", item[record.FIELD.KIND]);
 
-      var quote = el("p", "lahe-rail-quote", "");
-      row.appendChild(quote);
+      // The rail's card already carries the quote and the lifecycle chip, so a
+      // hosted row would say both of them twice. It draws what is left.
+      if (!hosted) {
+        var quote = el("p", "lahe-rail-quote", "");
+        row.appendChild(quote);
+      }
 
       var note = el("p", "lahe-rail-note", "");
       row.appendChild(note);
 
       var foot = el("div", "lahe-rail-rowfoot");
-      foot.appendChild(el("span", "lahe-rail-state", ""));
+      if (!hosted) foot.appendChild(el("span", "lahe-rail-state", ""));
       var reword = el("button", "lahe-rail-btn", "Reword");
       reword.setAttribute("type", "button");
       reword.addEventListener("click", function () {
@@ -372,9 +416,11 @@
 
     function updateRow(row, item) {
       var quote = row.querySelector(".lahe-rail-quote");
-      var quoteText = item[record.FIELD.CONTEXT] ? item[record.FIELD.CONTEXT].quote : null;
-      quote.textContent = quoteText || "";
-      quote.hidden = !quoteText;
+      if (quote) {
+        var quoteText = item[record.FIELD.CONTEXT] ? item[record.FIELD.CONTEXT].quote : null;
+        quote.textContent = quoteText || "";
+        quote.hidden = !quoteText;
+      }
 
       var note = row.querySelector(".lahe-rail-note");
       var text = item[record.FIELD.NOTE];
@@ -382,7 +428,7 @@
       note.setAttribute("data-empty", text ? "false" : "true");
 
       var state = row.querySelector(".lahe-rail-state");
-      state.textContent = stateLabel(item);
+      if (state) state.textContent = stateLabel(item);
       row.setAttribute("data-state", item[record.FIELD.STATE]);
     }
 
@@ -415,6 +461,13 @@
     // The collapsed pill never overlaps the open rail: only one of the two is
     // ever on screen.
     function collapse(next) {
+      // The rail owns the collapsed pill when the rail is the panel. Two things
+      // that collapse independently would let the reviewer hide one and keep
+      // the other.
+      if (hosted) {
+        collapsed = rail.collapse(next);
+        return collapsed;
+      }
       collapsed = next === undefined ? !collapsed : !!next;
       if (panel) panel.hidden = collapsed;
       if (pill) pill.hidden = !collapsed;
@@ -422,7 +475,7 @@
     }
 
     function isCollapsed() {
-      return collapsed;
+      return hosted ? rail.isCollapsed() : collapsed;
     }
 
     // What the rail occupies right now, in viewport coordinates, INCLUDING the
@@ -432,6 +485,20 @@
     // screenshot to everything left of this, which is the honest reading of
     // "identical outside the rail's bounds".
     function bounds() {
+      if (hosted) {
+        var geometry = rail.geometry();
+        var rect = geometry.rail || geometry.pill;
+        if (!rect) return { left: 0, top: 0, width: 0, height: 0 };
+        var railReach = geometry.rail ? PANEL_SHADOW_REACH : PILL_SHADOW_REACH;
+        return {
+          left: rect.left - railReach,
+          top: rect.top - railReach,
+          width: rect.right - rect.left + railReach,
+          height: rect.bottom - rect.top + railReach * 2,
+          right: rect.right,
+          bottom: rect.bottom + railReach
+        };
+      }
       var node = collapsed ? pill : panel;
       if (!node || !node.getBoundingClientRect) return { left: 0, top: 0, width: 0, height: 0 };
       var reach = collapsed ? PILL_SHADOW_REACH : PANEL_SHADOW_REACH;
@@ -451,6 +518,7 @@
       unsubscribe = null;
       if (panel && panel.parentNode) panel.parentNode.removeChild(panel);
       if (pill && pill.parentNode) pill.parentNode.removeChild(pill);
+      if (footEl && footEl.parentNode) footEl.parentNode.removeChild(footEl);
       panel = null;
       pill = null;
       listEl = null;
