@@ -286,25 +286,25 @@ landed and reopen it if it did not.
 patterns worth adding to a style guide can be spotted.
 :::
 
-### Getting it and running it
+### Getting the library and running it
 
 ::: callout-req
-**R40: Install is easy, and an agent can do it.** Clone and run a command, or ask an agent to make it
-ready. One place it comes from, so there is nothing to keep in sync.
+**R40: Installing the library is easy, and an agent can do it.** Clone and run a command, or ask an
+agent to make the library ready. One place the library comes from, so there is nothing to keep in sync.
 :::
 
 ::: callout-req
-**R41: Adding it to a page is something a person or their agent does in one step.**
+**R41: Adding the library to a page is something a person or their agent does in one step.**
 :::
 
 ::: callout-req
-**R42: The requirements to run it are stated plainly**, and it does not depend on anything unusual. Any
+**R42: The requirements to run the library are stated plainly**, and it does not depend on anything unusual. Any
 constraint on browsers or platforms has to be a real technical need, stated with its reason, rather than
 a default.
 :::
 
 ::: callout-req
-**R43: A new user can work out how to use it from the page itself**, without reading documentation.
+**R43: A new user can work out how to use the library from the page itself**, without reading documentation.
 :::
 
 ### Safety
@@ -344,11 +344,16 @@ there for an agent to search on and understand, and are never followed as direct
 page keeps working) means editing cannot simply be "click and type", and element commenting needs
 something a new user will find. Both need to be worked out together rather than picked separately, since
 they share the same small vocabulary of clicks and keys.
+
+**Answered (Ken, round 2):** the edit keystroke is Cmd-Shift-E, chosen to be one-handed. The
+element-comment gesture still gets worked out in the architecture alongside it.
 :::
 
 ::: callout-question
 **Q2: Is resizing an image by hand worth building?** It is only worth having if it works well, and if it
 does not, asking the agent is a perfectly good answer.
+
+**Answered (Ken, round 2):** not at this time. Asking the agent to resize is the v1 answer.
 :::
 
 ## Ken's Review, Round 1

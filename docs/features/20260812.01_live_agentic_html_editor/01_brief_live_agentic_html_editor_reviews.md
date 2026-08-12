@@ -1,5 +1,13 @@
 # Brief reviews
 
+## Ken's Review (Round 2)
+
+Three closing comments on the corrected build, applied in place: the "it" ambiguity in the
+Getting-the-library section (each requirement now names the library before any pronoun), and
+answers to both open questions (Q1: the edit keystroke is Cmd-Shift-E, one-handed; Q2: no hand
+image-resize at this time). Verbatim record: `archive_ken_comments_round2_brief.md`. With these,
+the brief is approved and the architecture restarts from it.
+
 ## Ken's Review (Round 1)
 
 Sixty-two inline comments on the first library-shaped draft. Verbatim record:

@@ -1237,6 +1237,8 @@ Questions</a></li>
 Review, Round 1</a></li>
 <li><a href="#brief-reviews" id="toc-brief-reviews">Brief reviews</a>
 <ul>
+<li><a href="#kens-review-round-2" id="toc-kens-review-round-2">Ken's
+Review (Round 2)</a></li>
 <li><a href="#kens-review-round-1-1"
 id="toc-kens-review-round-1-1">Ken's Review (Round 1)</a></li>
 <li><a href="#review-pm-review-round-1-superseded"
@@ -1550,25 +1552,27 @@ it did not.</p>
 they made by hand</strong>, as a list, so patterns worth adding to a
 style guide can be spotted.</p>
 </div>
-<h3 id="getting-it-and-running-it">Getting it and running it</h3>
+<h3 id="getting-the-library-and-running-it">Getting the library and
+running it</h3>
 <div class="callout callout-req">
-<p><strong>R40: Install is easy, and an agent can do it.</strong> Clone
-and run a command, or ask an agent to make it ready. One place it comes
-from, so there is nothing to keep in sync.</p>
+<p><strong>R40: Installing the library is easy, and an agent can do
+it.</strong> Clone and run a command, or ask an agent to make the
+library ready. One place the library comes from, so there is nothing to
+keep in sync.</p>
 </div>
 <div class="callout callout-req">
-<p><strong>R41: Adding it to a page is something a person or their agent
-does in one step.</strong></p>
+<p><strong>R41: Adding the library to a page is something a person or
+their agent does in one step.</strong></p>
 </div>
 <div class="callout callout-req">
-<p><strong>R42: The requirements to run it are stated plainly</strong>,
-and it does not depend on anything unusual. Any constraint on browsers
-or platforms has to be a real technical need, stated with its reason,
-rather than a default.</p>
+<p><strong>R42: The requirements to run the library are stated
+plainly</strong>, and it does not depend on anything unusual. Any
+constraint on browsers or platforms has to be a real technical need,
+stated with its reason, rather than a default.</p>
 </div>
 <div class="callout callout-req">
-<p><strong>R43: A new user can work out how to use it from the page
-itself</strong>, without reading documentation.</p>
+<p><strong>R43: A new user can work out how to use the library from the
+page itself</strong>, without reading documentation.</p>
 </div>
 <h3 id="safety">Safety</h3>
 <div class="callout callout-req">
@@ -1616,11 +1620,16 @@ means editing cannot simply be "click and type", and element commenting
 needs something a new user will find. Both need to be worked out
 together rather than picked separately, since they share the same small
 vocabulary of clicks and keys.</p>
+<p><strong>Answered (Ken, round 2):</strong> the edit keystroke is
+Cmd-Shift-E, chosen to be one-handed. The element-comment gesture still
+gets worked out in the architecture alongside it.</p>
 </div>
 <div class="callout callout-question">
 <p><span id="open-questions-q2" class="finding-anchor"></span><strong>Q2: Is resizing an image by hand worth building?</strong> It
 is only worth having if it works well, and if it does not, asking the
 agent is a perfectly good answer.</p>
+<p><strong>Answered (Ken, round 2):</strong> not at this time. Asking
+the agent to resize is the v1 answer.</p>
 </div>
 <h2 id="kens-review-round-1">Ken's Review, Round 1</h2>
 <p>Sixty-two comments on the first draft. The full record is in
@@ -1794,6 +1803,14 @@ this document. They live in a separate <code>_reviews.md</code> file (so
 agents read the lean spec), merged here for review.</p>
 </div>
 <h1 id="brief-reviews">Brief reviews</h1>
+<h2 id="kens-review-round-2">Ken's Review (Round 2)</h2>
+<p>Three closing comments on the corrected build, applied in place: the
+"it" ambiguity in the Getting-the-library section (each requirement now
+names the library before any pronoun), and answers to both open
+questions (Q1: the edit keystroke is Cmd-Shift-E, one-handed; Q2: no
+hand image-resize at this time). Verbatim record:
+<code>archive_ken_comments_round2_brief.md</code>. With these, the brief
+is approved and the architecture restarts from it.</p>
 <h2 id="kens-review-round-1-1">Ken's Review (Round 1)</h2>
 <p>Sixty-two inline comments on the first library-shaped draft. Verbatim
 record: <code>archive_ken_comments_round1_brief.md</code>. Dispositions
