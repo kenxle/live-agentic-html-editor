@@ -97,6 +97,7 @@
     var retryTimer = null;
     var pollTimer = null;
     var flushing = false;
+    var deliveredOnce = false;
     var cursor = 0;
     var repliesSeen = [];
     var seenItems = Object.create(null);
@@ -126,9 +127,19 @@
 
     function recomputeStatus() {
       var pending = store ? store.pendingEvents(requireReview()).length : 0;
-      if (pending > 0 || lastFailure) return setStatus(overlay.STATUS.KEPT_LOCALLY);
-      if (repliesSeen.length > 0) return setStatus(overlay.STATUS.AGENT_CONNECTED);
-      return setStatus(overlay.STATUS.STORED);
+      // Anything the helper refused, could not take, or never answered means
+      // the reviewer's typing is living in this browser and nowhere else.
+      if (lastFailure || cspRefused) return setStatus(overlay.STATUS.KEPT_LOCALLY);
+      if (pending === 0 && deliveredOnce) {
+        if (repliesSeen.length > 0) return setStatus(overlay.STATUS.AGENT_CONNECTED);
+        return setStatus(overlay.STATUS.STORED);
+      }
+      // Queued and in flight with nothing wrong: HOLD the current reading
+      // rather than flickering to kept-locally between every keystroke and its
+      // acknowledgement. Before the first successful post there is no reading
+      // to hold, and kept-locally is the true one.
+      if (status === null) return setStatus(overlay.STATUS.KEPT_LOCALLY);
+      return status;
     }
 
     function raise(failure) {
@@ -291,6 +302,7 @@
         if (result.ok) {
           var accepted = (result.body && result.body.accepted) || [];
           store.acknowledge(requireReview(), accepted);
+          deliveredOnce = true;
           counters.acknowledged += accepted.length;
           lastFailure = null;
           backoffIndex = 0;
@@ -434,24 +446,57 @@
       // the whole of "re-posts on the next load".
       flush();
 
-      return store.claimWindow(requireReview()).then(function (got) {
-        lock = {
-          checked: true,
-          acquired: got.acquired,
-          holder: got.holder,
-          reason: got.reason,
-          unchecked: got.unchecked === true
-        };
-        if (!got.acquired) {
-          raise(got.failure);
-        } else if (got.unchecked) {
-          // No Web Locks here, so the shared-storage half was not actually
-          // checked. Say so rather than implying it was.
+      return store
+        .claimWindow(requireReview())
+        .then(function (got) {
+          lock = {
+            checked: true,
+            acquired: got.acquired,
+            holder: got.holder,
+            reason: got.reason,
+            refusedBy: got.acquired ? null : "lock",
+            unchecked: got.unchecked === true
+          };
+          if (!got.acquired) {
+            raise(got.failure);
+            return lock;
+          }
+          // The two shapes fail differently (D5): the lock above catches two
+          // tabs sharing one storage bucket, and only the helper can see two
+          // windows that cannot see each other's storage.
+          return claimWithHelper();
+        })
+        .then(function (result) {
+          // Whichever way it went, the case nothing can refuse is said out
+          // loud rather than quietly claimed as covered.
           onLimit(overlay.LIMIT_SEPARATE_STORAGE_NO_HELPER);
-        } else {
-          // The case nothing can refuse (D5), stated rather than claimed.
-          onLimit(overlay.LIMIT_SEPARATE_STORAGE_NO_HELPER);
+          return result;
+        });
+    }
+
+    function claimWithHelper() {
+      return request("window.claim", {
+        method: "POST",
+        body: JSON.stringify({ review: requireReview(), window_id: store.windowId, takeover: false })
+      }).then(function (result) {
+        if (result.ok) {
+          lock.helperGranted = true;
+          return lock;
         }
+        var code = result.body && result.body.error && result.body.error.code;
+        if (code === "PROTO_SECOND_WINDOW") {
+          lock.acquired = false;
+          lock.refusedBy = "helper";
+          lock.reason =
+            "The helper says this review is already open in another window (" +
+            ((result.body.error && result.body.error.detail) || "no detail") +
+            ").";
+          raise(failures.failure("SECOND_WINDOW_REFUSED", lock.reason));
+          return lock;
+        }
+        // The helper being unreachable is not a refusal. A window locked out
+        // by a check that never ran is a work-losing outcome.
+        lock.helperGranted = false;
         return lock;
       });
     }

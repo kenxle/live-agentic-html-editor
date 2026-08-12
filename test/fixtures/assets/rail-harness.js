@@ -22,16 +22,26 @@
   var rail = LAHE.overlay.createRail({ store: store, reviewId: reviewId });
   var comments = LAHE.comments.createComments({ store: store, reviewId: reviewId });
 
+  // Every status the sync client has reported, in order. Ranked test 21 is
+  // about the TRANSITIONS, not about a string being present at one moment.
+  var statusLog = [];
+  var limitNote = null;
+
   var sync = LAHE.sync.createSync({
     review: reviewId,
     token: token,
-    helperOrigin: helper,
+    helperOrigin: helper || undefined,
     store: store,
     onStatus: function (state) {
+      statusLog.push(state);
       rail.setStatusLine(state);
     },
     onFailure: function (failure) {
       rail.failures.add(failure);
+    },
+    onLimit: function (text) {
+      limitNote = text;
+      rail.setLimitNote(text);
     }
   });
 
@@ -49,6 +59,12 @@
   }
 
   rail.mount();
+
+  // What the library does on load: everything browser storage holds for this
+  // review comes back as a card, drafts included.
+  store.read(reviewId).forEach(function (item) {
+    rail.upsertCard(item);
+  });
 
   // Every change to an item goes through the same path the real library uses:
   // storage is already written by comments.js, the rail is updated in place,
@@ -119,6 +135,10 @@
       return store.read(reviewId).length;
     },
 
+    storedItems: function () {
+      return store.read(reviewId);
+    },
+
     markReady: function (id) {
       var item = boxes[id].markReady();
       rail.upsertCard(item);
@@ -167,6 +187,34 @@
     },
     removeCard: function (id) {
       return rail.removeCard(id);
+    },
+
+    /**
+     * One keystroke and the durability check IN THE SAME TASK: the input event
+     * is dispatched and raw browser storage is read before this function
+     * returns, with no await and no timer in between. That ordering is the
+     * whole of ranked test 6, and a debounced store cannot pass it.
+     */
+    typeFinalKeystrokeAndRead: function (args) {
+      var box = boxes[args.id];
+      box.input.value = box.input.value + args.character;
+      box.input.dispatchEvent(new Event("input", { bubbles: true }));
+      var raw = localStorage.getItem(LAHE.store.KEY_PREFIX + reviewId);
+      var outbox = localStorage.getItem(LAHE.store.OUTBOX_PREFIX + reviewId);
+      return {
+        raw: raw,
+        durable: raw !== null && raw.indexOf(box.input.value) !== -1,
+        queued: outbox !== null && JSON.parse(outbox).length > 0,
+        typed: box.input.value
+      };
+    },
+
+    statusLog: function () {
+      return statusLog.slice();
+    },
+
+    limit: function () {
+      return limitNote;
     },
 
     // --- sync ----------------------------------------------------------------
