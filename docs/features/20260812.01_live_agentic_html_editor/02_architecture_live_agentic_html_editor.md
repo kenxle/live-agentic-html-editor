@@ -256,7 +256,10 @@ record it finds the anchor (D9) and compares against the record's history: the D
 current `after`, do nothing (idempotent); it matches `before`, apply the edit again; it matches an
 **earlier rev's** `after`, an old version was applied somewhere, so the current rev is re-applied and
 the card says an earlier version had landed; it matches none of these, the content changed underneath
-the reviewer, so the item is flagged on its card and nothing is written (R5). Replay never guesses. A
+the reviewer, so the item is flagged on its card and nothing is written (R5). The conflict card shows
+**both versions in full**, the reviewer's and the page's, and the reviewer picks which one stands
+(Ken's call at the wireframe: no "see theirs" indirection, both texts are right there). Replay never
+guesses. A
 record whose anchor cannot be found uniquely is surfaced as lost, on the page and in `review.md`,
 never silently dropped or moved (R20). Two record kinds compare on their own terms: a
 **format-only** change compares on structure rather than normalized text (whose whole job is to ignore

@@ -21,6 +21,8 @@ which is perfect." His notes, all folded into D10 (the rail):
   treatment.
 - On agent-agnostic naming: the agent states its own name in its reply line; no detection, generic
   "agent" fallback.
+- The conflict card's "Keep mine" / "See theirs" buttons: show both versions in full on the card and
+  let the reviewer choose which to keep. Folded into D7's neither-matches surfacing.
 
 ## review-security (Round 1, on v2)
 
