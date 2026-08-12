@@ -481,6 +481,18 @@
   // Applying one record
   // ---------------------------------------------------------------------------
 
+  // The node each record was last bound to. Used for ONE thing: asking whether
+  // the reviewer is in this region right now, before the anchor is consulted.
+  // It never places a write. A stale node is harmless here, because a detached
+  // node is not the protected one.
+  var lastElement = Object.create(null);
+
+  function isProtectedNow(ctx, element) {
+    if (!element) return false;
+    if (!ctx.protect || typeof ctx.protect.isProtected !== "function") return false;
+    return ctx.protect.isProtected(element);
+  }
+
   var WRITING_KINDS = {};
   WRITING_KINDS[record.KIND.EDIT] = 1;
   WRITING_KINDS[record.KIND.DELETE] = 1;
@@ -584,13 +596,23 @@
   function markLost(item, verdict, ctx) {
     counters.regionsLost += 1;
     var region = item[record.FIELD.REGION] || record.emptyRegion();
+    var reason = lostReason(verdict);
+
+    // A record that is still lost for the same reason is not re-stamped. Every
+    // pass would otherwise give it a new timestamp, which turns "this record
+    // was untouched" into a diff on every pass and makes the byte-identical
+    // assertions in ranked test 2 unstateable.
+    if (region.lost && region.lost.code === "ANCHOR_LOST" && region.lost.reason === reason) {
+      return { wrote: false, branch: null, lost: true, reason: verdict.reason, item: item, element: null };
+    }
+
     var next = {};
     Object.keys(region).forEach(function (key) {
       next[key] = region[key];
     });
     // The record's own lost state, which is what 3A projects into review.json.
     // review_format is not touched from here: the projection reads the record.
-    next.lost = { code: "ANCHOR_LOST", reason: lostReason(verdict), at: new Date().toISOString() };
+    next.lost = { code: "ANCHOR_LOST", reason: reason, at: new Date().toISOString() };
     item[record.FIELD.REGION] = next;
 
     if (failures) {
@@ -649,6 +671,24 @@
     var element = ctx.element || null;
     var verdict = null;
 
+    // Protection is asked BEFORE the anchor, against the node this record was
+    // last bound to. While the reviewer types, the region's text is neither the
+    // record's `before` nor its `after` nor anything in between, so the anchor
+    // cannot find it and would report the region the reviewer is looking at
+    // right now as lost. The node is known; asking first is both cheaper and
+    // the only honest answer.
+    if (!element && isProtectedNow(ctx, lastElement[id])) {
+      counters.regionsSkippedProtected += 1;
+      return {
+        wrote: false,
+        branch: null,
+        lost: false,
+        reason: "the reviewer is in this region",
+        item: item,
+        element: lastElement[id]
+      };
+    }
+
     if (!element) {
       if (!ref) {
         return { wrote: false, branch: null, lost: false, reason: "no reference", item: item, element: null };
@@ -677,7 +717,9 @@
       return markLost(item, verdict, ctx);
     }
 
-    if (ctx.protect && typeof ctx.protect.isProtected === "function" && ctx.protect.isProtected(element)) {
+    lastElement[id] = element;
+
+    if (isProtectedNow(ctx, element)) {
       counters.regionsSkippedProtected += 1;
       return {
         wrote: false,
