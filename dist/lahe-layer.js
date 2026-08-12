@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+ff137c7daf18
+ * version 0.0.0+b283e7b4ba3c
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+ff137c7daf18";
+  g.LAHE.version = "0.0.0+b283e7b4ba3c";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -12543,24 +12543,42 @@
 });
 
 /* ---- src/layer/inject.js  (owner: 2D) ---- */
-// Living in the page: remount, route detection, CSP refusal.
+// Living in the page: the remount contract, route detection, and the CSP
+// refusal watcher.
 //
-// Owner: Task 2C. STUB: real signatures, no DOM.
+// Owner: 2D (living in the page). Implements the architecture's browse-is-fully
+// -native half (R13, the page keeps working, which outranks editing
+// convenience) and the remount contract.
 //
-// The overlay-root contract from architecture D5, stated here because it is the
-// thing that breaks silently:
+// ---------------------------------------------------------------------------
+// The remount contract, stated here because it is the thing that breaks silently
+// ---------------------------------------------------------------------------
 //
-//   A morph can remove the overlay root, because the root is not in the
-//   server's HTML. So the root is re-created on turbo:morph, turbo:load,
-//   popstate, and a MutationObserver fallback; EVERY HANDLER IS DE-REGISTERED
-//   BEFORE RE-REGISTRATION, through the listener registry; and replay runs
-//   after each remount.
+//   The overlay root is NOT in the server's HTML. So any wholesale replacement
+//   of the body, any morph that reaches it, any navigation that re-renders the
+//   page can take it away. It is re-created on five paths:
 //
-// The Steady Thread layer survives morphs partly because Rails re-renders its
-// partial into the response, which an injected script does not inherit, and its
-// own remount path leaks a listener pair on every morph. Neither shape is
-// inherited. Plan test 20 is the guard: 100 morphs, listener count unchanged,
-// one overlay root, one gesture produces one item.
+//     turbo:morph      Hotwire replaced part of the page
+//     turbo:load       a Turbo Drive navigation finished
+//     popstate         the reviewer went back or forward
+//     pageshow         a fresh load, OR a back/forward cache restore
+//     a MutationObserver fallback, for a framework that fires none of the above
+//
+//   EVERY HANDLER IS DE-REGISTERED BEFORE RE-REGISTRATION, through the listener
+//   registry, and replay runs after each remount.
+//
+// The order below is not decoration. Re-registering before de-registering IS
+// the leak: the tool being replaced re-registers document-level mousedown and
+// mouseup on every morph with no removal, so after one hundred morphs one
+// gesture produces one hundred items. Ranked test 4 counts it.
+//
+// The bfcache path is the one nobody tests. Navigating away and pressing Back
+// restores the page WITHOUT a fresh load: no script re-runs, so a library that
+// only ever wires itself from a fresh boot comes back to a page whose root a
+// framework may already have replaced, with a store it never re-merged and a
+// replay that never ran. `pageshow` with `persisted` is the only signal, and
+// ranked test 24 asserts the remount really ran there rather than asserting the
+// rail happens to be present.
 //
 // Dual-environment module. See docs/CONTRACTS.md, "How a shared module loads".
 (function (root, factory) {
@@ -12596,69 +12614,335 @@
     "listeners.offGroup(DOCUMENT) and offGroup(NAVIGATION)",
     "re-create the overlay root if it is gone",
     "re-register document and navigation handlers through the registry",
+    "merge the store, so a restored page is not reading a stale set of records",
     "replay.schedule(REASON.REMOUNT)"
   ];
 
   // Client-side routing gives the layer no event unless it hooks history. The
-  // shim moves into the layer; it does not disappear (D5).
+  // shim moves into the layer; it does not disappear.
   var HISTORY_HOOKS = ["pushState", "replaceState"];
 
-  function remount() {
-    return { remounted: false, listenerCount: listeners.count(), isStub: true };
-  }
+  // The groups a remount clears before it re-registers. The comments surface
+  // registers under its own group name, which is why the list is data: a group
+  // that is not on it is a group that leaks.
+  var CLEARED_GROUPS = [listeners.GROUP.DOCUMENT, listeners.GROUP.NAVIGATION, "comments"];
 
-  function overlayRootCount() {
-    return 0;
-  }
+  // How many remounts to remember. A log rather than a single value because
+  // "which trigger fired, in what order" is the first question every remount
+  // bug asks, and the answer is gone by the time anyone looks.
+  var LOG_LIMIT = 50;
 
-  // CSP refusal detection. 2C wires a SecurityPolicyViolationEvent listener and
-  // reports connect-src violations naming the service origin as a policy
-  // refusal, distinct from service-down. The policy for what happens then lives
-  // in sync.classify; this only detects.
-  function watchForCspRefusal(onRefusal) {
-    void onRefusal;
-    return { watching: false, isStub: true };
+  function noop() {}
+
+  /**
+   * Install the remount contract on a real page.
+   *
+   * Everything this module does not own is a callback, because the WORK of a
+   * remount (re-creating the root, re-binding the comment surface, merging the
+   * store) belongs to modules 2D does not own. What lives here is the ORDER, the
+   * trigger list, and the de-registration.
+   *
+   * @param {Object} options
+   * @param {Document} options.document
+   * @param {Window} [options.window]
+   * @param {Object} [options.registry]  the listener registry; defaults to the shared one
+   * @param {() => boolean} [options.ensureRoot]  re-create the overlay root if it is gone;
+   *                                              returns true when it actually created one
+   * @param {() => void} [options.rebind]  re-register the document-level handlers
+   * @param {() => void} [options.merge]   the store's load-merge
+   * @param {(detail: Object) => void} [options.onRemount]
+   * @param {string[]} [options.groups]
+   */
+  function install(options) {
+    var opts = options || {};
+    var doc = opts.document || (typeof document !== "undefined" ? document : null);
+    var win = opts.window || (typeof window !== "undefined" ? window : null);
+    if (!doc) throw new Error("inject.install: a document is required");
+
+    var registry = opts.registry || listeners.shared;
+    var ensureRoot = opts.ensureRoot || function () {
+      return false;
+    };
+    var rebind = opts.rebind || noop;
+    var merge = opts.merge || noop;
+    var onRemount = opts.onRemount || noop;
+    var groups = opts.groups || CLEARED_GROUPS;
+
+    var counters = {
+      remounts: 0,
+      rootsRecreated: 0,
+      handlersCleared: 0,
+      mutationFallbacks: 0,
+      bfcacheRestores: 0,
+      historyHooks: 0,
+      cspRefusals: 0
+    };
+    var byTrigger = Object.create(null);
+    var log = [];
+    var observer = null;
+    var historyPatched = null;
+    var installed = false;
+
+    function rootMissing() {
+      return !doc.getElementById(markers.OVERLAY_ROOT_ID);
+    }
+
+    function note(detail) {
+      log.push(detail);
+      if (log.length > LOG_LIMIT) log.shift();
+      byTrigger[detail.reason] = (byTrigger[detail.reason] || 0) + 1;
+    }
+
+    /**
+     * One remount, in REMOUNT_ORDER. Synchronous on purpose: the handler that
+     * fired is the framework's, and anything deferred to a frame runs after the
+     * next gesture the reviewer makes.
+     */
+    function remount(reason, extra) {
+      var detail = { reason: reason || "manual", at: Date.now(), persisted: false, rootWasMissing: rootMissing() };
+      if (extra) {
+        Object.keys(extra).forEach(function (key) {
+          detail[key] = extra[key];
+        });
+      }
+
+      // 1. De-register EVERY handler, through the registry, before anything
+      //    re-registers. This line is the whole contract.
+      var cleared = 0;
+      groups.forEach(function (group) {
+        cleared += registry.offGroup(group);
+      });
+      counters.handlersCleared += cleared;
+      detail.handlersCleared = cleared;
+
+      // 2. The root, if it is gone.
+      var created = false;
+      if (detail.rootWasMissing) {
+        created = ensureRoot() === true;
+        if (created) counters.rootsRecreated += 1;
+      }
+      detail.rootRecreated = created;
+
+      // 3. Re-register, document handlers first and then the navigation ones we
+      //    just cleared out from under ourselves.
+      rebind();
+      registerNavigation();
+
+      // 4. The store's load-merge. A restored page that never re-merges shows
+      //    the reviewer a rail from before whatever else wrote to storage.
+      merge();
+
+      // 5. Replay, every time, whichever path got us here.
+      detail.replayScheduled = replay.schedule(replay.REASON.REMOUNT) === true;
+
+      counters.remounts += 1;
+      note(detail);
+      onRemount(detail);
+      return detail;
+    }
+
+    // ------------------------------------------------------------------------
+    // The five paths
+    // ------------------------------------------------------------------------
+
+    function registerNavigation() {
+      var group = listeners.GROUP.NAVIGATION;
+      registry.on(doc, "turbo:morph", function () {
+        remount("turbo:morph");
+      }, false, group);
+      registry.on(doc, "turbo:load", function () {
+        remount("turbo:load");
+      }, false, group);
+      if (!win) return;
+      registry.on(win, "popstate", function () {
+        remount("popstate");
+      }, false, group);
+      registry.on(win, "pageshow", function (event) {
+        var persisted = !!(event && event.persisted);
+        // A fresh load fires pageshow too, and boot has already done this work.
+        // The restore is the one that has nothing else behind it.
+        if (persisted) counters.bfcacheRestores += 1;
+        remount(persisted ? "pageshow-persisted" : "pageshow", { persisted: persisted });
+      }, false, group);
+    }
+
+    // The MutationObserver fallback. It watches for the root GOING AWAY rather
+    // than for change in general: a page that repaints on a timer would
+    // otherwise remount several times a second for no reason, and a remount
+    // that runs constantly is indistinguishable from one that never runs.
+    function startObserver() {
+      if (observer || !win || typeof win.MutationObserver !== "function") return null;
+      observer = new win.MutationObserver(function () {
+        if (!rootMissing()) return;
+        counters.mutationFallbacks += 1;
+        remount("mutation");
+      });
+      // documentElement, not body: a framework that replaces the whole body
+      // takes an observer bound to the old body with it.
+      observer.observe(doc.documentElement, { childList: true, subtree: true });
+      return observer;
+    }
+
+    // Client-side routing that never touches the network fires nothing at all.
+    // Patched ONCE and remembered, because a shim re-applied on every remount is
+    // the same leak in a different shape: one hundred morphs, one hundred
+    // wrappers, one hundred remounts per route change.
+    function patchHistory() {
+      if (historyPatched || !win || !win.history) return null;
+      var history = win.history;
+      var originals = {};
+      HISTORY_HOOKS.forEach(function (name) {
+        if (typeof history[name] !== "function") return;
+        originals[name] = history[name];
+        history[name] = function () {
+          var result = originals[name].apply(history, arguments);
+          counters.historyHooks += 1;
+          remount("history:" + name);
+          return result;
+        };
+      });
+      historyPatched = { history: history, originals: originals };
+      return historyPatched;
+    }
+
+    function unpatchHistory() {
+      if (!historyPatched) return;
+      Object.keys(historyPatched.originals).forEach(function (name) {
+        historyPatched.history[name] = historyPatched.originals[name];
+      });
+      historyPatched = null;
+    }
+
+    // ------------------------------------------------------------------------
+    // CSP refusal
+    // ------------------------------------------------------------------------
+    //
+    // A page whose Content-Security-Policy refuses connections to the helper
+    // looks EXACTLY like a helper that is down, from a fetch's point of view,
+    // and the two need opposite fixes: one is "start the helper", the other is
+    // "add the helper's origin to connect-src in this app's development CSP".
+    // The browser tells us which, once, through securitypolicyviolation.
+    //
+    // sync.js watches the same event for its own state machine. This watcher is
+    // the layer-wide one: it names the refusal on the rail even when nothing has
+    // tried to sync yet.
+
+    function watchForCspRefusal(onRefusal, watchOptions) {
+      var o = watchOptions || {};
+      var helperOrigin = o.helperOrigin || null;
+      var handler = function (event) {
+        var directive = String((event && (event.effectiveDirective || event.violatedDirective)) || "");
+        if (directive.indexOf("connect-src") !== 0) return;
+        var blocked = String((event && event.blockedURI) || "");
+        if (blocked && helperOrigin && blocked.indexOf(helperOrigin) !== 0) return;
+        counters.cspRefusals += 1;
+        (onRefusal || noop)(cspFailure("connect-src blocked " + (blocked || helperOrigin || "the helper")));
+      };
+      registry.on(doc, "securitypolicyviolation", handler, false, listeners.GROUP.NETWORK);
+      return { watching: true, handler: handler };
+    }
+
+    function start() {
+      if (installed) return api;
+      installed = true;
+      registerNavigation();
+      startObserver();
+      patchHistory();
+      return api;
+    }
+
+    function teardown() {
+      if (observer) {
+        observer.disconnect();
+        observer = null;
+      }
+      unpatchHistory();
+      groups.forEach(function (group) {
+        registry.offGroup(group);
+      });
+      registry.offGroup(listeners.GROUP.NETWORK);
+      installed = false;
+    }
+
+    var api = {
+      start: start,
+      remount: remount,
+      teardown: teardown,
+      watchForCspRefusal: watchForCspRefusal,
+      counters: counters,
+      byTrigger: byTrigger,
+      rootMissing: rootMissing,
+      isInstalled: function () {
+        return installed;
+      },
+      log: function () {
+        return log.slice();
+      },
+      last: function () {
+        return log.length ? log[log.length - 1] : null;
+      },
+      registry: registry
+    };
+    return api;
   }
 
   function cspFailure(detail) {
-    return failures.failure("SYNC_POLICY_REFUSED", detail || null);
+    return failures.failure("CSP_REFUSED", detail || null);
   }
 
   return {
     REMOUNT_TRIGGERS: REMOUNT_TRIGGERS,
     REMOUNT_ORDER: REMOUNT_ORDER,
     HISTORY_HOOKS: HISTORY_HOOKS,
+    CLEARED_GROUPS: CLEARED_GROUPS,
     OVERLAY_ROOT_ID: markers.OVERLAY_ROOT_ID,
-    remount: remount,
-    overlayRootCount: overlayRootCount,
-    watchForCspRefusal: watchForCspRefusal,
+    install: install,
     cspFailure: cspFailure,
-    replayReason: replay.REASON.REMOUNT,
-    isStub: true
+    replayReason: replay.REASON.REMOUNT
   };
 });
 
 /* ---- src/layer/index.js  (owner: 2D) ---- */
-// The review layer's entry point.
+// The review layer's entry point: boot, the version stamp, and the one place
+// the library's pieces are wired to each other.
 //
-// Owner: Task 2C. STUB: boot() wires nothing yet. It exists in Phase 0 so the
-// concatenated artifact has a single documented entry point and a version
-// stamp a browser test can read.
+// Owner: 2D (living in the page).
 //
 // Loaded LAST in the bundle, because it calls into everything above it. See
 // src/shared/manifest.js.
 //
-// Two refusals that live here rather than anywhere else:
+// ---------------------------------------------------------------------------
+// What boot does, and why it is here rather than in a page's own script
+// ---------------------------------------------------------------------------
 //
-//  - The layer refuses to initialize on a non-loopback origin. It is one of the
-//    three real controls behind R63 (local only), alongside the service
-//    refusing non-local targets it serves and the origin allowlist. It is a
-//    second line, not the guard: the guard is in the host template's own
-//    conditional, which setup emits framework-correct (D11).
+// A reviewed page adds ONE script tag (the architecture's D1), carrying
+// protocol.js's three attributes:
 //
-//  - The layer is never fetched from the service. It ships as one concatenated
-//    file that setup copies into the host application's own static assets, so a
-//    stopped service still means a working layer (D5).
+//   <script src="/lahe-layer.js"
+//           data-lahe-review="rev-abc"
+//           data-lahe-token="..."
+//           data-lahe-helper="http://127.0.0.1:7817"></script>
+//
+// Everything after that is this file: the store, the rail, the comment surface,
+// the Active tab inside the rail, sync, the remount contract, and the first
+// replay pass. Until this landed, the CP1 walk's fixture did that wiring by
+// hand in test/fixtures/assets/cp1-boot.js. That file now calls boot() and does
+// nothing else but expose what the walk reads.
+//
+// ---------------------------------------------------------------------------
+// The refusal that used to live here, and why it is gone
+// ---------------------------------------------------------------------------
+//
+// This file used to refuse to initialize on a non-loopback origin. That refusal
+// is removed: a built document opened from disk has a `file://` URL and an
+// opaque origin, that case is a supported primary one (1A's spike proved it
+// works), and the refusal broke it. The local-only controls that remain are the
+// real ones: the helper serves loopback only, it checks the per-review token on
+// every request, and it registers the origins a review accepts.
+//
+// The layer is never FETCHED from the helper either. It ships as one
+// concatenated file copied into the host application's own static assets, so a
+// stopped helper still means a working layer.
 //
 // Dual-environment module. See docs/CONTRACTS.md, "How a shared module loads".
 (function (root, factory) {
@@ -12666,36 +12950,473 @@
   var browser = typeof window !== "undefined" && !!window.document;
   if (browser) {
     root.LAHE = root.LAHE || {};
-    root.LAHE.layer = factory(root.LAHE);
+    root.LAHE.layer = factory(root.LAHE, typeof document !== "undefined" ? document.currentScript : null);
   } else {
-    module.exports = factory(require("../shared/contracts.js"));
+    // Node has no page to boot. The namespace is assembled from the same
+    // modules so the pure parts (reading a script tag's config, the shape boot
+    // returns) are unit-testable without a browser.
+    module.exports = factory(
+      Object.assign({}, require("../shared/contracts.js"), {
+        listeners: require("./listeners.js"),
+        replay: require("./replay.js"),
+        inject: require("./inject.js"),
+        store: require("./store.js"),
+        overlay: require("./overlay.js"),
+        highlight: require("./highlight.js"),
+        comments: require("./comments.js"),
+        tabActive: require("./tab_active.js"),
+        sync: require("./sync.js"),
+        protect: require("./protect.js")
+      }),
+      null
+    );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (ns) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (ns, ownScript) {
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+ff137c7daf18";
+  var VERSION = "0.0.0+b283e7b4ba3c";
 
-  function isLoopbackOrigin(origin) {
-    if (typeof origin !== "string" || !origin) return false;
-    var normalize = ns.normalize;
-    try {
-      var u = new URL(origin);
-      return normalize.isLoopbackHost(u.hostname);
-    } catch (err) {
-      return false;
+  var protocol = ns.protocol;
+  var record = ns.record;
+  var markers = ns.markers;
+
+  // The global the library publishes about itself. The browser test harness
+  // reads counters off it (test/helpers/README.md, "the counter contract"), and
+  // so does anyone debugging a page. It is published unconditionally: the layer
+  // is a development tool that only ever runs on a page whose author added its
+  // script tag, so there is nothing here to hide behind a flag.
+  var GLOBAL = "__lahe";
+
+  // ---------------------------------------------------------------------------
+  // Configuration
+  // ---------------------------------------------------------------------------
+
+  /**
+   * The script tag's config, read the way protocol.js specifies: the running
+   * script first, then the selector, which is what covers `defer` and any case
+   * where currentScript is null by the time boot is called.
+   *
+   * @param {Document} doc
+   * @param {HTMLScriptElement} [script]
+   * @returns {{review: string|null, token: string|null, helper: string|null, from: string|null}}
+   */
+  function readScriptConfig(doc, script) {
+    var attr = protocol.SCRIPT_ATTR;
+    var tag = script && script.getAttribute && script.getAttribute(attr.REVIEW) ? script : null;
+    var from = tag ? "currentScript" : null;
+    if (!tag && doc && typeof doc.querySelector === "function") {
+      tag = doc.querySelector(protocol.SCRIPT_SELECTOR);
+      from = tag ? "selector" : null;
     }
+    if (!tag) return { review: null, token: null, helper: null, from: null };
+    return {
+      review: tag.getAttribute(attr.REVIEW) || null,
+      token: tag.getAttribute(attr.TOKEN) || null,
+      helper: tag.getAttribute(attr.HELPER) || null,
+      from: from
+    };
   }
 
+  /** Explicit options win over the tag; the tag is the default, not the law. */
+  function resolveConfig(doc, options, script) {
+    var opts = options || {};
+    var fromTag = readScriptConfig(doc, script);
+    return {
+      review: opts.review || fromTag.review,
+      token: opts.token !== undefined ? opts.token : fromTag.token,
+      helper: opts.helper || fromTag.helper || protocol.DEFAULT_HELPER_ORIGIN,
+      from: opts.review ? "options" : fromTag.from
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Boot
+  // ---------------------------------------------------------------------------
+
+  var current = null;
+
+  /**
+   * Wire the library onto this page.
+   *
+   * @param {Object} [options]
+   * @param {string} [options.review]  the review id; the script tag's otherwise
+   * @param {string} [options.token]
+   * @param {string} [options.helper]
+   * @param {boolean} [options.startSync]  default true. The CP1 walk starts sync
+   *        itself, because the walk is about what happens either side of it.
+   * @returns {Object} the boot handle
+   */
   function boot(options) {
     var opts = options || {};
-    var origin = opts.origin || (typeof location !== "undefined" ? location.origin : null);
-    if (origin && !isLoopbackOrigin(origin) && opts.allowNonLoopback !== true) {
-      return { booted: false, reason: "the layer refuses to initialize on a non-loopback origin (R63)" };
+    var doc = opts.document || (typeof document !== "undefined" ? document : null);
+    var win = opts.window || (typeof window !== "undefined" ? window : null);
+    if (!doc || !win) {
+      return { booted: false, reason: "no document: the layer needs a page", version: VERSION };
     }
-    return { booted: false, reason: "not implemented yet: Task 2C owns boot()", version: VERSION, isStub: true };
+
+    var config = resolveConfig(doc, opts, opts.script || ownScript);
+    if (!config.review) {
+      // Fails closed and LOUD. A page with the library on it and no review id
+      // is a misconfiguration, and a quiet no-op here is a reviewer typing into
+      // a rail that never appears.
+      throw new Error(
+        "LAHE.layer.boot: no review id. The script tag needs " +
+          protocol.SCRIPT_ATTR.REVIEW +
+          ', as in <script src="..." ' +
+          protocol.SCRIPT_ATTR.REVIEW +
+          '="rev-abc" ' +
+          protocol.SCRIPT_ATTR.TOKEN +
+          '="...">'
+      );
+    }
+    if (current) return current;
+
+    var reviewId = config.review;
+    var store = opts.store || ns.store.createStore();
+    var rail = opts.rail || ns.overlay.createRail({ store: store, reviewId: reviewId });
+    rail.mount();
+
+    var page = record.pageFrom(
+      { origin: win.location.origin, pathname: win.location.pathname, href: win.location.href, title: doc.title },
+      { seq: 1 }
+    );
+
+    var comments = opts.comments || ns.comments.createComments({ store: store, reviewId: reviewId, page: page });
+    comments.bind({ page: page });
+
+    // The Active tab's contents live INSIDE the rail's own Active pane, so
+    // there is one rail on the page and one host under it.
+    var tab = createTab();
+
+    function createTab() {
+      var made = ns.tabActive.createActiveTab({
+        comments: comments,
+        overlay: rail,
+        host: rail.tabBody(ns.overlay.TAB.ACTIVE)
+      });
+      made.mount();
+      return made;
+    }
+
+    var statusLog = [];
+    var counters = { merges: 0, cardsDrawn: 0 };
+
+    var sync = opts.sync || ns.sync.createSync({
+      review: reviewId,
+      token: config.token,
+      helperOrigin: config.helper || undefined,
+      store: store,
+      onStatus: function (state) {
+        statusLog.push(state);
+        rail.setStatusLine(state);
+      },
+      onFailure: function (failure) {
+        rail.failures.add(failure);
+      },
+      onLimit: function (text) {
+        rail.setLimitNote(text);
+      }
+    });
+
+    // The load-merge. Everything browser storage holds for this review comes
+    // back as a card, drafts included. It runs on boot AND after every remount:
+    // a page restored from the back/forward cache never re-ran boot, and its
+    // rail would otherwise show whatever it showed before the reviewer left.
+    function merge() {
+      var items = store.read(reviewId);
+      items.forEach(function (item) {
+        rail.upsertCard(item);
+        counters.cardsDrawn += 1;
+      });
+      counters.merges += 1;
+      return items;
+    }
+
+    merge();
+
+    comments.onChange(function (item, event) {
+      // "removed" carries an id and nothing else, and "closed" is not a change
+      // to the record: the state it would post was already posted by the
+      // keystroke or by ready.
+      if (event === "removed" || event === "closed") return;
+      rail.upsertCard(item);
+      sync.recordItem(item, event === "ready" ? { immediate: "ready" } : undefined);
+    });
+
+    // -------------------------------------------------------------------------
+    // The remount contract
+    // -------------------------------------------------------------------------
+
+    // The host element the whole library draws into. Held by reference, and
+    // that reference is the difference between a cheap remount and a lossy one.
+    var hostNode = doc.getElementById(markers.OVERLAY_ROOT_ID);
+
+    /**
+     * Put the overlay root back when a morph took it.
+     *
+     * RE-ATTACH THE SAME NODE rather than building a new one. The node holds a
+     * closed shadow root, and every piece of the library caches something
+     * inside it: the rail's DOM, the comment surface's root, the Active tab's
+     * pane, the box stylesheets. Removing an element from the document does not
+     * destroy it, so appending the same node back leaves every one of those
+     * references valid, keeps the reviewer's open box open, and costs one DOM
+     * insertion. Building a fresh host instead leaves those caches pointing
+     * into a detached root, which looks like the library working (records are
+     * still written) while nothing the reviewer types is on screen.
+     *
+     * The rebuild path stays for the case where there is no node to re-attach.
+     *
+     * @returns {boolean} true when this call put a root back
+     */
+    function ensureRoot() {
+      if (doc.getElementById(markers.OVERLAY_ROOT_ID)) return false;
+
+      if (hostNode && !hostNode.isConnected) {
+        (doc.body || doc.documentElement).appendChild(hostNode);
+        return true;
+      }
+
+      // Nothing to re-attach: build the surface again from the rail down. Every
+      // box the reviewer had open died with the old root, so they are closed
+      // first; their text is already durable, because a draft is written on the
+      // keystroke and not on the close.
+      comments.closeAll();
+      tab.unmount();
+      rail.unmount();
+      rail.mount();
+      // The tab holds the pane node it was given, and that node went with the
+      // old root, so the tab is built again against the new one.
+      tab = createTab();
+      hostNode = doc.getElementById(markers.OVERLAY_ROOT_ID);
+      merge();
+      return !!hostNode;
+    }
+
+    var injector = ns.inject.install({
+      document: doc,
+      window: win,
+      ensureRoot: ensureRoot,
+      rebind: function () {
+        comments.bind({ page: page });
+      },
+      merge: merge,
+      onRemount: opts.onRemount || null
+    });
+    injector.start();
+
+    // A CSP that refuses the helper's origin looks exactly like a helper that is
+    // down, and the two need opposite fixes. sync.js reads the same event for
+    // its own state; this one names it on the rail.
+    injector.watchForCspRefusal(function (failure) {
+      rail.failures.add(failure);
+    }, { helperOrigin: config.helper });
+
+    if (opts.startSync !== false) sync.start();
+
+    // The first pass. Replay is what puts committed edits back on a page that
+    // was reloaded, so it runs on boot and not only on a later repaint.
+    ns.replay.schedule(ns.replay.REASON.BOOT);
+
+    var handle = {
+      booted: true,
+      version: VERSION,
+      review: reviewId,
+      config: config,
+      page: page,
+      store: store,
+      rail: rail,
+      comments: comments,
+      tab: function () {
+        return tab;
+      },
+      sync: sync,
+      injector: injector,
+      merge: merge,
+      remount: injector.remount,
+      statusLog: function () {
+        return statusLog.slice();
+      },
+      counters: counters,
+      teardown: function () {
+        injector.teardown();
+        comments.teardown();
+        tab.unmount();
+        rail.unmount();
+        if (win[GLOBAL] && win[GLOBAL].handle === handle) delete win[GLOBAL];
+        current = null;
+      }
+    };
+
+    current = handle;
+    publish(win, handle);
+    return handle;
   }
 
-  return { VERSION: VERSION, boot: boot, isLoopbackOrigin: isLoopbackOrigin, isStub: true };
+  // ---------------------------------------------------------------------------
+  // What the page can read about the library
+  // ---------------------------------------------------------------------------
+  //
+  // The counter names are the harness's contract (test/helpers/README.md):
+  // replayPasses increments on a pass that wrote nothing, regionsWritten only
+  // when replay actually wrote. They are GETTERS over the live counters rather
+  // than a copy, because a snapshot taken at boot is a number that never moves.
+
+  function publish(win, handle) {
+    var counters = {};
+    function live(name, read) {
+      Object.defineProperty(counters, name, { enumerable: true, get: read });
+    }
+
+    live("replayPasses", function () {
+      return ns.replay.counters.passes;
+    });
+    live("regionsWritten", function () {
+      return ns.replay.counters.regionsWritten;
+    });
+    live("regionsSkippedProtected", function () {
+      return ns.replay.counters.regionsSkippedProtected;
+    });
+    live("regionsLost", function () {
+      return ns.replay.counters.regionsLost;
+    });
+    ["remounts", "rootsRecreated", "handlersCleared", "mutationFallbacks", "bfcacheRestores", "historyHooks", "cspRefusals"].forEach(
+      function (name) {
+        live(name, function () {
+          return handle.injector.counters[name];
+        });
+      }
+    );
+    live("merges", function () {
+      return handle.counters.merges;
+    });
+    // 2B's, published here so a test reads one counters object whichever module
+    // owns the number.
+    if (ns.protect && ns.protect.counters) {
+      Object.keys(ns.protect.counters).forEach(function (name) {
+        live(name, function () {
+          return ns.protect.counters[name];
+        });
+      });
+    }
+
+    win[GLOBAL] = {
+      booted: true,
+      version: VERSION,
+      review: handle.review,
+      rootId: markers.OVERLAY_ROOT_ID,
+      handle: handle,
+      counters: counters,
+
+      // The store, and what is in it right now.
+      store: function () {
+        return handle.store;
+      },
+      page: function () {
+        return handle.page;
+      },
+      items: function () {
+        return handle.store.read(handle.review);
+      },
+      itemById: function (id) {
+        return handle.store.readItem(handle.review, id);
+      },
+      merge: handle.merge,
+
+      // The listener registry's self-report. Ranked test 4's first half.
+      listenerCount: function (group) {
+        return ns.listeners.count(group);
+      },
+      listenerGroups: function () {
+        return ns.listeners.shared.groups();
+      },
+
+      // The rail, which is inside a closed shadow root and cannot be reached
+      // with a selector.
+      rail: handle.rail,
+      status: function () {
+        return handle.rail.getStatusLine();
+      },
+      statusLog: handle.statusLog,
+      failures: function () {
+        return handle.rail.failures.list();
+      },
+      cardIds: function () {
+        return handle.rail.cardIds();
+      },
+
+      // The comment surface, for the gesture waits.
+      focusedBoxQuote: function () {
+        var box = handle.comments.focusedBox();
+        return box ? box.item.context.quote || box.id : null;
+      },
+      pickMode: function () {
+        return handle.comments.pickMode().active;
+      },
+
+      // The remount contract, observable. Ranked test 24 asserts the remount
+      // RAN on a bfcache restore, which is a different claim from the rail
+      // happening to be present.
+      remount: handle.remount,
+      remountLog: function () {
+        return handle.injector.log();
+      },
+      lastRemount: function () {
+        return handle.injector.last();
+      },
+
+      // The harness's replay hook.
+      replayNow: function () {
+        return ns.replay.schedule(ns.replay.REASON.MANUAL, { immediate: true });
+      },
+      startSync: function () {
+        return handle.sync.start();
+      },
+      teardown: handle.teardown
+    };
+    return win[GLOBAL];
+  }
+
+  // ---------------------------------------------------------------------------
+  // Auto-boot
+  // ---------------------------------------------------------------------------
+  //
+  // One script tag is the whole of what a page adds, so the tag booting itself
+  // is the contract. A page with the bundle on it and NO config tag (a test
+  // loading the modules, a build that concatenates it early) boots nothing and
+  // says nothing: that is not a misconfiguration, it is a page that has not
+  // asked for a review yet.
+
+  function autoBoot() {
+    if (typeof document === "undefined" || typeof window === "undefined") return null;
+    var config = readScriptConfig(document, ownScript);
+    if (!config.review) return null;
+    return boot({ script: ownScript });
+  }
+
+  var api = {
+    VERSION: VERSION,
+    GLOBAL: GLOBAL,
+    boot: boot,
+    booted: function () {
+      return current;
+    },
+    readScriptConfig: readScriptConfig,
+    resolveConfig: resolveConfig
+  };
+
+  // Runs at the bottom of the concatenated bundle, which is the bottom of the
+  // page's <body> in the ordinary case, so the document is already parsed.
+  if (typeof window !== "undefined" && typeof document !== "undefined") {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", function () {
+        autoBoot();
+      });
+    } else {
+      autoBoot();
+    }
+  }
+
+  return api;
 });
 
