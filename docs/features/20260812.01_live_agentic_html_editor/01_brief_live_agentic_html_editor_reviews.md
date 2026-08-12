@@ -3,7 +3,7 @@
 ## Ken's Review (Round 1)
 
 Sixty-two inline comments on the first library-shaped draft. Verbatim record:
-`01_brief_live_agentic_html_editor_reviews_ken_round1.md`. Dispositions are in the brief's
+`archive_ken_comments_round1_brief.md`. Dispositions are in the brief's
 closing table.
 
 ## review-pm Review (Round 1, superseded)

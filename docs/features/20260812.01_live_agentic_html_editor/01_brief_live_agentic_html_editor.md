@@ -23,22 +23,23 @@ the reviewer's work lived in short-lived places, and routine events emptied them
 
 ## Goal / Problem
 
-Build a library that can be added to any locally run HTML page, by anyone, that allows for **live
-editing**, **commenting that an agent reads on its own**, and **agent communication that appears on the
-page** rather than in a chat window that scrolls and buries the agent's important questions.
+Build a library that can be added to any locally run HTML page, by anyone, and allows for live editing,
+commenting that is auto-read by an agent, and agent communication that can appear on the page without
+having to go read the chat (which is constantly scrolling and loses the important agent requests
+quickly).
 
-The library has to let a human and an agent edit the same page at the same time **without clobbering
-each other's work**. That is the hard part and it is the reason this exists.
+The library has to enable live editing and agentic editing simultaneously **without clobbering each
+other's work**. That is the hard part and it is the reason this exists.
 
-Trust is the bar. Reviewers work hard leaving feedback and making edits, and we cannot lose their work
-or overwrite it.
+Trust is an important aspect of this product. Reviewers work hard leaving feedback and making edits, and
+we cannot lose their work or clobber their work.
 
 ## Non-Goals
 
 ::: callout-nongoal
-- **Not dependent on our existing tooling.** It does not require feature-forge, research-report, or any
-  other skill. Those skills, and anyone else's, should be able to drop this into a locally run or opened
-  HTML page easily.
+- **Not integrated into or relying on our existing tools.** It is standalone, not requiring
+  feature-forge or research-report skills. Those skills, or any other user's skills, should be able to
+  easily insert this module into any locally run or opened HTML.
 - **Not tied to one agent.** Claude, Codex, and anything else a person uses should be able to work with
   it.
 - Not multiplayer in the human sense. One human reviewer. It may well be working with several agents at
@@ -70,8 +71,9 @@ or overwrite it.
 - **As Ken with nothing running**, I want to grab my comments and take them somewhere else.
 - **As Ken watching an agent work**, I want a finished item's highlight to disappear and the item to
   leave the active thread, so the thread gets shorter as work gets done.
-- **As Ken at the end of a session**, I want a list of every edit I made by hand, so we can look for
-  patterns worth adding to the writing style guide and compound what we learn.
+- **As Ken at the end of a session**, I want a list of all the human edits that were made, so that we
+  can review and see if there is anything we should add to our writing style guide, compounding our
+  learnings.
 - **As any new user**, I want an install I can do quickly, or hand to my agent, and a page I can figure
   out without reading instructions.
 - **As a coding agent**, I want feedback that names what each comment is about and gives before and
@@ -81,7 +83,7 @@ or overwrite it.
 
 ## Requirements
 
-### The reviewer's work is never clobbered
+### The user's work is never clobbered
 
 The reason this is being built. Each names a way the current tool loses work.
 
@@ -147,9 +149,9 @@ that did not succeed, and nothing that the reviewer has decided not to care abou
 ### The page keeps working
 
 ::: callout-req
-**R13: The library does not break anything on the page.** Links, buttons, forms, interactivity,
-JavaScript event handling, and routing all keep working. **This outranks the convenience of editing.**
-If editing has to be entered deliberately so the page stays usable, that is the right trade.
+**R13: The module does not break functionality on the page**, including native links, buttons, forms,
+interactivity, and JavaScript event handling. **This outranks the convenience of editing.** If editing
+has to be entered deliberately so the page stays usable, that is the right trade.
 :::
 
 ::: callout-req
@@ -352,7 +354,7 @@ does not, asking the agent is a perfectly good answer.
 ## Ken's Review, Round 1
 
 Sixty-two comments on the first draft. The full record is in
-`01_brief_live_agentic_html_editor_reviews_ken_round1.md`.
+`archive_ken_comments_round1_brief.md`.
 
 | Finding | Disposition | Notes |
 | --- | --- | --- |
