@@ -25,7 +25,7 @@ flowchart LR
     H --> S[("Review store on disk<br/>append-only log + review.md")]
     A["Agent(s)<br/>Claude, Codex, anything"] -->|"reads review.md"| S
     A -->|"appends one reply line per item"| S
-    H -->|"library polls for replies"| L
+    L -->|"polls the helper for replies"| H
     L -->|"card updates, Done tab, highlights clear"| R
 ```
 
@@ -214,7 +214,10 @@ Grounds [R6 (feedback flows as the reviewer works) and R7 (the reviewer decides 
 :::
 
 The helper maintains **`review.md`**: one file per review, regenerated from the log (atomically:
-written beside, then renamed), human-readable, grouped by page. Each page's header carries an optional
+written beside, then renamed), human-readable, grouped by page. The name cannot collide when several
+docs are open at once, because the file lives inside its own review's folder (`reviews/<review-id>/`,
+the layout in Data and state): docs in one review share one file grouped by page, and separate
+reviews have separate folders. Each page's header carries an optional
 **source hint** given at add time, so an agent working a dev-server review edits the template the page
 came from rather than built output the next build overwrites. Each item carries its id and rev, its
 state, the quoted subject or before/after, and the reviewer's words verbatim. Only records the
@@ -284,7 +287,8 @@ sequenceDiagram
     A->>H: reads review.md (its own loop)
     K->>L: keeps reviewing, next screen
     A->>H: appends reply line (id, rev 1, handled)
-    H->>L: reply (library polls)
+    L->>H: poll for replies
+    H-->>L: the reply
     L->>K: card moves to Done, highlight clears
 ```
 
@@ -295,16 +299,21 @@ Grounds [R1 (nothing typed is lost) and R5 (unsent work is never silently overwr
 the heaviest real-browser testing.
 :::
 
-Live pages repaint themselves: Turbo morphs (Rails' way of rewriting parts of a page in place),
-framework re-renders, the agent's own landed changes
-arriving as a refresh. Two mechanisms keep the reviewer's work standing through all of it:
+Live pages repaint themselves: dev servers hot-reload, frameworks rewrite parts of the page in
+place, and the agent's own landed changes arrive as a refresh. The library assumes no particular
+framework (the standalone non-goal forbids relying on our own stack), so its protection is built on
+standard DOM mechanisms, with named framework integrations layered on top where a framework offers a
+hook. Rails with Turbo is the first named integration, because Ken reviews on it and it must work
+well there; it is an instance, never an assumption. Two mechanisms keep the reviewer's work standing
+through all of it:
 
 **Protected regions.** While the reviewer is actively editing a block, the library owns it. Three
 layers, because the archived round-2 review proved restore-after alone cannot save the caret (the
 repaint destroys the text node the selection lives in before any observer fires): the block is marked
-so cooperative frameworks skip it (Turbo's opt-out attribute), the library **vetoes the morph of that
-element before it happens** where the framework offers the hook, and a selection snapshot plus
-mutation-observer restore is the fallback for repaints that honor neither. The caret and the
+so cooperative frameworks skip it (a keep-this-element attribute, which several morphing libraries
+honor; Turbo's is one), the library **vetoes the repaint of that
+element before it happens** where the framework offers a hook, and a selection snapshot plus
+mutation-observer restore is the framework-free fallback for repaints that honor neither. The caret and the
 in-progress text survive a repaint of everything around them. On commit, the protection lifts, the
 result is a record, and a replay pass runs immediately: if the page had tried to change that block
 while it was protected, the suppressed change now surfaces through the neither-matches branch below

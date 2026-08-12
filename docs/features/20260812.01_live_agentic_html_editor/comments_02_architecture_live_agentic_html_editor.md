@@ -1,6 +1,6 @@
 # Review comments: Architecture: Live Agentic HTML Editor
 
-_Doc: 02_architecture_live_agentic_html_editor.html · saved 2026-08-12T16:33:14 · 18 comment(s)_
+_Doc: 02_architecture_live_agentic_html_editor.html · saved 2026-08-12T16:40:21 · 21 comment(s)_
 
 ## 1. Summary
 
@@ -217,4 +217,45 @@ line
 i need you to walk me thorugh this one. if i made a call that is non-standard then i want to talk about it 
 
 **[DONE]**
+
+## 19. D6:
+The agent contract is one readable file, and replies are one appended
+line
+
+> [Diagram 3]
+
+oh i was able to double click on this diagram and leave a comment. i actually like that. it was a good easy pattern. 
+
+besides that, we should be consistent with the arrows for polling. it looks like when the agent is polling it points at the layer, but when the library is polling the helper points at the library
+
+**[DONE]**
+
+## 20. D7:
+Protect the active region, replay the committed records
+
+> Live pages repaint themselves: Turbo morphs (Rails' way of rewriting
+> parts of a page in place), framework re-renders, the agent's own landed
+> changes arriving as a refresh. Two mechanisms keep the reviewer's work
+> standing through all of it:
+
+so when it's our server we can control this. but you've listed rails here, and rails is not a requirement for this module. yes that is what i use, but other people will have their own web frameworks in dev, most of which will have hot loading. this is currently violating the requirement that we not rely on any of our own stack or tools. (that being said i want it to work correctly with rails as well)
+
+**[DONE]**
+
+## 21. D8: Highlights that
+do not change the page
+
+> D9: Anchors match
+> by uniqueness, not confidence
+> A record's anchor is the normalized text of its region plus enough
+> surrounding context to make it unique on the page. At replay or
+> agent-read time, a match counts only if it is the only match;
+> two identical list items never get one edit applied to the wrong one,
+> they get a widened context or a surfaced failure. One shared normalizer
+> is used everywhere text is compared (recording, replay, anchoring): two
+> normalizers that disagree is how a replay engine ends up fighting the
+> reviewer's own cursor, so this is a single module by design, not
+> convention.
+
+yes to the principle. what is the mechanism? since we can edit dom properties, should we add a unique 
 

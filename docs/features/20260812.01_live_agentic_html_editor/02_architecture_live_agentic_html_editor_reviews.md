@@ -15,6 +15,14 @@ thinking is gone from the prose (the "What carries over" section now states only
 The xref "grounds" notes are links into the brief. Two were observations needing no change (D1 packs
 several small decisions; element-pick mode is accepted for images).
 
+Round 3 (comments 17 through 20, same file): review.md collisions cannot happen and D6 now says why
+(the file lives inside its review's own folder); the polling arrows in both diagrams now point from
+the poller to the polled; D7 no longer reads as Rails-assuming (framework-free protection with Rails
+plus Turbo as the first named integration, since Ken reviews on it); comment 18, the one-file-versus-
+JSON call, is held out for a live conversation with Ken rather than dispositioned here. Ken also
+liked that double-clicking a diagram let him comment on it, noted for the new library's element
+commenting.
+
 Round 2 (comments 13 through 16, same file): a stale draft now gets a gentle nudge on its own card
 (from the library, since drafts never reach the agent; reads the same to a new user); the offline
 reword merge rule got its diagram; the second-window refusal carries a "Review here instead" button

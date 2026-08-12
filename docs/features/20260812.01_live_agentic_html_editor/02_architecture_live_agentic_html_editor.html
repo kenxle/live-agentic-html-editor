@@ -1314,7 +1314,7 @@ can take a record back.</p>
     H --&gt; S[(&quot;Review store on disk&lt;br/&gt;append-only log + review.md&quot;)]
     A[&quot;Agent(s)&lt;br/&gt;Claude, Codex, anything&quot;] --&gt;|&quot;reads review.md&quot;| S
     A --&gt;|&quot;appends one reply line per item&quot;| S
-    H --&gt;|&quot;library polls for replies&quot;| L
+    L --&gt;|&quot;polls the helper for replies&quot;| H
     L --&gt;|&quot;card updates, Done tab, highlights clear&quot;| R</code></pre>
 <p>The library works alone: with no helper running, everything is kept
 in the browser and the copy and export buttons carry it out (R8, R10).
@@ -1573,13 +1573,17 @@ non-goals</a>.</p>
 </div>
 <p>The helper maintains <strong><code>review.md</code></strong>: one
 file per review, regenerated from the log (atomically: written beside,
-then renamed), human-readable, grouped by page. Each page's header
-carries an optional <strong>source hint</strong> given at add time, so
-an agent working a dev-server review edits the template the page came
-from rather than built output the next build overwrites. Each item
-carries its id and rev, its state, the quoted subject or before/after,
-and the reviewer's words verbatim. Only records the reviewer marked
-ready appear as actionable; drafts do not (R7).</p>
+then renamed), human-readable, grouped by page. The name cannot collide
+when several docs are open at once, because the file lives inside its
+own review's folder (<code>reviews/&lt;review-id&gt;/</code>, the layout
+in Data and state): docs in one review share one file grouped by page,
+and separate reviews have separate folders. Each page's header carries
+an optional <strong>source hint</strong> given at add time, so an agent
+working a dev-server review edits the template the page came from rather
+than built output the next build overwrites. Each item carries its id
+and rev, its state, the quoted subject or before/after, and the
+reviewer's words verbatim. Only records the reviewer marked ready appear
+as actionable; drafts do not (R7).</p>
 <p>This is the single file the agent reads, and "the agent reads it in a
 loop" is not left as a hope, since agents failing to collect feedback is
 one of the three symptoms being fixed. The contract block at the top of
@@ -1661,7 +1665,8 @@ that is a coordination problem this tool does not own.</p>
     A-&gt;&gt;H: reads review.md (its own loop)
     K-&gt;&gt;L: keeps reviewing, next screen
     A-&gt;&gt;H: appends reply line (id, rev 1, handled)
-    H-&gt;&gt;L: reply (library polls)
+    L-&gt;&gt;H: poll for replies
+    H--&gt;&gt;L: the reply
     L-&gt;&gt;K: card moves to Done, highlight clears</code></pre>
 <h3 id="d7-protect-the-active-region-replay-the-committed-records">D7:
 Protect the active region, replay the committed records</h3>
@@ -1677,18 +1682,24 @@ href="01_brief_live_agentic_html_editor.html#working-with-the-agent">R36
 liveness half that killed the old tool, and the half that gets the
 heaviest real-browser testing.</p>
 </div>
-<p>Live pages repaint themselves: Turbo morphs (Rails' way of rewriting
-parts of a page in place), framework re-renders, the agent's own landed
-changes arriving as a refresh. Two mechanisms keep the reviewer's work
-standing through all of it:</p>
+<p>Live pages repaint themselves: dev servers hot-reload, frameworks
+rewrite parts of the page in place, and the agent's own landed changes
+arrive as a refresh. The library assumes no particular framework (the
+standalone non-goal forbids relying on our own stack), so its protection
+is built on standard DOM mechanisms, with named framework integrations
+layered on top where a framework offers a hook. Rails with Turbo is the
+first named integration, because Ken reviews on it and it must work well
+there; it is an instance, never an assumption. Two mechanisms keep the
+reviewer's work standing through all of it:</p>
 <p><strong>Protected regions.</strong> While the reviewer is actively
 editing a block, the library owns it. Three layers, because the archived
 round-2 review proved restore-after alone cannot save the caret (the
 repaint destroys the text node the selection lives in before any
 observer fires): the block is marked so cooperative frameworks skip it
-(Turbo's opt-out attribute), the library <strong>vetoes the morph of
-that element before it happens</strong> where the framework offers the
-hook, and a selection snapshot plus mutation-observer restore is the
+(a keep-this-element attribute, which several morphing libraries honor;
+Turbo's is one), the library <strong>vetoes the repaint of that element
+before it happens</strong> where the framework offers a hook, and a
+selection snapshot plus mutation-observer restore is the framework-free
 fallback for repaints that honor neither. The caret and the in-progress
 text survive a repaint of everything around them. On commit, the
 protection lifts, the result is a record, and a replay pass runs
@@ -2241,6 +2252,15 @@ gone from the prose (the "What carries over" section now states only
 what the design is). The xref "grounds" notes are links into the brief.
 Two were observations needing no change (D1 packs several small
 decisions; element-pick mode is accepted for images).</p>
+<p>Round 3 (comments 17 through 20, same file): review.md collisions
+cannot happen and D6 now says why (the file lives inside its review's
+own folder); the polling arrows in both diagrams now point from the
+poller to the polled; D7 no longer reads as Rails-assuming
+(framework-free protection with Rails plus Turbo as the first named
+integration, since Ken reviews on it); comment 18, the one-file-versus-
+JSON call, is held out for a live conversation with Ken rather than
+dispositioned here. Ken also liked that double-clicking a diagram let
+him comment on it, noted for the new library's element commenting.</p>
 <p>Round 2 (comments 13 through 16, same file): a stale draft now gets a
 gentle nudge on its own card (from the library, since drafts never reach
 the agent; reads the same to a new user); the offline reword merge rule
