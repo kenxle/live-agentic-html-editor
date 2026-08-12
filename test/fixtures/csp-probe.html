@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>CSP Probe Fixture</title>
+</head>
+<body>
+  <!--
+    Served with a real Content-Security-Policy response header. The header comes
+    from the server, not from a meta tag, because a meta tag cannot express every
+    directive and because the failure we care about is the one a real app's real
+    header produces.
+
+    Two variants, both from test/helpers/servers.js:
+
+      block-script    script-src 'none'. The layer's script tag never executes,
+                      so window.__lahe is undefined. This is "the app's CSP
+                      refused the layer".
+      block-connect   connect-src 'none'. The layer runs, and its loopback calls
+                      are refused. This is "the app's CSP refused the sync", and
+                      D5 says it must be named distinctly from service-down.
+
+    Note for whoever writes the CSP tests: Playwright's page.evaluate is injected
+    through the debugger, so it runs even under script-src 'none'. That does not
+    weaken the test. Assert on whether the PAGE's own script ran (window.__lahe),
+    and use page.evaluate to drive the fetch probe, whose connect-src enforcement
+    is real either way.
+  -->
+  <h1 id="probe-title">CSP probe</h1>
+  <p id="probe-status" data-region="probe-status">Waiting.</p>
+
+  <script>
+    // Records that the page's own inline script was allowed to run. Under
+    // script-src 'none' this never executes and window.__cspProbe stays
+    // undefined, which is the assertion.
+    window.__cspProbe = { inlineRan: true, violations: [] };
+    document.addEventListener("securitypolicyviolation", function (event) {
+      window.__cspProbe.violations.push({
+        directive: event.effectiveDirective || event.violatedDirective,
+        blockedURI: event.blockedURI
+      });
+    });
+    document.getElementById("probe-status").textContent = "Inline script ran.";
+  </script>
+  <script src="/assets/harness-stub.js"></script>
+</body>
+</html>

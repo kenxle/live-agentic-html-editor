@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>CSS Reset Fixture</title>
+  <style>
+    /*
+      An aggressive reset of the kind a real design system ships. It hides list
+      markers and strips link styling, which is the case D12 calls out: when a
+      reviewer creates a list on this page, the tool does not fix the page's
+      appearance. It confirms the change through its own layer, and the artifact
+      keeps looking like the artifact.
+
+      A test that asserts a created list "looks like a list" on this page is
+      asserting the wrong thing. Assert the markup instead, and assert that no
+      host element picked up a style attribute or a layer class.
+    */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; border: 0; font: inherit; }
+    html { font: 16px/1.6 system-ui, sans-serif; color: #111; }
+    body { max-width: 46rem; margin: 2rem auto; }
+    ul, ol { list-style: none; padding-left: 0; }
+    li::marker { content: ""; font-size: 0; }
+    a, a:visited, a:hover { color: inherit; text-decoration: none; cursor: inherit; }
+    strong, b { font-weight: inherit; }
+    em, i { font-style: inherit; }
+    h1, h2, h3 { font-size: inherit; font-weight: inherit; }
+  </style>
+</head>
+<body>
+  <h1 id="reset-title" data-region="reset-title">Everything here is unstyled on purpose</h1>
+
+  <p id="reset-intro" data-region="reset-intro">This page resets list markers away and strips every link style. Anything the reviewer creates here will look like plain text, and that is correct behavior rather than a bug in the tool.</p>
+
+  <ul id="reset-list">
+    <li id="reset-item-1" data-region="reset-item-1">First item, with no marker</li>
+    <li id="reset-item-2" data-region="reset-item-2">Second item, with no marker</li>
+  </ul>
+
+  <p id="reset-link-holder" data-region="reset-link-holder">A link that does not look like one: <a id="reset-link" href="/built-doc.html">the training brief</a> sits inline here.</p>
+
+  <p id="reset-scratch" data-region="reset-scratch">Use this paragraph when a test needs to create a list or a link and then assert the host DOM stayed clean.</p>
+
+  <script src="/assets/harness-stub.js"></script>
+</body>
+</html>

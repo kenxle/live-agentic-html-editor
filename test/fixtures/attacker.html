@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Attacker Origin Fixture</title>
+</head>
+<body>
+  <!--
+    A page on a second origin. Served by test/helpers/servers.js on its own port,
+    which is what makes it genuinely cross-origin rather than a same-origin test
+    wearing a hat.
+
+    It offers the three shapes an attacker actually has, because CORS hides the
+    response and not the effect (architecture D9):
+
+      simplePost   a POST with a simple content type. No preflight is sent, so
+                   the request reaches the handler. This is the one that matters.
+      beacon       navigator.sendBeacon, same story, and it survives the page.
+      corsPost     a POST with JSON plus a custom header, which forces a
+                   preflight. The service should refuse the preflight.
+
+    Every one of these must be asserted on EFFECT: the event log has no new
+    entries and the review files are unchanged. A status code proves nothing,
+    because the attacker cannot read it either.
+  -->
+  <h1 id="attacker-title">Not your app</h1>
+  <p id="attacker-status">Idle.</p>
+
+  <script>
+    (function () {
+      function record(name, value) {
+        document.getElementById("attacker-status").textContent = name + ": " + value;
+        return value;
+      }
+
+      window.__attack = {
+        async simplePost(url, body) {
+          try {
+            await fetch(url, {
+              method: "POST",
+              mode: "no-cors",
+              headers: { "Content-Type": "text/plain" },
+              body: JSON.stringify(body || { forged: true })
+            });
+            return record("simplePost", "sent");
+          } catch (err) {
+            return record("simplePost", "threw:" + err.name);
+          }
+        },
+
+        beacon(url, body) {
+          const blob = new Blob([JSON.stringify(body || { forged: true })], { type: "text/plain" });
+          const ok = navigator.sendBeacon(url, blob);
+          return record("beacon", String(ok));
+        },
+
+        async corsPost(url, body, token) {
+          try {
+            const res = await fetch(url, {
+              method: "POST",
+              mode: "cors",
+              headers: {
+                "Content-Type": "application/json",
+                "x-lahe-token": token || "guessed-token",
+                "x-lahe-request": "1"
+              },
+              body: JSON.stringify(body || { forged: true })
+            });
+            return record("corsPost", "status:" + res.status);
+          } catch (err) {
+            return record("corsPost", "threw:" + err.name);
+          }
+        }
+      };
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Built Doc Fixture</title>
+  <style>
+    body { font: 16px/1.6 system-ui, sans-serif; max-width: 46rem; margin: 2rem auto; color: #1c1c1c; }
+    h1 { font-size: 2rem; margin: 0 0 1rem; }
+    h2 { font-size: 1.3rem; margin: 2rem 0 0.5rem; }
+    p { margin: 0 0 1rem; }
+    figure { margin: 1.5rem 0; }
+    .diagram { border: 1px solid #ddd; padding: 1rem; background: #fafafa; }
+    code { background: #f2f2f2; padding: 0.1rem 0.3rem; }
+  </style>
+</head>
+<body>
+  <!--
+    A static page shaped like one of the built documents this tool reviews: a
+    brief or a research report. Nothing here re-renders. Use repainting.html when
+    a test needs a page that fights back.
+
+    Every element a test may target carries data-region, which is what the stub
+    layer treats as a region. The repeated identical list items and the two
+    paragraphs in different containers under one heading are deliberate: they are
+    the anchoring cases Law 1 has to fail closed on, and the region-collision bug
+    named in the plan.
+  -->
+  <h1 id="title" data-region="title">Steady Pace: a training brief</h1>
+
+  <p id="intro" data-region="intro">This brief describes a training program for runners returning after a layoff. It is written to be read once and acted on, so it stays short and it names the tradeoffs it is making.</p>
+
+  <h2 id="heading-problem" data-region="heading-problem">The problem</h2>
+
+  <div id="container-a" data-container="a">
+    <p id="problem-a" data-region="problem-a">Runners come back too fast. The first two weeks feel easy, the third week hurts, and the fourth week is spent injured on a couch reading about other people running.</p>
+  </div>
+
+  <div id="container-b" data-container="b">
+    <p id="problem-b" data-region="problem-b">Runners come back too fast. The first two weeks feel easy, the third week hurts, and the fourth week is spent injured on a couch reading about other people running.</p>
+  </div>
+
+  <h2 id="heading-plan" data-region="heading-plan">The plan</h2>
+
+  <ul id="plan-list">
+    <li id="plan-1" data-region="plan-1">Warm up for ten minutes</li>
+    <li id="plan-2" data-region="plan-2">Warm up for ten minutes</li>
+    <li id="plan-3" data-region="plan-3">Warm up for ten minutes</li>
+    <li id="plan-4" data-region="plan-4">Run four easy miles on Tuesday</li>
+    <li id="plan-5" data-region="plan-5">Rest completely on Wednesday</li>
+  </ul>
+
+  <figure id="photo-figure">
+    <img
+      id="photo"
+      width="240"
+      height="120"
+      alt="A placeholder chart"
+      src="data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22240%22%20height%3D%22120%22%3E%3Crect%20width%3D%22240%22%20height%3D%22120%22%20fill%3D%22%23e8eef6%22%2F%3E%3Crect%20x%3D%2220%22%20y%3D%2260%22%20width%3D%2230%22%20height%3D%2240%22%20fill%3D%22%234a6fa5%22%2F%3E%3Crect%20x%3D%2270%22%20y%3D%2240%22%20width%3D%2230%22%20height%3D%2260%22%20fill%3D%22%234a6fa5%22%2F%3E%3Crect%20x%3D%22120%22%20y%3D%2220%22%20width%3D%2230%22%20height%3D%2280%22%20fill%3D%22%234a6fa5%22%2F%3E%3C%2Fsvg%3E"
+    />
+    <figcaption id="photo-caption" data-region="photo-caption">Weekly mileage over the first three weeks.</figcaption>
+  </figure>
+
+  <div class="diagram" id="diagram" data-region="diagram">
+    <svg width="320" height="90" role="img" aria-label="Three stage flow">
+      <rect x="4" y="20" width="90" height="44" fill="#fff" stroke="#4a6fa5"></rect>
+      <text x="20" y="47" font-size="13">Assess</text>
+      <rect x="114" y="20" width="90" height="44" fill="#fff" stroke="#4a6fa5"></rect>
+      <text x="132" y="47" font-size="13">Build</text>
+      <rect x="224" y="20" width="90" height="44" fill="#fff" stroke="#4a6fa5"></rect>
+      <text x="243" y="47" font-size="13">Taper</text>
+      <line x1="94" y1="42" x2="114" y2="42" stroke="#4a6fa5"></line>
+      <line x1="204" y1="42" x2="224" y2="42" stroke="#4a6fa5"></line>
+    </svg>
+  </div>
+
+  <p id="outro" data-region="outro">Send questions to the coach. The plan is a starting point, and it expects to be argued with by anyone who has run this distance before.</p>
+
+  <script src="/assets/harness-stub.js"></script>
+</body>
+</html>
