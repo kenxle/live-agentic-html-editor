@@ -18,14 +18,23 @@ const {
   startService,
   readEventLog,
   pollUntil,
-  pollPage
+  pollPage,
+  SERVICE_ENTRY: serviceEntry
 } = require("../helpers");
 
 const REPO_ROOT = path.join(__dirname, "..", "..");
-// The stand-in helper that speaks protocol.js. When 1A's real helper lands,
-// this constant is the only line that changes.
-const SERVICE_ENTRY = path.join(REPO_ROOT, "test", "fixtures", "servers", "protocol-service.js");
+// 1A's real helper, which is what CP1 exists to run these against. It was the
+// stand-in (test/fixtures/servers/protocol-service.js) only while 1A was still
+// in flight; SERVICE_ENTRY is the harness's own constant now.
+const SERVICE_ENTRY = serviceEntry;
 const REVIEW = "review-1";
+
+// The helper's own default port is fixed (7817) because a page has it baked
+// into its script tag. A parallel Playwright run would collide on it, so every
+// spec that does not need a pinned port asks for an ephemeral one and reads the
+// real port back out of service.json.
+const EPHEMERAL_PORT = ["--port", "0"];
+
 
 function railUrl(server, helper, token) {
   const query = new URLSearchParams({ review: REVIEW });
@@ -65,6 +74,7 @@ test.describe("nothing typed is lost", () => {
   test("a reload mid-sentence keeps the draft, and it reaches the helper marked draft", async ({ page }) => {
     const helper = await startService({
       entry: SERVICE_ENTRY,
+      args: EPHEMERAL_PORT,
       reviews: [REVIEW],
       allowedOrigins: [pages.origin]
     });
@@ -80,14 +90,16 @@ test.describe("nothing typed is lost", () => {
         message: "the draft to be acknowledged by the helper"
       });
 
-      const log = await pollUntil(
+      // The real helper opens a review by writing review.created and
+      // origin.registered into the same log, so "the file has a line in it" is
+      // true before the draft arrives. The condition is the draft itself.
+      const drafts = await pollUntil(
         () => {
-          const lines = readEventLog(helper.stateDir, REVIEW);
+          const lines = readEventLog(helper.stateDir, REVIEW).filter((event) => event.draft === true);
           return lines.length > 0 ? lines : null;
         },
         { message: "the draft to reach events.jsonl" }
       );
-      const drafts = log.filter((event) => event.draft === true);
       expect(drafts.length, "a half-written thought is in the helper's log too").toBeGreaterThan(0);
       expect(drafts[drafts.length - 1].record.note).toBe("Half a thought about the");
       expect(drafts[drafts.length - 1].record.state).toBe("draft");
@@ -111,6 +123,7 @@ test.describe("nothing typed is lost", () => {
   test("a kill -9 and a restart lose nothing, and every record lands exactly once", async ({ page }) => {
     const first = await startService({
       entry: SERVICE_ENTRY,
+      args: EPHEMERAL_PORT,
       reviews: [REVIEW],
       allowedOrigins: [pages.origin]
     });

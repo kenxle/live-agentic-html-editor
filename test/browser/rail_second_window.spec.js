@@ -18,11 +18,30 @@
 "use strict";
 
 const path = require("node:path");
-const { test, expect, startStaticServer, startService, openTwoTabs, openTwoContexts, pollPage } = require("../helpers");
+const {
+  test,
+  expect,
+  startStaticServer,
+  startService,
+  openTwoTabs,
+  openTwoContexts,
+  pollPage,
+  SERVICE_ENTRY: serviceEntry
+} = require("../helpers");
 
 const REPO_ROOT = path.join(__dirname, "..", "..");
-const SERVICE_ENTRY = path.join(REPO_ROOT, "test", "fixtures", "servers", "protocol-service.js");
+// 1A's real helper, which is what CP1 exists to run these against. It was the
+// stand-in (test/fixtures/servers/protocol-service.js) only while 1A was still
+// in flight; SERVICE_ENTRY is the harness's own constant now.
+const SERVICE_ENTRY = serviceEntry;
 const REVIEW = "review-1";
+
+// The helper's own default port is fixed (7817) because a page has it baked
+// into its script tag. A parallel Playwright run would collide on it, so every
+// spec that does not need a pinned port asks for an ephemeral one and reads the
+// real port back out of service.json.
+const EPHEMERAL_PORT = ["--port", "0"];
+
 
 function railUrl(server, helper, token) {
   const query = new URLSearchParams({ review: REVIEW });
@@ -80,6 +99,7 @@ test.describe("a second window is refused with a reason", () => {
   test("separate storage with the helper running: the helper refuses, naming the first", async ({ browser }) => {
     const helper = await startService({
       entry: SERVICE_ENTRY,
+      args: EPHEMERAL_PORT,
       reviews: [REVIEW],
       allowedOrigins: [pages.origin]
     });

@@ -483,14 +483,23 @@
           lock.helperGranted = true;
           return lock;
         }
-        var code = result.body && result.body.error && result.body.error.code;
-        if (code === "PROTO_SECOND_WINDOW") {
+        // The refusal, in the shape protocol.js's route table names:
+        // {granted, holder, since, heartbeat_seconds} with a reason, answered
+        // 409. The error-body form is read too, because a helper that refuses
+        // with protocol.errorBody is still saying the same thing.
+        var body = result.body || {};
+        var code = body.error && body.error.code;
+        var refused = body.granted === false || code === "PROTO_SECOND_WINDOW";
+        if (refused) {
           lock.acquired = false;
           lock.refusedBy = "helper";
           lock.reason =
-            "The helper says this review is already open in another window (" +
-            ((result.body.error && result.body.error.detail) || "no detail") +
-            ").";
+            "The helper says " +
+            (body.reason ||
+              (body.error && body.error.detail) ||
+              "this review is already open in another window" +
+                (body.holder ? " (" + body.holder + ")" : "") +
+                ".");
           raise(failures.failure("SECOND_WINDOW_REFUSED", lock.reason));
           return lock;
         }

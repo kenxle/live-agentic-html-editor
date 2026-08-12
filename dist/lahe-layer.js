@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+7ca7bbe8b72d
+ * version 0.0.0+2c0f5e5696ea
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+7ca7bbe8b72d";
+  g.LAHE.version = "0.0.0+2c0f5e5696ea";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -8471,14 +8471,23 @@
           lock.helperGranted = true;
           return lock;
         }
-        var code = result.body && result.body.error && result.body.error.code;
-        if (code === "PROTO_SECOND_WINDOW") {
+        // The refusal, in the shape protocol.js's route table names:
+        // {granted, holder, since, heartbeat_seconds} with a reason, answered
+        // 409. The error-body form is read too, because a helper that refuses
+        // with protocol.errorBody is still saying the same thing.
+        var body = result.body || {};
+        var code = body.error && body.error.code;
+        var refused = body.granted === false || code === "PROTO_SECOND_WINDOW";
+        if (refused) {
           lock.acquired = false;
           lock.refusedBy = "helper";
           lock.reason =
-            "The helper says this review is already open in another window (" +
-            ((result.body.error && result.body.error.detail) || "no detail") +
-            ").";
+            "The helper says " +
+            (body.reason ||
+              (body.error && body.error.detail) ||
+              "this review is already open in another window" +
+                (body.holder ? " (" + body.holder + ")" : "") +
+                ".");
           raise(failures.failure("SECOND_WINDOW_REFUSED", lock.reason));
           return lock;
         }
@@ -10025,7 +10034,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+7ca7bbe8b72d";
+  var VERSION = "0.0.0+2c0f5e5696ea";
 
   function isLoopbackOrigin(origin) {
     if (typeof origin !== "string" || !origin) return false;
