@@ -2,324 +2,303 @@
 
 ## Shape of the build
 
-Six phases. Phase 0 is one agent and everything waits on it, because it pins the contracts every other
-task reads and writes. Phases 1 through 3 fan out to parallel builders in their own worktrees. Phase 4
-is the test suite that decides whether this shipped. Phase 5 is what makes it a public repository.
+Four reviews reshaped this plan, and the reshaping is mostly one lesson: **the expensive part is never
+the feature surface, it is the seams between parallel builders.** The tool being replaced took 45
+commits over two and a half weeks and its cost was concentrated in cross-cutting integration, not in any
+one subsystem. So Phase 0 grew from a document into a working kernel, every task now names the files it
+owns, and there are budgeted integration checkpoints between phases rather than one merge day.
+
+The sharpest example of why: four separate tasks need to normalize text. The recorder mints a record's
+plain text, replay compares DOM to record to decide "already equal, skip", verification matches against
+source, and the anchor engine does whitespace-tolerant matching. If replay's comparison normalizes even
+slightly differently from the recorder's minting, no region ever compares equal, replay rewrites every
+region on every pass, and the caret fights the reviewer. **Parallelizing this work is itself capable of
+manufacturing the exact bug the tool exists to kill.** One normalizer, in Phase 0, imported by all four.
 
 ```mermaid
 flowchart TD
-    P0["Phase 0: contracts<br/>one agent, everything waits"]
-    P0 --> A["1A Service:<br/>auth, log, projection, endpoints"]
-    P0 --> B["1B Layer shell:<br/>rail, store, sync, failures list"]
-    P0 --> C["1C Anchor engine:<br/>pure, no DOM ownership"]
-    P0 --> D["1D Agent surface:<br/>CLI, files, fencing, setup"]
-    A & B --> E["2A Editing:<br/>recorder, formatting, blocks, undo"]
-    B & C --> F["2B Replay engine:<br/>the three laws"]
-    A & B --> G["2C In the page:<br/>injection, remount, routing, CSP"]
-    A & D --> H["3A Burn-down:<br/>ack, replies on cards, auto-refresh"]
-    A & D --> I["3B Verification + source hints"]
-    G --> J["3C Wiring:<br/>build-time injection, Steady Thread snippet"]
-    E & F & G & H & I & J --> K["Phase 4: the tests that decide it"]
-    K --> L["Phase 5: README, license, setup polish"]
+    P0a["Phase 0a: the kernel<br/>shapes, normalizer, anchor + replay stubs,<br/>gesture table, test harness"]
+    P0b["Phase 0b: the wire<br/>protocol, review files, CLI semantics"]
+    P0a --> P0b
+    P0a --> C["1C Anchor engine<br/>pure, uniqueness predicate"]
+    P0a --> Bi["1B-i Rail + card API<br/>lands first, five tasks import it"]
+    P0b --> A["1A Service"]
+    P0b --> D["1D Agent surface"]
+    Bi --> Bii["1B-ii Store, sync, copy/export"]
+    C --> Bii
+    Bi & Bii & C --> CP1{"Checkpoint 1<br/>orchestrator merges, runs gate,<br/>loads it in a browser"}
+    A & D --> CP1
+    CP1 --> Ai["2A-i Text, formatting, records, undo"]
+    CP1 --> B2["2B Replay + protected regions"]
+    CP1 --> Cc["2C Living in the page"]
+    CP1 --> Dd["2D Click interception + the toggle"]
+    Ai & B2 & Cc & Dd --> CP2{"Checkpoint 2<br/>same, plus AC3 walked by hand"}
+    CP2 --> Aii["2A-ii Blocks and images"]
+    CP2 --> H["3A Burn-down, replies, refresh"]
+    CP2 --> I["3B Verification + source hints"]
+    Aii & H & I --> P4["Phase 4: end-to-end walks"]
 ```
 
-Two rules for every builder, because they are the rules this tool exists to enforce on itself:
+Two rules for every builder, and one of them is now a deliverable rather than a hope:
 
-- **A test that fails without the behavior, or the behavior is not done.** Every reliability law in the
-  brief has one. That is the acceptance bar, not a coverage number.
-- **Nothing silently swallowed.** A failure surfaces in the page, per R69 (the page is the channel back
-  to the reviewer). A builder that catches an error and moves on has written a bug.
+- **A test that fails without the behavior.** Not asserted, demonstrated: the builder pastes the test
+  failing against a one-line deliberate revert, with the output, into their progress file. Stating this
+  rule without enforcing it is what the tool being replaced did with its "never rewrite the document"
+  prompt, and it is why that rule never held.
+- **No jsdom** for anything in the layer, replay, the rail, editing, or anchoring. jsdom has no layout,
+  no caret rects, no CSP enforcement, and no real key events, so every assertion that would catch the
+  three symptoms is impossible in it. Real Chromium via the Phase 0 harness or the test does not count.
 
-## Phase 0: Contracts
+## Phase 0: The kernel
 
-One agent. Nothing else starts until this lands, and everything else reads it rather than inventing.
+One agent, two commits. Everything else waits on 0a; 1A and 1D wait on 0b. This is the only gate, so
+under-specifying it means four builders invent four versions of the same thing and the merge is the
+disaster.
 
-::: callout-req
-**Task 0.1: Pin the shapes.** The item record and every field in it, per D4. The event envelope with its
-client-minted id. The wire protocol: routes, methods, required headers, and error shapes. The review
-file formats, both of them, including the fencing and the standing header from D10. The state directory
-layout. Write it as one reference document in the repo plus the shared constants module both the service
-and the layer import, so there is one definition and not two that drift.
-:::
+The repository skeleton, `npm run gate`, Playwright against Chromium, and `CLAUDE.md` already exist.
 
-Done when: a builder can implement either side of any boundary from this document alone, and the
-constants module is the only place a field name is spelled.
-
-## Phase 1: The four foundations, in parallel
-
-### Task 1A: The service
+### Task 0a: The shared kernel
 
 ::: callout-req
-Node, zero runtime dependencies. Ephemeral port, token and port recorded in an owner-only file, state
-directory outside any checkout. Every route requires the token in a header compared in constant time,
-requires a JSON content type and a custom header so no simple request reaches a handler, and checks the
-origin against a server-side allowlist recorded when the reviewer attaches. Append-only event log,
-projection read on start, no compaction. Serving a local HTML file with the layer injected. The endpoints
-Phase 0 pinned, including the stream the layer listens on for lifecycle changes.
+**Shapes.** The item record with every field from architecture D4, including `rev`, `group`, the region
+reference as named fields rather than prose, the lost-anchor state, and `reply`. The event envelope with
+its client-minted id. The item lifecycle transition table naming which side may make each transition.
+
+**The one normalizer**, plus cleaned-markup and canonical-target functions, with tests. Every later task
+imports these and no task may define its own. This is the highest-value hour in the build.
+
+**Stubbed signatures, committed, that later tasks fill in**: the anchor engine's mint and resolve, the
+replay scheduler's entry point and the ordering of its callers, the item store's read and write, the
+rail's card API (how any task attaches state, a badge, or an agent message to a card), the failures-list
+API, a listener registry with a count so handler leaks are observable, the node marker identifying
+tool-added DOM, and the caret and selection accessor. A stubbed anchor engine returns a fixed unique
+match and a stubbed replay is a no-op, so downstream tasks compile against real signatures and the swap
+is a one-line diff a reviewer can find.
+
+**The layer file manifest**, one owner per file per phase, and how the layer is concatenated into the
+single artifact `setup` copies into a host app.
+
+**The gesture table**, complete: plain click places the cursor, Alt-click comments on an element,
+Cmd-click follows a link, the editing toggle, send, escape, and what a Cmd-click over a link inside a
+commentable block does.
+
+**The region label rules**: the author-supplied attribute name, the fallback chain, that a label is
+pinned at first touch and never recomputed, and that record identity is the region reference and never
+the display label. Two paragraphs in different containers under one heading must produce two records;
+that collision is a named shipped bug in the tool being replaced.
+
+**The uniqueness predicate** from architecture D3 Law 1, expressed as a function contract, plus the
+fixture corpus it is judged against: text and path unchanged (bind), rewrapped and reformatted (bind), a
+sibling inserted above (bind), region text fully rewritten (no bind), region deleted (no bind), the same
+paragraph duplicated (no bind, ambiguous).
+
+**The formatting mechanism decision**, written down: `execCommand` with normalization on capture, given
+Chromium-only, or manual range surgery. Two builders will otherwise guess differently.
+
+**The write-epoch rule** so replay's own mutations do not retrigger the observer that schedules replay.
 :::
 
-Tests that must fail without it: a cross-origin POST without a token is refused; with a token but an
-unallowed origin is refused; a simple content type never reaches a handler; two events with the same id
-apply once; a killed and restarted service serves the same projection; the port is not a constant.
-
-### Task 1B: The layer shell
+### Task 0b: The wire and the files
 
 ::: callout-req
-The overlay in an isolated root that host CSS cannot reach and that reaches nothing in the host. The rail
-as a **fixed overlay that never shifts the host page**, collapsible, per D12. Comment creation on selected
-text and on a modifier click, never on a plain click. The item store writing synchronously on every change,
-keyed by canonical target path. The sync client that retries forever, never blocks, and tells policy
-refusal apart from service-down. The persistent failures list. Copy and export with no service running.
-The overall note as an item.
+Routes, methods, required headers, error shapes. The session-minting exchange for a layer living in a
+host page, what it is bound to, and what the layer does on a 401 mid-session. The two review file
+formats including D10's fencing, the standing header, and the per-page source hint. The state directory
+layout. `next` fully defined: flags, whether it blocks, keepalive, the terminal payload shapes, exit
+codes, and what an agent is told on each.
+
+**Who writes the review files**: a pure writer module owning the path-safety rules, imported and called
+by the service's send handler. Not two owners.
+
+**A no-op `verify()` stub** at its call site, so 3A writes the call and 3B fills it in and the collision
+is one line.
 :::
 
-The law this task owns: **the rail updates in place and a card holding focus is never re-created.** This
-is the single largest in-page revert mechanism in the tool being replaced, and it is one careless render
-loop away from being rebuilt.
-
-Tests: type half a comment, force a repaint, the half-comment survives. Kill the service mid-session,
-everything still captured, copy produces the full set. Two files with the same basename in different
-folders do not share a store.
-
-### Task 1C: The anchor engine
+### Task 0c: The test harness
 
 ::: callout-req
-Pure functions over a document, no ownership of the DOM and no UI. Turn a selection or an element into a
-region reference carrying its independent locators. Re-resolve a reference in a changed document and
-**return a confidence**, because D3's Law 1 is a caller decision and this task supplies the number it is
-made from. Whitespace-tolerant matching, occurrence disambiguation by surrounding context, honest failure.
+Fixture pages every task shares: a static built-doc-shaped page, a page that re-renders itself on a
+knob the test controls (both a Turbo-style frame swap and a React-style text-node replacement, with
+interval and target subtree settable), and a page served with a real CSP header.
+
+Helpers every task shares: `typeInto`, `forceRepaint`, `assertCaretUnmoved`, a replay-pass counter and
+a regions-written counter the tests read, a MutationObserver capture over a subtree, service start and
+`kill -9`, a second-origin attacker page server, and two browser contexts.
+
+**No arbitrary sleeps.** Every wait is a condition poll or a counter read. A flaky browser test gets its
+determinism fixed, never its assertion loosened, and the tool is never weakened to make a test pass.
 :::
 
-This is new work, not a port. The built-doc module's version is four exact substring probes with no
-whitespace tolerance and no disambiguation, so it binds a short prefix to the first hit.
+**Decisions closed here rather than carried:** a review is per project per session, and `next` returns
+the most recent review with anything outstanding. A target whose source hint is unknown says so plainly
+in both files rather than letting an agent confidently edit an artifact.
 
-Tests: survives edits elsewhere; survives reformatting and rewrapping; picks the right occurrence among
-repeats; reports failure rather than guessing when the subject is gone; two neighboring regions never
-resolve to the same node in one pass.
+## Phase 1
 
-### Task 1D: The agent surface
+**Task 1C, the anchor engine.** Pure functions, no DOM ownership, no UI. Mint a region reference; resolve
+it in a changed document returning a unique match or an honest failure with a reason. Whitespace-tolerant
+matching, context-based rival elimination, no scalar threshold. Judged against Phase 0's fixture corpus.
+New work, not a port: the built-doc module's version is four exact substring probes that bind a short
+prefix to the first hit.
 
-::: callout-req
-Four commands: `open`, `next`, `ack`, `setup`. The two review files, written per review and not per
-target, at the server-side review root, through an exclusively created temp name and a rename, refusing
-a symlinked destination, with names derived from a hash and a restricted slug and never from untrusted
-text. The fencing and standing header from D10, with reviewer-authored and document-derived fields
-classified and `before` bounded. `setup` writing agent instructions between sentinels, replacing only
-what is between them, and reporting rather than touching a file that mentions the tool without them.
-:::
+**Task 1B-i, the rail.** Lands before anything in Phase 2 dispatches, because five tasks import its card
+API. The overlay in an isolated root that host CSS cannot reach and that touches nothing in the host. A
+fixed overlay that never shifts the host page, collapsible. Comment creation on selection and on
+Alt-click, never on a plain click. The card API. The persistent failures list. The status line naming
+where an edit on this target goes. The edit list by region. **The law this task owns: the rail updates
+in place and a card holding focus is never re-created.**
 
-Tests: a target string containing traversal or encoded segments cannot move the write; a pre-planted
-symlink at the destination is refused; a fenced field containing the delimiter is escaped; re-running
-setup twice leaves one block and preserves text outside the sentinels; `next` returns outstanding items
-with no service connection held open.
+**Task 1B-ii, the store and the wire home.** Synchronous write on every change, keyed by canonical target
+and partitioned per target. Reconciliation on load and reconnect, lifecycle winning per `rev`. Second-tab
+refusal with a reason. The sync client: retries forever, never blocks, tells policy refusal from
+service-down. Copy and export with no service, scoped honestly to what this origin holds. The overall
+note as an item.
 
-## Phase 2: The three hard parts, in parallel
+**Task 1A, the service.** Zero runtime dependencies. Persistent run token in an owner-only file,
+ephemeral port, per-target HttpOnly credential for served documents, origin allowlist, forced preflight.
+Append-only log, projection on start, no compaction. Serving a local HTML file with the layer injected.
+The lifecycle stream. Second-instance refusal with an instruction.
 
-### Task 2A: Editing
+**Task 1D, the agent surface.** `open`, `next`, `ack`, `setup`. The review file writer with hashed names,
+temp-and-rename, symlink refusal, and the fencing. `setup` writing agent instructions between sentinels,
+replacing only what is between them, and reporting rather than touching a file that mentions the tool
+without them. `setup` owns the command outright; 2C supplies snippet content as data.
 
-::: callout-req
-No edit mode; the page is editable from the moment the layer loads. Ordinary typing, bold, italic, links,
-bulleted and numbered lists. Images resized, moved keeping their rendered size, and pasted with the
-allowed types only. Blocks deleted and reordered, a deletion recorded as a deletion. Every change becomes
-a record with a kind, plain text, cleaned markup when formatting changed, and landing anchors for a move.
-**Per-item undo that reverts the record and lets replay redraw**, since native undo does not survive
-replay rewriting a region.
+## Phase 2
 
-Nothing the layer adds may appear in a quote, a before, an after, or any field handed to the agent.
-:::
+**Task 2B, replay and protected regions.** The highest-risk task in the build. Protection of the actively
+edited region including the Turbo veto, commit on blur, and replay of committed records under D3: the
+uniqueness predicate, the three-way comparison against the record, atomic groups, and the undo exemption.
 
-Tests: a formatting-only change is a change; a deletion is a deletion and not an empty edit; undoing one
-edit leaves the others untouched; two edits to neighboring blocks stay two records; the layer's own
-markup never appears in a payload.
+**Task 2A-i, text and records.** Typing, formatting per Phase 0's decision, the record kinds, cleaned
+markup, per-item undo as a record operation, the `compositionend` deferral, spellcheck and autocorrect
+off, and the rule that no layer markup ever reaches a payload.
 
-### Task 2B: Replay
+**Task 2C, living in the page.** The layer loads from the host app's own assets and never from the
+service. Overlay root re-created on `turbo:morph`, `turbo:load`, `popstate`, and a MutationObserver, with
+every handler de-registered through the registry before re-registration. Client-side route detection. CSP
+refusal named distinctly from service-down. Snippet content, guarded outside the script tag, per
+framework.
 
-::: callout-req
-Re-apply outstanding edits after a repaint, under D3's three laws, with the confidence number from 1C:
+**Task 2D, using the page for real.** Plain click does not navigate, submit, or fire the page's handlers.
+The editing toggle restores an ordinary page. Cmd-click follows a link. The hover hint. This is half of
+the submission symptom and it had no owner until the EM review.
 
-- **Law 1, fail closed.** Below the confidence floor nothing is written to the DOM. The record keeps its
-  text and the item's card says it cannot be placed on this version of the page. One reference binds to
-  at most one node per pass, greedily in document order.
-- **Law 2, never disturb the reviewer.** A region whose DOM already equals the record is skipped, which
-  is what makes replay idempotent. A region holding the caret or the selection is never rewritten.
-- **Law 3, a source repaint is not an app repaint.** A source repaint replays and marks genuine
-  disagreements as collisions with the incoming version offered on the card. An app repaint replays only
-  where the DOM still matches what replay last wrote, and otherwise detaches the edit with its text intact
-  and says the page moved on.
-:::
+## Phase 3
 
-This task is the one most able to produce a worse version of the bug the tool exists to kill. Steady
-Thread has a Turbo frame polling every two seconds, so Law 2 is not theoretical.
+**Task 3A, the burn-down and the return channel.** Per-item ack, applied and declined, unnamed items stay
+outstanding. Applied items lose their highlight and move to Completed. Agent replies rendered on cards.
+Auto-refresh with acks processed first, and honestly: in a host page the source write arrives as a morph
+seconds before the ack, so a provisional collision may show and then clear when the ack explains it.
 
-Tests: type into a region, fire a repaint every 200ms, the caret never moves and the text is never
-disturbed; a low-confidence document writes nothing and says so; replay twice equals replay once; an app
-repaint that changes a region's data detaches rather than stamping; a source repaint that changes the same
-region raises a collision.
+**Task 3B, verification and source hints.** Source hint per target. Three verdicts: found, not found, and
+not verifiable. Authoritative for built docs where the reviewer's prose is literal in the markdown;
+advisory for routes, where an interpolated template can never match literally. A miss warns and never
+reopens.
 
-### Task 2C: Living in the page
+**Task 2A-ii, blocks and images.** Delete and reorder with landing anchors, resize and move. Image paste
+is cut.
 
-::: callout-req
-The layer loads from a script tag and never fetches itself from the service at page load. The overlay root
-is re-created on `turbo:morph`, `turbo:load`, `popstate`, and a MutationObserver fallback, **with every
-handler de-registered before re-registration**, and replay runs after each remount. Client-side navigation
-is detected by hooking history and framework events, so the target follows the route. CSP refusal of the
-script or of the loopback connection is detected and named as a policy refusal, distinct from
-service-down. `setup` emits framework-correct guarded snippets, with the guard outside the script tag in
-the host template's own conditional.
-:::
+## Not in this build
 
-The Steady Thread layer leaks a listener pair on every morph; do not inherit that shape.
+**Wiring into feature-forge, research-report, and Steady Thread.** It writes into two other repositories,
+so it cannot run in this repo's worktree fan-out, and it collides with a decision already made: the
+built-doc comment module stays for v1, so injecting this layer into the same builds puts two review
+layers in every brief, both intercepting selection and both drawing a rail. It ships separately, after
+Phase 4's non-interference test, with its own rows on the target repos' boards. Everything in the
+acceptance criteria is reachable through `open` and a hand-added snippet.
 
-Tests: a hundred simulated morphs leave one set of handlers and a working layer; a client-side route change
-moves the target without a page load; a CSP that blocks the connection produces a named policy refusal in
-the failures list; a stopped service leaves the layer fully functional.
+## The cut line
 
-## Phase 3: Closing the loop, in parallel
+If the day runs out, this is a coherent tool and it is the order to protect: Phase 0, 1C, 1B-i, 1B-ii,
+1A, 1D, 2A-i, 2B, 2D, and the ack half of 3A. That gives: open a built brief, comment, type fixes, use
+the page, lose nothing across a reload or a killed service, copy and export with nothing running, send
+with no agent, an agent that reads the files, and items that retire instead of re-shipping forever.
 
-### Task 3A: The burn-down and the return channel
-
-::: callout-req
-Per-item ack processing: applied with the files touched, or declined with a reason, anything unnamed stays
-outstanding. Applied items lose their highlight, leave the active list, and move to a completed list that
-keeps them. **Agent replies attached to an item and rendered on its card**, per R68, so a reviewer never
-goes to a terminal to find out what happened. Auto-refresh when the agent lands a change, with acks
-processed before replay so an applied item is retired before the repaint it caused. A stale ack is refused;
-a forged one cannot pass Phase 1A's auth.
-:::
-
-Tests: an ack naming three of five items clears three and leaves two; a declined item stays visible with
-its reason; an item edited after delivery is outstanding again and the ack applies to the delivered
-version; a completed item is still readable at the end of a session; the burn-down cannot be emptied by an
-ack for something never delivered.
-
-### Task 3B: Verification and source hints
-
-::: callout-req
-Every target carries a source hint: for a built document, the file it is generated from; for a route, the
-project root. Setup asks once per project. Both review files carry it and the agent instructions say to
-edit the generator's input and name what was edited. Verification then checks the reviewer's wording
-against the files the ack named, constrained to the project root, **matching on normalized text** because
-the reviewer's wording is a rendering of the source and will not appear verbatim in a template. A miss
-warns loudly on the item and does not reopen it.
-:::
-
-Tests: an agent that edits the built HTML instead of its source is caught; a match through an ERB
-template is not a false miss; a path outside the project root is a verification failure, not a read; a
-deletion is verified by absence.
-
-### Task 3C: Wiring it into the real workflows
-
-::: callout-req
-Build-time injection of the layer into feature-forge and research-report documents, the way the comment
-module is injected today. The guarded snippet for the Steady Thread development layout. Both are the same
-layer with no per-surface variation.
-:::
-
-Tests: a built brief carries the layer and renders identically without the service running; the Steady
-Thread snippet is inert outside development.
-
-## Phase 4: The tests that decide it
-
-::: callout-req
-The browser suite against a real browser, which is the thing the tool being replaced does not have and the
-reason every symptom Ken hit went unnoticed. Plus the end-to-end that is the actual acceptance bar.
-:::
-
-## Phase 5: A public repository
-
-::: callout-req
-README that a stranger follows without help: what it is, the two-line install, the three ways the layer
-gets into a page, and the honest statement of what v1 does not do. MIT license with human-review credited
-as prior art. The state directory and review file patterns in the shipped ignore file.
-:::
+Cut cleanly: 2A-ii, 2C, 3B, and 3A's refresh and replies. **Do not half-ship these:** 2A-i without 2B,
+because typed edits vanish on the first repaint; 2C without 2B's protected regions, because attaching to
+a page with a two-second poll without them is the bug; 3B without 3A, because verification hangs off the
+ack path; and `setup` without its sentinel logic, because it writes agent instruction files.
 
 ## Acceptance criteria
 
-Judged by evaluators who did not build the code, on the running tool, as user stories rather than unit
-assertions.
+Judged by evaluators who did not build the code, on the running tool. Each names what failure looks like,
+because a walk with no failure line gets a generous pass.
 
 ::: callout-metric
-**AC1, the brief.** Ken opens a built brief, fixes three sentences by typing, comments on a diagram,
-writes an overall note, and sends with no agent running. An agent started afterwards receives all five
-items, edits the **markdown source** rather than the built HTML, and acks. The items clear from Ken's
-page and appear in his completed list without him touching anything.
+**AC1, the brief.** Ken opens a built brief through `open`, fixes three sentences by typing, comments on
+a diagram, writes an overall note, and sends with no agent running. An agent started afterwards receives
+all five items and edits the markdown source. *Fails if:* an agent that edits the built HTML instead of
+its source does not produce a loud warning on the item.
 
-**AC2, the running app.** Ken attaches to the Steady Thread dev server, walks three screens behind the
-login, comments on two and types a fix on a third, uses the app for real in between by clicking a button
-that navigates, and sends the whole walk as one batch naming all three routes.
+**AC2, the running app.** Ken attaches to a dev server, walks three screens behind a login, comments on
+two, types a fix on a third, and uses the app for real in between by clicking a button that navigates.
+Sends the whole walk as one batch naming all three routes. *Fails if:* a plain click on that same button
+navigates.
 
-**AC3, nothing is taken back.** In the middle of typing, each of these happens and Ken loses nothing: a
-browser reload, the service killed and restarted, the app re-rendering the block he is typing in, and an
-agent rewriting the source underneath him. The Turbo-frame case is explicit: with a frame polling every
-two seconds, his cursor never moves and his text is never disturbed.
+**AC3, nothing is taken back.** Loses nothing means: item count identical, every item's text
+byte-identical, no item changed state, and the caret assertion held. Tested against a browser reload, a
+`kill -9` of the service, the app re-rendering the block he is typing in, and an agent rewriting the
+source, the last one run twice, once in a region he is typing in and once in a region he is not.
 
-**AC4, send always works.** Send is available whenever anything is outstanding, with no agent ever
-running. He sends, adds one more note, and sends again, and both reach the agent.
+**AC4, send always works.** Send is available whenever anything is outstanding with no agent ever
+running. Assert the button's enabled state and label at each step: fresh, note-only, after a send, after
+adding one more note, after a second send.
 
-**AC5, the agent talks back in the page.** An agent that cannot apply an item says so on that item's
-card, in words Ken reads without leaving the page. An edit replay cannot place says so on its card with
-its text intact. Neither is a silent clear and neither requires a terminal.
+**AC5, the agent talks back in the page.** An agent that cannot apply an item says so on that item's card.
+An edit replay cannot place says so with its text intact. *Fails if:* either item clears silently.
 
-**AC6, the artifact is untouched.** A built brief reviewed and sent looks pixel-identical to the same
-brief opened without the tool. No injected stylesheet, no shifted layout, no style attribute on any
-reviewed element.
+**AC6, the artifact is untouched.** Screenshot diff at two widths with the rail open and collapsed, zero
+diff outside the rail's bounds; `scrollHeight` and every host block's rect identical with and without the
+layer; zero host elements carrying a `style` attribute or a layer class after a session that created a
+list and a link on a page with a CSS reset.
 
-**AC7, it cannot be driven from outside.** A page on another origin can neither write an item, nor read
-the feedback set, nor forge an ack.
+**AC7, it cannot be driven from outside.** From a real second origin in a real browser: no item written,
+no feedback read, no ack forged. Judged on effect, the event log has no new entries and the review files
+are unchanged, not on a status code. Same-origin access is a stated v1 non-goal and is not tested here.
 
-**AC8, a stranger can run it.** A clone plus the setup command produces a working review on a machine
-that has never run it, with the agent instructions installed for the agent that machine actually uses.
+**AC8, a stranger can run it.** A clone plus setup produces a working review under a fresh user account
+with no state directory and no existing agent instruction files.
 :::
 
-## Test list
+## Tests, ranked
 
-| Area | Test |
-| --- | --- |
-| Durability | Reload mid-keystroke loses nothing |
-| Durability | Service killed mid-session loses nothing; sync drains on return |
-| Durability | Copy and export produce the full set with no service |
-| Durability | Two same-named files in different folders keep separate stores |
-| Replay | Idempotent by comparison |
-| Replay | Caret and selection never disturbed, including under a 2s repaint |
-| Replay | Low-confidence match writes nothing and says so |
-| Replay | App repaint detaches; source repaint collides |
-| Anchoring | Survives edits elsewhere, reformatting, rewrapping |
-| Anchoring | Picks the right occurrence among repeats |
-| Anchoring | Honest failure, carried into the payload |
-| Identity | Neighboring regions never merge |
-| Identity | Identity survives a repaint and a move |
-| Editing | Formatting-only change is a change |
-| Editing | Deletion is a deletion |
-| Editing | Per-item undo leaves other edits untouched |
-| Editing | Layer markup never appears in a payload |
-| Rail | A focused card is never re-created |
-| Rail | Failures persist until dismissed |
-| Send | Available whenever anything is outstanding, no agent needed |
-| Send | Note-only send works, and a second send after it works |
-| Send | Send flushes anything in flight first |
-| Protocol | Per-item ack; unnamed items stay outstanding |
-| Protocol | Stale ack refused; forged ack refused |
-| Protocol | Delivered items re-offered until acked |
-| Protocol | Browser and service reconcile with lifecycle winning |
-| Return channel | Agent reply renders on the item's card |
-| Verification | Editing the artifact instead of the source is caught |
-| Verification | A template match is not a false miss |
-| Security | Cross-origin write refused without token and allowed origin |
-| Security | Simple content type never reaches a handler |
-| Security | Traversal and symlink writes refused |
-| Security | Fenced fields escape a delimiter collision |
-| Security | Setup preserves text outside its sentinels |
-| In the page | 100 morphs leave one handler set |
-| In the page | Client-side route change moves the target |
-| In the page | CSP refusal is named, not reported as service-down |
-| Non-interference | Reviewed page renders identically with the layer present |
-| End to end | AC1 and AC2 walked in a real browser |
+Each row names the task that ships it. The top six are written first because each maps to a symptom Ken
+actually hit. Thirty-eight rows against a real browser harness is more than a day of test writing on its
+own, so the ranking is the plan, not a preference.
 
-## Open Questions
+| # | Test | Task |
+| --- | --- | --- |
+| 1 | Caret survives: type ten characters one per 50ms into a paragraph while the fixture repaints every 200ms; the paragraph reads exactly as before with the ten inserted contiguously; the replay-pass counter incremented at least five times | 2B |
+| 2 | Send enablement walked through the UI with real clicks, asserting `disabled` and label at every step, with no agent ever; plus a static assertion that agent presence is not among the enablement expression's inputs | 1B-i |
+| 3 | An agent rewrites the source touching one region; all five outstanding items across four regions survive byte-identical and unchanged in state, exactly one marked; run again with the service down | 2B |
+| 4 | Reload and `kill -9` durability, asserting synchronously in the same task as the final keystroke, with no awaited timer between | 1B-ii |
+| 5 | Fail-closed paired with positive placement: three naturally low-confidence fixtures write nothing (zero MutationObserver records) and three above the line place correctly; plus an ordering assertion rather than exact scores | 1C, 2B |
+| 6 | Cross-origin write and forged ack from a real second origin, asserted on effect; plus a fenced field containing the delimiter is escaped | 1A, 1D |
+| 7 | Copy and export with no service running | 1B-ii |
+| 8 | Acks processed before replay: agent acks and rewrites in one motion, the item is in Completed, no collision raised | 3A |
+| 9 | Verification both directions: an ack with no file change warns; a template region reports not verifiable; a literal markdown match passes; a deletion verified by absence | 3B |
+| 10 | Anchoring against a mechanically generated transformation set, named per transformation, targeting occurrence four of five and re-resolving after occurrence two is deleted | 1C |
+| 11 | Two neighboring regions never merge into one record, resolved in both orders | 1C, 2A-i |
+| 12 | A focused card is never re-created: node identity by reference, `activeElement`, and the behavioral version typing through 20 repaints | 1B-i |
+| 13 | Replay idempotence asserted as no second write via MutationObserver, not final-DOM equality | 2B |
+| 14 | Cross-region gesture decomposes into per-region records applied atomically | 2A-i, 2B |
+| 15 | Undo reverts one record, redraws with the caret in the region, leaves other edits untouched | 2A-i, 2B |
+| 16 | Plain click does not navigate or submit; Cmd-click does; the toggle restores an ordinary page | 2D |
+| 17 | Target identity converges: symlinked path, trailing slash, and both loopback spellings reach one review | 1A |
+| 18 | Two browser contexts on one target: the second is refused with a reason | 1B-ii, 1A |
+| 19 | No truncation of `after` through a 200KB item and a 300-item batch round-tripped through the CLI; `before` bounded with its marker in the same test | 1D |
+| 20 | 100 morphs: the listener registry count is unchanged, one overlay root, one gesture produces one item, one keystroke one record | 2C |
+| 21 | CSP refusal from a real header is named distinctly from service-down | 2C |
+| 22 | Failures persist through a remount, a route change, and a replay pass | 1B-i |
+| 23 | Traversal and symlink writes refused; setup preserves text outside its sentinels | 1D |
+| 24 | Non-interference per AC6's three assertions | 2A-i, 1B-i |
+| 25 | An item reworded after delivery survives an ack naming the older `rev` | 1B-ii, 1A |
+| 26 | Blocks delete and reorder with landing anchors through the wire; images keep rendered size on move | 2A-ii |
+| 27 | A dropped desktop file does not navigate the page and does not reach disk | 2A-ii |
+| 28 | The printed setup invocation actually runs | 1D |
+| 29 | End-to-end walks of AC1 and AC2 | Phase 4 |
 
-::: callout-question
-**Q1: Does a review need a name, or is one review per project enough?** D1 makes a review span many
-targets, which raises whether Ken reviewing two features in one day wants them separated. One review per
-project per session is the simplest answer and is probably right, but it decides how `next` picks what
-to return.
-:::
+## Open questions
+
+None blocking. Both prior open questions were closed in Phase 0.
