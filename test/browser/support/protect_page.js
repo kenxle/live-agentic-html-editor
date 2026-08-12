@@ -143,13 +143,30 @@ async function loadRealLayer(page, options = {}) {
     // 2D's job in the shipped library: the page changed, so replay gets a pass.
     // Standing in for it here keeps protect.js out of the business of deciding
     // when replay runs.
+    //
+    // `immediate` rather than replay's own coalescing, and it is not a
+    // preference. replay.schedule defers through requestAnimationFrame, and a
+    // browser that is not painting the page (a WebKit worker running six ways
+    // parallel, a backgrounded tab) throttles rAF to nothing: the pass counter
+    // stops moving, and every counter-based wait in the harness hangs on a page
+    // where the library is working perfectly. Flagged for 2C and 2D in
+    // 2b_builder_notes.md rather than worked around silently.
+    function pass(reason) {
+      L.replay.schedule(reason, { immediate: true });
+    }
     const scheduler = new MutationObserver(function () {
-      L.replay.schedule(L.replay.REASON.MUTATION);
+      pass(L.replay.REASON.MUTATION);
     });
     scheduler.observe(document.documentElement, {
       childList: true,
       characterData: true,
       subtree: true
+    });
+    // The harness fixture announces every repaint. A pass per repaint is the
+    // honest reading of "replay ran while the page was reverting", and it does
+    // not depend on the reviewer's own typing having produced a mutation.
+    document.addEventListener("lahe:repainted", function () {
+      pass(L.replay.REASON.REMOUNT);
     });
 
     const handle = L.protect.install({ layers: opts.layers });
