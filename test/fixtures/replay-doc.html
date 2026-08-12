@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Replay Fixture</title>
+  <style>
+    body { font: 16px/1.6 system-ui, sans-serif; max-width: 46rem; margin: 2rem auto; color: #1c1c1c; }
+    h1 { font-size: 1.6rem; }
+    h2 { font-size: 1.1rem; margin-top: 2rem; }
+    [data-repaint-target] { border: 1px dashed #cfd6e0; padding: 0.75rem; }
+    p { margin: 0 0 1rem; }
+    p:last-child { margin-bottom: 0; }
+  </style>
+</head>
+<body>
+  <!--
+    2C's page. A document that re-renders itself on the test's command, with the
+    REAL built library on it and the real replay engine driving.
+
+    It is its own fixture rather than an edit of repainting.html because that
+    page loads the harness STUB layer, whose job is to prove the harness bites
+    against a known-good and a known-bad implementation. A page that loaded both
+    the stub and the real layer would have two things claiming the same counters,
+    and every assertion would be ambiguous about which one it was reading.
+
+    Served from the REPO ROOT, so /dist/lahe-layer.js is reachable beside it.
+
+    The regions, and why there are these ones:
+
+      #region-a   ranked test 2's region A, the one the reviewer is in. It is
+                  inside the repaint target, so a repaint would revert it
+      #region-b   ranked test 2's region B, the one the agent rewrites
+      #region-c   a third outstanding record, to prove the pass leaves everything
+                  it did not decide about byte-identical
+      #region-format  a formatting-only change, which compares on structure
+      #region-delete  a deleted block, idempotent by absence
+      #region-twin-1 / #region-twin-2  identical text with identical context on
+                  both sides: the ambiguous anchor, which fails closed
+      #region-outside  outside every repaint target, so a test can prove a
+                  repaint's blast radius
+  -->
+  <h1 id="page-title">This week</h1>
+
+  <div id="live-frame" data-repaint-target="live">
+    <h2 id="live-heading">The plan</h2>
+    <p id="region-a" data-region="region-a">The trainer writes the plan every week.</p>
+    <p id="region-b" data-region="region-b">Dana moved her long run to Saturday because of the weather.</p>
+    <p id="region-c" data-region="region-c">Marcus is resting completely on Wednesday.</p>
+    <p id="region-format" data-region="region-format">This part matters.</p>
+    <p id="region-delete" data-region="region-delete">This whole paragraph should go.</p>
+  </div>
+
+  <div id="twin-frame">
+    <h2 id="twin-heading">Reminders</h2>
+    <p id="twin-lead-1">Ahead of it.</p>
+    <p id="region-twin-1">Two clients have not accepted the invite yet.</p>
+    <p id="twin-tail-1">Behind it.</p>
+    <p id="twin-lead-2">Ahead of it.</p>
+    <p id="region-twin-2">Two clients have not accepted the invite yet.</p>
+    <p id="twin-tail-2">Behind it.</p>
+  </div>
+
+  <div id="static-frame">
+    <h2 id="static-heading">Notes</h2>
+    <p id="region-outside">This block is outside every repaint target and never re-renders.</p>
+  </div>
+
+  <script src="/dist/lahe-layer.js"></script>
+  <script src="/test/fixtures/assets/repaint-engine.js"></script>
+  <script src="/test/fixtures/assets/replay-boot.js"></script>
+</body>
+</html>
