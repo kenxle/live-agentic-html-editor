@@ -1,12 +1,13 @@
 // The one normalizer.
 //
-// Owner: Task 0a (shared kernel). Imported by: the edit recorder (2A-i) when
-// it mints a record's plain text, replay (2B) when it compares the live DOM to
-// a record, verification (3B) when it matches the reviewer's wording against a
-// source file, and the anchor engine (1C) for whitespace-tolerant matching.
+// Owner: 0A-kernel. Imported by: the edit recorder (2A) when it mints a
+// record's plain text, replay (2C) when it compares the live DOM to a record,
+// the anchor engine (1C) for whitespace-tolerant matching, and the projection
+// (3A) when it renders a region's text into review.json.
 //
-// No other module may define its own text normalization. If any two of those
-// four normalize differently, no region ever compares equal to its record,
+// No other module may define its own text normalization (D9, one shared
+// normalizer). If any two of those normalize differently, no region ever
+// compares equal to its record,
 // replay rewrites every region on every pass, and the reviewer's caret gets
 // fought twice a second. That is the exact bug this tool exists to remove.
 //
@@ -431,6 +432,105 @@
   }
 
   // ---------------------------------------------------------------------------
+  // The two comparison modes (D7's format-only branch, D9's one normalizer)
+  // ---------------------------------------------------------------------------
+  //
+  // Ordinary records compare on normalized text. A format-only record cannot:
+  // its whole point is a change normalizeText is built to ignore, so comparing
+  // it on text makes replay's format-only branch a silent no-op.
+  //
+  // The formatting vocabulary is closed at bold and italic and nothing else in
+  // v1 (D4). cleanMarkup has already renamed b to strong and i to em, so the
+  // comparator only ever sees two tag names. Everything outside that list is
+  // dropped, which is what keeps the structural comparison a comparison of
+  // FORMATTING rather than a comparison of the page's markup: a framework that
+  // reserializes a span or adds a wrapper class must not read as a format
+  // change.
+  //
+  // structureOf returns a canonical string, so two structures are compared with
+  // ===, which is the same comparison the text mode makes. Every downstream
+  // caller asks equalsInMode and never picks a comparison of its own.
+
+  var STRUCTURAL_TAGS = ["em", "strong"];
+
+  var MODE = { TEXT: "text", STRUCTURE: "structure" };
+  var MODES = [MODE.TEXT, MODE.STRUCTURE];
+
+  // Which mode a record kind compares in. The kind vocabulary lives in
+  // record.js; this function takes the string so the normalizer stays at the
+  // bottom of the dependency order and depends on nothing.
+  var FORMAT_ONLY_KIND = "format_only";
+
+  function modeFor(kind) {
+    return kind === FORMAT_ONLY_KIND ? MODE.STRUCTURE : MODE.TEXT;
+  }
+
+  // Reduces markup to its formatting skeleton: the normalized text with the
+  // emphasis spans still around the words they cover, and nothing else.
+  //
+  // keepTags is the closed list of tags that survive. Passing an empty list
+  // gives the text mode's view of the same input, which is what makes the two
+  // modes comparable on one string: both take markup, and the only difference
+  // between them is whether emphasis counts.
+  function reduce(html, keepTags) {
+    var clean = cleanMarkup(html);
+    var out = [];
+    var i = 0;
+    while (i < clean.length) {
+      var lt = clean.indexOf("<", i);
+      if (lt === -1) {
+        out.push(clean.slice(i));
+        break;
+      }
+      if (lt > i) out.push(clean.slice(i, lt));
+      var tag = parseTag(clean, lt);
+      if (!tag) {
+        out.push("<");
+        i = lt + 1;
+        continue;
+      }
+      i = tag.end;
+      if (keepTags.indexOf(tag.name) !== -1) {
+        out.push(tag.closing ? "</" + tag.name + ">" : "<" + tag.name + ">");
+      }
+      // Every other tag contributes nothing; its text is emitted by the loop.
+    }
+    // The text between the kept markers is folded exactly the way normalizeText
+    // folds it, so whitespace differences are never a structural difference.
+    return out
+      .join("")
+      .replace(UNICODE_SPACES, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function structureOf(html) {
+    return reduce(html, STRUCTURAL_TAGS);
+  }
+
+  // The text mode's view: every tag gone, the words left. Plain text passes
+  // through unchanged, so a caller holding a record's `after` string and a
+  // caller holding a region's innerHTML get the same answer.
+  function textOf(html) {
+    return reduce(html, []);
+  }
+
+  function structureEquals(a, b) {
+    return structureOf(a) === structureOf(b);
+  }
+
+  // The one entry point. Fails loud on an unknown mode: a comparison that
+  // silently fell back to text is exactly the format-only no-op this exists to
+  // prevent, and it would look like a working feature.
+  function equalsInMode(mode, a, b) {
+    if (MODES.indexOf(mode) === -1) {
+      throw new Error("equalsInMode: unknown comparison mode " + String(mode) + "; expected one of " + MODES.join(", "));
+    }
+    if (mode === MODE.STRUCTURE) return structureEquals(a, b);
+    return textOf(a) === textOf(b);
+  }
+
+  // ---------------------------------------------------------------------------
   // canonicalTarget: THE target identity
   // ---------------------------------------------------------------------------
   //
@@ -568,6 +668,14 @@
     foldTypography: foldTypography,
     cleanMarkup: cleanMarkup,
     markupEquals: markupEquals,
+    STRUCTURAL_TAGS: STRUCTURAL_TAGS,
+    MODE: MODE,
+    MODES: MODES,
+    modeFor: modeFor,
+    structureOf: structureOf,
+    structureEquals: structureEquals,
+    textOf: textOf,
+    equalsInMode: equalsInMode,
     isSafeUrlValue: isSafeUrlValue,
     canonicalTarget: canonicalTarget,
     isLoopbackHost: isLoopbackHost,
