@@ -170,12 +170,13 @@ test.describe("1D: comments, gestures, and highlights", () => {
     await selectElementText(page, "#reset-intro");
     await page.keyboard.press("ControlOrMeta+Shift+KeyC");
 
-    // The box opens already focused on that passage, so the reviewer types
+    // The box opens ALREADY FOCUSED on that passage, so the reviewer types
     // without reaching for the mouse.
     const focused = await page.evaluate(function () {
-      return window.__lahe.comments.openBoxes().length;
+      var box = window.__lahe.comments.focusedBox();
+      return box ? box.item.context.quote : null;
     });
-    expect(focused).toBe(1);
+    expect(focused).toContain("resets list markers away");
 
     await page.keyboard.type("this says the opposite of the heading");
     await page.keyboard.press("ControlOrMeta+Enter");
@@ -345,8 +346,13 @@ test.describe("1D: comments, gestures, and highlights", () => {
                 painted += h.size;
               });
             }
+            // The rail lives in the library's one closed shadow root, so the
+            // page cannot query it and neither can this test. Both halves are
+            // asserted: the page-level host element exists, and the library's
+            // own API says the rail occupies real space.
+            var host = document.getElementById(window.LAHE.highlight.SURFACE_ID);
             return {
-              rail: !!document.querySelector("[data-lahe-rail]"),
+              rail: !!host && window.__lahe.tab.bounds().width > 0,
               painted: painted,
               records: window.LAHE.store.shared.read(window.__lahe.reviewId).length
             };
@@ -378,8 +384,7 @@ test.describe("1D: comments, gestures, and highlights", () => {
           // paragraph masked, because D8 allows exactly two visible additions:
           // painted highlights and the fixed rail.
           const railLeft = await layerPage.evaluate(function () {
-            var rail = document.querySelector("[data-lahe-rail]");
-            return Math.floor(rail.getBoundingClientRect().left);
+            return Math.floor(window.__lahe.tab.bounds().left);
           });
           expect(railLeft).toBeGreaterThan(0);
           expect(railLeft).toBeLessThan(width);
