@@ -5,8 +5,11 @@ gets injected into an HTML page. A reviewer comments on and directly edits
 the page; everything goes to their coding agent. See
 `docs/features/20260812.01_live_agentic_html_editor/` for the brief,
 architecture, and plan. Read the architecture doc before touching `src/`;
-it pins the design decisions (D1-D16) that every component below has to
-honor.
+it pins the design decisions (D1-D12) that every component below has to
+honor. Some code in `src/` predates the current architecture (it was built
+against an archived draft with different decision numbering); where code
+and the architecture doc disagree, the doc wins and the code is what
+changes.
 
 ## Zero runtime dependencies (hard rule)
 
@@ -39,7 +42,7 @@ src/
              is spelled. Both service and layer import from here. If you
              find yourself defining the same shape twice, it belongs here
              instead.
-  cli/       The agent surface: `open`, `next`, `ack`, `setup`
+  cli/       The helper's commands (serve, add, the blocking wait)
 test/
   unit/      node:test unit tests
   browser/   Playwright tests (Chromium only)
@@ -66,10 +69,12 @@ chromium`.
 
 ## Platform and browser target
 
-v1 targets macOS and Chromium only. Don't add cross-browser code paths or
-Windows/Linux-specific handling until the architecture doc says v1 is
-expanding scope. A second browser or OS is a scope decision, not a
-drive-by addition.
+Cross-platform: macOS, Linux, and Windows all run the helper (standard
+Node), and the layer is standard DOM APIs that current Chrome, Edge,
+Safari, and Firefox all support. The one capability floor is the CSS
+Custom Highlight API, stated with its reason in the architecture doc. The
+Playwright test suite runs on Chromium as its harness browser; that is a
+test-infrastructure choice, not a product support statement.
 
 ## Commit conventions
 
@@ -83,8 +88,9 @@ drive-by addition.
 ## Where the design lives
 
 `docs/features/20260812.01_live_agentic_html_editor/` has the brief,
-architecture, and plan. The architecture doc's Key Decisions (D1-D16) are
-binding: they resolved specific blockers found in review (replay's three
-laws, the authentication model, path-safety rules, prompt-injection
-fencing). Don't re-litigate a decision in code without updating the doc
-first.
+architecture, and plan. The architecture doc's Key Decisions (D1-D12) are
+binding: they resolved specific blockers found in review (protected
+regions and replay, the per-review token model, path-safety rules,
+prompt-injection fencing). Don't re-litigate a decision in code without
+updating the doc first. Files prefixed `archive_` in the feature folder
+are historical drafts, never current design.
