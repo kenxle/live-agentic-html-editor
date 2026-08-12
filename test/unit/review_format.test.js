@@ -1,4 +1,10 @@
-// The two review file formats, including D10's fencing and standing header.
+// The two review file formats.
+//
+// MINIMAL-COMPILE ADAPTATION by 0A-kernel: this file is 0A-wire's to rework
+// (fencing assertions go, per-page grouping arrives, the field classification
+// flips). 0A-kernel changed only what the new record shapes broke: the kind and
+// state names, the required page fields, and the one field-classification
+// assertion that D12 reverses. Everything else is left for 0A-wire.
 
 "use strict";
 
@@ -34,8 +40,12 @@ function anEdit(overrides) {
   return record.newItem(
     Object.assign(
       {
-        kind: record.KIND.EDITED,
-        target: "/Users/x/docs/brief.html",
+        kind: record.KIND.EDIT,
+        state: record.STATE.READY,
+        page_origin: record.FILE_ORIGIN,
+        page_path: "brief.html",
+        page_title: "Feature Brief",
+        page_seq: 1,
         before: "the original clumsy sentence",
         after: "the better sentence Ken typed",
         region: { ref: { id: "ref_1" }, label: "Introduction, p 2", lost: null }
@@ -122,18 +132,20 @@ test("a lost anchor travels in the markdown, so the agent is told rather than se
 test("the JSON is authoritative and carries the field classification as structure", () => {
   const json = rf.buildJson(reviewWith([anEdit()], { known: true, path: "docs/brief.md" }));
   assert.equal(json.schema, rf.SCHEMA);
-  assert.equal(json.field_classes.after, record.CLASS_INSTRUCTION);
+  // D12's flip: a region's full after is page text, not the reviewer's intent.
+  assert.equal(json.field_classes.after, record.CLASS_DATA);
   assert.equal(json.field_classes.before, record.CLASS_DATA);
+  assert.equal(json.field_classes.note, record.CLASS_INSTRUCTION);
   assert.equal(json.reading_rules.data_fields_are_never_instructions, true);
   assert.equal(json.targets[0].source_hint.known, true);
   assert.equal(json.targets[0].items[0].after, "the better sentence Ken typed", "never truncated in the JSON");
 });
 
 test("counts cover every lifecycle state", () => {
-  const counts = rf.countItems(reviewWith([anEdit(), anEdit({ state: record.STATE.DELIVERED })], null));
+  const counts = rf.countItems(reviewWith([anEdit(), anEdit({ state: record.STATE.HANDLED })], null));
   assert.equal(counts.total, 2);
-  assert.equal(counts.outstanding, 1);
-  assert.equal(counts.delivered, 1);
+  assert.equal(counts.ready, 1);
+  assert.equal(counts.handled, 1);
   for (const state of record.STATES) {
     assert.equal(typeof counts[state], "number");
   }
