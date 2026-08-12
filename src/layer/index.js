@@ -61,6 +61,7 @@
         comments: require("./comments.js"),
         tabActive: require("./tab_active.js"),
         sync: require("./sync.js"),
+        editing: require("./editing.js"),
         protect: require("./protect.js")
       }),
       null
@@ -214,21 +215,56 @@
       }
     });
 
+    // The editing surface. It is handed sync, because a record is posted by the
+    // same act that writes it, and it is bound to the document the way the
+    // comment surface is: through the listener registry, under its own group, so
+    // a remount clears exactly what it re-registers.
+    var editing = opts.editing || ns.editing.createEditing({
+      store: store,
+      reviewId: reviewId,
+      page: page,
+      sync: sync
+    });
+    editing.bind({ page: page });
+
+    // The records replay runs over. Read from the store and CACHED between
+    // changes, not re-read per pass: replay stamps a lost region on the object
+    // it was handed, and a fresh copy every pass would throw that stamp away and
+    // re-stamp it, which turns "this record was untouched" into a diff on every
+    // pass. Every write refreshes the cache.
+    var items = store.read(reviewId);
+
+    function refreshItems() {
+      items = store.read(reviewId);
+      return items;
+    }
+
     // The load-merge. Everything browser storage holds for this review comes
     // back as a card, drafts included. It runs on boot AND after every remount:
     // a page restored from the back/forward cache never re-ran boot, and its
     // rail would otherwise show whatever it showed before the reviewer left.
     function merge() {
-      var items = store.read(reviewId);
-      items.forEach(function (item) {
+      var merged = refreshItems();
+      merged.forEach(function (item) {
         rail.upsertCard(item);
         counters.cardsDrawn += 1;
       });
       counters.merges += 1;
-      return items;
+      return merged;
     }
 
     merge();
+
+    editing.onChange(function (item) {
+      // No sync call here: editing posts through the sync it was handed, on the
+      // same act that wrote the record. And NO replay pass here either. The pass
+      // that follows a commit comes out of protect.release(), once, through the
+      // ordinary scheduler; a second one scheduled from this callback would run
+      // against the same page for no reason and would hide a regression in the
+      // one that matters.
+      refreshItems();
+      rail.upsertCard(item);
+    });
 
     comments.onChange(function (item, event) {
       // "removed" carries an id and nothing else, and "closed" is not a change
@@ -238,6 +274,53 @@
       rail.upsertCard(item);
       sync.recordItem(item, event === "ready" ? { immediate: "ready" } : undefined);
     });
+
+    // -------------------------------------------------------------------------
+    // Protection, and replay
+    // -------------------------------------------------------------------------
+    //
+    // The four modules wire to each other exactly as CP2-mid proved them on
+    // test/fixtures/assets/cp2-mid-boot.js: editing marks and releases
+    // protection, protection runs the commit pass, replay asks protection before
+    // it writes, and protection's restore hands the rebuilt block back to
+    // editing. That last one is the seam with no symptom of its own: when layer
+    // three puts the reviewer's words back into a node the repaint built, the
+    // open session has to move onto that node, or the text on screen is right
+    // and the next keystroke goes nowhere.
+
+    var protect = ns.protect;
+    protect.install({
+      document: doc,
+      onRestore: function (el) {
+        editing.rebind(el);
+      }
+    });
+
+    ns.replay.configure({
+      root: doc.body || doc,
+      items: function () {
+        return items;
+      },
+      cards: rail,
+      protect: protect,
+      document: doc
+    });
+
+    // "The page changed, so replay gets a pass."
+    //
+    // The ORDINARY coalescing path, deliberately: no {immediate: true} anywhere
+    // in this file. replay.schedule races the frame against a 50ms timer, so a
+    // page that is not painting still runs its pass; forcing a pass immediate
+    // would hide a regression in that race rather than reporting it. Replay's
+    // own writes never land here, because schedule() refuses while the write
+    // epoch is open.
+    var pageObserver = null;
+    if (typeof win.MutationObserver === "function" && doc.body) {
+      pageObserver = new win.MutationObserver(function () {
+        ns.replay.schedule(ns.replay.REASON.MUTATION);
+      });
+      pageObserver.observe(doc.body, { childList: true, characterData: true, subtree: true });
+    }
 
     // -------------------------------------------------------------------------
     // The remount contract
@@ -294,6 +377,7 @@
       ensureRoot: ensureRoot,
       rebind: function () {
         comments.bind({ page: page });
+        editing.bind({ page: page });
       },
       merge: merge,
       onRemount: opts.onRemount || null
@@ -326,8 +410,13 @@
         return tab;
       },
       sync: sync,
+      editing: editing,
+      protect: protect,
       injector: injector,
       merge: merge,
+      items: function () {
+        return items;
+      },
       remount: injector.remount,
       statusLog: function () {
         return statusLog.slice();
@@ -335,6 +424,10 @@
       counters: counters,
       teardown: function () {
         injector.teardown();
+        if (pageObserver) pageObserver.disconnect();
+        pageObserver = null;
+        protect.uninstall();
+        editing.teardown();
         comments.teardown();
         tab.unmount();
         rail.unmount();
@@ -374,6 +467,18 @@
     });
     live("regionsLost", function () {
       return ns.replay.counters.regionsLost;
+    });
+    // The diagnostic names, spelled the way CP2-mid's fixture spelled them, so a
+    // test that moves from that fixture to the real boot reads the same counter
+    // under the same name.
+    live("regionsSkippedIdentical", function () {
+      return ns.replay.counters.regionsSkippedEqual;
+    });
+    live("regionsBlockedChanged", function () {
+      return ns.replay.counters.regionsConflicted;
+    });
+    live("regionsEarlierRevision", function () {
+      return ns.replay.counters.regionsEarlierRevision;
     });
     ["remounts", "rootsRecreated", "handlersCleared", "mutationFallbacks", "bfcacheRestores", "historyHooks", "cspRefusals"].forEach(
       function (name) {
@@ -438,6 +543,42 @@
       },
       cardIds: function () {
         return handle.rail.cardIds();
+      },
+
+      // The editing surface, and what replay decided. Both are inside the
+      // library; a spec on a real application page has no other way to ask.
+      isEditing: function () {
+        return handle.editing.isEditing();
+      },
+      editState: function () {
+        return handle.editing.state();
+      },
+      itemForElement: function (selector) {
+        var el = handle.page && typeof document !== "undefined" ? document.querySelector(selector) : null;
+        return el ? handle.editing.itemFor(el) : null;
+      },
+      flaggedIds: function () {
+        return ns.replay.conflictIds();
+      },
+      lastPass: function () {
+        var summary = ns.replay.lastPass();
+        if (!summary) return null;
+        return {
+          reason: summary.reason,
+          wrote: summary.wrote,
+          conflicts: summary.conflicts,
+          lost: summary.lost,
+          results: summary.results.map(function (r) {
+            var region = r.item[record.FIELD.REGION] || {};
+            return {
+              id: r.item[record.FIELD.ID],
+              label: region.label || null,
+              branch: r.branch,
+              wrote: r.wrote,
+              reason: r.reason
+            };
+          })
+        };
       },
 
       // The comment surface, for the gesture waits.

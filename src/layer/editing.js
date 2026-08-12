@@ -158,7 +158,8 @@
 
   var FRAME_CLASS = "lahe-edit-frame";
   var BAR_CLASS = "lahe-edit-bar";
-  var LISTENER_GROUP = "editing";
+  // The registry group, from the one place both this file and inject.js read it.
+  var LISTENER_GROUP = listeners.GROUP.EDITING;
 
   // The commands R24 allows for v1, closed to bold and italic (the
   // architecture's list). An enum rather than a pass-through string, so a
@@ -1209,6 +1210,11 @@
         listenerHandles.push(listeners.on(win, "pagehide", onUnload, false, LISTENER_GROUP));
         listenerHandles.push(listeners.on(win, "beforeunload", onUnload, false, LISTENER_GROUP));
       }
+      // A remount de-registers this whole group before it calls back in here,
+      // and the open block's own input handlers are in that group. Without this
+      // line the reviewer's block is still contenteditable and still on screen
+      // after a morph, and every keystroke into it is recorded nowhere.
+      if (session && session.block) bindBlock(session.block);
       return { bound: true, listeners: listenerHandles.length };
     }
 
