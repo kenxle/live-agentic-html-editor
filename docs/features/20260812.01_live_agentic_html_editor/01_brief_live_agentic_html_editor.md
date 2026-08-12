@@ -103,6 +103,11 @@ wonder whether it survived.
   repository is what let the two drift apart in the tool being replaced.
 - Not targeting Windows in v1. macOS first, Linux where it falls out for free. The tool being
   replaced spent four separate rounds of work on Windows and weakened its own test suite each time.
+- Not Markdown files. Cut on Ken's call: a Markdown file is already easy to edit in an editor. The
+  three targets that matter are built briefs, built report briefs, and pages on a running dev server,
+  and all three are HTML. This removes a renderer, a sanitizer, and a whole second content type.
+- Not reviewing HTML the reviewer did not produce. v1 assumes the reviewed page is the reviewer's own
+  build or their own app. See the architecture's note on isolation.
 - Not mobile.
 - Not an agent. It collects feedback and hands it off. Applying it is the agent's job.
 :::
@@ -348,13 +353,6 @@ replaced pins bullets and underlines onto the host page when it decides they wou
 which quietly changes the artifact.
 :::
 
-::: callout-req
-**R36: Content that arrives with no styling of its own is presented readably, and that is stated.**
-A markdown file has no appearance until something gives it one, so rendering it means choosing a
-presentation. That is different from restyling a document that already has a design, and the reviewer
-is told which of the two they are looking at.
-:::
-
 ### Using the page while reviewing it
 
 Ken hit both readings of "submission stopped working": the tool's own send going dead, and the
@@ -379,13 +377,11 @@ survives navigating away from it, and returning shows it still there.
 
 ### What can be reviewed
 
+All three targets are HTML. Markdown was cut from scope, which is why R36 and R41 no longer appear.
+
 ::: callout-req
 **R40: A standalone HTML file**, rendered exactly as it renders on its own, with its sibling images,
 stylesheets, and fonts loading normally.
-:::
-
-::: callout-req
-**R41: A markdown file**, rendered readably.
 :::
 
 ::: callout-req
@@ -478,6 +474,20 @@ stop, and keeping anything unsent for next time.
 ### Keeping up with the agent
 
 ::: callout-req
+**R68: The agent can write back to the reviewer, in the page.** When an agent cannot apply an item, or
+applied it differently than asked, or has a question about it, it attaches a message to that item and
+the reviewer reads it on the item's own card. The reviewer is not expected to return to a terminal or a
+chat window to find out what happened to their feedback.
+:::
+
+::: callout-req
+**R69: The page is the channel back to the reviewer.** Anything the tool or the agent needs to tell the
+reviewer arrives in the page they are looking at. Something that needs their attention persists on the
+item it concerns; something transient can be a passing message. Nothing important lives only in a log,
+a terminal, or a chat transcript, because that is not where the reviewer is.
+:::
+
+::: callout-req
 **R56: The page updates itself when the agent lands a change.** The reviewer does not reload to find
 out whether a fix arrived. Nothing unsent is discarded to make this happen, which is R2 (an agent
 write never discards pending feedback) applied to this path.
@@ -533,8 +543,9 @@ pointing out of the reviewed file's folder.
 :::
 
 ::: callout-req
-**R66: Reviewed content is content, never instructions.** Markup embedded in a markdown file is shown
-as text, and links and images carrying executable schemes are refused.
+**R66: Reviewed content is content, never instructions.** Text taken out of a reviewed page and put
+in front of an agent is data the agent may search on, never a directive it may follow. Links and images
+carrying executable schemes are refused.
 :::
 
 ::: callout-req
@@ -610,5 +621,7 @@ tool, the feature-forge and research-report skills both change. Also not blockin
 | Cut the unfalsifiable student metric | Accepted | Now: completes a review with no help from Ken |
 | Paste restriction constrains a capability never granted | Accepted | R25 now grants image paste; R67 constrains it |
 | Q3 (license) is a settled decision | Accepted | Settled as MIT with human-review credited in the README; question removed |
-| Tool imposes its own styling on the reviewed artifact (Ken, live) | Accepted | R34, R35, R36 added: style only what we add, never write styles onto the host page, and be honest about markdown having no styling of its own |
+| Tool imposes its own styling on the reviewed artifact (Ken, live) | Accepted | R34 and R35 added: style only what we add, and never write styles onto the host page |
+| Nothing important should live only in the chat window; an unplaceable edit needs to say so in the page (Ken, live) | Accepted | R68 (the agent writes back onto the item's card) and R69 (the page is the channel back) |
+| Markdown dropped as a target (Ken, live) | Accepted | R36 and R41 cut; R66 restated without markdown; non-goal added. All remaining targets are HTML |
 | Genuinely open: does the tool write the file, how auth works, which browsers | Split | The first two are architecture decisions per Ken; browsers remain as Q1 |

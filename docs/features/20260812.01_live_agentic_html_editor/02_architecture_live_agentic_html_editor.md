@@ -35,7 +35,7 @@ flowchart TB
     end
 
     subgraph Service["Local service, loopback + token + origin allowlist"]
-      Serve["serves local HTML and Markdown<br/>in an isolated frame"]
+      Serve["serves a local HTML file<br/>with the layer injected"]
       Ingest["accepts items, sends, acks"]
       Log[("append-only event log<br/>state derived by replay")]
       Ingest --> Log
@@ -49,7 +49,7 @@ flowchart TB
     subgraph Agent["The coding agent"]
       Read["reads the files, or `next` returned"]
       Apply["applies items to SOURCE, named by a source hint"]
-      Ack["acks per item, naming the files it touched"]
+      Ack["acks per item, naming files touched,<br/>and writes a message back onto the item"]
     end
 
     Layer <-->|authenticated loopback| Ingest
@@ -72,22 +72,22 @@ document, and two of the original reuse claims did not survive the reading.
 | Steady Thread dev layer (`_dev_comments.html.erb`) | Injection into the app's own page rather than a proxy; element commenting by modifier-click carrying a CSS path and surrounding context; a draft that survives a morph | **The remount contract.** It re-registers document-level listeners on every morph without removing the old ones, so handlers accumulate for the life of the page. It also survives morphs largely because Rails re-renders the partial into the response, which an injected script does not inherit. Its draft is one global key, not a queue |
 | human-review | The interaction model: page beside a rail, editable document, before-and-after pairs, per-target grouping | None of its liveness design |
 
-The security floor human-review reached is worth inheriting outright rather than rediscovering: a
-per-run token compared in constant time, a host header check, an origin split with the reviewed
-document in an opaque origin, and containment checked after symlink resolution.
+The security floor human-review reached is worth inheriting rather than rediscovering: a per-run token
+compared in constant time, a host header check, and containment checked after symlink resolution. Its
+origin split is the one control v1 does not take, for the reason given in D5.
 
 ## Components
 
 | Component | Job |
 | --- | --- |
-| **Review layer** | Everything the reviewer sees and does. Vanilla JS, no build step. Runs identically whether served or attached. |
+| **Review layer** | Everything the reviewer sees and does, and everything the tool or agent needs to tell them. Vanilla JS, no build step. Identical however it got into the page. |
 | **Overlay renderer** | Draws the rail, highlights, chips, and handles in an isolated root. Updates in place; never re-creates a card that holds focus. Owns the persistent failures list. |
 | **Anchor engine** | Turns a selection or an element into a durable reference and re-resolves it in a changed document, with a confidence score. New work. |
 | **Item store (browser)** | Durable queue written synchronously on every change. The source the layer renders from. |
 | **Edit recorder** | Turns editing into item records with a kind, plain text, markup, and landing anchors. |
 | **Replay engine** | Re-applies outstanding edits after a repaint, under the three laws in D3. |
 | **Sync client** | Ships items to the service, retries forever, never blocks, and distinguishes refused-by-policy from service-down. |
-| **Local service** | Serves file targets in a frame, authenticates, accepts items, appends to the log. |
+| **Local service** | Serves a local HTML file with the layer injected, authenticates, accepts items and agent replies, appends to the log. |
 | **Event log** | Append-only. The only durable server-side state. |
 | **Projection** | Reads the log into current state: outstanding, delivered, applied, declined. |
 | **Agent commands** | `open`, `next`, `ack`, `setup`. |
@@ -200,41 +200,55 @@ exists because the tool being replaced makes one misplaced drag cost an hour of 
 is stated because the note-only send bug, where typing a note left the button dead forever, is one of
 the three symptoms that caused this rebuild.
 
-### D5: Two ways in, and neither is a proxy
+### D5: One mode. The layer is a script in the page, and there is no proxy
 
-| Mode | How the layer gets in | Isolation | For |
-| --- | --- | --- | --- |
-| **Served** | The service serves the local file **inside a frame with an opaque origin**, with the layer in the shell around it | Full. The reviewed document cannot reach the layer, the token, or stored feedback | HTML and markdown files |
-| **Attached** | The app's own development layout loads the layer | None, by construction | A running app, including behind a login |
+Markdown is out of scope, so every target is HTML and there is one way in: **the review layer is a
+script tag in the page being reviewed.** How it gets there differs, and nothing downstream cares which.
 
-Attached mode answers authentication, client routing, morphs, and free roam by not fighting any of
-them: the page is the app's own page, served by the app, in the reviewer's logged-in browser. There is
-no session to forward, no asset URL to rewrite, no router to shim on the server side, and no login
-screen to land on. Free roam falls out for free.
+| Target | How the layer gets in |
+| --- | --- |
+| A built brief or report brief | Injected at build time, exactly the way the comment module is injected into these documents today |
+| A page on a running dev server | A guarded script tag in the development layout, exactly the way the Steady Thread dev layer works today |
+| Any other local HTML file | The `open` command serves it over loopback with the layer injected |
 
-**Served mode keeps the frame.** The argument for dropping it is entirely about running apps and none
-of it applies to a local file. Dropping it there would put a reviewed document's own scripts in the
-same document as the review layer, able to read every unsent comment the reviewer had written. Ken
-reviews LLM-generated HTML routinely, so the reviewed file is not a trusted input.
+This is the model Ken already uses daily in two places, which is the strongest argument for it. It also
+means the service does not need to stand between the reviewer and the page: for the first two rows it
+serves nothing at all and only receives feedback. Serving exists for the third row and for the
+convenience of a real origin, since relative assets, hash links, and an origin the allowlist can name
+all work better over loopback than over a `file://` URL.
 
-**Attached mode's real costs**, stated because they are load-bearing and were not obvious:
+This answers authentication, client routing, morphs, and free roam by not fighting any of them. The page
+is the real page, served by whoever normally serves it, in the reviewer's own logged-in browser. There is
+no session to forward, no asset URL to rewrite, no router to shim on the server side, and no login screen
+to land on. Free roam falls out for free: the layer is on every page the app renders.
 
-- **The app's CSP can refuse the layer or its sync.** `script-src` blocks the snippet; `connect-src`
-  blocks the loopback calls. A CSP refusal looks identical to the service being down, which is the one
-  failure this design calls harmless. The sync client distinguishes the two and says which, in the
-  persistent failures list.
-- **Browser storage lives on the app's origin.** The app's own scripts can read it, so **R65 (a
-  reviewed page cannot reach the tool's controls or stored feedback) is not achievable in attached
-  mode** and is scoped to served mode. Saying so is better than claiming it. It also means
-  `localhost:3000` and `127.0.0.1:3000` are separate storage buckets even though the service treats
-  them as one target.
-- **A client-side router gives the layer no event** unless it hooks history and framework navigation.
-  The shim moves from the server to the layer; it does not disappear.
-- **A morph can remove the overlay root**, because the root is not in the server's HTML. The contract:
-  the root is re-created on `turbo:morph`, `turbo:load`, `popstate`, and a MutationObserver fallback,
-  every handler is de-registered before re-registration, and replay runs after each remount.
-- **The layer must not be fetched from the service at page load**, or a stopped service means no layer
-  at all, contradicting the promise that a stopped service costs nothing.
+**The cost, stated rather than claimed away: there is no isolation between the layer and the page.**
+A script in the page can read the layer's state, its storage, and its token. This is acceptable because
+v1's three targets are all the reviewer's own output: their build, their build, their app. It is not
+acceptable for HTML the reviewer did not produce, which is why that is a stated non-goal. When it comes
+into scope, the known answer is to serve untrusted files inside a frame with an opaque origin and pin
+the messages across it, which is what the tool being replaced does for exactly this reason.
+
+**The other costs of living in the page's origin**, all load-bearing:
+
+- **The app's CSP can refuse the layer or its sync.** `script-src` blocks the tag; `connect-src` blocks
+  the loopback calls. A CSP refusal looks identical to the service being down, which is the one failure
+  this design calls harmless. The sync client distinguishes the two and says which, in the persistent
+  failures list.
+- **Browser storage is the page's origin's storage.** So R65 (a reviewed page cannot reach the tool's
+  controls or stored feedback) is not achievable and is not claimed. It also means `localhost:3000` and
+  `127.0.0.1:3000` are separate storage buckets even though the service treats them as one target, and a
+  `file://` page has an opaque origin, which is why serving is preferred over opening from Finder.
+- **A client-side router gives the layer no event** unless it hooks history and framework navigation. The
+  shim moves into the layer; it does not disappear.
+- **A morph can remove the overlay root**, because the root is not in the server's HTML. The contract: the
+  root is re-created on `turbo:morph`, `turbo:load`, `popstate`, and a MutationObserver fallback, every
+  handler is de-registered before re-registration, and replay runs after each remount. The Steady Thread
+  layer survives morphs partly because Rails re-renders its partial into the response, which an injected
+  script does not inherit, and its own remount path leaks a listener pair on every morph. Neither shape is
+  inherited.
+- **The layer is never fetched from the service at page load.** A stopped service must not mean no layer,
+  or the promise that a stopped service costs nothing is false.
 
 ### D6: Durability is an append-only log plus a browser copy, with stated authority
 
@@ -450,19 +464,45 @@ The rail also owns a **persistent failures list**. Sync failures, CSP refusals, 
 verification misses land there and stay until dismissed. Every failure in the tool being replaced is a
 three-second toast and then nothing, which is what R9 exists to prevent.
 
-### D15: Runtime
+### D15: The page is the channel back to the reviewer
+
+Everything the tool or the agent needs to say arrives where the reviewer is looking, which is the page.
+A reviewer does not go back to a terminal to find out what happened to their feedback, and an agent's
+turn output is not a place they will ever read.
+
+Three carriers, chosen by whether the reviewer has to do something about it:
+
+| What happened | Where it shows |
+| --- | --- |
+| The agent could not apply an item, applied it differently, or has a question | A message from the agent on that item's own card, and the item stays outstanding or declined rather than clearing |
+| Replay could not confidently place an edit on this version of the page | A persistent state on that item's card saying so, with its text intact |
+| Verification could not find the reviewer's wording after an apply | A persistent warning on that item's card |
+| Sync refused by policy, service unreachable, storage full | The persistent failures list in the rail, which stays until dismissed |
+| Something succeeded, or something the reviewer does not need to act on | A passing message |
+
+So the ack in D8 is not only a status. An agent may attach a **reply** to any item: what it did, what it
+could not do, or what it needs answered. The reply is part of the item and is rendered on its card, which
+also gives the reviewer somewhere to respond, since a declined item returns to outstanding and ships
+again with their answer attached.
+
+This is the difference between an agent that reports to a chat window nobody reads and an agent that
+answers in the document. It is also the honest home for every failure mode in D3's Law 1: an edit that
+cannot be placed is not a silent no-op, it is a visible card that still holds the reviewer's words.
+
+### D16: Runtime
 
 Zero-dependency Node for the service, vanilla JS with no build for the layer. `git clone`, one setup
 command, run it. No package manager for anything the tool needs at runtime, no lockfile, no build step.
 Development tooling is allowed dependencies, since the browser test runner is a real install and
 pretending otherwise would cost the test strategy that matters most.
 
-Node rather than Python, reversing an earlier draft of this document. The audience runs coding agents and
-is more likely to have Node than Python; `/usr/bin/python3` on a clean Mac is a stub that prompts for
-Xcode Command Line Tools, which is not the two-line README this design is trading for; and Node lets the
-one vendored markdown renderer serve both the service and the browser instead of needing one of each.
-`setup` verifies the runtime is present and prints the exact remedy if it is not, which is the same check
-R62 asks for.
+Node rather than Python, reversing an earlier draft. The audience runs coding agents and is more likely
+to have Node than Python, and `/usr/bin/python3` on a clean Mac is a stub that prompts for Xcode Command
+Line Tools, which is not the two-line README this design is trading for. `setup` verifies the runtime is
+present and prints the exact remedy if it is not, which is the same check R62 asks for.
+
+With Markdown out of scope there is no renderer to vendor and nothing to sanitize on the way in, so the
+runtime genuinely has no dependencies rather than nearly none.
 
 ## Data and state
 
@@ -520,6 +560,11 @@ feedback, and it means a large rewrite twice a second during ordinary typing.
 Agents end their turns. The tool being replaced has a line in its instructions pleading with agents not
 to end their turn while a poll waits, which is a prompt fighting a runtime.
 
+**Serving every target through a frame.** Rejected for v1 along with Markdown. The frame is what buys
+isolation between the layer and the reviewed page, and it costs a docked-rail layout problem, a
+postMessage protocol, and a second origin. v1's three targets are all the reviewer's own output, so the
+isolation buys little and the cost is real. It returns the day reviewing someone else's HTML is in scope.
+
 **A bookmarklet for apps whose source the reviewer will not modify.** Cut from v1. It loads the layer into
 whatever page the reviewer is on, so it becomes script in a possibly hostile origin, it would have to
 carry the token to work, and no server-side check can enforce local-only when the reviewer's click is the
@@ -560,8 +605,8 @@ data), and D11 (path safety, state location, setup's sentinel writes). What each
 | --- | --- |
 | R63, local only | The service refuses non-local targets it serves; the layer refuses to initialize on a non-loopback origin; the origin allowlist refuses everything else. In attached mode there is no server-side fetch, so these three are the boundary rather than a target check |
 | R64, no reading outside the reviewed folder | Sibling assets resolved against the reviewed file's directory, checked after symlink resolution |
-| R65, a reviewed page cannot reach the tool | The opaque-origin frame in served mode. **Scoped to served mode**; in attached mode the layer is in the app's origin by construction, and the status line says so |
-| R66, content is not instructions | D10 end to end, plus inert markdown rendering by construction rather than by stripping, with control characters removed before a scheme is read and an allowlist for link and image schemes |
+| R65, a reviewed page cannot reach the tool | **Not achievable in v1 and not claimed.** The layer lives in the page's origin. v1's targets are the reviewer's own build and their own app, and reviewing HTML they did not produce is a stated non-goal. The frame is the known answer when that changes |
+| R66, content is not instructions | D10 end to end. Reviewed text reaches an agent only as fenced data, and links and images carrying executable schemes are refused, with control characters removed before a scheme is read |
 | R67, paste restrictions | Raster image types only, excluding the vector format that can carry script |
 
 Feedback is the reviewer's words about their own work, written to their own disk, displayed as text and
