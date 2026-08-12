@@ -152,8 +152,17 @@ test.describe("ranked test 4: the page's own controls keep working", () => {
     const walked = await page.evaluate(async function () {
       window.__app.morph.stop();
       let rootsDeleted = 0;
+      // The fixture refuses a poll while one of its own is still in flight, so
+      // "call pollNow a hundred times" is not a hundred morphs. Each pass waits
+      // for the fixture's own counter to move, which is what makes this a
+      // hundred morphs on a loaded machine as well as an idle one.
+      const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
       for (let i = 0; i < 100; i += 1) {
-        await window.__app.morph.pollNow();
+        const target = window.__app.counters.morphPasses + 1;
+        while (window.__app.counters.morphPasses < target) {
+          await window.__app.morph.pollNow();
+          if (window.__app.counters.morphPasses < target) await frame();
+        }
         // Every tenth morph takes the overlay root with it. The root is not in
         // the server's HTML, so this is what a wholesale replacement does.
         if (i % 10 === 9) {

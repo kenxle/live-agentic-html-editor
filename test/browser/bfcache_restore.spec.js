@@ -97,6 +97,13 @@ test.describe("ranked test 24: restored from the back/forward cache", () => {
     await pollPage(page, () => !!(window.__lahe && window.__lahe.booted), undefined, {
       message: "the layer to be there after Back"
     });
+    // Give the restore's replay pass its frame. Swallowed on purpose: when the
+    // engine refused to cache the page this counter starts again from zero, and
+    // the loud skip below is the right answer to that, not a timeout here.
+    await pollPage(page, (from) => window.__lahe.counters.replayPasses > from, left.replayPasses, {
+      message: "the restore's replay pass to run",
+      timeoutMs: 2000
+    }).catch(() => {});
 
     const restored = await page.evaluate(() => {
       const last = window.__lahe.lastRemount();
@@ -205,6 +212,16 @@ test.describe("ranked test 24: restored from the back/forward cache", () => {
       return event.persisted === true;
     });
     expect(fired).toBe(true);
+
+    // replay.schedule coalesces onto an animation frame, so the pass lands a
+    // frame after the event rather than inside it. Polling for the counter is
+    // the difference between asserting replay ran and asserting it ran fast.
+    await pollPage(
+      page,
+      (from) => window.__lahe.counters.replayPasses > from,
+      before.replayPasses,
+      { message: "the remount's replay pass to run" }
+    );
 
     const after = await page.evaluate(() => {
       const last = window.__lahe.lastRemount();
