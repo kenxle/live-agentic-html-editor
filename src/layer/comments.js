@@ -332,13 +332,21 @@
 
     // Opens a box for an item that already exists: the reword path. Mints
     // nothing, and returns the SAME node when one is already open.
-    function reopen(id) {
+    //
+    // `host` and `placement` are how a tab file rewords INSIDE the rail's own
+    // card rather than in a box floating over the page. That is what makes the
+    // card really hold what the reviewer is typing into, which is the guard
+    // that stops a focused card being removed or re-parented.
+    function reopen(id, options) {
+      var where = options || {};
       if (open[id]) return open[id];
       var item = store.readItem(requireReview(), id);
       if (!item) throw new Error("comments.reopen: no item " + String(id) + " in review " + requireReview());
       var handle = buildHandle(item, {
         quote: item[record.FIELD.CONTEXT] ? item[record.FIELD.CONTEXT].quote : null,
-        range: highlights ? highlights.rangeFor(id) : null
+        range: highlights ? highlights.rangeFor(id) : null,
+        host: where.host || null,
+        placement: where.host ? where.placement || "inline" : "anchored"
       });
       open[id] = handle;
       return handle;

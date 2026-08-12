@@ -401,7 +401,9 @@
       var reword = el("button", "lahe-rail-btn", "Reword");
       reword.setAttribute("type", "button");
       reword.addEventListener("click", function () {
-        comments.reopen(id).focus();
+        // In the rail, the box the reviewer rewords in lives in the card
+        // itself; standalone, it opens over the page as before.
+        comments.reopen(id, hosted ? { host: rail.cardBody(id), placement: "inline" } : undefined).focus();
       });
       var del = el("button", "lahe-rail-btn", "Delete");
       del.setAttribute("type", "button");
