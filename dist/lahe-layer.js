@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+a3b3d28f49be
+ * version 0.0.0+ff137c7daf18
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+a3b3d28f49be";
+  g.LAHE.version = "0.0.0+ff137c7daf18";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -6142,8 +6142,18 @@
       element: el,
       key: key,
       reason: (options || {}).reason || null,
+      // The record this block is being edited under. 2C asked for it at
+      // CP2-mid: replay was answering "is the reviewer in this record's
+      // region" from the node it last bound the record to, and the side that
+      // actually knows the id is this one. Optional, because a caller that
+      // marks a block outside an edit session has no record.
+      item: (options || {}).item || null,
       at: Date.now(),
-      snapshot: null
+      snapshot: null,
+      // The last thing the page tried to say in this block while it was
+      // protected, taken off the page by layer three's restore. See
+      // displacedChange() below.
+      displaced: null
     };
 
     if (enabled(LAYER.SNAPSHOT_RESTORE)) snapshot(el);
@@ -6364,6 +6374,27 @@
 
     var rebuilt = !!active && active.element !== el && !active.element.isConnected;
     var placed = false;
+
+    // WHAT THE PAGE TRIED TO SAY, kept before it is written over.
+    //
+    // Layer three is the only place a page's change to a protected block is
+    // taken back off the page with its text still readable. Everywhere else the
+    // change either never happened (layer two vetoed it) or never reached this
+    // block. If that text is thrown away here, an agent that rewrote this very
+    // block while the reviewer was in it is swallowed silently: the reviewer
+    // commits, the page holds their own words, replay compares their words
+    // against their words, and nothing ever tells them the source moved. So the
+    // text is kept, and `release` hands it to replay, which decides whether it
+    // is a collision. Last write wins: the newest thing the page tried to say
+    // is the one the reviewer has to reconcile against.
+    if (active && active.element === el) {
+      active.displaced = {
+        text: typeof el.textContent === "string" ? el.textContent : "",
+        html: el.innerHTML,
+        at: Date.now()
+      };
+    }
+
     restoring = true;
     try {
       epoch.write("protect_restore", function () {
@@ -6515,6 +6546,16 @@
     if (el && active.element !== el) return false;
 
     var element = active.element;
+    // What the commit pass is told about this block, built before `active` is
+    // dropped. The element saves replay an anchor resolve it does not need
+    // (2C's ask), and `observed` is the page's own attempt at this block, which
+    // only protection ever saw.
+    var commit = {
+      item: active.item,
+      element: element,
+      observed: active.displaced ? active.displaced.text : null,
+      observedHtml: active.displaced ? active.displaced.html : null
+    };
     if (element && typeof element.removeAttribute === "function") {
       element.removeAttribute(PROTECTED_ATTRIBUTE);
       removeSkipAttributes(element);
@@ -6531,8 +6572,42 @@
           "Load src/layer/replay.js beside protect.js."
       );
     }
-    replay.schedule(replay.REASON.COMMIT, { immediate: true });
+    runCommitPass(replay, commit);
     return true;
+  }
+
+  /**
+   * Run the commit pass, AFTER the write epoch the caller is inside has closed.
+   *
+   * This is not a nicety. `epoch.write` closes on a microtask, not when its
+   * function returns, so a caller that just wrote to the DOM is still "inside" a
+   * write epoch for the rest of the synchronous turn. `replay.schedule` refuses
+   * while the epoch is open, by design, because replay's own writes must not
+   * schedule replay. The editing surface commits by taking contenteditable back
+   * off (a write) and then releasing protection in the same turn, so the commit
+   * pass was refused every single time: protection lifted, no pass ran, and a
+   * change the page made to the block underneath the reviewer was swallowed
+   * exactly as if this seam had never been wired.
+   *
+   * Nobody could see it before CP2-mid. 2B's specs call release() straight, with
+   * no epoch open, and pass; 2A's specs scheduled their own pass afterwards from
+   * a microtask, which hid it from that side too. It took the two real surfaces
+   * on one page.
+   *
+   * A microtask is the right amount of waiting: the epoch's own close is queued
+   * as one, so ours runs immediately after it, still in the same task and still
+   * before anything paints.
+   */
+  function runCommitPass(replay, commit) {
+    function run() {
+      replay.schedule(replay.REASON.COMMIT, { immediate: true, commit: commit });
+    }
+    if (!epoch.isWriting()) {
+      run();
+      return;
+    }
+    if (typeof queueMicrotask === "function") queueMicrotask(run);
+    else Promise.resolve().then(run);
   }
 
   return {
@@ -6555,6 +6630,17 @@
     isProtected: isProtected,
     touches: touches,
     protectedElement: protectedElement,
+    // The record the protected block is being edited under, or null. Replay
+    // asks this first, because an id from the side that knows it beats replay's
+    // own memory of the node a record was last bound to.
+    protectedItemId: function () {
+      return active ? active.item : null;
+    },
+    // The last change the page made to the protected block that layer three
+    // took back off, or null. Read by release(); a caller may read it too.
+    displacedChange: function () {
+      return active ? active.displaced : null;
+    },
     veto: veto,
     snapshot: snapshot,
     restore: restore,
@@ -10623,7 +10709,10 @@
       };
 
       applyEditableAttrs(block);
-      protect.mark(block, { reason: "edit" });
+      // The record goes on the mark. Protection is then able to answer "which
+      // record is the reviewer in" for replay, instead of replay inferring it
+      // from the node it last bound that record to (2C's CP2-mid ask).
+      protect.mark(block, { reason: "edit", item: item[record.FIELD.ID] });
       bindBlock(block);
       drawFrame(block);
       if (typeof block.focus === "function") block.focus();
@@ -10649,6 +10738,32 @@
           block.removeAttribute(name);
         });
       });
+    }
+
+    /**
+     * The open block came back as a NEW element and the session has to move
+     * onto it. This is the seam 2B's protection asked for: layer three restores
+     * the reviewer's words into a node the repaint built, and everything this
+     * file holds about the block (the input listener, the editing attributes,
+     * the element-to-record memory) is attached to the node that was destroyed.
+     * Without this the text on screen is right and the next keystroke goes
+     * nowhere: nothing records it, and the reviewer only finds out later.
+     *
+     * It is NOT a commit and not a re-entry. `before` is untouched, the record
+     * is untouched, and edit state stays exactly as open as it was.
+     *
+     * @param {Element} el the element the block came back as
+     * @returns {boolean} true when the session moved
+     */
+    function rebind(el) {
+      if (!session || !el) return false;
+      if (session.block === el) return false; // same node, same listeners
+      session.block = el;
+      applyEditableAttrs(el);
+      bindBlock(el);
+      remember(el, session.itemId);
+      positionFrame();
+      return true;
     }
 
     function sessionInfo() {
@@ -10749,11 +10864,23 @@
 
       unbindBlock();
       clearEditableAttrs(block);
-      protect.release(block);
       hideFrame();
 
+      // WHY PROTECTION LIFTS LAST, and not here.
+      //
+      // protect.release runs the commit pass, synchronously and immediately.
+      // Releasing before the record is written means that pass reads a DRAFT,
+      // and a draft is not outstanding, so replay skips the one record the pass
+      // exists for: the reviewer's commit is not compared against the page at
+      // all, and a change the page made to the block underneath them is
+      // swallowed exactly as if the seam were not wired. Found at CP2-mid, with
+      // real records; every earlier test drove protection and replay directly
+      // and could not see it. So: write the record, THEN lift protection.
       var item = store.readItem(requireReview(), open.itemId);
-      if (!item) return null;
+      if (!item) {
+        protect.release(block);
+        return null;
+      }
 
       var verdict = kindFor(open.before, after);
       if (!verdict.changed) {
@@ -10765,7 +10892,7 @@
           forget(open.itemId);
           emit(item, "discarded");
         }
-        scheduleReplay("commit");
+        protect.release(block);
         return null;
       }
 
@@ -10797,10 +10924,12 @@
       }
 
       remember(block, committed[record.FIELD.ID]);
-      // Protection has lifted, so a change the page tried to make to this block
-      // while it was protected surfaces through replay's neither-matches branch
-      // rather than being silently swallowed. 2C owns that seam.
-      scheduleReplay("commit");
+      // Protection lifts on the committed record, and lifting it runs the
+      // commit pass: a change the page tried to make to this block while it was
+      // protected surfaces through replay's neither-matches branch rather than
+      // being silently swallowed. 2B calls it, 2C owns that seam, and it is the
+      // only pass this commit schedules.
+      protect.release(block);
       return committed;
     }
 
@@ -11402,6 +11531,7 @@
       onChange: onChange,
       bind: bind,
       unbind: unbind,
+      rebind: rebind,
       teardown: teardown,
       editBlock: editBlock,
       editBlockAtCaret: editBlockAtCaret,
@@ -11649,7 +11779,10 @@
    * one morph and the reviewer should get one pass, not five.
    *
    * @param {string} reason one of REASON
-   * @param {Object} options {immediate: boolean}
+   * @param {Object} options {immediate: boolean, commit: Object}
+   *   `commit` is the detail 2B's release() hands over on a commit:
+   *   `{item, element, observed}`. It applies to exactly one record, the one
+   *   named by `item`, and it is per-pass: nothing about it is remembered.
    */
   function schedule(reason, options) {
     if (REASONS.indexOf(reason) === -1) {
@@ -11664,21 +11797,61 @@
     }
     lastReason = reason;
     var opts = options || {};
+    var override = opts.commit ? { commit: opts.commit } : null;
     if (opts.immediate) {
-      runPass(reason);
+      runPass(reason, override);
       return true;
     }
     if (scheduled) return true;
     scheduled = defer(function () {
       scheduled = null;
-      runPass(reason);
+      runPass(reason, override);
     });
     return true;
   }
 
+  // How long a deferred pass may wait on a frame that may never come. Long
+  // enough that a painting page always runs its pass on the frame (one frame is
+  // ~16ms) and the timer is the loser of the race; short enough that a page
+  // nobody is painting still catches up while the reviewer's own commit or undo
+  // is the thing waiting on it.
+  var FRAME_FALLBACK_MS = 50;
+
+  /**
+   * Defer one pass to the next frame, WITH A TIMER ALONGSIDE IT.
+   *
+   * requestAnimationFrame alone is wrong, and it is wrong in production, not
+   * only in a test. A browser that is not painting the page throttles rAF to
+   * nothing: a backgrounded tab, a hidden window, a headless lane running six
+   * workers wide. On such a page every deferred pass simply never runs, which
+   * means an edit the reviewer committed is never re-applied, a reply that
+   * arrived is never folded, and the page they come back to is stale. 2B found
+   * this as a 30-second test hang on the WebKit lane and worked around it in
+   * their spec glue with {immediate: true}; the product-side answer is here, so
+   * no caller has to know.
+   *
+   * The frame is still preferred: a pass that writes to the page belongs on a
+   * frame, and on any page that is painting the rAF callback wins the race by a
+   * wide margin. The timer only ever fires on a page that stopped painting, and
+   * whichever one gets there first cancels the other, so the pass runs exactly
+   * once either way.
+   */
   function defer(fn) {
-    if (typeof requestAnimationFrame === "function") return requestAnimationFrame(fn);
-    return setTimeout(fn, 0);
+    var done = false;
+    var frame = null;
+    var timer = null;
+
+    function run() {
+      if (done) return;
+      done = true;
+      if (frame !== null && typeof cancelAnimationFrame === "function") cancelAnimationFrame(frame);
+      if (timer !== null) clearTimeout(timer);
+      fn();
+    }
+
+    if (typeof requestAnimationFrame === "function") frame = requestAnimationFrame(run);
+    timer = setTimeout(run, frame === null ? 0 : FRAME_FALLBACK_MS);
+    return timer;
   }
 
   /**
@@ -11901,6 +12074,13 @@
   // card the reviewer may be in is the churn this file refuses), and it is
   // emptied and hidden.
   function clearConflict(ctx, id) {
+    // A DISPLACED conflict is not cleared by an ordinary pass. It was raised
+    // from something the page tried to say and protection took back off, so the
+    // page now holds the reviewer's own words: every later pass reads branch
+    // one and would clear a warning the reviewer has not answered yet, usually
+    // within a frame of it appearing. It clears when the reviewer commits that
+    // record again, which is the moment they have decided something.
+    if (conflicts[id] && conflicts[id].displaced) return;
     if (conflicts[id]) delete conflicts[id];
     callCard(ctx, "clearCardBadge", id, "REPLAY_NEITHER_MATCHES");
     var node = conflictNodes[id];
@@ -11932,10 +12112,40 @@
   // node is not the protected one.
   var lastElement = Object.create(null);
 
+  // `isProtected`, never `touches`. They are different questions: `touches` is
+  // the veto's ("would morphing this element destroy the protected block"), and
+  // it answers true for an ancestor of the block, which is most of the page.
+  // Replay's question is "is the reviewer inside THIS region", which is
+  // isProtected's. 2B says the same thing from their side.
   function isProtectedNow(ctx, element) {
     if (!element) return false;
     if (!ctx.protect || typeof ctx.protect.isProtected !== "function") return false;
     return ctx.protect.isProtected(element);
+  }
+
+  /**
+   * Is the reviewer in this record's region right now?
+   *
+   * Asked by id when protection can answer that way, which it can from CP2-mid
+   * on: the editing surface passes the record into `protect.mark`, so the side
+   * that knows which record is open says so directly. The node fallback is the
+   * older answer and still the only one available to a caller that marks a
+   * block without a record.
+   */
+  function protectedForItem(ctx, id) {
+    if (!ctx.protect) return false;
+    if (typeof ctx.protect.protectedItemId === "function") {
+      var open = ctx.protect.protectedItemId();
+      if (open) return open === id;
+    }
+    return isProtectedNow(ctx, lastElement[id]);
+  }
+
+  // The commit detail 2B's release() handed to this pass, when it is about this
+  // record. See replay.schedule's options.
+  function commitFor(ctx, id) {
+    if (!ctx.commit || !id) return null;
+    return ctx.commit.item === id ? ctx.commit : null;
   }
 
   var WRITING_KINDS = {};
@@ -12113,7 +12323,8 @@
     }
 
     var ref = item[record.FIELD.REGION] ? item[record.FIELD.REGION].ref : null;
-    var element = ctx.element || null;
+    var commit = commitFor(ctx, id);
+    var element = ctx.element || (commit && commit.element) || null;
     var verdict = null;
 
     // Protection is asked BEFORE the anchor, against the node this record was
@@ -12122,7 +12333,7 @@
     // cannot find it and would report the region the reviewer is looking at
     // right now as lost. The node is known; asking first is both cheaper and
     // the only honest answer.
-    if (!element && isProtectedNow(ctx, lastElement[id])) {
+    if (!element && protectedForItem(ctx, id)) {
       counters.regionsSkippedProtected += 1;
       return {
         wrote: false,
@@ -12184,6 +12395,27 @@
       return { wrote: false, branch: null, lost: false, reason: "nothing to write", item: item, element: element };
     }
 
+    // THE COMMIT SEAM. What the page tried to say in this block while the
+    // reviewer had it, which protection took back off and nothing else ever
+    // saw. If it is neither their version nor any version this record has had,
+    // the two genuinely collide and the reviewer has to be shown both. Without
+    // this the collision is invisible: the page holds the reviewer's own words
+    // because protection put them back, so the compare below reads branch one
+    // and the agent's rewrite is swallowed.
+    //
+    // It only ever FLAGS. A value that is not on the page cannot be a reason to
+    // write to the page, so every other branch falls through to the DOM compare
+    // below, which is the only thing a write is ever decided on.
+    if (commit && writes(item)) {
+      // A commit is the reviewer deciding something, so a displaced conflict
+      // raised by an earlier commit stops being sticky here and this pass gets
+      // to raise it again or let it go.
+      if (conflicts[id] && conflicts[id].displaced) delete conflicts[id];
+      if (typeof commit.observed === "string" && compare(item, commit.observed).branch === BRANCH.CONTENT_CHANGED) {
+        return flagConflict(ctx, item, id, element, commit.observed, true);
+      }
+    }
+
     var domValue = domValueOf(element, item);
     var verdictBranch = compare(item, domValue);
     var branch = verdictBranch.branch;
@@ -12195,30 +12427,7 @@
     }
 
     if (branch === BRANCH.CONTENT_CHANGED) {
-      counters.regionsConflicted += 1;
-      var yours = ours(item);
-      conflicts[id] = { id: id, yours: yours, theirs: domValue, at: new Date().toISOString() };
-      if (failures) {
-        callCard(
-          ctx,
-          "setCardBadge",
-          id,
-          failures.failure("REPLAY_NEITHER_MATCHES", { yours: yours, theirs: domValue })
-        );
-      }
-      var node = conflictNodeFor(ctx, id, yours, domValue);
-      if (node) callCard(ctx, "attachCardNode", id, node);
-      // R5. Nothing is written, in either direction.
-      return {
-        wrote: false,
-        branch: branch,
-        lost: false,
-        reason: "neither your version nor the one you edited is on the page",
-        yours: yours,
-        theirs: domValue,
-        item: item,
-        element: element
-      };
+      return flagConflict(ctx, item, id, element, domValue);
     }
 
     // Branches two and three both write the CURRENT revision. Three also says
@@ -12241,6 +12450,42 @@
       lost: false,
       reason: branch === BRANCH.EARLIER_REVISION ? "an earlier revision had landed" : "re-applied",
       earlierAfter: verdictBranch.earlierAfter,
+      item: item,
+      element: element
+    };
+  }
+
+  /**
+   * Branch four, in one place: the badge, the card node carrying both versions
+   * in full, and a result that says nothing was written. Called from the DOM
+   * compare and from the commit seam, which are two ways of finding the same
+   * collision and must say the same thing about it.
+   *
+   * @param {string} theirs what the page says, or tried to say
+   */
+  function flagConflict(ctx, item, id, element, theirs, displaced) {
+    counters.regionsConflicted += 1;
+    var yours = ours(item);
+    conflicts[id] = {
+      id: id,
+      yours: yours,
+      theirs: theirs,
+      displaced: !!displaced,
+      at: new Date().toISOString()
+    };
+    if (failures) {
+      callCard(ctx, "setCardBadge", id, failures.failure("REPLAY_NEITHER_MATCHES", { yours: yours, theirs: theirs }));
+    }
+    var node = conflictNodeFor(ctx, id, yours, theirs);
+    if (node) callCard(ctx, "attachCardNode", id, node);
+    // R5. Nothing is written, in either direction.
+    return {
+      wrote: false,
+      branch: BRANCH.CONTENT_CHANGED,
+      lost: false,
+      reason: "neither your version nor the one you edited is on the page",
+      yours: yours,
+      theirs: theirs,
       item: item,
       element: element
     };
@@ -12429,7 +12674,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+a3b3d28f49be";
+  var VERSION = "0.0.0+ff137c7daf18";
 
   function isLoopbackOrigin(origin) {
     if (typeof origin !== "string" || !origin) return false;
