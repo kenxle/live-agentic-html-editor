@@ -118,6 +118,11 @@ async function startStaticServer(options = {}) {
         server.close(function () {
           resolve();
         });
+        // A page that is still open holds keep-alive sockets, and server.close()
+        // waits for them: a test-scoped server closing while its page lives hangs
+        // until the test times out. Found on WebKit under load (2D), and the same
+        // line the app fixture's server carries.
+        server.closeAllConnections();
       });
     }
   };

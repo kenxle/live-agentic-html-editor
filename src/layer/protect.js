@@ -112,6 +112,7 @@
       name: "turbo",
       skipAttribute: markers.TURBO_PERMANENT_ATTR,
       beforeMorphEvent: "turbo:before-morph-element",
+      morphEvent: "turbo:morph",
       present: function (win) {
         return !!(win && win.Turbo);
       }
@@ -120,6 +121,7 @@
       name: "harness_repaint_engine",
       skipAttribute: "data-lahe-permanent",
       beforeMorphEvent: "lahe:before-morph-element",
+      morphEvent: "lahe:repainted",
       present: function (win) {
         return !!(win && win.__lahe && win.__lahe.fixture);
       }
@@ -128,6 +130,7 @@
       name: "app_fixture_morph_engine",
       skipAttribute: "data-app-permanent",
       beforeMorphEvent: "app:before-morph-element",
+      morphEvent: "app:morph",
       present: function (win) {
         return !!(win && win.__app && win.__app.morph);
       }
@@ -150,6 +153,15 @@
   var BEFORE_MORPH_EVENTS = unique(
     FRAMEWORKS.map(function (f) {
       return f.beforeMorphEvent;
+    })
+  );
+  // The page-level "a morph frame finished" events, one per framework. Layer two
+  // listens BEFORE a morph, per element; the remount contract in inject.js needs
+  // the other end of the same act, and it reads it from this table so there is
+  // one framework vocabulary rather than two lists that drift apart.
+  var MORPH_EVENTS = unique(
+    FRAMEWORKS.map(function (f) {
+      return f.morphEvent;
     })
   );
 
@@ -788,6 +800,7 @@
     FRAMEWORKS: FRAMEWORKS,
     SKIP_ATTRIBUTES: SKIP_ATTRIBUTES,
     BEFORE_MORPH_EVENTS: BEFORE_MORPH_EVENTS,
+    MORPH_EVENTS: MORPH_EVENTS,
     PROTECTED_ATTRIBUTE: PROTECTED_ATTRIBUTE,
     REGION_KEY_ATTRIBUTES: REGION_KEY_ATTRIBUTES,
     MINTED_REGION_ATTRIBUTE: MINTED_REGION_ATTRIBUTE,

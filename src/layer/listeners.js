@@ -100,7 +100,14 @@
     OVERLAY: "overlay", // the rail's own UI
     NAVIGATION: "navigation", // turbo:morph, turbo:load, popstate, pushState shim
     STORAGE: "storage", // storage events for the second-tab lock
-    NETWORK: "network" // online/offline, the lifecycle stream
+    NETWORK: "network", // online/offline, the lifecycle stream
+    // The two surfaces that register their own document-level handlers. They
+    // are named here, and read by comments.js, editing.js and inject.js, so the
+    // remount clears exactly what those two files re-register. A group spelled
+    // as a literal in two files is a leak the registry count cannot see: the
+    // handlers pile up under a name the remount never asks about.
+    COMMENTS: "comments", // the comment surface's keydown, mousemove, click
+    EDITING: "editing" // the editing surface's keydown, click, and block input
   };
 
   var shared = createRegistry();

@@ -36,6 +36,19 @@
 //   window.__app.morph.stop()        stop polling
 //   window.__app.morph.pollNow()     one pass now, resolves when it has applied
 //   window.__app.counters.feedPolls, .morphPasses, .morphedElements, .morphsSkipped
+//
+// Events it fires, both on the document and both modelled on Turbo's:
+//
+//   app:before-morph-element  cancelable, per element, BEFORE it is rewritten
+//                             (hooked flavor only, the same way Turbo only
+//                             offers it where it morphs rather than replaces)
+//   app:morph                 after a morph frame has been applied, whichever
+//                             flavor ran. This is the app's version of
+//                             turbo:morph: a library watching the page has to
+//                             hear that the frame changed, and until this
+//                             existed every spec had to dispatch the event on
+//                             the fixture's behalf, which made the fixture a
+//                             simulation at exactly the point it should not be.
 
 (function () {
   "use strict";
@@ -46,6 +59,7 @@
   const FLAVORS = ["hooked", "raw"];
   const PERMANENT_ATTRIBUTE = "data-app-permanent";
   const BEFORE_MORPH_EVENT = "app:before-morph-element";
+  const MORPH_EVENT = "app:morph";
   const DEFAULT_INTERVAL_MS = 250;
 
   const params = new URLSearchParams(window.location.search);
@@ -129,6 +143,17 @@
     }
 
     counters.morphPasses += 1;
+
+    // The frame is applied. Announced on the document, bubbling, the way a
+    // framework announces it: one event per morph pass, fired for the raw
+    // flavor too, because a framework that gives a library no per-element hook
+    // can still be one that says "the page changed".
+    document.dispatchEvent(
+      new CustomEvent(MORPH_EVENT, {
+        bubbles: true,
+        detail: { flavor: state.flavor, elements: incoming.length, pass: counters.morphPasses }
+      })
+    );
   }
 
   function pollNow() {
@@ -174,6 +199,7 @@
     hasTarget: Boolean(container),
     permanentAttribute: PERMANENT_ATTRIBUTE,
     beforeMorphEvent: BEFORE_MORPH_EVENT,
+    morphEvent: MORPH_EVENT,
     start: start,
     stop: stop,
     pollNow: pollNow

@@ -19,11 +19,12 @@
 // leak it catches is the exact shipped symptom this project exists to remove.
 //
 // The morphs are the fixture's OWN poll-and-morph engine, in its raw flavor
-// (no hook, every node under the target destroyed). The fixture fires no
-// turbo:morph of its own, so the spec dispatches one after each pass: that
-// stands in for the framework, and the harness README names it as the gap 2D
-// fills. Every tenth pass also deletes the overlay root outright, which is the
-// case the remount contract exists for.
+// (no hook, every node under the target destroyed). The fixture announces each
+// finished pass with its own `app:morph`, which the remount contract listens for
+// because protect.js's framework table carries that name beside the fixture's
+// pre-morph event: one vocabulary, and the spec no longer has to dispatch a
+// framework event on the application's behalf. Every tenth pass also deletes the
+// overlay root outright, which is the case the remount contract exists for.
 //
 // The edit record comes from 0A-kernel's record fixture generator, not from
 // 2A: 2A (editing) has not merged at the time this was written, and the plan
@@ -172,9 +173,6 @@ test.describe("ranked test 4: the page's own controls keep working", () => {
             rootsDeleted += 1;
           }
         }
-        // The framework's own signal. The fixture fires none, so the spec is
-        // the framework here.
-        document.dispatchEvent(new CustomEvent("turbo:morph", { bubbles: true }));
       }
       return { rootsDeleted: rootsDeleted, morphPasses: window.__app.counters.morphPasses };
     });

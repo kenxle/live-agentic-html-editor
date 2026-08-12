@@ -41,27 +41,44 @@
   var browser = typeof window !== "undefined" && !!window.document;
   if (browser) {
     root.LAHE = root.LAHE || {};
-    root.LAHE.inject = factory(root.LAHE.listeners, root.LAHE.replay, root.LAHE.markers, root.LAHE.failures);
+    root.LAHE.inject = factory(
+      root.LAHE.listeners,
+      root.LAHE.replay,
+      root.LAHE.markers,
+      root.LAHE.failures,
+      root.LAHE.protect
+    );
   } else {
     module.exports = factory(
       require("./listeners.js"),
       require("./replay.js"),
       require("../shared/markers.js"),
-      require("../shared/failures.js")
+      require("../shared/failures.js"),
+      require("./protect.js")
     );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (listeners, replay, markers, failures) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (listeners, replay, markers, failures, protect) {
   "use strict";
 
   // Every event that can cost the layer its root. Data, so a test can assert
   // the list rather than the implementation.
-  var REMOUNT_TRIGGERS = [
-    { event: "turbo:morph", on: "document", why: "Hotwire replaced part of the page" },
+  //
+  // The morph events come from protect.js's FRAMEWORKS table, which is the one
+  // place the library spells a framework's vocabulary. Layer two listens for the
+  // BEFORE half of the same act, per element; this is the other end of it, per
+  // page. Two hand-written lists would drift, and the way they drift is that a
+  // framework the protection layers already know about fires a morph the remount
+  // contract never hears.
+  var MORPH_EVENTS = (protect && protect.MORPH_EVENTS) || ["turbo:morph"];
+
+  var REMOUNT_TRIGGERS = MORPH_EVENTS.map(function (name) {
+    return { event: name, on: "document", why: "a framework replaced part of the page" };
+  }).concat([
     { event: "turbo:load", on: "document", why: "a Turbo Drive navigation finished" },
     { event: "popstate", on: "window", why: "the reviewer went back or forward" },
     { event: "pageshow", on: "window", why: "restored from the back/forward cache" },
     { event: "mutation-fallback", on: "document.body", why: "a framework that fires none of the above still removes the root" }
-  ];
+  ]);
 
   // The order remount runs in. Written down because doing these out of order is
   // exactly the leak: re-registering before de-registering doubles the handlers.
@@ -77,10 +94,16 @@
   // shim moves into the layer; it does not disappear.
   var HISTORY_HOOKS = ["pushState", "replaceState"];
 
-  // The groups a remount clears before it re-registers. The comments surface
-  // registers under its own group name, which is why the list is data: a group
-  // that is not on it is a group that leaks.
-  var CLEARED_GROUPS = [listeners.GROUP.DOCUMENT, listeners.GROUP.NAVIGATION, "comments"];
+  // The groups a remount clears before it re-registers. The comment surface and
+  // the editing surface each register under their own group name, which is why
+  // the list is data: a group that is not on it is a group that leaks. The names
+  // come from listeners.GROUP so this file and those two files cannot drift.
+  var CLEARED_GROUPS = [
+    listeners.GROUP.DOCUMENT,
+    listeners.GROUP.NAVIGATION,
+    listeners.GROUP.COMMENTS,
+    listeners.GROUP.EDITING
+  ];
 
   // How many remounts to remember. A log rather than a single value because
   // "which trigger fired, in what order" is the first question every remount
@@ -202,9 +225,11 @@
 
     function registerNavigation() {
       var group = listeners.GROUP.NAVIGATION;
-      registry.on(doc, "turbo:morph", function () {
-        remount("turbo:morph");
-      }, false, group);
+      MORPH_EVENTS.forEach(function (name) {
+        registry.on(doc, name, function () {
+          remount(name);
+        }, false, group);
+      });
       registry.on(doc, "turbo:load", function () {
         remount("turbo:load");
       }, false, group);
@@ -347,6 +372,7 @@
 
   return {
     REMOUNT_TRIGGERS: REMOUNT_TRIGGERS,
+    MORPH_EVENTS: MORPH_EVENTS,
     REMOUNT_ORDER: REMOUNT_ORDER,
     HISTORY_HOOKS: HISTORY_HOOKS,
     CLEARED_GROUPS: CLEARED_GROUPS,

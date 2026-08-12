@@ -192,7 +192,8 @@ test.describe("ranked test 24: restored from the back/forward cache", () => {
       merges: window.__lahe.counters.merges,
       replayPasses: window.__lahe.counters.replayPasses,
       bfcacheRestores: window.__lahe.counters.bfcacheRestores,
-      items: window.__lahe.items().map((i) => i.id)
+      items: window.__lahe.items().map((i) => i.id),
+      groups: window.__lahe.listenerGroups()
     }));
 
     // A framework ate the root while the page was frozen, which is the state a
@@ -256,9 +257,12 @@ test.describe("ranked test 24: restored from the back/forward cache", () => {
     expect(after.items).toEqual(before.items);
     expect(after.cards).toEqual(expect.arrayContaining(before.items));
 
-    // No handler doubled by the restore.
-    expect(after.groups.navigation).toBe(4);
-    expect(after.groups.comments).toBe(3);
+    // No handler doubled by the restore. The counts are compared against what
+    // the same page reported BEFORE the restore rather than against numbers
+    // written out here: one morph event per framework in protect.js's table is a
+    // list that grows, and a hard-coded 4 turns adding a framework into a failure
+    // in a bfcache test.
+    expect(after.groups).toEqual(before.groups);
 
     // And the reviewer can still work on the page that woke up.
     await commentOnSelection(page, "h1", "The dashboard heading should name the day.");

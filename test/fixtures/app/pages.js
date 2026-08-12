@@ -208,7 +208,13 @@ function clientsPage(state) {
     current: "/clients",
     body: body,
     searchParams: state.searchParams,
-    sessionEmail: state.sessionEmail
+    sessionEmail: state.sessionEmail,
+    // Every page of the app loads the app's own scripts, the way a real
+    // application's layout does. There is no morph target on this screen, so the
+    // engine loads and polls nothing; what matters is that window.__app exists
+    // on all three pathnames, so a library living in this app is living in the
+    // same app on every screen rather than on two screens out of three.
+    scripts: ["/assets/app.js", "/assets/morph-engine.js"]
   });
 }
 

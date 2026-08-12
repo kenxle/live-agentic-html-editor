@@ -251,9 +251,14 @@
 
     function surface() {
       if (!doc) return { host: null, root: null };
-      if (surfaceRoot && surfaceHost && surfaceHost.parentNode) {
+      if (surfaceRoot && surfaceHost && surfaceHost.isConnected) {
         return { host: surfaceHost, root: surfaceRoot };
       }
+      // The cached host is gone from the document, so a new one is about to be
+      // built. Every style node in surfaceStyles belongs to the OLD closed root:
+      // kept, they make addSurfaceStyle a no-op that returns a detached node, and
+      // the comment boxes come back unstyled with nothing to see in the DOM.
+      surfaceStyles = Object.create(null);
       // ONE HOST, and it fails loud rather than quietly becoming two. A second
       // host means two closed roots, two rails, and a remount that re-creates
       // one of them; none of that is diagnosable from the outside, because a

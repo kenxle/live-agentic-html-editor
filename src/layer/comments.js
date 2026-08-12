@@ -89,7 +89,10 @@
   var BOX_CLASS = "lahe-comment-box";
   var INPUT_CLASS = "lahe-comment-input";
   var OUTLINE_CLASS = "lahe-pick-outline";
-  var LISTENER_GROUP = "comments";
+  // The registry group, from the one place both this file and inject.js read it.
+  // The remount clears exactly the groups it re-registers, so this name has to be
+  // a constant rather than a literal in two files.
+  var LISTENER_GROUP = listeners.GROUP.COMMENTS;
 
   // Ken's copy, exactly. One spelling, used on every card.
   var HINT_READY = "Cmd-Enter when done with this comment";
@@ -243,7 +246,13 @@
 
     function surface() {
       if (!doc || !highlights) return null;
-      if (surfaceRoot) return surfaceRoot;
+      // Memoized, but only while the host it belongs to is still in the page. A
+      // rebuilt surface leaves this pointing into a detached closed root, which
+      // looks like the library working (boxes are created, records are written)
+      // while nothing the reviewer types is on screen.
+      var cachedHost = surfaceRoot ? surfaceRoot.host || surfaceRoot : null;
+      if (surfaceRoot && cachedHost && cachedHost.isConnected) return surfaceRoot;
+      surfaceRoot = null;
       var got = highlights.surface();
       surfaceRoot = got.root || got.host;
       highlights.addSurfaceStyle("comments", BOX_STYLE);

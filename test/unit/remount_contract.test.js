@@ -31,6 +31,7 @@ const listeners = require("../../src/layer/listeners.js");
 const markers = require("../../src/shared/markers.js");
 const protocol = require("../../src/shared/protocol.js");
 const failures = require("../../src/shared/failures.js");
+const protect = require("../../src/layer/protect.js");
 
 function fakeTarget(name) {
   return {
@@ -62,9 +63,24 @@ function fakeDocument(options) {
 
 test("the trigger list names all five paths, bfcache included", () => {
   const events = inject.REMOUNT_TRIGGERS.map((t) => t.event);
-  assert.deepEqual(events, ["turbo:morph", "turbo:load", "popstate", "pageshow", "mutation-fallback"]);
+  // One morph event per framework protect.js knows about, then the four paths
+  // that are not a morph at all.
+  assert.deepEqual(events, protect.MORPH_EVENTS.concat(["turbo:load", "popstate", "pageshow", "mutation-fallback"]));
+  assert.equal(events.includes("turbo:morph"), true);
   const pageshow = inject.REMOUNT_TRIGGERS.filter((t) => t.event === "pageshow")[0];
   assert.match(pageshow.why, /back\/forward cache/);
+});
+
+test("the morph events are protect.js's framework vocabulary, not a second list", () => {
+  assert.deepEqual(inject.MORPH_EVENTS, protect.MORPH_EVENTS);
+  // One page-level morph event for every framework whose per-element pre-morph
+  // event the protection layers already listen for.
+  assert.equal(inject.MORPH_EVENTS.length, protect.FRAMEWORKS.length);
+  assert.equal(
+    protect.FRAMEWORKS.every((f) => typeof f.morphEvent === "string" && f.morphEvent.length > 0),
+    true,
+    "a framework with a before-morph event and no morph event is a morph the remount never hears"
+  );
 });
 
 test("de-registration is the first step in the order, and replay is the last", () => {
@@ -76,10 +92,19 @@ test("the cleared groups include the comment surface's own group", () => {
   assert.equal(inject.CLEARED_GROUPS.includes(listeners.GROUP.DOCUMENT), true);
   assert.equal(inject.CLEARED_GROUPS.includes(listeners.GROUP.NAVIGATION), true);
   assert.equal(
-    inject.CLEARED_GROUPS.includes("comments"),
+    inject.CLEARED_GROUPS.includes(listeners.GROUP.COMMENTS),
     true,
-    "comments.js registers under 'comments'; leaving it out is a leak the registry count would not see"
+    "comments.js registers under listeners.GROUP.COMMENTS; leaving it out is a leak the registry count would not see"
   );
+  assert.equal(
+    inject.CLEARED_GROUPS.includes(listeners.GROUP.EDITING),
+    true,
+    "editing.js registers under listeners.GROUP.EDITING, and an open block's input handlers are in that group"
+  );
+  // The two surfaces read the same constant this list reads, so a rename cannot
+  // leave the remount clearing a group nobody registers under.
+  assert.equal(listeners.GROUP.COMMENTS, "comments");
+  assert.equal(listeners.GROUP.EDITING, "editing");
 });
 
 test("a remount de-registers BEFORE it re-registers, and the count comes back flat", () => {
@@ -100,8 +125,8 @@ test("a remount de-registers BEFORE it re-registers, and the count comes back fl
     },
     rebind: function () {
       order.push("rebind");
-      registry.on(doc, "keydown", function () {}, true, "comments");
-      registry.on(doc, "click", function () {}, true, "comments");
+      registry.on(doc, "keydown", function () {}, true, listeners.GROUP.COMMENTS);
+      registry.on(doc, "click", function () {}, true, listeners.GROUP.COMMENTS);
     },
     merge: function () {
       order.push("merge");
