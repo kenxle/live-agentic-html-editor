@@ -212,7 +212,7 @@ var NON_BUNDLE_FILES = [
   { path: "src/service/auth.js", owner: "1A", why: "the per-request check block, and the named refusal reason in the log" },
   { path: "src/service/log.js", owner: "1A", why: "the events.jsonl appender" },
   { path: "src/service/state_dir.js", owner: "1A", why: "reviews/<id>/ layout, owner-only, the safe-id rule" },
-  { path: "src/service/reviews.js", owner: "1A", planned: true, why: "review creation, per-review token minting, origin registration, the second-window session" },
+  { path: "src/service/reviews.js", owner: "1A", why: "review creation, per-review token minting, origin registration, the second-window session" },
   { path: "src/service/projection.js", owner: "3A", why: "the log projected into review.json and the reply state the library polls" },
   { path: "src/service/review_writer.js", owner: "3A", why: "the single writer of review.json, and the path-safety rules" },
   { path: "src/service/replies.js", owner: "3A", planned: true, why: "reply file discovery, byte-offset reading, folding, the conflict rule" },
@@ -224,7 +224,7 @@ var NON_BUNDLE_FILES = [
   },
 
   { path: "src/cli/index.js", owner: "1A", why: "the command dispatcher: serve, add, wait" },
-  { path: "src/cli/commands/serve.js", owner: "1A", planned: true, why: "serve" },
+  { path: "src/cli/commands/serve.js", owner: "1A", why: "serve" },
   { path: "src/cli/commands/add.js", owner: "3B", planned: true, why: "add" },
   { path: "src/cli/commands/wait.js", owner: "3A", planned: true, why: "wait" },
   { path: "src/cli/commands/next.js", owner: "none (CUT)", cut: true, why: "the blocking next command is the dead send model" },

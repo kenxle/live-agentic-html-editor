@@ -1,122 +1,280 @@
-// The state directory layout.
+// The state directory: where the helper keeps everything, and the rules that
+// keep it from being talked into writing somewhere else.
 //
-// Owner: Task 1A. The paths and the permissions are decided here in Phase 0
-// because they are a default that is painful to migrate after students have
-// installed the tool, and because getting the location wrong burns a user with
-// no attacker involved: a state directory inside the clone means a student's
-// `git add -A` publishes their entire review history to a public repository.
+// Owner: 1A. Architecture D11 (loopback is not a boundary, so the page proves
+// itself) and the Data and state section: the data directory sits OUTSIDE ANY
+// CHECKOUT, is owner-only, follows no symlinks inside itself, and projections
+// are written beside and renamed.
 //
-// Architecture D11: the log and the token live OUTSIDE ANY CHECKOUT, in an
-// owner-only directory.
+// Outside any checkout is not decoration. A state directory inside a clone means
+// a `git add -A` publishes a whole review history to a public repository, and
+// that burns a user with no attacker involved. stateDir() refuses a directory
+// that sits under a git checkout rather than warning about it.
 //
-//   $LAHE_STATE_DIR, or  ~/.local/state/lahe/          (0700)
-//     token                 the per-run token. 0600. Persists across restarts
-//     port                  the port the running service bound. 0600
-//     lock                  the second-instance guard. 0600
-//     origins.json          the origin allowlist, one entry per registered
-//                           development origin, with its review root and
-//                           source hint. 0600. Written by setup only
-//     reviews/<review_id>/
-//       log.ndjson          the append-only event log. 0600. Not compacted
-//       meta.json           review id, started_at, review root, targets. 0600
+//   $LAHE_STATE_DIR, or $XDG_STATE_HOME/lahe, or ~/.local/state/lahe   (0700)
+//     service.json           the readiness file: port, pid, and the per-review
+//                            tokens. 0600. Written beside, then renamed
+//     helper.log             one line per notable thing, and one line per
+//                            REFUSAL NAMING THE CHECK THAT FAILED (D11). 0600
+//     reviews/<review-id>/                                             (0700)
+//       events.jsonl         append-only, one JSON line per event. 0600
+//       review.json          the projection the agent reads (3A writes it)
+//       meta.json            the review's token and its registered origins. 0600
+//       replies*.jsonl       what agents append (3A reads them)
 //
-// The review FILES (review.md and review.json) do not live here. They live at
-// the review root, which is where the reviewer's agent can read them, and setup
-// offers to add their pattern to the reviewed project's ignore file.
+// Review ids are path components, so they are constrained to protocol.js's safe
+// character set. There is one spelling of that rule and it lives in protocol.js.
 //
 // Node-only.
 
 "use strict";
 
+var fs = require("node:fs");
 var os = require("node:os");
 var path = require("node:path");
+
+var protocol = require("../shared/protocol.js");
 
 var DIR_MODE = 0o700;
 var FILE_MODE = 0o600;
 
+// The append-only log grows for the life of a review and is bounded by
+// retention, not rotation: finished reviews age out rather than silently losing
+// history mid-review (Data and state).
 var RETENTION_DAYS = 30;
 
-function stateDir() {
-  if (process.env.LAHE_STATE_DIR) return path.resolve(process.env.LAHE_STATE_DIR);
-  var xdg = process.env.XDG_STATE_HOME;
-  if (xdg) return path.join(path.resolve(xdg), "lahe");
-  return path.join(os.homedir(), ".local", "state", "lahe");
-}
-
 var FILES = {
-  token: "token",
-  port: "port",
-  lock: "lock",
-  origins: "origins.json"
+  ready: "service.json",
+  helperLog: "helper.log",
+  events: "events.jsonl",
+  review: "review.json",
+  meta: "meta.json"
 };
 
-function tokenPath() {
-  return path.join(stateDir(), FILES.token);
-}
+var REVIEWS_DIR = "reviews";
 
-function portPath() {
-  return path.join(stateDir(), FILES.port);
-}
-
-function lockPath() {
-  return path.join(stateDir(), FILES.lock);
-}
-
-function originsPath() {
-  return path.join(stateDir(), FILES.origins);
-}
-
-function reviewDir(reviewId) {
-  if (typeof reviewId !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(reviewId)) {
-    throw new Error("reviewDir: reviewId must be 1 to 64 characters of [A-Za-z0-9_-], got " + String(reviewId));
+/**
+ * The nearest git checkout at or above a directory, or null.
+ *
+ * `.git` is a directory in an ordinary clone and a FILE in a worktree, so both
+ * shapes count. The walk stops at the filesystem root.
+ */
+function checkoutAbove(dir) {
+  var current = path.resolve(dir);
+  for (;;) {
+    if (fs.existsSync(path.join(current, ".git"))) return current;
+    var parent = path.dirname(current);
+    if (parent === current) return null;
+    current = parent;
   }
-  return path.join(stateDir(), "reviews", reviewId);
 }
 
-function logPath(reviewId) {
-  return path.join(reviewDir(reviewId), "log.ndjson");
+/**
+ * Where the helper keeps its data.
+ *
+ * @param {{allowInsideCheckout?: boolean}} [options] only the repo's own
+ *   tooling passes this, and nothing in the shipped paths does.
+ */
+function stateDir(options) {
+  var opts = options || {};
+  var dir;
+  if (process.env.LAHE_STATE_DIR) {
+    dir = path.resolve(process.env.LAHE_STATE_DIR);
+  } else if (process.env.XDG_STATE_HOME) {
+    dir = path.join(path.resolve(process.env.XDG_STATE_HOME), "lahe");
+  } else {
+    dir = path.join(os.homedir(), ".local", "state", "lahe");
+  }
+  if (!opts.allowInsideCheckout) {
+    var checkout = checkoutAbove(dir);
+    if (checkout) {
+      throw new Error(
+        "the helper's state directory must sit outside any checkout, and " +
+          dir +
+          " is inside the one at " +
+          checkout +
+          ". A review history committed by an ordinary `git add -A` is a real " +
+          "loss with no attacker involved. Point LAHE_STATE_DIR somewhere else."
+      );
+    }
+  }
+  return dir;
 }
 
-function metaPath(reviewId) {
-  return path.join(reviewDir(reviewId), "meta.json");
+/** Create a directory owner-only, and make sure it really is owner-only. */
+function ensureDir(dir) {
+  fs.mkdirSync(dir, { recursive: true, mode: DIR_MODE });
+  // recursive mkdir applies the mode only to directories it CREATES, so an
+  // existing directory with looser permissions is tightened here rather than
+  // trusted.
+  fs.chmodSync(dir, DIR_MODE);
+  return dir;
 }
 
-// D9: the run token PERSISTS across service restarts rather than rotating on
-// every start. Rotating it contradicts the promise that a stopped service costs
-// nothing: a page open across a restart would hold a dead token, every sync
-// would return 401 forever, and the failure would be neither of the two states
-// the sync client knows how to report. It is regenerated only when the reviewer
-// asks. That is a stated, small weakening bought with the drain promise being
-// true.
-var TOKEN_POLICY = {
-  persists_across_restarts: true,
-  rotates_on: "an explicit request from the reviewer only",
-  bytes: 32,
-  compared: "constant time"
-};
+/**
+ * Refuse a path whose final component is a symlink.
+ *
+ * The helper follows no symlinks inside its data directory (Data and state).
+ * A symlinked events.jsonl pointing at ~/.ssh/authorized_keys turns an
+ * append-only log into an append-anywhere primitive, and the append itself is
+ * the whole attack: nothing has to be read back.
+ */
+function assertNotSymlink(target) {
+  var stat;
+  try {
+    stat = fs.lstatSync(target);
+  } catch (err) {
+    if (err.code === "ENOENT") return target;
+    throw err;
+  }
+  if (stat.isSymbolicLink()) {
+    throw new Error(
+      "refusing to follow a symlink inside the helper's data directory: " + target
+    );
+  }
+  return target;
+}
 
-// D9: the port is ephemeral by default and recorded with the run token. Pinning
-// is available and documented as a weakening: a page attacking the service does
-// not need to scan if the port is a documented constant.
-var PORT_POLICY = {
-  ephemeral_by_default: true,
-  pinning: "available via --port, documented as a weakening",
-  recorded_in: FILES.port
-};
+/**
+ * Join under a base directory and refuse anything that escapes it, then refuse
+ * a symlink at any level between the base and the result.
+ *
+ * Both halves matter. The containment check alone is defeated by a symlink
+ * inside the data directory pointing out of it; the symlink check alone is
+ * defeated by a `..` segment.
+ */
+function resolveWithin(base, segments) {
+  var root = path.resolve(base);
+  var parts = Array.isArray(segments) ? segments : [segments];
+  parts.forEach(function (segment) {
+    if (typeof segment !== "string" || segment.length === 0) {
+      throw new Error("resolveWithin: every path segment must be a non-empty string");
+    }
+    if (segment.indexOf("/") !== -1 || segment.indexOf("\\") !== -1 || segment.indexOf("\0") !== -1) {
+      throw new Error("resolveWithin: a path segment may not contain a separator: " + JSON.stringify(segment));
+    }
+  });
+  var resolved = path.resolve.apply(path, [root].concat(parts));
+  if (resolved !== root && resolved.indexOf(root + path.sep) !== 0) {
+    throw new Error("refusing a write outside the helper's data directory: " + resolved);
+  }
+  var walked = root;
+  parts.forEach(function (segment) {
+    walked = path.join(walked, segment);
+    assertNotSymlink(walked);
+  });
+  return resolved;
+}
+
+/** The safe-id rule, one spelling, in protocol.js. */
+function assertSafeReviewId(reviewId) {
+  if (!protocol.isSafeId(reviewId)) {
+    throw new Error(
+      "review ids are path components, so they are limited to " +
+        String(protocol.SAFE_ID) +
+        ". Got: " +
+        JSON.stringify(reviewId)
+    );
+  }
+  return reviewId;
+}
+
+function readyPath(dir) {
+  return path.join(dir, FILES.ready);
+}
+
+function helperLogPath(dir) {
+  return path.join(dir, FILES.helperLog);
+}
+
+function reviewsRoot(dir) {
+  return path.join(dir, REVIEWS_DIR);
+}
+
+function reviewDir(dir, reviewId) {
+  assertSafeReviewId(reviewId);
+  return resolveWithin(dir, [REVIEWS_DIR, reviewId]);
+}
+
+function eventsPath(dir, reviewId) {
+  return resolveWithin(dir, [REVIEWS_DIR, assertSafeReviewId(reviewId), FILES.events]);
+}
+
+function reviewJsonPath(dir, reviewId) {
+  return resolveWithin(dir, [REVIEWS_DIR, assertSafeReviewId(reviewId), FILES.review]);
+}
+
+function metaPath(dir, reviewId) {
+  return resolveWithin(dir, [REVIEWS_DIR, assertSafeReviewId(reviewId), FILES.meta]);
+}
+
+/**
+ * A reply file inside one review, by its filename.
+ *
+ * The agent segment of replies-<agent>.jsonl is a path component too, so it goes
+ * through protocol.js's filename pattern before it is ever joined to a path.
+ */
+function replyFilePath(dir, reviewId, filename) {
+  var parsed = protocol.agentFromFilename(filename);
+  if (!parsed.ok) {
+    throw new Error("refusing a reply file name that is not replies.jsonl or replies-<agent>.jsonl: " + JSON.stringify(filename));
+  }
+  if (parsed.agent !== null && !protocol.isSafeId(parsed.agent)) {
+    throw new Error("refusing an unsafe agent segment in a reply file name: " + JSON.stringify(filename));
+  }
+  return resolveWithin(dir, [REVIEWS_DIR, assertSafeReviewId(reviewId), filename]);
+}
+
+/** Make the whole directory for one review, owner-only. */
+function ensureReviewDir(dir, reviewId) {
+  ensureDir(dir);
+  ensureDir(reviewsRoot(dir));
+  return ensureDir(reviewDir(dir, reviewId));
+}
+
+/**
+ * Write beside, then rename.
+ *
+ * A rename within one directory is atomic, so a crash leaves either the old
+ * whole file or the new whole file and never a half-written review.json (Data
+ * and state). The temp name carries the pid so two helpers cannot collide on it.
+ */
+function writeAtomic(target, contents) {
+  assertNotSymlink(target);
+  var temp = target + "." + process.pid + "." + Date.now() + ".tmp";
+  fs.writeFileSync(temp, contents, { mode: FILE_MODE });
+  fs.renameSync(temp, target);
+  return target;
+}
+
+/** Append one whole line, creating the file owner-only if it is not there. */
+function appendLine(target, line) {
+  assertNotSymlink(target);
+  fs.appendFileSync(target, line, { mode: FILE_MODE });
+  return target;
+}
 
 module.exports = {
   DIR_MODE: DIR_MODE,
   FILE_MODE: FILE_MODE,
   RETENTION_DAYS: RETENTION_DAYS,
   FILES: FILES,
-  TOKEN_POLICY: TOKEN_POLICY,
-  PORT_POLICY: PORT_POLICY,
+  REVIEWS_DIR: REVIEWS_DIR,
   stateDir: stateDir,
-  tokenPath: tokenPath,
-  portPath: portPath,
-  lockPath: lockPath,
-  originsPath: originsPath,
+  checkoutAbove: checkoutAbove,
+  ensureDir: ensureDir,
+  ensureReviewDir: ensureReviewDir,
+  assertNotSymlink: assertNotSymlink,
+  assertSafeReviewId: assertSafeReviewId,
+  resolveWithin: resolveWithin,
+  readyPath: readyPath,
+  helperLogPath: helperLogPath,
+  reviewsRoot: reviewsRoot,
   reviewDir: reviewDir,
-  logPath: logPath,
-  metaPath: metaPath
+  eventsPath: eventsPath,
+  reviewJsonPath: reviewJsonPath,
+  metaPath: metaPath,
+  replyFilePath: replyFilePath,
+  writeAtomic: writeAtomic,
+  appendLine: appendLine
 };

@@ -455,6 +455,20 @@ is in a repository, and the snippet it writes for a dev server belongs in a deve
 The final boundary is the user account: a process already running as the reviewer can touch the store
 directly, and no local helper can defend against that.
 
+**Resolved (1A spike): a `file://` page does reach the helper, on all three browsers.** The plan asked
+1A to settle this before it closed, because a page opened from disk has a null origin and a browser
+might refuse the request outright no matter what the helper allowed. It does not. Chromium, Firefox and
+WebKit all send the preflight and then the POST, and both arrive carrying the literal header value
+`Origin: null`. The evidence is `test/browser/file_origin.spec.js`, which runs on all three lanes; its
+recorded verdict per browser is `{"reached":true,"status":200,"requestsTheServerSaw":["OPTIONS
+origin=null","POST origin=null"]}`. So the three consequences the plan pre-decided for a failed spike
+are **not** taken: the helper grows no single-file static serve, `add` prints the file path rather than
+a served URL, and AC1 stands as written. What this does mean is that `null` is a real value in a
+review's registered origin set, and the helper answers such a request with
+`Access-Control-Allow-Origin: null`. The origin check therefore buys nothing for a document opened off
+disk (any local file can present the same null origin), which is exactly the residual this section
+already states: for a document someone else sent, the per-review token is the working factor.
+
 ### D12: Page text is data; reviewer text is intent
 
 ::: xref
