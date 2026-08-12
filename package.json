@@ -5,7 +5,7 @@
   "description": "Comment on and edit a live HTML page in the browser; hand every change back to your coding agent.",
   "license": "MIT",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   },
   "scripts": {
     "lint": "node scripts/lint.js",
