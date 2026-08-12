@@ -1,6 +1,6 @@
 # Review comments: Architecture: Live Agentic HTML Editor
 
-_Doc: 02_architecture_live_agentic_html_editor.html · saved 2026-08-12T16:45:07 · 22 comment(s)_
+_Doc: 02_architecture_live_agentic_html_editor.html · saved 2026-08-12T16:50:55 · 25 comment(s)_
 
 ## 1. Summary
 
@@ -295,6 +295,35 @@ yes to the principle. what is the mechanism? since we can edit dom properties, s
 > current module and fixed there too.
 
 this is a brutal wall of text. can i get some bullets or a table or something here?
+
+**[DONE]**
+
+## 23. Data and state
+
+> [Diagram 4]
+
+basically looks good, except it looks like the exit state is only accessible from the ready state and draft state?
+
+**[DONE]**
+
+## 24. Data and state
+
+> SQLite is still marked experimental,
+
+lol SQLite is plenty safe for this use case. it's not for production, but for this "experimental" is not an issue. not that i'm saying we should do sqlite, only that this is not the reason not to. 
+
+**[DONE]**
+
+## 25. Data and state
+
+>  SQLite is still marked experimental, an external one breaks
+> zero-dependency install, and an append-only JSONL log already gives
+> crash-safety, a full history, and greppability, while
+> review.md gives the readable view a database would need
+> generated anyway. The seam is narrow (the helper's store module), so
+> swapping later is contained.
+
+we should later think through what we could get with a sqlite db. sure it's an install/setup step, but do we gain a lot? like are these files going to burn context because they're really long, and a db would let us keep agents more focused?
 
 **[DONE]**
 
