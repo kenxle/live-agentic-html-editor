@@ -82,6 +82,9 @@
     "  background: #ffffff;",
     "  border-left: 1px solid rgba(17, 17, 17, 0.12);",
     "  box-shadow: -12px 0 32px rgba(17, 17, 17, 0.08);",
+    // Above the pick-mode outline, which is drawn over the page and must not
+    // paint across the rail.
+    "  z-index: 2;",
     "  font: 13px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif;",
     "  color: #111111;",
     "}",
@@ -152,6 +155,7 @@
     "  font: 12px/32px ui-sans-serif, system-ui, -apple-system, sans-serif;",
     "  color: #111111;",
     "  cursor: pointer;",
+    "  z-index: 2;",
     "}",
     ".lahe-rail-pill[hidden] { display: none; }",
     "@media (prefers-color-scheme: dark) {",

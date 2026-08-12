@@ -88,7 +88,7 @@
     "  color: inherit;",
     "}",
     "::highlight(" + NAME.ACTIVE + ") {",
-    "  background-color: rgba(255, 178, 26, 0.55);",
+    "  background-color: rgba(255, 178, 26, 0.46);",
     "  color: inherit;",
     "}"
   ].join("\n");

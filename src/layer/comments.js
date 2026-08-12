@@ -162,6 +162,7 @@
     "  outline: 2px solid rgba(255, 158, 0, 0.95);",
     "  outline-offset: 2px;",
     "  background: rgba(255, 202, 84, 0.12);",
+    "  z-index: 1;",
     "  display: none;",
     "}",
     "@media (prefers-color-scheme: dark) {",
@@ -350,7 +351,7 @@
         inputEl.setAttribute("rows", "3");
         inputEl.setAttribute(
           "placeholder",
-          item[record.FIELD.KIND] === record.KIND.NOTE ? "A note about the page" : "What should change here?"
+          item[record.FIELD.KIND] === record.KIND.NOTE ? "Not tied to any passage" : "What should change here?"
         );
         inputEl.value = item[record.FIELD.NOTE] || "";
         node.appendChild(inputEl);
@@ -692,14 +693,20 @@
     }
 
     // Outstanding work, newest first: what the Active tab shows.
+    //
+    // The reverse comes first, and it is not decoration. Two comments made in
+    // the same millisecond carry the same created_at, and a sort alone would
+    // then fall back to storage order, which is oldest first: the exact
+    // opposite of what the rail promises. Reversing first, then sorting with a
+    // stable sort, makes the tie break the right way.
     function outstanding() {
-      return items()
-        .filter(function (item) {
-          return item[record.FIELD.STATE] !== record.STATE.HANDLED;
-        })
-        .sort(function (a, b) {
-          return String(b[record.FIELD.CREATED_AT]).localeCompare(String(a[record.FIELD.CREATED_AT]));
-        });
+      var list = items().filter(function (item) {
+        return item[record.FIELD.STATE] !== record.STATE.HANDLED;
+      });
+      list.reverse();
+      return list.sort(function (a, b) {
+        return String(b[record.FIELD.CREATED_AT]).localeCompare(String(a[record.FIELD.CREATED_AT]));
+      });
     }
 
     function openBoxes() {

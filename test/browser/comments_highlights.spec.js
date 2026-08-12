@@ -100,16 +100,20 @@ function paintedHighlights(page) {
   });
 }
 
-// Every element the page itself owns, with its box. Library chrome is excluded
-// by its marker, which is the point of there being exactly one spelling of it.
+// Every element the page itself owns, with its box.
+//
+// The ONLY thing excluded is the library's one shadow host, excluded BY ID
+// rather than by marker. Excluding by marker would be a hole the size of this
+// whole test: a wrapper element the library inserted inside reviewed content
+// carries a marker too, so a marker-based filter hides exactly the failure the
+// test exists to catch. It was caught that way, by the deliberate revert.
 function pageGeometry(page) {
   return page.evaluate(function () {
-    var markers = window.LAHE ? window.LAHE.markers : null;
     var out = { scrollHeight: document.documentElement.scrollHeight, blocks: [] };
     var all = document.body.querySelectorAll("*");
     for (var i = 0; i < all.length; i += 1) {
       var el = all[i];
-      if (markers && markers.isInsideOverlay(el)) continue;
+      if (el.id === "lahe-surface-root" || (el.closest && el.closest("#lahe-surface-root"))) continue;
       if (el.tagName === "SCRIPT" || el.tagName === "STYLE") continue;
       var r = el.getBoundingClientRect();
       out.blocks.push({
@@ -366,6 +370,25 @@ test.describe("1D: comments, gestures, and highlights", () => {
           const layerGeometry = await pageGeometry(layerPage);
           expect(layerGeometry.scrollHeight).toBe(bareGeometry.scrollHeight);
           expect(layerGeometry.blocks).toEqual(bareGeometry.blocks);
+
+          // --- nothing of the library's is inside reviewed content --------------
+          // No wrapper elements, ever. Stated as its own assertion rather than
+          // left to the geometry, because a wrapper that happens not to move
+          // anything would otherwise pass.
+          const intruders = await layerPage.evaluate(function () {
+            var out = [];
+            var marked = document.querySelectorAll("[data-lahe]");
+            for (var i = 0; i < marked.length; i += 1) {
+              var el = marked[i];
+              // The two page-level things the library is allowed: the marked
+              // highlight stylesheet, and the one shadow host.
+              if (el.id === "lahe-surface-root") continue;
+              if (el.getAttribute("data-lahe-highlight") !== null) continue;
+              out.push(el.tagName + (el.id ? "#" + el.id : ""));
+            }
+            return out;
+          });
+          expect(intruders, "the library put nothing inside the page").toEqual([]);
 
           // --- the one page-level addition -------------------------------------
           const bareSheets = await pageStylesheets(barePage);
