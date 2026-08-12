@@ -1228,9 +1228,8 @@
 <nav id="TOC" role="doc-toc">
 <ul>
 <li><a href="#summary" id="toc-summary">Summary</a></li>
-<li><a href="#what-carries-over-and-what-does-not"
-id="toc-what-carries-over-and-what-does-not">What carries over, and what
-does not</a></li>
+<li><a href="#what-carries-over" id="toc-what-carries-over">What carries
+over</a></li>
 <li><a href="#key-decisions" id="toc-key-decisions">Key
 decisions</a></li>
 <li><a href="#data-and-state" id="toc-data-and-state">Data and
@@ -1251,6 +1250,9 @@ Review</a></li>
 <li><a href="#architecture-reviews"
 id="toc-architecture-reviews">Architecture reviews</a>
 <ul>
+<li><a href="#kens-comments-on-the-architecture-page-2026-08-12"
+id="toc-kens-comments-on-the-architecture-page-2026-08-12">Ken's
+comments on the architecture page (2026-08-12)</a></li>
 <li><a href="#wireframe-reaction-ken-2026-08-12"
 id="toc-wireframe-reaction-ken-2026-08-12">Wireframe reaction (Ken,
 2026-08-12)</a></li>
@@ -1287,21 +1289,25 @@ needed</a></li>
 </ul>
 </nav>
 <h2 id="summary">Summary</h2>
-<p>Two pieces. A <strong>library</strong>: one JavaScript file added to
-any locally run HTML page, which draws the review surface, records
-everything the reviewer does, and keeps the page fully native the rest
-of the time. A <strong>helper</strong>: one local background process
-that stores the review durably on disk, gives the agent one file to read
-and one place to answer, and tells the library what the agent said so
-the page can show it.</p>
-<p>The design center is the flow model. There is no send. The reviewer
-works; each finished thing (a confirmed comment, a committed edit)
-becomes a durable <strong>record</strong> the moment it exists; the
-agent reads records continuously and answers per record; the page shows
-those answers as they arrive. Reviewer and agent run at the same time
-against the same store, and the store, not the screen, is the truth. The
-screen is a view of the records, which is what makes "the user's work is
-never clobbered" a property of the design rather than a promise.</p>
+<p>Two pieces:</p>
+<ol type="1">
+<li><strong>A library</strong>: one JavaScript file added to any locally
+run HTML page. It draws the review surface, records everything the
+reviewer does, and keeps the page fully native the rest of the
+time.</li>
+<li><strong>A helper</strong>: one local background process. It stores
+the review durably on disk, gives the agent one file to read and one
+place to answer, and tells the library what the agent said so the page
+can show it.</li>
+</ol>
+<p>The design center is the flow model. The reviewer works. Each
+finished thing (a confirmed comment, a committed edit) becomes a durable
+<strong>record</strong> the moment it exists. The agent reads records
+continuously and answers per record, and the page shows those answers as
+they arrive. Reviewer and agent run at the same time against the same
+store, and the store, not the screen, is the truth. The screen is a view
+of the records, which is what makes "the user's work is never clobbered"
+a property of the design rather than a promise.</p>
 <pre class="mermaid"><code>flowchart LR
     R[&quot;Reviewer&lt;br/&gt;comments + edits on the page&quot;] --&gt; L[&quot;Library&lt;br/&gt;in the page&quot;]
     L --&gt;|&quot;every keystroke&quot;| B[(&quot;Browser storage&quot;)]
@@ -1314,23 +1320,22 @@ never clobbered" a property of the design rather than a promise.</p>
 <p>The library works alone: with no helper running, everything is kept
 in the browser and the copy and export buttons carry it out (R8, R10).
 The helper adds durability beyond the browser and the agent loop.
-Neither piece ever needs the other to be alive at the same moment.</p>
-<h2 id="what-carries-over-and-what-does-not">What carries over, and what
-does not</h2>
+Neither piece ever needs the other to be alive at the same moment,
+though that is the happy path.</p>
+<h2 id="what-carries-over">What carries over</h2>
 <p>From our comments module: the durability posture (keep on every
 keystroke, depend on nothing being alive), the overlay rail, copy and
-export, the confirm-before-actionable gesture. From human-review: the
-one idea worth keeping, that a page can be edited in place, rebuilt on
-the opposite storage philosophy. From the dead first architecture draft:
-the protected-region and replay design, the record shape, and the
-data-fencing rules survive; the send model, the click-to-edit
-interaction, and the Chromium default are gone, contradicted by the
-brief.</p>
+export, and the confirm-before-actionable gesture. From human-review:
+that a page can be edited in place. The protected-region and replay
+design (D7), the record shape (D4), and the data-fencing rules (D12) are
+where the two combine.</p>
 <h2 id="key-decisions">Key decisions</h2>
 <h3 id="d1-one-file-in-the-page-one-process-beside-it">D1: One file in
 the page, one process beside it</h3>
 <div class="xref">
-<p>Grounds R40, R41, R42 (getting the library and running it).</p>
+<p>Grounds <a
+href="01_brief_live_agentic_html_editor.html#getting-the-library-and-running-it">R40,
+R41, and R42 (getting the library and running it)</a>.</p>
 </div>
 <p>The library is a single built JavaScript file. Adding it to a page is
 one <code>&lt;script&gt;</code> line, which a person or an agent writes;
@@ -1343,12 +1348,19 @@ down. The repo is the one source (GitHub clone, R40); a build script
 concatenates the source modules into the shipped file, so builders work
 on small files and users add one.</p>
 <p>The helper is a zero-dependency Node process
-(<code>node bin/lahe.js serve</code>). Node 20+ is the only stated
-requirement. Nothing else is platform-specific: the library is standard
-DOM APIs, the helper is standard Node, and macOS, Linux, and Windows all
-run both. The one browser-support note (Custom Highlight API, D10) is
-stated with its reason per R42, and it holds in current Chrome, Edge,
-Safari, and Firefox.</p>
+(<code>node bin/lahe.js serve</code>). It listens on a <strong>fixed
+default port</strong> (configurable), because the page has to find it
+across restarts: the script line carries the helper's URL as an
+attribute, and a helper restarted on the same port is simply found
+again, which is what makes the reconnect-and-re-post promise in the
+failure table real. The script line's attributes (helper URL, review id,
+token) are public API, pinned exactly in the contracts doc the plan
+writes, since they are the one thing every host page depends on. Node
+20+ is the only stated requirement. Nothing else is platform-specific:
+the library is standard DOM APIs, the helper is standard Node, and
+macOS, Linux, and Windows all run both. The one browser-support note
+(Custom Highlight API, D10) is stated with its reason per R42, and it
+holds in current Chrome, Edge, Safari, and Firefox.</p>
 <h3 id="d2-the-library-never-writes-the-reviewed-pages-file">D2: The
 library never writes the reviewed page's file</h3>
 <p>An edit made in the browser changes the DOM the reviewer is looking
@@ -1362,8 +1374,13 @@ the reviewer did (R2, R4).</p>
 <h3 id="d3-two-page-states-browse-and-edit-with-browse-fully-native">D3:
 Two page states, browse and edit, with browse fully native</h3>
 <div class="xref">
-<p>Grounds R13 (the page keeps working, outranking editing convenience),
-R24, and answers Q1.</p>
+<p>Grounds <a
+href="01_brief_live_agentic_html_editor.html#the-page-keeps-working">R13
+(the page keeps working, outranking editing convenience)</a> and <a
+href="01_brief_live_agentic_html_editor.html#editing">R24 (edit the text
+directly, entered deliberately)</a>, and answers <a
+href="01_brief_live_agentic_html_editor.html#open-questions">Q1 (the
+gesture vocabulary)</a>.</p>
 </div>
 <p><strong>Browse is the default and it is the page untouched.</strong>
 No intercepted clicks, no contentEditable, no captured keys beyond the
@@ -1431,10 +1448,16 @@ R29), <code>after</code> (never truncated, R3), plus the same pair as
 HTML so an agent can see structure without the reviewer reading any
 (R23).</li>
 <li><strong>Delete</strong>, <strong>format-only change</strong>, and
-<strong>untethered note</strong> are their own kinds (R27, R31,
-R18).</li>
+<strong>untethered note</strong> are their own kinds (R27, R31, R18).
+Formatting is a closed list: <strong>bold and italic</strong>, nothing
+else in v1 (the brief's "basic formatting only"; anything richer is a
+request to the agent). The structural comparison in replay is defined
+against exactly that list.</li>
 </ul>
-<p>Each record has a client-minted id and a monotonically increasing
+<p>Every record names the <strong>page</strong> it was made on (its path
+and title, plus the source hint when one was given), which is what lets
+one review span a whole dev-server walk and still project grouped by
+page. Each record has a client-minted id and a monotonically increasing
 <strong>rev</strong>, bumped on every rewording. An agent reply names
 (id, rev), so a reply to rev 2 cannot mark rev 3 handled: the reviewer's
 later rewording stays outstanding (R9, R21). Records are never edited in
@@ -1444,22 +1467,32 @@ itself an event.</p>
 <h3 id="d5-durability-is-browser-storage-plus-an-append-only-log">D5:
 Durability is browser storage plus an append-only log</h3>
 <div class="xref">
-<p>Grounds R1, R8, R22.</p>
+<p>Grounds <a
+href="01_brief_live_agentic_html_editor.html#the-users-work-is-never-clobbered">R1
+(nothing typed is lost) and R8 (work reaches the agent even with nothing
+running)</a> and <a
+href="01_brief_live_agentic_html_editor.html#commenting">R22 (a comment
+survives interruption)</a>.</p>
 </div>
 <p>Two stores, each sufficient alone:</p>
 <ol type="1">
 <li><strong>Browser storage</strong>, written synchronously on every
 keystroke, including half-written drafts. A reload, a crash, or a sleep
-costs nothing. Keyed by review id, not by filename or origin, so two
-pages of one review do not collide, two reviews do not merge, and
-<code>localhost</code> versus <code>127.0.0.1</code> is not two
-buckets.</li>
+costs nothing. Keyed by review id, not by filename, so two pages of one
+review do not collide and two reviews do not merge. Browser storage is
+still partitioned by origin (no key choice changes that, so
+<code>localhost</code> and <code>127.0.0.1</code> are physically
+separate buckets); the helper is what unifies a review across origins,
+which is one more reason drafts flow to it.</li>
 <li><strong>The helper's on-disk store</strong>: one folder per review
 holding <code>events.jsonl</code> (append-only, one JSON line per event;
 an interrupted write corrupts at most the last line, never history) and
 the projections built from it (D6). The library posts each event as it
-happens and re-posts anything unacknowledged on every reconnect; events
-are idempotent by id and rev, so re-posting is always safe.</li>
+happens and re-posts anything unacknowledged on every reconnect. Every
+event carries its own <strong>event id</strong>, and re-posting is
+idempotent by that id rather than by (item, rev): drafts do not bump
+rev, so many draft events legitimately share an item and rev with
+different content.</li>
 </ol>
 <p><strong>Drafts flow to the helper too</strong>, marked draft, so a
 half-written thought has both stores like everything else and does not
@@ -1469,7 +1502,12 @@ can clear. Drafts never appear as actionable in what the agent reads
 commits automatically on navigation or unload</strong> (kept
 synchronously in browser storage, handed to the helper on the way out),
 because browse mode is fully native and a link click is one click: R1
-names navigation, so navigation cannot be a losing move.</p>
+names navigation, so navigation cannot be a losing move. The
+on-the-way-out post uses the one send mechanism that can both survive
+unload and carry D11's required headers (a kept-alive request,
+size-capped by the browser); an edit too large for it is already safe in
+browser storage and goes to the helper on the next load, so the cap
+costs latency, never work.</p>
 <p>The browser is authoritative for a record's content until the helper
 has acknowledged it; the store is authoritative for lifecycle <strong>at
 a given rev</strong>: a handled that names rev 1 retires rev 1, and a
@@ -1481,7 +1519,13 @@ status.</p>
 reason</strong> pointing at the first. Joining looked cheap until drafts
 entered the picture: two windows sharing one draft bucket is
 last-keystroke-wins, which is silent loss. Refusal costs the reviewer
-nothing and loses nothing.</p>
+nothing and loses nothing. The refusal has two mechanisms and one named
+limit: windows that can see each other's storage refuse through a
+client-side lock, windows that cannot are refused by the helper's
+session (with a takeover after a crashed window's heartbeat goes quiet),
+and two windows on different origins with no helper running cannot be
+refused by anything, so that one case is a stated limit in the failure
+table rather than a claim.</p>
 <p>A review <strong>starts</strong> when the add step mints it and
 <strong>ends</strong> when the reviewer archives it from the rail;
 retention (Data and state) ages out only archived and abandoned reviews,
@@ -1491,7 +1535,15 @@ id="d6-the-agent-contract-is-one-readable-file-and-replies-are-one-appended-line
 The agent contract is one readable file, and replies are one appended
 line</h3>
 <div class="xref">
-<p>Grounds R6, R7, R33, R34; agent-agnostic per the non-goals.</p>
+<p>Grounds <a
+href="01_brief_live_agentic_html_editor.html#the-users-work-is-never-clobbered">R6
+(feedback flows as the reviewer works) and R7 (the reviewer decides when
+a comment is done)</a> and <a
+href="01_brief_live_agentic_html_editor.html#working-with-the-agent">R33
+and R34 (the agent reports per item, and says so on the page when it
+cannot do something)</a>; agent-agnostic per <a
+href="01_brief_live_agentic_html_editor.html#non-goals">the
+non-goals</a>.</p>
 </div>
 <p>The helper maintains <strong><code>review.md</code></strong>: one
 file per review, regenerated from the log (atomically: written beside,
@@ -1508,10 +1560,18 @@ one of the three symptoms being fixed. The contract block at the top of
 the file tells the agent both ways to keep up: re-read the file between
 work items, or run the helper's <strong>wait command</strong>, which
 blocks until something new is ready (or a timeout) and prints it. The
-file is the contract; the wait command is a convenience that makes the
-loop cheap for agents that can run a command, and its death (an agent's
-turn ending kills a foreground wait, the old tool's delivery failure)
-costs nothing, because the file is still there and still complete.</p>
+wait command <strong>consumes nothing</strong>: it is a read with a
+watermark (the caller says where it left off), never an acknowledgment,
+so a killed wait, a repeated wait, and two agents waiting at once are
+all harmless, and the cut ack model cannot sneak back in through it.
+Handling is expressed only by writing a reply. The file is the contract;
+the wait command is a convenience that makes the loop cheap for agents
+that can run a command, and its death (an agent's turn ending kills a
+foreground wait, the old tool's delivery failure) costs nothing, because
+the file is still there and still complete. The contract block's exact
+text is pinned at plan time, and the standing header already in the repo
+is wrong for this design (it names an authoritative JSON file and a
+command that no longer exists) and gets rewritten, not kept.</p>
 <p>The agent answers by appending one JSON line to
 <strong><code>replies.jsonl</code></strong> in the same folder: id, rev,
 status (<code>handled</code> / <code>not_handled</code> with a reason /
@@ -1552,12 +1612,14 @@ handing items to subagents, and that coordinator already decides who
 does what; the store does not add claims or leases in v1. What the store
 does guarantee: each writer appends whole lines to its own reply file
 (<code>replies-&lt;agent&gt;.jsonl</code>, with
-<code>replies.jsonl</code> fine for the single-agent case), so
-uncoordinated writers never interleave a line; the helper is the single
-reader and folds them in arrival order; and conflicting replies to one
-item resolve by rev first, then latest-wins with both kept in the log.
-Two uncoordinated peer agents could still both fix the same item in
-source; that is a coordination problem this tool does not own.</p>
+<code>replies.jsonl</code> fine for the single-agent case; the agent
+name in the filename is constrained to the same safe character set as
+review ids, because it too is a path component), so uncoordinated
+writers never interleave a line; the helper is the single reader and
+folds them in arrival order; and conflicting replies to one item resolve
+by rev first, then latest-wins with both kept in the log. Two
+uncoordinated peer agents could still both fix the same item in source;
+that is a coordination problem this tool does not own.</p>
 <pre class="mermaid"><code>sequenceDiagram
     participant K as Reviewer (on the page)
     participant L as Library
@@ -1576,8 +1638,16 @@ source; that is a coordination problem this tool does not own.</p>
 <h3 id="d7-protect-the-active-region-replay-the-committed-records">D7:
 Protect the active region, replay the committed records</h3>
 <div class="xref">
-<p>Grounds R1, R5, R15, R36. This is the liveness half that killed the
-old tool, and the half that gets the heaviest real-browser testing.</p>
+<p>Grounds <a
+href="01_brief_live_agentic_html_editor.html#the-users-work-is-never-clobbered">R1
+(nothing typed is lost) and R5 (unsent work is never silently
+overwritten)</a>, <a
+href="01_brief_live_agentic_html_editor.html#the-page-keeps-working">R15
+(keeps working while the page changes underneath)</a>, and <a
+href="01_brief_live_agentic_html_editor.html#working-with-the-agent">R36
+(the page updates itself as the agent lands changes)</a>. This is the
+liveness half that killed the old tool, and the half that gets the
+heaviest real-browser testing.</p>
 </div>
 <p>Live pages repaint themselves: Turbo morphs, framework re-renders,
 the agent's own landed changes arriving as a refresh. Two mechanisms
@@ -1600,24 +1670,26 @@ agent's landed change under the reviewer's fingers is told, not
 lost.</p>
 <p><strong>Replay.</strong> After any repaint, committed records are
 re-applied by a single replay pass. For each record it finds the anchor
-(D9) and compares against the record's history: the DOM already matches
-the current <code>after</code>, do nothing (idempotent); it matches
-<code>before</code>, apply the edit again; it matches an <strong>earlier
-rev's</strong> <code>after</code>, an old version was applied somewhere,
-so the current rev is re-applied and the card says an earlier version
-had landed; it matches none of these, the content changed underneath the
-reviewer, so the item is flagged on its card and nothing is written
-(R5). The conflict card shows <strong>both versions in full</strong>,
-the reviewer's and the page's, and the reviewer picks which one stands
-(Ken's call at the wireframe: no "see theirs" indirection, both texts
-are right there). Replay never guesses. A record whose anchor cannot be
-found uniquely is surfaced as lost, on the page and in
-<code>review.md</code>, never silently dropped or moved (R20). Two
-record kinds compare on their own terms: a <strong>format-only</strong>
-change compares on structure rather than normalized text (whose whole
-job is to ignore formatting), and a <strong>delete</strong> is
-idempotent by absence: the block gone is applied, the block back is
-re-applied.</p>
+(D9) and compares against the record's history, which exists because the
+event log keeps every rev's <code>after</code> rather than only the
+latest (the in-memory record carries that rev history for exactly this
+comparison): the DOM already matches the current <code>after</code>, do
+nothing (idempotent); it matches <code>before</code>, apply the edit
+again; it matches an <strong>earlier rev's</strong> <code>after</code>,
+an old version was applied somewhere, so the current rev is re-applied
+and the card says an earlier version had landed; it matches none of
+these, the content changed underneath the reviewer, so the item is
+flagged on its card and nothing is written (R5). The conflict card shows
+<strong>both versions in full</strong>, the reviewer's and the page's,
+and the reviewer picks which one stands (Ken's call at the wireframe: no
+"see theirs" indirection, both texts are right there). Replay never
+guesses. A record whose anchor cannot be found uniquely is surfaced as
+lost, on the page and in <code>review.md</code>, never silently dropped
+or moved (R20). Two record kinds compare on their own terms: a
+<strong>format-only</strong> change compares on structure rather than
+normalized text (whose whole job is to ignore formatting), and a
+<strong>delete</strong> is idempotent by absence: the block gone is
+applied, the block back is re-applied.</p>
 <p>When the agent lands a change and the page updates itself (R36), the
 same pass runs: the agent's change is the new page, the reviewer's
 outstanding records are re-applied on top, and a collision between the
@@ -1631,7 +1703,10 @@ discard does not exist here.</p>
 <h3 id="d8-highlights-that-do-not-change-the-page">D8: Highlights that
 do not change the page</h3>
 <div class="xref">
-<p>Grounds R14 and part of R15.</p>
+<p>Grounds <a
+href="01_brief_live_agentic_html_editor.html#the-page-keeps-working">R14
+(the library does not change how the page looks) and part of R15 (keeps
+working while the page changes underneath)</a>.</p>
 </div>
 <p>Comment highlights use the CSS Custom Highlight API, which paints a
 range without inserting anything into the DOM. The page's own
@@ -1640,11 +1715,14 @@ without the library; there are no wrapper elements to break a
 framework's diffing or to leak into quoted text. This is the one
 capability with a browser floor, and it is why the floor exists: current
 Chrome, Edge, Safari, and Firefox all have it (R42's stated reason).</p>
-<p>All library UI (rail, boxes, chips, hints) lives in a shadow root
-with its own styles, so the page's CSS cannot restyle the library and
-the library's CSS cannot touch the page. The page renders exactly as it
-does without the library, to the pixel, except painted highlights and
-the fixed rail.</p>
+<p>All library UI (rail, boxes, chips, hints) lives in a closed shadow
+root with its own styles, so the page's CSS cannot restyle the library
+and the library's CSS cannot touch the page. One named exception,
+because the highlight API requires it: the library adds a single
+page-level stylesheet containing only its own namespaced highlight
+rules, and nothing else, ever. The page renders exactly as it does
+without the library, to the pixel, except painted highlights and the
+fixed rail.</p>
 <h3 id="d9-anchors-match-by-uniqueness-not-confidence">D9: Anchors match
 by uniqueness, not confidence</h3>
 <p>A record's anchor is the normalized text of its region plus enough
@@ -1695,7 +1773,9 @@ applied to export).</p>
 <h3 id="d11-loopback-is-not-a-boundary-so-the-page-proves-itself">D11:
 Loopback is not a boundary, so the page proves itself</h3>
 <div class="xref">
-<p>Grounds R44, with no reviewer action beyond adding the library.</p>
+<p>Grounds <a href="01_brief_live_agentic_html_editor.html#safety">R44
+(only the reviewer's own review can reach their work)</a>, with no
+reviewer action beyond adding the library.</p>
 </div>
 <p>Any web page the browser has open can try to talk to a local port, so
 "it came from localhost" proves nothing, and a browser preflight is a
@@ -1726,7 +1806,10 @@ and no local helper can defend against that.</p>
 <h3 id="d12-page-text-is-data-reviewer-text-is-intent">D12: Page text is
 data; reviewer text is intent</h3>
 <div class="xref">
-<p>Grounds R45, R3.</p>
+<p>Grounds <a href="01_brief_live_agentic_html_editor.html#safety">R45
+(text off the page is context, never instructions)</a> and <a
+href="01_brief_live_agentic_html_editor.html#the-users-work-is-never-clobbered">R3
+(the reviewer's words stay exactly as typed)</a>.</p>
 </div>
 <p>In <code>review.md</code>, everything that came <em>off the page</em>
 (quoted subjects, <code>before</code> text, context) is fenced as data
@@ -1881,8 +1964,10 @@ rev, and the card says an older version had landed</td>
 </tr>
 <tr>
 <td>A second window opens the same review</td>
-<td>Refused with a reason pointing at the first; no separate feedback
-ever accumulates</td>
+<td>Refused with a reason pointing at the first, via the storage lock or
+the helper session; the one unrefusable case (different origins, no
+helper) is a known limit, and the helper reconciles by event id when it
+returns</td>
 </tr>
 <tr>
 <td>A hostile local page or non-browser client probes the helper</td>
@@ -2114,6 +2199,17 @@ draft (send model, click-to-edit, Chromium default) and its reviews are
 archived: <code>archive_architecture_v1_send_model_draft.md</code>,
 <code>archive_architecture_v1_reviews.md</code>.</p>
 <p>Reviews of this version land below as they return.</p>
+<h2 id="kens-comments-on-the-architecture-page-2026-08-12">Ken's
+comments on the architecture page (2026-08-12)</h2>
+<p>Twelve inline comments, verbatim record in
+<code>comments_02_architecture_live_agentic_html_editor.md</code>. All
+applied: the summary's two pieces are a numbered list, the
+four-semicolon sentence is short sentences, "though that is the happy
+path" added, and every reference to the dead draft and old thinking is
+gone from the prose (the "What carries over" section now states only
+what the design is). The xref "grounds" notes are links into the brief.
+Two were observations needing no change (D1 packs several small
+decisions; element-pick mode is accepted for images).</p>
 <h2 id="wireframe-reaction-ken-2026-08-12">Wireframe reaction (Ken,
 2026-08-12)</h2>
 <p>Three directions were drawn and opened (side rail, bottom dock,

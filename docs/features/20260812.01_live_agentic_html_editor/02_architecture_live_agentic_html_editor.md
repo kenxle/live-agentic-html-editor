@@ -2,15 +2,18 @@
 
 ## Summary
 
-Two pieces. A **library**: one JavaScript file added to any locally run HTML page, which draws the
-review surface, records everything the reviewer does, and keeps the page fully native the rest of the
-time. A **helper**: one local background process that stores the review durably on disk, gives the
-agent one file to read and one place to answer, and tells the library what the agent said so the page
-can show it.
+Two pieces:
 
-The design center is the flow model. There is no send. The reviewer works; each finished thing (a
-confirmed comment, a committed edit) becomes a durable **record** the moment it exists; the agent reads
-records continuously and answers per record; the page shows those answers as they arrive. Reviewer and
+1. **A library**: one JavaScript file added to any locally run HTML page. It draws the review
+   surface, records everything the reviewer does, and keeps the page fully native the rest of the
+   time.
+2. **A helper**: one local background process. It stores the review durably on disk, gives the agent
+   one file to read and one place to answer, and tells the library what the agent said so the page
+   can show it.
+
+The design center is the flow model. The reviewer works. Each finished thing (a confirmed comment, a
+committed edit) becomes a durable **record** the moment it exists. The agent reads records
+continuously and answers per record, and the page shows those answers as they arrive. Reviewer and
 agent run at the same time against the same store, and the store, not the screen, is the truth. The
 screen is a view of the records, which is what makes "the user's work is never clobbered" a property of
 the design rather than a promise.
@@ -29,23 +32,22 @@ flowchart LR
 
 The library works alone: with no helper running, everything is kept in the browser and the copy and
 export buttons carry it out (R8, R10). The helper adds durability beyond the browser and the agent
-loop. Neither piece ever needs the other to be alive at the same moment.
+loop. Neither piece ever needs the other to be alive at the same moment, though that is the happy
+path.
 
-## What carries over, and what does not
+## What carries over
 
 From our comments module: the durability posture (keep on every keystroke, depend on nothing being
-alive), the overlay rail, copy and export, the confirm-before-actionable gesture. From human-review:
-the one idea worth keeping, that a page can be edited in place, rebuilt on the opposite storage
-philosophy. From the dead first architecture draft: the protected-region and replay design, the record
-shape, and the data-fencing rules survive; the send model, the click-to-edit interaction, and the
-Chromium default are gone, contradicted by the brief.
+alive), the overlay rail, copy and export, and the confirm-before-actionable gesture. From
+human-review: that a page can be edited in place. The protected-region and replay design (D7), the
+record shape (D4), and the data-fencing rules (D12) are where the two combine.
 
 ## Key decisions
 
 ### D1: One file in the page, one process beside it
 
 ::: xref
-Grounds R40, R41, R42 (getting the library and running it).
+Grounds [R40, R41, and R42 (getting the library and running it)](01_brief_live_agentic_html_editor.html#getting-the-library-and-running-it).
 :::
 
 The library is a single built JavaScript file. Adding it to a page is one `<script>` line, which a
@@ -79,7 +81,7 @@ did (R2, R4).
 ### D3: Two page states, browse and edit, with browse fully native
 
 ::: xref
-Grounds R13 (the page keeps working, outranking editing convenience), R24, and answers Q1.
+Grounds [R13 (the page keeps working, outranking editing convenience)](01_brief_live_agentic_html_editor.html#the-page-keeps-working) and [R24 (edit the text directly, entered deliberately)](01_brief_live_agentic_html_editor.html#editing), and answers [Q1 (the gesture vocabulary)](01_brief_live_agentic_html_editor.html#open-questions).
 :::
 
 **Browse is the default and it is the page untouched.** No intercepted clicks, no contentEditable, no
@@ -131,7 +133,7 @@ which is itself an event.
 ### D5: Durability is browser storage plus an append-only log
 
 ::: xref
-Grounds R1, R8, R22.
+Grounds [R1 (nothing typed is lost) and R8 (work reaches the agent even with nothing running)](01_brief_live_agentic_html_editor.html#the-users-work-is-never-clobbered) and [R22 (a comment survives interruption)](01_brief_live_agentic_html_editor.html#commenting).
 :::
 
 Two stores, each sufficient alone:
@@ -180,7 +182,7 @@ rail; retention (Data and state) ages out only archived and abandoned reviews, n
 ### D6: The agent contract is one readable file, and replies are one appended line
 
 ::: xref
-Grounds R6, R7, R33, R34; agent-agnostic per the non-goals.
+Grounds [R6 (feedback flows as the reviewer works) and R7 (the reviewer decides when a comment is done)](01_brief_live_agentic_html_editor.html#the-users-work-is-never-clobbered) and [R33 and R34 (the agent reports per item, and says so on the page when it cannot do something)](01_brief_live_agentic_html_editor.html#working-with-the-agent); agent-agnostic per [the non-goals](01_brief_live_agentic_html_editor.html#non-goals).
 :::
 
 The helper maintains **`review.md`**: one file per review, regenerated from the log (atomically:
@@ -260,7 +262,7 @@ sequenceDiagram
 ### D7: Protect the active region, replay the committed records
 
 ::: xref
-Grounds R1, R5, R15, R36. This is the liveness half that killed the old tool, and the half that gets
+Grounds [R1 (nothing typed is lost) and R5 (unsent work is never silently overwritten)](01_brief_live_agentic_html_editor.html#the-users-work-is-never-clobbered), [R15 (keeps working while the page changes underneath)](01_brief_live_agentic_html_editor.html#the-page-keeps-working), and [R36 (the page updates itself as the agent lands changes)](01_brief_live_agentic_html_editor.html#working-with-the-agent). This is the liveness half that killed the old tool, and the half that gets
 the heaviest real-browser testing.
 :::
 
@@ -309,7 +311,7 @@ not exist here.
 ### D8: Highlights that do not change the page
 
 ::: xref
-Grounds R14 and part of R15.
+Grounds [R14 (the library does not change how the page looks) and part of R15 (keeps working while the page changes underneath)](01_brief_live_agentic_html_editor.html#the-page-keeps-working).
 :::
 
 Comment highlights use the CSS Custom Highlight API, which paints a range without inserting anything
@@ -363,7 +365,7 @@ of the review, never passed off as the whole (R10, R11's no-false-success rule a
 ### D11: Loopback is not a boundary, so the page proves itself
 
 ::: xref
-Grounds R44, with no reviewer action beyond adding the library.
+Grounds [R44 (only the reviewer's own review can reach their work)](01_brief_live_agentic_html_editor.html#safety), with no reviewer action beyond adding the library.
 :::
 
 Any web page the browser has open can try to talk to a local port, so "it came from localhost" proves
@@ -389,7 +391,7 @@ directly, and no local helper can defend against that.
 ### D12: Page text is data; reviewer text is intent
 
 ::: xref
-Grounds R45, R3.
+Grounds [R45 (text off the page is context, never instructions)](01_brief_live_agentic_html_editor.html#safety) and [R3 (the reviewer's words stay exactly as typed)](01_brief_live_agentic_html_editor.html#the-users-work-is-never-clobbered).
 :::
 
 In `review.md`, everything that came *off the page* (quoted subjects, `before` text, context) is

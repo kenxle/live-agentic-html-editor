@@ -6,6 +6,15 @@ click-to-edit, Chromium default) and its reviews are archived:
 
 Reviews of this version land below as they return.
 
+## Ken's comments on the architecture page (2026-08-12)
+
+Twelve inline comments, verbatim record in `comments_02_architecture_live_agentic_html_editor.md`.
+All applied: the summary's two pieces are a numbered list, the four-semicolon sentence is short
+sentences, "though that is the happy path" added, and every reference to the dead draft and old
+thinking is gone from the prose (the "What carries over" section now states only what the design is).
+The xref "grounds" notes are links into the brief. Two were observations needing no change (D1 packs
+several small decisions; element-pick mode is accepted for images).
+
 ## Wireframe reaction (Ken, 2026-08-12)
 
 Three directions were drawn and opened (side rail, bottom dock, margin annotations), same content in
