@@ -10,6 +10,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const epochModule = require("../../src/shared/epoch.js");
+const { nextTask } = require("../helpers/poll.js");
 
 test("the epoch is open for the duration of a tool write", () => {
   const e = epochModule.createEpoch();
@@ -36,7 +37,7 @@ test("the depth drops in a MICROTASK, not synchronously", async () => {
   });
 
   assert.equal(e.isWriting(), true, "still open synchronously after write returns");
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await nextTask();
   assert.equal(seenByObserver, true, "the observer must see the epoch open and skip its own batch");
   assert.equal(e.isWriting(), false, "and it must be closed by the next task");
 });
@@ -44,12 +45,12 @@ test("the depth drops in a MICROTASK, not synchronously", async () => {
 test("a mutation after the epoch closes is NOT suppressed", async () => {
   const e = epochModule.createEpoch();
   e.write("replay", () => {});
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await nextTask();
   let seen = null;
   queueMicrotask(() => {
     seen = e.isWriting();
   });
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await nextTask();
   assert.equal(seen, false, "a genuine page repaint after the write must still schedule a pass");
 });
 
@@ -62,7 +63,7 @@ test("nested writes keep the epoch open until the outermost one closes", async (
   });
   assert.equal(innerSeen, true);
   assert.equal(e.isWriting(), true);
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await nextTask();
   assert.equal(e.isWriting(), false);
 });
 
@@ -73,7 +74,7 @@ test("an exception inside a write does not pin the epoch open forever", async ()
       throw new Error("boom");
     });
   }, /boom/);
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await nextTask();
   assert.equal(e.isWriting(), false, "otherwise the observer is muted for the rest of the session");
 });
 

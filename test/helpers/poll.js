@@ -80,9 +80,22 @@ async function pollPage(page, pageFunction, arg = undefined, options = {}) {
   }
 }
 
+/**
+ * Yield one macrotask turn. Not a sleep: a zero-delay task boundary, used where
+ * a test must observe "after the microtask queue drained and the next task ran"
+ * (the write-epoch tests depend on exactly that ordering). Duration is always
+ * zero, so there is nothing to tune and nothing to flake.
+ */
+function nextTask() {
+  return new Promise(function (resolve) {
+    setTimeout(resolve, 0);
+  });
+}
+
 module.exports = {
   DEFAULT_TIMEOUT_MS,
   DEFAULT_INTERVAL_MS,
   pollUntil,
-  pollPage
+  pollPage,
+  nextTask
 };

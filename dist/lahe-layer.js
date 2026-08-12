@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+0172895685c5
+ * version 0.0.0+8e6a80459d5b
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+0172895685c5";
+  g.LAHE.version = "0.0.0+8e6a80459d5b";
 })();
 /* ---- src/shared/markers.js  (owner: 0a kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -1148,13 +1148,24 @@
   // A CSPRNG is required in both environments; Node 20 and Chromium both have
   // globalThis.crypto. Missing entropy is an error, not a Math.random fallback:
   // two items sharing an id is silent, permanent feedback loss.
-  function randomId(prefix) {
-    var c = typeof globalThis !== "undefined" ? globalThis.crypto : null;
-    if (!c || typeof c.getRandomValues !== "function") {
-      throw new Error("randomId: no CSPRNG available (globalThis.crypto.getRandomValues)");
+  function csprngBytes(n) {
+    var g = typeof globalThis !== "undefined" ? globalThis : null;
+    if (g && g.crypto && typeof g.crypto.getRandomValues === "function") {
+      var b = new Uint8Array(n);
+      g.crypto.getRandomValues(b);
+      return b;
     }
-    var bytes = new Uint8Array(12);
-    c.getRandomValues(bytes);
+    // Node without the webcrypto global. Node's own crypto module is built in,
+    // so reaching for it is not a dependency. Guarded on there being no window
+    // so a browser page that happens to define require never takes this path.
+    if (typeof require === "function" && typeof window === "undefined") {
+      return new Uint8Array(require("node:crypto").randomBytes(n));
+    }
+    throw new Error("randomId: no CSPRNG available (globalThis.crypto.getRandomValues)");
+  }
+
+  function randomId(prefix) {
+    var bytes = csprngBytes(12);
     var hex = "";
     for (var i = 0; i < bytes.length; i += 1) {
       hex += (bytes[i] + 0x100).toString(16).slice(1);
@@ -1612,9 +1623,10 @@
     },
     {
       name: "tag_ordinal",
-      why: "last resort: a tag and a document-order position, always available",
+      why: "last resort: a tag and a document-order position, available for any element",
       get: function (d) {
-        return (d.tag || "block") + " " + (d.ordinal || 1);
+        if (!d.tag) return null;
+        return d.tag + " " + (d.ordinal || 1);
       }
     },
     {
@@ -1892,8 +1904,14 @@
       } else if (probe && text && (text.indexOf(probe) !== -1 || probe.indexOf(text) !== -1)) {
         match = MATCH.CONTAINS;
       }
+      // The structural path CORROBORATES a text match. It never produces a
+      // candidate on its own here, because a document where every miss also
+      // emits a structure-only candidate would report structure_only as the
+      // reason for every miss, which tells the reviewer nothing. Task 1C's real
+      // engine does emit a structure-only candidate in the one case that
+      // deserves it: an author-supplied region attribute matched and the text
+      // did not. selectUnique refuses that candidate either way.
       var structural = typeof ref.path === "number" && ref.path === i;
-      if (!match && structural) match = MATCH.STRUCTURE;
       if (!match) continue;
       out.push({
         key: i,
@@ -4518,7 +4536,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+0172895685c5";
+  var VERSION = "0.0.0+8e6a80459d5b";
 
   function isLoopbackOrigin(origin) {
     if (typeof origin !== "string" || !origin) return false;
