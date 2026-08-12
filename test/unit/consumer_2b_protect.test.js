@@ -29,6 +29,16 @@ function anElement() {
     getAttribute(k) {
       return Object.prototype.hasOwnProperty.call(this.attrs, k) ? this.attrs[k] : null;
     },
+    // 2B's landed protect.js reads and clears attributes as well as writing
+    // them: layer one takes its skip attributes back off on release, and layer
+    // three saves the block's editing surface so it can re-apply it after a
+    // repaint rebuilt the element. A stand-in element needs the whole trio.
+    hasAttribute(k) {
+      return Object.prototype.hasOwnProperty.call(this.attrs, k);
+    },
+    removeAttribute(k) {
+      delete this.attrs[k];
+    },
     contains(node) {
       return node === el || children.indexOf(node) !== -1;
     }
@@ -68,8 +78,11 @@ test("2B's layer three has its own counters, which its own assertion reads", () 
   protect.resetCounters();
   const el = anElement();
   protect.mark(el, null);
+  // Marking takes the first snapshot itself: a repaint that lands before the
+  // reviewer's first keystroke would otherwise have nothing to restore to.
+  assert.equal(protect.counters.snapshots, 1, "mark takes the opening snapshot");
   const snap = protect.snapshot(el);
-  assert.equal(protect.counters.snapshots, 1);
+  assert.equal(protect.counters.snapshots, 2);
   assert.equal(typeof snap.collapsed, "boolean");
   assert.equal(snap.text, "the block being edited");
   protect.restore(snap, el);
