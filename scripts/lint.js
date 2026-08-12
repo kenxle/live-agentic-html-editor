@@ -14,12 +14,20 @@
 //      merge conflict every time both touch it; a file with none is a thing
 //      nobody built.
 //
-// On the manifest check being read GENERICALLY: 0A-kernel is rewriting
-// shared/manifest.js, so this check does not bind to today's entry names. It
-// takes every array the manifest exports, pulls a path out of each entry
+// THE THREE MANIFEST RULES, per the orchestrator's ruling on the seam:
+//
+//   a. Every file ON DISK under src/ appears exactly once across the lists.
+//   b. An entry carrying `planned: true` may be absent from disk. Those name a
+//      file a later task creates, and they are in the manifest early precisely
+//      so the ownership question has an answer before the file exists.
+//   c. Any other entry must exist on disk. That includes `cut: true` entries,
+//      which are on disk until the Phase 4B batch removes them and so need no
+//      special case.
+//
+// On the check being read GENERICALLY: it does not bind to today's entry names.
+// It takes every array the manifest exports, pulls a path out of each entry
 // (a bare string, or an object with a path-ish field), and compares that set
-// against the real tree. Whatever list-of-paths shape the rewrite lands on, this
-// keeps working.
+// against the real tree.
 
 const { execFileSync } = require("node:child_process");
 const path = require("node:path");
@@ -164,20 +172,24 @@ function pathOf(entry) {
 // names LAYER_FILES and NON_BUNDLE_FILES would have to be rewritten with it.
 function manifestPaths(manifest) {
   const counts = new Map();
+  const planned = new Set();
   const lists = [];
   Object.keys(manifest).forEach(function (key) {
     const value = manifest[key];
     if (!Array.isArray(value)) return;
-    const paths = value.map(pathOf).filter(function (value) {
-      return typeof value === "string" && value.indexOf("src/") === 0;
+    const entries = value.filter(function (entry) {
+      const file = pathOf(entry);
+      return typeof file === "string" && file.indexOf("src/") === 0;
     });
-    if (paths.length === 0) return;
+    if (entries.length === 0) return;
     lists.push(key);
-    paths.forEach(function (file) {
+    entries.forEach(function (entry) {
+      const file = pathOf(entry);
       counts.set(file, (counts.get(file) || 0) + 1);
+      if (entry && typeof entry === "object" && entry.planned === true) planned.add(file);
     });
   });
-  return { counts: counts, lists: lists };
+  return { counts: counts, planned: planned, lists: lists };
 }
 
 function checkManifest() {
@@ -195,7 +207,7 @@ function checkManifest() {
     return;
   }
 
-  const { counts, lists } = manifestPaths(manifest);
+  const { counts, planned, lists } = manifestPaths(manifest);
   if (lists.length === 0) {
     fail("manifest", [
       MANIFEST_PATH + " exports no array holding src/ paths, so completeness cannot be checked.",
@@ -216,9 +228,13 @@ function checkManifest() {
     .map(function (entry) {
       return entry[0] + " (listed " + entry[1] + " times)";
     });
+  // An entry with no file. `planned: true` says a later task creates it, which
+  // is the whole reason those entries are written before the file exists.
+  // Anything else with no file on disk is a manifest that has drifted from the
+  // tree, and the gate should say so.
   const phantom = Array.from(counts.keys())
     .filter(function (file) {
-      return onDisk.indexOf(file) === -1;
+      return onDisk.indexOf(file) === -1 && !planned.has(file);
     })
     .sort();
 
@@ -245,24 +261,14 @@ function checkManifest() {
   }
   if (phantom.length > 0) {
     lines.push("");
-    lines.push("  IN THE MANIFEST, NOT ON DISK:");
+    lines.push("  IN THE MANIFEST, NOT ON DISK, AND NOT MARKED planned:");
     phantom.forEach(function (file) {
       lines.push("    " + file);
     });
+    lines.push("");
+    lines.push("  A file a later task still has to create carries `planned: true`, and is");
+    lines.push("  allowed to be absent. Anything else here is drift between the two.");
   }
-  lines.push("");
-  lines.push(
-    "  EXPECTED TO PASS AFTER 0A-kernel. The manifest in the repo today was written"
-  );
-  lines.push(
-    "  against the archived draft and is being rewritten against the plan's ownership"
-  );
-  lines.push(
-    "  table by 0A-kernel, who owns this file. Until that lands this check fails, and"
-  );
-  lines.push(
-    "  it fails loudly on purpose: skipping it is how a file with no owner ships."
-  );
   fail("manifest", lines);
 }
 
