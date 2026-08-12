@@ -167,7 +167,12 @@ per-rev status.
 
 A second window on the same page is **refused with a reason** pointing at the first. Joining looked
 cheap until drafts entered the picture: two windows sharing one draft bucket is last-keystroke-wins,
-which is silent loss. Refusal costs the reviewer nothing and loses nothing.
+which is silent loss. Refusal costs the reviewer nothing and loses nothing. The refusal has two
+mechanisms and one named limit: windows that can see each other's storage refuse through a
+client-side lock, windows that cannot are refused by the helper's session (with a takeover after a
+crashed window's heartbeat goes quiet), and two windows on different origins with no helper running
+cannot be refused by anything, so that one case is a stated limit in the failure table rather than a
+claim.
 
 A review **starts** when the add step mints it and **ends** when the reviewer archives it from the
 rail; retention (Data and state) ages out only archived and abandoned reviews, never a live one.
@@ -490,7 +495,7 @@ position.
 | Browser crash mid-keystroke | Browser storage has everything up to the last keystroke (R1) |
 | Link clicked while an edit is open | The edit commits on the way out and is re-posted on the next page load (R1 names navigation) |
 | An agent applied an outdated rev of an edit | Replay recognizes the earlier rev's text, re-applies the current rev, and the card says an older version had landed |
-| A second window opens the same review | Refused with a reason pointing at the first; no separate feedback ever accumulates |
+| A second window opens the same review | Refused with a reason pointing at the first, via the storage lock or the helper session; the one unrefusable case (different origins, no helper) is a known limit, and the helper reconciles by event id when it returns |
 | A hostile local page or non-browser client probes the helper | Refused server-side on every request: no valid token, custom header, content type, Host, and origin together, no handler runs (R44) |
 | A page's own CSP blocks the library's requests | Distinct on the status line from "helper not running", so the reviewer fixes the right thing |
 | The reviewer dismisses an error | It stays dismissed; the underlying state is still visible in the status line (R11) |
