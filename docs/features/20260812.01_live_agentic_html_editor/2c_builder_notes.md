@@ -33,7 +33,7 @@ counters and `compare()` were 0A-kernel's and did not move. What is new:
   `setCardNotice`. The test asserts the module's own constant, so the message a test asserts
   and the message the reviewer reads cannot drift apart.
 
-### Two decisions that were not in the plan, and why they had to be made
+### Three decisions that were not in the plan, and why they had to be made
 
 **1. Multi-probe resolution (D9 at replay time).** A reference's probe is the region's text
 at mint time, which is the record's `before`. The moment replay writes `after` into that
