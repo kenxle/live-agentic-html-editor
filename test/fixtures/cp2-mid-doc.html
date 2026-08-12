@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>CP2-mid Fixture</title>
+  <style>
+    body { font: 16px/1.6 system-ui, sans-serif; max-width: 46rem; margin: 2rem auto; color: #1c1c1c; }
+    h1 { font-size: 1.6rem; }
+    h2 { font-size: 1.1rem; margin-top: 2rem; }
+    [data-repaint-target] { border: 1px dashed #cfd6e0; padding: 0.75rem; }
+    p { margin: 0 0 1rem; }
+    p:last-child { margin-bottom: 0; }
+  </style>
+</head>
+<body>
+  <!--
+    CP2-mid's page: 2A's editing, 2B's protection and 2C's replay on one
+    document, all real, with the built bundle on it.
+
+    It is its own fixture and not an edit of replay-doc.html or editing-doc.html.
+    Those two pages are what their builders' specs measure, and CP2-mid needs
+    something neither of them is: a page whose records are made by real
+    gestures, that re-renders itself while they are being made, and where every
+    module is the shipped one.
+
+    The regions, and why there are these ones:
+
+      #region-a   the block the reviewer is inside. It lives in the repaint
+                  target, so the page is actively trying to revert it
+      #region-b   the reviewer's committed edit that the page keeps rewriting
+                  back to the source. Replay re-applies it, pass after pass
+      #region-c   a second committed edit nobody touches, so "every other record
+                  is byte-identical" has something to be true about
+      #region-d   the reviewer deleted this block. The repaint keeps putting it
+                  back, which is a delete replay has to keep applying
+      #region-outside  outside every repaint target: the blast-radius control
+
+    Served from the REPO ROOT, so /dist/lahe-layer.js is reachable beside it.
+  -->
+  <h1 id="page-title">This week</h1>
+
+  <div id="live-frame" data-repaint-target="live">
+    <h2 id="live-heading">The plan</h2>
+    <p id="region-a" data-region="region-a">The trainer writes the plan every week.</p>
+    <p id="region-b" data-region="region-b">Dana moved her long run to Saturday because of the weather.</p>
+    <p id="region-c" data-region="region-c">Marcus is resting completely on Wednesday.</p>
+    <p id="region-d" data-region="region-d">This paragraph is here to be deleted.</p>
+  </div>
+
+  <div id="static-frame">
+    <h2 id="static-heading">Notes</h2>
+    <p id="region-outside" data-region="region-outside">This block is outside every repaint target and never re-renders.</p>
+  </div>
+
+  <script src="/dist/lahe-layer.js"></script>
+  <script src="/test/fixtures/assets/repaint-engine.js"></script>
+  <script src="/test/fixtures/assets/cp2-mid-boot.js"></script>
+</body>
+</html>

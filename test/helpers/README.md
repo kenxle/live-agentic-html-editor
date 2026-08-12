@@ -29,6 +29,11 @@ Three Playwright projects: `chromium`, `firefox`, `webkit`. A bare
 `playwright test` runs **Chromium only**, so a builder's loop stays one browser
 wide; `--project=webkit` runs one lane by name when you are debugging it.
 
+**`--project` needs `LAHE_ALL_BROWSERS=1` alongside it.** On its own it fails with
+`Project "<name>" not found in the worker process`: the config reads `process.argv` to
+decide which projects exist, and the worker process does not carry the flag. So
+`LAHE_ALL_BROWSERS=1 npx playwright test --project=webkit <file>`.
+
 | Command | What it runs |
 | --- | --- |
 | `npm run gate:builder` | lint, unit, Chromium. **This is the one a builder runs.** No `check:layer`, because builders never commit `dist/`. |
