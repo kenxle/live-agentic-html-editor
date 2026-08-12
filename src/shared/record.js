@@ -390,17 +390,32 @@
   // is exactly what replay's branch three compares against: an earlier version
   // landed somewhere, so the current revision is re-applied and the card says
   // an earlier version had landed.
-  function priorAfters(item) {
-    var current = item[FIELD.AFTER];
+  //
+  // `field` is FIELD.AFTER for an ordinary record and FIELD.AFTER_HTML for a
+  // format-only one, whose difference lives in the markup rather than in the
+  // text. The history entry carries both, so one history serves both modes.
+  function priorAfters(item, field) {
+    var key = field === FIELD.AFTER_HTML ? "after_html" : "after";
+    var current = item[field === FIELD.AFTER_HTML ? FIELD.AFTER_HTML : FIELD.AFTER];
     var out = [];
     var history = item[FIELD.AFTER_HISTORY] || [];
     for (var i = 0; i < history.length; i += 1) {
-      var entry = history[i];
-      if (typeof entry.after !== "string") continue;
-      if (entry.after === current) continue;
-      if (out.indexOf(entry.after) === -1) out.push(entry.after);
+      var value = history[i][key];
+      if (typeof value !== "string") continue;
+      if (value === current) continue;
+      if (out.indexOf(value) === -1) out.push(value);
     }
     return out;
+  }
+
+  // Which pair of fields a record compares on. A format-only record's whole
+  // difference is in the markup, so comparing its `after` (identical to its
+  // `before` by construction) would make the branch a silent no-op.
+  function comparisonFields(item) {
+    if (item[FIELD.KIND] === KIND.FORMAT_ONLY) {
+      return { before: FIELD.BEFORE_HTML, after: FIELD.AFTER_HTML };
+    }
+    return { before: FIELD.BEFORE, after: FIELD.AFTER };
   }
 
   // ---------------------------------------------------------------------------
@@ -492,6 +507,7 @@
     bumpRev: bumpRev,
     historyEntry: historyEntry,
     priorAfters: priorAfters,
+    comparisonFields: comparisonFields,
     validateItem: validateItem,
     isDraft: isDraft,
     isReady: isReady,

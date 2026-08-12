@@ -203,6 +203,10 @@
   function compare(item, domText) {
     var mode = record.comparisonMode(item);
     var F = record.FIELD;
+    // A format-only record compares on its MARKUP fields: its `after` text is
+    // identical to its `before` by construction, so comparing text would make
+    // this whole branch a silent no-op.
+    var fields = record.comparisonFields(item);
 
     // A delete is idempotent by absence: the block gone is applied, the block
     // back is re-applied. The caller passes null for a region that is not in
@@ -221,16 +225,16 @@
       throw new TypeError("replay.compare: domText must be a string for a " + item[F.KIND] + " record");
     }
 
-    if (typeof item[F.AFTER] === "string" && normalize.equalsInMode(mode, domText, item[F.AFTER])) {
+    if (typeof item[fields.after] === "string" && normalize.equalsInMode(mode, domText, item[fields.after])) {
       return { branch: BRANCH.ALREADY_APPLIED, earlierAfter: null };
     }
-    if (typeof item[F.BEFORE] === "string" && normalize.equalsInMode(mode, domText, item[F.BEFORE])) {
+    if (typeof item[fields.before] === "string" && normalize.equalsInMode(mode, domText, item[fields.before])) {
       return { branch: BRANCH.REAPPLY, earlierAfter: null };
     }
 
     // Branch three. Every `after` this record has had, other than the current
     // one, read from the applied history the record carries.
-    var priors = record.priorAfters(item);
+    var priors = record.priorAfters(item, fields.after);
     for (var i = 0; i < priors.length; i += 1) {
       if (normalize.equalsInMode(mode, domText, priors[i])) {
         return { branch: BRANCH.EARLIER_REVISION, earlierAfter: priors[i] };

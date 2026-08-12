@@ -199,6 +199,12 @@ cursor.
 unknown mode rather than falling back to text: a silent fallback makes the whole format-only branch a
 no-op that looks like a working feature.
 
+`record.comparisonFields(item)` says **which pair of fields** to compare: `before`/`after` for an
+ordinary record, and `before_html`/`after_html` for a format-only one, whose `after` text is identical
+to its `before` by construction. Comparing a format-only record on its text fields is a silent no-op
+that looks like a working branch. `record.priorAfters(item, field)` takes the same field, so one
+history serves both modes.
+
 **Formatting is a closed list: bold and italic, nothing else in v1** (`normalize.STRUCTURAL_TAGS`).
 `cleanMarkup` renames `b` to `strong` and `i` to `em` first, so the comparator only ever sees two tag
 names, and a framework reserializing a span or adding a wrapper class is not a format change.
