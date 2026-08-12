@@ -360,15 +360,22 @@
     const snap = snapshots[name];
     const el = regionElement(name);
     if (!snap || !el || el.textContent === snap.text) return false;
+    // The protected element reference points at the node the repaint destroyed,
+    // so protection has to be re-established on the node that replaced it.
+    const wasProtected = !!active && !active.element.isConnected;
     restoring = true;
     let placed = true;
     try {
       el.innerHTML = snap.html;
-      // The repaint rebuilt the block itself, so it came back without its edit
-      // state. Putting the text back and leaving the block dead to the keyboard
-      // is not a restore. This is the stub's version of the remount contract 2D
-      // owns in the real library.
+      // The repaint rebuilt the BLOCK ITSELF, not just its children, so it came
+      // back with no edit state and no listeners on it. Putting the text back and
+      // leaving the block dead to the keyboard is not a restore: the next
+      // keystroke goes nowhere, the snapshot goes stale, and every later repaint
+      // restores the same one sentence. This is the stub's version of the
+      // remount contract 2D owns in the real library.
       applyEditState(el);
+      bindEditListeners(el, name);
+      if (wasProtected) mark(el, { reason: "restore" });
       el.focus();
       if (snap.caret !== null) placed = placeCaretAt(el, snap.caret);
     } finally {
@@ -419,6 +426,27 @@
     el.setAttribute("autocapitalize", "off");
   }
 
+  // Bound per element, not per region, because the repaint replaces the element.
+  // The dataset flag rides on the node, so a rebuilt node binds again and the
+  // node that survives does not double-bind.
+  function bindEditListeners(el, region) {
+    if (el.dataset.laheBound === "1") return;
+    el.dataset.laheBound = "1";
+    // `input` fires synchronously after the keystroke landed and before any
+    // MutationObserver callback, so the snapshot is always ahead of the observer
+    // that reads it.
+    el.addEventListener("input", function () {
+      snapshot(el);
+    });
+    el.addEventListener("keyup", function () {
+      snapshot(el);
+    });
+    el.addEventListener("blur", function () {
+      if (!config.commitOnBlur || !el.isConnected) return;
+      commitEdit(region);
+    });
+  }
+
   function clearEditState(el) {
     delete el.dataset.laheEditing;
     el.removeAttribute("contenteditable");
@@ -456,20 +484,7 @@
     }
 
     applyEditState(el);
-    if (!el.dataset.laheBound) {
-      el.dataset.laheBound = "1";
-      el.addEventListener("input", function () {
-        snapshot(el);
-      });
-      el.addEventListener("keyup", function () {
-        snapshot(el);
-      });
-      el.addEventListener("blur", function () {
-        if (!config.commitOnBlur || !el.isConnected) return;
-        commitEdit(region);
-      });
-    }
-
+    bindEditListeners(el, region);
     mark(el, { reason: GESTURE.EDIT_BLOCK });
     return Object.assign({}, item);
   }
@@ -485,6 +500,15 @@
     const el = regionElement(region);
     const item = itemFor(region);
     if (!el || !item) return null;
+
+    // The gesture table's `when` column: COMMIT_EDIT applies when a block is in
+    // edit state, and there is nothing to commit otherwise. This is load-bearing
+    // rather than defensive. Clearing edit state removes contenteditable, which
+    // blurs the block, which fires the blur handler, which commits again: the
+    // second commit finds the item already ready and bumps its rev, so one edit
+    // arrives at the agent as a rewording that never happened, and a reply
+    // naming rev 1 gets refused for no reason.
+    if (!el.dataset.laheEditing) return Object.assign({}, item);
 
     if (item.state !== STATE.DRAFT) {
       // A second commit after a re-entry is a rewording: it bumps rev, which is

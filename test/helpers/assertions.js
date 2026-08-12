@@ -294,7 +294,10 @@ async function assertNoSecondWrite(page, config) {
 async function assertCaretRestoredAcrossRepaints(page, options) {
   const selector = options.selector;
   const text = options.text ?? "0123456789";
-  const restoreCounter = options.restoreCounter ?? "caretRestores";
+  // src/layer/protect.js publishes this counter and spells it `restores`. The
+  // harness reads the kernel's name rather than one of its own, so 2B does not
+  // have to discover that layer three scores zero for a naming reason.
+  const restoreCounter = options.restoreCounter ?? "restores";
   const minRestores = options.minRestores ?? 1;
   const trailingRepaints = options.trailingRepaints ?? 2;
   const repaintTimeoutMs = options.repaintTimeoutMs ?? 4000;

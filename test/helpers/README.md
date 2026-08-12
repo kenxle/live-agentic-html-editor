@@ -153,7 +153,7 @@ it, then asserts four things:
 
 ```js
 await configureFixture(page, { protection: "veto", flavor: "turbo-frame" });
-await enableEditing(page);
+await editBlock(page, "live-note");
 const result = await assertCaretSurvivesTyping(page, {
   selector: "#live-note",
   text: "0123456789",
@@ -191,7 +191,8 @@ const result = await assertCaretRestoredAcrossRepaints(page, {
 });
 ```
 
-`restoreCounter` names the counter to read, and defaults to `caretRestores`.
+`restoreCounter` names the counter to read, and defaults to `restores`, which is
+what `src/layer/protect.js` calls it.
 
 ### `assertNoSecondWrite(page, { selector, action, minReplayPasses })`
 
@@ -359,11 +360,14 @@ The real layer must publish, behind whatever test-hooks flag it wants:
 ```js
 window.__lahe.counters.replayPasses    // ++ once per replay pass, written or not
 window.__lahe.counters.regionsWritten  // ++ once per region replay wrote to the DOM
-window.__lahe.counters.caretRestores   // ++ once per protection-layer-three restore
+window.__lahe.counters.restores        // ++ once per protection-layer-three restore
 ```
 
-`caretRestores` is 2B's, and `assertCaretRestoredAcrossRepaints` reads it. Name
-it something else if you must, and pass `restoreCounter` to the assertion.
+`restores` is 2B's, and it is what `src/layer/protect.js` already calls it. The
+same module publishes `marked`, `vetoes`, `snapshots` and `restoreFailures`, and
+the stub carries all five under those names so a test reads the same counter
+whichever is loaded. `assertCaretRestoredAcrossRepaints` takes `restoreCounter`
+if you must call it something else.
 
 `replayPasses` must increment on a pass that wrote nothing. That is what makes it
 possible to assert "replay ran five times and wrote nothing", which is the
@@ -398,12 +402,53 @@ app-side veto looks for.
 
 ### 4. The whole of `stub.js`
 
-`enableEditing`, `commitRegion`, `replayNow`, `layerRecords` are shims over
-`window.__lahe.stub`. Point them at the real layer's equivalents. `configureStub`
-is stub-only by design: it switches off the behaviors under test so the negative
-self-tests can watch the assertions fail. When the real layer lands, the negative
-tests either keep using a fixture page that loads the stub, or get rewritten as
-the one-line deliberate revert the plan requires of every builder.
+Every function is a shim over `window.__lahe.stub`, and **every name in it is the
+kernel's name**, not the harness's. Point each one at the real library's
+equivalent:
+
+| Helper | Stands in for |
+| --- | --- |
+| `editBlock(page, region)` | `GESTURE.EDIT_BLOCK`, Cmd-Shift-E on one block |
+| `commitEdit(page, region)` | `GESTURE.COMMIT_EDIT`, Esc or a click outside |
+| `markReadyItem(page, region)` | `GESTURE.MARK_READY`, Cmd-Enter on a comment box |
+| `protectBlock` / `releaseBlock` / `isBlockProtected` | `protect.mark` / `protect.release` / `protect.isProtected` |
+| `layerItems(page)` / `itemFor(page, region)` | the store, returning items in `record.js` shape |
+| `replayNow(page)` / `replayTimes(page, n)` | replay's entry point |
+
+**There is no page-wide "make everything editable" any more.** Edit state is per
+block and entered deliberately (D3), so a test names the block it means, and a
+test that only pokes the DOM gets a page in browse mode. That is not a harness
+detail: browse being the page untouched is R13, and a fixture that quietly turned
+on `contenteditable` everywhere would let a library that captures every click
+pass.
+
+**Order matters in a negative half.** Entering edit state marks the block, so a
+test that means "nothing protects this region" calls `configureStub` first and
+`editBlock` after.
+
+`configureStub` is stub-only by design. Its knobs are one per protection layer
+plus the replay behaviors, so a test can switch off exactly one thing:
+`cooperativeSkip`, `veto`, `snapshotRestore`, `idempotent`, `respectCaret`,
+`commitOnBlur`. An unknown knob name throws rather than being ignored, because a
+typo that silently leaves a behavior on makes a negative half pass for no reason.
+When the real library lands, the negative tests either keep using a fixture page
+that loads the stub, or get rewritten as the one-line deliberate revert the plan
+requires of every builder.
+
+### How the stub stays honest about the vocabulary
+
+The stub does **not** require or bundle the real modules: the fixture server's
+root is `test/fixtures`, the built bundle is `dist/lahe-layer.js`, and builders
+are forbidden from rebuilding `dist/`, so a harness that loaded the bundle would
+make every browser self-test depend on an artifact no builder may refresh.
+
+The cost of that is that the stub holds copies of the kernel's names, and a copy
+drifts. The guard is `test/unit/harness_stub_vocabulary.test.js`, which reads the
+names out of the stub source and compares them against `src/shared/record.js`,
+`src/shared/gestures.js` and `src/layer/protect.js`. Rename a state, a kind, a
+gesture, a protection counter, or a record field, and it fails in the unit suite
+with both spellings side by side, rather than in a browser test three phases later
+with a symptom that looks like a broken assertion.
 
 ### A note on the normalizer
 

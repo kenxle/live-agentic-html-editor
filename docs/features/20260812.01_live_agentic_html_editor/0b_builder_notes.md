@@ -273,3 +273,159 @@ The plan's own Cleanup needed list (`test/fixtures/sample.html`,
 `test/browser/sample.spec.js`, the six cut `src/` files) is unchanged by this
 task. Note that `test/browser/sample.spec.js` still runs and still passes on all
 three lanes; it is a cut, not a break.
+
+---
+
+# 0B, second pass: the manifest ruling and the stub rescope
+
+Picked up after the orchestrator merged 0A-kernel and 0C into `task/0b-harness`.
+
+## 1. The manifest seam, per the orchestrator's ruling
+
+`scripts/lint.js` now applies three rules instead of one:
+
+- Every file **on disk** under `src/` appears exactly once across the manifest's
+  lists.
+- An entry carrying `planned: true` **may** be absent from disk. Those name a
+  file a later task creates, and they exist early so the ownership question has
+  an answer before the file does.
+- Any other entry must exist on disk. `cut: true` entries are on disk until the
+  Phase 4B batch, so they need no special case, and they do not get one.
+
+The check still reads the manifest generically (every exported array, a path
+pulled from each entry), so it is not bound to the kernel's entry names.
+
+Demonstrated that the phantom half still bites, by dropping `planned: true` from
+one entry:
+
+```
+lint [manifest] FAILED
+  IN THE MANIFEST, NOT ON DISK, AND NOT MARKED planned:
+    src/layer/highlight.js
+
+  A file a later task still has to create carries `planned: true`, and is
+  allowed to be absent. Anything else here is drift between the two.
+```
+
+Restored immediately. `npm run lint` is now green in this clone:
+`lint passed (syntax: 97 files, no jsdom, manifest complete)`.
+
+## 2. The stub rescope
+
+`test/fixtures/assets/harness-stub.js` and `test/helpers/stub.js` are rewritten
+against the landed kernel, read rather than guessed. The surface is the plan's
+five words: **enter edit state on a block, protect, release, commit, mark ready.**
+
+| Was | Is | Why |
+| --- | --- | --- |
+| `enableEditing(page)` (every region at once) | `editBlock(page, region)` | Edit state is per block and entered deliberately (D3). A page-wide contentEditable is the inversion the design exists to remove, so it does not exist in the harness either. |
+| `commitRegion` | `commitEdit` | `GESTURE.COMMIT_EDIT` |
+| (none) | `markReadyItem` | `GESTURE.MARK_READY`, a different gesture on a different surface: only one of the two lifts protection. |
+| (none) | `protectBlock` / `releaseBlock` / `isBlockProtected` | `protect.mark` / `release` / `isProtected`, so a test can exercise one protection layer at a time. |
+| `layerRecords` | `layerItems` / `itemFor` | Items in `record.js` shape: id, rev, kind, state, before, after, after_history, the page fields. |
+| `protectOnEdit` | `cooperativeSkip` + `veto` | They are two different framework features, and the plan says to test them separately. One knob for both made that impossible. |
+| `caretRestores` | `restores` | `src/layer/protect.js` already publishes this counter under that name. |
+
+The stub now carries all five of protect.js's counters (`marked`, `vetoes`,
+`snapshots`, `restores`, `restoreFailures`), so a test reads the same counter
+whichever implementation is loaded. It also implements layer two for real: a
+listener on the fixture's cancelable `lahe:before-morph-element` that vetoes the
+protected block, which is what makes layer two scoreable on its own.
+
+**The stub does not load the built bundle**, and that is deliberate: the fixture
+server's root is `test/fixtures`, the bundle is `dist/lahe-layer.js`, and builders
+may not rebuild `dist/`, so wiring the harness to it would make every browser
+self-test depend on an artifact no builder may refresh. The copies are guarded by
+a new unit test instead, `test/unit/harness_stub_vocabulary.test.js`, which reads
+the names out of the stub source and compares them against `record.js`,
+`gestures.js` and `protect.js`. Demonstrated failing by renaming one value:
+
+```
+not ok 2 - the stub's STATE values are the record module's four
+    stub STATE.NOT_HANDLED has drifted
+```
+
+Both halves of every self-test survive, including every negative half. Two new
+ones landed with the rescope: a block in edit state leaves its **neighbour**
+untouched, and committing an edit gives the block back to the page (protection
+lifted, edit state cleared, item ready at rev 1 with one history entry).
+
+## Gate output
+
+### `npm run gate:builder`
+
+```
+lint passed (syntax: 97 files, no jsdom, manifest complete)
+# tests 212
+# pass 212
+# fail 0
+  50 passed (15.5s)
+```
+
+### `npx playwright test` (Chromium)
+
+```
+  50 passed (15.6s)
+```
+
+### `npm run test:browser:all` (three lanes)
+
+```
+  150 passed (31.7s)
+```
+
+## Three things in the kernel worth flagging
+
+**1. `protect.isProtected` is the wrong predicate for the veto path, and layer
+two silently does nothing on a turbo-frame without a fix.** `isProtected(el)`
+answers "is el the protected block, or inside it". A whole-frame replacement
+fires the pre-morph event on the FRAME, which *contains* the protected block, so
+a veto handler written against `isProtected` alone never fires there. The stub
+vetoes in both directions (target is the block, is inside it, or contains it) and
+says so in a comment addressed to 2B. Worth a line in `protect.js` before 2B
+builds on it.
+
+**2. The counter name was about to diverge.** `protect.js` publishes `restores`;
+my first pass had invented `caretRestores`. Left alone, 2B would have shipped a
+correct layer three and watched every layer-three assertion score zero restores,
+which reads exactly like broken code. The assertion now defaults to the kernel's
+name.
+
+**3. `protect.restore()` counts `restoreFailures` on purpose and returns false.**
+That is the right call for a stub, and it means the layer-three assertion fails
+against the kernel as landed, by design, until 2B fills it in. Nobody should read
+that failure as a harness bug.
+
+## One bug the rescope surfaced in the stub itself
+
+Committing an edit bumped the revision on a first commit. Clearing edit state
+removes `contenteditable`, which blurs the block, which fires the blur handler,
+which commits a second time; the second commit found the item already ready and
+bumped its rev. One edit would have reached the agent as a rewording that never
+happened, and a reply naming rev 1 would have been refused for no reason. Fixed
+by honoring the gesture table's `when` column: COMMIT_EDIT applies only when a
+block is in edit state. **2A owns the same trap in the real editing surface.**
+
+Also: the layer-three restore has to re-attach the block's listeners, not just
+its text. The no-hook repaint replaces the block element itself, so a restore
+that only re-applies `contenteditable` leaves the block dead to the keyboard, the
+snapshot goes stale, and every later repaint restores the same one sentence. That
+is the stub's version of 2D's remount contract.
+
+## Files changed in this pass
+
+```
+scripts/lint.js
+test/browser/harness_selftest.spec.js
+test/fixtures/assets/harness-stub.js
+test/helpers/README.md
+test/helpers/assertions.js
+test/helpers/stub.js
+test/unit/harness_stub_vocabulary.test.js   (new)
+```
+
+## Cleanup needed (unchanged, plus nothing new)
+
+- `debug_layer3.tmp.js` (repo root, untracked probe)
+- `probe.tmp.js` (repo root, untracked probe)
+- `test-results/`, `playwright-report/` (already ignored)
