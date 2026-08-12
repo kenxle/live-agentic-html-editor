@@ -204,7 +204,10 @@
    * one morph and the reviewer should get one pass, not five.
    *
    * @param {string} reason one of REASON
-   * @param {Object} options {immediate: boolean}
+   * @param {Object} options {immediate: boolean, commit: Object}
+   *   `commit` is the detail 2B's release() hands over on a commit:
+   *   `{item, element, observed}`. It applies to exactly one record, the one
+   *   named by `item`, and it is per-pass: nothing about it is remembered.
    */
   function schedule(reason, options) {
     if (REASONS.indexOf(reason) === -1) {
@@ -219,21 +222,61 @@
     }
     lastReason = reason;
     var opts = options || {};
+    var override = opts.commit ? { commit: opts.commit } : null;
     if (opts.immediate) {
-      runPass(reason);
+      runPass(reason, override);
       return true;
     }
     if (scheduled) return true;
     scheduled = defer(function () {
       scheduled = null;
-      runPass(reason);
+      runPass(reason, override);
     });
     return true;
   }
 
+  // How long a deferred pass may wait on a frame that may never come. Long
+  // enough that a painting page always runs its pass on the frame (one frame is
+  // ~16ms) and the timer is the loser of the race; short enough that a page
+  // nobody is painting still catches up while the reviewer's own commit or undo
+  // is the thing waiting on it.
+  var FRAME_FALLBACK_MS = 50;
+
+  /**
+   * Defer one pass to the next frame, WITH A TIMER ALONGSIDE IT.
+   *
+   * requestAnimationFrame alone is wrong, and it is wrong in production, not
+   * only in a test. A browser that is not painting the page throttles rAF to
+   * nothing: a backgrounded tab, a hidden window, a headless lane running six
+   * workers wide. On such a page every deferred pass simply never runs, which
+   * means an edit the reviewer committed is never re-applied, a reply that
+   * arrived is never folded, and the page they come back to is stale. 2B found
+   * this as a 30-second test hang on the WebKit lane and worked around it in
+   * their spec glue with {immediate: true}; the product-side answer is here, so
+   * no caller has to know.
+   *
+   * The frame is still preferred: a pass that writes to the page belongs on a
+   * frame, and on any page that is painting the rAF callback wins the race by a
+   * wide margin. The timer only ever fires on a page that stopped painting, and
+   * whichever one gets there first cancels the other, so the pass runs exactly
+   * once either way.
+   */
   function defer(fn) {
-    if (typeof requestAnimationFrame === "function") return requestAnimationFrame(fn);
-    return setTimeout(fn, 0);
+    var done = false;
+    var frame = null;
+    var timer = null;
+
+    function run() {
+      if (done) return;
+      done = true;
+      if (frame !== null && typeof cancelAnimationFrame === "function") cancelAnimationFrame(frame);
+      if (timer !== null) clearTimeout(timer);
+      fn();
+    }
+
+    if (typeof requestAnimationFrame === "function") frame = requestAnimationFrame(run);
+    timer = setTimeout(run, frame === null ? 0 : FRAME_FALLBACK_MS);
+    return timer;
   }
 
   /**
@@ -456,6 +499,13 @@
   // card the reviewer may be in is the churn this file refuses), and it is
   // emptied and hidden.
   function clearConflict(ctx, id) {
+    // A DISPLACED conflict is not cleared by an ordinary pass. It was raised
+    // from something the page tried to say and protection took back off, so the
+    // page now holds the reviewer's own words: every later pass reads branch
+    // one and would clear a warning the reviewer has not answered yet, usually
+    // within a frame of it appearing. It clears when the reviewer commits that
+    // record again, which is the moment they have decided something.
+    if (conflicts[id] && conflicts[id].displaced) return;
     if (conflicts[id]) delete conflicts[id];
     callCard(ctx, "clearCardBadge", id, "REPLAY_NEITHER_MATCHES");
     var node = conflictNodes[id];
@@ -487,10 +537,40 @@
   // node is not the protected one.
   var lastElement = Object.create(null);
 
+  // `isProtected`, never `touches`. They are different questions: `touches` is
+  // the veto's ("would morphing this element destroy the protected block"), and
+  // it answers true for an ancestor of the block, which is most of the page.
+  // Replay's question is "is the reviewer inside THIS region", which is
+  // isProtected's. 2B says the same thing from their side.
   function isProtectedNow(ctx, element) {
     if (!element) return false;
     if (!ctx.protect || typeof ctx.protect.isProtected !== "function") return false;
     return ctx.protect.isProtected(element);
+  }
+
+  /**
+   * Is the reviewer in this record's region right now?
+   *
+   * Asked by id when protection can answer that way, which it can from CP2-mid
+   * on: the editing surface passes the record into `protect.mark`, so the side
+   * that knows which record is open says so directly. The node fallback is the
+   * older answer and still the only one available to a caller that marks a
+   * block without a record.
+   */
+  function protectedForItem(ctx, id) {
+    if (!ctx.protect) return false;
+    if (typeof ctx.protect.protectedItemId === "function") {
+      var open = ctx.protect.protectedItemId();
+      if (open) return open === id;
+    }
+    return isProtectedNow(ctx, lastElement[id]);
+  }
+
+  // The commit detail 2B's release() handed to this pass, when it is about this
+  // record. See replay.schedule's options.
+  function commitFor(ctx, id) {
+    if (!ctx.commit || !id) return null;
+    return ctx.commit.item === id ? ctx.commit : null;
   }
 
   var WRITING_KINDS = {};
@@ -668,7 +748,8 @@
     }
 
     var ref = item[record.FIELD.REGION] ? item[record.FIELD.REGION].ref : null;
-    var element = ctx.element || null;
+    var commit = commitFor(ctx, id);
+    var element = ctx.element || (commit && commit.element) || null;
     var verdict = null;
 
     // Protection is asked BEFORE the anchor, against the node this record was
@@ -677,7 +758,7 @@
     // cannot find it and would report the region the reviewer is looking at
     // right now as lost. The node is known; asking first is both cheaper and
     // the only honest answer.
-    if (!element && isProtectedNow(ctx, lastElement[id])) {
+    if (!element && protectedForItem(ctx, id)) {
       counters.regionsSkippedProtected += 1;
       return {
         wrote: false,
@@ -739,6 +820,27 @@
       return { wrote: false, branch: null, lost: false, reason: "nothing to write", item: item, element: element };
     }
 
+    // THE COMMIT SEAM. What the page tried to say in this block while the
+    // reviewer had it, which protection took back off and nothing else ever
+    // saw. If it is neither their version nor any version this record has had,
+    // the two genuinely collide and the reviewer has to be shown both. Without
+    // this the collision is invisible: the page holds the reviewer's own words
+    // because protection put them back, so the compare below reads branch one
+    // and the agent's rewrite is swallowed.
+    //
+    // It only ever FLAGS. A value that is not on the page cannot be a reason to
+    // write to the page, so every other branch falls through to the DOM compare
+    // below, which is the only thing a write is ever decided on.
+    if (commit && writes(item)) {
+      // A commit is the reviewer deciding something, so a displaced conflict
+      // raised by an earlier commit stops being sticky here and this pass gets
+      // to raise it again or let it go.
+      if (conflicts[id] && conflicts[id].displaced) delete conflicts[id];
+      if (typeof commit.observed === "string" && compare(item, commit.observed).branch === BRANCH.CONTENT_CHANGED) {
+        return flagConflict(ctx, item, id, element, commit.observed, true);
+      }
+    }
+
     var domValue = domValueOf(element, item);
     var verdictBranch = compare(item, domValue);
     var branch = verdictBranch.branch;
@@ -750,30 +852,7 @@
     }
 
     if (branch === BRANCH.CONTENT_CHANGED) {
-      counters.regionsConflicted += 1;
-      var yours = ours(item);
-      conflicts[id] = { id: id, yours: yours, theirs: domValue, at: new Date().toISOString() };
-      if (failures) {
-        callCard(
-          ctx,
-          "setCardBadge",
-          id,
-          failures.failure("REPLAY_NEITHER_MATCHES", { yours: yours, theirs: domValue })
-        );
-      }
-      var node = conflictNodeFor(ctx, id, yours, domValue);
-      if (node) callCard(ctx, "attachCardNode", id, node);
-      // R5. Nothing is written, in either direction.
-      return {
-        wrote: false,
-        branch: branch,
-        lost: false,
-        reason: "neither your version nor the one you edited is on the page",
-        yours: yours,
-        theirs: domValue,
-        item: item,
-        element: element
-      };
+      return flagConflict(ctx, item, id, element, domValue);
     }
 
     // Branches two and three both write the CURRENT revision. Three also says
@@ -796,6 +875,42 @@
       lost: false,
       reason: branch === BRANCH.EARLIER_REVISION ? "an earlier revision had landed" : "re-applied",
       earlierAfter: verdictBranch.earlierAfter,
+      item: item,
+      element: element
+    };
+  }
+
+  /**
+   * Branch four, in one place: the badge, the card node carrying both versions
+   * in full, and a result that says nothing was written. Called from the DOM
+   * compare and from the commit seam, which are two ways of finding the same
+   * collision and must say the same thing about it.
+   *
+   * @param {string} theirs what the page says, or tried to say
+   */
+  function flagConflict(ctx, item, id, element, theirs, displaced) {
+    counters.regionsConflicted += 1;
+    var yours = ours(item);
+    conflicts[id] = {
+      id: id,
+      yours: yours,
+      theirs: theirs,
+      displaced: !!displaced,
+      at: new Date().toISOString()
+    };
+    if (failures) {
+      callCard(ctx, "setCardBadge", id, failures.failure("REPLAY_NEITHER_MATCHES", { yours: yours, theirs: theirs }));
+    }
+    var node = conflictNodeFor(ctx, id, yours, theirs);
+    if (node) callCard(ctx, "attachCardNode", id, node);
+    // R5. Nothing is written, in either direction.
+    return {
+      wrote: false,
+      branch: BRANCH.CONTENT_CHANGED,
+      lost: false,
+      reason: "neither your version nor the one you edited is on the page",
+      yours: yours,
+      theirs: theirs,
       item: item,
       element: element
     };
