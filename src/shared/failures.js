@@ -1,8 +1,8 @@
 // The failure code enum.
 //
-// Owner: Task 0a (shared kernel). Imported by: the sync client (1B-ii), the
-// store (1B-ii), the anchor engine (1C), replay (2B), the rail's failures list
-// (1B-i), the service's error shapes (1A), verification (3B), the CLI (1D).
+// Owner: 0A-wire. Imported by: the sync client and the rail's failures list
+// (1B), the anchor engine (1C), replay (2C), protection (2B), the helper's
+// error shapes and per-request checks (1A), the reply folder (3A), and the CLI.
 //
 // One code list, because R9 (failures are loud and they persist) is only
 // checkable if there is one vocabulary for what failed. Every code carries:
@@ -15,8 +15,20 @@
 //              cannot write two wordings for the same failure
 //   remedy     what to do about it, or null when there is nothing to do
 //
-// Architecture D15's table is the mapping from a failure to its surface. This
-// module is that table.
+// This table is the architecture's Failure modes section as code.
+//
+// REWORKED for the current architecture. Gone: the send codes, the
+// acknowledgement codes, the session codes, and the verification codes, all of
+// which belonged to the archived send model (there is no send button, no ack
+// command, no session exchange, and verification is a stated v1 cut). Added:
+// the lost anchor, the neither-matches collision, the second window refusal,
+// the CSP refusal told apart from a helper that is down, the malformed reply
+// line, and the helper being unreachable.
+//
+// A few old names survive as ALIASES, not as second definitions: code in files
+// other tasks own still spells them, and a rename landing in four branches at
+// once is a merge conflict for no gain. Each alias resolves to its canonical
+// code, and the alias list is on the Phase 4B cleanup batch.
 //
 // Dual-environment module. See docs/CONTRACTS.md, "How a shared module loads".
 (function (root) {
@@ -37,44 +49,40 @@
   }
 
   var CODES = {
-    // --- sync and transport ------------------------------------------------
-    SYNC_SERVICE_DOWN: def(
+    // --- the helper, and getting to it -------------------------------------
+    HELPER_UNREACHABLE: def(
       SEVERITY.WARNING,
       true,
       SURFACE.FAILURES_LIST,
-      "The local service is not reachable. Your feedback is safe in this browser and will be sent when it comes back.",
-      "Start the service, or use Copy or Export to get everything out now."
+      "The local helper is not reachable. Your feedback is safe in this browser and goes to the helper when it comes back.",
+      "Start the helper, or use Copy or Export to get everything out now."
     ),
-    SYNC_POLICY_REFUSED: def(
+    // Told apart from the helper being down ON PURPOSE. They look identical to
+    // a fetch and they need opposite fixes: one is "start the helper", the
+    // other is "this page's own policy refuses the connection".
+    CSP_REFUSED: def(
       SEVERITY.BLOCKING,
       true,
       SURFACE.FAILURES_LIST,
-      "This page's content security policy refused the connection to the local service. This is not the service being down.",
-      "Add the service origin to connect-src in this app's development CSP."
+      "This page's content security policy refused the connection to the local helper. This is not the helper being down.",
+      "Add the helper's origin to connect-src in this app's development CSP."
     ),
     SYNC_UNAUTHORIZED: def(
       SEVERITY.BLOCKING,
       true,
       SURFACE.FAILURES_LIST,
-      "The local service refused this page's session and would not mint a new one.",
-      "Re-register this origin from your terminal, then reload."
-    ),
-    SYNC_SESSION_EXPIRED: def(
-      SEVERITY.INFO,
-      false,
-      SURFACE.FAILURES_LIST,
-      "The session expired and was renewed.",
-      null
+      "The local helper refused this page's token.",
+      "Run the add step again for this review, then reload the page."
     ),
     SYNC_ORIGIN_NOT_ALLOWED: def(
       SEVERITY.BLOCKING,
       true,
       SURFACE.FAILURES_LIST,
-      "This origin is not registered with the local service, so the layer cannot send anything.",
-      "Register it from your terminal with the setup command."
+      "This page's origin is not registered with this review, so the helper refuses its events.",
+      "Run the add step from this page's origin."
     ),
 
-    // --- browser storage ---------------------------------------------------
+    // --- browser storage and windows ---------------------------------------
     STORAGE_QUOTA: def(
       SEVERITY.BLOCKING,
       true,
@@ -89,12 +97,15 @@
       "Browser storage is unavailable on this page, so nothing can be saved locally.",
       "Serve the page over http rather than opening it from Finder."
     ),
-    SECOND_TAB_REFUSED: def(
+    // D5: two windows sharing one draft bucket means the last keystroke wins
+    // and the other window's work disappears without saying so. Refusal costs
+    // the reviewer nothing, and the takeover is one button.
+    SECOND_WINDOW_REFUSED: def(
       SEVERITY.BLOCKING,
       true,
       SURFACE.FAILURES_LIST,
-      "Another tab is already reviewing this page. This tab is read-only so the two cannot overwrite each other.",
-      "Close the other tab, or take over from this one."
+      "Another window is already reviewing this page. This one is read-only so the two cannot overwrite each other.",
+      "Use Review here instead to move the review to this window."
     ),
 
     // --- anchoring and replay ----------------------------------------------
@@ -119,11 +130,14 @@
       "Only the page structure matched, not the text, so nothing was written. Your text is kept.",
       null
     ),
-    ANCHOR_SUBJECT_GONE: def(
+    // The lost anchor: the subject this item is about is not on the page any
+    // more. The item is kept, the card says so, and the projection tells the
+    // agent rather than sending it looking blind.
+    ANCHOR_LOST: def(
       SEVERITY.WARNING,
       true,
       SURFACE.CARD,
-      "The passage this comment is about is no longer on the page. The comment is kept and the agent is told.",
+      "The passage this item is about is no longer on the page. The item is kept and the agent is told.",
       null
     ),
     REPLAY_CONTENT_CHANGED: def(
@@ -133,6 +147,16 @@
       "The content under this edit changed, so nothing was written. Your text is kept.",
       null
     ),
+    // Neither the before nor the after matches what is on the page now: two
+    // people, or a rebuild, changed the same region. Writing either one would
+    // clobber a change nobody asked to lose.
+    REPLAY_NEITHER_MATCHES: def(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.CARD,
+      "This region is neither what you edited nor what you changed it to, so nothing was written. Your text is kept.",
+      "Look at the region and reapply your change if it still makes sense."
+    ),
     REPLAY_GROUP_INCOMPLETE: def(
       SEVERITY.WARNING,
       true,
@@ -141,39 +165,41 @@
       null
     ),
 
-    // --- verification (D8) -------------------------------------------------
-    VERIFY_NOT_FOUND: def(
+    // --- replies from agents (D6) ------------------------------------------
+    //
+    // The helper SKIPS a bad line and never dies: exiting on one agent's typo
+    // takes the reviewer's session with it, which is a worse failure than the
+    // one it reports.
+    REPLY_LINE_MALFORMED: def(
       SEVERITY.WARNING,
       true,
-      SURFACE.CARD,
-      "The agent reported this applied, but your wording is not in the file it named.",
-      "Check the file yourself before trusting this one."
-    ),
-    VERIFY_NOT_VERIFIABLE: def(
-      SEVERITY.INFO,
-      false,
-      SURFACE.CARD,
-      "This region could not be checked literally, because the source builds it from a template.",
-      null
-    ),
-    VERIFY_PATH_OUTSIDE_ROOT: def(
-      SEVERITY.BLOCKING,
-      true,
       SURFACE.FAILURES_LIST,
-      "An acknowledgement named a file outside this review's project root and was not read.",
-      null
+      "An agent wrote a reply line this tool could not read, so that line was skipped. Everything else was folded in.",
+      "The chip names the file and the line number; the agent that wrote it can fix and append again."
     ),
 
-    // --- protocol (service replies) ----------------------------------------
+    // --- the helper's refusals (D11) ---------------------------------------
+    //
+    // Every one of these is logged by the helper NAMING THE CHECK THAT FAILED,
+    // which is what makes "outside cannot get in" observable rather than a
+    // claim. src/shared/protocol.js CHECKS is the ordered list.
     PROTO_BAD_REQUEST: def(SEVERITY.BLOCKING, false, SURFACE.CLI, "The request was malformed.", null),
-    PROTO_UNAUTHORIZED: def(SEVERITY.BLOCKING, false, SURFACE.CLI, "Missing or invalid credential.", null),
+    PROTO_BAD_HOST: def(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "The Host header does not name the helper, so the request was refused.",
+      null
+    ),
+    PROTO_UNAUTHORIZED: def(SEVERITY.BLOCKING, false, SURFACE.CLI, "Missing or invalid per-review token.", null),
     PROTO_FORBIDDEN_ORIGIN: def(
       SEVERITY.BLOCKING,
       false,
       SURFACE.CLI,
-      "This origin is not on the allowlist for any review.",
+      "This origin is not registered for this review.",
       null
     ),
+    PROTO_UNKNOWN_REVIEW: def(SEVERITY.BLOCKING, false, SURFACE.CLI, "No such review.", null),
     PROTO_UNSUPPORTED_MEDIA_TYPE: def(
       SEVERITY.BLOCKING,
       false,
@@ -185,48 +211,34 @@
       SEVERITY.BLOCKING,
       false,
       SURFACE.CLI,
-      "Mutating routes require the client header, so a simple cross-origin request cannot reach a handler.",
+      "Every route but health requires the client header, so a simple cross-origin request cannot reach a handler.",
       null
     ),
     PROTO_STALE_REV: def(
       SEVERITY.WARNING,
       false,
       SURFACE.CLI,
-      "This acknowledgement names a revision that has since been superseded. The newer revision stays outstanding.",
+      "This reply names a revision that has since been superseded. The newer revision stays outstanding.",
       null
     ),
     PROTO_UNKNOWN_ITEM: def(SEVERITY.BLOCKING, false, SURFACE.CLI, "No such item in this review.", null),
-    PROTO_NOT_DELIVERED: def(
+    PROTO_SECOND_WINDOW: def(
       SEVERITY.BLOCKING,
       false,
       SURFACE.CLI,
-      "This item was never delivered, so it cannot be acknowledged.",
-      null
-    ),
-    PROTO_TARGET_MISMATCH: def(
-      SEVERITY.BLOCKING,
-      false,
-      SURFACE.CLI,
-      "This credential was minted for a different target.",
-      null
+      "Another window already holds this review.",
+      "Take over from the window you are in."
     ),
     PROTO_SECOND_INSTANCE: def(
       SEVERITY.BLOCKING,
       false,
       SURFACE.CLI,
-      "Another service instance is already running for this state directory.",
+      "Another helper is already running for this data directory.",
       "Use the running one, or stop it first."
     ),
 
-    // --- CLI and setup -----------------------------------------------------
-    CLI_NO_SERVICE: def(
-      SEVERITY.BLOCKING,
-      false,
-      SURFACE.CLI,
-      "No local service is running.",
-      "Start one, or read the review files directly."
-    ),
-    CLI_NO_REVIEW: def(SEVERITY.INFO, false, SURFACE.CLI, "No review has anything outstanding.", null),
+    // --- the CLI -----------------------------------------------------------
+    CLI_NO_REVIEW: def(SEVERITY.INFO, false, SURFACE.CLI, "No review has anything ready.", null),
     CLI_REVIEW_ENDED: def(
       SEVERITY.INFO,
       false,
@@ -234,44 +246,61 @@
       "The reviewer ended this review. Stop waiting and stop asking.",
       null
     ),
-    CLI_SENTINELS_MISSING: def(
-      SEVERITY.BLOCKING,
-      false,
-      SURFACE.CLI,
-      "This instruction file mentions the tool but has no sentinel block, so nothing was written.",
-      "Add the sentinels by hand, or point setup at a different file."
-    ),
     CLI_RUNTIME_MISSING: def(
       SEVERITY.BLOCKING,
       false,
       SURFACE.CLI,
       "Node 20 or newer is required and was not found.",
-      "Install Node 20 or newer, then run setup again."
+      "Install Node 20 or newer, then run the add step again."
     ),
     CLI_PATH_REFUSED: def(
       SEVERITY.BLOCKING,
       false,
       SURFACE.CLI,
-      "A write was refused because the destination resolved outside the review root or is a symlink.",
+      "A write was refused because the destination resolved outside the review folder or is a symlink.",
       null
     )
   };
 
-  var CODE_NAMES = Object.keys(CODES);
+  // ---------------------------------------------------------------------------
+  // Aliases
+  // ---------------------------------------------------------------------------
+  //
+  // Old spellings still typed in files other tasks own. They resolve to the
+  // canonical code and keep their own spelling in the failure they return, so a
+  // rail entry and a dismissal still match. ON THE PHASE 4B CLEANUP BATCH: when
+  // 1B, 1C and 2C rename their call sites, this map goes.
+  var ALIASES = {
+    SYNC_SERVICE_DOWN: "HELPER_UNREACHABLE",
+    CLI_NO_SERVICE: "HELPER_UNREACHABLE",
+    SYNC_POLICY_REFUSED: "CSP_REFUSED",
+    SECOND_TAB_REFUSED: "SECOND_WINDOW_REFUSED",
+    ANCHOR_SUBJECT_GONE: "ANCHOR_LOST",
+    ANCHOR_NOT_FOUND: "ANCHOR_LOST"
+  };
 
-  function describe(code) {
-    if (!Object.prototype.hasOwnProperty.call(CODES, code)) {
-      throw new Error("unknown failure code: " + String(code) + ". Add it to src/shared/failures.js");
-    }
-    return CODES[code];
+  var CODE_NAMES = Object.keys(CODES);
+  var ALIAS_NAMES = Object.keys(ALIASES);
+
+  function canonical(code) {
+    return Object.prototype.hasOwnProperty.call(ALIASES, code) ? ALIASES[code] : code;
   }
 
-  // The shape every failure travels in, whether it lands in the rail's
-  // failures list, on a card, or in a CLI error body.
+  function describe(code) {
+    var name = canonical(code);
+    if (!Object.prototype.hasOwnProperty.call(CODES, name)) {
+      throw new Error("unknown failure code: " + String(code) + ". Add it to src/shared/failures.js");
+    }
+    return CODES[name];
+  }
+
+  // The shape every failure travels in, whether it lands in the rail's failures
+  // list, on a card, or in a helper error body.
   function failure(code, detail) {
     var d = describe(code);
     return {
       code: code,
+      canonical_code: canonical(code),
       severity: d.severity,
       persistent: d.persistent,
       surface: d.surface,
@@ -291,6 +320,9 @@
     SURFACE: SURFACE,
     CODES: CODES,
     CODE_NAMES: CODE_NAMES,
+    ALIASES: ALIASES,
+    ALIAS_NAMES: ALIAS_NAMES,
+    canonical: canonical,
     describe: describe,
     failure: failure,
     isPersistent: isPersistent
