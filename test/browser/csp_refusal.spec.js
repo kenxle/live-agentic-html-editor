@@ -10,18 +10,53 @@
 // this app's development CSP", and a reviewer told the helper is down will
 // restart it all afternoon and never get a single comment out of the page.
 //
-// Three cases, and the third is the one people forget:
+// Four cases, and the third is the one people forget:
 //
 //   connect-src 'none'   the layer runs, its calls to the helper are refused
 //   no policy, dead port the layer runs, the helper really is down
 //   script-src 'none'    the layer never runs at all, and nothing in the page
 //                        can say so, which is why the assertion is about the
 //                        page's own script never having run
+//   no policy at all     the same page, the same tag, and the library boots,
+//                        which is what stops the case above passing because the
+//                        fixture was broken
 
 "use strict";
 
-const { test, expect, pollPage } = require("../helpers");
+const path = require("node:path");
+
+const { test: base, expect, pollPage, startCspServer, startStaticServer } = require("../helpers");
 const { withLayer } = require("./support/with_layer");
+
+const REPO_ROOT = path.join(__dirname, "..", "..");
+
+// Two servers rooted at the REPO, so a fixture page can carry a real script tag
+// pointing at /dist/lahe-layer.js.
+//
+// WORKER-SCOPED, and that is not an optimization. node:http's close() waits for
+// keep-alive sockets and the harness's servers do not drop them, so a
+// test-scoped server closing while its page is still open turns teardown into a
+// timeout: found on WebKit, which holds the connection longest. At worker
+// teardown every page is already closed, so close() returns at once. (The ask
+// for the harness is one line: closeAllConnections() before close.)
+const test = base.extend({
+  repoBlockScriptServer: [
+    async function ({}, use) {
+      const server = await startCspServer("block-script", { root: REPO_ROOT });
+      await use(server);
+      await server.close();
+    },
+    { scope: "worker" }
+  ],
+  repoServer: [
+    async function ({}, use) {
+      const server = await startStaticServer({ root: REPO_ROOT, label: "repo" });
+      await use(server);
+      await server.close();
+    },
+    { scope: "worker" }
+  ]
+});
 
 const REVIEW = "csp-review";
 const TOKEN = "csp-token";
@@ -33,9 +68,9 @@ const DEAD_HELPER = "http://127.0.0.1:1";
 
 const FIXTURE = "built-doc.html";
 
-async function bootOn(page, server, path) {
+async function bootOn(page, server, pathname) {
   await withLayer(page, { review: REVIEW, token: TOKEN, helper: DEAD_HELPER });
-  await page.goto(server.urlFor(path || FIXTURE));
+  await page.goto(server.urlFor(pathname || FIXTURE));
 }
 
 async function failureCodes(page) {
@@ -107,20 +142,33 @@ test.describe("ranked test 23: a policy refusal is not a helper that is down", (
     expect(messages.some((m) => /content security policy/i.test(m.message))).toBe(false);
   });
 
-  test("script-src 'none' stops the layer running at all, and the page says so", async ({ page, cspServer }) => {
-    const server = await cspServer("block-script");
-    await bootOn(page, server, "csp-probe.html");
+  test("script-src 'none' stops the layer running at all, and the page says so", async ({ page, repoBlockScriptServer }) => {
+    // No injection here: a real page with a real script tag, served from the
+    // repo root so /dist/lahe-layer.js is beside it. The claim is about the
+    // page's OWN tag being refused, so the tag has to be the page's own.
+    await page.goto(repoBlockScriptServer.urlFor("test/fixtures/csp-layer-doc.html"));
 
-    // The page's OWN inline script never ran, which is what "the policy refused
+    // The page's own script tag never ran, which is what "the policy refused
     // the layer" looks like from inside the page. page.evaluate is injected
     // through the debugger and runs regardless, so the assertion is about the
     // page's script and not about the ability to evaluate anything here.
-    expect(await page.evaluate(() => typeof window.__cspProbe)).toBe("undefined");
     expect(await page.evaluate(() => typeof window.__lahe)).toBe("undefined");
     expect(await page.evaluate(() => typeof window.LAHE)).toBe("undefined");
 
     // The page is still the page. Nothing about the tool being refused breaks it.
     await expect(page.locator("#probe-title")).toHaveText("CSP probe");
     expect(await page.evaluate(() => document.getElementById("probe-status").textContent)).toBe("Waiting.");
+  });
+
+  test("the same page with no policy runs the library from its own script tag", async ({ page, repoServer }) => {
+    // The other half of the pair, and the one that stops the test above passing
+    // because the fixture is broken: same page, same tag, no header, and the
+    // library boots.
+    await page.goto(repoServer.urlFor("test/fixtures/csp-layer-doc.html"));
+    await pollPage(page, () => !!(window.__lahe && window.__lahe.booted), undefined, {
+      message: "the layer to boot from the page's own script tag, with no policy in the way"
+    });
+    expect(await page.evaluate(() => window.__lahe.review)).toBe("csp-doc-review");
+    expect(await page.evaluate(() => document.querySelectorAll("#" + window.__lahe.rootId).length)).toBe(1);
   });
 });

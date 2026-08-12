@@ -202,7 +202,10 @@ test.describe("ranked test 4: the page's own controls keep working", () => {
     expect(after.hosts).toBe(1);
 
     // Half two, the load-bearing one: one gesture, one item.
-    await commentOnSelection(page, "#log-session", "This button needs a label a person can read.");
+    // A passage, not the button: selecting a button's own text is a browser
+    // quirk (Firefox will not hand back a usable selection for one), and the
+    // button's job in this test is to be CLICKED, which the first test does.
+    await commentOnSelection(page, "section.focus p", "Name the two people in the heading.");
     await pollPage(page, () => window.__lahe.items().length === 2, undefined, {
       message: "the second comment, and only the second comment"
     });

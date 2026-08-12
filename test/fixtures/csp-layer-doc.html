@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>A reviewed page with the real library on it</title>
+</head>
+<body>
+  <!--
+    Owner: 2D (living in the page).
+
+    A reviewed page as a person actually writes one: ONE script tag, carrying
+    protocol.js's three attributes, and nothing else of the tool's. The library
+    boots itself from that tag.
+
+    Served from the REPO ROOT, so /dist/lahe-layer.js is reachable beside it.
+
+    It exists for the script-src half of ranked test 23, where the whole point is
+    that the page's own script tag never executes. That case cannot be written
+    against a page whose library was injected by the test runner: an injected
+    tag is still a tag, but the fixture stops being a page a person could have
+    written, and the assertion stops being about the real bundle's real tag.
+
+    The helper attribute is the default origin on purpose. Under script-src
+    'none' nothing here runs, so no request is ever made to it.
+  -->
+  <h1 id="probe-title">CSP probe</h1>
+  <p id="probe-status" data-region="probe-status">Waiting.</p>
+  <p id="probe-body" data-region="probe-body">
+    A short passage, so a gesture has something to attach itself to when this
+    page is loaded without a policy in the way.
+  </p>
+
+  <script src="/dist/lahe-layer.js"
+          data-lahe-review="csp-doc-review"
+          data-lahe-token="csp-doc-token"
+          data-lahe-helper="http://127.0.0.1:7817"></script>
+</body>
+</html>
