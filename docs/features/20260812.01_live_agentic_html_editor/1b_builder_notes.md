@@ -29,3 +29,33 @@ The law: **the rail updates in place, and a card holding focus is never re-creat
   table.
 - `sync.js` as landed reads `protocol.SESSION.ON_401`, a symbol 0A-wire removed on purpose. That is
   the deliberate breakage marking this file as mine to rework.
+
+### The demonstrated failure (ranked test 12, the law 1B owns)
+
+Written first, watched fail against the stub rail (no DOM at all), then made to pass. The
+demonstration the plan asks for is the one-line revert: make `upsertCard` treat every call as a
+creation, which is exactly what "the rail rebuilds its cards" means.
+
+```diff
+--- a/src/layer/overlay.js
++++ b/src/layer/overlay.js
+       var id = item[record.FIELD.ID];
+-      if (!cards[id]) {
++      if (true) {
+```
+
+```
+  ✘  1 [chromium] › test/browser/rail_focus.spec.js:34:3 › a focused card survives twenty repaints
+       with its node, focus and text intact (401ms)
+
+    Error: expect(received).toBe(expected) // Object.is equality
+    Expected: "itm_75e2109529949f355d470c14"
+    Received: null
+
+      44 |     const before = await page.evaluate((id) => window.__laheRail.activeInfo(), opened.id);
+    > 45 |     expect(before.cardId).toBe(opened.id);
+  1 failed
+```
+
+The failure reads exactly like the bug: the card the reviewer is typing into is not the card on
+screen any more, so nothing holds focus. Reverted, the same run is three passes.
