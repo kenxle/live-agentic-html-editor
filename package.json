@@ -9,9 +9,11 @@
   },
   "scripts": {
     "lint": "node scripts/lint.js",
+    "build:layer": "node scripts/build-layer.js",
+    "check:layer": "node scripts/build-layer.js --check",
     "test:unit": "node --test test/unit/",
     "test:browser": "playwright test",
-    "gate": "npm run lint && npm run test:unit && npm run test:browser"
+    "gate": "npm run lint && npm run check:layer && npm run test:unit && npm run test:browser"
   },
   "dependencies": {},
   "devDependencies": {

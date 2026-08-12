@@ -1,0 +1,578 @@
+// The one normalizer.
+//
+// Owner: Task 0a (shared kernel). Imported by: the edit recorder (2A-i) when
+// it mints a record's plain text, replay (2B) when it compares the live DOM to
+// a record, verification (3B) when it matches the reviewer's wording against a
+// source file, and the anchor engine (1C) for whitespace-tolerant matching.
+//
+// No other module may define its own text normalization. If any two of those
+// four normalize differently, no region ever compares equal to its record,
+// replay rewrites every region on every pass, and the reviewer's caret gets
+// fought twice a second. That is the exact bug this tool exists to remove.
+//
+// Dual-environment module. See docs/CONTRACTS.md, "How a shared module loads".
+(function (root, factory) {
+  "use strict";
+  var browser = typeof window !== "undefined" && !!window.document;
+  if (browser) {
+    root.LAHE = root.LAHE || {};
+    root.LAHE.normalize = factory(root.LAHE.markers);
+  } else {
+    module.exports = factory(require("./markers.js"));
+  }
+})(typeof globalThis !== "undefined" ? globalThis : this, function (markers) {
+  "use strict";
+
+  // ---------------------------------------------------------------------------
+  // Character classes
+  // ---------------------------------------------------------------------------
+
+  // Unicode spaces that render as a space and must compare equal to one.
+  // U+200A (hair space) is in here deliberately: it has bitten this codebase's
+  // sibling project through a test fixture that looked identical to a space.
+  var UNICODE_SPACES =
+    /[\u0009\u000A\u000B\u000C\u000D\u0020\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/g;
+
+  // Invisible characters that carry no meaning in prose and would otherwise
+  // make two identical-looking strings compare unequal.
+  //
+  // Deliberately NOT in this set: U+200D (zero width joiner) and U+200C (zero
+  // width non-joiner). Both are meaningful, in emoji sequences and in Persian,
+  // Hindi, and other scripts. Removing them would change the reviewer's text.
+  var INVISIBLES = /[\u200B\uFEFF\u00AD]/g;
+
+  // C0 controls except tab, newline, carriage return, plus C1 controls.
+  var CONTROLS_KEEP_WS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g;
+  // Every control character, including tab, newline, and carriage return.
+  var CONTROLS_ALL = /[\u0000-\u001F\u007F-\u009F]/g;
+
+  function stripControls(input) {
+    return String(input).replace(CONTROLS_KEEP_WS, "");
+  }
+
+  function stripAllControls(input) {
+    return String(input).replace(CONTROLS_ALL, "");
+  }
+
+  // ---------------------------------------------------------------------------
+  // normalizeText: THE comparison key
+  // ---------------------------------------------------------------------------
+  //
+  // Guarantees, each one relied on by a caller:
+  //  - Idempotent. normalizeText(normalizeText(x)) === normalizeText(x).
+  //  - Whitespace-insensitive. Rewrapping and reindenting a paragraph does not
+  //    change its key, which is what makes R16 (a comment survives
+  //    reformatting) reachable.
+  //  - Case-sensitive and typography-preserving. "Fix" and "fix" are different
+  //    words, and a curly quote is a real difference in a document about
+  //    wording. Verification has a separate, explicitly named fallback for
+  //    typographic differences (see foldTypography) rather than folding them
+  //    here, because folding here would make a reviewer's punctuation fix
+  //    invisible to replay.
+  //  - Throws on a non-string. Fail loud: a silent String(undefined) here
+  //    produces the literal text "undefined" as a comparison key, which will
+  //    match nothing forever and look like an anchoring bug.
+  function normalizeText(input) {
+    if (typeof input !== "string") {
+      throw new TypeError("normalizeText expects a string, got " + typeof input);
+    }
+    var s = input.normalize("NFC");
+    s = stripControls(s);
+    s = s.replace(INVISIBLES, "");
+    s = s.replace(UNICODE_SPACES, " ");
+    s = s.replace(/\s+/g, " ");
+    return s.trim();
+  }
+
+  // True when two strings are the same text for every purpose in this tool.
+  function textEquals(a, b) {
+    return normalizeText(a) === normalizeText(b);
+  }
+
+  // An additional transform, applied ON TOP of normalizeText, never instead of
+  // it. Verification (3B) uses it for a second pass when the literal pass
+  // misses, because a markdown source holds a straight quote where the built
+  // HTML holds a curly one. Nothing else may use it: replay folding typography
+  // would silently discard a reviewer's punctuation fix.
+  function foldTypography(input) {
+    return normalizeText(input)
+      .replace(/[\u2018\u2019\u201A\u201B\u2032]/g, "'")
+      .replace(/[\u201C\u201D\u201E\u201F\u2033]/g, '"')
+      .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]/g, "-")
+      .replace(/\u2026/g, "...");
+  }
+
+  // ---------------------------------------------------------------------------
+  // cleanMarkup: THE markup key
+  // ---------------------------------------------------------------------------
+  //
+  // Takes serialized HTML (in the browser: element.innerHTML) and returns
+  // canonical markup safe to put in a record's before_html / after_html and to
+  // hand to an agent.
+  //
+  // It is a pure string function on purpose: it is unit-testable in node:test
+  // with no DOM, and the browser side just serializes first. The plan forbids
+  // jsdom for anything in the layer; this keeps the markup rules out of that
+  // ban entirely.
+  //
+  // What it guarantees:
+  //  - No tool DOM survives (R33). Chrome nodes go with their subtree, wrapper
+  //    nodes are unwrapped, every data-lahe* attribute and lahe-* class token
+  //    is stripped.
+  //  - No style attribute survives (R34, R35, AC6). The tool never writes one
+  //    and never reports one.
+  //  - No executable scheme survives in a URL attribute (R66), checked after
+  //    control characters and entities are resolved.
+  //  - No event handler attribute survives.
+  //  - Script, style, template, noscript, iframe, object, embed are dropped
+  //    with their contents.
+  //  - Output is stable under reserialization: tag and attribute names are
+  //    lowercased, attributes are sorted by name, b/i are renamed to
+  //    strong/em, whitespace is collapsed outside <pre>.
+  //
+  // Attribute sorting is a deliberate trade. It loses the author's attribute
+  // order in the markup an agent reads, and it buys a before_html/after_html
+  // comparison that does not report a formatting change because Chromium
+  // reserialized two attributes in a different order.
+
+  var VOID_TAGS = {
+    area: 1, base: 1, br: 1, col: 1, embed: 1, hr: 1, img: 1, input: 1,
+    link: 1, meta: 1, param: 1, source: 1, track: 1, wbr: 1
+  };
+
+  var DROP_SUBTREE_TAGS = {
+    script: 1, style: 1, template: 1, noscript: 1, iframe: 1, object: 1,
+    embed: 1, applet: 1, frame: 1, frameset: 1
+  };
+
+  var RENAME_TAGS = { b: "strong", i: "em" };
+
+  var PRESERVE_WS_TAGS = { pre: 1, textarea: 1 };
+
+  var URL_ATTRS = {
+    href: 1, src: 1, srcset: 1, action: 1, formaction: 1, poster: 1,
+    "xlink:href": 1, data: 1, cite: 1, background: 1
+  };
+
+  var SAFE_SCHEMES = { http: 1, https: 1, mailto: 1, tel: 1 };
+
+  var DROP_ATTRS = {
+    style: 1,
+    contenteditable: 1,
+    spellcheck: 1,
+    autocorrect: 1,
+    autocapitalize: 1,
+    "data-turbo-permanent": 1,
+    srcdoc: 1
+  };
+
+  function decodeForSchemeCheck(value) {
+    var s = String(value);
+    s = s.replace(/&#[xX]([0-9a-fA-F]+);?/g, function (_m, hex) {
+      var code = parseInt(hex, 16);
+      return code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : "";
+    });
+    s = s.replace(/&#(\d+);?/g, function (_m, dec) {
+      var code = parseInt(dec, 10);
+      return code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : "";
+    });
+    s = s
+      .replace(/&colon;?/gi, ":")
+      .replace(/&tab;?/gi, "")
+      .replace(/&newline;?/gi, "")
+      .replace(/&amp;?/gi, "&");
+    // Control characters and whitespace are removed before the scheme is read.
+    // Both are how "java\tscript:" gets past a naive prefix check.
+    return stripAllControls(s).replace(/\s+/g, "");
+  }
+
+  // Returns true when the URL value is safe to keep.
+  function isSafeUrlValue(value) {
+    var s = decodeForSchemeCheck(value);
+    var colon = s.indexOf(":");
+    if (colon === -1) return true; // relative, fragment, or query only
+    var beforeColon = s.slice(0, colon);
+    // A colon that appears after a path separator is not a scheme.
+    if (/[/?#]/.test(beforeColon)) return true;
+    if (!/^[a-zA-Z][a-zA-Z0-9+.-]*$/.test(beforeColon)) return true;
+    return Object.prototype.hasOwnProperty.call(SAFE_SCHEMES, beforeColon.toLowerCase());
+  }
+
+  function escapeAttrValue(value) {
+    return String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  // Parses a start or end tag beginning at index `at`. Returns null when the
+  // "<" is not actually a tag, so a bare "<" in prose survives as text.
+  function parseTag(html, at) {
+    var i = at + 1;
+    var closing = false;
+    if (html.charAt(i) === "/") {
+      closing = true;
+      i += 1;
+    }
+    var nameStart = i;
+    while (i < html.length && /[a-zA-Z0-9:_-]/.test(html.charAt(i))) i += 1;
+    if (i === nameStart) return null;
+    var name = html.slice(nameStart, i).toLowerCase();
+    var attrs = [];
+    var selfClosing = false;
+
+    while (i < html.length) {
+      while (i < html.length && /\s/.test(html.charAt(i))) i += 1;
+      var ch = html.charAt(i);
+      if (ch === ">") {
+        i += 1;
+        break;
+      }
+      if (ch === "/" && html.charAt(i + 1) === ">") {
+        selfClosing = true;
+        i += 2;
+        break;
+      }
+      if (i >= html.length) break;
+      var aStart = i;
+      while (i < html.length && !/[\s=/>]/.test(html.charAt(i))) i += 1;
+      if (i === aStart) {
+        i += 1;
+        continue;
+      }
+      var aName = html.slice(aStart, i).toLowerCase();
+      var aValue = "";
+      var save = i;
+      while (i < html.length && /\s/.test(html.charAt(i))) i += 1;
+      if (html.charAt(i) === "=") {
+        i += 1;
+        while (i < html.length && /\s/.test(html.charAt(i))) i += 1;
+        var q = html.charAt(i);
+        if (q === '"' || q === "'") {
+          i += 1;
+          var vStart = i;
+          while (i < html.length && html.charAt(i) !== q) i += 1;
+          aValue = html.slice(vStart, i);
+          i += 1;
+        } else {
+          var uStart = i;
+          while (i < html.length && !/[\s>]/.test(html.charAt(i))) i += 1;
+          aValue = html.slice(uStart, i);
+        }
+      } else {
+        i = save;
+      }
+      attrs.push({ name: aName, value: aValue });
+    }
+
+    return { name: name, closing: closing, selfClosing: selfClosing, attrs: attrs, end: i };
+  }
+
+  function cleanAttrs(attrs) {
+    var kept = [];
+    for (var k = 0; k < attrs.length; k += 1) {
+      var name = attrs[k].name;
+      var value = attrs[k].value;
+      if (markers.isToolAttrName(name)) continue;
+      if (Object.prototype.hasOwnProperty.call(DROP_ATTRS, name)) continue;
+      if (name.indexOf("on") === 0) continue;
+      if (name === "class") {
+        var tokens = String(value)
+          .split(/\s+/)
+          .filter(function (t) {
+            return t && !markers.isToolClassToken(t);
+          });
+        if (!tokens.length) continue;
+        kept.push({ name: name, value: tokens.join(" ") });
+        continue;
+      }
+      if (Object.prototype.hasOwnProperty.call(URL_ATTRS, name) && !isSafeUrlValue(value)) continue;
+      kept.push({ name: name, value: value });
+    }
+    kept.sort(function (a, b) {
+      return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+    });
+    return kept;
+  }
+
+  function serializeStartTag(name, attrs) {
+    var out = "<" + name;
+    for (var k = 0; k < attrs.length; k += 1) {
+      out += " " + attrs[k].name + '="' + escapeAttrValue(attrs[k].value) + '"';
+    }
+    return out + ">";
+  }
+
+  function collapseText(text) {
+    return text.replace(UNICODE_SPACES, " ").replace(/\s+/g, " ");
+  }
+
+  function cleanMarkup(html) {
+    if (typeof html !== "string") {
+      throw new TypeError("cleanMarkup expects a string, got " + typeof html);
+    }
+
+    var out = [];
+    var stack = [];
+    var dropDepth = 0;
+    var preDepth = 0;
+    var i = 0;
+    var n = html.length;
+
+    function emitText(text) {
+      if (dropDepth > 0 || !text) return;
+      var t = text
+        .normalize("NFC")
+        .replace(INVISIBLES, "")
+        .replace(/&nbsp;/gi, " ")
+        .replace(/&#160;/g, " ")
+        .replace(/&#[xX]a0;/g, " ");
+      t = stripControls(t);
+      out.push(preDepth > 0 ? t : collapseText(t));
+    }
+
+    while (i < n) {
+      var lt = html.indexOf("<", i);
+      if (lt === -1) {
+        emitText(html.slice(i));
+        break;
+      }
+      if (lt > i) emitText(html.slice(i, lt));
+
+      if (html.substr(lt, 4) === "<!--") {
+        var endC = html.indexOf("-->", lt + 4);
+        i = endC === -1 ? n : endC + 3;
+        continue;
+      }
+      if (html.charAt(lt + 1) === "!" || html.charAt(lt + 1) === "?") {
+        var gt = html.indexOf(">", lt);
+        i = gt === -1 ? n : gt + 1;
+        continue;
+      }
+
+      var tag = parseTag(html, lt);
+      if (!tag) {
+        emitText("<");
+        i = lt + 1;
+        continue;
+      }
+      i = tag.end;
+
+      if (tag.closing) {
+        var found = -1;
+        for (var s = stack.length - 1; s >= 0; s -= 1) {
+          if (stack[s].name === tag.name) {
+            found = s;
+            break;
+          }
+        }
+        if (found === -1) continue;
+        for (var p = stack.length - 1; p >= found; p -= 1) {
+          var entry = stack[p];
+          if (entry.action === "drop") dropDepth -= 1;
+          if (entry.preserve) preDepth -= 1;
+          if (entry.action === "keep" && dropDepth === 0) out.push("</" + entry.emitName + ">");
+        }
+        stack.length = found;
+        continue;
+      }
+
+      var role = null;
+      var attrsRaw = tag.attrs;
+      for (var a = 0; a < attrsRaw.length; a += 1) {
+        if (attrsRaw[a].name === markers.TOOL_ATTR) role = attrsRaw[a].value;
+      }
+
+      var action = "keep";
+      if (dropDepth > 0) {
+        action = "drop";
+      } else if (
+        Object.prototype.hasOwnProperty.call(DROP_SUBTREE_TAGS, tag.name) ||
+        role === markers.ROLE_CHROME
+      ) {
+        action = "drop";
+      } else if (role === markers.ROLE_WRAP) {
+        action = "unwrap";
+      }
+
+      var emitName = Object.prototype.hasOwnProperty.call(RENAME_TAGS, tag.name)
+        ? RENAME_TAGS[tag.name]
+        : tag.name;
+      var isVoid = Object.prototype.hasOwnProperty.call(VOID_TAGS, tag.name) || tag.selfClosing;
+
+      if (isVoid) {
+        if (action === "keep" && dropDepth === 0) {
+          out.push(serializeStartTag(emitName, cleanAttrs(tag.attrs)));
+        }
+        continue;
+      }
+
+      if (action === "drop") dropDepth += 1;
+      var preserve = action === "keep" && Object.prototype.hasOwnProperty.call(PRESERVE_WS_TAGS, tag.name);
+      if (preserve) preDepth += 1;
+      if (action === "keep" && dropDepth === 0) {
+        out.push(serializeStartTag(emitName, cleanAttrs(tag.attrs)));
+      }
+      stack.push({ name: tag.name, emitName: emitName, action: action, preserve: preserve });
+    }
+
+    // Close anything the source left open, so the output is well formed.
+    for (var q = stack.length - 1; q >= 0; q -= 1) {
+      if (stack[q].action === "drop") dropDepth -= 1;
+      if (stack[q].action === "keep" && dropDepth === 0) out.push("</" + stack[q].emitName + ">");
+    }
+
+    return out.join("").trim();
+  }
+
+  function markupEquals(a, b) {
+    return cleanMarkup(a) === cleanMarkup(b);
+  }
+
+  // ---------------------------------------------------------------------------
+  // canonicalTarget: THE target identity
+  // ---------------------------------------------------------------------------
+  //
+  // R11: a path reached through a symlink, a URL with or without a trailing
+  // slash, and the localhost and 127.0.0.1 spellings of one address all resolve
+  // to the same review.
+  //
+  // This function is pure and does no filesystem work, so symlink resolution is
+  // the caller's job: the service calls fs.realpathSync first and passes
+  // {resolved: true}. The returned object says which, so a downstream reader is
+  // never guessing.
+  //
+  // It deliberately does NOT percent-decode a route path. Decoding is exactly
+  // the traversal primitive D11 forbids: %2e%2e%2f decodes to "../". Percent
+  // escapes are case-normalized instead, which is enough to converge two
+  // spellings of the same route.
+
+  var LOOPBACK_NAMES = { localhost: 1, "127.0.0.1": 1, "::1": 1, "[::1]": 1, "0:0:0:0:0:0:0:1": 1 };
+  var CANONICAL_HOST = "localhost";
+  var DEFAULT_PORTS = { "http:": "80", "https:": "443" };
+
+  function isLoopbackHost(host) {
+    if (typeof host !== "string" || !host) return false;
+    var h = host.toLowerCase().replace(/^\[|\]$/g, "");
+    if (Object.prototype.hasOwnProperty.call(LOOPBACK_NAMES, h)) return true;
+    if (Object.prototype.hasOwnProperty.call(LOOPBACK_NAMES, host.toLowerCase())) return true;
+    if (/^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h)) return true;
+    if (/\.localhost$/.test(h)) return true;
+    return false;
+  }
+
+  function resolveSegments(pathname) {
+    var parts = String(pathname).split("/");
+    var outParts = [];
+    for (var i = 0; i < parts.length; i += 1) {
+      var seg = parts[i];
+      if (seg === "" || seg === ".") continue;
+      if (seg === "..") {
+        outParts.pop();
+        continue;
+      }
+      outParts.push(seg.replace(/%[0-9a-fA-F]{2}/g, function (m) {
+        return m.toUpperCase();
+      }));
+    }
+    return "/" + outParts.join("/");
+  }
+
+  function canonicalTarget(input, options) {
+    var opts = options || {};
+    if (typeof input !== "string" || !input.trim()) {
+      throw new TypeError("canonicalTarget expects a non-empty string");
+    }
+    var raw = stripAllControls(input.trim());
+
+    if (/^https?:\/\//i.test(raw)) {
+      var u = new URL(raw);
+      var host = u.hostname.toLowerCase();
+      if (isLoopbackHost(host)) host = CANONICAL_HOST;
+      var port = u.port;
+      if (port && DEFAULT_PORTS[u.protocol.toLowerCase()] === port) port = "";
+      var pathPart = resolveSegments(u.pathname);
+      if (pathPart !== "/" && pathPart.charAt(pathPart.length - 1) === "/") {
+        pathPart = pathPart.slice(0, -1);
+      }
+      var search = u.search === "?" ? "" : u.search;
+      var canonical = u.protocol.toLowerCase() + "//" + host + (port ? ":" + port : "") + pathPart + search;
+      return {
+        kind: "route",
+        canonical: canonical,
+        host: host,
+        port: port || null,
+        isLocal: isLoopbackHost(u.hostname),
+        resolved: true
+      };
+    }
+
+    var filePath = raw;
+    if (/^file:\/\//i.test(raw)) {
+      var fu = new URL(raw);
+      if (fu.hostname && !isLoopbackHost(fu.hostname)) {
+        throw new Error("canonicalTarget: a file:// URL with a remote host is not a local target: " + raw);
+      }
+      try {
+        filePath = decodeURIComponent(fu.pathname);
+      } catch (err) {
+        throw new Error("canonicalTarget: malformed percent-escape in file URL: " + raw);
+      }
+    }
+
+    if (filePath.charAt(0) !== "/") {
+      throw new Error(
+        "canonicalTarget: expected an absolute file path, a file:// URL, or an http(s) URL; got " + input
+      );
+    }
+
+    var canonicalPath = resolveSegments(filePath).replace(/%[0-9A-F]{2}/g, function (m) {
+      return decodeURIComponent(m);
+    });
+    if (canonicalPath.length > 1 && canonicalPath.charAt(canonicalPath.length - 1) === "/") {
+      canonicalPath = canonicalPath.slice(0, -1);
+    }
+    return {
+      kind: "file",
+      canonical: canonicalPath,
+      host: null,
+      port: null,
+      isLocal: true,
+      resolved: opts.resolved === true
+    };
+  }
+
+  // A human-readable, filesystem-safe fragment for a target. Never a path
+  // component on its own: the review file writer pairs it with a hash of the
+  // canonical target (D11, never derive a path component from untrusted text).
+  var SLUG_MAX = 40;
+
+  function targetSlug(canonical) {
+    var s = typeof canonical === "string" ? canonical : String(canonical);
+    var tail = s.split("?")[0].split("/").filter(Boolean).pop() || "target";
+    var slug = tail
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, SLUG_MAX)
+      .replace(/^-+|-+$/g, "");
+    return slug || "target";
+  }
+
+  return {
+    stripControls: stripControls,
+    stripAllControls: stripAllControls,
+    normalizeText: normalizeText,
+    textEquals: textEquals,
+    foldTypography: foldTypography,
+    cleanMarkup: cleanMarkup,
+    markupEquals: markupEquals,
+    isSafeUrlValue: isSafeUrlValue,
+    canonicalTarget: canonicalTarget,
+    isLoopbackHost: isLoopbackHost,
+    targetSlug: targetSlug,
+    SLUG_MAX: SLUG_MAX,
+    SAFE_SCHEMES: SAFE_SCHEMES
+  };
+});
