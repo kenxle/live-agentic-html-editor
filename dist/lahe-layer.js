@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+7e5f012226a5
+ * version 0.0.0+ee8bcc4636ce
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+7e5f012226a5";
+  g.LAHE.version = "0.0.0+ee8bcc4636ce";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -5807,6 +5807,343 @@
   };
 });
 
+/* ---- src/layer/highlight.js  (owner: 1D) ---- */
+// Highlights that do not change the page, and the library's one contact
+// surface with the page's own document.
+//
+// Owner: 1D. Implements architecture D8 (highlights that do not change the
+// page), which grounds R14 (the library does not change how the page looks) and
+// part of R15 (it keeps working while the page changes underneath).
+//
+// ---------------------------------------------------------------------------
+// The rule: NO WRAPPER ELEMENTS, EVER
+// ---------------------------------------------------------------------------
+//
+// A comment highlight paints through the CSS Custom Highlight API, which colors
+// a Range without putting anything in the DOM. The alternative, wrapping the
+// range in a span, fails twice over: it mutates the DOM the page's own
+// framework is diffing, and the wrapper leaks into any markup a record carries.
+// So there is no code path here that creates an element inside reviewed
+// content, and ranked test 18 scores it from the outside: every block's
+// bounding rectangle and the page's scrollHeight are identical with and without
+// the library.
+//
+// This is the one capability with a browser floor. Current Chrome, Edge,
+// Safari, and Firefox all have the API; anything older fails loud here rather
+// than silently leaving comments unpainted.
+//
+// ---------------------------------------------------------------------------
+// D8's ONE named exception, and it lives in this file
+// ---------------------------------------------------------------------------
+//
+// ::highlight() rules only work from a stylesheet in the page's own document; a
+// shadow root cannot provide them. So the library adds exactly one page-level
+// stylesheet, containing only its own namespaced highlight rules, marked as the
+// library's, and removed on teardown. That is the only page-level stylesheet
+// the library ever adds, and ranked test 18 asserts the count rather than
+// asserting zero.
+//
+// The highlight names are namespaced (`lahe-`) so a page using the API itself
+// cannot collide with ours, and ours cannot quietly overwrite theirs.
+//
+// The library's UI (boxes, rail, pick-mode outline) does NOT go here in the
+// page's document: it goes inside one closed shadow root, which this file also
+// owns because it is the same question. One host element, created once, marked
+// as the library's, holding everything the library draws. The page's CSS cannot
+// reach into it and its CSS cannot reach the page.
+//
+// Dual-environment module. See docs/CONTRACTS.md, "How a shared module loads".
+(function (root, factory) {
+  "use strict";
+  var browser = typeof window !== "undefined" && !!window.document;
+  if (browser) {
+    root.LAHE = root.LAHE || {};
+    root.LAHE.highlight = factory(root.LAHE.markers);
+  } else {
+    module.exports = factory(require("../shared/markers.js"));
+  }
+})(typeof globalThis !== "undefined" ? globalThis : this, function (markers) {
+  "use strict";
+
+  // The namespace. Every name the library registers starts with this, so a page
+  // that uses the Custom Highlight API for its own purposes is untouched.
+  var PREFIX = "lahe-";
+
+  var NAME = {
+    // A passage a comment is attached to.
+    COMMENT: PREFIX + "comment",
+    // The one whose box is open. Quieter than a selection, louder than the rest.
+    ACTIVE: PREFIX + "comment-active"
+  };
+  var NAMES = [NAME.COMMENT, NAME.ACTIVE];
+
+  // The marked page-level stylesheet. Both attributes matter: `data-lahe` is
+  // the one spelling of "this node is ours" that the normalizer strips, and
+  // `data-lahe-highlight` is what ranked test 18 identifies the ONE allowed
+  // page-level addition by.
+  var STYLE_ID = "lahe-highlight-styles";
+  var STYLE_ATTR = "data-lahe-highlight";
+
+  // The shadow host. Fixed and zero-weight in layout terms: a fixed element is
+  // out of flow, so it cannot move a block or change scrollHeight, and pointer
+  // events pass through it except where the library actually draws something.
+  var SURFACE_ID = "lahe-surface-root";
+
+  // Highlight colors, as light a touch as a highlight can be and still read.
+  // Written with color-mix-free plain rgba so a page-level stylesheet cannot
+  // depend on anything the host page defines.
+  var STYLE_TEXT = [
+    "::highlight(" + NAME.COMMENT + ") {",
+    "  background-color: rgba(255, 202, 84, 0.34);",
+    "  color: inherit;",
+    "}",
+    "::highlight(" + NAME.ACTIVE + ") {",
+    "  background-color: rgba(255, 178, 26, 0.46);",
+    "  color: inherit;",
+    "}"
+  ].join("\n");
+
+  function createHighlights(options) {
+    var opts = options || {};
+    var doc = opts.document || (typeof document !== "undefined" ? document : null);
+
+    // id -> {name, range}. One entry per item, so clearing one item's paint is
+    // a lookup rather than a re-scan.
+    var painted = Object.create(null);
+    var styleNode = null;
+    var surfaceHost = null;
+    var surfaceRoot = null;
+    var surfaceStyles = Object.create(null);
+
+    function global() {
+      return typeof window !== "undefined" ? window : null;
+    }
+
+    // The API, or an honest answer about why not. Checked as a function rather
+    // than remembered as a flag so a test can ask.
+    function supported() {
+      var g = global();
+      if (!g || !doc) return false;
+      return !!(g.CSS && g.CSS.highlights && typeof g.Highlight === "function");
+    }
+
+    function requireSupport() {
+      if (!supported()) {
+        throw new Error(
+          "highlight: this browser has no CSS Custom Highlight API (CSS.highlights and Highlight). " +
+            "Comment highlights need it, and wrapping the range in an element instead is exactly what D8 forbids. " +
+            "Current Chrome, Edge, Safari, and Firefox all have it."
+        );
+      }
+    }
+
+    // ------------------------------------------------------------------------
+    // D8's named exception: one page-level stylesheet
+    // ------------------------------------------------------------------------
+
+    function ensureStylesheet() {
+      if (!doc) return null;
+      if (styleNode && styleNode.parentNode) return styleNode;
+      var existing = doc.getElementById(STYLE_ID);
+      if (existing) {
+        styleNode = existing;
+        return styleNode;
+      }
+      var el = doc.createElement("style");
+      el.id = STYLE_ID;
+      el.setAttribute(STYLE_ATTR, "");
+      markers.markChrome(el);
+      el.textContent = STYLE_TEXT;
+      (doc.head || doc.documentElement).appendChild(el);
+      styleNode = el;
+      return styleNode;
+    }
+
+    function removeStylesheet() {
+      if (styleNode && styleNode.parentNode) styleNode.parentNode.removeChild(styleNode);
+      styleNode = null;
+    }
+
+    // ------------------------------------------------------------------------
+    // Painting
+    // ------------------------------------------------------------------------
+
+    function registryFor(name) {
+      var g = global();
+      var current = g.CSS.highlights.get(name);
+      if (!current) {
+        current = new g.Highlight();
+        g.CSS.highlights.set(name, current);
+      }
+      return current;
+    }
+
+    // Rebuilds one name's Highlight from the ranges we still hold. Rebuilding
+    // rather than deleting is deliberate: a Highlight whose last range is
+    // removed stays registered and empty, so `CSS.highlights` keeps a stable
+    // set of names and a test can tell "nothing painted" from "never ran".
+    function rebuild(name) {
+      var g = global();
+      var highlight = registryFor(name);
+      highlight.clear();
+      Object.keys(painted).forEach(function (id) {
+        if (painted[id].name === name && painted[id].range) highlight.add(painted[id].range);
+      });
+      g.CSS.highlights.set(name, highlight);
+      return highlight;
+    }
+
+    /**
+     * Paints one item's range. Nothing enters the DOM.
+     *
+     * @param {string} id    the record's id
+     * @param {Range} range  a live Range over reviewed content
+     * @param {string} [name] one of NAMES; defaults to the comment paint
+     */
+    function paint(id, range, name) {
+      requireSupport();
+      if (!id) throw new TypeError("highlight.paint: an item id is required");
+      if (!range || typeof range.cloneRange !== "function") {
+        throw new TypeError("highlight.paint: a live Range is required");
+      }
+      var which = NAMES.indexOf(name) === -1 ? NAME.COMMENT : name;
+      ensureStylesheet();
+      var previous = painted[id];
+      painted[id] = { name: which, range: range };
+      if (previous && previous.name !== which) rebuild(previous.name);
+      rebuild(which);
+      return painted[id];
+    }
+
+    // Moves one item between the two paints (open box versus the rest) without
+    // touching its range.
+    function setActive(id, isActive) {
+      var entry = painted[id];
+      if (!entry) return null;
+      return paint(id, entry.range, isActive ? NAME.ACTIVE : NAME.COMMENT);
+    }
+
+    function clear(id) {
+      var entry = painted[id];
+      if (!entry) return false;
+      delete painted[id];
+      if (supported()) rebuild(entry.name);
+      return true;
+    }
+
+    function clearAll() {
+      Object.keys(painted).forEach(function (id) {
+        delete painted[id];
+      });
+      if (supported()) NAMES.forEach(rebuild);
+    }
+
+    function rangeFor(id) {
+      return painted[id] ? painted[id].range : null;
+    }
+
+    function paintedIds() {
+      return Object.keys(painted);
+    }
+
+    // ------------------------------------------------------------------------
+    // The library's one shadow surface
+    // ------------------------------------------------------------------------
+    //
+    // Closed, so the page's own scripts cannot reach in and the library's DOM
+    // cannot be styled by the page. The root is kept in this closure because a
+    // closed root is not readable from the element, which is the point.
+
+    function surface() {
+      if (!doc) return { host: null, root: null };
+      if (surfaceRoot && surfaceHost && surfaceHost.parentNode) {
+        return { host: surfaceHost, root: surfaceRoot };
+      }
+      var host = doc.createElement("div");
+      host.id = SURFACE_ID;
+      markers.markChrome(host);
+      // Inline, not from a stylesheet: the page-level stylesheet budget is one
+      // and it is spent on the highlight rules. A style attribute on the
+      // library's own host is not a page-level addition and never reaches a
+      // record, because the whole node is chrome.
+      host.setAttribute(
+        "style",
+        [
+          "position:fixed",
+          "inset:0",
+          "pointer-events:none",
+          "z-index:2147483000",
+          "border:0",
+          "margin:0",
+          "padding:0",
+          "background:transparent"
+        ].join(";")
+      );
+      var root = host.attachShadow ? host.attachShadow({ mode: "closed" }) : null;
+      (doc.body || doc.documentElement).appendChild(host);
+      surfaceHost = host;
+      surfaceRoot = root;
+      return { host: surfaceHost, root: surfaceRoot };
+    }
+
+    // Adds a stylesheet INSIDE the shadow root, once per key. Every caller's
+    // styles land here rather than in the page, which is what keeps the
+    // page-level count at one.
+    function addSurfaceStyle(key, cssText) {
+      var s = surface();
+      if (!s.root) return null;
+      if (surfaceStyles[key]) return surfaceStyles[key];
+      var el = doc.createElement("style");
+      el.textContent = cssText;
+      s.root.appendChild(el);
+      surfaceStyles[key] = el;
+      return el;
+    }
+
+    function teardown() {
+      clearAll();
+      removeStylesheet();
+      if (surfaceHost && surfaceHost.parentNode) surfaceHost.parentNode.removeChild(surfaceHost);
+      surfaceHost = null;
+      surfaceRoot = null;
+      surfaceStyles = Object.create(null);
+    }
+
+    return {
+      NAME: NAME,
+      NAMES: NAMES,
+      STYLE_ID: STYLE_ID,
+      STYLE_ATTR: STYLE_ATTR,
+      SURFACE_ID: SURFACE_ID,
+      supported: supported,
+      ensureStylesheet: ensureStylesheet,
+      paint: paint,
+      setActive: setActive,
+      clear: clear,
+      clearAll: clearAll,
+      rangeFor: rangeFor,
+      paintedIds: paintedIds,
+      surface: surface,
+      addSurfaceStyle: addSurfaceStyle,
+      teardown: teardown
+    };
+  }
+
+  var shared = createHighlights();
+
+  return {
+    PREFIX: PREFIX,
+    NAME: NAME,
+    NAMES: NAMES,
+    STYLE_ID: STYLE_ID,
+    STYLE_ATTR: STYLE_ATTR,
+    SURFACE_ID: SURFACE_ID,
+    STYLE_TEXT: STYLE_TEXT,
+    createHighlights: createHighlights,
+    shared: shared
+  };
+});
+
 /* ---- src/layer/overlay.js  (owner: 1B) ---- */
 // The rail: the chrome, the card API, and the persistent failure chips.
 //
@@ -6176,6 +6513,511 @@
   };
 });
 
+/* ---- src/layer/tab_active.js  (owner: 1D) ---- */
+// The Active tab's contents: outstanding comments and notes, newest visible,
+// and the open note box at the foot.
+//
+// Owner: 1D. The rail CHROME (the tab shell, the status line, the failure
+// chips, the card API) is 1B's, in overlay.js. This file is only what the
+// Active tab holds, which is why five tasks are not writing one file.
+//
+// ---------------------------------------------------------------------------
+// The law inherited from the rail: THE LIST UPDATES IN PLACE
+// ---------------------------------------------------------------------------
+//
+// There is no render(items) here that redraws everything, and that is
+// deliberate. A rail that rebuilds every row on every change destroys a
+// half-reworded comment, because a removed node never fires blur. So: rows are
+// created once, updated in place, and only ever removed when the reviewer
+// deletes the item.
+//
+// ---------------------------------------------------------------------------
+// How this file talks to the rail it lives in
+// ---------------------------------------------------------------------------
+//
+// Through overlay's card API, never by editing overlay.js. Every item this tab
+// shows is upserted as a card so the rail's own model knows its state, and the
+// visible row is this file's. Until 1B's real rail lands, `mount()` with no
+// host draws its own panel inside the library's one closed shadow surface, so
+// the surface is scoreable on its own. When 1B passes a host, that fallback is
+// never built. See the builder notes for the seam.
+//
+// Every gesture appears here as a readable hint line, rendered from the one
+// gesture table, so a new user works the tool out from the page itself (R43).
+//
+// Dual-environment module. See docs/CONTRACTS.md, "How a shared module loads".
+(function (root, factory) {
+  "use strict";
+  var browser = typeof window !== "undefined" && !!window.document;
+  if (browser) {
+    root.LAHE = root.LAHE || {};
+    root.LAHE.tabActive = factory(
+      root.LAHE.markers,
+      root.LAHE.record,
+      root.LAHE.gestures,
+      root.LAHE.highlight,
+      root.LAHE.overlay
+    );
+  } else {
+    module.exports = factory(
+      require("../shared/markers.js"),
+      require("../shared/record.js"),
+      require("../shared/gestures.js"),
+      require("./highlight.js"),
+      require("./overlay.js")
+    );
+  }
+})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, record, gestures, highlightModule, overlayModule) {
+  "use strict";
+
+  var PANEL_CLASS = "lahe-rail";
+  var PANEL_ATTR = "data-lahe-rail";
+  var ROW_CLASS = "lahe-rail-row";
+  var PANEL_WIDTH = 320;
+
+  // How far each shadow paints beyond its element's box: offset plus blur,
+  // rounded up. Kept beside the CSS that produces it, because bounds() is wrong
+  // the moment the two disagree.
+  var PANEL_SHADOW_REACH = 48;
+  var PILL_SHADOW_REACH = 28;
+
+  // Quiet furniture. It sits beside the page all session, so it is deliberately
+  // plain: one hairline, one soft shadow, one accent, and type that does not
+  // compete with whatever the page is doing.
+  var PANEL_STYLE = [
+    "." + PANEL_CLASS + " {",
+    "  position: fixed;",
+    "  top: 0;",
+    "  right: 0;",
+    "  bottom: 0;",
+    "  width: " + PANEL_WIDTH + "px;",
+    "  max-width: 92vw;",
+    "  pointer-events: auto;",
+    "  display: flex;",
+    "  flex-direction: column;",
+    "  background: #ffffff;",
+    "  border-left: 1px solid rgba(17, 17, 17, 0.12);",
+    "  box-shadow: -12px 0 32px rgba(17, 17, 17, 0.08);",
+    // Above the pick-mode outline, which is drawn over the page and must not
+    // paint across the rail.
+    "  z-index: 2;",
+    "  font: 13px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif;",
+    "  color: #111111;",
+    "}",
+    "." + PANEL_CLASS + "[hidden] { display: none; }",
+    ".lahe-rail-head {",
+    "  display: flex;",
+    "  align-items: baseline;",
+    "  justify-content: space-between;",
+    "  gap: 8px;",
+    "  padding: 14px 16px 10px;",
+    "  border-bottom: 1px solid rgba(17, 17, 17, 0.08);",
+    "}",
+    ".lahe-rail-title { font-weight: 600; letter-spacing: 0.01em; }",
+    ".lahe-rail-count { color: rgba(17, 17, 17, 0.5); font-size: 12px; }",
+    ".lahe-rail-list { flex: 1 1 auto; overflow-y: auto; padding: 8px 12px 12px; display: flex; flex-direction: column; gap: 8px; }",
+    ".lahe-rail-empty { color: rgba(17, 17, 17, 0.45); font-size: 12px; padding: 8px 4px; }",
+    "." + ROW_CLASS + " {",
+    "  border: 1px solid rgba(17, 17, 17, 0.1);",
+    "  border-radius: 10px;",
+    "  padding: 10px;",
+    "  background: #ffffff;",
+    "  display: flex;",
+    "  flex-direction: column;",
+    "  gap: 6px;",
+    "}",
+    "." + ROW_CLASS + "[data-kind='note'] { border-style: dashed; }",
+    ".lahe-rail-quote {",
+    "  margin: 0;",
+    "  padding-left: 8px;",
+    "  border-left: 2px solid rgba(255, 178, 26, 0.9);",
+    "  color: rgba(17, 17, 17, 0.6);",
+    "  font-size: 12px;",
+    "  max-height: 3.2em;",
+    "  overflow: hidden;",
+    "}",
+    ".lahe-rail-note { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }",
+    ".lahe-rail-note[data-empty='true'] { color: rgba(17, 17, 17, 0.4); }",
+    ".lahe-rail-rowfoot { display: flex; align-items: center; gap: 8px; font-size: 11px; color: rgba(17, 17, 17, 0.5); }",
+    ".lahe-rail-state { text-transform: none; }",
+    ".lahe-rail-btn {",
+    "  margin-left: auto;",
+    "  border: 0;",
+    "  background: none;",
+    "  padding: 2px 4px;",
+    "  font: inherit;",
+    "  color: rgba(17, 17, 17, 0.55);",
+    "  cursor: pointer;",
+    "  border-radius: 4px;",
+    "}",
+    ".lahe-rail-btn:hover { color: #111111; background: rgba(17, 17, 17, 0.06); }",
+    ".lahe-rail-foot { border-top: 1px solid rgba(17, 17, 17, 0.08); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }",
+    ".lahe-rail-footlabel { font-size: 11px; color: rgba(17, 17, 17, 0.5); }",
+    ".lahe-rail-hints { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: rgba(17, 17, 17, 0.55); }",
+    ".lahe-rail-hints li { display: flex; gap: 8px; }",
+    ".lahe-rail-keys { flex: 0 0 auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: rgba(17, 17, 17, 0.75); }",
+    ".lahe-rail-pill {",
+    "  position: fixed;",
+    "  right: 16px;",
+    "  bottom: 16px;",
+    "  pointer-events: auto;",
+    "  min-width: 44px;",
+    "  height: 32px;",
+    "  padding: 0 12px;",
+    "  border-radius: 999px;",
+    "  border: 1px solid rgba(17, 17, 17, 0.12);",
+    "  background: #ffffff;",
+    "  box-shadow: 0 6px 20px rgba(17, 17, 17, 0.16);",
+    "  font: 12px/32px ui-sans-serif, system-ui, -apple-system, sans-serif;",
+    "  color: #111111;",
+    "  cursor: pointer;",
+    "  z-index: 2;",
+    "}",
+    ".lahe-rail-pill[hidden] { display: none; }",
+    "@media (prefers-color-scheme: dark) {",
+    "  ." + PANEL_CLASS + ", ." + ROW_CLASS + ", .lahe-rail-pill { background: #1b1b1d; color: #f2f2f2; border-color: rgba(255,255,255,0.16); }",
+    "  .lahe-rail-count, .lahe-rail-quote, .lahe-rail-rowfoot, .lahe-rail-hints, .lahe-rail-footlabel { color: rgba(242,242,242,0.6); }",
+    "  .lahe-rail-keys { color: rgba(242,242,242,0.85); }",
+    "}"
+  ].join("\n");
+
+  function createActiveTab(options) {
+    var opts = options || {};
+    var comments = opts.comments || null;
+    if (!comments) throw new TypeError("createActiveTab: a comments surface is required");
+    var doc = Object.prototype.hasOwnProperty.call(opts, "document")
+      ? opts.document
+      : typeof document !== "undefined"
+      ? document
+      : null;
+    var rail = opts.overlay || overlayModule.shared;
+    var highlights = opts.highlights || comments.highlights || null;
+    var providedHost = opts.host || null;
+
+    var panel = null;
+    var listEl = null;
+    var emptyEl = null;
+    var countEl = null;
+    var footEl = null;
+    var pill = null;
+    var noteHandle = null;
+    var collapsed = false;
+    var mounted = false;
+    var unsubscribe = null;
+    // id -> row node. The reason there is no rebuild path.
+    var rows = Object.create(null);
+
+    function surfaceRoot() {
+      if (providedHost) return providedHost;
+      if (!doc || !highlights) return null;
+      highlights.addSurfaceStyle("tab_active", PANEL_STYLE);
+      var got = highlights.surface();
+      return got.root || got.host;
+    }
+
+    function el(tag, className, text) {
+      var node = doc.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined && text !== null) node.textContent = text;
+      markers.markChrome(node);
+      return node;
+    }
+
+    function mount() {
+      if (mounted) return handle();
+      var host = surfaceRoot();
+      if (!host) {
+        mounted = true;
+        return handle();
+      }
+
+      panel = el("section", PANEL_CLASS);
+      panel.setAttribute(PANEL_ATTR, "");
+      panel.setAttribute("aria-label", "Review");
+
+      var head = el("header", "lahe-rail-head");
+      head.appendChild(el("span", "lahe-rail-title", "Active"));
+      countEl = el("span", "lahe-rail-count", "");
+      head.appendChild(countEl);
+      panel.appendChild(head);
+
+      listEl = el("div", "lahe-rail-list");
+      emptyEl = el("p", "lahe-rail-empty", "Nothing outstanding. Select text and press Cmd-Shift-C.");
+      listEl.appendChild(emptyEl);
+      panel.appendChild(listEl);
+
+      footEl = el("footer", "lahe-rail-foot");
+      footEl.appendChild(el("span", "lahe-rail-footlabel", "A note about the page, tied to nothing"));
+      panel.appendChild(footEl);
+      footEl.appendChild(hintList());
+
+      pill = el("button", "lahe-rail-pill", "Review");
+      pill.setAttribute("type", "button");
+      pill.hidden = true;
+      pill.addEventListener("click", function () {
+        collapse(false);
+      });
+
+      host.appendChild(panel);
+      host.appendChild(pill);
+
+      openNoteBox();
+      unsubscribe = comments.onChange(function (item, event) {
+        onItemChanged(item, event);
+      });
+      mounted = true;
+      refresh();
+      return handle();
+    }
+
+    // The note box at the foot of the thread: an open box tied to nothing
+    // (R18). It is created once and replaced only when the reviewer finishes
+    // the one that is there.
+    function openNoteBox() {
+      if (!footEl) return null;
+      noteHandle = comments.openNote({ host: footEl, focus: false });
+      // Keep the hint list last, under the box.
+      footEl.appendChild(footEl.querySelector(".lahe-rail-hints"));
+      return noteHandle;
+    }
+
+    function hintList() {
+      var list = el("ul", "lahe-rail-hints");
+      gestures.hintLines().forEach(function (line) {
+        var li = el("li");
+        li.appendChild(el("span", "lahe-rail-keys", line.keys));
+        li.appendChild(el("span", "lahe-rail-hint", line.hint));
+        list.appendChild(li);
+      });
+      return list;
+    }
+
+    function hintText() {
+      if (!panel) {
+        return gestures
+          .hintLines()
+          .map(function (line) {
+            return line.keys + " " + line.hint;
+          })
+          .join("\n");
+      }
+      return panel.querySelector(".lahe-rail-hints").textContent;
+    }
+
+    function onItemChanged(item, event) {
+      if (!mounted) return;
+      if (event === "removed") {
+        dropRow(item.id);
+        refreshCount();
+        return;
+      }
+      if (noteHandle && item[record.FIELD.ID] === noteHandle.id && event === "ready") {
+        // The reviewer finished the untethered note, so the foot gets a fresh
+        // empty one and the finished note joins the list.
+        openNoteBox();
+      }
+      refresh();
+    }
+
+    // In place, always. New items get a row at the top (newest visible without
+    // scrolling); existing rows are updated where they are.
+    function refresh() {
+      if (!listEl) return handle();
+      var items = comments.outstanding().filter(function (item) {
+        return !noteHandle || item[record.FIELD.ID] !== noteHandle.id || !record.isDraft(item);
+      });
+      var seen = Object.create(null);
+
+      items.forEach(function (item) {
+        var id = item[record.FIELD.ID];
+        seen[id] = true;
+        rail.upsertCard(item);
+        rail.setCardState(id, item[record.FIELD.STATE]);
+        if (!rows[id]) {
+          rows[id] = buildRow(item);
+          listEl.insertBefore(rows[id], listEl.firstChild);
+        }
+        updateRow(rows[id], item);
+      });
+
+      Object.keys(rows).forEach(function (id) {
+        if (!seen[id]) dropRow(id);
+      });
+
+      emptyEl.hidden = items.length > 0;
+      if (emptyEl.parentNode !== listEl) listEl.appendChild(emptyEl);
+      refreshCount();
+      return handle();
+    }
+
+    function refreshCount() {
+      if (!countEl) return;
+      var n = Object.keys(rows).length;
+      countEl.textContent = n === 1 ? "1 open" : n + " open";
+    }
+
+    function buildRow(item) {
+      var id = item[record.FIELD.ID];
+      var row = el("article", ROW_CLASS);
+      row.setAttribute("data-lahe-item", id);
+      row.setAttribute("data-kind", item[record.FIELD.KIND]);
+
+      var quote = el("p", "lahe-rail-quote", "");
+      row.appendChild(quote);
+
+      var note = el("p", "lahe-rail-note", "");
+      row.appendChild(note);
+
+      var foot = el("div", "lahe-rail-rowfoot");
+      foot.appendChild(el("span", "lahe-rail-state", ""));
+      var reword = el("button", "lahe-rail-btn", "Reword");
+      reword.setAttribute("type", "button");
+      reword.addEventListener("click", function () {
+        comments.reopen(id).focus();
+      });
+      var del = el("button", "lahe-rail-btn", "Delete");
+      del.setAttribute("type", "button");
+      del.addEventListener("click", function () {
+        comments.remove(id);
+      });
+      foot.appendChild(reword);
+      foot.appendChild(del);
+      row.appendChild(foot);
+      return row;
+    }
+
+    function updateRow(row, item) {
+      var quote = row.querySelector(".lahe-rail-quote");
+      var quoteText = item[record.FIELD.CONTEXT] ? item[record.FIELD.CONTEXT].quote : null;
+      quote.textContent = quoteText || "";
+      quote.hidden = !quoteText;
+
+      var note = row.querySelector(".lahe-rail-note");
+      var text = item[record.FIELD.NOTE];
+      note.textContent = text ? text : "Empty draft";
+      note.setAttribute("data-empty", text ? "false" : "true");
+
+      var state = row.querySelector(".lahe-rail-state");
+      state.textContent = stateLabel(item);
+      row.setAttribute("data-state", item[record.FIELD.STATE]);
+    }
+
+    // Nothing that is not ready is actionable (R7), and the row says so in
+    // words rather than in a color a reviewer has to learn.
+    function stateLabel(item) {
+      var state = item[record.FIELD.STATE];
+      if (state === record.STATE.DRAFT) return "Draft, not sent";
+      if (state === record.STATE.READY) return "Ready";
+      if (state === record.STATE.NOT_HANDLED) return "Not handled";
+      return "Handled";
+    }
+
+    function dropRow(id) {
+      var row = rows[id];
+      if (row && row.parentNode) row.parentNode.removeChild(row);
+      delete rows[id];
+      rail.removeCard(id);
+    }
+
+    function focusNote() {
+      if (!noteHandle) return null;
+      return noteHandle.focus();
+    }
+
+    function noteBox() {
+      return noteHandle;
+    }
+
+    // The collapsed pill never overlaps the open rail: only one of the two is
+    // ever on screen.
+    function collapse(next) {
+      collapsed = next === undefined ? !collapsed : !!next;
+      if (panel) panel.hidden = collapsed;
+      if (pill) pill.hidden = !collapsed;
+      return collapsed;
+    }
+
+    function isCollapsed() {
+      return collapsed;
+    }
+
+    // What the rail occupies right now, in viewport coordinates, INCLUDING the
+    // reach of its shadow. A box shadow paints outside the element's box, so a
+    // caller told the border-box edge and asked "is the page identical outside
+    // the rail" gets a wrong answer by 44 pixels. Ranked test 18 clips its
+    // screenshot to everything left of this, which is the honest reading of
+    // "identical outside the rail's bounds".
+    function bounds() {
+      var node = collapsed ? pill : panel;
+      if (!node || !node.getBoundingClientRect) return { left: 0, top: 0, width: 0, height: 0 };
+      var reach = collapsed ? PILL_SHADOW_REACH : PANEL_SHADOW_REACH;
+      var r = node.getBoundingClientRect();
+      return {
+        left: r.left - reach,
+        top: r.top - reach,
+        width: r.width + reach,
+        height: r.height + reach * 2,
+        right: r.right,
+        bottom: r.bottom + reach
+      };
+    }
+
+    function unmount() {
+      if (unsubscribe) unsubscribe();
+      unsubscribe = null;
+      if (panel && panel.parentNode) panel.parentNode.removeChild(panel);
+      if (pill && pill.parentNode) pill.parentNode.removeChild(pill);
+      panel = null;
+      pill = null;
+      listEl = null;
+      footEl = null;
+      countEl = null;
+      emptyEl = null;
+      noteHandle = null;
+      rows = Object.create(null);
+      mounted = false;
+    }
+
+    function isMounted() {
+      return mounted;
+    }
+
+    function handle() {
+      return api;
+    }
+
+    var api = {
+      PANEL_CLASS: PANEL_CLASS,
+      PANEL_ATTR: PANEL_ATTR,
+      ROW_CLASS: ROW_CLASS,
+      mount: mount,
+      unmount: unmount,
+      isMounted: isMounted,
+      refresh: refresh,
+      rowCount: function () {
+        return Object.keys(rows).length;
+      },
+      hintText: hintText,
+      focusNote: focusNote,
+      noteBox: noteBox,
+      collapse: collapse,
+      isCollapsed: isCollapsed,
+      bounds: bounds
+    };
+
+    return api;
+  }
+
+  return {
+    PANEL_CLASS: PANEL_CLASS,
+    PANEL_ATTR: PANEL_ATTR,
+    ROW_CLASS: ROW_CLASS,
+    PANEL_WIDTH: PANEL_WIDTH,
+    PANEL_STYLE: PANEL_STYLE,
+    createActiveTab: createActiveTab
+  };
+});
+
 /* ---- src/layer/sync.js  (owner: 1B) ---- */
 // The sync client.
 //
@@ -6301,27 +7143,48 @@
 /* ---- src/layer/comments.js  (owner: 1D) ---- */
 // Comment boxes, element-pick mode, and the untethered note.
 //
-// Owner: 1D. 0A-kernel ships A MINIMAL REAL COMMENT BOX here, not a stub,
-// because 1B (library shell) and 1D (comments) each need a scoreable done bar
-// in their own worktree instead of each stubbing the other's half and both
-// passing. 1B can type into this box and assert twenty repaints leave the node
-// identity and activeElement alone; 1D replaces it with the real surface.
+// Owner: 1D. Implements architecture D3 (the gesture vocabulary, browse is the
+// page untouched) for the comment half, and leans on D8 (highlights that do not
+// change the page) for everything it paints.
 //
-// What is real here: a focused text box, a draft record written to the store
-// SYNCHRONOUSLY ON EVERY KEYSTROKE, Cmd-Enter marking it ready, Esc closing it
-// with the draft kept, and rewording bumping the revision.
+// ---------------------------------------------------------------------------
+// What a reviewer does, and what happens
+// ---------------------------------------------------------------------------
 //
-// What 1D still owns: element-pick mode's hover outlining, the untethered note
-// at the foot of the thread, the highlight painting (that is highlight.js), the
-// shadow-root styling, and the draft nudge.
+//   Cmd-Shift-C with text selected     a box opens already focused on that
+//                                      passage, and the passage is painted
+//   Cmd-Shift-C with nothing selected  element-pick mode: hovering outlines the
+//                                      element under the pointer, clicking one
+//                                      comments on the whole thing, Esc cancels
+//   a box at the foot of the thread    a note tied to nothing (R18)
+//   Cmd-Enter                          marks the comment ready. Nothing that is
+//                                      not ready is actionable (R7)
+//   Esc                                closes the box, KEEPING the draft
+//   rewording a ready comment          bumps its revision (R21)
+//   deleting                           the reviewer's own act, and the only
+//                                      thing that ever removes an item
 //
-// Two rules this box already obeys, because they are the ones a rewrite loses:
+// ---------------------------------------------------------------------------
+// Four rules this file must not lose
+// ---------------------------------------------------------------------------
 //
-//  1. THE BOX IS NEVER RE-CREATED WHILE IT HOLDS FOCUS. open() on an id that is
-//     already open returns the same node.
-//  2. NOTHING THE LIBRARY ADDS EVER REACHES A RECORD. The box is marked as the
-//     library's own chrome, so the normalizer strips it out of any markup a
-//     record carries (R23).
+//  1. THE BOX IS NEVER RE-CREATED WHILE IT HOLDS FOCUS. Opening a box for an id
+//     that already has one returns the same node. A rail that rebuilds its
+//     cards on every repaint is the single largest revert mechanism in the tool
+//     being replaced.
+//  2. NOTHING THE LIBRARY ADDS EVER REACHES A RECORD. Every node here is marked
+//     as the library's, and every node here lives inside the closed shadow
+//     surface, so the normalizer strips it and the page's CSS cannot reach it.
+//  3. EVERY KEYSTROKE IS DURABLE, SYNCHRONOUSLY. Not on a timer, not on blur.
+//  4. NOTHING IS WRITTEN TO THE REVIEWED PAGE. No outline on a hovered element,
+//     no wrapper around a highlighted range, no class on a commented block. The
+//     pick outline is a rectangle drawn in the library's own shadow root over
+//     the element's bounding box, which is why ranked test 18 can assert that
+//     every block's rectangle is unchanged.
+//
+// The gesture decisions are NOT made here. They come from the one pure table in
+// src/shared/gestures.js, so the rail's hint lines and this file's behavior
+// cannot drift apart.
 //
 // Dual-environment module. See docs/CONTRACTS.md, "How a shared module loads".
 (function (root, factory) {
@@ -6329,30 +7192,151 @@
   var browser = typeof window !== "undefined" && !!window.document;
   if (browser) {
     root.LAHE = root.LAHE || {};
-    root.LAHE.comments = factory(root.LAHE.markers, root.LAHE.record, root.LAHE.store, root.LAHE.gestures);
+    root.LAHE.comments = factory(
+      root.LAHE.markers,
+      root.LAHE.normalize,
+      root.LAHE.record,
+      root.LAHE.regions,
+      root.LAHE.store,
+      root.LAHE.gestures,
+      root.LAHE.anchor,
+      root.LAHE.highlight,
+      root.LAHE.listeners
+    );
   } else {
     module.exports = factory(
       require("../shared/markers.js"),
+      require("../shared/normalize.js"),
       require("../shared/record.js"),
+      require("../shared/regions.js"),
       require("./store.js"),
-      require("../shared/gestures.js")
+      require("../shared/gestures.js"),
+      require("./anchor.js"),
+      require("./highlight.js"),
+      require("./listeners.js")
     );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, record, storeModule, gestures) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (
+  markers,
+  normalize,
+  record,
+  regions,
+  storeModule,
+  gestures,
+  anchor,
+  highlightModule,
+  listeners
+) {
   "use strict";
 
   var BOX_CLASS = "lahe-comment-box";
   var INPUT_CLASS = "lahe-comment-input";
+  var OUTLINE_CLASS = "lahe-pick-outline";
+  var LISTENER_GROUP = "comments";
+
+  // Ken's copy, exactly. One spelling, used on every card.
+  var HINT_READY = "Cmd-Enter when done with this comment";
+
+  // The box's own look. Quiet: a card the reviewer can ignore while they read,
+  // and unmistakably not part of the page. It lives in the shadow root, so
+  // nothing here can leak into the page and the page cannot restyle it.
+  var BOX_STYLE = [
+    ":host, * { box-sizing: border-box; }",
+    "." + BOX_CLASS + " {",
+    "  position: fixed;",
+    "  width: 288px;",
+    "  max-width: calc(100vw - 32px);",
+    "  pointer-events: auto;",
+    "  display: flex;",
+    "  flex-direction: column;",
+    "  gap: 8px;",
+    "  padding: 12px;",
+    "  border-radius: 10px;",
+    "  border: 1px solid rgba(17, 17, 17, 0.12);",
+    "  background: #ffffff;",
+    "  box-shadow: 0 8px 28px rgba(17, 17, 17, 0.16), 0 1px 2px rgba(17, 17, 17, 0.08);",
+    "  font: 13px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif;",
+    "  color: #111111;",
+    "}",
+    "." + BOX_CLASS + "[data-lahe-placement='inline'] {",
+    "  position: static;",
+    "  width: auto;",
+    "  box-shadow: none;",
+    "  border-color: rgba(17, 17, 17, 0.16);",
+    "}",
+    ".lahe-comment-quote {",
+    "  margin: 0;",
+    "  padding-left: 8px;",
+    "  border-left: 2px solid rgba(255, 178, 26, 0.9);",
+    "  color: rgba(17, 17, 17, 0.62);",
+    "  font-size: 12px;",
+    "  max-height: 3.2em;",
+    "  overflow: hidden;",
+    "}",
+    "." + INPUT_CLASS + " {",
+    "  width: 100%;",
+    "  min-height: 66px;",
+    "  resize: vertical;",
+    "  border: 1px solid rgba(17, 17, 17, 0.16);",
+    "  border-radius: 6px;",
+    "  padding: 7px 8px;",
+    "  font: inherit;",
+    "  color: inherit;",
+    "  background: #ffffff;",
+    "}",
+    "." + INPUT_CLASS + ":focus-visible, ." + INPUT_CLASS + ":focus {",
+    "  outline: 2px solid rgba(255, 158, 0, 0.85);",
+    "  outline-offset: 1px;",
+    "  border-color: transparent;",
+    "}",
+    ".lahe-comment-foot {",
+    "  display: flex;",
+    "  align-items: center;",
+    "  justify-content: space-between;",
+    "  gap: 8px;",
+    "  color: rgba(17, 17, 17, 0.5);",
+    "  font-size: 11px;",
+    "}",
+    ".lahe-comment-state[data-state='ready'] { color: rgba(17, 17, 17, 0.72); }",
+    "." + OUTLINE_CLASS + " {",
+    "  position: fixed;",
+    "  pointer-events: none;",
+    "  border-radius: 4px;",
+    "  outline: 2px solid rgba(255, 158, 0, 0.95);",
+    "  outline-offset: 2px;",
+    "  background: rgba(255, 202, 84, 0.12);",
+    "  z-index: 1;",
+    "  display: none;",
+    "}",
+    "@media (prefers-color-scheme: dark) {",
+    "  ." + BOX_CLASS + " { background: #1b1b1d; color: #f2f2f2; border-color: rgba(255,255,255,0.16); }",
+    "  ." + INPUT_CLASS + " { background: #111113; color: inherit; border-color: rgba(255,255,255,0.18); }",
+    "  .lahe-comment-quote { color: rgba(242,242,242,0.66); }",
+    "  .lahe-comment-foot { color: rgba(242,242,242,0.55); }",
+    "}"
+  ].join("\n");
 
   function createComments(options) {
     var opts = options || {};
     var store = opts.store || storeModule.shared;
     var reviewId = opts.reviewId || null;
-    var doc = opts.document || (typeof document !== "undefined" ? document : null);
+    var hasDoc = Object.prototype.hasOwnProperty.call(opts, "document");
+    var doc = hasDoc ? opts.document : typeof document !== "undefined" ? document : null;
+    var win = opts.window || (typeof window !== "undefined" ? window : null);
+    var highlights = opts.highlights || (doc ? highlightModule.createHighlights({ document: doc }) : null);
+    var defaultPage = opts.page || null;
 
-    // id -> {item, node, input}
+    // id -> handle
     var open = Object.create(null);
-    var listeners = [];
+    var listenerHandles = [];
+    var listenersState = [];
+    var pick = { active: false, element: null };
+    // How much room the rail is assumed to take on the right. The rail's real
+    // width is 1B's; this is only a clamp for box placement, so being generous
+    // costs nothing.
+    var RAIL_ALLOWANCE = 340;
+    var outlineNode = null;
+    var surfaceRoot = null;
 
     function requireReview() {
       if (!reviewId) throw new Error("comments: a reviewId is required before a comment can be stored");
@@ -6364,42 +7348,71 @@
       return reviewId;
     }
 
+    function setPage(page) {
+      defaultPage = page;
+      return defaultPage;
+    }
+
     function onChange(fn) {
-      listeners.push(fn);
+      listenersState.push(fn);
       return function () {
-        listeners = listeners.filter(function (f) {
+        listenersState = listenersState.filter(function (f) {
           return f !== fn;
         });
       };
     }
 
-    function emit(item) {
-      for (var i = 0; i < listeners.length; i += 1) listeners[i](item);
+    function emit(item, event) {
+      for (var i = 0; i < listenersState.length; i += 1) listenersState[i](item, event || "changed");
     }
 
-    // The one write path. Synchronous to storage before anything else happens,
-    // which is the rule the whole design rests on.
-    function persist(item) {
+    // The one write path. Synchronous to storage before anything else happens.
+    function persist(item, event) {
       store.write(requireReview(), item);
-      emit(item);
+      emit(item, event);
       return item;
     }
 
+    // ------------------------------------------------------------------------
+    // The shadow surface
+    // ------------------------------------------------------------------------
+
+    function surface() {
+      if (!doc || !highlights) return null;
+      if (surfaceRoot) return surfaceRoot;
+      var got = highlights.surface();
+      surfaceRoot = got.root || got.host;
+      highlights.addSurfaceStyle("comments", BOX_STYLE);
+      return surfaceRoot;
+    }
+
+    // ------------------------------------------------------------------------
+    // Opening a box
+    // ------------------------------------------------------------------------
+
     /**
-     * Opens a comment box.
+     * Opens a comment box and mints its record.
      *
      * @param {Object} input
-     *   page      {origin, path, title, seq, source_hint} from record.pageFrom
-     *   quote     the passage the reviewer selected, or null for a note
-     *   kind      record.KIND.COMMENT (default) or record.KIND.NOTE
-     *   region    the anchor reference, when 1C has minted one
-     *   host      the element to append the box to (default document.body)
-     * @returns {Object} {item, node, input, focus, type, markReady, close}
+     *   page       {origin, path, title, seq, source_hint} from record.pageFrom
+     *   quote      the passage the reviewer selected, or null for a note
+     *   kind       record.KIND.COMMENT (default) or record.KIND.NOTE
+     *   region     the anchor reference, when one has been minted
+     *   range      a live Range to paint and to position the box against
+     *   element    the element the comment is about, for an element pick
+     *   host       a node inside the surface to append the box to
+     *   placement  "anchored" (default) or "inline" (in the rail's thread)
+     * @returns {Object} a handle: {id, item, node, input, focus, type,
+     *                              markReady, close, remove}
      */
     function openBox(input) {
       var src = input || {};
-      var page = src.page || {};
+      var page = src.page || defaultPage || {};
       var kind = src.kind || record.KIND.COMMENT;
+      var context = record.emptyContext();
+      if (src.quote) context.quote = src.quote;
+      if (src.element && src.element.tagName) context.element = src.element.tagName;
+      if (src.heading) context.heading = src.heading;
 
       var item = record.newItem({
         kind: kind,
@@ -6411,37 +7424,93 @@
         page_seq: page.seq,
         source_hint: page.source_hint,
         region: src.region || record.emptyRegion(),
-        context: src.quote ? Object.assign(record.emptyContext(), { quote: src.quote }) : record.emptyContext()
+        context: context
       });
 
-      // A draft exists the moment the box does. An empty box that the reviewer
-      // abandons is a draft they can come back to, which costs nothing, and a
-      // box whose first keystroke is the first durable thing is a box that can
-      // lose that keystroke.
-      persist(item);
+      // A draft exists the moment the box does. An empty box the reviewer
+      // abandons is a draft they can come back to, which costs nothing; a box
+      // whose first keystroke is the first durable thing can lose that
+      // keystroke.
+      //
+      // The ONE exception, and it is not a weakening of that rule: the note box
+      // standing open at the foot of the thread all session. It is not a box
+      // the reviewer opened, so minting a record for it would put an empty note
+      // in the rail, in review.json, and in the agent's queue on every page
+      // load. It mints on its first keystroke instead, still synchronously, and
+      // still before anything else happens.
+      if (!src.deferred) persist(item, "opened");
 
-      var handle = buildHandle(item, src.host || null);
+      var handle = buildHandle(item, src);
       open[item[record.FIELD.ID]] = handle;
+
+      if (src.range && highlights) {
+        highlights.paint(item[record.FIELD.ID], src.range, highlightModule.NAME.ACTIVE);
+      }
       return handle;
     }
 
-    function buildHandle(item, host) {
+    // Opens a box for an item that already exists: the reword path. Mints
+    // nothing, and returns the SAME node when one is already open.
+    function reopen(id) {
+      if (open[id]) return open[id];
+      var item = store.readItem(requireReview(), id);
+      if (!item) throw new Error("comments.reopen: no item " + String(id) + " in review " + requireReview());
+      var handle = buildHandle(item, {
+        quote: item[record.FIELD.CONTEXT] ? item[record.FIELD.CONTEXT].quote : null,
+        range: highlights ? highlights.rangeFor(id) : null
+      });
+      open[id] = handle;
+      return handle;
+    }
+
+    function buildHandle(item, src) {
       var id = item[record.FIELD.ID];
       var node = null;
       var inputEl = null;
+      var stateEl = null;
+      var placement = src && src.placement === "inline" ? "inline" : "anchored";
 
       if (doc) {
+        var host = (src && src.host) || surface();
         node = doc.createElement("div");
         node.className = BOX_CLASS;
         // Marked as the library's own chrome, so nothing here can reach a
         // record's markup (R23).
         markers.markChrome(node);
         node.setAttribute("data-lahe-item", id);
+        node.setAttribute("data-lahe-placement", placement);
+
+        var quote = item[record.FIELD.CONTEXT] ? item[record.FIELD.CONTEXT].quote : null;
+        if (quote) {
+          var quoteEl = doc.createElement("p");
+          quoteEl.className = "lahe-comment-quote";
+          quoteEl.textContent = quote;
+          node.appendChild(quoteEl);
+        }
 
         inputEl = doc.createElement("textarea");
         inputEl.className = INPUT_CLASS;
         inputEl.setAttribute("spellcheck", "false");
+        inputEl.setAttribute("rows", "3");
+        inputEl.setAttribute(
+          "placeholder",
+          item[record.FIELD.KIND] === record.KIND.NOTE ? "Not tied to any passage" : "What should change here?"
+        );
+        inputEl.value = item[record.FIELD.NOTE] || "";
         node.appendChild(inputEl);
+
+        var foot = doc.createElement("div");
+        foot.className = "lahe-comment-foot";
+        var hint = doc.createElement("span");
+        hint.className = "lahe-comment-hint";
+        hint.textContent = HINT_READY;
+        stateEl = doc.createElement("span");
+        stateEl.className = "lahe-comment-state";
+        stateEl.setAttribute("data-state", item[record.FIELD.STATE]);
+        stateEl.textContent = item[record.FIELD.STATE] === record.STATE.READY ? "Ready" : "Draft";
+        foot.appendChild(hint);
+        foot.appendChild(stateEl);
+        node.appendChild(foot);
 
         inputEl.addEventListener("input", function () {
           type(inputEl.value);
@@ -6458,31 +7527,48 @@
           if (got.gesture === gestures.GESTURE.MARK_READY) {
             if (got.preventDefault) event.preventDefault();
             markReady();
+            close();
           } else if (got.gesture === gestures.GESTURE.CANCEL) {
             if (got.preventDefault) event.preventDefault();
-            close();
+            // Esc cancels the thing that is open. Picking is more recent than
+            // the box, so it goes first; a second Esc closes the box, with the
+            // draft kept.
+            if (pick.active) exitPickMode();
+            else close();
+          } else if (got.gesture === gestures.GESTURE.ENTER_ELEMENT_PICK) {
+            // Starting the next comment without leaving the box first. The
+            // document-level handler cannot see this one: the event retargets
+            // to the library's own host, and everything of the library's is
+            // skipped there by design.
+            if (got.preventDefault) event.preventDefault();
+            enterPickMode();
           }
         });
 
-        (host || doc.body).appendChild(node);
+        if (host) host.appendChild(node);
+        if (placement === "anchored") positionAt(node, src && src.range ? src.range : null);
       }
 
       // Every keystroke. Synchronous, before anything else.
       function type(text) {
         var current = handleItem();
         // A draft does not bump rev: drafts flow to the helper and the log
-        // legitimately holds many events at one revision (0A-wire's
-        // idempotence rule is by event id, never by item and rev).
-        var next = Object.assign({}, current);
-        next[record.FIELD.NOTE] = String(text);
-        next[record.FIELD.UPDATED_AT] = record.nowIso();
-        if (!record.isDraft(next)) {
+        // legitimately holds many events at one revision (idempotence is by
+        // event id, never by item and rev).
+        var next;
+        if (record.isDraft(current)) {
+          next = Object.assign({}, current);
+          next[record.FIELD.NOTE] = String(text);
+          next[record.FIELD.UPDATED_AT] = record.nowIso();
+        } else {
           // Rewording something already ready bumps the revision, which is what
           // makes a stale reply naming the old revision refusable (R21).
           next = record.bumpRev(current, { note: String(text) });
         }
         store.write(requireReview(), next);
-        emit(next);
+        if (inputEl && inputEl.value !== next[record.FIELD.NOTE]) inputEl.value = next[record.FIELD.NOTE];
+        paintState(next);
+        emit(next, "typed");
         return next;
       }
 
@@ -6493,8 +7579,15 @@
         next[record.FIELD.UPDATED_AT] = record.nowIso();
         record.validateItem(next);
         store.write(requireReview(), next);
-        emit(next);
+        paintState(next);
+        emit(next, "ready");
         return next;
+      }
+
+      function paintState(next) {
+        if (!stateEl) return;
+        stateEl.setAttribute("data-state", next[record.FIELD.STATE]);
+        stateEl.textContent = next[record.FIELD.STATE] === record.STATE.READY ? "Ready" : "Draft";
       }
 
       function close() {
@@ -6502,6 +7595,8 @@
         // reviewer's own delete removes an item.
         if (node && node.parentNode) node.parentNode.removeChild(node);
         delete open[id];
+        if (highlights) highlights.setActive(id, false);
+        emit(handleItem(), "closed");
         return handleItem();
       }
 
@@ -6521,11 +7616,240 @@
         },
         node: node,
         input: inputEl,
+        placement: placement,
         focus: focus,
         type: type,
         markReady: markReady,
         close: close
       };
+    }
+
+    // Places an anchored box under its passage, kept inside the viewport and
+    // clear of the rail. Fixed positioning, inside the shadow root: the page's
+    // own layout never learns this happened.
+    function positionAt(node, range) {
+      if (!node || !win) return node;
+      var vw = win.innerWidth || 1024;
+      var vh = win.innerHeight || 768;
+      var width = 288;
+      var rect = range && typeof range.getBoundingClientRect === "function" ? range.getBoundingClientRect() : null;
+      var top = rect ? rect.bottom + 10 : 24;
+      var left = rect ? rect.left : 24;
+      var rightLimit = Math.max(16, vw - width - 16 - RAIL_ALLOWANCE);
+      if (left > rightLimit) left = rightLimit;
+      if (left < 16) left = 16;
+      if (top > vh - 180) top = Math.max(16, (rect ? rect.top : vh) - 180);
+      node.style.top = Math.round(top) + "px";
+      node.style.left = Math.round(left) + "px";
+      return node;
+    }
+
+    // ------------------------------------------------------------------------
+    // The three ways a comment starts
+    // ------------------------------------------------------------------------
+
+    // Cmd-Shift-C with a selection. The box opens already focused on that
+    // passage (R16).
+    function commentOnSelection(input) {
+      var src = input || {};
+      var selection = src.selection || (win && win.getSelection ? win.getSelection() : null);
+      if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
+      var range = selection.getRangeAt(0).cloneRange();
+      var quote = String(selection.toString()).trim();
+      if (!quote) return null;
+      var element = blockOf(range.commonAncestorContainer);
+      var handle = openBox({
+        page: src.page,
+        quote: quote,
+        range: range,
+        element: null,
+        region: regionFor(element, range),
+        heading: headingTextFor(element)
+      });
+      // The reviewer's selection has done its job; leaving it painted under the
+      // highlight reads as two overlapping colors.
+      if (selection.removeAllRanges) selection.removeAllRanges();
+      handle.focus();
+      return handle;
+    }
+
+    // Cmd-Shift-C with nothing selected. Hovering outlines, clicking comments,
+    // Esc cancels (R17).
+    function enterPickMode() {
+      if (!doc) return pickState();
+      pick.active = true;
+      pick.element = null;
+      showOutline(null);
+      return pickState();
+    }
+
+    function exitPickMode() {
+      pick.active = false;
+      pick.element = null;
+      showOutline(null);
+      return pickState();
+    }
+
+    function pickState() {
+      return {
+        active: pick.active,
+        outlining: pick.element ? pick.element.id || pick.element.tagName : null,
+        element: pick.element
+      };
+    }
+
+    // Comments on a whole element: the element's own contents are the passage.
+    function commentOnElement(element, input) {
+      var src = input || {};
+      if (!element) return null;
+      var range = doc.createRange();
+      range.selectNodeContents(element);
+      var handle = openBox({
+        page: src.page,
+        quote: String(element.textContent || "").trim(),
+        range: range,
+        element: element,
+        region: regionFor(element, range),
+        heading: headingTextFor(element)
+      });
+      handle.focus();
+      return handle;
+    }
+
+    // A note tied to nothing (R18). No range, so nothing is painted and nothing
+    // is anchored: the region stays empty and honest.
+    function openNote(input) {
+      var src = input || {};
+      var handle = openBox({
+        page: src.page,
+        kind: record.KIND.NOTE,
+        host: src.host,
+        placement: src.host ? "inline" : "anchored",
+        deferred: src.deferred !== false
+      });
+      if (src.focus !== false) handle.focus();
+      return handle;
+    }
+
+    // ------------------------------------------------------------------------
+    // Anchoring and labels
+    // ------------------------------------------------------------------------
+
+    function blockOf(node) {
+      var el = node;
+      while (el && el.nodeType !== 1) el = el.parentNode;
+      return el && el.nodeType === 1 ? el : null;
+    }
+
+    function headingTextFor(element) {
+      if (!element) return null;
+      var el = element.previousElementSibling;
+      while (el) {
+        if (/^H[1-6]$/.test(el.tagName)) return normalize.normalizeText(el.textContent || "");
+        el = el.previousElementSibling;
+      }
+      var parent = element.parentElement;
+      return parent && parent !== doc.body ? headingTextFor(parent) : null;
+    }
+
+    // Mints the durable reference through 1C's engine and pins a display label
+    // once. The label is display only; identity is the reference.
+    function regionFor(element, range) {
+      var region = record.emptyRegion();
+      if (!element) return region;
+      region.ref = anchor.mint({ element: element, range: range, root: doc });
+      try {
+        regions.pinLabel(region, descriptorFor(element));
+      } catch (err) {
+        // A label is a display convenience. A region with a reference and no
+        // label is still a usable record, so this is the one place a failure is
+        // recorded rather than thrown.
+        region.label = null;
+      }
+      return region;
+    }
+
+    function descriptorFor(element) {
+      var tag = String(element.tagName || "").toLowerCase();
+      var ordinal = 1;
+      var sibling = element.previousElementSibling;
+      while (sibling) {
+        if (sibling.tagName === element.tagName) ordinal += 1;
+        sibling = sibling.previousElementSibling;
+      }
+      return {
+        authorName: element.getAttribute ? element.getAttribute(regions.AUTHOR_ATTR) : null,
+        id: element.id || null,
+        ariaLabel: element.getAttribute ? element.getAttribute("aria-label") : null,
+        heading: headingTextFor(element),
+        ordinal: ordinal,
+        tag: tag,
+        text: element.textContent || null
+      };
+    }
+
+    // ------------------------------------------------------------------------
+    // The pick-mode outline: drawn over the page, never on it
+    // ------------------------------------------------------------------------
+
+    function ensureOutline() {
+      var host = surface();
+      if (!host) return null;
+      if (outlineNode && outlineNode.parentNode) return outlineNode;
+      outlineNode = doc.createElement("div");
+      outlineNode.className = OUTLINE_CLASS;
+      markers.markChrome(outlineNode);
+      host.appendChild(outlineNode);
+      return outlineNode;
+    }
+
+    function showOutline(element) {
+      var el = ensureOutline();
+      if (!el) return null;
+      if (!element) {
+        el.style.display = "none";
+        return el;
+      }
+      var r = element.getBoundingClientRect();
+      el.style.display = "block";
+      el.style.top = r.top + "px";
+      el.style.left = r.left + "px";
+      el.style.width = r.width + "px";
+      el.style.height = r.height + "px";
+      return el;
+    }
+
+    // ------------------------------------------------------------------------
+    // The reviewer's own edits to their own comments
+    // ------------------------------------------------------------------------
+
+    function remove(id) {
+      var removed = store.remove(requireReview(), id);
+      if (open[id]) open[id].close();
+      if (highlights) highlights.clear(id);
+      if (removed) emit({ id: id }, "removed");
+      return removed;
+    }
+
+    function items() {
+      return store.read(requireReview());
+    }
+
+    // Outstanding work, newest first: what the Active tab shows.
+    //
+    // The reverse comes first, and it is not decoration. Two comments made in
+    // the same millisecond carry the same created_at, and a sort alone would
+    // then fall back to storage order, which is oldest first: the exact
+    // opposite of what the rail promises. Reversing first, then sorting with a
+    // stable sort, makes the tie break the right way.
+    function outstanding() {
+      var list = items().filter(function (item) {
+        return item[record.FIELD.STATE] !== record.STATE.HANDLED;
+      });
+      list.reverse();
+      return list.sort(function (a, b) {
+        return String(b[record.FIELD.CREATED_AT]).localeCompare(String(a[record.FIELD.CREATED_AT]));
+      });
     }
 
     function openBoxes() {
@@ -6534,33 +7858,157 @@
       });
     }
 
-    // Reopening an id that is already open returns the SAME node. A box that
-    // holds focus is never re-created.
+    function closeAll() {
+      openBoxes().forEach(function (handle) {
+        handle.close();
+      });
+    }
+
+    // Reopening an id that is already open returns the SAME node.
     function boxFor(id) {
       return open[id] || null;
     }
 
-    // STUB: 1D owns element-pick mode's hover outlining and Esc handling. The
-    // entry point is here so the gesture table has somewhere to land.
-    function enterPickMode() {
-      return { active: false, isStub: true };
+    function focusedBox() {
+      return openBoxes().filter(function (handle) {
+        return handle.node && handle.input && isFocused(handle.input);
+      })[0] || null;
+    }
+
+    function isFocused(el) {
+      var rootNode = el.getRootNode ? el.getRootNode() : doc;
+      return rootNode && rootNode.activeElement === el;
+    }
+
+    // ------------------------------------------------------------------------
+    // Wiring the gestures
+    // ------------------------------------------------------------------------
+    //
+    // Every decision comes from the pure table. This function's only job is to
+    // describe the world to it and then do what it says.
+
+    function bind(input) {
+      var src = input || {};
+      var target = src.document || doc;
+      if (!target) return { bound: false, reason: "no document" };
+      if (src.page) setPage(src.page);
+      unbind();
+
+      listenerHandles.push(listeners.on(target, "keydown", onKeydown, true, LISTENER_GROUP));
+      listenerHandles.push(listeners.on(target, "mousemove", onMouseMove, true, LISTENER_GROUP));
+      listenerHandles.push(listeners.on(target, "click", onClick, true, LISTENER_GROUP));
+      return { bound: true, listeners: listenerHandles.length };
+    }
+
+    function unbind() {
+      listenerHandles.forEach(function (handle) {
+        handle.off();
+      });
+      listenerHandles = [];
+    }
+
+    function describe(event) {
+      var selection = win && win.getSelection ? win.getSelection() : null;
+      return {
+        type: event.type,
+        key: event.key,
+        metaKey: event.metaKey === true,
+        ctrlKey: event.ctrlKey === true,
+        shiftKey: event.shiftKey === true,
+        hasSelection: !!(selection && selection.rangeCount > 0 && !selection.isCollapsed),
+        inOverlay: markers.isInsideOverlay(event.target),
+        pickMode: pick.active === true,
+        inCommentBox: !!focusedBox()
+      };
+    }
+
+    function onKeydown(event) {
+      // The library's own UI handles its own keys; the box's handler already
+      // ran by the time this sees it.
+      if (markers.isInsideOverlay(event.target)) return;
+      var got = gestures.gestureFor(describe(event));
+      if (got.gesture === gestures.GESTURE.COMMENT_ON_SELECTION) {
+        if (got.preventDefault) event.preventDefault();
+        commentOnSelection({});
+      } else if (got.gesture === gestures.GESTURE.ENTER_ELEMENT_PICK) {
+        if (got.preventDefault) event.preventDefault();
+        enterPickMode();
+      } else if (got.gesture === gestures.GESTURE.CANCEL) {
+        if (got.preventDefault) event.preventDefault();
+        if (pick.active) exitPickMode();
+      }
+    }
+
+    function onMouseMove(event) {
+      if (!pick.active) return;
+      var el = blockOf(event.target);
+      if (!el || markers.isInsideOverlay(el)) return;
+      if (el === doc.documentElement || el === doc.body) {
+        pick.element = null;
+        showOutline(null);
+        return;
+      }
+      pick.element = el;
+      showOutline(el);
+    }
+
+    function onClick(event) {
+      if (markers.isInsideOverlay(event.target)) return;
+      var got = gestures.gestureFor(describe(event));
+      if (got.gesture !== gestures.GESTURE.PICK_ELEMENT) return;
+      // The ONE time the library takes a click on the page, entered
+      // deliberately by a keystroke one moment earlier.
+      if (got.preventDefault) event.preventDefault();
+      event.stopPropagation();
+      var element = pick.element || blockOf(event.target);
+      exitPickMode();
+      if (element) commentOnElement(element, {});
+    }
+
+    function teardown() {
+      unbind();
+      closeAll();
+      if (highlights) highlights.teardown();
+      surfaceRoot = null;
+      outlineNode = null;
     }
 
     return {
       BOX_CLASS: BOX_CLASS,
       INPUT_CLASS: INPUT_CLASS,
+      OUTLINE_CLASS: OUTLINE_CLASS,
+      HINT_READY: HINT_READY,
       setReview: setReview,
+      setPage: setPage,
       onChange: onChange,
       openBox: openBox,
+      openNote: openNote,
+      reopen: reopen,
+      remove: remove,
+      items: items,
+      outstanding: outstanding,
       boxFor: boxFor,
       openBoxes: openBoxes,
-      enterPickMode: enterPickMode
+      closeAll: closeAll,
+      focusedBox: focusedBox,
+      commentOnSelection: commentOnSelection,
+      commentOnElement: commentOnElement,
+      enterPickMode: enterPickMode,
+      exitPickMode: exitPickMode,
+      pickMode: pickState,
+      highlights: highlights,
+      bind: bind,
+      unbind: unbind,
+      teardown: teardown
     };
   }
 
   return {
     BOX_CLASS: BOX_CLASS,
     INPUT_CLASS: INPUT_CLASS,
+    OUTLINE_CLASS: OUTLINE_CLASS,
+    HINT_READY: HINT_READY,
+    BOX_STYLE: BOX_STYLE,
     createComments: createComments
   };
 });
@@ -7161,7 +8609,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+7e5f012226a5";
+  var VERSION = "0.0.0+ee8bcc4636ce";
 
   function isLoopbackOrigin(origin) {
     if (typeof origin !== "string" || !origin) return false;
