@@ -1,14 +1,23 @@
-// The boot the CP1 walk uses: the four Phase 1 pieces wired together.
+// The CP1 walk's page-side surface, on top of the REAL boot.
 //
-// This is the whole of what 2D's index.js will do on a real page, written out
-// here because 2D does not exist yet and CP1 is the checkpoint that proves the
-// four branches work as one thing. It wires nothing of its own: store, rail,
-// comments, the Active tab and sync are all the REAL modules from the built
-// bundle. If an assertion in test/browser/cp1_walk.spec.js could pass because
-// of a line in this file, the line is in the wrong file.
+// This file used to wire the four Phase 1 pieces together by hand, because 2D
+// (living in the page) did not exist and CP1 was the checkpoint that proved the
+// four branches work as one thing. That wiring is now src/layer/index.js's
+// boot(), which is where it belongs: the library boots itself from its script
+// tag on a real page, and this fixture calls the same function.
+//
+// So what is left here is ONLY the walk's reading surface: the handful of
+// questions test/browser/cp1_walk.spec.js asks about a page it cannot see into,
+// because the rail lives in a CLOSED shadow root that no selector reaches. If
+// an assertion in that spec could pass because of a line in this file, the line
+// is in the wrong file.
 //
 // The review id and the token come off the query string, and both were minted
-// by the helper (1A's reviews.create), never by this page.
+// by the helper (1A's reviews.create), never by this page. They arrive as boot
+// OPTIONS rather than as script-tag attributes for one reason: the helper's
+// port is ephemeral under test, and a static fixture cannot carry it. The
+// script-tag path is the one a host application uses, and it is exercised in
+// test/browser/living_in_the_page.spec.js against 0C's app fixture.
 //
 // Everything the spec reads is under window.__laheCp1.
 
@@ -20,60 +29,20 @@
   var token = params.get("token") || "";
   var helper = params.get("helper") || "";
 
-  var store = LAHE.store.createStore();
-  var rail = LAHE.overlay.createRail({ store: store, reviewId: reviewId });
-  rail.mount();
-
-  var page = LAHE.record.pageFrom(
-    { origin: location.origin, pathname: location.pathname, href: location.href, title: document.title },
-    { seq: 1 }
-  );
-
-  var comments = LAHE.comments.createComments({ store: store, reviewId: reviewId, page: page });
-  comments.bind({ page: page });
-
-  // The seam CP1 closes: the Active tab's contents live INSIDE the rail's own
-  // Active pane, so there is one rail on the page and one host under it.
-  var tab = LAHE.tabActive.createActiveTab({
-    comments: comments,
-    overlay: rail,
-    host: rail.tabBody(LAHE.overlay.TAB.ACTIVE)
-  });
-  tab.mount();
-
-  var statusLog = [];
-
-  var sync = LAHE.sync.createSync({
+  // THE WHOLE WIRING, in one call: the store, the rail, the comment surface,
+  // the Active tab inside the rail, sync, the remount contract, and the first
+  // replay pass. Sync is left for the walk to start, because the walk is about
+  // what happens either side of that.
+  var app = LAHE.layer.boot({
     review: reviewId,
     token: token,
-    helperOrigin: helper || undefined,
-    store: store,
-    onStatus: function (state) {
-      statusLog.push(state);
-      rail.setStatusLine(state);
-    },
-    onFailure: function (failure) {
-      rail.failures.add(failure);
-    },
-    onLimit: function (text) {
-      rail.setLimitNote(text);
-    }
+    helper: helper || undefined,
+    startSync: false
   });
 
-  // What the library does on load: everything browser storage holds for this
-  // review comes back as a card, drafts included.
-  store.read(reviewId).forEach(function (item) {
-    rail.upsertCard(item);
-  });
-
-  comments.onChange(function (item, event) {
-    // "removed" carries an id and nothing else, and "closed" is not a change to
-    // the record: the state it would post was already posted by the keystroke
-    // or by ready.
-    if (event === "removed" || event === "closed") return;
-    rail.upsertCard(item);
-    sync.recordItem(item, event === "ready" ? { immediate: "ready" } : undefined);
-  });
+  var store = app.store;
+  var rail = app.rail;
+  var comments = app.comments;
 
   function itemsNow() {
     return store.read(reviewId);
@@ -102,18 +71,16 @@
     status: function () {
       return rail.getStatusLine();
     },
-    statusLog: function () {
-      return statusLog.slice();
-    },
+    statusLog: app.statusLog,
     startSync: function () {
-      return sync.start();
+      return app.sync.start();
     },
 
     // Where the reviewer clicks. The rail is in a CLOSED shadow root, so a test
     // cannot reach a selector into it; it asks the library where the box is and
     // clicks the real pixels.
     noteBoxRect: function () {
-      var box = tab.noteBox();
+      var box = app.tab().noteBox();
       if (!box || !box.input) return null;
       // The pane scrolls once there are a few cards in it, and a reviewer
       // scrolls to the box before clicking it.
