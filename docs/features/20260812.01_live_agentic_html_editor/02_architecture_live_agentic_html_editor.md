@@ -4,53 +4,55 @@
 
 Three parts, each with one job.
 
-A **review layer** is a single vanilla-JS file that runs inside whatever page is being reviewed. It
-draws the comment and edit surface, captures what the reviewer does, and writes every change to
-browser storage the instant it happens. It never mutates the reviewed page's styles and never writes
-to the reviewed file.
+A **review layer** is vanilla JS that runs inside whatever page is being reviewed. It draws the
+comment and edit surface, captures what the reviewer does, and writes every change to browser storage
+the instant it happens. It never restyles the reviewed page and never writes to the reviewed file.
 
-A **local service** is a small dependency-free process that serves local files with the layer
-injected, accepts feedback over loopback, and appends it to a log on disk. It derives its state by
-replaying that log, so nothing important lives only in memory.
+A **local service** serves local files with the layer injected, accepts feedback over loopback behind
+real authentication, and appends it to a log on disk. State is derived by replaying the log, so
+nothing important lives only in memory.
 
-An **agent surface** is a handful of commands plus two files on disk. The files are the contract; the
-commands are a convenience. An agent that was never running when the reviewer pressed send still gets
+An **agent surface** is four commands plus two files on disk. The files are the contract; the commands
+are a convenience. An agent that was never running when the reviewer pressed send still gets
 everything, because delivery is a file, not a connection.
 
 The idea holding it together: **the reviewer's outstanding feedback is the truth, and the page is a
-view of it.** Edits are not changes made to a document. They are durable records that get replayed on
-top of whatever the page currently shows. A reload, an app re-render, or an agent rewriting the source
-produces a fresh page, and the outstanding edits are laid back over it. This one decision is what
-removes the entire class of bug where the reviewer's text comes back reverted, because there is
-nothing to revert to: the page was never where the text lived.
+view of it.** An edit is not a change made to a document. It is a durable record replayed on top of
+whatever the page currently shows. This is what removes the class of bug where the reviewer's text
+comes back reverted: there is nothing to revert to, because the page was never where the text lived.
+
+Replay is powerful and therefore dangerous, so it is bounded by three laws stated in D3: it never
+writes on a low-confidence match, it never touches a region holding the caret, and it treats an app
+re-rendering its own data differently from a source rewrite. Without those it becomes a worse version
+of the bug it exists to kill.
 
 ```mermaid
 flowchart TB
     subgraph Browser["The reviewer's own browser"]
-      Layer["Review layer<br/>one JS file, no build, no dependencies<br/>draws the rail, captures comments and edits<br/>writes to localStorage on every change"]
+      Layer["Review layer<br/>draws the rail, captures items<br/>writes to browser storage on every change"]
       Page["The page being reviewed<br/>its own CSS, untouched"]
       Layer -.overlays, never restyles.-> Page
     end
 
-    subgraph Service["Local service (loopback only)"]
-      Serve["serves local HTML and Markdown<br/>with the layer injected"]
-      Ingest["accepts comments, edits, sends, acks"]
+    subgraph Service["Local service, loopback + token + origin allowlist"]
+      Serve["serves local HTML and Markdown<br/>in an isolated frame"]
+      Ingest["accepts items, sends, acks"]
       Log[("append-only event log<br/>state derived by replay")]
       Ingest --> Log
     end
 
-    subgraph Disk["Files an agent reads"]
-      MD["review_<target>.md<br/>plain markdown, readable by anyone"]
-      JSON["review_<target>.json<br/>the structured batch"]
+    subgraph Disk["What an agent reads"]
+      MD["review.md<br/>one per review, grouped by page"]
+      JSON["review.json<br/>the structured contract"]
     end
 
     subgraph Agent["The coding agent"]
-      Read["reads the files, or waits on a command"]
-      Apply["applies items to SOURCE"]
-      Ack["reports per item: applied or declined with a reason"]
+      Read["reads the files, or `next` returned"]
+      Apply["applies items to SOURCE, named by a source hint"]
+      Ack["acks per item, naming the files it touched"]
     end
 
-    Layer <-->|loopback| Ingest
+    Layer <-->|authenticated loopback| Ingest
     Serve --> Layer
     Log --> MD & JSON
     MD & JSON --> Read --> Apply --> Ack
@@ -58,383 +60,594 @@ flowchart TB
     Ingest -->|applied items| Layer
 ```
 
-## Analysis of Existing Structure
+## Analysis of existing structure
 
-Nothing is being modified. This is a new repository. Two existing implementations are the input, and
-what carries over from each is worth being precise about, because the brief's reliability claims rest
-on it.
+Nothing is being modified; this is a new repository. Two existing implementations are the input, and
+what actually carries over is narrower than it first looks. Both were read line by line for this
+document, and two of the original reuse claims did not survive the reading.
 
-| Existing piece | What it proves | What we take |
+| Existing piece | What genuinely carries over | What is new work |
 | --- | --- | --- |
-| Built-doc comment module (`shared-assets/comment_module.html`) | A review surface can be genuinely unbreakable if it depends on nothing being alive | Immediate write to browser storage on every keystroke; quote-plus-context anchoring with a ladder of fallback probes; copy and export with no server; a helper that refuses work for a document it does not own |
-| Steady Thread dev layer (`_dev_comments.html.erb`) | A layer injected into a real app survives auth, Hotwire morphs, and free roam | Injection into the app's own page rather than a proxy; element commenting by modifier-click with a CSS path and surrounding context; drafts that survive a morph; remount on `turbo:morph`, `turbo:load`, and a MutationObserver fallback |
-| human-review | The shape of the product: page beside a rail, editable document, before-and-after pairs | The interaction model only. None of its liveness design |
+| Built-doc comment module (`shared-assets/comment_module.html`) | Immediate synchronous persistence on every change; copy and export with no server; the *idea* of a ladder of anchor probes; a helper that refuses work for a document it does not own | **Anchoring itself.** Its `locate()` is four exact substring probes over the concatenated text, with no whitespace tolerance and no occurrence disambiguation, so a short prefix binds to the first hit. R16 (survive reformatting, pick the right occurrence among repeats) is not met by it. **Storage keying**: its browser key is the file's basename, so two `index.html` files in different folders merge into one bucket |
+| Steady Thread dev layer (`_dev_comments.html.erb`) | Injection into the app's own page rather than a proxy; element commenting by modifier-click carrying a CSS path and surrounding context; a draft that survives a morph | **The remount contract.** It re-registers document-level listeners on every morph without removing the old ones, so handlers accumulate for the life of the page. It also survives morphs largely because Rails re-renders the partial into the response, which an injected script does not inherit. Its draft is one global key, not a queue |
+| human-review | The interaction model: page beside a rail, editable document, before-and-after pairs, per-target grouping | None of its liveness design |
 
-Two properties from the built-doc module do not exist on the live-app side today and are new work:
-an offline copy-and-export path, and any durable record of a comment before it is sent.
+The security floor human-review reached is worth inheriting outright rather than rediscovering: a
+per-run token compared in constant time, a host header check, an origin split with the reviewed
+document in an opaque origin, and containment checked after symlink resolution.
 
 ## Components
 
 | Component | Job |
 | --- | --- |
-| **Review layer** | Everything the reviewer sees and does. One file, vanilla JS, no build step. Runs identically whether it was injected by the service or by the app. |
-| **Overlay renderer** | Draws the rail, highlights, chips, and handles inside an isolated root so host CSS cannot reach them and they cannot reach host CSS. |
-| **Anchor engine** | Turns a selection or an element into a durable reference, and finds that reference again in a changed document. |
-| **Edit recorder** | Turns a typing session into before-and-after records keyed to a stable region identity. Owns the replay that puts outstanding edits back after any repaint. |
-| **Local store** | Browser-side durable queue. Written synchronously on every change. Survives reload, and is the source the layer renders from. |
-| **Sync client** | Ships local-store changes to the service, retries forever, and never blocks the reviewer. |
-| **Local service** | Serves file targets, accepts feedback, appends to the log, writes the two agent-facing files. |
-| **Event log** | Append-only record of everything that happened. The only durable server-side state. |
-| **Projection** | Replays the log into current state: what is outstanding, what was applied, what is declined. |
-| **Agent commands** | `open`, `wait`, `status`, `ack`, `end`, `setup`. |
-| **Attach kit** | The one-line snippet for a dev layout, and a bookmarklet for an app that cannot be modified. |
+| **Review layer** | Everything the reviewer sees and does. Vanilla JS, no build step. Runs identically whether served or attached. |
+| **Overlay renderer** | Draws the rail, highlights, chips, and handles in an isolated root. Updates in place; never re-creates a card that holds focus. Owns the persistent failures list. |
+| **Anchor engine** | Turns a selection or an element into a durable reference and re-resolves it in a changed document, with a confidence score. New work. |
+| **Item store (browser)** | Durable queue written synchronously on every change. The source the layer renders from. |
+| **Edit recorder** | Turns editing into item records with a kind, plain text, markup, and landing anchors. |
+| **Replay engine** | Re-applies outstanding edits after a repaint, under the three laws in D3. |
+| **Sync client** | Ships items to the service, retries forever, never blocks, and distinguishes refused-by-policy from service-down. |
+| **Local service** | Serves file targets in a frame, authenticates, accepts items, appends to the log. |
+| **Event log** | Append-only. The only durable server-side state. |
+| **Projection** | Reads the log into current state: outstanding, delivered, applied, declined. |
+| **Agent commands** | `open`, `next`, `ack`, `setup`. |
+| **Attach kit** | Framework-correct guarded snippets emitted by `setup` for a development layout. |
 
 ## Key decisions
 
-### D1: The tool never writes the file being reviewed
+### D1: A review is the unit, not a target
 
-Every edit is feedback. There is no autosave, no save conflict, no revert-all, and no serialization of
-a live DOM back over a source file.
+One review spans many targets. Walking eight routes of an app produces one review containing eight
+pages, one `review.md`, and one `review.json`. Items carry the target they belong to; target identity
+is the per-page key inside the review, not the identity of the review itself.
 
-The reason is specific to what actually gets reviewed. A built spec doc and a research report are both
-generated from markdown; writing the HTML would be erased by the next build, which is worse than not
-writing it because it looked applied. A markdown file under review is the thing the agent needs to
-edit, so two writers would collide. A running app has no file to write at all. Writing the reviewed
-file helps in none of the real cases and is the root of most of the reverting bugs in the tool being
-replaced: the stale-hash conflict that permanently kills saving, the whole-file re-serialization
-through the browser's parser, and the stale tab overwriting an agent's newer version.
+This is the difference between an agent reading one file and an agent discovering eight. It is what
+makes "walk the app and send the whole walk at once" true, and it is what makes free roam coherent:
+a reviewer who wanders through screens is doing one review, not one per URL they happened to land on.
 
-This makes every target type behave identically, which is what makes the status line honest and short:
-your edits go to your agent.
+A review's files live at a **review root**, which is server-side configuration recorded when the
+reviewer starts a review or attaches a project. It is never accepted from a request body. See D11.
+
+### D2: The tool never writes the file being reviewed, and it names the source instead
+
+Every edit is feedback. There is no autosave, no save conflict, no revert-all, no serialization of a
+live DOM over a source file.
+
+The reason is specific to what gets reviewed. A built spec doc and a research report are generated
+from markdown, so writing the HTML is erased by the next build. A markdown file under review is what
+the agent needs to edit, so two writers collide. A running app has no file to write. Writing helps in
+none of the real cases and is the root of most of the reverting bugs in the tool being replaced.
+
+**Refusing to write is not enough on its own.** An agent handed a review of a built HTML file will
+edit that HTML file, the verification in D8 will pass, the item will clear from the rail, and the next
+build will erase it. The reviewer watched the burn-down and believes the fix landed, which is exactly
+the failure R47 (a typed fix must reach whatever the next build reads) exists to prevent.
+
+So every target carries a **source hint**: for a generated document, the file it is generated from;
+for a route, the project root. `setup` asks once per project and the answer is stored with the review
+root. The hint travels in both agent-facing files, the agent instructions say to edit the generator's
+input and to name what it edited, and D8 verifies against that file.
 
 ::: xref
-[Brief: R44, a typed fix must reach whatever the next build reads](01_brief_live_agentic_html_editor.html#the-reviewed-artifact-and-its-source)
+[Brief: R47, a typed fix must reach whatever the next build reads](01_brief_live_agentic_html_editor.html#the-reviewed-artifact-and-its-source)
 :::
 
-### D2: Outstanding edits are a replayable overlay, not a mutation
+### D3: Replay, and the three laws that keep it safe
 
-An edit record holds a region reference, the original text captured the first time that region was
-touched, and the current text. The page is rendered, then every outstanding edit for that page is
-applied on top of it.
+An item record holds a region reference, the original content captured the first time that region was
+touched, and the current content. The page renders, then outstanding edits are applied on top.
 
-Replay is what makes the hard requirements fall out rather than needing to be defended one at a time:
+Replay is the reason the reliability laws fall out of one mechanism instead of needing to be defended
+one at a time. It is also the most dangerous thing in the design, because a replay that writes to the
+wrong place produces a lie about the reviewer's own document. Three laws bound it.
+
+**Law 1: replay never writes on a low-confidence match, and it fails closed.**
+A region reference carries several independent ways to find its place: an author-supplied name where
+the document offers one, a structural path, the heading it sits under with its position among
+siblings, and its original text. Identity is **minted once and re-resolved on every repaint**, because
+a repaint destroys anything stored on a node. Each pass binds a reference to at most one node, greedily
+in document order. Below the confidence floor, nothing is written to the DOM. The record keeps its
+text, and the rail says the edit cannot be placed on this version of the page.
+
+A miss is survivable because the record is the truth. A mis-bind is not: stamping paragraph four's
+text onto paragraph five produces a before-and-after pair that is incoherent, and ships it to the
+agent as the reviewer's intent. Fail closed.
+
+**Law 2: replay never disturbs the reviewer.**
+A region whose DOM already equals the record is skipped, which makes replay idempotent by comparison
+rather than by bookkeeping. A region containing the caret or the current selection is never rewritten.
+Those two rules together are what stop replay from yanking the cursor out of the paragraph being typed
+in. Steady Thread has a Turbo frame that polls every two seconds; without Law 2, replay would fight
+the reviewer twice a second, which is a worse version of the symptom this whole design exists to kill.
+
+**Law 3: an app re-rendering its own data is not the same as a source rewrite.**
 
 ```mermaid
 flowchart TD
-    E["Page repaints for any reason"] --> R{"Outstanding edits for this page?"}
-    R -->|no| Done["Show the page as it is"]
-    R -->|yes| Re["Re-find each edit's region and re-apply its current text"]
-    Re --> C{"Region's underlying text changed<br/>since the edit was captured?"}
-    C -->|no| Show["Reviewer sees their own text, as they left it"]
-    C -->|yes| Conflict["Keep the reviewer's text on screen.<br/>Mark the edit as having a collision<br/>and show the incoming version on its card"]
+    Repaint["A repaint happens"] --> Kind{"What caused it?"}
+    Kind -->|"Source repaint:<br/>agent wrote the source,<br/>reviewer reloaded"| Src["Replay. A region whose underlying<br/>content changed is a collision:<br/>reviewer's text stays on screen,<br/>incoming version offered on its card"]
+    Kind -->|"App repaint:<br/>the app re-rendered itself"| App["Replay only where the region's DOM<br/>still matches what replay last wrote.<br/>Otherwise the edit detaches, keeps its text,<br/>and its card says the page moved on"]
+    Src --> Laws["Laws 1 and 2 apply to both"]
+    App --> Laws
 ```
 
-The repaint causes are all the same to the layer: a browser reload, the reviewed app re-rendering
-part of itself, the agent rewriting the source and the page refreshing. There is one code path, so
-the rare cases get the same treatment as the common one.
+The distinction matters most in the target Ken cares about. Filter a client roster, come back, and
+row three is now a different client. Treating that as a source rewrite would stamp the reviewer's edit
+to Sarah onto Marcus and call it a collision. The reviewer would be looking at a lie about their own
+app, and D12 (use the app for real) would be fighting replay directly.
 
-A region whose reviewer text and incoming text disagree is a collision. The reviewer's text stays on
-screen and the incoming version is offered on the edit's card, which is the rule the brief demands
-rather than a silent winner.
+### D4: What a record is
 
-### D3: Two ways in, and neither is a proxy
+Text-only records cannot express most of what the brief asks for, so a record carries:
 
-| Mode | How the layer gets into the page | For |
-| --- | --- | --- |
-| **Served** | The service serves the local file and injects one script tag before the closing body tag | HTML files, markdown files |
-| **Attached** | The page loads the layer itself, from a one-line script tag in the app's development layout, or from a bookmarklet | A running app, including anything behind a login |
+| Field | Purpose |
+| --- | --- |
+| `kind` | `commented`, `edited`, `deleted`, `moved`, `formatted`, `resized`, `note` |
+| `before` / `after` | Plain text, original captured on first touch |
+| `before_html` / `after_html` | Cleaned markup, so a formatting-only change is a change (R30) |
+| `moved_after` / `moved_before` | Landing anchors, so a relocation can be applied without a rewrite |
+| `region` | The reference described in D3 |
+| `target` | Which page in the review it belongs to |
+| `state` | The lifecycle in the diagram below |
 
-Attached mode is the answer to authentication, to client-side routing, to Hotwire morphs, and to free
-roam, and it is the answer because it does not fight any of them. The page is the app's own page,
-served by the app, in the reviewer's own logged-in browser. There is no session to forward, no asset
-URL to rewrite, no router to shim, and no second origin. The Steady Thread dev layer already works
-exactly this way and has none of the problems the proxy approach has.
+**Undo is a record operation.** Per-item undo reverts the record and lets replay redraw the region.
+This is the only version of undo that composes with D3, because once replay has rewritten a region the
+browser's native undo stack for it is gone. Native undo inside a region is a convenience on top, never
+the mechanism. This is what R27 (every edit undone on its own) requires, and it is the requirement that
+exists because the tool being replaced makes one misplaced drag cost an hour of work.
 
-Free roam falls out of attached mode for free: the layer is on every page the app renders, so the
-reviewer clicks into any screen and comments there, with nothing opened as a target first. The target
-identity is the route the browser is actually on.
+**The overall note is an item** like any other. It counts as outstanding, and it can ship alone. This
+is stated because the note-only send bug, where typing a note left the button dead forever, is one of
+the three symptoms that caused this rebuild.
 
-The bookmarklet covers an app whose source the reviewer will not modify. It is the same layer, loaded
-on demand into the page already in front of them.
+### D5: Two ways in, and neither is a proxy
 
-### D4: Durability is an append-only log, and the browser holds its own copy
+| Mode | How the layer gets in | Isolation | For |
+| --- | --- | --- | --- |
+| **Served** | The service serves the local file **inside a frame with an opaque origin**, with the layer in the shell around it | Full. The reviewed document cannot reach the layer, the token, or stored feedback | HTML and markdown files |
+| **Attached** | The app's own development layout loads the layer | None, by construction | A running app, including behind a login |
 
-Two independent durable stores, and the reviewer's work is safe if either survives.
+Attached mode answers authentication, client routing, morphs, and free roam by not fighting any of
+them: the page is the app's own page, served by the app, in the reviewer's logged-in browser. There is
+no session to forward, no asset URL to rewrite, no router to shim on the server side, and no login
+screen to land on. Free roam falls out for free.
 
-**Browser side.** Every comment, keystroke batch, and deletion is written to browser storage
-synchronously as it happens, before any network call. This is the property that makes the built-doc
-module trustworthy and it is copied deliberately. A reload re-reads it. Nothing waits on a timer to
-become durable.
+**Served mode keeps the frame.** The argument for dropping it is entirely about running apps and none
+of it applies to a local file. Dropping it there would put a reviewed document's own scripts in the
+same document as the review layer, able to read every unsent comment the reviewer had written. Ken
+reviews LLM-generated HTML routinely, so the reviewed file is not a trusted input.
 
-**Service side.** Every accepted change appends one line to a log file. Appending cannot destroy what
-came before, which removes the failure where two processes rewrite a shared state file over each
-other. Current state is a projection of the log, rebuilt on start. Compaction, if the log ever grows
-enough to matter, writes a new file and renames it into place, never edits in place.
+**Attached mode's real costs**, stated because they are load-bearing and were not obvious:
 
-The sync client is allowed to be slow and is not allowed to be a gate. It retries with backoff
-forever. If the service is down for the whole session, the reviewer loses nothing: the browser copy
-is complete, and copy-and-export produce the full set with no service at all.
+- **The app's CSP can refuse the layer or its sync.** `script-src` blocks the snippet; `connect-src`
+  blocks the loopback calls. A CSP refusal looks identical to the service being down, which is the one
+  failure this design calls harmless. The sync client distinguishes the two and says which, in the
+  persistent failures list.
+- **Browser storage lives on the app's origin.** The app's own scripts can read it, so **R65 (a
+  reviewed page cannot reach the tool's controls or stored feedback) is not achievable in attached
+  mode** and is scoped to served mode. Saying so is better than claiming it. It also means
+  `localhost:3000` and `127.0.0.1:3000` are separate storage buckets even though the service treats
+  them as one target.
+- **A client-side router gives the layer no event** unless it hooks history and framework navigation.
+  The shim moves from the server to the layer; it does not disappear.
+- **A morph can remove the overlay root**, because the root is not in the server's HTML. The contract:
+  the root is re-created on `turbo:morph`, `turbo:load`, `popstate`, and a MutationObserver fallback,
+  every handler is de-registered before re-registration, and replay runs after each remount.
+- **The layer must not be fetched from the service at page load**, or a stopped service means no layer
+  at all, contradicting the promise that a stopped service costs nothing.
 
-### D5: Send is a write, not a handshake
+### D6: Durability is an append-only log plus a browser copy, with stated authority
 
-Pressing send appends a send event and writes two files. It does not require, check for, or wait on an
-agent.
+Two independent durable stores. The reviewer's work is safe if either survives.
+
+**Browser side.** Every change is written to browser storage synchronously as it happens, before any
+network call. This is the property that makes the built-doc module trustworthy and it is copied
+deliberately. Its key is the canonical target path, not a basename, because a basename key merges two
+same-named files from different folders.
+
+**Service side.** Every accepted change appends one line to a log. Appending cannot destroy what came
+before, which removes the failure where two processes rewrite a shared state file over each other.
+State is a projection of the log, read on start. The log is not compacted; a review is a few hundred
+events.
+
+**Three rules make two stores safe:**
+
+- Events carry a client-minted id and are idempotent by that id, so a re-send after a failed sync
+  cannot double-count.
+- An item event is a **full snapshot of that item**, never a delta, so replaying events in any order
+  converges.
+- **The browser is authoritative for item content until delivery; the service is authoritative for
+  lifecycle.** The layer reconciles against the service projection on every reconnect, and lifecycle
+  wins. Without this rule an item acked while the browser was closed comes back from browser storage
+  as outstanding and re-ships, which breaks apply-once.
+
+### D7: Send is a write, not a handshake
 
 ```mermaid
 sequenceDiagram
     participant R as Reviewer
     participant L as Review layer
     participant S as Local service
-    participant F as Files on disk
+    participant F as review.md + review.json
     participant A as Agent
 
-    R->>L: types, comments, deletes a block
+    R->>L: comments, types, deletes a block
     L->>L: write to browser storage immediately
     L->>S: sync (retries forever, never blocks)
     S->>S: append to log
     R->>L: Send
     L->>L: flush anything in flight first
     L->>S: send
-    S->>F: write review markdown + review JSON
-    Note over S,A: no agent needed for any of the above
-    A->>F: reads (or `wait` returned)
-    A->>A: applies items to SOURCE
-    A->>S: ack: item ids applied, item ids declined with reasons
-    S->>S: append ack events
-    S-->>L: applied items
-    L->>L: clear their highlights, move them to Completed
+    S->>F: write both files for the whole review
+    Note over S,A: nothing above needs an agent
+    A->>F: reads (or `next` returned)
+    A->>A: applies items to the SOURCE named by the source hint
+    A->>S: ack per item: applied (with files touched) or declined (with a reason)
+    S->>S: verify, then append ack events
+    S-->>L: lifecycle update
+    L->>L: retire applied items, then replay
 ```
 
-Send is enabled whenever anything is outstanding. Agent presence is displayed next to it as
-information and never consulted to decide whether the button works. There is no "sent" latch: sending
-marks the outstanding items as delivered-pending-ack, and anything created afterward is outstanding
-again immediately. A second send while an earlier one is unconfirmed adds to the same queue rather
-than replacing a snapshot.
+Send is enabled whenever anything is outstanding. There is no sent latch: sending marks items
+delivered, and anything created afterward is outstanding immediately. A second send while an earlier
+one is unconfirmed adds to the same queue rather than replacing a snapshot.
 
-### D6: The agent confirms per item
+Agent presence is displayed next to the button because the brief asks for it, and the law is written
+here so it cannot drift: **presence is never read by the code that decides whether send works.** In
+the tool being replaced, displaying presence is how it became a gate.
 
-An ack names item identifiers. Each is either applied, or declined with a reason. Anything not named
-stays outstanding.
+**Ordering rule:** acks are processed before replay, so an item the agent applied is retired before
+the repaint that its own change caused. Otherwise replay stamps the reviewer's wording back over a fix
+that landed and reports a collision that is not one.
 
-This is what makes the burn-down honest. Clearing a highlight because a batch came back would clear
-items the agent skipped, which is worse than losing feedback because it looks handled. An item the
-agent could not apply stays on screen with the agent's reason attached, which is also the most useful
-thing the reviewer could be told.
+### D8: Per-item ack, and verifying the agent did not rewrite the document
 
-Applied items move to a completed list. Nothing is deleted.
+An ack names item identifiers. Each is applied, with the file paths the agent touched, or declined
+with a reason. Anything unnamed stays outstanding. Applied items move to a completed list; nothing is
+deleted.
 
-### D7: Verifying the agent did not rewrite the document
+Per-item is what makes the burn-down honest. A batch-level ack clears highlights for items the agent
+skipped, which is worse than losing feedback because it looks handled.
 
-After an ack, the service checks each applied edit: is the reviewer's exact `after` text present in
-the file the agent said it changed? A miss is reported loudly, on the item, in the reviewer's face.
+Verification then checks each applied edit against the files the ack named, constrained to the
+review's own project root. Two corrections that keep it from causing its own outage:
 
-This is the one defense against an agent regenerating a document from context and reverting the
-reviewer's wording in the process. The tool being replaced attempted this with a sentence in a prompt
-file and nothing else.
+- **Match on normalized text**, whitespace collapsed and markup stripped. On a markdown source or an
+  ERB template, the reviewer's `after` is a rendering of the source and will legitimately never appear
+  verbatim.
+- **A miss warns loudly and does not reopen the item.** Auto-reopening turns a false positive into an
+  infinite re-ship loop. A deletion gets the inverse check: the `before` text should be gone.
 
-### D8: The tool styles only what it adds
+This is the only defense against an agent regenerating a document from context and reverting the
+reviewer's wording. The tool being replaced attempted it with a sentence in a prompt file.
 
-The layer's own UI lives in an isolated root with its own reset, so host CSS cannot reach it. In the
-other direction the layer adds no stylesheet to the reviewed content, overrides no font, color,
-spacing, or layout, and never sets a style attribute on a reviewed element.
+### D9: Authentication, because loopback is not a boundary
 
-The consequence worth stating: when a reviewer creates something the page's own CSS hides, such as a
-list on a page with a reset that removes markers, the tool does not fix the page's appearance to make
-the change visible. It confirms the change through its own layer, in the edit list and on the region's
-own marker. The artifact keeps looking exactly like the artifact.
+Binding to loopback stops nothing that matters here, because the attacker is a page running in the
+reviewer's own browser. A cross-origin POST with a simple content type fires no preflight, reaches the
+handler, and takes effect; CORS hides the response, not the effect. Without authentication, any page
+the reviewer visits can write forged items into the file their agent reads and acts on. That is a
+drive-by write into an agent's instruction stream.
 
-Markdown is the one case that needs care. A markdown file has no appearance of its own, so rendering
-it means choosing one. That is a presentation of unstyled text, not a restyling of a designed
-document, and the status line says which of the two the reviewer is looking at.
+Three layers, all of them:
 
-### D9: Using the app for real
+1. **A per-run token**, regenerated each service start, required on every route that reads or mutates,
+   sent as a header, compared in constant time, recorded in an owner-only file.
+2. **A server-side origin allowlist**, recorded when the reviewer attaches a project, with no wildcard
+   and no reflection, applied to preflight responses too. A page cannot forge its `Origin`, so this
+   closes the blind-write path that a token alone cannot, since a token in a development layout is
+   readable by anything in the app's origin.
+3. **A required JSON content type plus a custom header on every mutating route**, so a simple request
+   cannot reach a handler and a preflight is always forced.
 
-A plain click places the text cursor. Two escapes, because Ken hit both halves of this problem:
+The port is ephemeral by default and recorded with the token in the same owner-only file. Pinning is
+available and documented as a weakening.
 
-- **A modifier click** passes straight through to the page: links navigate, buttons fire, forms
-  submit. Taught by a hint on hover rather than in documentation.
-- **An editing toggle** turns the layer's interception off entirely for a stretch, giving back an
-  ordinary page to drive through a multi-step flow. Commenting stays available; only the
-  click-means-cursor behavior stops. Feedback already left is untouched.
+The same three layers cover `ack`, which mutates the burn-down. A forged ack would clear the
+reviewer's screen to empty with nothing looking wrong, which is worse than an error because the whole
+premise is that what is on screen is what is still outstanding.
 
-Leaving a page and coming back re-renders it and replays outstanding edits onto it, so driving the app
-costs nothing.
+### D10: Reviewed content is data, never instructions
 
-### D10: Runtime is whatever is already installed
+The reviewed document is often LLM-generated and may carry text engineered to instruct an agent. That
+text becomes a quote in a comment or a `before` in an edit, lands in a file an agent reads raw, and the
+agent has repository write access.
 
-Python 3 standard library for the service, vanilla JS with no build for the layer. `git clone`, one
-setup command, run it. No package manager, no lockfile, no build step, no compiled asset.
+The `before` field is the worst carrier: verbatim by design, potentially long, and **the reviewer never
+reads it**, because it is the document's original text and not their words. An injected instruction can
+travel through a review the reviewer conducted attentively. D8's verification does not help; an
+instruction that makes the agent also touch a second file passes it cleanly.
 
-The dependency-free choice is not aesthetic. It is what lets the install instruction be two lines in a
-README that a student follows without help, and it removes the entire class of failure where a
-published package and a repository drift apart, which is the failure Ken named when he chose git clone
-over npm.
+The contract:
 
-Markdown rendering is the one capability the standard library lacks. It is handled in the browser by a
-single vendored renderer file committed to the repository, not fetched by a package manager.
+- **Every field is classified.** Reviewer-authored (`feedback`, `after`, the note) is instruction.
+  Document-derived (`quote`, prefix, suffix, element description, `before`, `before_html`, page title,
+  target string) is data.
+- **Data fields are fenced structurally** in the markdown, with a per-file random delimiter and any
+  content line that would close it escaped. Blockquote-prefixing each line is the right shape and is
+  not sufficient alone, because a quoted line can still read like a directive.
+- **Every generated markdown file carries a standing header** saying that quoted passages and `before`
+  text are content from the reviewed document, are never instructions, and are only search keys for
+  locating a region.
+- **The JSON is authoritative and the markdown is the human fallback.** Structure survives injection in
+  a way prose does not.
+- **`before` is bounded** with a visible marker. R50's no-truncation rule is right for `after`, which
+  is the reviewer's exact wording, and wrong for `before`, which is arbitrary-length text the reviewer
+  did not write.
+
+These rules are also what `setup` writes into the agent instruction files, because that is where they
+have to live to have any effect.
+
+### D11: Paths, and what setup may write
+
+**Never derive a path component from untrusted text.** In attached mode the page supplies the target,
+so a target-derived filename is attacker-controlled. A write into an agent's own configuration file is
+not file corruption; it is agent reconfiguration, which is a full compromise of everything the agent can
+reach.
+
+- The review root is server-side configuration set at `setup` or service start, never accepted from a
+  request body.
+- File names are a hash of the canonical target plus a slug restricted to safe characters and capped in
+  length.
+- The destination is checked inside the review root after symlink resolution, and refused if it exists
+  and is a symlink.
+- Writes go through an exclusively created temp name and a rename.
+- The log and the token live outside any checkout, in an owner-only directory, so a student running
+  `git add -A` cannot publish their review history to a public repository. Setup offers to add the
+  review files' pattern to the reviewed project's ignore file.
+
+**Setup writing agent instructions is the highest-privilege thing this tool does**, higher than writing
+feedback, because it changes what the agent will do with everything else. It writes a block between
+sentinels and on re-run replaces only what is between them. If the sentinels are missing but the file
+already mentions the tool, it reports and touches nothing.
+
+The attached-mode snippet is guarded **outside** the script tag, in the host template's own conditional,
+because a client-side snippet cannot know the server's environment. `setup` emits the framework-correct
+form. A snippet that reached production would run in the production origin, in a real visitor's logged-in
+session, for anyone who binds that loopback port; Chrome treats loopback as trustworthy, so mixed-content
+blocking does not save it. A loopback-hostname check inside the layer is a second line, not the guard.
+
+### D12: Style only what we add, and never move the page
+
+The layer's UI lives in an isolated root with its own reset. In the other direction it adds no
+stylesheet to the reviewed content, overrides no font, color, spacing, or layout, and never sets a style
+attribute on a reviewed element.
+
+**The rail is a fixed overlay that never shifts the host page**, and it collapses. This has to be
+decided here rather than discovered during the build: the built-doc module docks its panel by setting a
+body margin, which is precisely what R34 forbids, and human-review only gets away with a docked rail
+because it frames the document. Both modes use the same overlay so they look identical, which is what D5
+claims.
+
+The consequence worth stating: when a reviewer creates something the page's CSS hides, such as a list on
+a page whose reset removes markers, the tool does not fix the page's appearance. It confirms the change
+through its own layer. The artifact keeps looking like the artifact.
+
+Markdown is the one case needing care. A markdown file has no appearance until something gives it one,
+so rendering it means choosing a presentation. That is different from restyling a designed document, and
+the status line says which the reviewer is looking at.
+
+### D13: Using the app for real
+
+A plain click places the text cursor. Two escapes, because Ken hit both halves of this:
+
+- **A modifier click** passes through to the page: links navigate, buttons fire, forms submit. Taught by
+  a hover hint.
+- **An editing toggle** turns interception off entirely for a stretch, giving back an ordinary page for a
+  multi-step flow. Commenting stays available. Feedback already left is untouched.
+
+Leaving a page and returning re-renders it and replays outstanding edits, so driving the app costs
+nothing.
+
+### D14: The rail updates in place
+
+**A card that holds focus is never re-created.** The single largest in-page revert mechanism in the tool
+being replaced is a rail that rebuilds every card on every repaint: a half-reworded comment is destroyed
+because a removed node never fires blur. Replay makes repaints more frequent, not less, so this law is
+stated rather than left to a careful render loop.
+
+The rail also owns a **persistent failures list**. Sync failures, CSP refusals, storage quota, and
+verification misses land there and stay until dismissed. Every failure in the tool being replaced is a
+three-second toast and then nothing, which is what R9 exists to prevent.
+
+### D15: Runtime
+
+Zero-dependency Node for the service, vanilla JS with no build for the layer. `git clone`, one setup
+command, run it. No package manager for anything the tool needs at runtime, no lockfile, no build step.
+Development tooling is allowed dependencies, since the browser test runner is a real install and
+pretending otherwise would cost the test strategy that matters most.
+
+Node rather than Python, reversing an earlier draft of this document. The audience runs coding agents and
+is more likely to have Node than Python; `/usr/bin/python3` on a clean Mac is a stub that prompts for
+Xcode Command Line Tools, which is not the two-line README this design is trading for; and Node lets the
+one vendored markdown renderer serve both the service and the browser instead of needing one of each.
+`setup` verifies the runtime is present and prints the exact remedy if it is not, which is the same check
+R62 asks for.
 
 ## Data and state
 
-### Item identity
+### Item lifecycle
 
-Everything the reviewer creates is an **item** with a stable identifier assigned at creation in the
-browser. Comments and edits are both items and share a lifecycle, which is what makes per-item
-acknowledgment uniform.
+Comments, edits, and the overall note are all items and share one lifecycle, which is what makes
+per-item acknowledgment uniform.
 
 ```mermaid
 stateDiagram-v2
     [*] --> outstanding: reviewer creates it
-    outstanding --> outstanding: reviewer rewords or retypes
+    outstanding --> outstanding: reviewer rewords, retypes, or undoes
     outstanding --> delivered: send
     delivered --> outstanding: reviewer edits it again
-    delivered --> applied: agent acks it as applied
-    delivered --> declined: agent acks it as declined with a reason
+    delivered --> applied: agent acks applied, verification runs
+    delivered --> declined: agent acks declined with a reason
     declined --> outstanding: reviewer reopens it
     applied --> [*]: moves to Completed, never deleted
     outstanding --> [*]: reviewer deletes it
 ```
 
-`delivered` is not a terminal state and never gates anything. An item sent with no agent running sits
-in `delivered` and is included in every subsequent read until acked.
+`delivered` is not terminal and never gates anything. An item sent with no agent running sits there and
+is included in every subsequent read until acked.
 
 ### Target identity
 
-A target is one review. Identity is canonical: a file resolves through symlinks to its real path; a
-route normalizes its host spelling, its trailing slash, and drops its fragment. An agent naming a
-target any of the ways a human might write it reaches the same review.
+A target is a page inside a review. A file resolves through symlinks to its real path; a route normalizes
+host spelling, trailing slash, and drops its fragment. An agent naming a target any of the ways a human
+might write it reaches the same page.
 
-### What a region is
+### The two files
 
-An edit is keyed to a region, and a region needs a name that is stable across repaints and distinct
-from its neighbors, because two of the bugs in the tool being replaced come from getting this wrong:
-labels that collide silently merge two edits into one, and labels recomputed after a reload produce
-contradictory records for the same block.
-
-A region reference carries several independent ways to find the same place, resolved in order, so that
-no single change to the document orphans it: an author-supplied name where the document provides one,
-a structural path, the heading it sits under with its position among siblings, and its original text.
-Identity is assigned once when the region is first touched and travels with the region, including when
-the reviewer moves it.
-
-### The two files an agent reads
-
-Written on every send, at a documented path derived from the target. For a file target they sit beside
-the file. For a route they sit in a review folder in the project the reviewer names, which is where the
-Steady Thread comments file already lives.
-
-The markdown file is for a person or for an agent with no tooling: quoted passage, comment, region,
-before, after. The JSON file is the structured contract: pages, items, identifiers, region references,
-anchors, original and current text, and the lost-anchor flag when a comment's subject can no longer be
-found.
-
-Neither is truncated. A long block travels whole, because a clipped `after` becomes an agent
-faithfully truncating the reviewer's own paragraph.
+One pair per review, at the review root. The markdown is for a person or an agent with no tooling. The
+JSON is the structured contract and is authoritative. Both group items by page, and both carry the source
+hint per page so the agent edits the generator's input rather than the artifact.
 
 ## Alternatives considered
 
-**Fork human-review and fix it.** Rejected. Its storage design is careful and worth learning from, but
-the symptoms live in its liveness design, and that design is load-bearing throughout: the blocking
-poll, the memory-only delivery flag, the file watcher that clears edit rows, the send button gated on a
-listener. Fixing those is replacing the spine while keeping the ribs. The interaction model is the
-valuable part and it can be rebuilt in less time than the untangling would take.
+**Fork human-review and fix it.** Rejected. Its storage design is worth learning from, but the symptoms
+live in its liveness design and that design is load-bearing throughout: the blocking poll, the memory-only
+delivery flag, the watcher that clears edit rows, the send button gated on a listener. Fixing those is
+replacing the spine while keeping the ribs.
 
-**Proxy the reviewed route through the tool.** Rejected. It is how the tool being replaced handles a
-running app, and it is the source of the worst problem the brief found: the tool fetches the route
-server-side, so it carries no session and lands on a login page. It also has to rewrite every asset
-URL, shim the history API for client routers, and give the framed app a same-origin relationship with
-the tool's own API. Attached mode has none of these problems because the page is the app's own page.
-The cost is a one-line script tag in a development layout, which Steady Thread already has for the
-same reason.
+**Proxy the reviewed route.** Rejected. The tool fetches the route server-side, carries no session, and
+lands on a login page, which kills the primary use case. It also requires rewriting every asset URL,
+shimming history for client routers, and giving the framed app a same-origin relationship with the tool's
+API. Attached mode has none of these because the page is the app's own page.
 
-**Autosave the reviewed file.** Rejected, see D1. It would help in none of the cases Ken actually
-reviews and it is the root of most of the reverting bugs.
+**Autosave the reviewed file.** Rejected, see D2.
 
 **Rewrite a state file on every change.** Rejected. It is what lets two processes destroy each other's
-feedback, and it means a megabyte-scale rewrite twice a second during ordinary typing. Appending
-cannot lose what came before.
+feedback, and it means a large rewrite twice a second during ordinary typing.
 
 **Deliver feedback by holding a connection open.** Rejected as the mechanism, kept as a convenience.
-Agents end their turns, so a blocking read is not something to build delivery on. The tool being
-replaced has a line in its instructions pleading with agents not to end their turn while a poll is
-waiting, which is a prompt fighting a runtime. Files do not have this problem.
+Agents end their turns. The tool being replaced has a line in its instructions pleading with agents not
+to end their turn while a poll waits, which is a prompt fighting a runtime.
 
-**A browser extension instead of an injected layer.** Rejected for v1. It would remove the script-tag
-requirement for attached mode, and it adds a store review, a permissions model, a second distribution
-channel, and a per-browser build. The bookmarklet covers the same need with none of it.
+**A bookmarklet for apps whose source the reviewer will not modify.** Cut from v1. It loads the layer into
+whatever page the reviewer is on, so it becomes script in a possibly hostile origin, it would have to
+carry the token to work, and no server-side check can enforce local-only when the reviewer's click is the
+target selection. It covers the smallest case and carries the largest blast radius. The eventual answer for
+that case is a browser extension, which is out of scope for v1 for its own reasons: a store review, a
+permissions model, and a per-browser build.
 
-**Node instead of Python.** Rejected. Node is the more familiar runtime for the audience, and a clone
-still needs an install step for anything beyond the standard library, plus a lockfile to keep honest.
-Python 3 is present on the target platform and its standard library covers a loopback HTTP service
-completely. If the tool ever needs a package manager, that is the moment to revisit this.
+**A browser extension instead of an injected layer.** Deferred, see above.
+
+**Python instead of Node.** Rejected, see D15. An earlier draft chose Python and the reasoning did not
+survive contact with a clean machine.
 
 ## Failure modes
 
 | Situation | Behavior |
 | --- | --- |
-| The service is not running | The layer keeps working entirely from browser storage. Everything is captured, copy and export produce the full set, and the sync client drains when the service returns. |
-| The service is running and the browser is closed mid-review | Everything already synced is on disk. Anything not yet synced is in browser storage and is sent when the page is opened again. |
-| The reviewed page re-renders and eats typed text | Replay puts it back. The edit record is the truth and the DOM is a view of it. |
-| The agent rewrites the source under the reviewer | The page refreshes, outstanding edits replay on top, and any region where the reviewer's text and the incoming text disagree is marked as a collision on its card rather than being resolved silently. |
-| The agent acks an item the reviewer has since edited again | The item is outstanding again, so the ack applies to the version that was delivered and the newer version ships next. |
-| An ack names a batch nobody delivered | Refused. A stale ack cannot clear newer feedback. |
-| Two windows open the same target | Both join the same review. State is the projection of one log, so both see the same outstanding set, and neither can overwrite the other's items. |
-| A comment's subject no longer exists in the document | The comment stays, is marked on its card, and its lost-anchor state travels in the payload so the agent is told the quote may not be findable rather than being sent to look for it. |
-| The reviewer sends with nothing listening | The files are written. Send stays available. The reviewer is shown how to hand it to an agent, and the next agent to ask gets everything. |
-| The agent claims an item applied but the text is not in the file | Reported loudly on the item, which returns to outstanding. |
-| A repaint arrives while the reviewer is mid-keystroke | The pending change is captured before the repaint is applied, because the record is written on the keystroke rather than on a timer. |
+| The service is not running | The layer keeps working from browser storage. Copy and export produce the full set. Sync drains when the service returns. In attached mode the layer is not fetched from the service, so it still loads. |
+| The app's CSP refuses the layer or its sync | Named as a policy refusal in the persistent failures list, distinct from service-down, with what to change. |
+| The reviewed page re-renders its own data | App-repaint rules: replay only where the DOM still matches what replay wrote; otherwise the edit detaches and says the page moved on. |
+| The agent rewrites the source | Source-repaint rules: replay, and mark genuine disagreements as collisions on the card. Acks process first so applied items are retired before the repaint they caused. |
+| Replay cannot confidently place an edit | Nothing is written to the DOM. The record keeps its text and the rail says it cannot be placed on this version. |
+| The reviewer is typing when a repaint lands | The region holding the caret is never rewritten. |
+| A comment's subject no longer exists | The comment stays, is marked, and its lost-anchor state travels in the payload so the agent is told rather than sent looking. |
+| The reviewer sends with nothing listening | Files are written, send stays available, the next agent to ask gets everything. |
+| The agent acks an item the reviewer edited again | The item is outstanding again; the ack applies to the delivered version and the newer one ships next. |
+| An ack names something never delivered | Refused. |
+| Verification cannot find the reviewer's wording | Loud warning on the item. The item is not auto-reopened. |
+| Two windows on the same target | Both join the same review; state is a projection of one log. |
+| Two service instances | The second refuses with an instruction rather than racing. |
+| A repaint arrives mid-keystroke | The change was already written on the keystroke, not on a timer. |
 
 ## Security and privacy
 
-The service listens on loopback only, rejects requests whose host header names anything else, and
-refuses any target that is not a local file or a local development server.
+The controls are D9 (token, origin allowlist, forced preflight, ephemeral port), D10 (reviewed content is
+data), and D11 (path safety, state location, setup's sentinel writes). What each covers:
 
-Served file targets resolve their sibling assets against the reviewed file's own directory, checked
-after symlink resolution, so a planted link cannot read outward. The review layer's own controls and
-the stored feedback are not reachable from the reviewed page's own scripts.
+| Requirement | Enforced by |
+| --- | --- |
+| R63, local only | The service refuses non-local targets it serves; the layer refuses to initialize on a non-loopback origin; the origin allowlist refuses everything else. In attached mode there is no server-side fetch, so these three are the boundary rather than a target check |
+| R64, no reading outside the reviewed folder | Sibling assets resolved against the reviewed file's directory, checked after symlink resolution |
+| R65, a reviewed page cannot reach the tool | The opaque-origin frame in served mode. **Scoped to served mode**; in attached mode the layer is in the app's origin by construction, and the status line says so |
+| R66, content is not instructions | D10 end to end, plus inert markdown rendering by construction rather than by stripping, with control characters removed before a scheme is read and an allowlist for link and image schemes |
+| R67, paste restrictions | Raster image types only, excluding the vector format that can carry script |
 
-Markdown is rendered with embedded markup inert and shown as text, and links and images carrying
-executable schemes are refused. Pasted files are limited to raster image types, which excludes the
-vector format that can carry script.
-
-Feedback text is the reviewer's own words about their own work and is written to their own disk. It
-is displayed as text, never as markup, so a passage quoted out of a page cannot execute when it is
-rendered back into the rail.
-
-Attached mode is the one place where a deliberate note is warranted: the snippet belongs in a
-development layout, guarded the way Steady Thread already guards its dev layer, so it is never served
-in production. The setup command's instructions say so, and the snippet itself carries the guard.
+Feedback is the reviewer's words about their own work, written to their own disk, displayed as text and
+never as markup. The log lives outside any checkout, owner-only, with a documented retention window and a
+purge command.
 
 ## Test strategy
 
 The single most important fact from studying the tool being replaced: it has **no browser-level test at
-all**, and every symptom Ken hit lives in the part that has none. Its careful, well-tested storage layer
-is not where it fails. So the test strategy is inverted from the one it grew: the interactive surface
-is the priority.
+all**, and every symptom Ken hit lives in the part that has none. Its careful, well-tested storage layer is
+not where it fails. The strategy is inverted from the one it grew.
 
 | Layer | What it proves |
 | --- | --- |
-| **Browser tests against a real browser** | The reliability laws, individually. Type and reload, type and kill the service, type and force a re-render, type and have the agent rewrite the file underneath. Send with nothing listening, then add more and send again. Each of these is one test that fails if the corresponding law is broken. |
-| **Anchoring tests** | A comment survives edits elsewhere, reformatting, and rewrapping; picks the right occurrence among repeats; reports honestly when its subject is gone. |
-| **Region identity tests** | Two neighboring regions never merge into one record; identity survives a repaint and a move. |
-| **Replay tests** | Outstanding edits reappear after every repaint cause, and a genuine collision is surfaced rather than resolved. |
-| **Protocol tests** | Per-item ack; a stale ack is refused; delivered items are re-offered until acked; a second send adds rather than replaces. |
-| **Containment tests** | Symlink escape, host header, inert markdown, refused schemes, refused paste types. |
-| **The end-to-end one that decides it** | A full review of a real running app behind a login: comment, type fixes, drive the app through several screens, send, have an agent apply and ack, watch the burn-down, and account for every item. |
+| **Browser tests, real browser** | Each reliability law, individually. Type and reload. Type and kill the service. Type and force an app re-render. Type and have an agent rewrite the source. Type half a comment, trigger a repaint, assert the half-comment survives. Send with nothing listening, add more, send again. |
+| **Replay tests** | Idempotence by comparison; the caret is never disturbed; a low-confidence match writes nothing; app repaint and source repaint behave differently; collisions surface rather than resolve. |
+| **Anchoring tests** | Survives edits elsewhere, reformatting, rewrapping; picks the right occurrence among repeats; reports honestly when the subject is gone. |
+| **Region identity tests** | Two neighboring regions never merge; identity survives a repaint and a move. |
+| **Protocol tests** | Per-item ack; stale ack refused; delivered items re-offered until acked; a second send adds rather than replaces; browser and service reconcile with lifecycle winning. |
+| **Security tests** | Cross-origin write refused without a token and without an allowlisted origin; forged ack refused; traversal and symlink write refused; injected instructions fenced in the markdown; inert markdown; refused schemes and paste types. |
+| **The end-to-end one that decides it** | A full review of a real running app behind a login: comment, type fixes, drive the app through several screens, send, have an agent apply and ack, watch the burn-down, account for every item. |
 
-Every reliability law in the brief needs a test that fails without it. That is the acceptance bar for
-this feature, not coverage percentage.
+Every reliability law in the brief needs a test that fails without it. That is the acceptance bar, not a
+coverage number.
+
+## Decisions resolved
+
+**Browsers: Chromium only for v1**, stated in the README. The editing surface is the entire risk and its
+cost swings with the answer. A second browser gets added when someone reports needing one.
+
+**The built-doc comment module stays for v1.** Opening a spec doc from Finder with nothing running has to
+keep working, so this tool does not replace the embedded layer yet.
+
+**Where the agent-facing files live** is answered by D1: one pair per review at a server-side review root,
+which removes the question rather than answering it per target type.
 
 ## Open Questions
 
 ::: callout-question
-**Q1: Which browsers does v1 support?** Carried from the brief. It changes how much of the editing
-surface is implemented by hand and how wide the browser test matrix is. A single target browser is
-reasonable for a tool Ken uses and thin for a public repository.
+**Q1: Which projects does a student attach, and how does the tool learn the source hint for a document it
+did not build?** D2 has `setup` ask once per project, which works for Ken's repositories where the answer
+is uniform. A stranger reviewing a single HTML file they were emailed has no project and no generator. The
+fallback is probably to say plainly that the source is unknown and let the agent decide, but the wording of
+that fallback is what stops an agent from confidently editing the artifact.
 :::
 
-::: callout-question
-**Q2: Where do the two agent-facing files go for a route target?** A file target has an obvious answer,
-next to the file. A route does not. The candidates are a folder in the project the reviewer names when
-attaching, or one known location per project the way the Steady Thread comments file works today. This
-needs settling before attached mode is built, not before the file mode is.
-:::
+## Architect Review Disposition
+
+| Finding | Disposition | Notes |
+| --- | --- | --- |
+| A target as the unit breaks one-batch review and makes Q2 unanswerable | Accepted | D1: a review spans many targets, one file pair, one review root |
+| Replay has no confidence floor and no fail-closed rule; identity cannot survive a repaint as written | Accepted | D3 Law 1, including minted-once and re-resolved-per-repaint |
+| App re-render and source rewrite treated identically; replay destroys the caret | Accepted | D3 Laws 2 and 3. This was the most dangerous defect in the draft |
+| Record shape is text-only; undo has no design | Accepted | D4, including undo as a record operation |
+| Verification is unimplementable because the ack carries no file paths | Accepted | D8, plus normalized matching and warn-do-not-reopen |
+| Refusing to write does not stop the agent editing the artifact the next build erases | Accepted | D2 source hint. This closed a real hole in R47 |
+| The xref cites R44 when it means R47 | Accepted | Corrected |
+| Attached mode's costs are not admitted | Accepted | D5 costs list: CSP, CORS, origin-scoped storage, router shim, overlay-root contract, layer not fetched from the service |
+| Nobody owns the refresh | Accepted | D5 per mode, plus the ordering rule in D7 |
+| Nothing protects an open compose box from a rail re-render | Accepted | D14 |
+| Two stores with no event identity or stated authority | Accepted | D6 three rules |
+| R9 and R20 have no owner | Accepted | D14 failures list; D4 makes the note an item |
+| Reuse claims do not survive opening the files | Accepted | Existing-structure table corrected: anchoring and the remount contract are new work |
+| A docked rail contradicts the no-restyle rule | Accepted | D12: fixed overlay, never shifts the host |
+| Python is not reliably present on a clean Mac | Accepted | D15 reversed to Node |
+| Cut compaction and projection-rebuild as named machinery | Accepted | D6 says the log is not compacted |
+| Cut the agent-presence display | Rejected | The brief requires presence to be shown. The risk is real, so D7 states the law that presence is never read by the send decision |
+| Collapse six commands to four | Accepted | `open`, `next`, `ack`, `setup` |
+| Browsers should not still be open | Accepted | Chromium only for v1 |
+| Runtime has no dependencies, dev tooling may | Accepted | D15 |
+| Does the built-doc module stay | Accepted | Yes for v1, stated |
+
+## Security Review Disposition
+
+| Finding | Disposition | Notes |
+| --- | --- | --- |
+| No authentication; any origin can write to the loopback service | Accepted | D9 three layers. This also fixes the same hole in the existing `comment_server.py` |
+| Prompt injection through quoted content into agent-read files | Accepted | D10. The vector was absent from the draft entirely |
+| Path derivation from attacker-controlled target; arbitrary write | Accepted | D11 |
+| "The snippet carries the guard" is not implementable | Accepted | D11: the guard is in the host template, emitted framework-correct by setup |
+| Dropping the frame loses the only isolation boundary in served mode | Accepted | D5 splits the decision by mode |
+| Cut the bookmarklet | Accepted | Cut from v1, recorded in Alternatives with the conditions under which it could return |
+| Log location, permissions, retention unstated | Accepted | D11 |
+| A forged ack silently empties the burn-down | Accepted | Closed by D9 |
+| Setup writes agent instructions with no safety story | Accepted | D11 sentinel blocks; D10's rules are what it writes |
+| Local-only has no enforcement point in attached mode | Accepted | Security table states the three real controls instead of one unenforceable claim |
+| Verification reads a path the acking party supplies | Accepted | D8 constrains it to the review's project root |
+| A fixed default port weakens everything | Accepted | D9 ephemeral by default |
+| Markdown sanitization described by effect, not mechanism | Accepted | Security table: inert by construction, control characters stripped before scheme reading, scheme allowlist |
