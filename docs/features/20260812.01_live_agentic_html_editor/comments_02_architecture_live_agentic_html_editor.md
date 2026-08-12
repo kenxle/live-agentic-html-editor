@@ -1,6 +1,6 @@
 # Review comments: Architecture: Live Agentic HTML Editor
 
-_Doc: 02_architecture_live_agentic_html_editor.html · saved 2026-08-12T16:31:01 · 17 comment(s)_
+_Doc: 02_architecture_live_agentic_html_editor.html · saved 2026-08-12T16:33:14 · 18 comment(s)_
 
 ## 1. Summary
 
@@ -201,6 +201,20 @@ line
 > then renamed), human-readable, grouped by page.
 
 do we want a unique naming convention to prevent collisions when multiple docs are open?
+
+**[DONE]**
+
+## 18. D6:
+The agent contract is one readable file, and replies are one appended
+line
+
+> Two honest notes on this channel. One agent-facing file is a
+> deliberate deviation from the usual "JSON is authoritative"
+> posture, on Ken's call: agents get one readable file, and the structured
+> truth stays in events.jsonl underneath it, available to any
+> agent that would rather parse but never required. 
+
+i need you to walk me thorugh this one. if i made a call that is non-standard then i want to talk about it 
 
 **[DONE]**
 

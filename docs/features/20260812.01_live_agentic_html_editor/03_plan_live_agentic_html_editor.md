@@ -1229,10 +1229,11 @@ Three, and none of them blocks the fan-out. Each needs Ken.
 1. **Who is the Phase 4A evaluator?** This plan assumes a fresh agent for AC1 through AC5, AC7, AC8, and
    the mechanical half of AC6, with Ken for AC6's honest half. If Ken would rather score AC1 and AC2 at a
    keyboard himself, 4A's shape changes but nothing upstream does.
-2. **Is `lahe` an installed command or `node bin/lahe.js`?** AC6 is scored on the exact number of
-   commands, so this is a product decision. This plan assumes `node bin/lahe.js add <file>` as the
-   documented invocation, with `npm link` as an optional convenience, because it works from a clone with
-   nothing installed globally.
+2. **Is `lahe` an installed command or `node bin/lahe.js`?** AC6 (a new user installs and starts a
+   review) is scored on the exact number of commands, so this was a product decision. **Answered
+   (Ken): `lahe` is an installed command.** The install step runs `npm link` from the clone so `lahe
+   add <file>` works anywhere, and `node bin/lahe.js` remains as the no-install fallback the README
+   documents. AC6 counts the installed form.
 3. **Does AC2 run against 0C's app fixture, or against Steady Thread's dev server?** The fixture is built
    either way, because 2D and ranked test 4 need it before Phase 4 exists. Ken's actual story is his own
    Rails app, and running AC2 there would be the truer test if the evaluator can be given access.

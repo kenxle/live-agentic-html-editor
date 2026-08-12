@@ -3706,11 +3706,13 @@ AC6, with Ken for AC6's honest half. If Ken would rather score AC1 and
 AC2 at a keyboard himself, 4A's shape changes but nothing upstream
 does.</li>
 <li><strong>Is <code>lahe</code> an installed command or
-<code>node bin/lahe.js</code>?</strong> AC6 is scored on the exact
-number of commands, so this is a product decision. This plan assumes
-<code>node bin/lahe.js add &lt;file&gt;</code> as the documented
-invocation, with <code>npm link</code> as an optional convenience,
-because it works from a clone with nothing installed globally.</li>
+<code>node bin/lahe.js</code>?</strong> AC6 (a new user installs and
+starts a review) is scored on the exact number of commands, so this was
+a product decision. <strong>Answered (Ken): <code>lahe</code> is an
+installed command.</strong> The install step runs <code>npm link</code>
+from the clone so <code>lahe add &lt;file&gt;</code> works anywhere, and
+<code>node bin/lahe.js</code> remains as the no-install fallback the
+README documents. AC6 counts the installed form.</li>
 <li><strong>Does AC2 run against 0C's app fixture, or against Steady
 Thread's dev server?</strong> The fixture is built either way, because
 2D and ranked test 4 need it before Phase 4 exists. Ken's actual story
