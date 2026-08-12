@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+ee8bcc4636ce
+ * version 0.0.0+7ca7bbe8b72d
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+ee8bcc4636ce";
+  g.LAHE.version = "0.0.0+7ca7bbe8b72d";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -4867,24 +4867,29 @@
 /* ---- src/layer/store.js  (owner: 1B) ---- */
 // The draft store: browser storage, written synchronously on every change.
 //
-// Owner: 1B. 0A-kernel ships this as a REAL minimal store rather than a stub,
-// because 1B (library shell) and 1D (comments) each need a scoreable done bar
-// in their own worktree instead of each stubbing the other's half and both
-// passing.
+// Owner: 1B.
 //
-// What is real here: synchronous writes to browser storage keyed by review id,
-// drafts, revisions, deletion, and the merge against the helper's state. What
-// 1B still owns: the Web Lock that refuses a second window, the quota story,
-// and everything about posting to the helper (that is sync.js).
+// Four things live in browser storage, all keyed by REVIEW ID and all written
+// synchronously:
 //
-// THE TWO RULES 1B MUST NOT LOSE, both from D5:
+//   items    the records themselves, drafts included
+//   outbox   the events that have not been acknowledged by the helper yet.
+//            This is what makes "re-post anything unacknowledged" survive a
+//            reload and a kill -9: a queue that lives only in a JS array is
+//            gone the moment the tab is
+//   chips    the failure list and the codes the reviewer dismissed, so a chip
+//            survives a remount and a navigation and stays gone once dismissed
+//   holder   which window holds this review, so the second window's refusal can
+//            NAME the first one rather than saying "somewhere else"
+//
+// THE TWO RULES, both from D5:
 //
 //  1. WRITTEN SYNCHRONOUSLY ON EVERY CHANGE, before any network call. Not on a
 //     timer, not debounced, not on blur. Ranked test 6 asserts durability in the
 //     same task as the final keystroke with no awaited timer in between, which
 //     is a test a debounced store cannot pass. The debounce in this design is
-//     on the post to the HELPER (750ms of typing idle, 0A-wire's flush policy),
-//     never on the write to storage.
+//     on the post to the HELPER (750ms of typing idle, protocol.js's flush
+//     policy), never on the write to storage.
 //
 //  2. KEYED BY REVIEW ID, never by filename and never by page. A review spans
 //     pages, so keying by page splits one review into several buckets and the
@@ -4913,6 +4918,10 @@
   "use strict";
 
   var KEY_PREFIX = "lahe.items.v1:";
+  var OUTBOX_PREFIX = "lahe.outbox.v1:";
+  var CHIPS_PREFIX = "lahe.chips.v1:";
+  var HOLDER_PREFIX = "lahe.holder.v1:";
+  var LOCK_PREFIX = "lahe.window.v1:";
 
   // The storage key for a review. Review id, never a filename, never a page.
   function keyFor(reviewId) {
@@ -4950,26 +4959,45 @@
   function createStore(options) {
     var opts = options || {};
     var backing = opts.backing || defaultBacking();
+    // A window identifies itself so a refusal can name the other one.
+    var windowId = opts.windowId || record.randomId("win");
+    var locks = opts.locks || (typeof navigator !== "undefined" && navigator ? navigator.locks : null);
+    var releaseHeldLock = null;
 
-    function readAll(reviewId) {
-      var raw = backing.getItem(keyFor(reviewId));
-      if (!raw) return [];
+    function readJson(key, fallback) {
+      var raw = backing.getItem(key);
+      if (!raw) return fallback;
       try {
-        var parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed : [];
+        return JSON.parse(raw);
       } catch (err) {
         // Fail loud. A store that silently returns an empty list after a
         // corrupt write is the reviewer's whole session disappearing quietly,
         // which is exactly the failure this tool exists to remove.
-        throw new Error(
-          "store: the stored items for review " + reviewId + " are not readable JSON (" + err.message + ")"
-        );
+        throw new Error("store: " + key + " is not readable JSON (" + err.message + ")");
       }
     }
 
+    // Every durable write in this file goes through here, so there is one place
+    // a full disk is reported from and one place that is synchronous.
+    function writeJson(key, value) {
+      try {
+        backing.setItem(key, JSON.stringify(value));
+      } catch (err) {
+        var f = failures.failure("STORAGE_QUOTA", err && err.message);
+        var loud = new Error("store: " + f.message + " (key " + key + ")");
+        loud.failure = f;
+        throw loud;
+      }
+      return value;
+    }
+
+    function readAll(reviewId) {
+      var parsed = readJson(keyFor(reviewId), []);
+      return Array.isArray(parsed) ? parsed : [];
+    }
+
     function writeAll(reviewId, items) {
-      backing.setItem(keyFor(reviewId), JSON.stringify(items));
-      return items;
+      return writeJson(keyFor(reviewId), items);
     }
 
     // @returns {Array<Object>} every item for this review, in creation order
@@ -5003,6 +5031,15 @@
         throw new Error("store.writeDraft: item " + item[record.FIELD.ID] + " is not a draft");
       }
       return write(reviewId, item);
+    }
+
+    // A rewording. The revision bump and the applied-after history are
+    // record.js's rule; this is the durable half of it, so no caller has to
+    // remember to write after bumping.
+    function writeRevision(reviewId, item, changes) {
+      var next = record.bumpRev(item, changes || {});
+      write(reviewId, next);
+      return next;
     }
 
     function readItem(reviewId, id) {
@@ -5049,28 +5086,209 @@
       return got;
     }
 
-    // The second-window refusal, client side (D5). STUB: 1B holds a Web Lock
-    // for the life of the session, which works with the helper down. The
-    // failure code and the shape of the answer are already here.
-    function acquireWindowLock(reviewId) {
-      void reviewId;
-      return { acquired: true, holder: null, failure: null, isStub: true };
+    // -------------------------------------------------------------------------
+    // The outbox
+    // -------------------------------------------------------------------------
+    //
+    // Written synchronously, in the same task as the keystroke that caused it,
+    // for one reason: a queue that lives only in a JS array is gone with the
+    // tab, and "re-posts anything unacknowledged on reconnect" would then mean
+    // "unless the reviewer reloaded", which is the promise this tool is about.
+    //
+    // Acknowledgement is BY event_id, never by (item, rev): drafts do not bump
+    // rev and drafts flow to the helper, so many events legitimately share an
+    // item and a revision (protocol.js).
+
+    function outboxKey(reviewId) {
+      return OUTBOX_PREFIX + reviewId;
     }
 
-    function refusalFailure() {
-      return failures.failure("SECOND_TAB_REFUSED", null);
+    function pendingEvents(reviewId) {
+      var parsed = readJson(outboxKey(reviewId), []);
+      return Array.isArray(parsed) ? parsed : [];
+    }
+
+    // Appends one event. Same event_id twice replaces rather than duplicates,
+    // so a re-queue after a failed post cannot double-count.
+    function queueEvent(reviewId, event) {
+      if (!event || typeof event.event_id !== "string" || !event.event_id) {
+        throw new TypeError("store.queueEvent: an event needs an event_id; idempotence is by event_id");
+      }
+      var queue = pendingEvents(reviewId);
+      for (var i = 0; i < queue.length; i += 1) {
+        if (queue[i].event_id === event.event_id) {
+          queue[i] = event;
+          writeJson(outboxKey(reviewId), queue);
+          return queue;
+        }
+      }
+      queue.push(event);
+      writeJson(outboxKey(reviewId), queue);
+      return queue;
+    }
+
+    // Drops the events the helper said it accepted. Anything it did not name
+    // stays queued, which is what makes a partially accepted batch safe.
+    function acknowledge(reviewId, eventIds) {
+      var accepted = Object.create(null);
+      (eventIds || []).forEach(function (id) {
+        accepted[id] = true;
+      });
+      var queue = pendingEvents(reviewId).filter(function (event) {
+        return !accepted[event.event_id];
+      });
+      writeJson(outboxKey(reviewId), queue);
+      return queue;
+    }
+
+    // -------------------------------------------------------------------------
+    // Chips
+    // -------------------------------------------------------------------------
+
+    function readChips(reviewId) {
+      var got = readJson(CHIPS_PREFIX + reviewId, null);
+      if (!got || typeof got !== "object") return { chips: [], dismissed: [] };
+      return {
+        chips: Array.isArray(got.chips) ? got.chips : [],
+        dismissed: Array.isArray(got.dismissed) ? got.dismissed : []
+      };
+    }
+
+    function writeChips(reviewId, value) {
+      return writeJson(CHIPS_PREFIX + reviewId, {
+        chips: (value && value.chips) || [],
+        dismissed: (value && value.dismissed) || []
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // The second window, client side (D5)
+    // -------------------------------------------------------------------------
+    //
+    // TWO SHAPES, AND THEY FAIL DIFFERENTLY.
+    //
+    //   shared storage (two tabs, one browser profile) is refused HERE, by a Web
+    //   Lock held for the life of the session. It works with the helper down,
+    //   which is the whole reason it is a lock and not a helper call.
+    //
+    //   separate storage (two profiles, two contexts) cannot see this lock at
+    //   all and can only be refused by the helper's session (1A's half).
+    //
+    // The third case, separate storage AND no helper, is refused by nothing.
+    // That is a NAMED LIMIT: sync.js puts it on the status line rather than
+    // letting the rail imply a guarantee that does not exist.
+
+    function holderKey(reviewId) {
+      return HOLDER_PREFIX + reviewId;
+    }
+
+    function readHolder(reviewId) {
+      return readJson(holderKey(reviewId), null);
+    }
+
+    function describeHolder(holder) {
+      if (!holder) return "another window";
+      var where = holder.path ? " on " + holder.path : "";
+      var when = holder.since ? ", open since " + holder.since : "";
+      return "the window" + where + when;
+    }
+
+    /**
+     * Claim this review for this window.
+     *
+     * @returns {Promise<{acquired: boolean, holder: object|null, windowId: string,
+     *                    failure: object|null, reason: string|null}>}
+     *   Resolved, never thrown: a window that cannot claim the review is a
+     *   read-only window, not a crash.
+     */
+    function claimWindow(reviewId, meta) {
+      var self = {
+        window_id: windowId,
+        since: new Date().toISOString(),
+        path: (meta && meta.path) || (typeof location !== "undefined" ? location.pathname : null)
+      };
+
+      if (!locks || typeof locks.request !== "function") {
+        // No Web Locks (an old browser, or Node). The claim is not refused,
+        // because refusing on the basis of a check that did not run would lock
+        // a reviewer out of their own review, and a reviewer locked out is a
+        // work-losing outcome in a tool whose thesis is never losing work.
+        writeJson(holderKey(reviewId), self);
+        return Promise.resolve({
+          acquired: true,
+          holder: self,
+          windowId: windowId,
+          failure: null,
+          reason: null,
+          unchecked: true
+        });
+      }
+
+      var settle;
+      var answered = new Promise(function (resolve) {
+        settle = resolve;
+      });
+
+      locks.request(LOCK_PREFIX + reviewId, { ifAvailable: true }, function (lock) {
+        if (!lock) {
+          var holder = readHolder(reviewId);
+          settle({
+            acquired: false,
+            holder: holder,
+            windowId: windowId,
+            failure: failures.failure("SECOND_WINDOW_REFUSED", describeHolder(holder)),
+            reason: "This review is already open in " + describeHolder(holder) + "."
+          });
+          return null;
+        }
+        writeJson(holderKey(reviewId), self);
+        settle({ acquired: true, holder: self, windowId: windowId, failure: null, reason: null });
+        // HELD FOR THE LIFE OF THE SESSION. The promise this returns is what
+        // keeps the lock, so it resolves only when releaseWindow is called.
+        return new Promise(function (resolve) {
+          releaseHeldLock = resolve;
+        });
+      });
+
+      return answered;
+    }
+
+    function releaseWindow(reviewId) {
+      if (typeof releaseHeldLock === "function") {
+        releaseHeldLock();
+        releaseHeldLock = null;
+      }
+      if (reviewId) {
+        var holder = readHolder(reviewId);
+        if (holder && holder.window_id === windowId) backing.removeItem(holderKey(reviewId));
+      }
+      return true;
+    }
+
+    function refusalFailure(detail) {
+      return failures.failure("SECOND_WINDOW_REFUSED", detail || null);
     }
 
     return {
+      windowId: windowId,
       keyFor: keyFor,
       read: read,
       write: write,
       writeDraft: writeDraft,
+      writeRevision: writeRevision,
       readItem: readItem,
       remove: remove,
       reviews: reviews,
       mergeWithHelper: mergeWithHelper,
-      acquireWindowLock: acquireWindowLock,
+      pendingEvents: pendingEvents,
+      queueEvent: queueEvent,
+      acknowledge: acknowledge,
+      readChips: readChips,
+      writeChips: writeChips,
+      readHolder: readHolder,
+      describeHolder: describeHolder,
+      claimWindow: claimWindow,
+      releaseWindow: releaseWindow,
       refusalFailure: refusalFailure
     };
   }
@@ -5079,6 +5297,10 @@
 
   return {
     KEY_PREFIX: KEY_PREFIX,
+    OUTBOX_PREFIX: OUTBOX_PREFIX,
+    CHIPS_PREFIX: CHIPS_PREFIX,
+    HOLDER_PREFIX: HOLDER_PREFIX,
+    LOCK_PREFIX: LOCK_PREFIX,
     keyFor: keyFor,
     createStore: createStore,
     shared: shared
@@ -6145,15 +6367,15 @@
 });
 
 /* ---- src/layer/overlay.js  (owner: 1B) ---- */
-// The rail: the chrome, the card API, and the persistent failure chips.
+// The rail: the chrome, the card API, the status line, and the failure chips.
 //
-// Owner: 1B. STUB committed by 0A-kernel: every signature is real and the state
-// each function records is real. What is missing is the DOM.
+// Owner: 1B.
 //
 // This file holds THE RAIL CHROME ONLY: the tab shell, the status line, the
 // failure chips, and the card API. TAB CONTENTS ARE NOT HERE. They live in
 // three files with one owner each (tab_active.js is 1D's, tab_done.js is 3A's,
-// tab_edits.js is 3D's), so five tasks stop writing one file.
+// tab_edits.js is 3D's), so five tasks stop writing one file. A tab owner fills
+// tabBody(tab); a card's contents go in cardBody(id).
 //
 // ---------------------------------------------------------------------------
 // The law this file owns: THE RAIL UPDATES IN PLACE, AND A CARD THAT HOLDS
@@ -6166,6 +6388,29 @@
 // frequent, not less. So this API has no render(items) that redraws everything.
 // It has upsertCard and the mutators below, and that is deliberate: there is no
 // function here whose implementation could reasonably be "rebuild the list".
+//
+// The law has three sharp edges, all of them enforced below rather than
+// documented:
+//
+//   1. upsertCard on an id that exists MUTATES the existing node. It never
+//      replaces it, and it never re-orders around it.
+//   2. removeCard on a card holding focus returns false and removes nothing.
+//   3. A card whose state moves it to another tab is NOT re-parented while it
+//      holds focus: re-parenting blurs a focused element in every engine. The
+//      move is held and flushed the moment focus leaves.
+//
+// ---------------------------------------------------------------------------
+// All library UI is in a CLOSED shadow root (D8)
+// ---------------------------------------------------------------------------
+//
+// The page's CSS cannot reach the library and the library's CSS cannot touch
+// the page. That is also why the rail answers questions about its own focus:
+// nothing outside can read a closed root's activeElement, and removeCard needs
+// the answer anyway.
+//
+// The one page-level exception D8 names (the namespaced ::highlight() rules) is
+// 1D's file, not this one. This file adds exactly one element to the page: the
+// overlay host.
 //
 // ---------------------------------------------------------------------------
 // How any task attaches something to a card
@@ -6216,6 +6461,7 @@
   // here, so a tab can be registered before its file exists.
   var TAB = { ACTIVE: "active", EDITS: "edits", DONE: "done" };
   var TABS = [TAB.ACTIVE, TAB.EDITS, TAB.DONE];
+  var TAB_LABEL = { active: "Active", edits: "Edits", done: "Done" };
 
   // R12. The status line has states, not strings, so a test asserts the
   // TRANSITIONS rather than the presence of a sentence. The sentences live here
@@ -6230,22 +6476,443 @@
     stored: "Stored.",
     agent_connected: "Stored, and an agent is reading."
   };
+  // The short form, for the one line that is always on screen. The long form
+  // above is the title attribute, so the plain statement is never truncated
+  // away entirely.
+  var STATUS_SHORT = {
+    kept_locally: "Kept in this browser",
+    stored: "Stored",
+    agent_connected: "Stored · agent reading"
+  };
 
-  function createRail() {
+  var STATE_LABEL = {
+    draft: "Draft",
+    ready: "Ready",
+    handled: "Handled",
+    not_handled: "Not handled"
+  };
+  var KIND_LABEL = {
+    comment: "Comment",
+    edit: "Edit",
+    delete: "Deletion",
+    format_only: "Formatting",
+    note: "Note"
+  };
+
+  // The named limit from D5, said on the status line rather than claimed as
+  // covered: two windows in separate storage with no helper running cannot be
+  // refused by anything, so the rail says so out loud.
+  var LIMIT_SEPARATE_STORAGE_NO_HELPER =
+    "With no helper running, a second window in a separate browser profile cannot be detected.";
+
+  var CSS = [
+    // all: initial stops every inheritable property of the host page (font,
+    // color, line-height, letter-spacing) from reaching the rail. A closed
+    // shadow root blocks the page's SELECTORS, never its inheritance.
+    ":host{all:initial;position:fixed;z-index:2147483000;top:0;right:0;bottom:0;width:0;height:0;",
+    "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;",
+    "--ink:#15171c;--ink-soft:#565e6d;--ink-faint:#868f9f;--paper:#fff;--surface:#f6f7f9;",
+    "--sunken:#eef0f4;--line:#e2e5eb;--line-soft:#eceef2;--accent:#3c56a5;--accent-ink:#2c3f7d;",
+    "--accent-wash:rgba(60,86,165,.09);--warn:#8d5715;--warn-wash:rgba(180,120,30,.12);",
+    "--good:#2c6f52;--shadow:0 1px 2px rgba(18,20,26,.06),0 14px 34px rgba(18,20,26,.13);",
+    "--radius:14px;--radius-sm:10px}",
+    "@media (prefers-color-scheme:dark){:host{",
+    // Dark keeps the same relationship light has: the card and the rail are the
+    // lit surface, the pane behind them is the ground. Inverting that is what
+    // makes a dark UI read as a stack of holes.
+    "--ink:#e9ebf0;--ink-soft:#a8b0be;--ink-faint:#7b8496;--paper:#1c2028;--surface:#14171c;",
+    "--sunken:#0f1216;--line:#2c313b;--line-soft:#242932;--accent:#93a7ea;",
+    "--accent-ink:#b7c4f2;--accent-wash:rgba(147,167,234,.14);--warn:#dfae6a;",
+    "--warn-wash:rgba(223,174,106,.14);--good:#7fc4a2;",
+    "--shadow:0 1px 2px rgba(0,0,0,.4),0 16px 40px rgba(0,0,0,.45)}}",
+    "*{box-sizing:border-box;margin:0;padding:0;font:inherit;color:inherit}",
+    "button{background:none;border:0;cursor:pointer;font:inherit;color:inherit}",
+    ":focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}",
+
+    // --- the rail -----------------------------------------------------------
+    ".rail{position:fixed;top:16px;right:16px;bottom:16px;width:clamp(320px,26vw,392px);",
+    "display:flex;flex-direction:column;background:var(--paper);color:var(--ink);",
+    "border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);",
+    "overflow:hidden;font-size:13px;line-height:1.45;letter-spacing:.005em}",
+    ".rail[hidden]{display:none}",
+
+    ".head{display:flex;align-items:center;gap:10px;padding:13px 14px 12px;",
+    "border-bottom:1px solid var(--line-soft)}",
+    ".mark{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none}",
+    ".title{font-size:13px;font-weight:600;letter-spacing:-.005em}",
+    ".review{font-size:11px;color:var(--ink-faint);letter-spacing:.02em;",
+    "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:11ch}",
+    ".head .spacer{flex:1}",
+    ".iconbtn{width:26px;height:26px;border-radius:7px;color:var(--ink-soft);",
+    "display:flex;align-items:center;justify-content:center;font-size:14px}",
+    ".iconbtn:hover{background:var(--surface);color:var(--ink)}",
+
+    // --- tabs ---------------------------------------------------------------
+    ".tabs{display:flex;gap:2px;padding:8px 10px 0;border-bottom:1px solid var(--line-soft)}",
+    ".tab{position:relative;padding:6px 10px 10px;font-size:12px;font-weight:500;",
+    "color:var(--ink-soft);display:flex;align-items:center;gap:6px}",
+    ".tab:hover{color:var(--ink)}",
+    ".tab[aria-selected='true']{color:var(--ink);font-weight:600}",
+    ".tab[aria-selected='true']::after{content:'';position:absolute;left:8px;right:8px;bottom:-1px;",
+    "height:2px;background:var(--accent);border-radius:2px}",
+    ".count{font-variant-numeric:tabular-nums;font-size:11px;color:var(--ink-faint);",
+    "background:var(--surface);border-radius:999px;padding:1px 6px;min-width:20px;text-align:center}",
+    ".tab[aria-selected='true'] .count{color:var(--accent-ink);background:var(--accent-wash)}",
+
+    // --- panes --------------------------------------------------------------
+    ".panes{flex:1;overflow:hidden;display:flex;background:var(--surface)}",
+    ".pane{flex:1;overflow-y:auto;padding:12px;display:none;flex-direction:column;gap:10px}",
+    ".pane[data-current='true']{display:flex}",
+    ".empty{color:var(--ink-faint);font-size:12px;padding:18px 4px;text-align:center}",
+    ".pane:not(:has(.card)) .empty{display:block}",
+    ".pane:has(.card) .empty{display:none}",
+
+    // --- cards --------------------------------------------------------------
+    ".card{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius-sm);",
+    "padding:11px 12px 12px;display:flex;flex-direction:column;gap:8px;",
+    "box-shadow:0 1px 1px rgba(18,20,26,.03)}",
+    ".card:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-wash)}",
+    ".card__top{display:flex;align-items:center;gap:8px}",
+    ".card__kind{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;",
+    "color:var(--ink-faint)}",
+    ".card__top .spacer{flex:1}",
+    ".card__state{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;",
+    "padding:2px 7px;border-radius:999px;background:var(--surface);color:var(--ink-soft)}",
+    ".card__state[data-state='ready']{background:var(--accent-wash);color:var(--accent-ink)}",
+    ".card__state[data-state='handled']{color:var(--good);background:transparent;",
+    "border:1px solid currentColor}",
+    ".card__state[data-state='not_handled']{color:var(--warn);background:var(--warn-wash)}",
+    ".card__quote{font-size:12px;color:var(--ink-soft);border-left:2px solid var(--line);",
+    "padding-left:9px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}",
+    ".card__body{font-size:13.5px;line-height:1.5;color:var(--ink);display:flex;",
+    "flex-direction:column;gap:8px}",
+    ".card__body:empty{display:none}",
+    // A text box a tab owner hosts in a card reads as part of the card rather
+    // than as a form control dropped into one. 1D owns the box; the rail owns
+    // how anything inside its own surface looks, and specificity this low is
+    // overridable by the owner.
+    ".card__body textarea,.card__body input[type='text']{width:100%;border:0;background:transparent;",
+    "resize:none;min-height:3.2em;font:inherit;font-size:13.5px;line-height:1.5;color:var(--ink);",
+    "outline:0;padding:0}",
+    ".card__body textarea::placeholder{color:var(--ink-faint)}",
+    ".card__badges{display:flex;flex-direction:column;gap:5px}",
+    ".card__badges:empty{display:none}",
+    ".badge{font-size:12px;color:var(--warn);background:var(--warn-wash);border-radius:7px;",
+    "padding:6px 8px}",
+    ".card__notice{font-size:12px;color:var(--ink-faint)}",
+    ".card__notice:empty{display:none}",
+
+    // The agent's question is the loudest thing on a card: its own block, its
+    // own rule, its own weight. Not a tinted label (D10).
+    ".agent{border-radius:8px;padding:8px 10px;background:var(--surface);font-size:12.5px}",
+    ".agent:empty{display:none}",
+    ".agent__who{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;",
+    "color:var(--ink-faint);display:block;margin-bottom:3px}",
+    ".agent.is-loud{background:var(--accent-wash);border-left:3px solid var(--accent);",
+    "color:var(--ink);font-size:13.5px;line-height:1.5}",
+    ".agent.is-loud .agent__who{color:var(--accent-ink)}",
+    ".agent__files{margin-top:5px;font-size:11px;color:var(--ink-faint);",
+    "font-family:ui-monospace,SFMono-Regular,Menlo,monospace}",
+
+    // --- footer -------------------------------------------------------------
+    ".foot{border-top:1px solid var(--line-soft);background:var(--paper);",
+    "padding:10px 12px 11px;display:flex;flex-direction:column;gap:9px}",
+    ".chips{display:flex;flex-direction:column;gap:6px}",
+    ".chips:empty{display:none}",
+    ".chip{display:flex;align-items:flex-start;gap:8px;font-size:12px;line-height:1.4;",
+    "background:var(--warn-wash);color:var(--ink);border-radius:8px;padding:7px 8px 7px 10px}",
+    ".chip__text{flex:1}",
+    ".chip__remedy{display:block;color:var(--ink-soft);font-size:11.5px;margin-top:2px}",
+    ".chip__x{width:20px;height:20px;border-radius:5px;color:var(--ink-soft);flex:none;",
+    "display:flex;align-items:center;justify-content:center;font-size:13px}",
+    ".chip__x:hover{background:rgba(0,0,0,.06);color:var(--ink)}",
+    ".chip__count{font-variant-numeric:tabular-nums;color:var(--ink-faint);font-size:11px}",
+
+    ".status{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink-soft)}",
+    ".status__dot{width:6px;height:6px;border-radius:50%;background:var(--ink-faint);flex:none}",
+    ".status[data-status='stored'] .status__dot{background:var(--good)}",
+    ".status[data-status='agent_connected'] .status__dot{background:var(--accent)}",
+    ".status[data-status='kept_locally'] .status__dot{background:var(--warn)}",
+    ".status__text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+    ".limit{font-size:11.5px;color:var(--ink-faint);line-height:1.4}",
+    ".limit:empty{display:none}",
+
+    // Copy and export are ALWAYS visible, not only when nothing is connected
+    // (D10): when something is wrong is exactly when the reviewer cannot tell.
+    ".actions{display:flex;gap:7px}",
+    ".btn{flex:1;font-size:12px;font-weight:550;padding:7px 10px;border-radius:8px;",
+    "border:1px solid var(--line);background:var(--paper);color:var(--ink);text-align:center}",
+    ".btn:hover{background:var(--surface)}",
+    ".btn--primary{background:var(--accent);border-color:var(--accent);color:#fff}",
+    "@media (prefers-color-scheme:dark){.btn--primary{color:#12151a}}",
+    ".btn--primary:hover{filter:brightness(1.06);background:var(--accent)}",
+
+    // The keyboard hints are readable, not fine print (D10).
+    ".hints{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11.5px;color:var(--ink-soft)}",
+    ".hint{display:flex;align-items:center;gap:5px}",
+    "kbd{font-family:inherit;font-size:11px;font-weight:600;color:var(--ink);",
+    "background:var(--sunken);border:1px solid var(--line);border-bottom-width:2px;",
+    "border-radius:5px;padding:1px 5px;letter-spacing:.01em}",
+
+    // --- the collapsed pill --------------------------------------------------
+    // It never overlaps the open rail because it only exists while the rail is
+    // hidden. Two elements that are never on screen together cannot overlap.
+    ".pill{position:fixed;right:16px;bottom:16px;display:flex;align-items:center;gap:8px;",
+    "height:38px;padding:0 14px;border-radius:999px;background:var(--paper);color:var(--ink);",
+    "border:1px solid var(--line);box-shadow:var(--shadow);font-size:12.5px;font-weight:550}",
+    ".pill[hidden]{display:none}",
+    ".pill:hover{background:var(--surface)}",
+    ".pill__dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}",
+    ".pill__count{font-variant-numeric:tabular-nums;color:var(--ink-faint);font-weight:500}"
+  ].join("");
+
+  var HINTS = [
+    { keys: ["⌘", "⇧", "C"], what: "comment" },
+    { keys: ["⌘", "⇧", "E"], what: "edit" },
+    { keys: ["⌘", "⏎"], what: "done with this one" }
+  ];
+
+  function createRail(options) {
+    var opts = options || {};
+    var doc = opts.document || (typeof document !== "undefined" ? document : null);
+    var store = opts.store || null;
+    var reviewId = opts.reviewId || null;
+
     var cards = Object.create(null);
     var chips = [];
+    var dismissed = Object.create(null);
     var status = null;
     var activeTab = TAB.ACTIVE;
     var collapsed = false;
     var mounted = false;
+    var limitText = null;
+    var actionHandlers = Object.create(null);
 
-    // A card handle. The node reference is what 1B fills in; the point of
-    // returning a handle rather than an id is that a caller physically cannot
-    // "re-render the list" through it.
+    // The DOM, all of it, or all nulls when there is no document (Node).
+    var dom = null;
+    // Cards whose pane changed while they held focus. Re-parenting a focused
+    // element blurs it, so the move waits for focus to leave.
+    var pendingPlacement = Object.create(null);
+
+    // -------------------------------------------------------------------------
+    // Mount
+    // -------------------------------------------------------------------------
+
+    function el(tag, className, text) {
+      var node = doc.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined && text !== null) node.textContent = text;
+      return node;
+    }
+
+    function mount(mountOptions) {
+      var mo = mountOptions || {};
+      if (mounted) return { rootId: markers.OVERLAY_ROOT_ID, remounted: false };
+      mounted = true;
+      loadChips();
+      if (!doc || !doc.body) return { rootId: markers.OVERLAY_ROOT_ID, headless: true };
+
+      var host = doc.createElement("div");
+      host.id = markers.OVERLAY_ROOT_ID;
+      markers.markChrome(host);
+      // CLOSED, per D8. Nothing outside the library can reach in, which is also
+      // why this module answers holdsFocus and activeElementInfo itself.
+      var shadow = host.attachShadow({ mode: "closed" });
+
+      var style = doc.createElement("style");
+      style.textContent = CSS;
+      shadow.appendChild(style);
+
+      var rail = el("aside", "rail");
+      rail.setAttribute("aria-label", "Review");
+
+      var head = el("div", "head");
+      head.appendChild(el("span", "mark"));
+      head.appendChild(el("span", "title", "Review"));
+      head.appendChild(el("span", "review", reviewId || ""));
+      head.appendChild(el("span", "spacer"));
+      var collapseBtn = el("button", "iconbtn", "→");
+      collapseBtn.setAttribute("aria-label", "Collapse the rail");
+      collapseBtn.title = "Collapse the rail";
+      collapseBtn.addEventListener("click", function () {
+        collapse(true);
+      });
+      head.appendChild(collapseBtn);
+      rail.appendChild(head);
+
+      var tabs = el("div", "tabs");
+      tabs.setAttribute("role", "tablist");
+      var tabButtons = Object.create(null);
+      var counts = Object.create(null);
+      TABS.forEach(function (name) {
+        var button = el("button", "tab");
+        button.setAttribute("role", "tab");
+        button.setAttribute("data-tab", name);
+        button.appendChild(el("span", null, TAB_LABEL[name]));
+        var count = el("span", "count", "0");
+        button.appendChild(count);
+        button.addEventListener("click", function () {
+          selectTab(name);
+        });
+        tabs.appendChild(button);
+        tabButtons[name] = button;
+        counts[name] = count;
+      });
+      rail.appendChild(tabs);
+
+      var panes = el("div", "panes");
+      var paneNodes = Object.create(null);
+      TABS.forEach(function (name) {
+        var pane = el("div", "pane");
+        pane.setAttribute("data-pane", name);
+        pane.setAttribute("role", "tabpanel");
+        pane.appendChild(el("div", "empty", emptyTextFor(name)));
+        panes.appendChild(pane);
+        paneNodes[name] = pane;
+      });
+      rail.appendChild(panes);
+
+      var foot = el("div", "foot");
+      var chipList = el("div", "chips");
+      foot.appendChild(chipList);
+
+      var statusRow = el("div", "status");
+      statusRow.setAttribute("role", "status");
+      statusRow.appendChild(el("span", "status__dot"));
+      var statusText = el("span", "status__text", "Kept in this browser");
+      statusRow.appendChild(statusText);
+      foot.appendChild(statusRow);
+
+      var limit = el("div", "limit");
+      foot.appendChild(limit);
+
+      var actions = el("div", "actions");
+      var copyBtn = el("button", "btn btn--primary", "Copy");
+      copyBtn.addEventListener("click", function () {
+        runAction("copy");
+      });
+      var exportBtn = el("button", "btn", "Export");
+      exportBtn.addEventListener("click", function () {
+        runAction("export");
+      });
+      actions.appendChild(copyBtn);
+      actions.appendChild(exportBtn);
+      foot.appendChild(actions);
+
+      var hints = el("div", "hints");
+      HINTS.forEach(function (hint) {
+        var row = el("span", "hint");
+        hint.keys.forEach(function (key) {
+          row.appendChild(el("kbd", null, key));
+        });
+        row.appendChild(el("span", null, hint.what));
+        hints.appendChild(row);
+      });
+      foot.appendChild(hints);
+      rail.appendChild(foot);
+
+      var pill = el("button", "pill");
+      pill.hidden = true;
+      pill.appendChild(el("span", "pill__dot"));
+      pill.appendChild(el("span", null, "Review"));
+      var pillCount = el("span", "pill__count", "0");
+      pill.appendChild(pillCount);
+      pill.addEventListener("click", function () {
+        collapse(false);
+      });
+
+      shadow.appendChild(rail);
+      shadow.appendChild(pill);
+      doc.body.appendChild(host);
+
+      // A held pane move lands the moment focus leaves the card.
+      shadow.addEventListener("focusout", function () {
+        flushPendingPlacements();
+      });
+
+      dom = {
+        host: host,
+        shadow: shadow,
+        rail: rail,
+        tabButtons: tabButtons,
+        counts: counts,
+        panes: paneNodes,
+        chipList: chipList,
+        statusRow: statusRow,
+        statusText: statusText,
+        limit: limit,
+        pill: pill,
+        pillCount: pillCount
+      };
+
+      // Everything already in state is painted once, here. This is the only
+      // place that draws from scratch, and it runs when there are no cards.
+      Object.keys(cards).forEach(function (id) {
+        buildCardNode(cards[id]);
+        placeCard(cards[id]);
+        paintCard(cards[id]);
+      });
+      renderChips();
+      renderStatus();
+      renderTabs();
+      renderCollapsed();
+      if (mo.hidden) collapse(true);
+      return { rootId: markers.OVERLAY_ROOT_ID, remounted: false };
+    }
+
+    function emptyTextFor(name) {
+      if (name === TAB.ACTIVE) return "Nothing outstanding. Select some text and press Cmd-Shift-C.";
+      if (name === TAB.EDITS) return "No hand edits yet.";
+      return "Nothing handled yet.";
+    }
+
+    // Unmount drops the DOM and keeps every piece of state, which is what makes
+    // a remount (2D's, on navigation) cheap and lossless. Chips that were
+    // dismissed stay dismissed because dismissal is state, not markup.
+    function unmount() {
+      if (dom && dom.host && dom.host.parentNode) dom.host.parentNode.removeChild(dom.host);
+      Object.keys(cards).forEach(function (id) {
+        cards[id].node = null;
+        cards[id].bodyNode = null;
+        cards[id].parts = null;
+      });
+      dom = null;
+      mounted = false;
+    }
+
+    function isMounted() {
+      return mounted;
+    }
+
+    function setReview(id) {
+      reviewId = id;
+      loadChips();
+      if (dom) {
+        dom.rail.querySelector(".review").textContent = id || "";
+        renderChips();
+      }
+      return reviewId;
+    }
+
+    // -------------------------------------------------------------------------
+    // Cards
+    // -------------------------------------------------------------------------
+
+    function paneForItem(item) {
+      var kind = item[record.FIELD.KIND];
+      var state = item[record.FIELD.STATE];
+      if (state === record.STATE.HANDLED) return TAB.DONE;
+      if (kind === record.KIND.EDIT || kind === record.KIND.FORMAT_ONLY || kind === record.KIND.DELETE) {
+        return TAB.EDITS;
+      }
+      return TAB.ACTIVE;
+    }
+
     function handleFor(id) {
       return {
         id: id,
         node: cards[id] ? cards[id].node : null,
+        body: cards[id] ? cards[id].bodyNode : null,
         holdsFocus: function () {
           return holdsFocus(id);
         }
@@ -6253,7 +6920,7 @@
     }
 
     // Creates the card if it does not exist, updates it in place if it does.
-    // Never re-creates. Returns a handle.
+    // NEVER re-creates. Returns a handle.
     function upsertCard(item) {
       record.validateItem(item);
       var id = item[record.FIELD.ID];
@@ -6261,22 +6928,148 @@
         cards[id] = {
           id: id,
           node: null,
+          bodyNode: null,
+          parts: null,
           item: item,
           state: item[record.FIELD.STATE],
+          pane: paneForItem(item),
           badges: [],
           agentMessage: null,
           notice: null,
           created: true
         };
+        buildCardNode(cards[id]);
+        placeCard(cards[id]);
       } else {
         cards[id].item = item;
         cards[id].state = item[record.FIELD.STATE];
+        cards[id].pane = paneForItem(item);
+        placeCard(cards[id]);
       }
+      paintCard(cards[id]);
+      renderTabs();
       return handleFor(id);
+    }
+
+    function buildCardNode(card) {
+      if (!dom || card.node) return card.node;
+      var node = el("article", "card");
+      node.setAttribute("data-card-id", card.id);
+      markers.markChrome(node);
+
+      var top = el("div", "card__top");
+      var kind = el("span", "card__kind");
+      top.appendChild(kind);
+      top.appendChild(el("span", "spacer"));
+      var state = el("span", "card__state");
+      top.appendChild(state);
+      node.appendChild(top);
+
+      var quote = el("div", "card__quote");
+      node.appendChild(quote);
+
+      // What a tab-content owner fills. Nothing in this file writes into it.
+      var body = el("div", "card__body");
+      node.appendChild(body);
+
+      var badges = el("div", "card__badges");
+      node.appendChild(badges);
+      var agent = el("div", "agent");
+      node.appendChild(agent);
+      var notice = el("div", "card__notice");
+      node.appendChild(notice);
+
+      card.node = node;
+      card.bodyNode = body;
+      card.parts = { kind: kind, state: state, quote: quote, badges: badges, agent: agent, notice: notice };
+      return node;
+    }
+
+    // Puts the card in the pane its state says it belongs in. A card holding
+    // focus is NEVER re-parented: moving a focused element blurs it in every
+    // engine, which would be this file's own law broken by its own tidying.
+    function placeCard(card) {
+      if (!dom || !card.node) return;
+      var pane = dom.panes[card.pane];
+      if (card.node.parentNode === pane) return;
+      if (holdsFocus(card.id)) {
+        pendingPlacement[card.id] = true;
+        return;
+      }
+      pane.appendChild(card.node);
+      delete pendingPlacement[card.id];
+    }
+
+    function flushPendingPlacements() {
+      Object.keys(pendingPlacement).forEach(function (id) {
+        if (!cards[id]) {
+          delete pendingPlacement[id];
+          return;
+        }
+        if (holdsFocus(id)) return;
+        delete pendingPlacement[id];
+        placeCard(cards[id]);
+      });
+      renderTabs();
+    }
+
+    // Updates the parts of a card that changed. It writes text into existing
+    // nodes; it never replaces one.
+    function paintCard(card) {
+      if (!dom || !card.node) return;
+      var item = card.item;
+      var p = card.parts;
+      p.kind.textContent = KIND_LABEL[item[record.FIELD.KIND]] || item[record.FIELD.KIND];
+      p.state.textContent = STATE_LABEL[card.state] || card.state;
+      p.state.setAttribute("data-state", card.state);
+      var quote = (item[record.FIELD.CONTEXT] && item[record.FIELD.CONTEXT].quote) || "";
+      p.quote.textContent = quote;
+      p.quote.style.display = quote ? "" : "none";
+
+      p.badges.textContent = "";
+      card.badges.forEach(function (badge) {
+        var row = el("div", "badge", badge.message || badge.code);
+        p.badges.appendChild(row);
+      });
+
+      p.agent.textContent = "";
+      p.agent.className = "agent";
+      if (card.agentMessage) {
+        var who = card.agentMessage.agent || "agent";
+        var label =
+          card.agentMessage.status === record.REPLY_STATUS.QUESTION
+            ? "Question from " + who
+            : who;
+        p.agent.appendChild(el("span", "agent__who", label));
+        p.agent.appendChild(
+          el("span", null, card.agentMessage.text || card.agentMessage.reason || "")
+        );
+        if (card.agentMessage.files && card.agentMessage.files.length) {
+          p.agent.appendChild(el("div", "agent__files", card.agentMessage.files.join("  ")));
+        }
+        if (card.agentMessage.loud) p.agent.className = "agent is-loud";
+      }
+
+      p.notice.textContent = card.notice || "";
     }
 
     function getCard(id) {
       return cards[id] || null;
+    }
+
+    function cardNode(id) {
+      return cards[id] ? cards[id].node : null;
+    }
+
+    // The element a tab-content owner fills for this card.
+    function cardBody(id) {
+      return cards[id] ? cards[id].bodyNode : null;
+    }
+
+    // The element a tab owner fills with that tab's contents.
+    function tabBody(tab) {
+      if (TABS.indexOf(tab) === -1) throw new Error("tabBody: unknown tab " + String(tab));
+      return dom ? dom.panes[tab] : null;
     }
 
     function removeCard(id) {
@@ -6284,7 +7077,12 @@
       // The one guard that matters. A card holding focus is not removed, even
       // when the caller thinks it should be; the caller is told no.
       if (holdsFocus(id)) return false;
+      if (cards[id].node && cards[id].node.parentNode) {
+        cards[id].node.parentNode.removeChild(cards[id].node);
+      }
       delete cards[id];
+      delete pendingPlacement[id];
+      renderTabs();
       return true;
     }
 
@@ -6294,6 +7092,12 @@
       }
       if (!cards[id]) return null;
       cards[id].state = state;
+      cards[id].item = Object.assign({}, cards[id].item);
+      cards[id].item[record.FIELD.STATE] = state;
+      cards[id].pane = paneForItem(cards[id].item);
+      placeCard(cards[id]);
+      paintCard(cards[id]);
+      renderTabs();
       return handleFor(id);
     }
 
@@ -6304,6 +7108,7 @@
       if (!failure || !failure.code) throw new TypeError("setCardBadge expects a failure object");
       clearCardBadge(id, failure.code);
       cards[id].badges.push(failure);
+      paintCard(cards[id]);
       return handleFor(id);
     }
 
@@ -6313,7 +7118,9 @@
       cards[id].badges = cards[id].badges.filter(function (b) {
         return b.code !== code;
       });
-      return cards[id].badges.length !== before;
+      var changed = cards[id].badges.length !== before;
+      if (changed) paintCard(cards[id]);
+      return changed;
     }
 
     function cardBadges(id) {
@@ -6328,6 +7135,7 @@
       if (!cards[id]) return null;
       if (!reply) {
         cards[id].agentMessage = null;
+        paintCard(cards[id]);
         return handleFor(id);
       }
       cards[id].agentMessage = {
@@ -6341,6 +7149,7 @@
         // treatment cannot quietly become a tinted label.
         loud: reply.status === record.REPLY_STATUS.QUESTION
       };
+      paintCard(cards[id]);
       return handleFor(id);
     }
 
@@ -6349,31 +7158,105 @@
     function setCardNotice(id, text) {
       if (!cards[id]) return null;
       cards[id].notice = text ? String(text) : null;
+      paintCard(cards[id]);
       return handleFor(id);
     }
 
-    // STUB: 1B answers this from the shadow root's activeElement. Returning
-    // false here is safe only because removeCard is the sole consumer and the
-    // stub creates no DOM to remove.
+    // Answered from the closed shadow root, which is the only place that can
+    // see it. removeCard and placeCard are the callers that matter.
     function holdsFocus(id) {
-      void id;
-      return false;
+      if (!dom || !cards[id] || !cards[id].node) return false;
+      var active = dom.shadow.activeElement;
+      if (!active) return false;
+      return cards[id].node === active || cards[id].node.contains(active);
+    }
+
+    function focusedCardId() {
+      if (!dom) return null;
+      var ids = Object.keys(cards);
+      for (var i = 0; i < ids.length; i += 1) {
+        if (holdsFocus(ids[i])) return ids[i];
+      }
+      return null;
+    }
+
+    // A closed root's activeElement is unreadable from outside, so the rail
+    // describes it. Used by 1B's own specs and by anything that has to know
+    // whether the reviewer is mid-sentence before it acts.
+    function activeElementInfo() {
+      if (!dom) return { isCardInput: false, cardId: null, tag: null, selectionStart: null, value: null };
+      var active = dom.shadow.activeElement;
+      var id = focusedCardId();
+      var isInput = !!active && (active.tagName === "TEXTAREA" || active.tagName === "INPUT" || active.isContentEditable);
+      return {
+        isCardInput: isInput && !!id,
+        cardId: id,
+        tag: active ? active.tagName : null,
+        selectionStart: active && typeof active.selectionStart === "number" ? active.selectionStart : null,
+        value: active && typeof active.value === "string" ? active.value : null
+      };
     }
 
     function cardIds() {
       return Object.keys(cards);
     }
 
+    function countFor(tab) {
+      return Object.keys(cards).filter(function (id) {
+        return cards[id].pane === tab;
+      }).length;
+    }
+
     // -------------------------------------------------------------------------
     // The dismissible failure chips (R11)
     // -------------------------------------------------------------------------
+    //
+    // Chips and their dismissals live in browser storage, not in the DOM, so
+    // they survive a remount and a navigation (ranked test 33). DISMISSED STAYS
+    // DISMISSED: a code the reviewer waved away does not come back the next
+    // time the same thing fails, because a chip that reappears every poll is
+    // the reviewer's own dismissal not working. The underlying state is still
+    // on the status line, so dismissing hides the chip and never the truth.
+
+    function loadChips() {
+      if (!store || !reviewId || typeof store.readChips !== "function") return;
+      var got = store.readChips(reviewId);
+      chips = got.chips || [];
+      dismissed = Object.create(null);
+      (got.dismissed || []).forEach(function (code) {
+        dismissed[code] = true;
+      });
+    }
+
+    function saveChips() {
+      if (!store || !reviewId || typeof store.writeChips !== "function") return;
+      store.writeChips(reviewId, { chips: chips, dismissed: Object.keys(dismissed) });
+    }
+
+    function renderChips() {
+      if (!dom) return;
+      dom.chipList.textContent = "";
+      chips.forEach(function (chip) {
+        var row = el("div", "chip");
+        var text = el("div", "chip__text");
+        text.appendChild(el("span", null, chip.message || chip.code));
+        if (chip.remedy) text.appendChild(el("span", "chip__remedy", chip.remedy));
+        row.appendChild(text);
+        if (chip.count > 1) row.appendChild(el("span", "chip__count", "×" + chip.count));
+        var x = el("button", "chip__x", "×");
+        x.setAttribute("aria-label", "Dismiss");
+        x.addEventListener("click", function () {
+          failuresApi.dismiss(chip.code);
+        });
+        row.appendChild(x);
+        dom.chipList.appendChild(row);
+      });
+    }
 
     var failuresApi = {
-      // Persistent codes stay until dismissed. A non-persistent code is still
-      // recorded, so a test can assert it happened, and the UI shows it as a
-      // passing message.
       add: function (failure) {
         if (!failure || !failure.code) throw new TypeError("failures.add expects a failure object");
+        if (dismissed[failure.code]) return null;
         var existing = chips.filter(function (f) {
           return f.code === failure.code;
         })[0];
@@ -6381,21 +7264,28 @@
           existing.count = (existing.count || 1) + 1;
           existing.at = failure.at;
           existing.detail = failure.detail;
+          saveChips();
+          renderChips();
           return existing;
         }
         var entry = Object.assign({}, failure, { count: 1, dismissed: false });
         chips.push(entry);
+        saveChips();
+        renderChips();
         return entry;
       },
-      // Dismissed stays dismissed, across a remount, a navigation, and a replay
-      // pass (ranked test 33). The underlying state is still visible on the
-      // status line, so dismissing hides the chip and never the truth.
       dismiss: function (code) {
         var n = chips.length;
         chips = chips.filter(function (f) {
           return f.code !== code;
         });
+        dismissed[code] = true;
+        saveChips();
+        renderChips();
         return chips.length !== n;
+      },
+      isDismissed: function (code) {
+        return dismissed[code] === true;
       },
       list: function () {
         return chips.slice();
@@ -6405,6 +7295,8 @@
       },
       clear: function () {
         chips = [];
+        saveChips();
+        renderChips();
       }
     };
 
@@ -6417,12 +7309,16 @@
     function setStatusLine(state) {
       if (state === null || state === undefined) {
         status = null;
+        renderStatus();
         return null;
       }
       if (!Object.prototype.hasOwnProperty.call(STATUS_TEXT, state)) {
-        throw new Error("setStatusLine: unknown status " + String(state) + "; expected one of " + Object.keys(STATUS_TEXT).join(", "));
+        throw new Error(
+          "setStatusLine: unknown status " + String(state) + "; expected one of " + Object.keys(STATUS_TEXT).join(", ")
+        );
       }
       status = state;
+      renderStatus();
       return status;
     }
 
@@ -6434,9 +7330,36 @@
       return status ? STATUS_TEXT[status] : null;
     }
 
+    // The one case nothing can refuse (D5): two windows, separate storage, no
+    // helper. It is said here rather than claimed as covered anywhere.
+    function setLimitNote(text) {
+      limitText = text || null;
+      renderStatus();
+      return limitText;
+    }
+
+    function renderStatus() {
+      if (!dom) return;
+      dom.statusRow.setAttribute("data-status", status || "");
+      dom.statusText.textContent = status ? STATUS_SHORT[status] : "Kept in this browser";
+      dom.statusRow.title = status ? STATUS_TEXT[status] : "";
+      dom.limit.textContent = limitText || "";
+    }
+
+    function renderTabs() {
+      if (!dom) return;
+      TABS.forEach(function (name) {
+        dom.tabButtons[name].setAttribute("aria-selected", name === activeTab ? "true" : "false");
+        dom.panes[name].setAttribute("data-current", name === activeTab ? "true" : "false");
+        dom.counts[name].textContent = String(countFor(name));
+      });
+      dom.pillCount.textContent = String(countFor(TAB.ACTIVE));
+    }
+
     function selectTab(tab) {
       if (TABS.indexOf(tab) === -1) throw new Error("selectTab: unknown tab " + String(tab));
       activeTab = tab;
+      renderTabs();
       return activeTab;
     }
 
@@ -6444,28 +7367,59 @@
       return activeTab;
     }
 
-    function mount() {
-      mounted = true;
-      return { rootId: markers.OVERLAY_ROOT_ID, isStub: true };
+    // Copy and Export are always visible; who does the work is 3C's. The rail
+    // holds the buttons and hands the click on.
+    function onAction(name, fn) {
+      actionHandlers[name] = fn;
+      return function () {
+        delete actionHandlers[name];
+      };
     }
 
-    function unmount() {
-      mounted = false;
+    function runAction(name) {
+      if (typeof actionHandlers[name] === "function") return actionHandlers[name]();
+      return null;
     }
 
-    function isMounted() {
-      return mounted;
-    }
-
-    // The collapsed pill never overlaps the open rail (D10). 1B owns the
-    // geometry; the state lives here so a test can drive it.
+    // The collapsed pill never overlaps the open rail (D10), and the mechanism
+    // is that the two are never on screen at the same time.
     function collapse(next) {
       collapsed = next === undefined ? !collapsed : !!next;
+      renderCollapsed();
       return collapsed;
+    }
+
+    function renderCollapsed() {
+      if (!dom) return;
+      dom.rail.hidden = collapsed;
+      dom.pill.hidden = !collapsed;
     }
 
     function isCollapsed() {
       return collapsed;
+    }
+
+    // Rects for both, plus the overlap answer, because "never overlaps" is a
+    // geometric claim and a test should be able to check it as one.
+    function geometry() {
+      if (!dom) return { railVisible: false, pillVisible: false, overlap: false, rail: null, pill: null };
+      var railRect = dom.rail.hidden ? null : dom.rail.getBoundingClientRect();
+      var pillRect = dom.pill.hidden ? null : dom.pill.getBoundingClientRect();
+      var overlap = false;
+      if (railRect && pillRect) {
+        overlap =
+          railRect.left < pillRect.right &&
+          pillRect.left < railRect.right &&
+          railRect.top < pillRect.bottom &&
+          pillRect.top < railRect.bottom;
+      }
+      return {
+        railVisible: !!railRect,
+        pillVisible: !!pillRect,
+        overlap: overlap,
+        rail: railRect ? { top: railRect.top, right: railRect.right, bottom: railRect.bottom, left: railRect.left } : null,
+        pill: pillRect ? { top: pillRect.top, right: pillRect.right, bottom: pillRect.bottom, left: pillRect.left } : null
+      };
     }
 
     return {
@@ -6473,15 +7427,22 @@
       TABS: TABS,
       STATUS: STATUS,
       STATUS_TEXT: STATUS_TEXT,
+      STATUS_SHORT: STATUS_SHORT,
+      LIMIT_SEPARATE_STORAGE_NO_HELPER: LIMIT_SEPARATE_STORAGE_NO_HELPER,
       mount: mount,
       unmount: unmount,
       isMounted: isMounted,
+      setReview: setReview,
       collapse: collapse,
       isCollapsed: isCollapsed,
+      geometry: geometry,
       selectTab: selectTab,
       currentTab: currentTab,
+      tabBody: tabBody,
       upsertCard: upsertCard,
       getCard: getCard,
+      cardNode: cardNode,
+      cardBody: cardBody,
       removeCard: removeCard,
       setCardState: setCardState,
       setCardBadge: setCardBadge,
@@ -6490,11 +7451,16 @@
       setAgentMessage: setAgentMessage,
       setCardNotice: setCardNotice,
       holdsFocus: holdsFocus,
+      focusedCardId: focusedCardId,
+      activeElementInfo: activeElementInfo,
       cardIds: cardIds,
+      countFor: countFor,
       failures: failuresApi,
+      onAction: onAction,
       setStatusLine: setStatusLine,
       getStatusLine: getStatusLine,
-      statusText: statusText
+      statusText: statusText,
+      setLimitNote: setLimitNote
     };
   }
 
@@ -6505,11 +7471,12 @@
     TABS: TABS,
     STATUS: STATUS,
     STATUS_TEXT: STATUS_TEXT,
+    STATUS_SHORT: STATUS_SHORT,
+    LIMIT_SEPARATE_STORAGE_NO_HELPER: LIMIT_SEPARATE_STORAGE_NO_HELPER,
     createRail: createRail,
     shared: shared,
     OVERLAY_ROOT_ID: markers.OVERLAY_ROOT_ID,
-    failureFor: failuresModule.failure,
-    isStub: true
+    failureFor: failuresModule.failure
   };
 });
 
@@ -7019,22 +7986,37 @@
 });
 
 /* ---- src/layer/sync.js  (owner: 1B) ---- */
-// The sync client.
+// The sync client, and the reply poll loop.
 //
-// Owner: Task 1B-ii. STUB: real signatures, real classification of a failure,
-// no network yet.
+// Owner: 1B. 3A (agent loop) reads replies through this file rather than
+// editing it, which is why the poll loop is built here in Phase 1 against
+// protocol.js's reply shapes.
 //
-// The one thing this file must get right and the tool being replaced does not:
-// A CSP REFUSAL LOOKS IDENTICAL TO THE SERVICE BEING DOWN. Both surface as a
-// rejected fetch with an opaque error. The design calls service-down harmless
-// and calls a CSP refusal a thing the reviewer has to fix, so telling them
-// apart is not a nicety. classify() below is where that happens, and 1B-ii
-// fills in the detection (a SecurityPolicyViolation event on the document
-// naming connect-src, versus a plain network error), not the policy.
+// Five promises, and each one is a line of code below rather than a paragraph:
 //
-// Retries forever, never blocks. Send is never gated on this succeeding: the
-// browser copy is the other durable store and Copy and Export work with nothing
-// running.
+//  1. POST PER EVENT, on protocol.js's flush policy: browser storage every
+//     keystroke (store.js's job), the helper debounced at 750ms of typing idle,
+//     and immediately on blur, ready, navigation and unload.
+//  2. RE-POST ANYTHING UNACKNOWLEDGED, on reconnect and on the next load. The
+//     queue is in browser storage, not in a JS array, so a reload and a kill -9
+//     lose nothing.
+//  3. RETRY FOREVER, capped backoff, never give up. A stopped helper costs the
+//     reviewer nothing and the backlog drains when it returns.
+//  4. NEVER BLOCK THE REVIEWER. Nothing here is awaited on the typing path, and
+//     every request carries a deadline: A SUSPENDED HELPER ACCEPTS THE SOCKET
+//     AND NEVER ANSWERS, which a client written only against a dead helper
+//     hangs on forever.
+//  5. TELL A CSP REFUSAL FROM A HELPER THAT IS DOWN. Both surface as a rejected
+//     fetch with a deliberately opaque error, and they need opposite fixes:
+//     one is "start the helper", the other is "this page's policy refuses the
+//     connection". The detection is a real SecurityPolicyViolation event on the
+//     document naming connect-src, not a guess from the error text.
+//
+// THE SECOND WINDOW, and the case nothing can cover. Shared storage is refused
+// by store.js's Web Lock, which works with the helper down. Separate storage
+// can only be refused by the helper's session. Separate storage AND no helper
+// is refused by nothing, and that is said on the status line as a named limit
+// (D5) rather than quietly claimed as covered.
 //
 // Dual-environment module. See docs/CONTRACTS.md, "How a shared module loads".
 (function (root, factory) {
@@ -7042,102 +8024,536 @@
   var browser = typeof window !== "undefined" && !!window.document;
   if (browser) {
     root.LAHE = root.LAHE || {};
-    root.LAHE.sync = factory(root.LAHE.protocol, root.LAHE.failures);
+    root.LAHE.sync = factory(root.LAHE.protocol, root.LAHE.failures, root.LAHE.record, root.LAHE.overlay);
   } else {
-    module.exports = factory(require("../shared/protocol.js"), require("../shared/failures.js"));
+    module.exports = factory(
+      require("../shared/protocol.js"),
+      require("../shared/failures.js"),
+      require("../shared/record.js"),
+      require("./overlay.js")
+    );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (protocol, failures) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (protocol, failures, record, overlay) {
   "use strict";
 
   var STATE = {
     IDLE: "idle",
     IN_FLIGHT: "in_flight",
     RETRYING: "retrying",
-    REFUSED: "refused" // policy refusal or a second 401. Stops retrying
+    REFUSED: "refused" // a policy refusal. Stops posting; the queue is kept
   };
 
-  // Backoff for the service being down. Capped, and it never gives up, because
-  // the promise is that a stopped service costs nothing and sync drains when it
+  // Backoff for the helper being down. Capped, and it never gives up, because
+  // the promise is that a stopped helper costs nothing and sync drains when it
   // returns.
   var BACKOFF_MS = [250, 500, 1000, 2000, 5000, 10000, 30000];
 
-  function createSync() {
+  // Every request carries this deadline. It is the difference between a dead
+  // helper and a suspended one: a dead helper refuses the connection at once, a
+  // suspended one accepts it and answers nothing, and only a deadline turns the
+  // second into a status line the reviewer can read.
+  var REQUEST_TIMEOUT_MS = 2000;
+
+  // The library's own poll of the helper. Deliberately NOT protocol.REPLY_POLL
+  // .INTERVAL_MS: that 250ms is the helper watching reply FILES on local disk,
+  // and reusing it here would mean four HTTP requests a second from every open
+  // page for no gain. The cursor is protocol.REPLY_CURSOR_FIELD, a seq, never a
+  // timestamp.
+  var POLL_INTERVAL_MS = 1000;
+
+  function createSync(options) {
+    var opts = options || {};
+    var review = opts.review || null;
+    var token = opts.token || "";
+    var helperOrigin = opts.helperOrigin || protocol.DEFAULT_HELPER_ORIGIN;
+    var store = opts.store || null;
+    var doc = opts.document || (typeof document !== "undefined" ? document : null);
+    var win = opts.window || (typeof window !== "undefined" ? window : null);
+    var fetchImpl = opts.fetch || (typeof fetch === "function" ? fetch.bind(typeof globalThis !== "undefined" ? globalThis : null) : null);
+    var onStatus = opts.onStatus || function () {};
+    var onFailure = opts.onFailure || function () {};
+    var onReplies = opts.onReplies || function () {};
+    var onLimit = opts.onLimit || function () {};
+
     var state = STATE.IDLE;
-    var queue = [];
-    var session = null;
-    var remintAttempts = 0;
+    var status = null;
+    var started = false;
+    var cspRefused = false;
+    var lastFailure = null;
+    var backoffIndex = 0;
+    var debounceTimer = null;
+    var retryTimer = null;
+    var pollTimer = null;
+    var flushing = false;
+    var deliveredOnce = false;
+    var cursor = 0;
+    var repliesSeen = [];
+    var seenItems = Object.create(null);
+    var lock = { checked: false, acquired: null, holder: null, reason: null, unchecked: false };
+    var counters = { posts: 0, postsFailed: 0, polls: 0, acknowledged: 0, timeouts: 0 };
 
-    // Queues events. Never blocks and never throws on a transport problem: the
-    // caller already wrote to browser storage before calling here.
-    function enqueue(events) {
-      if (!Array.isArray(events)) throw new TypeError("sync.enqueue expects an array of events");
-      queue = queue.concat(events);
-      return queue.length;
+    function requireReview() {
+      if (!review) throw new Error("sync: a review id is required; browser storage and the wire are both keyed by it");
+      return review;
     }
 
-    // STUB: 1B-ii implements the POST. Flushes everything queued, in order,
-    // idempotent by event id so a re-send after a failure cannot double-count.
-    function flush() {
-      return Promise.resolve({ sent: 0, remaining: queue.length, isStub: true });
+    // -------------------------------------------------------------------------
+    // The status line (R12)
+    // -------------------------------------------------------------------------
+    //
+    // Three states, and the transitions are what a test asserts. STORED means
+    // the helper has acknowledged everything this browser holds: while anything
+    // is still queued, the honest word is kept-locally, whatever the last
+    // request happened to return.
+
+    function setStatus(next) {
+      if (next === status) return status;
+      status = next;
+      onStatus(status);
+      return status;
     }
 
-    // D7: send flushes anything in flight FIRST, so the sentence typed a moment
-    // before pressing send is in the batch (R5).
-    function send() {
-      return flush().then(function () {
-        return { send_id: null, isStub: true };
+    function recomputeStatus() {
+      var pending = store ? store.pendingEvents(requireReview()).length : 0;
+      // Anything the helper refused, could not take, or never answered means
+      // the reviewer's typing is living in this browser and nowhere else.
+      if (lastFailure || cspRefused) return setStatus(overlay.STATUS.KEPT_LOCALLY);
+      if (pending === 0 && deliveredOnce) {
+        if (repliesSeen.length > 0) return setStatus(overlay.STATUS.AGENT_CONNECTED);
+        return setStatus(overlay.STATUS.STORED);
+      }
+      // Queued and in flight with nothing wrong: HOLD the current reading
+      // rather than flickering to kept-locally between every keystroke and its
+      // acknowledgement. Before the first successful post there is no reading
+      // to hold, and kept-locally is the true one.
+      if (status === null) return setStatus(overlay.STATUS.KEPT_LOCALLY);
+      return status;
+    }
+
+    function raise(failure) {
+      lastFailure = failure;
+      onFailure(failure);
+      return failure;
+    }
+
+    // -------------------------------------------------------------------------
+    // Minting events
+    // -------------------------------------------------------------------------
+
+    function eventTypeFor(item) {
+      if (item[record.FIELD.STATE] === record.STATE.READY) return protocol.EVENT.ITEM_READY;
+      if (!seenItems[item[record.FIELD.ID]]) return protocol.EVENT.ITEM_CREATED;
+      return protocol.EVENT.ITEM_CONTENT;
+    }
+
+    function eventFor(item) {
+      var type = eventTypeFor(item);
+      seenItems[item[record.FIELD.ID]] = true;
+      return protocol.newEvent({
+        event: type,
+        event_id: record.randomId("evt"),
+        review: requireReview(),
+        item: item[record.FIELD.ID],
+        rev: item[record.FIELD.REV],
+        page_path: item[record.FIELD.PAGE_PATH],
+        page_title: item[record.FIELD.PAGE_TITLE],
+        page_seq: item[record.FIELD.PAGE_SEQ],
+        source_hint: item[record.FIELD.SOURCE_HINT],
+        payload: {
+          // Drafts flow to the helper marked draft, and never appear as
+          // actionable in what the agent reads (D5, R7).
+          draft: record.isDraft(item),
+          record: item
+        }
       });
     }
 
-    // The session exchange (D9). STUB: 1B-ii implements it against
-    // protocol.route("session.mint").
-    function mintSession() {
-      remintAttempts += 1;
-      return Promise.resolve({ session: null, isStub: true });
-    }
-
-    // What the layer does on a 401 mid-session, from protocol.SESSION.ON_401:
-    // re-mint once, and a second refusal becomes a persistent failure rather
-    // than a silent retry loop.
-    function onUnauthorized() {
-      if (remintAttempts < protocol.SESSION.ON_401.remint_attempts) {
-        return mintSession();
+    /**
+     * The typing path. SYNCHRONOUS and non-blocking: the event is queued in
+     * browser storage in this task, and the network happens later or never.
+     *
+     * @param {Object} item the record as stored
+     * @param {{immediate?: string}} [options] one of protocol.FLUSH.IMMEDIATE_ON
+     */
+    function recordItem(item, options) {
+      var opts2 = options || {};
+      var event = eventFor(item);
+      store.queueEvent(requireReview(), event);
+      if (opts2.immediate) {
+        if (protocol.FLUSH.IMMEDIATE_ON.indexOf(opts2.immediate) === -1) {
+          throw new Error(
+            "sync.recordItem: immediate must be one of " + protocol.FLUSH.IMMEDIATE_ON.join(", ") + ", got " + opts2.immediate
+          );
+        }
+        scheduleFlush(0);
+      } else {
+        scheduleFlush(protocol.FLUSH.HELPER_DEBOUNCE_MS);
       }
-      state = STATE.REFUSED;
-      return Promise.resolve({ failure: failures.failure("SYNC_UNAUTHORIZED", null), stopped: true });
+      recomputeStatus();
+      return event;
     }
 
-    // Turns a transport error into one of the two states the rail knows how to
-    // report. STUB for the detection, real for the policy: anything the caller
-    // flags as a policy violation is a policy refusal, everything else is the
-    // service being down.
+    // -------------------------------------------------------------------------
+    // Posting
+    // -------------------------------------------------------------------------
+
+    function url(routeName, query) {
+      var base = helperOrigin + protocol.route(routeName).path;
+      if (!query) return base;
+      var parts = Object.keys(query).map(function (key) {
+        return encodeURIComponent(key) + "=" + encodeURIComponent(query[key]);
+      });
+      return base + "?" + parts.join("&");
+    }
+
+    function headersFor(routeName) {
+      var out = {};
+      out[protocol.HEADER.CLIENT] = protocol.CLIENT_LAYER;
+      out[protocol.HEADER.TOKEN] = token;
+      if (protocol.route(routeName).mutating) out[protocol.HEADER.CONTENT_TYPE] = protocol.JSON_CONTENT_TYPE;
+      return out;
+    }
+
+    // One request, with a deadline. Resolves to {ok, status, body} or
+    // {ok:false, error}. It never throws: a transport problem is a state the
+    // rail reports, not an exception the typing path has to catch.
+    function request(routeName, init) {
+      if (!fetchImpl) return Promise.resolve({ ok: false, error: new Error("no fetch in this environment") });
+      var controller = typeof AbortController === "function" ? new AbortController() : null;
+      var timedOut = false;
+      var timer = null;
+      if (controller) {
+        // harness-allow-timer: the request deadline. A suspended helper accepts
+        // the socket and answers nothing, so without this the reviewer's page
+        // waits forever on a helper that is never coming back this second.
+        timer = setTimeout(function () {
+          timedOut = true;
+          counters.timeouts += 1;
+          controller.abort();
+        }, REQUEST_TIMEOUT_MS);
+      }
+      var config = Object.assign({}, init, { headers: headersFor(routeName) });
+      if (controller) config.signal = controller.signal;
+
+      return fetchImpl(url(routeName, init && init.query), config)
+        .then(function (response) {
+          if (timer) clearTimeout(timer);
+          return response
+            .json()
+            .catch(function () {
+              return null;
+            })
+            .then(function (body) {
+              return { ok: response.ok, status: response.status, body: body };
+            });
+        })
+        .catch(function (error) {
+          if (timer) clearTimeout(timer);
+          return { ok: false, error: error, timedOut: timedOut };
+        });
+    }
+
+    /**
+     * Drain the outbox. Never throws, never blocks a caller who does not await
+     * it, and idempotent: the helper acknowledges by event_id, so a re-post
+     * after a timeout cannot double-count.
+     */
+    function flush(flushOptions) {
+      var fo = flushOptions || {};
+      if (flushing) return Promise.resolve({ sent: 0, remaining: pendingCount(), busy: true });
+      if (cspRefused) return Promise.resolve({ sent: 0, remaining: pendingCount(), refused: true });
+
+      var events = store.pendingEvents(requireReview());
+      if (!events.length) {
+        recomputeStatus();
+        return Promise.resolve({ sent: 0, remaining: 0 });
+      }
+
+      var body = JSON.stringify({ review: requireReview(), events: events });
+
+      // The unload path. Keepalive carries the headers D11 requires, which
+      // sendBeacon cannot; oversize is a delay, never a loss, because the
+      // events are already in browser storage.
+      if (fo.unload && !protocol.fitsKeepalive(body)) {
+        return Promise.resolve({ sent: 0, remaining: events.length, oversize: true });
+      }
+
+      flushing = true;
+      state = STATE.IN_FLIGHT;
+      counters.posts += 1;
+
+      var init = { method: "POST", body: body };
+      if (fo.unload) init.keepalive = true;
+
+      return request("events.append", init).then(function (result) {
+        flushing = false;
+        if (result.ok) {
+          var accepted = (result.body && result.body.accepted) || [];
+          store.acknowledge(requireReview(), accepted);
+          deliveredOnce = true;
+          counters.acknowledged += accepted.length;
+          lastFailure = null;
+          backoffIndex = 0;
+          state = STATE.IDLE;
+          if (typeof (result.body && result.body.seq) === "number" && cursor === 0) {
+            cursor = result.body.seq;
+          }
+          recomputeStatus();
+          var remaining = pendingCount();
+          if (remaining > 0 && !fo.unload) scheduleFlush(0);
+          return { sent: accepted.length, remaining: remaining };
+        }
+
+        counters.postsFailed += 1;
+        state = STATE.RETRYING;
+        raise(classify(result.error, { status: result.status, detail: describe(result) }));
+        recomputeStatus();
+        if (!fo.unload) scheduleRetry();
+        return { sent: 0, remaining: pendingCount(), failed: true };
+      });
+    }
+
+    function describe(result) {
+      if (result.timedOut) return "the helper accepted the connection and did not answer within " + REQUEST_TIMEOUT_MS + "ms";
+      if (result.error) return result.error.message || String(result.error);
+      if (result.body && result.body.error) return result.body.error.message || result.body.error.code;
+      return result.status ? "HTTP " + result.status : null;
+    }
+
+    function pendingCount() {
+      return store ? store.pendingEvents(requireReview()).length : 0;
+    }
+
+    function scheduleFlush(delayMs) {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      // harness-allow-timer: protocol.FLUSH's 750ms typing-idle debounce. This
+      // is the ONLY debounce in the design and it is on the post to the helper,
+      // never on the write to browser storage.
+      debounceTimer = setTimeout(function () {
+        debounceTimer = null;
+        flush();
+      }, delayMs);
+    }
+
+    function scheduleRetry() {
+      if (retryTimer) return;
+      var wait = BACKOFF_MS[Math.min(backoffIndex, BACKOFF_MS.length - 1)];
+      backoffIndex += 1;
+      // harness-allow-timer: the capped retry backoff. It never gives up, which
+      // is the promise that a stopped helper costs the reviewer nothing.
+      retryTimer = setTimeout(function () {
+        retryTimer = null;
+        flush();
+      }, wait);
+    }
+
+    // -------------------------------------------------------------------------
+    // The reply poll loop (3A reads this; it never edits this file)
+    // -------------------------------------------------------------------------
+    //
+    // The cursor is a seq from the log (protocol.REPLY_CURSOR_FIELD), never a
+    // timestamp: two events in one millisecond are ordinary and a clock that
+    // steps backwards silently skips work.
+
+    function poll() {
+      counters.polls += 1;
+      return request("replies.poll", { method: "GET", query: { review: requireReview(), since: cursor } }).then(
+        function (result) {
+          if (!result.ok) {
+            raise(classify(result.error, { status: result.status, detail: describe(result) }));
+            recomputeStatus();
+            return { events: [] };
+          }
+          lastFailure = null;
+          var events = (result.body && result.body.events) || [];
+          if (typeof (result.body && result.body.seq) === "number") cursor = result.body.seq;
+          if (events.length) {
+            repliesSeen = repliesSeen.concat(events);
+            onReplies(events);
+          }
+          recomputeStatus();
+          return { events: events, seq: cursor };
+        }
+      );
+    }
+
+    function startPolling() {
+      if (pollTimer) return pollTimer;
+      // harness-allow-timer: the reply poll interval, pinned above.
+      pollTimer = setInterval(function () {
+        poll();
+        if (pendingCount() > 0 && !retryTimer && !flushing) flush();
+      }, POLL_INTERVAL_MS);
+      return pollTimer;
+    }
+
+    // -------------------------------------------------------------------------
+    // Telling a CSP refusal from a helper that is down
+    // -------------------------------------------------------------------------
+
     function classify(error, hints) {
       var h = hints || {};
-      if (h.cspViolation === true) return failures.failure("SYNC_POLICY_REFUSED", h.detail || null);
-      if (h.status === 401 || h.status === 403) {
-        return failures.failure(h.status === 403 ? "SYNC_ORIGIN_NOT_ALLOWED" : "SYNC_UNAUTHORIZED", h.detail || null);
-      }
-      return failures.failure("SYNC_SERVICE_DOWN", (error && error.message) || null);
+      if (cspRefused) return failures.failure("CSP_REFUSED", h.detail || null);
+      if (h.status === 401) return failures.failure("SYNC_UNAUTHORIZED", h.detail || null);
+      if (h.status === 403) return failures.failure("SYNC_ORIGIN_NOT_ALLOWED", h.detail || null);
+      return failures.failure("HELPER_UNREACHABLE", h.detail || (error && error.message) || null);
     }
 
-    function status() {
-      return { state: state, queued: queue.length, session: session, remintAttempts: remintAttempts };
+    function onPolicyViolation(event) {
+      var directive = String(event.effectiveDirective || event.violatedDirective || "");
+      if (directive.indexOf("connect-src") !== 0) return;
+      var blocked = String(event.blockedURI || "");
+      if (blocked && helperOrigin && blocked.indexOf(helperOrigin) !== 0) return;
+      cspRefused = true;
+      state = STATE.REFUSED;
+      raise(failures.failure("CSP_REFUSED", "connect-src blocked " + (blocked || helperOrigin)));
+      recomputeStatus();
+    }
+
+    // -------------------------------------------------------------------------
+    // Lifecycle
+    // -------------------------------------------------------------------------
+
+    function start() {
+      if (started) return Promise.resolve(lock);
+      started = true;
+      requireReview();
+
+      if (doc && typeof doc.addEventListener === "function") {
+        doc.addEventListener("securitypolicyviolation", onPolicyViolation);
+      }
+      if (win && typeof win.addEventListener === "function") {
+        // Navigation and unload both commit immediately, with keepalive. R1
+        // names navigation, so a link click cannot be a losing move.
+        win.addEventListener("pagehide", commitOnUnload);
+        win.addEventListener("beforeunload", commitOnUnload);
+      }
+
+      startPolling();
+      // Anything a previous session left unacknowledged goes out now. This is
+      // the whole of "re-posts on the next load".
+      flush();
+
+      return store
+        .claimWindow(requireReview())
+        .then(function (got) {
+          lock = {
+            checked: true,
+            acquired: got.acquired,
+            holder: got.holder,
+            reason: got.reason,
+            refusedBy: got.acquired ? null : "lock",
+            unchecked: got.unchecked === true
+          };
+          if (!got.acquired) {
+            raise(got.failure);
+            return lock;
+          }
+          // The two shapes fail differently (D5): the lock above catches two
+          // tabs sharing one storage bucket, and only the helper can see two
+          // windows that cannot see each other's storage.
+          return claimWithHelper();
+        })
+        .then(function (result) {
+          // Whichever way it went, the case nothing can refuse is said out
+          // loud rather than quietly claimed as covered.
+          onLimit(overlay.LIMIT_SEPARATE_STORAGE_NO_HELPER);
+          return result;
+        });
+    }
+
+    function claimWithHelper() {
+      return request("window.claim", {
+        method: "POST",
+        body: JSON.stringify({ review: requireReview(), window_id: store.windowId, takeover: false })
+      }).then(function (result) {
+        if (result.ok) {
+          lock.helperGranted = true;
+          return lock;
+        }
+        var code = result.body && result.body.error && result.body.error.code;
+        if (code === "PROTO_SECOND_WINDOW") {
+          lock.acquired = false;
+          lock.refusedBy = "helper";
+          lock.reason =
+            "The helper says this review is already open in another window (" +
+            ((result.body.error && result.body.error.detail) || "no detail") +
+            ").";
+          raise(failures.failure("SECOND_WINDOW_REFUSED", lock.reason));
+          return lock;
+        }
+        // The helper being unreachable is not a refusal. A window locked out
+        // by a check that never ran is a work-losing outcome.
+        lock.helperGranted = false;
+        return lock;
+      });
+    }
+
+    function commitOnUnload() {
+      flush({ unload: true });
+    }
+
+    function stop() {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      if (retryTimer) clearTimeout(retryTimer);
+      if (pollTimer) clearInterval(pollTimer);
+      debounceTimer = null;
+      retryTimer = null;
+      pollTimer = null;
+      if (doc && typeof doc.removeEventListener === "function") {
+        doc.removeEventListener("securitypolicyviolation", onPolicyViolation);
+      }
+      if (win && typeof win.removeEventListener === "function") {
+        win.removeEventListener("pagehide", commitOnUnload);
+        win.removeEventListener("beforeunload", commitOnUnload);
+      }
+      if (store) store.releaseWindow(review);
+      started = false;
+      return true;
+    }
+
+    function statusOf() {
+      return {
+        state: state,
+        status: status,
+        queued: pendingCount(),
+        cursor: cursor,
+        cspRefused: cspRefused,
+        lastFailure: lastFailure ? lastFailure.code : null,
+        counters: Object.assign({}, counters)
+      };
     }
 
     return {
       STATE: STATE,
       BACKOFF_MS: BACKOFF_MS,
-      enqueue: enqueue,
+      REQUEST_TIMEOUT_MS: REQUEST_TIMEOUT_MS,
+      POLL_INTERVAL_MS: POLL_INTERVAL_MS,
+      start: start,
+      stop: stop,
+      recordItem: recordItem,
+      eventFor: eventFor,
       flush: flush,
-      send: send,
-      mintSession: mintSession,
-      onUnauthorized: onUnauthorized,
+      commitOnUnload: commitOnUnload,
+      poll: poll,
       classify: classify,
-      status: status
+      repliesSeen: function () {
+        return repliesSeen.slice();
+      },
+      lockState: function () {
+        return lock;
+      },
+      status: statusOf
     };
   }
 
-  return { STATE: STATE, BACKOFF_MS: BACKOFF_MS, createSync: createSync, shared: createSync(), isStub: true };
+  return {
+    STATE: STATE,
+    BACKOFF_MS: BACKOFF_MS,
+    REQUEST_TIMEOUT_MS: REQUEST_TIMEOUT_MS,
+    POLL_INTERVAL_MS: POLL_INTERVAL_MS,
+    createSync: createSync
+  };
 });
 
 /* ---- src/layer/comments.js  (owner: 1D) ---- */
@@ -8609,7 +10025,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+ee8bcc4636ce";
+  var VERSION = "0.0.0+7ca7bbe8b72d";
 
   function isLoopbackOrigin(origin) {
     if (typeof origin !== "string" || !origin) return false;
