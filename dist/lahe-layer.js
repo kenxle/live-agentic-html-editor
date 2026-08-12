@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+d04bcda70711
+ * version 0.0.0+7e5f012226a5
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+d04bcda70711";
+  g.LAHE.version = "0.0.0+7e5f012226a5";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -3211,6 +3211,20 @@
     throw new Error("unknown check: " + String(name));
   }
 
+  // Constant-time token comparison. A plain !== returns at the first differing
+  // character, and response timing then leaks how much of a guessed token
+  // matched. Pure JS (no node:crypto) because this module also loads in the
+  // browser. Length is not hidden: tokens are fixed-length mints, so length
+  // carries nothing.
+  function tokensEqual(a, b) {
+    var max = Math.max(a.length, b.length);
+    var diff = a.length === b.length ? 0 : 1;
+    for (var i = 0; i < max; i += 1) {
+      diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+    }
+    return diff === 0;
+  }
+
   function headerOf(headers, name) {
     if (!headers) return null;
     if (Object.prototype.hasOwnProperty.call(headers, name)) return headers[name];
@@ -3274,7 +3288,7 @@
     }
     var registered = reviews[reviewId];
     var presented = headerOf(headers, HEADER.TOKEN);
-    if (!registered.token || typeof presented !== "string" || presented !== registered.token) {
+    if (!registered.token || typeof presented !== "string" || !tokensEqual(presented, registered.token)) {
       return refuse(CHECK.TOKEN, null);
     }
 
@@ -7147,7 +7161,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+d04bcda70711";
+  var VERSION = "0.0.0+7e5f012226a5";
 
   function isLoopbackOrigin(origin) {
     if (typeof origin !== "string" || !origin) return false;

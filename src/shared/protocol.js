@@ -264,6 +264,20 @@
     throw new Error("unknown check: " + String(name));
   }
 
+  // Constant-time token comparison. A plain !== returns at the first differing
+  // character, and response timing then leaks how much of a guessed token
+  // matched. Pure JS (no node:crypto) because this module also loads in the
+  // browser. Length is not hidden: tokens are fixed-length mints, so length
+  // carries nothing.
+  function tokensEqual(a, b) {
+    var max = Math.max(a.length, b.length);
+    var diff = a.length === b.length ? 0 : 1;
+    for (var i = 0; i < max; i += 1) {
+      diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+    }
+    return diff === 0;
+  }
+
   function headerOf(headers, name) {
     if (!headers) return null;
     if (Object.prototype.hasOwnProperty.call(headers, name)) return headers[name];
@@ -327,7 +341,7 @@
     }
     var registered = reviews[reviewId];
     var presented = headerOf(headers, HEADER.TOKEN);
-    if (!registered.token || typeof presented !== "string" || presented !== registered.token) {
+    if (!registered.token || typeof presented !== "string" || !tokensEqual(presented, registered.token)) {
       return refuse(CHECK.TOKEN, null);
     }
 
