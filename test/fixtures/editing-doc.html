@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Editing Fixture</title>
+  <style>
+    body { font: 16px/1.6 system-ui, sans-serif; max-width: 46rem; margin: 2rem auto; color: #1c1c1c; }
+    h1 { font-size: 2rem; margin: 0 0 1rem; }
+    h2 { font-size: 1.3rem; margin: 2rem 0 0.5rem; }
+    p { margin: 0 0 1rem; }
+    nav { margin: 2rem 0 0; }
+  </style>
+</head>
+<body>
+  <!--
+    2A's fixture: a static document with the shapes the editing tests need.
+
+    Two NEIGHBOURING paragraphs (#alpha and #beta) with no element between them,
+    because ranked test 15's merge bug lives exactly there. A block that already
+    carries inline markup (#delta) so a formatting-only change has something to
+    compare structurally. A block to delete (#gamma). A link to a second page,
+    because ranked test 7 is about a real navigation with an edit still open.
+
+    It is a separate file from cp1-doc.html on purpose: that one is CP1's walk
+    and is re-run at every checkpoint, so adding blocks to it would change what
+    that spec measures.
+
+    Served from the REPO ROOT, so /dist/lahe-layer.js is reachable beside it.
+  -->
+  <h1 id="title">Steady Pace: a training brief</h1>
+
+  <p id="alpha">Runners come back too fast after a layoff.</p>
+  <p id="beta">The first two weeks feel easy and the third week hurts.</p>
+
+  <h2 id="heading-plan">The plan</h2>
+
+  <p id="gamma">This paragraph exists to be deleted.</p>
+
+  <p id="delta">Warm up for <strong>ten</strong> minutes before every session.</p>
+
+  <p id="big">A long block, for the oversize unload case.</p>
+
+  <nav>
+    <a id="next" href="/test/fixtures/editing-doc.html?p=2">The next page</a>
+  </nav>
+
+  <script src="/dist/lahe-layer.js"></script>
+  <script src="/test/fixtures/assets/editing-boot.js"></script>
+</body>
+</html>
