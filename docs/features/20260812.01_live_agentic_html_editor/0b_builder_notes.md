@@ -429,3 +429,26 @@ test/unit/harness_stub_vocabulary.test.js   (new)
 - `debug_layer3.tmp.js` (repo root, untracked probe)
 - `probe.tmp.js` (repo root, untracked probe)
 - `test-results/`, `playwright-report/` (already ignored)
+
+## One flake seen once, in 0C's spec, not fixed here
+
+Reporting it rather than burying it. On one standalone `npx playwright test` run,
+immediately after `gate:builder` had passed, this failed:
+
+```
+  1 failed
+    [chromium] › test/browser/app_fixture.spec.js:48:3 › app fixture: the reviewed
+    application › walks three pathnames by clicking links, logging in on the way
+  49 passed (31.4s)
+```
+
+It did not reproduce: six runs since (three of that spec alone, three of the full
+suite) are green at 6 passed and 50 passed. The artifacts were overwritten by the
+later runs, so I have no trace to read.
+
+It is 0C's file and 0C's zero-dependency app server, and the shape (a navigation
+walk failing once under parallel workers, right after another full suite had just
+released its ports) points at a server-start race rather than at anything the
+harness rescope touched. **Flagging it for 0C rather than retrying it away:** the
+harness's own rule is that a flaky browser test gets its determinism fixed, never
+its assertion loosened, and a retry count would hide exactly this.
