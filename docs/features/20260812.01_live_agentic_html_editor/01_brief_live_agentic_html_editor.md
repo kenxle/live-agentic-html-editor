@@ -49,6 +49,9 @@ or overwrite it.
 - Not Markdown. Cut on Ken's call: a Markdown file is already easy to edit in an editor.
 - Not an agent. It collects feedback, carries it, and shows the agent's answers. Doing the work is the
   agent's job.
+- **Not reordering blocks by hand, in v1.** Ken asks for reordering often, so this is a real need rather
+  than one nobody wants, and it is the first thing to revisit. It is out for now because doing it badly
+  breaks pages, and asking the agent to reorder something works today.
 :::
 
 ## User Stories
@@ -342,9 +345,8 @@ they share the same small vocabulary of clicks and keys.
 :::
 
 ::: callout-question
-**Q2: How much rearranging of a page is worth supporting?** Deleting a block is clearly useful and
-clearly safe. Reordering blocks is neither, and doing it badly could break the page. Resizing an image is
-worth having only if it works well.
+**Q2: Is resizing an image by hand worth building?** It is only worth having if it works well, and if it
+does not, asking the agent is a perfectly good answer.
 :::
 
 ## Ken's Review, Round 1
@@ -368,7 +370,7 @@ Sixty-two comments on the first draft. The full record is in
 | Trust framing reworded | Accepted | Ken's wording used in the goal |
 | "Well tested does not mean well designed" | Accepted | Context reworded |
 | Lists are not needed; keep formatting basic | Accepted | R26 |
-| Reordering blocks needs thought and could break things; image resize can slip | Accepted | Q2 |
+| Reordering blocks needs thought and could break things; image resize can slip | Accepted | Reordering is a stated non-goal for v1 with its reason and its standing as a frequent request recorded, so it is the first thing to revisit. Image resize is Q2 |
 | "Region" was never defined, so the requirement was hazy | Accepted | R29 and R30 now say it in plain words |
 | Unclear why library markup must be kept out of feedback | Accepted | Folded into R23, which says what the reviewer should not have to read |
 | Errors should be dismissible | Accepted | R11 |
