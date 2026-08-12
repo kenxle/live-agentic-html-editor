@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Rail Fixture</title>
+  <style>
+    body { font: 16px/1.6 system-ui, sans-serif; max-width: 46rem; margin: 2rem auto; color: #1c1c1c; }
+    h1 { font-size: 1.6rem; }
+    h2 { font-size: 1.1rem; margin-top: 2rem; }
+    [data-repaint-target] { border: 1px dashed #cfd6e0; padding: 0.75rem; }
+    p { margin: 0 0 1rem; }
+  </style>
+</head>
+<body>
+  <!--
+    The page 1B's own tests run against: a repainting page carrying the REAL
+    built library, plus a driver (assets/rail-harness.js) a test speaks to.
+
+    It is served from the REPO ROOT rather than from test/fixtures, because it
+    needs dist/lahe-layer.js beside the fixture assets. See the rail specs'
+    startStaticServer({ root: REPO_ROOT }) call.
+
+    It is not the app fixture (0C's) and not the plain repainting fixture
+    (0B's). It exists because 1B's done bar is about the rail, the store and the
+    sync client living on a page that re-renders underneath them, and all three
+    are in the built bundle rather than in the harness stub.
+  -->
+  <h1 id="page-title">Roster</h1>
+
+  <div id="live-frame" data-repaint-target="live">
+    <h2 id="live-heading">This week</h2>
+    <p id="live-note" data-region="live-note">Marcus is running four easy miles on Tuesday and resting completely on Wednesday.</p>
+    <p id="live-second" data-region="live-second">Dana moved her long run to Saturday because of the weather.</p>
+  </div>
+
+  <div id="sidebar-frame" data-repaint-target="sidebar">
+    <h2 id="sidebar-heading">Reminders</h2>
+    <p id="sidebar-note" data-region="sidebar-note">Two clients have not accepted the invite yet.</p>
+  </div>
+
+  <script src="/test/fixtures/assets/repaint-engine.js"></script>
+  <script src="/dist/lahe-layer.js"></script>
+  <script src="/test/fixtures/assets/rail-harness.js"></script>
+</body>
+</html>

@@ -71,9 +71,29 @@ test("1B can drive the rail: tabs, cards, chips, and the status line", () => {
   assert.throws(() => rail.setStatusLine("vibes"), /unknown status/);
 });
 
-test("1B's window lock has a signature to fill in", () => {
+// The stub's acquireWindowLock is gone: a Web Lock cannot be claimed
+// synchronously, and a synchronous answer would have been a lie in the one
+// environment that matters. claimWindow is the landed shape.
+test("1B's window claim answers, and answers without Web Locks too", async () => {
   const store = storeModule.createStore();
-  const got = store.acquireWindowLock("rev_1");
+  const got = await store.claimWindow("rev_1");
   assert.equal(typeof got.acquired, "boolean");
+  assert.equal(got.acquired, true, "with no Web Locks API the claim is not refused on a check that never ran");
+  assert.equal(got.unchecked, true, "and it says the check did not run rather than implying it passed");
   assert.equal(typeof store.refusalFailure().code, "string");
+});
+
+test("1B's outbox survives in browser storage, keyed by review id", () => {
+  const store = storeModule.createStore();
+  store.queueEvent("rev_1", { event_id: "evt_a", event: "item.content" });
+  store.queueEvent("rev_1", { event_id: "evt_b", event: "item.content" });
+  store.queueEvent("rev_1", { event_id: "evt_a", event: "item.content", note: "same id replaces" });
+  assert.equal(store.pendingEvents("rev_1").length, 2, "idempotence is by event_id");
+  store.acknowledge("rev_1", ["evt_a"]);
+  assert.deepEqual(
+    store.pendingEvents("rev_1").map((e) => e.event_id),
+    ["evt_b"],
+    "anything the helper did not name stays queued"
+  );
+  assert.equal(store.pendingEvents("rev_other").length, 0);
 });

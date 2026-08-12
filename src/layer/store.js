@@ -1,23 +1,28 @@
 // The draft store: browser storage, written synchronously on every change.
 //
-// Owner: 1B. 0A-kernel ships this as a REAL minimal store rather than a stub,
-// because 1B (library shell) and 1D (comments) each need a scoreable done bar
-// in their own worktree instead of each stubbing the other's half and both
-// passing.
+// Owner: 1B.
 //
-// What is real here: synchronous writes to browser storage keyed by review id,
-// drafts, revisions, deletion, and the merge against the helper's state. What
-// 1B still owns: the Web Lock that refuses a second window, the quota story,
-// and everything about posting to the helper (that is sync.js).
+// Four things live in browser storage, all keyed by REVIEW ID and all written
+// synchronously:
 //
-// THE TWO RULES 1B MUST NOT LOSE, both from D5:
+//   items    the records themselves, drafts included
+//   outbox   the events that have not been acknowledged by the helper yet.
+//            This is what makes "re-post anything unacknowledged" survive a
+//            reload and a kill -9: a queue that lives only in a JS array is
+//            gone the moment the tab is
+//   chips    the failure list and the codes the reviewer dismissed, so a chip
+//            survives a remount and a navigation and stays gone once dismissed
+//   holder   which window holds this review, so the second window's refusal can
+//            NAME the first one rather than saying "somewhere else"
+//
+// THE TWO RULES, both from D5:
 //
 //  1. WRITTEN SYNCHRONOUSLY ON EVERY CHANGE, before any network call. Not on a
 //     timer, not debounced, not on blur. Ranked test 6 asserts durability in the
 //     same task as the final keystroke with no awaited timer in between, which
 //     is a test a debounced store cannot pass. The debounce in this design is
-//     on the post to the HELPER (750ms of typing idle, 0A-wire's flush policy),
-//     never on the write to storage.
+//     on the post to the HELPER (750ms of typing idle, protocol.js's flush
+//     policy), never on the write to storage.
 //
 //  2. KEYED BY REVIEW ID, never by filename and never by page. A review spans
 //     pages, so keying by page splits one review into several buckets and the
@@ -46,6 +51,10 @@
   "use strict";
 
   var KEY_PREFIX = "lahe.items.v1:";
+  var OUTBOX_PREFIX = "lahe.outbox.v1:";
+  var CHIPS_PREFIX = "lahe.chips.v1:";
+  var HOLDER_PREFIX = "lahe.holder.v1:";
+  var LOCK_PREFIX = "lahe.window.v1:";
 
   // The storage key for a review. Review id, never a filename, never a page.
   function keyFor(reviewId) {
@@ -83,26 +92,45 @@
   function createStore(options) {
     var opts = options || {};
     var backing = opts.backing || defaultBacking();
+    // A window identifies itself so a refusal can name the other one.
+    var windowId = opts.windowId || record.randomId("win");
+    var locks = opts.locks || (typeof navigator !== "undefined" && navigator ? navigator.locks : null);
+    var releaseHeldLock = null;
 
-    function readAll(reviewId) {
-      var raw = backing.getItem(keyFor(reviewId));
-      if (!raw) return [];
+    function readJson(key, fallback) {
+      var raw = backing.getItem(key);
+      if (!raw) return fallback;
       try {
-        var parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed : [];
+        return JSON.parse(raw);
       } catch (err) {
         // Fail loud. A store that silently returns an empty list after a
         // corrupt write is the reviewer's whole session disappearing quietly,
         // which is exactly the failure this tool exists to remove.
-        throw new Error(
-          "store: the stored items for review " + reviewId + " are not readable JSON (" + err.message + ")"
-        );
+        throw new Error("store: " + key + " is not readable JSON (" + err.message + ")");
       }
     }
 
+    // Every durable write in this file goes through here, so there is one place
+    // a full disk is reported from and one place that is synchronous.
+    function writeJson(key, value) {
+      try {
+        backing.setItem(key, JSON.stringify(value));
+      } catch (err) {
+        var f = failures.failure("STORAGE_QUOTA", err && err.message);
+        var loud = new Error("store: " + f.message + " (key " + key + ")");
+        loud.failure = f;
+        throw loud;
+      }
+      return value;
+    }
+
+    function readAll(reviewId) {
+      var parsed = readJson(keyFor(reviewId), []);
+      return Array.isArray(parsed) ? parsed : [];
+    }
+
     function writeAll(reviewId, items) {
-      backing.setItem(keyFor(reviewId), JSON.stringify(items));
-      return items;
+      return writeJson(keyFor(reviewId), items);
     }
 
     // @returns {Array<Object>} every item for this review, in creation order
@@ -136,6 +164,15 @@
         throw new Error("store.writeDraft: item " + item[record.FIELD.ID] + " is not a draft");
       }
       return write(reviewId, item);
+    }
+
+    // A rewording. The revision bump and the applied-after history are
+    // record.js's rule; this is the durable half of it, so no caller has to
+    // remember to write after bumping.
+    function writeRevision(reviewId, item, changes) {
+      var next = record.bumpRev(item, changes || {});
+      write(reviewId, next);
+      return next;
     }
 
     function readItem(reviewId, id) {
@@ -182,28 +219,209 @@
       return got;
     }
 
-    // The second-window refusal, client side (D5). STUB: 1B holds a Web Lock
-    // for the life of the session, which works with the helper down. The
-    // failure code and the shape of the answer are already here.
-    function acquireWindowLock(reviewId) {
-      void reviewId;
-      return { acquired: true, holder: null, failure: null, isStub: true };
+    // -------------------------------------------------------------------------
+    // The outbox
+    // -------------------------------------------------------------------------
+    //
+    // Written synchronously, in the same task as the keystroke that caused it,
+    // for one reason: a queue that lives only in a JS array is gone with the
+    // tab, and "re-posts anything unacknowledged on reconnect" would then mean
+    // "unless the reviewer reloaded", which is the promise this tool is about.
+    //
+    // Acknowledgement is BY event_id, never by (item, rev): drafts do not bump
+    // rev and drafts flow to the helper, so many events legitimately share an
+    // item and a revision (protocol.js).
+
+    function outboxKey(reviewId) {
+      return OUTBOX_PREFIX + reviewId;
     }
 
-    function refusalFailure() {
-      return failures.failure("SECOND_TAB_REFUSED", null);
+    function pendingEvents(reviewId) {
+      var parsed = readJson(outboxKey(reviewId), []);
+      return Array.isArray(parsed) ? parsed : [];
+    }
+
+    // Appends one event. Same event_id twice replaces rather than duplicates,
+    // so a re-queue after a failed post cannot double-count.
+    function queueEvent(reviewId, event) {
+      if (!event || typeof event.event_id !== "string" || !event.event_id) {
+        throw new TypeError("store.queueEvent: an event needs an event_id; idempotence is by event_id");
+      }
+      var queue = pendingEvents(reviewId);
+      for (var i = 0; i < queue.length; i += 1) {
+        if (queue[i].event_id === event.event_id) {
+          queue[i] = event;
+          writeJson(outboxKey(reviewId), queue);
+          return queue;
+        }
+      }
+      queue.push(event);
+      writeJson(outboxKey(reviewId), queue);
+      return queue;
+    }
+
+    // Drops the events the helper said it accepted. Anything it did not name
+    // stays queued, which is what makes a partially accepted batch safe.
+    function acknowledge(reviewId, eventIds) {
+      var accepted = Object.create(null);
+      (eventIds || []).forEach(function (id) {
+        accepted[id] = true;
+      });
+      var queue = pendingEvents(reviewId).filter(function (event) {
+        return !accepted[event.event_id];
+      });
+      writeJson(outboxKey(reviewId), queue);
+      return queue;
+    }
+
+    // -------------------------------------------------------------------------
+    // Chips
+    // -------------------------------------------------------------------------
+
+    function readChips(reviewId) {
+      var got = readJson(CHIPS_PREFIX + reviewId, null);
+      if (!got || typeof got !== "object") return { chips: [], dismissed: [] };
+      return {
+        chips: Array.isArray(got.chips) ? got.chips : [],
+        dismissed: Array.isArray(got.dismissed) ? got.dismissed : []
+      };
+    }
+
+    function writeChips(reviewId, value) {
+      return writeJson(CHIPS_PREFIX + reviewId, {
+        chips: (value && value.chips) || [],
+        dismissed: (value && value.dismissed) || []
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // The second window, client side (D5)
+    // -------------------------------------------------------------------------
+    //
+    // TWO SHAPES, AND THEY FAIL DIFFERENTLY.
+    //
+    //   shared storage (two tabs, one browser profile) is refused HERE, by a Web
+    //   Lock held for the life of the session. It works with the helper down,
+    //   which is the whole reason it is a lock and not a helper call.
+    //
+    //   separate storage (two profiles, two contexts) cannot see this lock at
+    //   all and can only be refused by the helper's session (1A's half).
+    //
+    // The third case, separate storage AND no helper, is refused by nothing.
+    // That is a NAMED LIMIT: sync.js puts it on the status line rather than
+    // letting the rail imply a guarantee that does not exist.
+
+    function holderKey(reviewId) {
+      return HOLDER_PREFIX + reviewId;
+    }
+
+    function readHolder(reviewId) {
+      return readJson(holderKey(reviewId), null);
+    }
+
+    function describeHolder(holder) {
+      if (!holder) return "another window";
+      var where = holder.path ? " on " + holder.path : "";
+      var when = holder.since ? ", open since " + holder.since : "";
+      return "the window" + where + when;
+    }
+
+    /**
+     * Claim this review for this window.
+     *
+     * @returns {Promise<{acquired: boolean, holder: object|null, windowId: string,
+     *                    failure: object|null, reason: string|null}>}
+     *   Resolved, never thrown: a window that cannot claim the review is a
+     *   read-only window, not a crash.
+     */
+    function claimWindow(reviewId, meta) {
+      var self = {
+        window_id: windowId,
+        since: new Date().toISOString(),
+        path: (meta && meta.path) || (typeof location !== "undefined" ? location.pathname : null)
+      };
+
+      if (!locks || typeof locks.request !== "function") {
+        // No Web Locks (an old browser, or Node). The claim is not refused,
+        // because refusing on the basis of a check that did not run would lock
+        // a reviewer out of their own review, and a reviewer locked out is a
+        // work-losing outcome in a tool whose thesis is never losing work.
+        writeJson(holderKey(reviewId), self);
+        return Promise.resolve({
+          acquired: true,
+          holder: self,
+          windowId: windowId,
+          failure: null,
+          reason: null,
+          unchecked: true
+        });
+      }
+
+      var settle;
+      var answered = new Promise(function (resolve) {
+        settle = resolve;
+      });
+
+      locks.request(LOCK_PREFIX + reviewId, { ifAvailable: true }, function (lock) {
+        if (!lock) {
+          var holder = readHolder(reviewId);
+          settle({
+            acquired: false,
+            holder: holder,
+            windowId: windowId,
+            failure: failures.failure("SECOND_WINDOW_REFUSED", describeHolder(holder)),
+            reason: "This review is already open in " + describeHolder(holder) + "."
+          });
+          return null;
+        }
+        writeJson(holderKey(reviewId), self);
+        settle({ acquired: true, holder: self, windowId: windowId, failure: null, reason: null });
+        // HELD FOR THE LIFE OF THE SESSION. The promise this returns is what
+        // keeps the lock, so it resolves only when releaseWindow is called.
+        return new Promise(function (resolve) {
+          releaseHeldLock = resolve;
+        });
+      });
+
+      return answered;
+    }
+
+    function releaseWindow(reviewId) {
+      if (typeof releaseHeldLock === "function") {
+        releaseHeldLock();
+        releaseHeldLock = null;
+      }
+      if (reviewId) {
+        var holder = readHolder(reviewId);
+        if (holder && holder.window_id === windowId) backing.removeItem(holderKey(reviewId));
+      }
+      return true;
+    }
+
+    function refusalFailure(detail) {
+      return failures.failure("SECOND_WINDOW_REFUSED", detail || null);
     }
 
     return {
+      windowId: windowId,
       keyFor: keyFor,
       read: read,
       write: write,
       writeDraft: writeDraft,
+      writeRevision: writeRevision,
       readItem: readItem,
       remove: remove,
       reviews: reviews,
       mergeWithHelper: mergeWithHelper,
-      acquireWindowLock: acquireWindowLock,
+      pendingEvents: pendingEvents,
+      queueEvent: queueEvent,
+      acknowledge: acknowledge,
+      readChips: readChips,
+      writeChips: writeChips,
+      readHolder: readHolder,
+      describeHolder: describeHolder,
+      claimWindow: claimWindow,
+      releaseWindow: releaseWindow,
       refusalFailure: refusalFailure
     };
   }
@@ -212,6 +430,10 @@
 
   return {
     KEY_PREFIX: KEY_PREFIX,
+    OUTBOX_PREFIX: OUTBOX_PREFIX,
+    CHIPS_PREFIX: CHIPS_PREFIX,
+    HOLDER_PREFIX: HOLDER_PREFIX,
+    LOCK_PREFIX: LOCK_PREFIX,
     keyFor: keyFor,
     createStore: createStore,
     shared: shared
