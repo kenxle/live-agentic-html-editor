@@ -162,6 +162,16 @@ the reviewer twice a second, which is a worse version of the symptom this whole 
 
 **Law 3: an app re-rendering its own data is not the same as a source rewrite.**
 
+The signal has to be named or the law cannot be tested and a builder will invent a heuristic. A repaint
+is a **source repaint** only when the tool knows the source changed: it has just processed an ack, or
+the service has told it the target's source changed on disk. Everything else is an **app repaint**.
+
+**App repaint is the safe default**, and when the two are ambiguous the tool picks it. The worst outcome
+of a wrong detach is that the reviewer is told their edit could not be placed while holding its full
+text, which is recoverable and visible. The worst outcome of a wrong collision is the reviewer's words
+stamped over live application data, which is a lie about their own app and is the thing D3 exists to
+prevent. Losing a collision is a smaller harm than inventing one.
+
 ```mermaid
 flowchart TD
     Repaint["A repaint happens"] --> Kind{"What caused it?"}
@@ -248,7 +258,12 @@ the messages across it, which is what the tool being replaced does for exactly t
   script does not inherit, and its own remount path leaks a listener pair on every morph. Neither shape is
   inherited.
 - **The layer is never fetched from the service at page load.** A stopped service must not mean no layer,
-  or the promise that a stopped service costs nothing is false.
+  or the promise that a stopped service costs nothing is false. So the layer ships as one concatenated
+  file that `setup` copies into the host application's own static assets with a version stamp, and the
+  snippet points at the app's own path. Re-running `setup` copies the new file and reports the version
+  change, which is the upgrade path. Concatenation is a development-time script, not a runtime
+  dependency, so this stays inside D16's no-build-step rule while still letting the layer live in
+  several files that separate builders own.
 
 ### D6: Durability is an append-only log plus a browser copy, with stated authority
 
@@ -326,9 +341,14 @@ skipped, which is worse than losing feedback because it looks handled.
 Verification then checks each applied edit against the files the ack named, constrained to the
 review's own project root. Two corrections that keep it from causing its own outage:
 
-- **Match on normalized text**, whitespace collapsed and markup stripped. On a markdown source or an
-  ERB template, the reviewer's `after` is a rendering of the source and will legitimately never appear
-  verbatim.
+- **Three verdicts, not two: found, not found, and not verifiable.** Normalizing whitespace does not
+  make a rendered string match its template. `Welcome back, Sarah` and
+  `Welcome back, <%= @client.first_name %>` do not match and no normalization makes them, so any region
+  carrying interpolation, a loop, a helper, or a translation key is a permanent miss. A warning that
+  fires on most items on a Rails app trains the reviewer to ignore all of them, which is worse than
+  having no check. Verification returns a literal verdict only where the reviewer's wording is literal
+  prose in the named file; otherwise it says it could not verify and says why. Normalized comparison
+  applies within the found case, for whitespace and markup differences only.
 - **A miss warns loudly and does not reopen the item.** Auto-reopening turns a false positive into an
   infinite re-ship loop. A deletion gets the inverse check: the `before` text should be gone.
 
@@ -354,7 +374,23 @@ Three layers, all of them:
 3. **A required JSON content type plus a custom header on every mutating route**, so a simple request
    cannot reach a handler and a preflight is always forced.
 
-The port is ephemeral by default and recorded with the token in the same owner-only file. Pinning is
+**How the layer authenticates when it lives in the page.** The owner-only token file is readable by the
+service and by the reviewer's shell, and not by a script tag that Rails started. So the layer does not
+carry the run token at all. Instead:
+
+- The reviewer registers an origin deliberately, at their terminal, when they attach a project. That act
+  is the authorization, and it is the one thing a hostile page cannot perform.
+- On load, a layer on a registered origin exchanges nothing but its origin for a short-lived session
+  token bound to that origin and that review root. A page on any other origin is refused at the
+  allowlist and never reaches the exchange.
+- A session token that expires or is refused mid-session is re-minted once, and a second refusal becomes
+  a persistent entry in the failures list rather than a silent retry loop.
+
+So in attached mode **the origin allowlist is the control and the session token is depth**, because a
+same-origin script can read anything the layer holds, which D5 already concedes. In served mode the
+service injects the token directly and both controls are real.
+
+The port is ephemeral by default and recorded with the run token in the same owner-only file. Pinning is
 available and documented as a weakening.
 
 The same three layers cover `ack`, which mutates the burn-down. A forged ack would clear the
@@ -592,6 +628,8 @@ survive contact with a clean machine.
 | The agent acks an item the reviewer edited again | The item is outstanding again; the ack applies to the delivered version and the newer one ships next. |
 | An ack names something never delivered | Refused. |
 | Verification cannot find the reviewer's wording | Loud warning on the item. The item is not auto-reopened. |
+| The named source region is a template with interpolation | Reported as not verifiable, with the reason. Never a warning, because a warning that fires on most Rails items is ignored on all of them. |
+| A repaint's cause is ambiguous | Treated as an app repaint, the safe default. A wrong detach is recoverable and visible; a wrong collision stamps the reviewer's words over live data. |
 | Two windows on the same target | Both join the same review; state is a projection of one log. |
 | Two service instances | The second refuses with an instruction rather than racing. |
 | A repaint arrives mid-keystroke | The change was already written on the keystroke, not on a timer. |

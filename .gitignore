@@ -2,3 +2,15 @@ node_modules/
 .DS_Store
 .claude-commit*
 *.log
+
+# Playwright artifacts
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# The tool's own state directory (event log, token, port file). The real
+# default location is server-side config outside any checkout per the
+# architecture (D11); this pattern covers any local/dev state that lands
+# inside the repo during manual testing.
+.review-state/
