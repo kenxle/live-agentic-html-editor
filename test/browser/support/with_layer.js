@@ -22,6 +22,23 @@
 //      way it does in a host app (document.currentScript, then the selector).
 //   3. Response headers are preserved. The CSP specs depend on the app's own
 //      Content-Security-Policy header surviving the rewrite.
+//   4. The helper's origin is excluded from the matcher, so nothing here stands
+//      in front of the library's own calls.
+//
+// THE ONE THING THIS CANNOT DO: be used on a page that talks to a LIVE helper.
+// Measured at CP2: while any page.route handler is registered, cross-origin
+// requests from that page never leave the browser at all. Not blocked by CORS,
+// not refused by the server -- the helper's log shows nothing arrived, and the
+// page sees a bare "Failed to fetch", which the library correctly reads as a
+// helper that is down. Excluding the helper's URL from the matcher does not help
+// (the exclusion works; the requests still die), and page.unrouteAll() makes the
+// same fetch reach the helper immediately, which is what pins the cause.
+//
+// So a spec that needs the library talking to a running helper on 0C's app
+// fixture asks the FIXTURE to carry the script tag instead:
+// startAppServer({ layer: { review, token, helper } }), which is also closer to
+// the shipped install (D1: the host application's layout gets one line). This
+// module stays for the specs whose helper is deliberately dead or absent.
 
 "use strict";
 
@@ -76,8 +93,13 @@ function scriptTagFor(config) {
 async function withLayer(page, config) {
   const bundle = readBundle();
   const tag = scriptTagFor(config);
+  const helperOrigin = config.helper ? String(config.helper).replace(/\/+$/, "") : null;
 
-  await page.route("**/*", async function (route, request) {
+  const notTheHelper = function (url) {
+    return !helperOrigin || String(url).indexOf(helperOrigin) !== 0;
+  };
+
+  await page.route(notTheHelper, async function (route, request) {
     if (request.method() !== "GET" || request.resourceType() !== "document") {
       return route.continue();
     }

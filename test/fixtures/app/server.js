@@ -31,8 +31,16 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 
 const pages = require("./pages");
+const protocol = require("../../../src/shared/protocol.js");
 
 const ASSET_ROOT = path.join(__dirname, "assets");
+const BUNDLE_PATH = path.join(__dirname, "..", "..", "..", "dist", "lahe-layer.js");
+
+// Same-origin by construction, so a page under script-src 'self' can load it,
+// and so the library arrives exactly the way it arrives in a host application:
+// copied into the application's own static assets (never fetched from the
+// helper), referenced by one script tag in the layout.
+const BUNDLE_ROUTE = "/assets/lahe-layer.js";
 
 const ACCOUNT = { email: "coach@steadythread.test", password: "kettlebell" };
 
@@ -96,11 +104,55 @@ function redirect(res, location, extraHeaders) {
 /**
  * Start the app fixture.
  *
+ * @param {{layer?: {review: string, token: string, helper: string}}} [options]
+ *   `layer` makes this application a REVIEWED one: its layout carries the one
+ *   script tag (D1) on every page and it serves the built bundle from its own
+ *   assets. Left out, the fixture is what it has always been: an application
+ *   that has never heard of the tool.
+ *
+ *   Why the fixture carries the tag rather than a test injecting it through
+ *   Playwright routing: while any page.route handler is registered, cross-origin
+ *   requests from that page never leave the browser, so a page set up that way
+ *   reads a running helper as a dead one. Measured at CP2; the note is in
+ *   test/browser/support/with_layer.js.
+ *
  * @returns {Promise<{origin: string, url: string, port: number,
  *                    urlFor: (p: string) => string, notes: object[],
  *                    close: () => Promise<void>}>}
  */
-async function startAppServer() {
+async function startAppServer(options = {}) {
+  function layerFrom(config) {
+    return config
+      ? {
+          review: config.review,
+          token: config.token,
+          helper: config.helper,
+          src: BUNDLE_ROUTE,
+          // The tag itself is protocol.js's, not this fixture's: one spelling of
+          // the three attributes, and it fails closed on a missing token.
+          html: protocol.scriptTag({
+            src: BUNDLE_ROUTE,
+            review: config.review,
+            token: config.token,
+            helper: config.helper
+          })
+        }
+      : null;
+  }
+
+  // Mutable, because the helper mints the token for a review that names THIS
+  // application's origin, and the origin does not exist until this server is
+  // listening. So a test starts the app, starts the helper against its origin,
+  // and then hands the tag's contents back with useLayer().
+  let layer = layerFrom(options.layer);
+
+  if (layer && !fs.existsSync(BUNDLE_PATH)) {
+    // Fail loud, at start, rather than as a page that quietly has no library on
+    // it and a spec that fails four assertions later.
+    throw new Error(
+      "startAppServer({ layer }): dist/lahe-layer.js is missing. Run `npm run build:layer` before the browser specs."
+    );
+  }
   // Server-side state. Small on purpose: it exists so the form and the login
   // are real round trips, not so the fixture becomes an application.
   const state = {
@@ -128,6 +180,20 @@ async function startAppServer() {
     const sessionEmail = state.sessions.get(cookies.app_session) || null;
     const carried = pages.carriedQuery(searchParams);
 
+    if (pathname === BUNDLE_ROUTE) {
+      if (!layer) {
+        res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end("this app fixture was not started with a layer");
+        return;
+      }
+      res.writeHead(200, {
+        "Content-Type": MIME[".js"],
+        "Cache-Control": "no-store"
+      });
+      res.end(fs.readFileSync(BUNDLE_PATH));
+      return;
+    }
+
     if (pathname.startsWith("/assets/")) return serveAsset(pathname, res);
 
     // The morph engine's poll. Every hit advances the cursor, so the fragment
@@ -141,7 +207,12 @@ async function startAppServer() {
     if (pathname === "/" && req.method === "GET") {
       sendHtml(
         res,
-        pages.dashboardPage({ searchParams: searchParams, sessionEmail: sessionEmail, cursor: state.cursor })
+        pages.dashboardPage({
+          searchParams: searchParams,
+          sessionEmail: sessionEmail,
+          cursor: state.cursor,
+          layer: layer
+        })
       );
       return;
     }
@@ -149,7 +220,12 @@ async function startAppServer() {
     if (pathname === "/clients" && req.method === "GET") {
       sendHtml(
         res,
-        pages.clientsPage({ searchParams: searchParams, sessionEmail: sessionEmail, notes: state.notes })
+        pages.clientsPage({
+          searchParams: searchParams,
+          sessionEmail: sessionEmail,
+          notes: state.notes,
+          layer: layer
+        })
       );
       return;
     }
@@ -174,7 +250,8 @@ async function startAppServer() {
         res,
         pages.loginPage({
           searchParams: searchParams,
-          next: searchParams.get("next") || "/reports"
+          next: searchParams.get("next") || "/reports",
+          layer: layer
         })
       );
       return;
@@ -194,7 +271,8 @@ async function startAppServer() {
           pages.loginPage({
             searchParams: searchParams,
             next: next,
-            error: "That email and password do not match an account."
+            error: "That email and password do not match an account.",
+            layer: layer
           })
         );
         return;
@@ -217,7 +295,12 @@ async function startAppServer() {
       }
       sendHtml(
         res,
-        pages.reportsPage({ searchParams: searchParams, sessionEmail: sessionEmail, cursor: state.cursor })
+        pages.reportsPage({
+          searchParams: searchParams,
+          sessionEmail: sessionEmail,
+          cursor: state.cursor,
+          layer: layer
+        })
       );
       return;
     }
@@ -262,6 +345,20 @@ async function startAppServer() {
     url: origin,
     account: ACCOUNT,
     state: state,
+    bundleRoute: BUNDLE_ROUTE,
+    layer: function () {
+      return layer;
+    },
+    /** Make this application a reviewed one, from now on. Returns the tag's config. */
+    useLayer: function (config) {
+      if (config && !fs.existsSync(BUNDLE_PATH)) {
+        throw new Error(
+          "appServer.useLayer: dist/lahe-layer.js is missing. Run `npm run build:layer` before the browser specs."
+        );
+      }
+      layer = layerFrom(config);
+      return layer;
+    },
     urlFor: function (target) {
       const suffix = String(target || "/");
       return origin + (suffix.startsWith("/") ? suffix : "/" + suffix);
@@ -280,4 +377,4 @@ async function startAppServer() {
   };
 }
 
-module.exports = { startAppServer, ACCOUNT, ASSET_ROOT };
+module.exports = { startAppServer, ACCOUNT, ASSET_ROOT, BUNDLE_ROUTE, BUNDLE_PATH };

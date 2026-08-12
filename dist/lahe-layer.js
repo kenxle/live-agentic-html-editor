@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+b283e7b4ba3c
+ * version 0.0.0+f8afa346ebc0
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+b283e7b4ba3c";
+  g.LAHE.version = "0.0.0+f8afa346ebc0";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -4665,7 +4665,14 @@
     OVERLAY: "overlay", // the rail's own UI
     NAVIGATION: "navigation", // turbo:morph, turbo:load, popstate, pushState shim
     STORAGE: "storage", // storage events for the second-tab lock
-    NETWORK: "network" // online/offline, the lifecycle stream
+    NETWORK: "network", // online/offline, the lifecycle stream
+    // The two surfaces that register their own document-level handlers. They
+    // are named here, and read by comments.js, editing.js and inject.js, so the
+    // remount clears exactly what those two files re-register. A group spelled
+    // as a literal in two files is a leak the registry count cannot see: the
+    // handlers pile up under a name the remount never asks about.
+    COMMENTS: "comments", // the comment surface's keydown, mousemove, click
+    EDITING: "editing" // the editing surface's keydown, click, and block input
   };
 
   var shared = createRegistry();
@@ -5940,6 +5947,7 @@
       name: "turbo",
       skipAttribute: markers.TURBO_PERMANENT_ATTR,
       beforeMorphEvent: "turbo:before-morph-element",
+      morphEvent: "turbo:morph",
       present: function (win) {
         return !!(win && win.Turbo);
       }
@@ -5948,6 +5956,7 @@
       name: "harness_repaint_engine",
       skipAttribute: "data-lahe-permanent",
       beforeMorphEvent: "lahe:before-morph-element",
+      morphEvent: "lahe:repainted",
       present: function (win) {
         return !!(win && win.__lahe && win.__lahe.fixture);
       }
@@ -5956,6 +5965,7 @@
       name: "app_fixture_morph_engine",
       skipAttribute: "data-app-permanent",
       beforeMorphEvent: "app:before-morph-element",
+      morphEvent: "app:morph",
       present: function (win) {
         return !!(win && win.__app && win.__app.morph);
       }
@@ -5978,6 +5988,15 @@
   var BEFORE_MORPH_EVENTS = unique(
     FRAMEWORKS.map(function (f) {
       return f.beforeMorphEvent;
+    })
+  );
+  // The page-level "a morph frame finished" events, one per framework. Layer two
+  // listens BEFORE a morph, per element; the remount contract in inject.js needs
+  // the other end of the same act, and it reads it from this table so there is
+  // one framework vocabulary rather than two lists that drift apart.
+  var MORPH_EVENTS = unique(
+    FRAMEWORKS.map(function (f) {
+      return f.morphEvent;
     })
   );
 
@@ -6467,6 +6486,41 @@
       veto(event.target, event);
     }
 
+    /**
+     * The caret moved without the text changing: a click into the middle of the
+     * block, a Home key, a drag. Found at CP2, on a page whose OWN activity is
+     * somewhere else entirely.
+     *
+     * The snapshot's caret offset is only refreshed by typing (input and keyup),
+     * so a caret moved with the mouse leaves the snapshot pointing at wherever
+     * the reviewer was standing when they last typed. Then any mutation anywhere
+     * in the document runs the restore, which sees the caret is "wrong", puts it
+     * back where the snapshot says, and the reviewer's next sentence lands at
+     * the front of the paragraph. Nothing was damaged and nothing needed
+     * restoring; the stale half of the snapshot did it.
+     *
+     * Only the caret half is refreshed here, and only while the text is
+     * unchanged. A block whose text has moved on belongs to the typing path,
+     * which snapshots both halves together.
+     */
+    function onSelectionMoved() {
+      if (!enabled(LAYER.SNAPSHOT_RESTORE) || restoring || !active) return;
+      var el = active.element;
+      var node = selection.caretNode();
+      if (!node || !el || typeof el.contains !== "function" || !el.contains(node)) return;
+      var snap = snapshots[active.key.value];
+      if (!snap || el.textContent !== snap.text) return;
+      var range = selection.currentRange();
+      if (!range) return;
+      var startOffset = offsetWithin(el, range.startContainer, range.startOffset);
+      var endOffset = offsetWithin(el, range.endContainer, range.endOffset);
+      if (startOffset === null) return;
+      snap.startOffset = startOffset;
+      snap.endOffset = endOffset === null ? startOffset : endOffset;
+      snap.collapsed = !selection.hasSelection();
+      if (active.snapshot === snap) active.snapshot = snap;
+    }
+
     function onTyping(event) {
       if (!enabled(LAYER.SNAPSHOT_RESTORE) || restoring || !active) return;
       var target = event.target;
@@ -6490,6 +6544,7 @@
     });
     doc.addEventListener("input", onTyping, true);
     doc.addEventListener("keyup", onTyping, true);
+    doc.addEventListener("selectionchange", onSelectionMoved, true);
 
     if (layers.indexOf(LAYER.SNAPSHOT_RESTORE) !== -1 && typeof MutationObserver === "function") {
       observer = new MutationObserver(onMutations);
@@ -6507,6 +6562,7 @@
         });
         doc.removeEventListener("input", onTyping, true);
         doc.removeEventListener("keyup", onTyping, true);
+        doc.removeEventListener("selectionchange", onSelectionMoved, true);
         if (observer) observer.disconnect();
         installation = null;
       }
@@ -6616,6 +6672,7 @@
     FRAMEWORKS: FRAMEWORKS,
     SKIP_ATTRIBUTES: SKIP_ATTRIBUTES,
     BEFORE_MORPH_EVENTS: BEFORE_MORPH_EVENTS,
+    MORPH_EVENTS: MORPH_EVENTS,
     PROTECTED_ATTRIBUTE: PROTECTED_ATTRIBUTE,
     REGION_KEY_ATTRIBUTES: REGION_KEY_ATTRIBUTES,
     MINTED_REGION_ATTRIBUTE: MINTED_REGION_ATTRIBUTE,
@@ -6905,9 +6962,14 @@
 
     function surface() {
       if (!doc) return { host: null, root: null };
-      if (surfaceRoot && surfaceHost && surfaceHost.parentNode) {
+      if (surfaceRoot && surfaceHost && surfaceHost.isConnected) {
         return { host: surfaceHost, root: surfaceRoot };
       }
+      // The cached host is gone from the document, so a new one is about to be
+      // built. Every style node in surfaceStyles belongs to the OLD closed root:
+      // kept, they make addSurfaceStyle a no-op that returns a detached node, and
+      // the comment boxes come back unstyled with nothing to see in the DOM.
+      surfaceStyles = Object.create(null);
       // ONE HOST, and it fails loud rather than quietly becoming two. A second
       // host means two closed roots, two rails, and a remount that re-creates
       // one of them; none of that is diagnosable from the outside, because a
@@ -9420,7 +9482,10 @@
   var BOX_CLASS = "lahe-comment-box";
   var INPUT_CLASS = "lahe-comment-input";
   var OUTLINE_CLASS = "lahe-pick-outline";
-  var LISTENER_GROUP = "comments";
+  // The registry group, from the one place both this file and inject.js read it.
+  // The remount clears exactly the groups it re-registers, so this name has to be
+  // a constant rather than a literal in two files.
+  var LISTENER_GROUP = listeners.GROUP.COMMENTS;
 
   // Ken's copy, exactly. One spelling, used on every card.
   var HINT_READY = "Cmd-Enter when done with this comment";
@@ -9574,7 +9639,13 @@
 
     function surface() {
       if (!doc || !highlights) return null;
-      if (surfaceRoot) return surfaceRoot;
+      // Memoized, but only while the host it belongs to is still in the page. A
+      // rebuilt surface leaves this pointing into a detached closed root, which
+      // looks like the library working (boxes are created, records are written)
+      // while nothing the reviewer types is on screen.
+      var cachedHost = surfaceRoot ? surfaceRoot.host || surfaceRoot : null;
+      if (surfaceRoot && cachedHost && cachedHost.isConnected) return surfaceRoot;
+      surfaceRoot = null;
       var got = highlights.surface();
       surfaceRoot = got.root || got.host;
       highlights.addSurfaceStyle("comments", BOX_STYLE);
@@ -10395,7 +10466,8 @@
 
   var FRAME_CLASS = "lahe-edit-frame";
   var BAR_CLASS = "lahe-edit-bar";
-  var LISTENER_GROUP = "editing";
+  // The registry group, from the one place both this file and inject.js read it.
+  var LISTENER_GROUP = listeners.GROUP.EDITING;
 
   // The commands R24 allows for v1, closed to bold and italic (the
   // architecture's list). An enum rather than a pass-through string, so a
@@ -11446,6 +11518,11 @@
         listenerHandles.push(listeners.on(win, "pagehide", onUnload, false, LISTENER_GROUP));
         listenerHandles.push(listeners.on(win, "beforeunload", onUnload, false, LISTENER_GROUP));
       }
+      // A remount de-registers this whole group before it calls back in here,
+      // and the open block's own input handlers are in that group. Without this
+      // line the reviewer's block is still contenteditable and still on screen
+      // after a morph, and every keystroke into it is recorded nowhere.
+      if (session && session.block) bindBlock(session.block);
       return { bound: true, listeners: listenerHandles.length };
     }
 
@@ -12586,27 +12663,44 @@
   var browser = typeof window !== "undefined" && !!window.document;
   if (browser) {
     root.LAHE = root.LAHE || {};
-    root.LAHE.inject = factory(root.LAHE.listeners, root.LAHE.replay, root.LAHE.markers, root.LAHE.failures);
+    root.LAHE.inject = factory(
+      root.LAHE.listeners,
+      root.LAHE.replay,
+      root.LAHE.markers,
+      root.LAHE.failures,
+      root.LAHE.protect
+    );
   } else {
     module.exports = factory(
       require("./listeners.js"),
       require("./replay.js"),
       require("../shared/markers.js"),
-      require("../shared/failures.js")
+      require("../shared/failures.js"),
+      require("./protect.js")
     );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (listeners, replay, markers, failures) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (listeners, replay, markers, failures, protect) {
   "use strict";
 
   // Every event that can cost the layer its root. Data, so a test can assert
   // the list rather than the implementation.
-  var REMOUNT_TRIGGERS = [
-    { event: "turbo:morph", on: "document", why: "Hotwire replaced part of the page" },
+  //
+  // The morph events come from protect.js's FRAMEWORKS table, which is the one
+  // place the library spells a framework's vocabulary. Layer two listens for the
+  // BEFORE half of the same act, per element; this is the other end of it, per
+  // page. Two hand-written lists would drift, and the way they drift is that a
+  // framework the protection layers already know about fires a morph the remount
+  // contract never hears.
+  var MORPH_EVENTS = (protect && protect.MORPH_EVENTS) || ["turbo:morph"];
+
+  var REMOUNT_TRIGGERS = MORPH_EVENTS.map(function (name) {
+    return { event: name, on: "document", why: "a framework replaced part of the page" };
+  }).concat([
     { event: "turbo:load", on: "document", why: "a Turbo Drive navigation finished" },
     { event: "popstate", on: "window", why: "the reviewer went back or forward" },
     { event: "pageshow", on: "window", why: "restored from the back/forward cache" },
     { event: "mutation-fallback", on: "document.body", why: "a framework that fires none of the above still removes the root" }
-  ];
+  ]);
 
   // The order remount runs in. Written down because doing these out of order is
   // exactly the leak: re-registering before de-registering doubles the handlers.
@@ -12622,10 +12716,16 @@
   // shim moves into the layer; it does not disappear.
   var HISTORY_HOOKS = ["pushState", "replaceState"];
 
-  // The groups a remount clears before it re-registers. The comments surface
-  // registers under its own group name, which is why the list is data: a group
-  // that is not on it is a group that leaks.
-  var CLEARED_GROUPS = [listeners.GROUP.DOCUMENT, listeners.GROUP.NAVIGATION, "comments"];
+  // The groups a remount clears before it re-registers. The comment surface and
+  // the editing surface each register under their own group name, which is why
+  // the list is data: a group that is not on it is a group that leaks. The names
+  // come from listeners.GROUP so this file and those two files cannot drift.
+  var CLEARED_GROUPS = [
+    listeners.GROUP.DOCUMENT,
+    listeners.GROUP.NAVIGATION,
+    listeners.GROUP.COMMENTS,
+    listeners.GROUP.EDITING
+  ];
 
   // How many remounts to remember. A log rather than a single value because
   // "which trigger fired, in what order" is the first question every remount
@@ -12747,9 +12847,11 @@
 
     function registerNavigation() {
       var group = listeners.GROUP.NAVIGATION;
-      registry.on(doc, "turbo:morph", function () {
-        remount("turbo:morph");
-      }, false, group);
+      MORPH_EVENTS.forEach(function (name) {
+        registry.on(doc, name, function () {
+          remount(name);
+        }, false, group);
+      });
       registry.on(doc, "turbo:load", function () {
         remount("turbo:load");
       }, false, group);
@@ -12892,6 +12994,7 @@
 
   return {
     REMOUNT_TRIGGERS: REMOUNT_TRIGGERS,
+    MORPH_EVENTS: MORPH_EVENTS,
     REMOUNT_ORDER: REMOUNT_ORDER,
     HISTORY_HOOKS: HISTORY_HOOKS,
     CLEARED_GROUPS: CLEARED_GROUPS,
@@ -12966,6 +13069,7 @@
         comments: require("./comments.js"),
         tabActive: require("./tab_active.js"),
         sync: require("./sync.js"),
+        editing: require("./editing.js"),
         protect: require("./protect.js")
       }),
       null
@@ -12975,7 +13079,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+b283e7b4ba3c";
+  var VERSION = "0.0.0+f8afa346ebc0";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -13119,21 +13223,56 @@
       }
     });
 
+    // The editing surface. It is handed sync, because a record is posted by the
+    // same act that writes it, and it is bound to the document the way the
+    // comment surface is: through the listener registry, under its own group, so
+    // a remount clears exactly what it re-registers.
+    var editing = opts.editing || ns.editing.createEditing({
+      store: store,
+      reviewId: reviewId,
+      page: page,
+      sync: sync
+    });
+    editing.bind({ page: page });
+
+    // The records replay runs over. Read from the store and CACHED between
+    // changes, not re-read per pass: replay stamps a lost region on the object
+    // it was handed, and a fresh copy every pass would throw that stamp away and
+    // re-stamp it, which turns "this record was untouched" into a diff on every
+    // pass. Every write refreshes the cache.
+    var items = store.read(reviewId);
+
+    function refreshItems() {
+      items = store.read(reviewId);
+      return items;
+    }
+
     // The load-merge. Everything browser storage holds for this review comes
     // back as a card, drafts included. It runs on boot AND after every remount:
     // a page restored from the back/forward cache never re-ran boot, and its
     // rail would otherwise show whatever it showed before the reviewer left.
     function merge() {
-      var items = store.read(reviewId);
-      items.forEach(function (item) {
+      var merged = refreshItems();
+      merged.forEach(function (item) {
         rail.upsertCard(item);
         counters.cardsDrawn += 1;
       });
       counters.merges += 1;
-      return items;
+      return merged;
     }
 
     merge();
+
+    editing.onChange(function (item) {
+      // No sync call here: editing posts through the sync it was handed, on the
+      // same act that wrote the record. And NO replay pass here either. The pass
+      // that follows a commit comes out of protect.release(), once, through the
+      // ordinary scheduler; a second one scheduled from this callback would run
+      // against the same page for no reason and would hide a regression in the
+      // one that matters.
+      refreshItems();
+      rail.upsertCard(item);
+    });
 
     comments.onChange(function (item, event) {
       // "removed" carries an id and nothing else, and "closed" is not a change
@@ -13143,6 +13282,53 @@
       rail.upsertCard(item);
       sync.recordItem(item, event === "ready" ? { immediate: "ready" } : undefined);
     });
+
+    // -------------------------------------------------------------------------
+    // Protection, and replay
+    // -------------------------------------------------------------------------
+    //
+    // The four modules wire to each other exactly as CP2-mid proved them on
+    // test/fixtures/assets/cp2-mid-boot.js: editing marks and releases
+    // protection, protection runs the commit pass, replay asks protection before
+    // it writes, and protection's restore hands the rebuilt block back to
+    // editing. That last one is the seam with no symptom of its own: when layer
+    // three puts the reviewer's words back into a node the repaint built, the
+    // open session has to move onto that node, or the text on screen is right
+    // and the next keystroke goes nowhere.
+
+    var protect = ns.protect;
+    protect.install({
+      document: doc,
+      onRestore: function (el) {
+        editing.rebind(el);
+      }
+    });
+
+    ns.replay.configure({
+      root: doc.body || doc,
+      items: function () {
+        return items;
+      },
+      cards: rail,
+      protect: protect,
+      document: doc
+    });
+
+    // "The page changed, so replay gets a pass."
+    //
+    // The ORDINARY coalescing path, deliberately: no {immediate: true} anywhere
+    // in this file. replay.schedule races the frame against a 50ms timer, so a
+    // page that is not painting still runs its pass; forcing a pass immediate
+    // would hide a regression in that race rather than reporting it. Replay's
+    // own writes never land here, because schedule() refuses while the write
+    // epoch is open.
+    var pageObserver = null;
+    if (typeof win.MutationObserver === "function" && doc.body) {
+      pageObserver = new win.MutationObserver(function () {
+        ns.replay.schedule(ns.replay.REASON.MUTATION);
+      });
+      pageObserver.observe(doc.body, { childList: true, characterData: true, subtree: true });
+    }
 
     // -------------------------------------------------------------------------
     // The remount contract
@@ -13199,6 +13385,7 @@
       ensureRoot: ensureRoot,
       rebind: function () {
         comments.bind({ page: page });
+        editing.bind({ page: page });
       },
       merge: merge,
       onRemount: opts.onRemount || null
@@ -13231,8 +13418,13 @@
         return tab;
       },
       sync: sync,
+      editing: editing,
+      protect: protect,
       injector: injector,
       merge: merge,
+      items: function () {
+        return items;
+      },
       remount: injector.remount,
       statusLog: function () {
         return statusLog.slice();
@@ -13240,6 +13432,10 @@
       counters: counters,
       teardown: function () {
         injector.teardown();
+        if (pageObserver) pageObserver.disconnect();
+        pageObserver = null;
+        protect.uninstall();
+        editing.teardown();
         comments.teardown();
         tab.unmount();
         rail.unmount();
@@ -13279,6 +13475,18 @@
     });
     live("regionsLost", function () {
       return ns.replay.counters.regionsLost;
+    });
+    // The diagnostic names, spelled the way CP2-mid's fixture spelled them, so a
+    // test that moves from that fixture to the real boot reads the same counter
+    // under the same name.
+    live("regionsSkippedIdentical", function () {
+      return ns.replay.counters.regionsSkippedEqual;
+    });
+    live("regionsBlockedChanged", function () {
+      return ns.replay.counters.regionsConflicted;
+    });
+    live("regionsEarlierRevision", function () {
+      return ns.replay.counters.regionsEarlierRevision;
     });
     ["remounts", "rootsRecreated", "handlersCleared", "mutationFallbacks", "bfcacheRestores", "historyHooks", "cspRefusals"].forEach(
       function (name) {
@@ -13343,6 +13551,42 @@
       },
       cardIds: function () {
         return handle.rail.cardIds();
+      },
+
+      // The editing surface, and what replay decided. Both are inside the
+      // library; a spec on a real application page has no other way to ask.
+      isEditing: function () {
+        return handle.editing.isEditing();
+      },
+      editState: function () {
+        return handle.editing.state();
+      },
+      itemForElement: function (selector) {
+        var el = handle.page && typeof document !== "undefined" ? document.querySelector(selector) : null;
+        return el ? handle.editing.itemFor(el) : null;
+      },
+      flaggedIds: function () {
+        return ns.replay.conflictIds();
+      },
+      lastPass: function () {
+        var summary = ns.replay.lastPass();
+        if (!summary) return null;
+        return {
+          reason: summary.reason,
+          wrote: summary.wrote,
+          conflicts: summary.conflicts,
+          lost: summary.lost,
+          results: summary.results.map(function (r) {
+            var region = r.item[record.FIELD.REGION] || {};
+            return {
+              id: r.item[record.FIELD.ID],
+              label: region.label || null,
+              branch: r.branch,
+              wrote: r.wrote,
+              reason: r.reason
+            };
+          })
+        };
       },
 
       // The comment surface, for the gesture waits.

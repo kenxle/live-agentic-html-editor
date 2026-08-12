@@ -53,6 +53,17 @@ function nav(current, searchParams) {
   return '<nav class="app-nav"><ul>' + rendered + "</ul></nav>";
 }
 
+/**
+ * The one line a host application's layout adds to be reviewable (D1): one
+ * script tag carrying the review id, the per-review token and the helper's
+ * origin. The fixture emits it only when the server was started with a `layer`
+ * option, so the default app is still an application that has never heard of the
+ * tool.
+ */
+function layerTag(layer) {
+  return layer && layer.html ? layer.html : "";
+}
+
 function layout(options) {
   const searchParams = options.searchParams;
   const scripts = (options.scripts || [])
@@ -79,7 +90,11 @@ function layout(options) {
     nav(options.current, searchParams) +
     '\n<main class="app-main">\n' +
     options.body +
-    "\n</main>\n</body>\n</html>\n"
+    "\n</main>\n" +
+    // Last in the body, which is where a layout puts it and where the bundle
+    // expects to run: the document is already parsed by then.
+    layerTag(options.layer) +
+    "\n</body>\n</html>\n"
   );
 }
 
@@ -142,6 +157,7 @@ function dashboardPage(state) {
     body: body,
     searchParams: state.searchParams,
     sessionEmail: state.sessionEmail,
+    layer: state.layer,
     scripts: ["/assets/app.js", "/assets/morph-engine.js"]
   });
 }
@@ -209,6 +225,7 @@ function clientsPage(state) {
     body: body,
     searchParams: state.searchParams,
     sessionEmail: state.sessionEmail,
+    layer: state.layer,
     // Every page of the app loads the app's own scripts, the way a real
     // application's layout does. There is no morph target on this screen, so the
     // engine loads and polls nothing; what matters is that window.__app exists
@@ -244,7 +261,8 @@ function loginPage(state) {
     title: "Sign in",
     current: "/login",
     body: body,
-    searchParams: state.searchParams
+    searchParams: state.searchParams,
+    layer: state.layer
   });
 }
 
@@ -266,12 +284,14 @@ function reportsPage(state) {
     body: body,
     searchParams: state.searchParams,
     sessionEmail: state.sessionEmail,
+    layer: state.layer,
     scripts: ["/assets/app.js", "/assets/morph-engine.js"]
   });
 }
 
 module.exports = {
   escapeHtml,
+  layerTag,
   carriedQuery,
   feedItems,
   dashboardPage,

@@ -651,6 +651,41 @@
       veto(event.target, event);
     }
 
+    /**
+     * The caret moved without the text changing: a click into the middle of the
+     * block, a Home key, a drag. Found at CP2, on a page whose OWN activity is
+     * somewhere else entirely.
+     *
+     * The snapshot's caret offset is only refreshed by typing (input and keyup),
+     * so a caret moved with the mouse leaves the snapshot pointing at wherever
+     * the reviewer was standing when they last typed. Then any mutation anywhere
+     * in the document runs the restore, which sees the caret is "wrong", puts it
+     * back where the snapshot says, and the reviewer's next sentence lands at
+     * the front of the paragraph. Nothing was damaged and nothing needed
+     * restoring; the stale half of the snapshot did it.
+     *
+     * Only the caret half is refreshed here, and only while the text is
+     * unchanged. A block whose text has moved on belongs to the typing path,
+     * which snapshots both halves together.
+     */
+    function onSelectionMoved() {
+      if (!enabled(LAYER.SNAPSHOT_RESTORE) || restoring || !active) return;
+      var el = active.element;
+      var node = selection.caretNode();
+      if (!node || !el || typeof el.contains !== "function" || !el.contains(node)) return;
+      var snap = snapshots[active.key.value];
+      if (!snap || el.textContent !== snap.text) return;
+      var range = selection.currentRange();
+      if (!range) return;
+      var startOffset = offsetWithin(el, range.startContainer, range.startOffset);
+      var endOffset = offsetWithin(el, range.endContainer, range.endOffset);
+      if (startOffset === null) return;
+      snap.startOffset = startOffset;
+      snap.endOffset = endOffset === null ? startOffset : endOffset;
+      snap.collapsed = !selection.hasSelection();
+      if (active.snapshot === snap) active.snapshot = snap;
+    }
+
     function onTyping(event) {
       if (!enabled(LAYER.SNAPSHOT_RESTORE) || restoring || !active) return;
       var target = event.target;
@@ -674,6 +709,7 @@
     });
     doc.addEventListener("input", onTyping, true);
     doc.addEventListener("keyup", onTyping, true);
+    doc.addEventListener("selectionchange", onSelectionMoved, true);
 
     if (layers.indexOf(LAYER.SNAPSHOT_RESTORE) !== -1 && typeof MutationObserver === "function") {
       observer = new MutationObserver(onMutations);
@@ -691,6 +727,7 @@
         });
         doc.removeEventListener("input", onTyping, true);
         doc.removeEventListener("keyup", onTyping, true);
+        doc.removeEventListener("selectionchange", onSelectionMoved, true);
         if (observer) observer.disconnect();
         installation = null;
       }
