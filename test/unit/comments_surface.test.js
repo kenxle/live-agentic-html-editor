@@ -1,0 +1,128 @@
+// 1D's Node-side half: the rules that hold with no browser in the room.
+//
+// The browser half is test/browser/comments_highlights.spec.js, which is where
+// painting, picking, and ranked test 18 live. What is here is what a browser
+// would only make slower to check: the record a box mints, the revision rule,
+// the deferred note, and the two strings that must not drift.
+
+"use strict";
+
+const test = require("node:test");
+const assert = require("node:assert/strict");
+
+const record = require("../../src/shared/record.js");
+const gestures = require("../../src/shared/gestures.js");
+const commentsModule = require("../../src/layer/comments.js");
+const highlightModule = require("../../src/layer/highlight.js");
+const storeModule = require("../../src/layer/store.js");
+
+const PAGE = { origin: "http://localhost:3000", path: "/clients", title: "Clients", seq: 1, source_hint: null };
+
+function surface() {
+  const store = storeModule.createStore();
+  const comments = commentsModule.createComments({ store, reviewId: "rev_1", document: null, page: PAGE });
+  return { store, comments };
+}
+
+test("the on-card hint is Ken's copy, and it is spelled once", () => {
+  assert.equal(commentsModule.HINT_READY, "Cmd-Enter when done with this comment");
+  // The gesture table says the same thing, as a sentence. Two wordings of one
+  // instruction is how a hint line and a card drift apart.
+  assert.equal(gestures.hintFor(gestures.GESTURE.MARK_READY), commentsModule.HINT_READY + ".");
+});
+
+test("every highlight name is namespaced, so a page using the API itself cannot collide", () => {
+  assert.ok(highlightModule.NAMES.length > 0);
+  highlightModule.NAMES.forEach(function (name) {
+    assert.equal(name.indexOf(highlightModule.PREFIX), 0, name + " is not namespaced");
+  });
+  // The page-level stylesheet contains highlight rules and nothing else.
+  highlightModule.STYLE_TEXT.split("}")
+    .map(function (chunk) {
+      return chunk.trim();
+    })
+    .filter(Boolean)
+    .forEach(function (chunk) {
+      assert.match(chunk, /^::highlight\(lahe-/);
+    });
+});
+
+test("a browser with no Custom Highlight API fails loud rather than painting nothing", () => {
+  const highlights = highlightModule.createHighlights({ document: null });
+  assert.equal(highlights.supported(), false);
+  assert.throws(
+    function () {
+      highlights.paint("itm_1", { cloneRange: function () {} });
+    },
+    /Custom Highlight API/
+  );
+});
+
+test("a comment box mints a draft and every keystroke is durable at once", () => {
+  const { store, comments } = surface();
+  const box = comments.openBox({ quote: "The trainer writes the plan." });
+
+  assert.equal(box.item.state, record.STATE.DRAFT);
+  assert.equal(box.item.context.quote, "The trainer writes the plan.");
+  assert.equal(box.item.page_origin, PAGE.origin, "the page fields come from the surface's page");
+
+  box.type("this says the opp");
+  assert.equal(store.readItem("rev_1", box.id).note, "this says the opp");
+  box.type("this says the opposite");
+  assert.equal(store.readItem("rev_1", box.id).note, "this says the opposite");
+  assert.equal(store.readItem("rev_1", box.id).rev, 1, "a draft does not bump rev");
+});
+
+test("Cmd-Enter marks it ready, and rewording after that bumps the revision", () => {
+  const { store, comments } = surface();
+  const box = comments.openBox({ quote: "q" });
+  box.type("say this instead");
+  box.markReady();
+  assert.equal(store.readItem("rev_1", box.id).state, record.STATE.READY);
+
+  comments.reopen(box.id).type("no, say this instead");
+  assert.equal(store.readItem("rev_1", box.id).rev, 2);
+  assert.equal(store.readItem("rev_1", box.id).note, "no, say this instead");
+});
+
+test("the note box standing open at the foot mints nothing until it is typed in", () => {
+  const { store, comments } = surface();
+  const note = comments.openNote({});
+  assert.equal(store.read("rev_1").length, 0, "an untouched note is not a record");
+
+  note.type("the whole page reads cold");
+  const items = store.read("rev_1");
+  assert.equal(items.length, 1);
+  assert.equal(items[0].kind, record.KIND.NOTE);
+  assert.equal(items[0].context.quote, null, "a note is tied to nothing");
+  assert.equal(items[0].region.ref, null);
+});
+
+test("closing keeps the draft; only the reviewer's own delete removes it", () => {
+  const { store, comments } = surface();
+  const box = comments.openBox({ quote: "q" });
+  box.type("half a thought");
+  box.close();
+  assert.equal(store.readItem("rev_1", box.id).note, "half a thought");
+
+  comments.remove(box.id);
+  assert.equal(store.readItem("rev_1", box.id), null);
+});
+
+test("outstanding is newest first, and a handled item is not outstanding", () => {
+  const { store, comments } = surface();
+  const first = comments.openBox({ quote: "one" });
+  first.type("a");
+  const second = comments.openBox({ quote: "two" });
+  second.type("b");
+
+  let out = comments.outstanding();
+  assert.equal(out[0].id, second.id, "newest is visible without scrolling");
+
+  const handled = Object.assign({}, store.readItem("rev_1", first.id));
+  handled[record.FIELD.STATE] = record.STATE.HANDLED;
+  store.write("rev_1", handled);
+  out = comments.outstanding();
+  assert.equal(out.length, 1);
+  assert.equal(out[0].id, second.id);
+});

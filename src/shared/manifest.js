@@ -131,7 +131,6 @@ var LAYER_FILES = [
   {
     path: "src/layer/highlight.js",
     owner: "1D",
-    planned: true,
     why: "Custom Highlight API registration plus the one page-level stylesheet (D8's named exception)"
   },
   {
@@ -142,7 +141,6 @@ var LAYER_FILES = [
   {
     path: "src/layer/tab_active.js",
     owner: "1D",
-    planned: true,
     why: "Active tab contents"
   },
   {
