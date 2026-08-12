@@ -271,6 +271,10 @@ async function startAppServer() {
         server.close(function () {
           resolve();
         });
+        // The page's poll-and-morph engine holds keep-alive sockets open, and
+        // server.close() waits for them forever. Sever them so teardown cannot
+        // outlive the test that owned the server.
+        server.closeAllConnections();
       });
     }
   };
