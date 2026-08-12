@@ -25,6 +25,8 @@ which is perfect." His notes, all folded into D10 (the rail):
   let the reviewer choose which to keep. Folded into D7's neither-matches surfacing.
 - The draft hint copy is "Cmd-Enter when done with this comment", not "Cmd-Enter when ready". In the
   gesture table in D3.
+- Make explicit to builders that the wireframe is not a final visualization and the built rail should
+  look nice, properly designed. Stated in D10 as a binding note.
 
 ## review-security (Round 1, on v2)
 

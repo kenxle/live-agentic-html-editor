@@ -308,7 +308,11 @@ newest visible, the open note box at the foot), **Edits** (every hand edit as be
 apart from comments per R32, and doubling as the end-of-session style-guide list per R39, exportable),
 and **Done** (handled items with their agent replies, reopenable per R38). Ken reviewed three
 wireframed directions and chose this rail shape, the evolution of the module he already uses; his
-notes are folded in here. **Copy and export are always visible**, not only when nothing is connected:
+notes are folded in here. **The wireframe settled structure only, and it is not a visual target.**
+Whoever builds the rail is expected to design it properly: considered type, spacing, and hierarchy, a
+surface that looks like a product someone cared about, judged as if by a staff designer. Copying the
+sketch's grey-box styling into the build is wrong; so is inventing decoration. The constraint that
+stands is D10's own: the library styles only what it adds, quietly enough to sit over anyone's page. **Copy and export are always visible**, not only when nothing is connected:
 the review may need to go to a different agent, and when something is wrong is exactly when the
 reviewer cannot tell. **An agent's question is the loudest thing on a card**, a distinct treatment
 rather than a tinted label, because a question the reviewer scrolls past is a stalled agent. The
