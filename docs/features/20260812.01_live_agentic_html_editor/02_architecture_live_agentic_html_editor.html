@@ -2092,6 +2092,11 @@ status line (R11)</td>
 </tbody>
 </table></div>
 <h2 id="test-strategy">Test strategy</h2>
+<p>This section is only the strategy. The full test plan lives in <a
+href="03_plan_live_agentic_html_editor.html">the plan</a>: 39 ranked
+tests, each owned by exactly one task, the top ones mapped to the real
+failures this replaces, plus the binding testing laws every test
+follows.</p>
 <p>Real browser, real pages, per the brief's metric that the interactive
 parts are tested where the old tool was not. The harness already built
 survives: a repainting fixture page whose engine actively reverts typed
@@ -2283,7 +2288,11 @@ start a process, so someone must run the helper once.</p>
 <p><strong>Answered (settled at plan time):</strong> the add command
 starts the helper when it is not already running, so adding the library
 to a page is one command and the helper's start rides along with it.
-Manual <code>serve</code> remains for anyone who wants it.</p>
+Manual <code>serve</code> remains for anyone who wants it. In practice
+the whole process usually starts with the reviewer asking their agent to
+open a doc for review (Ken's note), so the agent runs the add command
+and the helper comes up without the reviewer touching a terminal at
+all.</p>
 </div>
 <div class="callout callout-question">
 <p><span id="security-q2" class="finding-anchor"></span><strong>Q2: How does <code>review.json</code> divide by page on a dev
@@ -2338,6 +2347,12 @@ Node 22, our floor is 20; an external driver breaks zero-dependency
 install); and a revisit note records what a database could buy later,
 chiefly context economy for agents on long reviews, with the measurable
 trigger for revisiting.</p>
+<p>Round 6 (comments 26 and 27, the last on the architecture): the
+test-strategy section now points at the plan's full test list (39
+ranked, one owner each) so it no longer reads thin; and Q1's answer
+records the usual kickoff, the reviewer asks their agent to open a doc,
+so the agent runs add and the helper comes up with no terminal
+involved.</p>
 <p>Round 3 (comments 17 through 20, same file): review.md collisions
 cannot happen and D6 now says why (the file lives inside its review's
 own folder); the polling arrows in both diagrams now point from the

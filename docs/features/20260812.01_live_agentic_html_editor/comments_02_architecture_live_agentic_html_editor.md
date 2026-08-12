@@ -1,6 +1,6 @@
 # Review comments: Architecture: Live Agentic HTML Editor
 
-_Doc: 02_architecture_live_agentic_html_editor.html · saved 2026-08-12T16:50:55 · 25 comment(s)_
+_Doc: 02_architecture_live_agentic_html_editor.html · saved 2026-08-12T16:54:48 · 27 comment(s)_
 
 ## 1. Summary
 
@@ -324,6 +324,38 @@ lol SQLite is plenty safe for this use case. it's not for production, but for th
 > swapping later is contained.
 
 we should later think through what we could get with a sqlite db. sure it's an install/setup step, but do we gain a lot? like are these files going to burn context because they're really long, and a db would let us keep agents more focused?
+
+**[DONE]**
+
+## 26. Failure modes
+
+> Test strategy
+> Real browser, real pages, per the brief's metric that the interactive
+> parts are tested where the old tool was not. The harness already built
+> survives: a repainting fixture page whose engine actively reverts typed
+> text on a timer, a caret assertion that requires the same text node by
+> identity after five replay passes, and a no-second-write assertion via
+> mutation observation rather than final-DOM equality (an idempotence bug
+> is invisible to an end-state check). The top-ranked tests map one-to-one
+> to Ken's three original symptoms: typed text reverting, delivery
+> stopping, and the page's own controls dying. Replay tests must assert
+> replay actually ran (pass counters), or a do-nothing replay engine
+> passes every test.
+
+seems thin. is there a test plan written in the plan?
+
+**[DONE]**
+
+## 27. Security Review
+
+> Q1: Does the helper start itself? The library cannot
+> start a process, so someone must run the helper once.
+> Answered (settled at plan time): the add command
+> starts the helper when it is not already running, so adding the library
+> to a page is one command and the helper's start rides along with it.
+> Manual serve remains for anyone who wants it.
+
+this whole process is usually kicked off by asking an agent to open a doc with the comments module, so an agent can take care of it
 
 **[DONE]**
 

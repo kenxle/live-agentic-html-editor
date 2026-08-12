@@ -584,6 +584,11 @@ position.
 
 ## Test strategy
 
+This section is only the strategy. The full test plan lives in
+[the plan](03_plan_live_agentic_html_editor.html): 39 ranked tests, each owned by exactly one task,
+the top ones mapped to the real failures this replaces, plus the binding testing laws every test
+follows.
+
 Real browser, real pages, per the brief's metric that the interactive parts are tested where the old
 tool was not. The harness already built survives: a repainting fixture page whose engine actively
 reverts typed text on a timer, a caret assertion that requires the same text node by identity after
@@ -636,7 +641,9 @@ helper once.
 
 **Answered (settled at plan time):** the add command starts the helper when it is not already
 running, so adding the library to a page is one command and the helper's start rides along with it.
-Manual `serve` remains for anyone who wants it.
+Manual `serve` remains for anyone who wants it. In practice the whole process usually starts with
+the reviewer asking their agent to open a doc for review (Ken's note), so the agent runs the add
+command and the helper comes up without the reviewer touching a terminal at all.
 :::
 
 ::: callout-question

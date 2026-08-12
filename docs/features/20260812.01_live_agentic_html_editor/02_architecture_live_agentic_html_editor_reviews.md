@@ -31,6 +31,11 @@ floor is 20; an external driver breaks zero-dependency install); and a revisit n
 database could buy later, chiefly context economy for agents on long reviews, with the measurable
 trigger for revisiting.
 
+Round 6 (comments 26 and 27, the last on the architecture): the test-strategy section now points at
+the plan's full test list (39 ranked, one owner each) so it no longer reads thin; and Q1's answer
+records the usual kickoff, the reviewer asks their agent to open a doc, so the agent runs add and
+the helper comes up with no terminal involved.
+
 Round 3 (comments 17 through 20, same file): review.md collisions cannot happen and D6 now says why
 (the file lives inside its review's own folder); the polling arrows in both diagrams now point from
 the poller to the polled; D7 no longer reads as Rails-assuming (framework-free protection with Rails
