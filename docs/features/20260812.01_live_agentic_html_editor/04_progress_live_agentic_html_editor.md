@@ -282,3 +282,132 @@ Nothing was deleted. For the Phase 4B batch:
   `cp2_mid.spec.js` does. If 2D's `index.js` ends up covering the same wiring, the boot file is the half
   to cut, not the fixture page.
 - `test-results/` — Playwright artifacts from the deliberate-revert runs. Gitignored.
+
+## CP2: the second stitch-back
+
+Branch `feat/live_agentic_html_editor`, main checkout. All of Phase 2 was already merged and the gate
+was already green. This pass applied CP2-mid's merge notes to the real boot, closed 2D's cross-task
+asks, and wrote CP2 as a checked-in spec (ranked test 38).
+
+### The real boot: what CP2-mid's notes were actually asking for
+
+`src/layer/index.js` merged from a pre-CP2-mid base, so it did not wire three of the four modules at
+all: it booted the store, the rail, the comment surface, the Active tab, sync and the remount contract,
+and then scheduled a replay pass into an engine nobody had configured. On a real page that means the
+editing surface was not on it, protection was not installed, and replay had no records and no root.
+
+It now does what `test/fixtures/assets/cp2-mid-boot.js` proved, in the same order:
+
+- **The editing surface**, created with the store, the page and sync, and bound through the registry.
+- **Protection**, `protect.install({ onRestore })`, whose restore calls `editing.rebind(el)`. That is
+  the seam with no symptom of its own: without it the reviewer's text is right on screen and the next
+  keystroke goes nowhere.
+- **Replay**, configured with the body as its root, a CACHED item list, the rail as its cards, and
+  protection. Cached rather than re-read per pass because replay stamps a lost region on the object it
+  was handed; a fresh copy per pass re-stamps it every time and makes "this record was untouched"
+  unstateable.
+- **The page-changed pass**, one MutationObserver on the body calling `replay.schedule(MUTATION)`,
+  through the ORDINARY coalescing path. No `{immediate: true}` anywhere in the file.
+- **No second commit pass.** The pass that follows a commit comes out of `protect.release`, once. The
+  `editing.onChange` handler refreshes the cache and draws the card, and schedules nothing.
+
+### 2D's cross-task asks, closed
+
+| Ask | What landed |
+| --- | --- |
+| The memoized shadow surface goes stale | `highlight.surface()` keys on `isConnected` and DROPS `surfaceStyles` when it rebuilds; `comments.surface()` re-reads when the cached root's host has left the document |
+| The listener group `"comments"` is a literal in two files | `listeners.GROUP.COMMENTS` and `listeners.GROUP.EDITING`, read by `comments.js`, `editing.js` and `inject.CLEARED_GROUPS`. The editing group was missing from the cleared list entirely, which the real boot would have turned into a leak the registry count could not see |
+| `servers.js` `close()` hangs on keep-alive sockets | `server.closeAllConnections()` before the callback resolves, the same line the app fixture's server carries |
+| 0C's fixture fires no event the remount contract hears | The morph engine announces `app:morph` on the document after every applied frame, raw flavor included, and `protect.js`'s FRAMEWORKS table now carries a `morphEvent` beside each `beforeMorphEvent`. `inject.js` builds its trigger list from `protect.MORPH_EVENTS`: one framework vocabulary, not two lists that drift |
+| 0C's `/clients` loads no scripts | Every page of the app fixture loads the app's own scripts, so `window.__app` exists on all three pathnames |
+
+`living_in_the_page.spec.js` no longer dispatches `turbo:morph` on the application's behalf. Its
+hundred morphs are now driven entirely by the fixture's own event, and it still asserts a flat registry.
+
+### The bug the checkpoint caught, and the one it caught on the way
+
+**1. A page that talks to a live helper cannot be set up with Playwright routing.**
+
+`test/browser/support/with_layer.js` puts the library on 0C's app fixture by intercepting the app's
+document responses and appending the script tag. Every spec using it so far had a helper that was
+deliberately dead, so nobody had asked whether a LIVE one is reachable from such a page. It is not:
+while any `page.route` handler is registered, cross-origin requests from that page never leave the
+browser. Not blocked by CORS, not refused by the helper: the helper's log shows nothing arrived, and
+the page sees a bare "Failed to fetch", which the library correctly reads as a helper that is down.
+
+Measured rather than guessed. Excluding the helper's URL from the route matcher does not help (the
+exclusion works, the requests still die), and `page.unrouteAll()` makes the same fetch reach the helper
+immediately, which is what pins the cause.
+
+The answer is closer to the product anyway: the FIXTURE carries the tag.
+`startAppServer({ layer })` (or `appServer.useLayer(...)` once the helper has minted the token for the
+app's origin) puts `protocol.scriptTag(...)` in the application's own layout and serves the built
+bundle from the application's own assets, which is exactly D1's install. The CP2 walk uses no routing
+at all. `with_layer.js` stays for the specs whose helper is deliberately dead, with the finding written
+at the top of it.
+
+**2. A caret moved by anything but typing goes stale, and the next mutation anywhere yanks it back.**
+
+Protection snapshots the block on `input` and `keyup`. A caret moved with the mouse (or Home, or a
+drag) updates nothing, so the snapshot still points at wherever the reviewer last typed. Then any
+mutation ANYWHERE in the document runs the restore, which finds the text undamaged, the caret "wrong",
+and puts it back where the snapshot says. The reviewer's next sentence lands at the front of the
+paragraph.
+
+CP2-mid could not see this: its fixture repaints the very block being edited, so the restore is always
+a real one. The CP2 walk types into a region the application never touches while the application
+morphs a region on the other side of the page, and the caret jumped on roughly one run in three.
+
+Closed in `protect.js`: a `selectionchange` listener refreshes the CARET half of the snapshot while the
+text half is unchanged. A block whose text has moved on belongs to the typing path, which snapshots
+both halves together.
+
+### The spec
+
+`test/browser/cp2_walk.spec.js`, the plan's script, nothing standing in: 0C's node application serving
+its own HTML and running its own poll-and-morph engine in the RAW flavor on its own timer, the library
+arriving as one script tag in the application's own layout, the helper running with a token it minted
+for the app's origin, and every record made by the reviewer's own gestures.
+
+The walk: a comment and an edit first, then the fix typed into a third region while the page morphs
+under it, committed with Esc, confirmed on disk in `events.jsonl`, then a full RELOAD, then the record
+read back out of browser storage byte for byte and replay re-applying both edits to a DOM the
+application just built, then the application rewriting the source under a region the reviewer never
+touched, and nothing else moving.
+
+Three positive controls, because each half has a way of passing for the wrong reason:
+
+1. The page really morphed under the reviewer's hands, and replay really ran (both counters, polled).
+2. The application's own HTML is fetched and asserted NOT to contain the reviewer's sentence, so "the
+   fix is on the page after a reload" can only be replay's doing.
+3. The source under the other region really changed, read back rather than assumed.
+
+Then: every record byte-identical across the rewrite, `regionsBlockedChanged` delta exactly zero, no
+flagged ids, no record lost, and the commented region never written to.
+
+### Gate
+
+```
+lint passed (syntax: 140 files, no jsdom, manifest complete)
+# tests 335
+# pass 335
+# fail 0
+  1 skipped
+  127 passed (20.3s)
+```
+
+`npm run gate:all` (three lanes, whole suite): `3 skipped, 381 passed (1.0m)`, exit 0.
+
+`cp1_walk` + `cp2_mid` + `cp2_walk` on all three lanes (`LAHE_ALL_BROWSERS=1`): `18 passed`, three
+consecutive runs, no flake. The one skip per lane is 2D's honest bfcache skip.
+
+`dist/lahe-layer.js` was rebuilt and committed, which is the orchestrator's job at a checkpoint.
+
+### Cleanup needed
+
+Nothing was deleted. For the Phase 4B batch:
+
+- `test-results/` — Playwright artifacts from the diagnosis runs. Gitignored.
+- `test/fixtures/cp2-mid-doc.html` and `test/fixtures/assets/cp2-mid-boot.js` — still carried from
+  CP2-mid. The boot file is now genuinely redundant with `src/layer/index.js`; cut it only when
+  `cp2_mid.spec.js` is retired or re-pointed at the real boot.
