@@ -56,7 +56,12 @@ alone" would be false the first time the helper was down. The repo is the one so
 R40); a build script concatenates the source modules into the shipped file, so builders work on small
 files and users add one.
 
-The helper is a zero-dependency Node process (`node bin/lahe.js serve`). Node 20+ is the only stated
+The helper is a zero-dependency Node process (`node bin/lahe.js serve`). It listens on a **fixed
+default port** (configurable), because the page has to find it across restarts: the script line
+carries the helper's URL as an attribute, and a helper restarted on the same port is simply found
+again, which is what makes the reconnect-and-re-post promise in the failure table real. The script
+line's attributes (helper URL, review id, token) are public API, pinned exactly in the contracts doc
+the plan writes, since they are the one thing every host page depends on. Node 20+ is the only stated
 requirement. Nothing else is platform-specific: the library is standard DOM APIs, the helper is
 standard Node, and macOS, Linux, and Windows all run both. The one browser-support note (Custom
 Highlight API, D10) is stated with its reason per R42, and it holds in current Chrome, Edge, Safari,
@@ -111,6 +116,9 @@ Everything the reviewer produces is a record:
   times they retype, R29), `after` (never truncated, R3), plus the same pair as HTML so an agent can
   see structure without the reviewer reading any (R23).
 - **Delete**, **format-only change**, and **untethered note** are their own kinds (R27, R31, R18).
+  Formatting is a closed list: **bold and italic**, nothing else in v1 (the brief's "basic formatting
+  only"; anything richer is a request to the agent). The structural comparison in replay is defined
+  against exactly that list.
 
 Every record names the **page** it was made on (its path and title, plus the source hint when one was
 given), which is what lets one review span a whole dev-server walk and still project grouped by page.
@@ -137,15 +145,19 @@ Two stores, each sufficient alone:
 2. **The helper's on-disk store**: one folder per review holding `events.jsonl` (append-only, one JSON
    line per event; an interrupted write corrupts at most the last line, never history) and the
    projections built from it (D6). The library posts each event as it happens and re-posts anything
-   unacknowledged on every reconnect; events are idempotent by id and rev, so re-posting is always
-   safe.
+   unacknowledged on every reconnect. Every event carries its own **event id**, and re-posting is
+   idempotent by that id rather than by (item, rev): drafts do not bump rev, so many draft events
+   legitimately share an item and rev with different content.
 
 **Drafts flow to the helper too**, marked draft, so a half-written thought has both stores like
 everything else and does not live only in the reviewed app's own browser bucket, which the app itself
 can clear. Drafts never appear as actionable in what the agent reads (R7); they exist in the store
 purely as durability. An **open edit commits automatically on navigation or unload** (kept
 synchronously in browser storage, handed to the helper on the way out), because browse mode is fully
-native and a link click is one click: R1 names navigation, so navigation cannot be a losing move.
+native and a link click is one click: R1 names navigation, so navigation cannot be a losing move. The
+on-the-way-out post uses the one send mechanism that can both survive unload and carry D11's required
+headers (a kept-alive request, size-capped by the browser); an edit too large for it is already safe
+in browser storage and goes to the helper on the next load, so the cap costs latency, never work.
 
 The browser is authoritative for a record's content until the helper has acknowledged it; the store is
 authoritative for lifecycle **at a given rev**: a handled that names rev 1 retires rev 1, and a
@@ -177,9 +189,15 @@ This is the single file the agent reads, and "the agent reads it in a loop" is n
 since agents failing to collect feedback is one of the three symptoms being fixed. The contract block
 at the top of the file tells the agent both ways to keep up: re-read the file between work items, or
 run the helper's **wait command**, which blocks until something new is ready (or a timeout) and prints
-it. The file is the contract; the wait command is a convenience that makes the loop cheap for agents
-that can run a command, and its death (an agent's turn ending kills a foreground wait, the old tool's
-delivery failure) costs nothing, because the file is still there and still complete.
+it. The wait command **consumes nothing**: it is a read with a watermark (the caller says where it
+left off), never an acknowledgment, so a killed wait, a repeated wait, and two agents waiting at once
+are all harmless, and the cut ack model cannot sneak back in through it. Handling is expressed only
+by writing a reply. The file is the contract; the wait command is a convenience that makes the loop
+cheap for agents that can run a command, and its death (an agent's turn ending kills a foreground
+wait, the old tool's delivery failure) costs nothing, because the file is still there and still
+complete. The contract block's exact text is pinned at plan time, and the standing header already in
+the repo is wrong for this design (it names an authoritative JSON file and a command that no longer
+exists) and gets rewritten, not kept.
 
 The agent answers by appending one JSON line to **`replies.jsonl`** in the same folder: id, rev,
 status (`handled` / `not_handled` with a reason / `question` with text), an optional agent name (so
@@ -210,7 +228,8 @@ verification can be added later without changing the contract.
 coordinating agent handing items to subagents, and that coordinator already decides who does what; the
 store does not add claims or leases in v1. What the store does guarantee: each writer appends whole
 lines to its own reply file (`replies-<agent>.jsonl`, with `replies.jsonl` fine for the single-agent
-case), so uncoordinated writers never interleave a line; the helper is the single reader and folds
+case; the agent name in the filename is constrained to the same safe character set as review ids,
+because it too is a path component), so uncoordinated writers never interleave a line; the helper is the single reader and folds
 them in arrival order; and conflicting replies to one item resolve by rev first, then latest-wins with
 both kept in the log. Two uncoordinated peer agents could still both fix the same item in source; that
 is a coordination problem this tool does not own.
@@ -294,9 +313,11 @@ without the library; there are no wrapper elements to break a framework's diffin
 quoted text. This is the one capability with a browser floor, and it is why the floor exists: current
 Chrome, Edge, Safari, and Firefox all have it (R42's stated reason).
 
-All library UI (rail, boxes, chips, hints) lives in a shadow root with its own styles, so the page's
-CSS cannot restyle the library and the library's CSS cannot touch the page. The page renders exactly as
-it does without the library, to the pixel, except painted highlights and the fixed rail.
+All library UI (rail, boxes, chips, hints) lives in a closed shadow root with its own styles, so the
+page's CSS cannot restyle the library and the library's CSS cannot touch the page. One named
+exception, because the highlight API requires it: the library adds a single page-level stylesheet
+containing only its own namespaced highlight rules, and nothing else, ever. The page renders exactly
+as it does without the library, to the pixel, except painted highlights and the fixed rail.
 
 ### D9: Anchors match by uniqueness, not confidence
 
