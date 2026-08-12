@@ -71,7 +71,6 @@ what       readEventLog returns `[]` for a missing file, and the log path is abo
            asserts length 1. The plan reproduces only the negative half.
 why        Point the helper at the wrong path, or forget to update readEventLog, and every refusal
            assertion passes forever against a helper with no authentication at all.
-than       -
 fix        Make the positive control mandatory in #5 and in 1A's Done-when: same test, same stateDir,
            same reader. Allowed origin plus valid token writes exactly one line, then each of the five
            checks is omitted one at a time and each probe leaves the count at one. Also state in the

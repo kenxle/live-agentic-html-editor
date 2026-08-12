@@ -112,6 +112,8 @@ Everything the reviewer produces is a record:
   see structure without the reviewer reading any (R23).
 - **Delete**, **format-only change**, and **untethered note** are their own kinds (R27, R31, R18).
 
+Every record names the **page** it was made on (its path and title, plus the source hint when one was
+given), which is what lets one review span a whole dev-server walk and still project grouped by page.
 Each record has a client-minted id and a monotonically increasing **rev**, bumped on every rewording.
 An agent reply names (id, rev), so a reply to rev 2 cannot mark rev 3 handled: the reviewer's later
 rewording stays outstanding (R9, R21). Records are never edited in place in the store; a change is a
@@ -127,9 +129,11 @@ Grounds R1, R8, R22.
 Two stores, each sufficient alone:
 
 1. **Browser storage**, written synchronously on every keystroke, including half-written drafts. A
-   reload, a crash, or a sleep costs nothing. Keyed by review id, not by filename or origin, so two
-   pages of one review do not collide, two reviews do not merge, and `localhost` versus `127.0.0.1`
-   is not two buckets.
+   reload, a crash, or a sleep costs nothing. Keyed by review id, not by filename, so two pages of
+   one review do not collide and two reviews do not merge. Browser storage is still partitioned by
+   origin (no key choice changes that, so `localhost` and `127.0.0.1` are physically separate
+   buckets); the helper is what unifies a review across origins, which is one more reason drafts flow
+   to it.
 2. **The helper's on-disk store**: one folder per review holding `events.jsonl` (append-only, one JSON
    line per event; an interrupted write corrupts at most the last line, never history) and the
    projections built from it (D6). The library posts each event as it happens and re-posts anything
@@ -252,7 +256,9 @@ rather than being silently discarded, so an agent's landed change under the revi
 told, not lost.
 
 **Replay.** After any repaint, committed records are re-applied by a single replay pass. For each
-record it finds the anchor (D9) and compares against the record's history: the DOM already matches the
+record it finds the anchor (D9) and compares against the record's history, which exists because the
+event log keeps every rev's `after` rather than only the latest (the in-memory record carries that
+rev history for exactly this comparison): the DOM already matches the
 current `after`, do nothing (idempotent); it matches `before`, apply the edit again; it matches an
 **earlier rev's** `after`, an old version was applied somewhere, so the current rev is re-applied and
 the card says an earlier version had landed; it matches none of these, the content changed underneath
