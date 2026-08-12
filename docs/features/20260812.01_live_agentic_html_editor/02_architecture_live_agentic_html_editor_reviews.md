@@ -24,6 +24,13 @@ generated class-name marker was rejected as durable identity (repaints and reloa
 transient marking during an active edit stays. D10 (the rail) is restructured from a wall of text
 into a tab table plus behavior bullets.
 
+Round 5 (comments 23 through 25, same file): the lifecycle diagram's exits from draft and ready only
+are now stated as deliberate (handled items are kept, the only way out is reopen); the SQLite
+"experimental" justification is corrected to the real reasons (built-in SQLite needs Node 22, our
+floor is 20; an external driver breaks zero-dependency install); and a revisit note records what a
+database could buy later, chiefly context economy for agents on long reviews, with the measurable
+trigger for revisiting.
+
 Round 3 (comments 17 through 20, same file): review.md collisions cannot happen and D6 now says why
 (the file lives inside its review's own folder); the polling arrows in both diagrams now point from
 the poller to the polled; D7 no longer reads as Rails-assuming (framework-free protection with Rails

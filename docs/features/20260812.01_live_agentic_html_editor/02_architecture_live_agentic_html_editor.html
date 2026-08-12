@@ -1950,14 +1950,27 @@ own UI lives in a closed shadow root.</p>
     handled --&gt; ready: reviewer reopens (R38)
     draft --&gt; [*]: reviewer deletes
     ready --&gt; [*]: reviewer deletes</code></pre>
+<p>Deletion is reachable only from draft and ready on purpose: a handled
+item is kept as the record that a fix landed (R38, handled items are
+kept, not deleted), so the only way out of handled is reopening it. The
+reviewer deletes their own outstanding work, never the history.</p>
 <p>A <strong>database was considered</strong> for the store (Ken raised
-it; someone he met built theirs on one) and rejected for v1: Node's
-built-in SQLite is still marked experimental, an external one breaks
-zero-dependency install, and an append-only JSONL log already gives
-crash-safety, a full history, and greppability, while
-<code>review.json</code> gives the readable view a database would need
-generated anyway. The seam is narrow (the helper's store module), so
-swapping later is contained.</p>
+it; someone he met built theirs on one) and set aside for v1. The real
+reasons, not safety: Node's built-in SQLite arrives in Node 22 and our
+floor is Node 20, an external driver breaks the zero-dependency install,
+and an append-only JSONL log already gives crash-safety, a full history,
+and greppability, while <code>review.json</code> gives the readable view
+a database would need generated anyway. The seam is narrow (the helper's
+store module), so swapping later is contained.</p>
+<p>Worth revisiting after v1 (Ken's note): what a database would
+actually buy. The interesting case is context economy for agents. A long
+review makes <code>review.json</code> a long file, and an agent
+re-reading it burns context on items it has already handled; a database,
+or just a query command on the helper, would let an agent pull one item
+or one page at a time. The wait command already delivers deltas, which
+covers the loop case, so the pressure to revisit is "reviews grew long
+enough that reading the whole file hurts", and that is measurable when
+it happens.</p>
 <h2 id="the-code-already-in-the-repo">The code already in the repo</h2>
 <p>A Phase-0 kernel and a real browser test harness are already in the
 repo, built against an earlier product shape. <strong>This document is
@@ -2317,6 +2330,14 @@ was rejected as durable identity (repaints and reloads strip it) while
 transient marking during an active edit stays. D10 (the rail) is
 restructured from a wall of text into a tab table plus behavior
 bullets.</p>
+<p>Round 5 (comments 23 through 25, same file): the lifecycle diagram's
+exits from draft and ready only are now stated as deliberate (handled
+items are kept, the only way out is reopen); the SQLite "experimental"
+justification is corrected to the real reasons (built-in SQLite needs
+Node 22, our floor is 20; an external driver breaks zero-dependency
+install); and a revisit note records what a database could buy later,
+chiefly context economy for agents on long reviews, with the measurable
+trigger for revisiting.</p>
 <p>Round 3 (comments 17 through 20, same file): review.md collisions
 cannot happen and D6 now says why (the file lives inside its review's
 own folder); the polling arrows in both diagrams now point from the

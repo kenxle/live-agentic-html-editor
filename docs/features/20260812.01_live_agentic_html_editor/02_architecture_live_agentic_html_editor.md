@@ -511,11 +511,23 @@ stateDiagram-v2
     ready --> [*]: reviewer deletes
 ```
 
+Deletion is reachable only from draft and ready on purpose: a handled item is kept as the record
+that a fix landed (R38, handled items are kept, not deleted), so the only way out of handled is
+reopening it. The reviewer deletes their own outstanding work, never the history.
+
 A **database was considered** for the store (Ken raised it; someone he met built theirs on one) and
-rejected for v1: Node's built-in SQLite is still marked experimental, an external one breaks
-zero-dependency install, and an append-only JSONL log already gives crash-safety, a full history, and
-greppability, while `review.json` gives the readable view a database would need generated anyway. The
-seam is narrow (the helper's store module), so swapping later is contained.
+set aside for v1. The real reasons, not safety: Node's built-in SQLite arrives in Node 22 and our
+floor is Node 20, an external driver breaks the zero-dependency install, and an append-only JSONL
+log already gives crash-safety, a full history, and greppability, while `review.json` gives the
+readable view a database would need generated anyway. The seam is narrow (the helper's store
+module), so swapping later is contained.
+
+Worth revisiting after v1 (Ken's note): what a database would actually buy. The interesting case is
+context economy for agents. A long review makes `review.json` a long file, and an agent re-reading
+it burns context on items it has already handled; a database, or just a query command on the helper,
+would let an agent pull one item or one page at a time. The wait command already delivers deltas,
+which covers the loop case, so the pressure to revisit is "reviews grew long enough that reading the
+whole file hurts", and that is measurable when it happens.
 
 ## The code already in the repo
 
