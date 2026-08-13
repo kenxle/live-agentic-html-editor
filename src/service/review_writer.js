@@ -1,14 +1,15 @@
-// The review file writer: the ONE owner of writing review.md and review.json,
-// and the one owner of the path-safety rules.
+// The review file writer: the ONE owner of writing review.json, and the one
+// owner of the path-safety rules.
 //
-// Owner: Task 1D. The service's send handler imports and calls this. The CLI
-// does not write these files. Nothing else opens them for writing. Two writers
-// is how a partial file gets read by an agent halfway through a write.
+// Owner: 3A. The projection (src/service/projection.js) calls this every time
+// the log moves. Nothing else opens the file for writing. Two writers is how a
+// partial file gets read by an agent halfway through a write.
 //
 // The split with src/shared/review_format.js is deliberate and is the only
-// split: review_format renders the bytes and is pure, so the layer's Copy and
-// Export produce identical markdown with no service running (R10). This module
-// decides WHERE the bytes go and refuses everything D11 says to refuse.
+// split: review_format builds the projection and renders its bytes, and it is
+// pure, so the layer's Copy and Export produce their text with no helper
+// running (R10). This module decides WHERE the bytes go and refuses everything
+// D11 says to refuse.
 //
 // The path-safety rules, all of them from architecture D11:
 //
@@ -36,8 +37,10 @@ var crypto = require("node:crypto");
 var normalize = require("../shared/normalize.js");
 var reviewFormat = require("../shared/review_format.js");
 var failures = require("../shared/failures.js");
+var stateDir = require("./state_dir.js");
 
-// A CSPRNG hex source for the per-file fence delimiter (D10).
+// A CSPRNG hex source for the temp name below. The fencing delimiter it used to
+// serve is gone with the fences (D6, the agent contract is one JSON file).
 function randomHex(n) {
   return crypto.randomBytes(Math.ceil(n / 2)).toString("hex").slice(0, n);
 }
@@ -133,30 +136,42 @@ function writeAtomic(destPath, contents) {
 }
 
 /**
- * Writes both review files for a whole review. One pair per review (D1),
- * whatever the review root holds.
+ * Write `review.json` for one review, atomically.
  *
- * @param {Object} review the review projection: {id, targets: [...]}
- * @param {Object} options {reviewRoot} server-side configuration
- * @returns {Object} {md, json} absolute paths
+ * ONE FILE, not a pair. The markdown half belonged to the archived send model;
+ * the agent contract is one JSON file now (D6), and the human-readable text is
+ * produced by the library's own Copy and Export with no helper running (R10),
+ * which is why it is not written here at all.
+ *
+ * Two ways to name the destination, and both end in the same check:
+ *
+ *   {dir, review}   the helper's own state directory layout, which is the
+ *                   shipped path: <dir>/reviews/<review-id>/review.json
+ *   {reviewRoot}    an absolute directory set server-side, which is what the
+ *                   path-safety rules were written against and what a test
+ *                   points at a temporary folder
+ *
+ * The review root is never taken from a request in either shape: the caller is
+ * the helper, and the helper knows where its own state directory is.
+ *
+ * @param {Object} projection what src/service/projection.js built
+ * @param {{dir?: string, review?: string, reviewRoot?: string}} options
+ * @returns {string} the absolute path written
  */
-function writeReviewFiles(review, options) {
+function writeReviewJson(projection, options) {
   var opts = options || {};
   var reviewRoot = opts.reviewRoot;
+  if (!reviewRoot) {
+    if (!opts.dir || !opts.review) {
+      throw new Error("writeReviewJson: pass either {reviewRoot} or {dir, review}, both server-side");
+    }
+    // Creates the directory if it is not there, owner-only, and refuses a
+    // symlink at any level on the way in.
+    reviewRoot = stateDir.ensureReviewDir(opts.dir, opts.review);
+  }
 
-  var delimiter = reviewFormat.makeDelimiter(randomHex);
-  var markdown = reviewFormat.renderMarkdown(review, { delimiter: delimiter });
-  var json = JSON.stringify(reviewFormat.buildJson(review), null, 2) + "\n";
-
-  var mdPath = assertInsideRoot(reviewRoot, reviewFormat.FILE_NAMES.markdown);
-  var jsonPath = assertInsideRoot(reviewRoot, reviewFormat.FILE_NAMES.json);
-
-  // JSON first: it is authoritative, so an interrupted pair leaves the
-  // authoritative file newer than the fallback rather than the other way round.
-  writeAtomic(jsonPath, json);
-  writeAtomic(mdPath, markdown);
-
-  return { md: mdPath, json: jsonPath, delimiter: delimiter };
+  var destination = assertInsideRoot(reviewRoot, reviewFormat.FILE_NAMES.json);
+  return writeAtomic(destination, reviewFormat.stringifyReview(projection));
 }
 
 module.exports = {
@@ -164,5 +179,5 @@ module.exports = {
   fileBaseFor: fileBaseFor,
   assertInsideRoot: assertInsideRoot,
   writeAtomic: writeAtomic,
-  writeReviewFiles: writeReviewFiles
+  writeReviewJson: writeReviewJson
 };

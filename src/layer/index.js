@@ -61,6 +61,7 @@
         comments: require("./comments.js"),
         tabActive: require("./tab_active.js"),
         tabEdits: require("./tab_edits.js"),
+        tabDone: require("./tab_done.js"),
         sync: require("./sync.js"),
         editing: require("./editing.js"),
         protect: require("./protect.js"),
@@ -186,12 +187,31 @@
     // The Active tab's contents live INSIDE the rail's own Active pane, so
     // there is one rail on the page and one host under it.
     var tab = createTab();
+    // The Done tab, wired the same way: 3A's file draws what the Done pane
+    // holds, and it is also what an agent's answer reaches when the reply poll
+    // brings one back.
+    var done = createDoneTab();
 
     function createTab() {
       var made = ns.tabActive.createActiveTab({
         comments: comments,
         overlay: rail,
         host: rail.tabBody(ns.overlay.TAB.ACTIVE)
+      });
+      made.mount();
+      return made;
+    }
+
+    function createDoneTab() {
+      var made = ns.tabDone.createDoneTab({
+        store: store,
+        reviewId: reviewId,
+        comments: comments,
+        overlay: rail,
+        host: rail.tabBody(ns.overlay.TAB.DONE),
+        sync: function () {
+          return sync;
+        }
       });
       made.mount();
       return made;
@@ -214,6 +234,11 @@
       },
       onLimit: function (text) {
         rail.setLimitNote(text);
+      },
+      onReplies: function (events) {
+        // 1B's poll loop brings folded replies and rejected lines back; 3A's
+        // file decides what each one does to a card.
+        done.applyReplies(events);
       }
     });
 
@@ -401,12 +426,14 @@
       comments.closeAll();
       tab.unmount();
       editsTab.unmount();
+      done.unmount();
       rail.unmount();
       rail.mount();
       // The tab holds the pane node it was given, and that node went with the
       // old root, so the tab is built again against the new one.
       tab = createTab();
       editsTab = makeEditsTab();
+      done = createDoneTab();
       hostNode = doc.getElementById(markers.OVERLAY_ROOT_ID);
       merge();
       return !!hostNode;
@@ -453,6 +480,9 @@
       editsTab: function () {
         return editsTab;
       },
+      doneTab: function () {
+        return done;
+      },
       sync: sync,
       exporter: exporter,
       editing: editing,
@@ -476,6 +506,7 @@
         comments.teardown();
         tab.unmount();
         editsTab.unmount();
+        done.unmount();
         rail.unmount();
         if (win[GLOBAL] && win[GLOBAL].handle === handle) delete win[GLOBAL];
         current = null;
