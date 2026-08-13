@@ -445,6 +445,16 @@ Loopback is not a boundary, so the page proves itself on every request. The help
 | `review.end` | POST | `/lahe/v1/end` | per-review token |
 | `wait` | GET | `/lahe/v1/wait?review=&since=&timeout=` | per-review token |
 
+`window.claim` body is `{review, window_id, session_secret?, takeover?}` (D5's one-session-per-review).
+A grant returns `{granted:true, since, heartbeat_seconds, took_over, session_secret}`; the
+`session_secret` is minted server-side and handed to the holder only. A refusal returns
+`{granted:false, since, heartbeat_seconds, reason}` and discloses **neither the holder's window id nor
+its secret**: being the current holder is proven only by re-sending the secret on the heartbeat, so
+knowing a window id is not being that window. `takeover:true` is a same-token-trusted action (any
+window bearing the review token may depose the current holder, automatically once it goes stale or on
+the reviewer's explicit "Review here instead"); a fresh secret is minted on every takeover, so a
+deposed holder cannot re-assert with its old one.
+
 The checks, in order, each with the code it refuses under (`protocol.CHECKS`, and
 `protocol.checkRequest(request, config)` is the whole block as one pure function):
 

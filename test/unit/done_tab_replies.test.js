@@ -219,3 +219,29 @@ test("a reply for an item this browser does not hold changes nothing", () => {
   assert.deepEqual(applied, []);
   assert.equal(store.read(REVIEW).length, 0);
 });
+
+test("NEW-1: reopening bumps the rev, so a stale same-rev fold cannot re-bury the reopened item", () => {
+  const { store, rail, done } = setup();
+  const item = store.write(REVIEW, readyItem());
+  rail.upsertCard(item);
+
+  // The agent handles rev 1.
+  done.applyReplies([foldEvent(item)]);
+  assert.equal(store.readItem(REVIEW, item.id).state, record.STATE.HANDLED);
+
+  // The reviewer reopens it. Reopen must move the rev on, the way a reword does,
+  // so a reply that named the old rev can no longer apply to it.
+  const reopened = done.reopen(item.id);
+  assert.equal(reopened.state, record.STATE.READY);
+  assert.ok(reopened.rev > item.rev, "reopen bumps the rev");
+
+  // A duplicate or delayed fold, still naming the OLD rev, arrives. It must be
+  // refused rather than sending the just-reopened item back to Done.
+  const applied = done.applyReplies([foldEvent(item)]);
+  assert.equal(applied[0].kind, "refused", "the stale fold is refused, not applied");
+  assert.equal(
+    store.readItem(REVIEW, item.id).state,
+    record.STATE.READY,
+    "the reopen survives the stale fold"
+  );
+});

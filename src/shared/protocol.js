@@ -161,8 +161,8 @@
       auth: AUTH.REVIEW_TOKEN,
       mutating: true,
       why: "D5's second-window refusal for windows that cannot see each other's storage, plus the takeover",
-      request: "{review, window_id, takeover}",
-      response: "{granted, holder, since, heartbeat_seconds}"
+      request: "{review, window_id, session_secret?, takeover?}",
+      response: "grant {granted:true, since, heartbeat_seconds, took_over, session_secret}; refusal {granted:false, since, heartbeat_seconds, reason} (no holder id, no secret)"
     },
     {
       name: "review.end",

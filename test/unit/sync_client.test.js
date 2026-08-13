@@ -153,3 +153,158 @@ test("a card can carry a loud attachment, which is what an agent question needs"
   rail.setAgentMessage(item.id, { status: "handled", agent: "claude" });
   assert.equal(rail.getCard(item.id).agentMessage.loud, false);
 });
+
+const merge = require("../../src/shared/merge.js");
+
+function readyEdit(note) {
+  return record.newItem({
+    kind: record.KIND.COMMENT,
+    state: record.STATE.READY,
+    note: note,
+    page_origin: "http://127.0.0.1:4000",
+    page_path: "/roster"
+  });
+}
+
+test("finding 10: a flush the helper acknowledges stamps the item acknowledged, and clears it on the next write", async (t) => {
+  const store = storeModule.createStore();
+  const fetchStub = async (_url, config) => {
+    const sent = JSON.parse(config.body);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ accepted: sent.events.map((e) => e.event_id), seq: 1 })
+    };
+  };
+  const sync = syncModule.createSync({
+    review: "review-1",
+    token: "t",
+    helperOrigin: "http://127.0.0.1:7817",
+    store: store,
+    document: null,
+    window: null,
+    fetch: fetchStub
+  });
+  t.after(() => sync.stop());
+
+  const item = readyEdit("fix this sentence");
+  store.write("review-1", item);
+  sync.recordItem(item, { immediate: "ready" });
+  await sync.flush();
+
+  // The ack lives in the side-table, keyed by rev, not on the item itself (so it
+  // never leaks into a snapshot or an export).
+  assert.equal(store.acknowledgedRev("review-1", item.id), item.rev, "the helper confirmed this rev");
+  assert.equal(store.readItem("review-1", item.id).acknowledged, undefined, "and it is NOT a field on the item");
+
+  // With the browser copy acknowledged, the store wins fully at equal rev:
+  // SAME_REV_ACKED becomes reachable instead of the browser always winning.
+  const got = store.mergeWithHelper("review-1", [Object.assign({}, item)]);
+  assert.equal(got.reasons[item.id], merge.REASON.SAME_REV_ACKED);
+  // The merged item still carries no acknowledged field.
+  assert.equal(store.readItem("review-1", item.id).acknowledged, undefined);
+
+  // The next content write clears the ack: fresh keystrokes are unacknowledged
+  // again until the helper confirms them, so the browser wins on content again.
+  store.write("review-1", Object.assign({}, item, { note: "fix this sentence, and the next one" }));
+  assert.equal(store.acknowledgedRev("review-1", item.id), null, "a content write clears the ack");
+  const after = store.mergeWithHelper("review-1", [Object.assign({}, item)]);
+  assert.equal(after.reasons[item.id], merge.REASON.SAME_REV_UNACKED);
+});
+
+test("finding 1: a window refused the claim goes read-only and writes nothing to the shared bucket", async (t) => {
+  const realStore = storeModule.createStore();
+  // A store whose window claim is refused, the way the client Web Lock refuses a
+  // second tab sharing one storage bucket.
+  const refusingStore = Object.assign({}, realStore, {
+    claimWindow: () =>
+      Promise.resolve({
+        acquired: false,
+        holder: { window_id: "the-other-window" },
+        windowId: realStore.windowId,
+        failure: { code: "SECOND_WINDOW_REFUSED", message: "held elsewhere" },
+        reason: "This review is already open in another window."
+      })
+  });
+  let refusedInfo = null;
+  const sync = syncModule.createSync({
+    review: "review-1",
+    token: "t",
+    helperOrigin: "http://127.0.0.1:7817",
+    store: refusingStore,
+    document: null,
+    window: null,
+    fetch: null,
+    onRefused: (info) => {
+      refusedInfo = info;
+    }
+  });
+  t.after(() => sync.stop());
+
+  await sync.start();
+  assert.equal(sync.isReadOnly(), true, "a refused window is read-only");
+  assert.ok(refusedInfo, "the boot layer is told to go read-only and show the refusal panel");
+
+  const before = realStore.pendingEvents("review-1").length;
+  const result = sync.recordItem(draft("trying to type in a refused window"));
+  assert.equal(result, null, "the write path is a no-op in a refused window");
+  assert.equal(
+    realStore.pendingEvents("review-1").length,
+    before,
+    "nothing the refused window typed reached the shared outbox"
+  );
+});
+
+test("finding 12/NEW-2: the refused window's takeover makes it the holder and lifts read-only", async (t) => {
+  const realStore = storeModule.createStore();
+  const refusingStore = Object.assign({}, realStore, {
+    // The client lock refuses (a second tab sharing storage). start() goes
+    // read-only without ever consulting the helper.
+    claimWindow: () =>
+      Promise.resolve({
+        acquired: false,
+        holder: { window_id: "the-other-window" },
+        windowId: realStore.windowId,
+        failure: { code: "SECOND_WINDOW_REFUSED", message: "held elsewhere" },
+        reason: "This review is already open in another window."
+      })
+  });
+  // The helper grants the explicit takeover (same-token-trusted, NEW-2).
+  const fetchStub = async (url, config) => {
+    const body = JSON.parse(config.body);
+    if (String(url).indexOf("/window") !== -1 && body.takeover === true) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ granted: true, took_over: true, session_secret: "s2", heartbeat_seconds: 10, since: "now" })
+      };
+    }
+    return { ok: false, status: 0, json: async () => null };
+  };
+  let held = 0;
+  const sync = syncModule.createSync({
+    review: "review-1",
+    token: "t",
+    helperOrigin: "http://127.0.0.1:7817",
+    store: refusingStore,
+    document: null,
+    window: null,
+    fetch: fetchStub,
+    onHeld: () => {
+      held += 1;
+    }
+  });
+  t.after(() => sync.stop());
+
+  await sync.start();
+  assert.equal(sync.isReadOnly(), true, "refused first: read-only");
+
+  const result = await sync.takeover();
+  assert.equal(result.ok, true, "the takeover is granted");
+  assert.equal(sync.isReadOnly(), false, "and read-only is lifted");
+  assert.equal(held, 1, "onHeld fires so boot re-installs the edit and comment handlers");
+
+  // The window can write again now that it is the holder.
+  const ev = sync.recordItem(draft("now I can type"));
+  assert.ok(ev, "the write path is live again");
+});

@@ -220,6 +220,33 @@
     var statusLog = [];
     var counters = { merges: 0, cardsDrawn: 0 };
 
+    // The window-session state machine's boot half (D5, findings 1/12, NEW-2). A
+    // window that loses the claim goes READ-ONLY: its edit and comment handlers
+    // are torn down so it writes nothing to the shared bucket, and the refusal
+    // panel is shown. Its button re-claims with a takeover, and on success the
+    // handlers are re-installed and the panel hidden.
+    var readOnlyActive = false;
+
+    function enterReadOnly(info) {
+      if (readOnlyActive) {
+        rail.showRefusal(info);
+        return;
+      }
+      readOnlyActive = true;
+      comments.closeAll();
+      comments.teardown();
+      editing.teardown();
+      rail.showRefusal(info);
+    }
+
+    function exitReadOnly() {
+      if (!readOnlyActive) return;
+      readOnlyActive = false;
+      comments.bind({ page: page });
+      editing.bind({ page: page });
+      rail.hideRefusal();
+    }
+
     var sync = opts.sync || ns.sync.createSync({
       review: reviewId,
       token: config.token,
@@ -235,11 +262,32 @@
       onLimit: function (text) {
         rail.setLimitNote(text);
       },
+      onRefused: function (info) {
+        enterReadOnly(info);
+      },
+      onHeld: function () {
+        exitReadOnly();
+      },
       onReplies: function (events) {
         // 1B's poll loop brings folded replies and rejected lines back; 3A's
         // file decides what each one does to a card.
         done.applyReplies(events);
       }
+    });
+
+    // The refusal panel's "Review here instead" button (finding 12), through the
+    // same action seam Copy and Export use.
+    rail.onAction("takeover", function () {
+      rail.markRefusalPending();
+      return sync.takeover().then(function (result) {
+        // On success the sync client's onHeld already hid the panel and re-bound
+        // the handlers. On failure the review is still held elsewhere: say so and
+        // leave the button pressable again.
+        if (!result || !result.ok) {
+          rail.showRefusal({ reason: (result && result.reason) || "The review is still open in another window." });
+        }
+        return result;
+      });
     });
 
     // Copy and Export (3C). The rail holds the buttons and hands the click on;
@@ -505,6 +553,10 @@
       },
       counters: counters,
       teardown: function () {
+        // sync.stop() first (finding 13): it clears the poll timer, the
+        // heartbeat and liveness timers, and releases the window lock and the
+        // window-registered unload listeners, all of which used to leak.
+        sync.stop();
         injector.teardown();
         if (pageObserver) pageObserver.disconnect();
         pageObserver = null;

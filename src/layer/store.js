@@ -53,8 +53,17 @@
   var KEY_PREFIX = "lahe.items.v1:";
   var OUTBOX_PREFIX = "lahe.outbox.v1:";
   var CHIPS_PREFIX = "lahe.chips.v1:";
+  var ACKED_PREFIX = "lahe.acked.v1:";
   var HOLDER_PREFIX = "lahe.holder.v1:";
   var LOCK_PREFIX = "lahe.window.v1:";
+  // The window IDENTITY and the helper SESSION SECRET live in sessionStorage,
+  // not localStorage: sessionStorage survives a same-tab navigation (page 1 to
+  // /clients of one review is the same reviewer, not a second window) but a
+  // genuinely new tab gets a fresh sessionStorage and therefore a new identity.
+  // That is exactly the line the helper session needs: a navigated reload proves
+  // it is the holder with the secret it kept, and a second tab has neither.
+  var WINDOW_ID_KEY = "lahe.window.id.v1";
+  var SESSION_SECRET_PREFIX = "lahe.session.v1:";
 
   // The storage key for a review. Review id, never a filename, never a page.
   function keyFor(reviewId) {
@@ -89,11 +98,57 @@
     };
   }
 
+  // A private in-memory backing, the fallback when there is no sessionStorage
+  // (Node, an old browser). Same tiny surface defaultBacking exposes.
+  function memBacking() {
+    var mem = Object.create(null);
+    return {
+      getItem: function (k) {
+        return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null;
+      },
+      setItem: function (k, v) {
+        mem[k] = String(v);
+      },
+      removeItem: function (k) {
+        delete mem[k];
+      }
+    };
+  }
+
+  // The stable, per-tab window id. Read from sessionStorage so it survives a
+  // navigation; minted and stored once when absent.
+  function stableWindowId(sessionBacking) {
+    try {
+      var existing = sessionBacking.getItem(WINDOW_ID_KEY);
+      if (existing) return existing;
+    } catch (err) {
+      // sessionStorage can throw in a partitioned/denied context. Fall back to a
+      // fresh id rather than failing the whole layer.
+      return record.randomId("win");
+    }
+    var minted = record.randomId("win");
+    try {
+      sessionBacking.setItem(WINDOW_ID_KEY, minted);
+    } catch (err) {
+      /* best effort: a denied sessionStorage just means the id is per-load */
+    }
+    return minted;
+  }
+
   function createStore(options) {
     var opts = options || {};
     var backing = opts.backing || defaultBacking();
-    // A window identifies itself so a refusal can name the other one.
-    var windowId = opts.windowId || record.randomId("win");
+    // sessionStorage in a browser, an injected object in a test, a private mem
+    // object otherwise. This is where the window identity and the session secret
+    // live, so both survive a same-tab navigation but not a new tab.
+    var sessionBacking =
+      opts.sessionBacking ||
+      (typeof sessionStorage !== "undefined" && sessionStorage ? sessionStorage : memBacking());
+    // A window identifies itself so a refusal can name the other one, and the id
+    // is STABLE across a same-tab navigation (read from sessionStorage), so the
+    // helper recognizes a reload of one review as the same window rather than a
+    // second one. A new tab has a fresh sessionStorage and mints a new id.
+    var windowId = opts.windowId || stableWindowId(sessionBacking);
     var locks = opts.locks || (typeof navigator !== "undefined" && navigator ? navigator.locks : null);
     var releaseHeldLock = null;
 
@@ -143,6 +198,12 @@
     // silently dropped write is the failure this tool exists to remove.
     function write(reviewId, item) {
       record.validateItem(item);
+      // A content write means this browser holds keystrokes the helper has not
+      // necessarily confirmed at this revision, so any stale acknowledgement is
+      // cleared here (finding 10, "clear on the next content write"). The ack is
+      // kept in a side-table, NOT on the item, so it never leaks into a snapshot,
+      // an export, or review.json; merge reads it through a transient decoration.
+      clearAcknowledged(reviewId, item[record.FIELD.ID]);
       var items = readAll(reviewId);
       for (var i = 0; i < items.length; i += 1) {
         if (items[i][record.FIELD.ID] === item[record.FIELD.ID]) {
@@ -173,6 +234,50 @@
       var next = record.bumpRev(item, changes || {});
       write(reviewId, next);
       return next;
+    }
+
+    // The acknowledged side-table: itemId -> the rev the helper has confirmed.
+    // Kept apart from the items so the ack is never serialized as content. merge
+    // reads it via the transient decoration in mergeWithHelper (finding 10).
+    function ackedKey(reviewId) {
+      return ACKED_PREFIX + reviewId;
+    }
+
+    function readAcked(reviewId) {
+      var got = readJson(ackedKey(reviewId), null);
+      return got && typeof got === "object" ? got : {};
+    }
+
+    // Stamp an item acknowledged when the helper has confirmed the event that
+    // carried THIS revision (finding 10). merge.js lets the store win fully at
+    // equal rev when it is acknowledged (SAME_REV_ACKED); without it the browser
+    // always won at equal rev and that branch was unreachable. The stored item's
+    // current rev must match, so a confirmation of an older revision cannot mark
+    // a newer one.
+    function markAcknowledged(reviewId, id, rev) {
+      var item = readItem(reviewId, id);
+      if (!item) return false;
+      if (typeof rev === "number" && item[record.FIELD.REV] !== rev) return false;
+      var acked = readAcked(reviewId);
+      if (acked[id] === item[record.FIELD.REV]) return true;
+      acked[id] = item[record.FIELD.REV];
+      writeJson(ackedKey(reviewId), acked);
+      return true;
+    }
+
+    function clearAcknowledged(reviewId, id) {
+      var acked = readAcked(reviewId);
+      if (!Object.prototype.hasOwnProperty.call(acked, id)) return false;
+      delete acked[id];
+      writeJson(ackedKey(reviewId), acked);
+      return true;
+    }
+
+    // The rev the helper has confirmed for an item, or null. Test-facing; the
+    // product reads this only through the merge.
+    function acknowledgedRev(reviewId, id) {
+      var acked = readAcked(reviewId);
+      return Object.prototype.hasOwnProperty.call(acked, id) ? acked[id] : null;
     }
 
     function readItem(reviewId, id) {
@@ -214,9 +319,26 @@
     // written back synchronously, so a reload after a merge shows the merged
     // truth rather than re-running the merge from stale halves.
     function mergeWithHelper(reviewId, helperItems) {
-      var got = merge.mergeLists(readAll(reviewId), helperItems || []);
-      writeAll(reviewId, got.items);
-      return got;
+      // Decorate the browser items with a TRANSIENT acknowledged flag from the
+      // side-table, so merge.js can reach SAME_REV_ACKED (finding 10), then strip
+      // the flag from the results so nothing durable ever carries it.
+      var acked = readAcked(reviewId);
+      var local = readAll(reviewId).map(function (item) {
+        if (acked[item[record.FIELD.ID]] === item[record.FIELD.REV]) {
+          return Object.assign({}, item, { acknowledged: true });
+        }
+        return item;
+      });
+      var got = merge.mergeLists(local, helperItems || []);
+      var cleaned = got.items.map(function (item) {
+        if (item && item.acknowledged !== undefined) {
+          item = Object.assign({}, item);
+          delete item.acknowledged;
+        }
+        return item;
+      });
+      writeAll(reviewId, cleaned);
+      return { items: cleaned, reasons: got.reasons };
     }
 
     // -------------------------------------------------------------------------
@@ -402,6 +524,32 @@
       return failures.failure("SECOND_WINDOW_REFUSED", detail || null);
     }
 
+    // The helper session secret this window holds for a review, kept in
+    // sessionStorage so a same-tab navigation can re-present it and be recognized
+    // as the holder rather than refused as a second window (D5). A new tab has no
+    // secret and is correctly refused while the first tab is alive.
+    function sessionSecretKey(reviewId) {
+      return SESSION_SECRET_PREFIX + reviewId;
+    }
+
+    function sessionSecretFor(reviewId) {
+      try {
+        return sessionBacking.getItem(sessionSecretKey(reviewId)) || null;
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function rememberSessionSecret(reviewId, secret) {
+      try {
+        if (secret) sessionBacking.setItem(sessionSecretKey(reviewId), secret);
+        else sessionBacking.removeItem(sessionSecretKey(reviewId));
+      } catch (err) {
+        /* best effort */
+      }
+      return secret || null;
+    }
+
     return {
       windowId: windowId,
       keyFor: keyFor,
@@ -410,6 +558,8 @@
       writeDraft: writeDraft,
       writeRevision: writeRevision,
       readItem: readItem,
+      markAcknowledged: markAcknowledged,
+      acknowledgedRev: acknowledgedRev,
       remove: remove,
       reviews: reviews,
       mergeWithHelper: mergeWithHelper,
@@ -422,7 +572,9 @@
       describeHolder: describeHolder,
       claimWindow: claimWindow,
       releaseWindow: releaseWindow,
-      refusalFailure: refusalFailure
+      refusalFailure: refusalFailure,
+      sessionSecretFor: sessionSecretFor,
+      rememberSessionSecret: rememberSessionSecret
     };
   }
 

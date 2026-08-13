@@ -306,6 +306,21 @@
     ".limit{font-size:11.5px;color:var(--ink-faint);line-height:1.4}",
     ".limit:empty{display:none}",
 
+    // The refusal panel (D5): shown when this window lost the claim and is
+    // read-only. It carries the reason and the one control that undoes it,
+    // "Review here instead", which moves the review to this window.
+    ".refusal{display:none;flex-direction:column;gap:8px;padding:11px 12px;border-radius:var(--radius-sm);",
+    "background:var(--warn-wash);border:1px solid rgba(180,120,30,.28);margin-bottom:2px}",
+    ".refusal[data-shown='true']{display:flex}",
+    ".refusal__title{font-size:12px;font-weight:700;color:var(--warn);letter-spacing:.02em}",
+    ".refusal__reason{font-size:11.5px;color:var(--ink-soft);line-height:1.45;",
+    "overflow-wrap:anywhere;white-space:pre-wrap}",
+    ".refusal__btn{align-self:flex-start;font-size:12px;font-weight:600;padding:6px 12px;border-radius:8px;",
+    "background:var(--accent);border:1px solid var(--accent);color:#fff;cursor:pointer}",
+    ":host([data-lahe-scheme='dark']) .refusal__btn{color:#12151a}",
+    ".refusal__btn:hover{filter:brightness(1.06)}",
+    ".refusal__btn[disabled]{opacity:.6;cursor:default}",
+
     // Copy and export are ALWAYS visible, not only when nothing is connected
     // (D10): when something is wrong is exactly when the reviewer cannot tell.
     ".actions{display:flex;gap:7px}",
@@ -462,6 +477,22 @@
       var chipList = el("div", "chips");
       foot.appendChild(chipList);
 
+      // The refusal panel (D5, finding 12). Hidden until this window is refused;
+      // its button re-claims the review with a takeover.
+      var refusal = el("div", "refusal");
+      refusal.setAttribute("role", "note");
+      var refusalTitle = el("div", "refusal__title", "This review is open in another window");
+      var refusalReason = el("div", "refusal__reason", "");
+      var refusalBtn = el("button", "refusal__btn", "Review here instead");
+      refusalBtn.setAttribute("type", "button");
+      refusalBtn.addEventListener("click", function () {
+        runAction("takeover");
+      });
+      refusal.appendChild(refusalTitle);
+      refusal.appendChild(refusalReason);
+      refusal.appendChild(refusalBtn);
+      foot.appendChild(refusal);
+
       var statusRow = el("div", "status");
       statusRow.setAttribute("role", "status");
       statusRow.appendChild(el("span", "status__dot"));
@@ -527,6 +558,9 @@
         statusRow: statusRow,
         statusText: statusText,
         limit: limit,
+        refusal: refusal,
+        refusalReason: refusalReason,
+        refusalBtn: refusalBtn,
         pill: pill,
         pillCount: pillCount
       };
@@ -1075,6 +1109,38 @@
       return limitText;
     }
 
+    // D5's refusal panel and its "Review here instead" button (finding 12). The
+    // click is wired through onAction("takeover"), the same seam Copy and Export
+    // use, so boot owns what the button actually does.
+    function showRefusal(info) {
+      var i = info || {};
+      if (!dom) return false;
+      dom.refusalReason.textContent = i.reason || "This review is already open in another window.";
+      dom.refusalBtn.disabled = false;
+      dom.refusalBtn.textContent = "Review here instead";
+      dom.refusal.setAttribute("data-shown", "true");
+      return true;
+    }
+
+    function hideRefusal() {
+      if (!dom) return false;
+      dom.refusal.removeAttribute("data-shown");
+      return true;
+    }
+
+    // While the takeover request is in flight, the button says so and cannot be
+    // pressed twice.
+    function markRefusalPending() {
+      if (!dom) return false;
+      dom.refusalBtn.disabled = true;
+      dom.refusalBtn.textContent = "Moving the review here…";
+      return true;
+    }
+
+    function refusalShown() {
+      return !!(dom && dom.refusal.getAttribute("data-shown") === "true");
+    }
+
     function renderStatus() {
       if (!dom) return;
       dom.statusRow.setAttribute("data-status", status || "");
@@ -1206,6 +1272,10 @@
       countFor: countFor,
       failures: failuresApi,
       onAction: onAction,
+      showRefusal: showRefusal,
+      hideRefusal: hideRefusal,
+      markRefusalPending: markRefusalPending,
+      refusalShown: refusalShown,
       setStatusLine: setStatusLine,
       getStatusLine: getStatusLine,
       statusText: statusText,

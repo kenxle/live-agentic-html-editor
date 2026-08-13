@@ -154,7 +154,7 @@ test("a kill -9 in the middle of the work leaves a readable history", async () =
   );
 });
 
-test("one session per review, refused by name, taken over when the heartbeat goes quiet", () => {
+test("one session per review, refused without disclosing the holder, taken over when the heartbeat goes quiet", () => {
   const dir = tempDir();
   let now = 1000000;
   const log = logModule.createEventLog({ dir: dir });
@@ -164,17 +164,23 @@ test("one session per review, refused by name, taken over when the heartbeat goe
   const first = reviews.claimWindow(REVIEW, { window_id: "w1" });
   assert.equal(first.granted, true);
   assert.equal(first.heartbeat_seconds, reviewsModule.HEARTBEAT_SECONDS);
+  // The grant hands the holder a session secret, and that is the only thing that
+  // proves possession afterwards.
+  assert.equal(typeof first.session_secret, "string");
+  assert.ok(first.session_secret.length > 0);
 
-  // A second window, while the first is alive, is refused with a reason NAMING
-  // the first. A refusal the reviewer cannot act on is just a broken tab.
+  // A second window, while the first is alive, is refused. The refusal discloses
+  // NOTHING about the holder: not its window id, not its secret.
   const second = reviews.claimWindow(REVIEW, { window_id: "w2" });
   assert.equal(second.granted, false);
-  assert.equal(second.holder, "w1");
-  assert.match(second.reason, /already open in another window \(w1\)/);
+  assert.equal(second.holder, undefined, "the holder's window id must not leak in a refusal");
+  assert.equal(second.session_secret, undefined, "the holder's secret must never leak");
+  assert.match(second.reason, /already open in another window/);
 
-  // The first window's heartbeat keeps it alive.
+  // The first window's heartbeat keeps it alive, and the heartbeat is the SECRET,
+  // not the window id.
   now += 20000;
-  assert.equal(reviews.claimWindow(REVIEW, { window_id: "w1" }).granted, true);
+  assert.equal(reviews.claimWindow(REVIEW, { window_id: "w1", session_secret: first.session_secret }).granted, true);
   assert.equal(reviews.claimWindow(REVIEW, { window_id: "w2" }).granted, false);
 
   // Then the first window's tab dies. After the stale window, the second one
@@ -184,10 +190,68 @@ test("one session per review, refused by name, taken over when the heartbeat goe
   const takeover = reviews.claimWindow(REVIEW, { window_id: "w2" });
   assert.equal(takeover.granted, true);
   assert.equal(takeover.took_over, true);
+  assert.equal(typeof takeover.session_secret, "string");
+  assert.notEqual(takeover.session_secret, first.session_secret, "a takeover mints a fresh secret");
   assert.equal(reviews.holderOf(REVIEW).window_id, "w2");
 
-  // And now the roles are reversed: the old holder is the one refused.
-  assert.equal(reviews.claimWindow(REVIEW, { window_id: "w1" }).granted, false);
+  // And now the roles are reversed: the old holder's OLD secret is refused, because
+  // the takeover minted a new one.
+  assert.equal(reviews.claimWindow(REVIEW, { window_id: "w1", session_secret: first.session_secret }).granted, false);
+});
+
+test("finding 3: a rival that knows the holder's window id but not its secret is refused, not fed the heartbeat", () => {
+  const dir = tempDir();
+  let now = 1000000;
+  const log = logModule.createEventLog({ dir: dir });
+  const reviews = reviewsModule.createReviews({ dir: dir, log: log, now: () => now });
+  reviews.create({ id: REVIEW });
+
+  const holder = reviews.claimWindow(REVIEW, { window_id: "holder-win" });
+  assert.equal(holder.granted, true);
+
+  // The rival presents the holder's exact window id (as if it had been disclosed
+  // in a 409 body, which is exactly what used to happen). Without the secret it
+  // is NOT the holder: it is refused, and it cannot bump the holder's last_seen.
+  now += 5000;
+  const rival = reviews.claimWindow(REVIEW, { window_id: "holder-win" });
+  assert.equal(rival.granted, false, "presenting the holder's id is not proof of being the holder");
+
+  // The rival's rejected claim must not have refreshed the holder's liveness. The
+  // real holder proves itself with the secret only it holds.
+  const stillHolder = reviews.claimWindow(REVIEW, { window_id: "holder-win", session_secret: holder.session_secret });
+  assert.equal(stillHolder.granted, true);
+});
+
+test("NEW-3: a corrupt meta.json on restart is recovered from the log, loudly, not silently dropped", () => {
+  const dir = tempDir();
+  const log = logModule.createEventLog({ dir: dir });
+  const reviews = reviewsModule.createReviews({ dir: dir, log: log });
+  const created = reviews.create({ id: REVIEW, origins: ["http://127.0.0.1:3000"] });
+
+  // Corrupt the meta.json the way an interrupted write or a bad disk would.
+  fs.writeFileSync(stateDirModule.metaPath(dir, REVIEW), "{ this is not json");
+
+  // A loud startup error must reach the operator, not just a quiet diagnostic.
+  const errors = [];
+  const originalError = console.error;
+  console.error = (...args) => errors.push(args.join(" "));
+  let restarted;
+  try {
+    restarted = reviewsModule.createReviews({ dir: dir, log: logModule.createEventLog({ dir: dir }) });
+    restarted.loadFromDisk();
+  } finally {
+    console.error = originalError;
+  }
+
+  // The review is NOT silently de-registered: it is recovered from the log, with
+  // the same token the page still holds, so its edits stay reachable.
+  assert.ok(restarted.get(REVIEW), "the review is recovered, not dropped");
+  assert.equal(restarted.get(REVIEW).token, created.token);
+  assert.deepEqual(restarted.get(REVIEW).origins, ["http://127.0.0.1:3000"]);
+  assert.ok(
+    errors.some((line) => /STARTUP ERROR/.test(line) && line.includes(REVIEW)),
+    "the operator sees a loud startup error naming the review"
+  );
 });
 
 test("a review's token and origins persist across a restart", () => {

@@ -86,6 +86,13 @@
     var onFailure = opts.onFailure || function () {};
     var onReplies = opts.onReplies || function () {};
     var onLimit = opts.onLimit || function () {};
+    // The window-session state machine (D5, findings 1/2/3/12, NEW-2). onRefused
+    // fires when this window loses the claim (client lock or helper); the boot
+    // layer goes READ-ONLY and shows the refusal panel. onHeld fires only on the
+    // TRANSITION out of read-only into holder (a takeover), so boot re-installs
+    // the edit and comment handlers it tore down.
+    var onRefused = opts.onRefused || function () {};
+    var onHeld = opts.onHeld || function () {};
 
     var state = STATE.IDLE;
     var status = null;
@@ -96,6 +103,15 @@
     var debounceTimer = null;
     var retryTimer = null;
     var pollTimer = null;
+    // The window session. readOnly gates every write (finding 1); sessionSecret
+    // is what proves this window is the holder on a heartbeat (finding 3); the
+    // two timers are the holder's heartbeat (finding 2) and the refused window's
+    // liveness poll (NEW-2), both stopped in sync.stop (finding 13).
+    var readOnly = false;
+    var sessionSecret = null;
+    var heartbeatTimer = null;
+    var livenessTimer = null;
+    var heartbeatMs = 10000;
     var flushing = false;
     var deliveredOnce = false;
     var cursor = 0;
@@ -188,6 +204,11 @@
      * @param {{immediate?: string}} [options] one of protocol.FLUSH.IMMEDIATE_ON
      */
     function recordItem(item, options) {
+      // A refused window is READ-ONLY (finding 1): it writes nothing to the
+      // shared bucket, so it cannot clobber the holder's work last-keystroke-
+      // wins. Boot also tears down the edit/comment handlers, so in practice
+      // nothing calls this; the guard is the belt to that suspenders.
+      if (readOnly) return null;
       var opts2 = options || {};
       var event = eventFor(item);
       store.queueEvent(requireReview(), event);
@@ -302,6 +323,24 @@
         if (result.ok) {
           var accepted = (result.body && result.body.accepted) || [];
           store.acknowledge(requireReview(), accepted);
+          // Finding 10: beside dropping the accepted events from the outbox,
+          // stamp the item acknowledged when the helper named the event carrying
+          // its current rev, so merge.js can let the store win at equal rev. The
+          // event carries its item id and rev; markAcknowledged guards the rev.
+          if (typeof store.markAcknowledged === "function" && accepted.length) {
+            var acceptedIds = Object.create(null);
+            accepted.forEach(function (id) {
+              acceptedIds[id] = true;
+            });
+            events.forEach(function (ev) {
+              if (!acceptedIds[ev.event_id]) return;
+              var itemId = ev[protocol.EVENT_FIELD.ITEM];
+              var rev = ev[protocol.EVENT_FIELD.REV];
+              if (itemId && typeof rev === "number") {
+                store.markAcknowledged(requireReview(), itemId, rev);
+              }
+            });
+          }
           deliveredOnce = true;
           counters.acknowledged += accepted.length;
           lastFailure = null;
@@ -426,10 +465,29 @@
     // Lifecycle
     // -------------------------------------------------------------------------
 
+    // The secret this window kept from a previous page of the same review, if
+    // any. Presenting it on the first claim is what turns a same-tab navigation
+    // into a recognized heartbeat instead of a refused second window (D5).
+    function loadPersistedSecret() {
+      if (store && typeof store.sessionSecretFor === "function") {
+        sessionSecret = store.sessionSecretFor(requireReview()) || null;
+      }
+      return sessionSecret;
+    }
+
+    function rememberSecret(secret) {
+      sessionSecret = secret || null;
+      if (store && typeof store.rememberSessionSecret === "function") {
+        store.rememberSessionSecret(requireReview(), sessionSecret);
+      }
+      return sessionSecret;
+    }
+
     function start() {
       if (started) return Promise.resolve(lock);
       started = true;
       requireReview();
+      loadPersistedSecret();
 
       if (doc && typeof doc.addEventListener === "function") {
         doc.addEventListener("securitypolicyviolation", onPolicyViolation);
@@ -470,43 +528,201 @@
           // Whichever way it went, the case nothing can refuse is said out
           // loud rather than quietly claimed as covered.
           onLimit(overlay.LIMIT_SEPARATE_STORAGE_NO_HELPER);
+          finalizeClaim();
           return result;
         });
     }
 
+    // The window.claim request, in one place, so the initial claim, the
+    // heartbeat, the liveness poll and the manual takeover all speak the same
+    // wire. `body` decides which: a heartbeat carries the session_secret, a
+    // takeover carries takeover:true, a first claim or liveness poll carries
+    // neither.
+    function claimRequest(body) {
+      return request("window.claim", { method: "POST", body: JSON.stringify(body) }).then(parseClaim);
+    }
+
+    function parseClaim(result) {
+      if (result.ok) {
+        var b = result.body || {};
+        return {
+          granted: true,
+          refused: false,
+          tookOver: b.took_over === true,
+          sessionSecret: b.session_secret || null,
+          heartbeatSeconds: typeof b.heartbeat_seconds === "number" ? b.heartbeat_seconds : null,
+          body: b
+        };
+      }
+      var body = result.body || {};
+      var code = body.error && body.error.code;
+      // A refusal has a body that SAYS refused. A helper that is simply down is a
+      // rejected fetch with no body, and that is NOT a refusal: locking a window
+      // out on a check that never ran is the work-losing outcome D5 forbids.
+      var refused = body.granted === false || code === "PROTO_SECOND_WINDOW";
+      return { granted: false, refused: refused, body: body, error: result.error };
+    }
+
+    // The refusal, with no holder id to read anymore (finding 3): the server
+    // stopped disclosing it, so the reason is the server's own sentence.
+    function reasonFromBody(body) {
+      body = body || {};
+      return (
+        "The helper says " +
+        (body.reason || (body.error && body.error.detail) || "this review is already open in another window.")
+      );
+    }
+
     function claimWithHelper() {
-      return request("window.claim", {
-        method: "POST",
-        body: JSON.stringify({ review: requireReview(), window_id: store.windowId, takeover: false })
-      }).then(function (result) {
-        if (result.ok) {
+      // The first claim carries any secret this window kept from an earlier page
+      // of this review (a same-tab navigation), so the helper recognizes it as
+      // the holder's heartbeat rather than refusing it as a second window.
+      return claimRequest({
+        review: requireReview(),
+        window_id: store.windowId,
+        session_secret: sessionSecret || undefined,
+        takeover: false
+      }).then(function (parsed) {
+        if (parsed.granted) {
           lock.helperGranted = true;
+          rememberSecret(parsed.sessionSecret);
+          if (parsed.heartbeatSeconds) heartbeatMs = parsed.heartbeatSeconds * 1000;
           return lock;
         }
-        // The refusal, in the shape protocol.js's route table names:
-        // {granted, holder, since, heartbeat_seconds} with a reason, answered
-        // 409. The error-body form is read too, because a helper that refuses
-        // with protocol.errorBody is still saying the same thing.
-        var body = result.body || {};
-        var code = body.error && body.error.code;
-        var refused = body.granted === false || code === "PROTO_SECOND_WINDOW";
-        if (refused) {
+        if (parsed.refused) {
           lock.acquired = false;
           lock.refusedBy = "helper";
-          lock.reason =
-            "The helper says " +
-            (body.reason ||
-              (body.error && body.error.detail) ||
-              "this review is already open in another window" +
-                (body.holder ? " (" + body.holder + ")" : "") +
-                ".");
+          lock.reason = reasonFromBody(parsed.body);
           raise(failures.failure("SECOND_WINDOW_REFUSED", lock.reason));
           return lock;
         }
-        // The helper being unreachable is not a refusal. A window locked out
-        // by a check that never ran is a work-losing outcome.
+        // The helper being unreachable is not a refusal. Held optimistically; the
+        // heartbeat will claim properly once the helper answers.
         lock.helperGranted = false;
         return lock;
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // The window-session state machine (D5)
+    // -------------------------------------------------------------------------
+
+    function finalizeClaim() {
+      if (!lock.acquired) {
+        // Refused, by the client lock or the helper. READ-ONLY, and a light
+        // liveness poll so the holder going quiet is still noticed here.
+        enterReadOnly();
+      } else {
+        // Held. Start the heartbeat so the helper keeps seeing this window; a
+        // holder that never re-posts loses its own review after STALE_AFTER_MS.
+        startHeartbeat();
+      }
+    }
+
+    function enterReadOnly() {
+      if (readOnly) return;
+      readOnly = true;
+      stopHeartbeat();
+      onRefused({ reason: lock.reason, refusedBy: lock.refusedBy });
+      startLiveness();
+    }
+
+    // The read-only window becomes the holder: on auto-takeover (holder went
+    // stale, granted by the liveness poll) or on the reviewer's Review-here.
+    function becomeHolder(parsed) {
+      readOnly = false;
+      rememberSecret(parsed.sessionSecret);
+      if (parsed.heartbeatSeconds) heartbeatMs = parsed.heartbeatSeconds * 1000;
+      lock.acquired = true;
+      lock.helperGranted = true;
+      lock.refusedBy = null;
+      lock.reason = null;
+      lastFailure = null;
+      stopLiveness();
+      // Re-grab the client lock too, for the shared-storage case: the old holder
+      // released it when it died or was deposed. Best-effort and unawaited.
+      if (store && typeof store.claimWindow === "function") store.claimWindow(requireReview());
+      startHeartbeat();
+      recomputeStatus();
+      onHeld();
+    }
+
+    /**
+     * The reviewer's "Review here instead" (finding 12). It re-posts the claim
+     * with takeover:true, which the helper honors for any token-bearing window
+     * (NEW-2's decision: takeover is same-token-trusted, not secret-proven),
+     * deposing even a live holder. On success this window becomes the holder.
+     *
+     * @returns {Promise<{ok: boolean, reason?: string}>}
+     */
+    function takeover() {
+      return claimRequest({ review: requireReview(), window_id: store.windowId, takeover: true }).then(function (parsed) {
+        if (parsed.granted) {
+          becomeHolder(parsed);
+          return { ok: true };
+        }
+        return { ok: false, reason: parsed.refused ? reasonFromBody(parsed.body) : "the helper could not be reached" };
+      });
+    }
+
+    function startHeartbeat() {
+      if (heartbeatTimer) return heartbeatTimer;
+      // harness-allow-timer: the holder's heartbeat. The helper calls a holder
+      // lost after STALE_AFTER_MS of silence, so re-posting the claim on this
+      // cadence is what keeps this window the holder (finding 2).
+      heartbeatTimer = setInterval(postHeartbeat, heartbeatMs);
+      return heartbeatTimer;
+    }
+
+    function stopHeartbeat() {
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
+    }
+
+    function postHeartbeat() {
+      claimRequest({
+        review: requireReview(),
+        window_id: store.windowId,
+        session_secret: sessionSecret,
+        takeover: false
+      }).then(function (parsed) {
+        if (parsed.granted) {
+          lock.helperGranted = true;
+          if (parsed.sessionSecret) rememberSecret(parsed.sessionSecret);
+          return;
+        }
+        if (parsed.refused) {
+          // Deposed: another window ran Review-here-instead. Drop to read-only
+          // rather than keep editing a review this window no longer owns.
+          lock.acquired = false;
+          lock.refusedBy = "helper";
+          lock.reason = reasonFromBody(parsed.body);
+          raise(failures.failure("SECOND_WINDOW_REFUSED", lock.reason));
+          recomputeStatus();
+          enterReadOnly();
+        }
+        // Unreachable: keep the heartbeat running and try again next tick.
+      });
+    }
+
+    function startLiveness() {
+      if (livenessTimer) return livenessTimer;
+      // harness-allow-timer: the refused window's liveness poll. It re-attempts
+      // the claim with takeover:false; while the holder is alive it is refused
+      // and nothing happens, but once the holder goes stale the helper grants it
+      // and this becomes D5's 30s auto-takeover (NEW-2).
+      livenessTimer = setInterval(pollLiveness, heartbeatMs);
+      return livenessTimer;
+    }
+
+    function stopLiveness() {
+      if (livenessTimer) clearInterval(livenessTimer);
+      livenessTimer = null;
+    }
+
+    function pollLiveness() {
+      claimRequest({ review: requireReview(), window_id: store.windowId, takeover: false }).then(function (parsed) {
+        if (parsed.granted) becomeHolder(parsed);
       });
     }
 
@@ -518,6 +734,8 @@
       if (debounceTimer) clearTimeout(debounceTimer);
       if (retryTimer) clearTimeout(retryTimer);
       if (pollTimer) clearInterval(pollTimer);
+      stopHeartbeat();
+      stopLiveness();
       debounceTimer = null;
       retryTimer = null;
       pollTimer = null;
@@ -539,6 +757,7 @@
         status: status,
         queued: pendingCount(),
         cursor: cursor,
+        readOnly: readOnly,
         cspRefused: cspRefused,
         lastFailure: lastFailure ? lastFailure.code : null,
         counters: Object.assign({}, counters)
@@ -556,6 +775,10 @@
       eventFor: eventFor,
       flush: flush,
       commitOnUnload: commitOnUnload,
+      takeover: takeover,
+      isReadOnly: function () {
+        return readOnly;
+      },
       poll: poll,
       classify: classify,
       repliesSeen: function () {
