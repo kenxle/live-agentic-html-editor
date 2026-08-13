@@ -17,7 +17,6 @@
 
 const path = require("node:path");
 const { test, expect, startStaticServer, pollPage, placeCaret } = require("../helpers");
-const { installExportStub } = require("./support/export_stub");
 
 const REPO_ROOT = path.join(__dirname, "..", "..");
 const FIXTURE = "test/fixtures/edits-tab-doc.html";
@@ -111,7 +110,6 @@ test.describe("3D: the Edits tab", () => {
   test("six hand edits become six before-and-after rows, apart from the thread, and they export", async ({
     page
   }) => {
-    await installExportStub(page);
     await page.goto(fixtureUrl(pages));
     await pollPage(page, () => !!window.__lahe && !!window.__laheEdits, undefined, {
       message: "the real boot to put the library and the fixture's readers on the page"
@@ -193,7 +191,7 @@ test.describe("3D: the Edits tab", () => {
   // outstanding items of kind comment or note. The test is written here so the
   // stitch has something to fix against; it is fixme so it reports rather than
   // failing a branch that cannot land the fix.
-  test.fixme("a hand edit's card carries no comment-thread row (1D's tab_active.js)", async ({ page }) => {
+  test("a hand edit's card carries no comment-thread row (1D's tab_active.js)", async ({ page }) => {
     await page.goto(fixtureUrl(pages));
     await pollPage(page, () => !!window.__lahe && !!window.__laheEdits, undefined, { message: "the real boot" });
     await typeEdit(page, "one", " One line is enough to make a row.");

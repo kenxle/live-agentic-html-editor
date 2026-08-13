@@ -343,6 +343,11 @@
       if (!mounted && !listEl) return handle();
       if (!listEl && !hosted) return handle();
       var items = comments.outstanding().filter(function (item) {
+        // The Active thread carries comments and notes only. Hand edits live in
+        // the Edits tab (R32: neither buries the other); rendering a comment row
+        // into an edit's card was the cross-task defect 3D flagged at the stitch.
+        var kind = item[record.FIELD.KIND];
+        if (kind !== record.KIND.COMMENT && kind !== record.KIND.NOTE) return false;
         return !noteHandle || item[record.FIELD.ID] !== noteHandle.id || !record.isDraft(item);
       });
       var seen = Object.create(null);
