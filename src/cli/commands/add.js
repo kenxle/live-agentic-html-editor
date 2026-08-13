@@ -403,13 +403,39 @@ async function pollFor(check, timeoutMs, what) {
   }
 }
 
-async function stopHelper(ready, host, port) {
-  if (ready && typeof ready.pid === "number") {
-    try {
-      process.kill(ready.pid, "SIGTERM");
-    } catch (err) {
-      if (err.code !== "ESRCH") throw err;
-    }
+async function stopHelper(ready, host, port, live) {
+  // Finding 23: signal a pid ONLY when we have confirmed it is the helper
+  // service.json describes. A lahe helper writes its pid AND its start instant
+  // into service.json when it binds, and returns that same instant on /health.
+  // If the helper answering now was started at a different instant than
+  // service.json records, service.json is stale and its pid may since have been
+  // reused by an unrelated process, so we refuse to kill it.
+  if (!ready || typeof ready.pid !== "number") {
+    throw new Error(
+      "cannot stop the helper on " + host + ":" + port + ": " + stateDirModule.readyPath(ready && ready.dir ? ready.dir : "") +
+        " names no pid. Stop it yourself, then run add again."
+    );
+  }
+  if (live && live.started_at && ready.started_at && live.started_at !== ready.started_at) {
+    throw new Error(
+      "refusing to signal pid " +
+        ready.pid +
+        ": the server answering on " +
+        host +
+        ":" +
+        port +
+        " reports it started at " +
+        live.started_at +
+        " but service.json records " +
+        ready.started_at +
+        ". service.json is stale and its pid may now belong to another process. " +
+        "Stop whatever holds the port yourself, then run add again."
+    );
+  }
+  try {
+    process.kill(ready.pid, "SIGTERM");
+  } catch (err) {
+    if (err.code !== "ESRCH") throw err;
   }
   await pollFor(
     async function () {
@@ -434,6 +460,32 @@ async function startHelper(host, port, dir) {
     },
     15000,
     "the helper to answer on " + host + ":" + port + ". Run `lahe serve` yourself to see why it did not start"
+  );
+}
+
+/**
+ * Confirm the server answering on this port is the helper we just started, not
+ * a squatter that grabbed the port during the restart window (finding 21).
+ *
+ * probeHealth alone accepts any local server that answers {ok:true}, so on its
+ * own it would let a squatter that binds the freed port collect the review's
+ * token off the script line. A lahe helper writes its start instant into the
+ * OWNER-ONLY service.json when it binds and returns the same instant on /health;
+ * a bare {ok:true} squatter cannot make those two agree without reading a file
+ * only the owner can read. A match is therefore good evidence the port holds our
+ * helper. This is best effort, not a boundary: a same-user process that can read
+ * service.json can still echo the value, which is the stated residual in D11.
+ */
+async function confirmOurHelper(host, port, dir, what) {
+  return pollFor(
+    async function () {
+      var ready = readReadyFile(dir);
+      var live = await service.probeHealth(host, port);
+      if (!ready || !ready.started_at || !live || !live.started_at) return null;
+      return ready.started_at === live.started_at ? live : null;
+    },
+    10000,
+    what
   );
 }
 
@@ -505,7 +557,13 @@ async function run(argv) {
 
   var dir;
   try {
-    dir = options.stateDir ? path.resolve(options.stateDir) : stateDirModule.stateDir();
+    // An explicit --state-dir runs through the SAME in-checkout refusal as the
+    // env-derived default (finding 19). Without this, --state-dir bypassed the
+    // guard and a token written into meta.json under a clone could be published
+    // by an ordinary `git add -A`.
+    dir = options.stateDir
+      ? stateDirModule.stateDir({ dir: options.stateDir })
+      : stateDirModule.stateDir();
   } catch (err) {
     process.stderr.write("lahe add: " + err.message + "\n");
     return EXIT.FAILED;
@@ -582,7 +640,7 @@ async function run(argv) {
         return EXIT.FAILED;
       }
       try {
-        await stopHelper(ready, host, port);
+        await stopHelper(Object.assign({ dir: dir }, ready), host, port, alive);
       } catch (err) {
         process.stderr.write("lahe add: " + err.message + "\n");
         return EXIT.FAILED;
@@ -615,6 +673,15 @@ async function run(argv) {
 
     try {
       await startHelper(host, port, dir);
+      // Finding 21: a plain probeHealth would accept a squatter on the freed
+      // port. Confirm the port holds the helper we just started before the
+      // token is ever written onto the page.
+      await confirmOurHelper(
+        host,
+        port,
+        dir,
+        "the server on " + host + ":" + port + " to identify itself as the helper this run started"
+      );
     } catch (err) {
       process.stderr.write("lahe add: " + err.message + "\n");
       return EXIT.FAILED;

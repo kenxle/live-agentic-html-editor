@@ -72,13 +72,19 @@ function checkoutAbove(dir) {
 /**
  * Where the helper keeps its data.
  *
- * @param {{allowInsideCheckout?: boolean}} [options] only the repo's own
- *   tooling passes this, and nothing in the shipped paths does.
+ * @param {{dir?: string, allowInsideCheckout?: boolean}} [options]
+ *   `dir` is an explicit path (a `--state-dir` the user typed). It is resolved
+ *   and run through the SAME in-checkout refusal as the env-derived path, so a
+ *   `--state-dir` inside a clone is refused rather than published by a later
+ *   `git add -A`. `allowInsideCheckout` waives that refusal and only the repo's
+ *   own tooling passes it; nothing in the shipped paths does.
  */
 function stateDir(options) {
   var opts = options || {};
   var dir;
-  if (process.env.LAHE_STATE_DIR) {
+  if (opts.dir) {
+    dir = path.resolve(opts.dir);
+  } else if (process.env.LAHE_STATE_DIR) {
     dir = path.resolve(process.env.LAHE_STATE_DIR);
   } else if (process.env.XDG_STATE_HOME) {
     dir = path.join(path.resolve(process.env.XDG_STATE_HOME), "lahe");
