@@ -322,3 +322,164 @@ outside the repo, for whoever runs the Phase 4B batch:
 
 - `…/scratchpad/shots.js` — the driver that produced these screenshots.
 - `…/scratchpad/design_eval/` — the screenshots themselves, once the fixes have landed.
+
+---
+
+# Verdict re-check, after the 4B fix pass
+
+A second staff-designer pass over the merged branch (`feat/live_agentic_html_editor`, the
+fix pass at `1d6dfba`). Method: read the fix notes, put every before screenshot next to its
+after twin, then drive the four blocker states live myself in a fresh Chromium against the
+same app fixture with a real helper and a real minted token, and look at the result. The
+conflict card was reached through a real branch-four collision and **both** of its buttons
+were pressed for real, in separate runs, with the page and the store read afterwards. The
+scheme was checked in both directions with the OS preference set against the page on
+purpose. Fresh screenshots are in `…/scratchpad/design_verify/` (`V*.png`).
+
+## Per finding
+
+**F1 — the Active tab's unstyled hint list — CONFIRMED FIXED.** The eight-line prose wall
+is gone. What sits in an empty rail now is the empty-state sentence, a note box under a
+small-caps `A NOTE ABOUT THE PAGE` eyebrow, and a single closed disclosure reading
+"All shortcuts". Driven live, no `.lahe-rail-*` element in the pane renders naked: the
+hosted stylesheet reaches the rail's own closed root, the keycaps compute to 10.5px with
+their bottom-weighted border, and the empty pane's tallest object is now the note box
+rather than a wall of black text. (`V01_empty_active.png`, and the same in dark.)
+
+**F2 — "RewordDelete" on every card — CONFIRMED FIXED.** Two separate buttons reading
+`Reword` and `Delete`, measured live at a 7px gap, 11.5px, weight 550, in soft ink
+(`rgb(86,94,109)`) against the reviewer's own sentence in full ink above. They no longer
+land second in the eye. (`V02_card_actions.png`.)
+
+**F3 — two hint systems — CONFIRMED FIXED.** One hint surface. The footer's keycaps stay;
+the tab's prose list moved behind the closed "All shortcuts" disclosure. Opening it live
+still renders all eight gestures from the one gesture table, now as keycap plus sentence
+rather than glued-together prose, so nothing was lost to fix the noise.
+(`V01b_shortcuts_open.png`.)
+
+**F4 — the undesigned, unpickable conflict card — CONFIRMED FIXED, and it is now one of the
+better objects in the rail.** A hairline separates it from the edit row above. It opens
+with the title "Which version stands?", then two labelled panes with eyebrow type and a
+rule each, the reviewer's in the accent (`rgb(60,86,165)`) and the page's in the neutral
+line colour, with the differing run marked on both sides. Both versions still print in
+full; the mark points at the divergence rather than replacing it. Two real buttons.
+Pressed live:
+
+- **Keep mine** put the reviewer's sentence back on the page verbatim, cleared the
+  collision, and kept the record. PASS.
+- **Take the page's** left the page exactly as the agent wrote it, wrote nothing, cleared
+  the collision, and retired both the record and the card. PASS.
+
+(`V04_conflict_card.png`, `V04b_conflict_after_keep_mine.png`,
+`V04b_conflict_after_take_theirs.png`.)
+
+**F5 — a handled card saying three things twice each — CONFIRMED FIXED.** Six blocks became
+three. Counted live in the card's own drawn text: the reviewer's note once, the agent's
+sentence once, each file path once. Reword and Delete are not drawn on a handled card;
+Reopen is. The card is roughly half its old height and reads as a finished item rather than
+as a bug. (`V03_done_handled.png`.)
+
+**RED 1 — a handled item keeping its highlight — CONFIRMED FIXED.** Read off
+`highlights.paintedIds()` across the transition: painted before the fold, gone after the
+item moved to Done, and back after pressing Reopen. The pair works in both directions.
+
+**F6 — dark mode following the OS instead of the page — CONFIRMED FIXED.** The signal moved
+to where it belongs. With the OS in **light** and the page painted dark, the rail comes out
+dark (`pageScheme: "dark"`, `data-lahe-scheme="dark"`). With the OS in **dark** and the page
+light, the rail comes out light. The old failure case, a black slab and a black comment box
+on a white page, does not reproduce. (`V05_scheme_darkpage_oslight.png`,
+`V05b_scheme_lightpage_osdark_whole.png`.)
+
+**F7 — the permanent untrue limit note — CONFIRMED FIXED.** It renders under
+"Kept in this browser" and is absent under both "Stored" and "Stored · agent reading", so it
+no longer contradicts the line above it. The "With no helper running" prefix is gone.
+
+**F8 — amber spent on the page — CONFIRMED FIXED.** The comment wash and the pick outline
+and fill are both indigo now. Amber survives in the rail's own vocabulary and in the
+conflict badge, which is where "needs you" actually lives. The highlight reads quieter and
+more clearly like part of this tool. (Before/after `14b_pick_mode.png`, `15_whole_page.png`.)
+
+**F9 — the comment box landing on what it is about — PARTIALLY FIXED.** The edit-bar half is
+genuinely fixed: in `11_edit_frame.png` the box now sits clear above the bar instead of
+overlapping it, and `nudgeOffEditBar` is real code doing real work. The gutter preference is
+also real code, but on the reference page it never fires, because the content column runs
+right up under the rail and leaves no gutter to prefer. So the fallback applies and the box
+still covers the paragraph below the one being commented on, which is exactly the picture
+the original finding objected to. Minor, and it was minor before; noting it so nobody reads
+this one as closed.
+
+**F10 — the native resize grabber — CONFIRMED FIXED.** `resize` computes to `none` on the
+note box textarea, and the grabber is gone from the corner on screen.
+
+**F11 — the question block losing contrast in dark — CONFIRMED FIXED.** In a dark rail the
+question block now reads as a filled panel again: the wash is clearly separable from the
+card and it picks up a hairline top and bottom. It is still unmistakably the loudest thing
+in the pane, and the margin is back. (`V05_scheme_darkpage_oslight.png`.)
+
+**F12 — the unbalanced export bar — CONFIRMED FIXED.** The button dropped to the card-action
+scale and reads "Export edits". It no longer outweighs everything else in the pane.
+
+**F13 — "Review 0" on the pill — CONFIRMED FIXED.** The collapsed pill on an untouched page
+is a dot and the word Review. Nothing else.
+
+## The one-sentence verdict
+
+Every blocker is fixed in the place it had to be fixed, on screen and under the hand: the
+hosted rail is styled, the conflict is a designed decision with two buttons that both do
+what they say, a handled card states each fact once, and the scheme now follows the page
+instead of the OS, so this is one product and it ships.
+
+## The two judgment calls
+
+**"Which version stands?" as the conflict title — agree.** It is the decision in the
+reviewer's own words, it is a question so it reads as something to act on rather than
+something to absorb, and it sits directly above the two panes and the two buttons that
+answer it. Keeping the old heading would have restated the amber badge's fact one card
+apart from it, which is F5's complaint rebuilt in a new place. Right call, and the shorter
+line is better copy than the one it replaced.
+
+**Reword and Delete one step quieter than Reopen — agree, and this is the more interesting
+call of the two.** My original note suggested Reopen's treatment; the fixer was right not to
+take it literally. Reopen is one action on a finished card and can afford an outline.
+Reword and Delete appear under the reviewer's sentence on every card in the pane, so
+outlining both would put two boxes on every card and rebuild the exact complaint F2 was
+about. Sharing Reopen's register (11.5px, 550, soft ink, same radius and padding) and taking
+its border only on hover and focus is the same system at the right volume. Confirmed live:
+transparent border at rest, visible border on Reopen.
+
+## New findings
+
+### N1 — minor / taste — the conflict card explains itself after the reviewer has already decided
+
+**Where.** The amber badge under the two buttons; `V04_conflict_card.png`.
+
+**What.** The card now reads: title, your version, the page's version, Keep mine / Take the
+page's, and then an amber block saying "This region is neither what you edited nor what you
+changed it to, so nothing was written. Your text is kept." That badge is the loudest and
+largest block on the card, it is three lines against the title's four words, and it arrives
+after the decision it is meant to inform. The reading order is backwards.
+
+**Fix.** Move it above the two panes, or fold what it still adds ("nothing was written, your
+text is kept") into a quiet line under the title. The badge earned its amber when it was the
+only statement of what happened; now that the title carries the decision, it should recede.
+
+### N2 — minor / taste — the two conflict choices are not weighted like two choices
+
+**Where.** `[data-lahe-conflict-choice]`; measured live.
+
+**What.** "Keep mine" is an outlined button on white; "Take the page's" is borderless and
+transparent. Same size and weight, different register. On the one screen where the product's
+whole claim is that the decision belongs to the reviewer, one option is drawn as a button
+and the other as a text link, which puts a thumb on the scale toward keeping your own
+version. Nothing about branch four says the reviewer's version is the better answer.
+
+**Fix.** Give both the same register. Either outline both, or outline neither and let the
+title carry the weight.
+
+## Cleanup needed (re-check pass)
+
+Nothing was deleted and nothing under `src/` was touched. One new artifact, outside the repo,
+to go with the ones the earlier lists already name:
+
+- `…/scratchpad/verify.js` — the re-check driver.
+- `…/scratchpad/design_verify/` — the re-check screenshots, once this has been read.
