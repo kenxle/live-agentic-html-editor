@@ -142,6 +142,36 @@ test("the projected item spells the page's text into data-named fields", () => {
 });
 
 // ---------------------------------------------------------------------------
+// NEW-4: the page title is page-controlled, so it is bounded, and the
+// field_classes map names the fields the projection actually emits
+// ---------------------------------------------------------------------------
+
+test("a long page title is bounded at the group header, with the marker visible", () => {
+  const longTitle = "T".repeat(rf.CONTEXT_MAX + 500);
+  const json = rf.projectReview(reviewWith([anEdit({ page_title: longTitle })], null));
+  const page = json.pages[0];
+  assert.equal(page.title.length < longTitle.length, true, "page.title is page-controlled, so it is boundable");
+  assert.equal(page.title.startsWith("T".repeat(rf.CONTEXT_MAX)), true);
+  assert.equal(page.title.includes(rf.TRUNCATION_MARKER.split("{n}")[0]), true, "the bound is visible in the value");
+});
+
+test("field_classes names the fields the projection emits, and no stale ones", () => {
+  const json = rf.projectReview(reviewWith([anEdit()], null));
+  const fc = json.field_classes;
+  // The emitted page-group header fields.
+  assert.equal(fc.title, record.CLASS_DATA);
+  assert.equal(fc.origin, record.CLASS_DATA);
+  assert.equal(fc.path, record.CLASS_DATA);
+  // The emitted item field name, not the record's dotted internal name.
+  assert.equal(fc.region_label, record.CLASS_DATA);
+  assert.equal(Object.prototype.hasOwnProperty.call(fc, "region.label"), false, "the record's internal name is not emitted");
+  // Stale keys that name nothing in the file are gone.
+  assert.equal(Object.prototype.hasOwnProperty.call(fc, "after_history"), false, "after_history is not projected");
+  assert.equal(Object.prototype.hasOwnProperty.call(fc, "page_title"), false, "emitted as title, not page_title");
+  assert.equal(Object.prototype.hasOwnProperty.call(fc, "page_path"), false, "emitted as path, not page_path");
+});
+
+// ---------------------------------------------------------------------------
 // Ranked test 28's unit half: injected instructions stay data
 // ---------------------------------------------------------------------------
 
@@ -236,6 +266,31 @@ test("a reply file line's text is projected as data, never as an instruction", (
 });
 
 // ---------------------------------------------------------------------------
+// Finding 24: reply.files is agent-controlled, so it is typed, capped and bounded
+// ---------------------------------------------------------------------------
+
+test("reply.files keeps only strings, caps the count, and bounds each entry", () => {
+  const many = [];
+  for (let i = 0; i < rf.REPLY_FILES_MAX + 25; i += 1) many.push("app/file_" + i + ".rb");
+  const item = anEdit({
+    reply: {
+      status: "handled",
+      agent: "claude",
+      reason: null,
+      text: null,
+      // a number, an object, a null, a very long string, then real paths
+      files: [42, { path: "x" }, null, "p".repeat(rf.CONTEXT_MAX + 300)].concat(many)
+    }
+  });
+  const p = rf.projectReview(reviewWith([item], null)).pages[0].items[0];
+  assert.equal(Array.isArray(p.reply.files), true);
+  assert.equal(p.reply.files.every((f) => typeof f === "string"), true, "non-string entries are dropped");
+  assert.equal(p.reply.files.length <= rf.REPLY_FILES_MAX, true, "the count is capped");
+  const longEntry = p.reply.files.find((f) => f.startsWith("p".repeat(50)));
+  assert.equal(longEntry.includes(rf.TRUNCATION_MARKER.split("{n}")[0]), true, "each entry is bounded");
+});
+
+// ---------------------------------------------------------------------------
 // Per-page grouping (D6, Q2)
 // ---------------------------------------------------------------------------
 
@@ -275,12 +330,15 @@ test("the group header carries the title and the source hint", () => {
   assert.equal(page.title, "Feature Brief");
   assert.equal(page.source_hint.known, true);
   assert.equal(page.source_hint.path, "docs/brief.md");
-  assert.match(page.source_hint.note, /erased by the next build/);
+  // The sentence rides in `instruction`, not `note`: `note` is a declared intent
+  // field and must mean exactly one thing (NEW-6).
+  assert.match(page.source_hint.instruction, /erased by the next build/);
+  assert.equal(Object.prototype.hasOwnProperty.call(page.source_hint, "note"), false);
 });
 
 test("an unknown source hint says so plainly rather than letting an agent edit the artifact", () => {
   const json = rf.projectReview(reviewWith([anEdit()], null));
-  assert.match(json.pages[0].source_hint.note, /Source unknown/);
+  assert.match(json.pages[0].source_hint.instruction, /Source unknown/);
   assert.equal(json.pages[0].source_hint.known, false);
 });
 
@@ -295,7 +353,9 @@ test("a lost anchor travels in the projection, so the agent is told rather than 
   const json = rf.projectReview(reviewWith([item], null));
   const p = json.pages[0].items[0];
   assert.equal(p.lost.code, "ANCHOR_NOT_FOUND");
-  assert.match(p.lost.note, /no longer on the page/);
+  // The sentence rides in `hint`, not `note` (NEW-6).
+  assert.match(p.lost.hint, /no longer on the page/);
+  assert.equal(Object.prototype.hasOwnProperty.call(p.lost, "note"), false);
 });
 
 test("drafts are projected with their state so an agent can leave them alone", () => {

@@ -110,21 +110,34 @@
     PROJECTED.REGION_LABEL
   ];
 
-  // Built from the record's own classification so there is one rule, not two.
-  // The only difference is the `after` to `after_full` rename and the two
-  // fields the projection adds (`quote` lifted out of context, `region_label`).
-  var PROJECTED_FIELD_CLASS = (function () {
-    var out = {};
-    Object.keys(record.FIELD_CLASS).forEach(function (k) {
-      if (k === record.FIELD.AFTER) return;
-      out[k] = record.FIELD_CLASS[k];
-    });
-    out[PROJECTED.AFTER_FULL] = record.CLASS_DATA;
-    out[PROJECTED.QUOTE] = record.CLASS_DATA;
-    out[PROJECTED.CONTEXT] = record.CLASS_DATA;
-    out[PROJECTED.REGION_LABEL] = record.CLASS_DATA;
-    return out;
-  })();
+  // The classification travels with the file, so an agent sees the rule as
+  // structure and not only as prose. Every key here names a field the
+  // projection ACTUALLY emits (NEW-4): the record's internal, dotted field names
+  // (`region.label`, `after_history`, `page_title`) are not what an agent reads,
+  // so listing them would describe fields that are not in the file. The two
+  // intent fields, then every data-named carrier the projection writes,
+  // including the page-group header fields the agent reads as labels.
+  var PROJECTED_FIELD_CLASS = {
+    // intent (D12): the reviewer's own words, verbatim, never bounded
+    note: record.CLASS_INSTRUCTION,
+    change: record.CLASS_INSTRUCTION,
+    // data: everything that came off the page, boundable
+    quote: record.CLASS_DATA,
+    before: record.CLASS_DATA,
+    after_full: record.CLASS_DATA,
+    context: record.CLASS_DATA,
+    before_html: record.CLASS_DATA,
+    after_html: record.CLASS_DATA,
+    region_label: record.CLASS_DATA,
+    // the page-group header fields, all page-controlled
+    title: record.CLASS_DATA,
+    origin: record.CLASS_DATA,
+    path: record.CLASS_DATA,
+    // the agent's own reply text, its own trust class: plain data (D6)
+    "reply.agent": record.CLASS_DATA,
+    "reply.reason": record.CLASS_DATA,
+    "reply.text": record.CLASS_DATA
+  };
 
   // ---------------------------------------------------------------------------
   // Bounding (D12): data may be bounded, intent never is
@@ -137,6 +150,10 @@
   var BEFORE_MAX = 2000;
   // Shorter, because these are locating hints rather than passages.
   var CONTEXT_MAX = 400;
+  // reply.files is agent-controlled and reaches the rail, so it is not trusted
+  // to be a short list of strings. The count is capped and each entry is bounded
+  // (finding 24).
+  var REPLY_FILES_MAX = 100;
 
   // The bound is VISIBLE in the value: an agent that reads a bounded field has
   // to be able to tell it was bounded, or it will treat a cut-off passage as
@@ -162,6 +179,18 @@
     return typeof value === "string" ? value : value === undefined ? null : value;
   }
 
+  // reply.files as it reaches the rail: string entries only, the count capped,
+  // and each entry bounded (finding 24). An agent could put anything in this
+  // array; a non-string entry or a runaway list must not ride through untyped.
+  function boundFiles(files) {
+    if (!Array.isArray(files)) return [];
+    var out = [];
+    for (var i = 0; i < files.length && out.length < REPLY_FILES_MAX; i += 1) {
+      if (typeof files[i] === "string") out.push(boundData(files[i], CONTEXT_MAX));
+    }
+    return out;
+  }
+
   // ---------------------------------------------------------------------------
   // The source hint (D6)
   // ---------------------------------------------------------------------------
@@ -170,9 +199,11 @@
   // agent confidently editing the artifact.
   function sourceHintSentence(hint) {
     if (hint && hint.known === true && hint.path) {
+      // hint.path came off the page's add-step config; bound it like other
+      // page-derived text (NEW-6).
       return (
         "Edit this source: " +
-        hint.path +
+        boundData(hint.path, CONTEXT_MAX) +
         ". This page is generated from it. A change made only to the generated file is erased by the next build."
       );
     }
@@ -182,11 +213,15 @@
     );
   }
 
+  // The nested key is `instruction`, never `note`: `note` is one of the two
+  // declared intent fields (D12), so it must mean exactly one thing across the
+  // whole file. This is an agent-facing sentence about the source, not the
+  // reviewer's note (NEW-6). hint.path is bounded.
   function sourceHint(hint) {
     return {
       known: !!(hint && hint.known === true && hint.path),
-      path: (hint && hint.path) || null,
-      note: sourceHintSentence(hint)
+      path: boundData((hint && hint.path) || null, CONTEXT_MAX),
+      instruction: sourceHintSentence(hint)
     };
   }
 
@@ -275,7 +310,9 @@
     out[PROJECTED.REGION_LABEL] = boundData((it[F.REGION] && it[F.REGION].label) || null, CONTEXT_MAX);
 
     var lost = it[F.REGION] && it[F.REGION].lost;
-    out.lost = lost ? { code: lost.code || null, reason: lost.reason || null, at: lost.at || null, note: LOST_NOTE } : null;
+    // The nested key is `hint`, never `note`: `note` is a declared intent field
+    // (D12), so it may not also name this agent-facing sentence (NEW-6).
+    out.lost = lost ? { code: lost.code || null, reason: lost.reason || null, at: lost.at || null, hint: LOST_NOTE } : null;
 
     // The agent's own words have their own trust class (D6): plain data, so one
     // agent cannot instruct another through a reply the helper re-projects.
@@ -286,7 +323,7 @@
           agent: boundData(reply.agent, CONTEXT_MAX),
           reason: boundData(reply.reason, BEFORE_MAX),
           text: boundData(reply.text, BEFORE_MAX),
-          files: Array.isArray(reply.files) ? reply.files.slice() : []
+          files: boundFiles(reply.files)
         }
       : null;
 
@@ -317,7 +354,10 @@
           key: g.key,
           origin: g.origin,
           path: g.path,
-          title: g.title,
+          // The title comes from doc.title, so it is fully page-controlled and
+          // an agent reads it as a label. Bounded like every other page-derived
+          // field, with the marker visible (NEW-4).
+          title: boundData(g.title, CONTEXT_MAX),
           source_hint: sourceHint(g.hint),
           items: g.items.map(projectItem)
         };
@@ -479,6 +519,7 @@
     PROJECTED_FIELD_CLASS: PROJECTED_FIELD_CLASS,
     BEFORE_MAX: BEFORE_MAX,
     CONTEXT_MAX: CONTEXT_MAX,
+    REPLY_FILES_MAX: REPLY_FILES_MAX,
     TRUNCATION_MARKER: TRUNCATION_MARKER,
     truncationMarker: truncationMarker,
     boundData: boundData,

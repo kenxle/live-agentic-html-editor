@@ -662,6 +662,13 @@
         return null;
       }
 
+      // The reviewer's change, stated for the intent channel (D12). An edit
+      // carries no typed note, so without this its only intent field is empty
+      // and the agent is left reading the data-class `after`/`before`. `before`
+      // is pinned at first touch, so this states the change against the page's
+      // original wording, whichever session committed it.
+      var changeText = record.editChangeText(verdict.kind, open.before ? open.before.text : null, after.text);
+
       var committed;
       if (record.isDraft(item)) {
         // First commit. The revision stays at one; the history gets its first
@@ -669,6 +676,7 @@
         committed = Object.assign({}, item);
         committed[record.FIELD.KIND] = verdict.kind;
         committed[record.FIELD.STATE] = record.STATE.READY;
+        committed[record.FIELD.CHANGE] = changeText;
         committed[record.FIELD.AFTER] = after.text;
         committed[record.FIELD.AFTER_HTML] = after.html;
         committed[record.FIELD.UPDATED_AT] = record.nowIso();
@@ -681,6 +689,7 @@
         // revision refusable (R21).
         committed = record.bumpRev(item, {
           kind: verdict.kind,
+          change: changeText,
           after: after.text,
           after_html: after.html,
           state: record.STATE.READY
@@ -752,10 +761,15 @@
         }
       }
 
+      // A deletion is a change with no typed note, so it carries the same
+      // stated intent field an edit does (D12).
+      var deleteChange = record.editChangeText(record.KIND.DELETE, before.text, null);
+
       var item;
       if (existing) {
         item = record.bumpRev(existing, {
           kind: record.KIND.DELETE,
+          change: deleteChange,
           after: null,
           after_html: null,
           state: record.STATE.READY
@@ -764,6 +778,7 @@
         item = record.newItem({
           kind: record.KIND.DELETE,
           state: record.STATE.READY,
+          change: deleteChange,
           before: before.text,
           before_html: before.html,
           page_origin: pageField("origin"),

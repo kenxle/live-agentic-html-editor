@@ -416,6 +416,51 @@
     return out;
   }
 
+  // ---------------------------------------------------------------------------
+  // The reviewer's change, for the intent channel (D12)
+  // ---------------------------------------------------------------------------
+  //
+  // An edit commits with no note typed, so without this its only intent field is
+  // empty and the agent is left reading the data-class `after`/`before` the
+  // contract tells it never to treat as an instruction. That is the D12
+  // laundering the redraw exists to prevent.
+  //
+  // The whole `after` is NOT the answer: it is mostly the page's own words with
+  // the reviewer's change mixed in, so carrying it as intent would launder page
+  // text into the instruction channel on the back of the edit. So `change` names
+  // only what the reviewer actually did: the span that moved between `before`
+  // and `after`, stated in one short line. It is the reviewer's own action, so
+  // it is intent, and (like every intent field) it is carried verbatim and never
+  // truncated.
+
+  // The changed span between two strings: the shared prefix and suffix trimmed
+  // away, leaving what was removed and what was added. Pure, so editing.js and a
+  // test agree on the same answer.
+  function changedSpan(before, after) {
+    var b = typeof before === "string" ? before : "";
+    var a = typeof after === "string" ? after : "";
+    var start = 0;
+    var maxStart = Math.min(b.length, a.length);
+    while (start < maxStart && b.charAt(start) === a.charAt(start)) start += 1;
+    var endB = b.length;
+    var endA = a.length;
+    while (endB > start && endA > start && b.charAt(endB - 1) === a.charAt(endA - 1)) {
+      endB -= 1;
+      endA -= 1;
+    }
+    return { removed: b.slice(start, endB), added: a.slice(start, endA) };
+  }
+
+  function editChangeText(kind, before, after) {
+    if (kind === KIND.DELETE) return "Deleted this block.";
+    if (kind === KIND.FORMAT_ONLY) return "Changed the emphasis in this block; the words are the same.";
+    var span = changedSpan(before, after);
+    if (span.added && span.removed) return 'Changed "' + span.removed + '" to "' + span.added + '".';
+    if (span.added) return 'Added "' + span.added + '".';
+    if (span.removed) return 'Removed "' + span.removed + '".';
+    return "Edited this block.";
+  }
+
   // Which pair of fields a record compares on. A format-only record's whole
   // difference is in the markup, so comparing its `after` (identical to its
   // `before` by construction) would make the branch a silent no-op.
@@ -515,6 +560,8 @@
     bumpRev: bumpRev,
     historyEntry: historyEntry,
     priorAfters: priorAfters,
+    changedSpan: changedSpan,
+    editChangeText: editChangeText,
     comparisonFields: comparisonFields,
     validateItem: validateItem,
     isDraft: isDraft,
