@@ -266,11 +266,13 @@
       var said = reply.text || reply.reason;
       return {
         status: reply.status || null,
-        agent: agentName(reply),
+        // Agent name and reason are agent-controlled and reach the rail, so they
+        // are bounded here the way reply.text already is (finding 22).
+        agent: reviewFormat.boundData(agentName(reply), reviewFormat.CONTEXT_MAX),
         // The reply's own fields are kept as they came, so nothing reading the
         // card's model loses what the agent actually said in which field. Only
         // `text` is what gets DRAWN, which is what makes it one carrier.
-        reason: reply.reason || null,
+        reason: reviewFormat.boundData(reply.reason, reviewFormat.CONTEXT_MAX),
         text: said ? boundedText(said) : agentName(reply) + " made this change.",
         files: Array.isArray(reply.files) ? reply.files : [],
         at: reply.at || null
