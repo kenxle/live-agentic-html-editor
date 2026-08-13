@@ -14,8 +14,9 @@ Two pieces, and that is the whole design:
   `127.0.0.1:7817`. It keeps an append-only log of the review and writes the
   file your agent reads.
 
-**Status: not ready yet.** The service, the review layer, and the agent surface
-described in `docs/features/` are being built out.
+**Status: v1 built.** The library, the helper, and the agent surface are
+implemented and tested against real browsers (Chromium, Firefox, WebKit). See
+`docs/features/` for the brief, architecture, plan, and review record.
 
 ## What you need
 
