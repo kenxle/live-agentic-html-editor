@@ -121,6 +121,12 @@ async function serve(options) {
     startedAt: startedAt
   };
 
+  // 3A's projector: it folds every review's reply files on protocol.REPLY_POLL's
+  // interval and rewrites review.json whenever a review's log moves. One line,
+  // here, because the agent loop has to run for the life of the helper rather
+  // than only while a page happens to be asking something.
+  projection.startWatching(deps);
+
   var server = http.createServer(function (req, res) {
     handle(req, res).catch(function (err) {
       log.helperLog("unhandled error serving " + req.method + " " + req.url + ": " + err.message);

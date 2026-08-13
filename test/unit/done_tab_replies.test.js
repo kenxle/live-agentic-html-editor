@@ -145,8 +145,9 @@ test("a question leaves the item ready, carries the agent's name, and is not mar
   assert.equal(stored.state, record.STATE.READY, "a question is not a state change");
   assert.equal(stored.reply.status, "question");
   assert.equal(stored.reply.text, "<b>which</b> heading do you mean?", "carried whole, as text");
-  assert.equal(rail.getCard(item.id).agentMessage.loud, true);
-  assert.equal(rail.getCard(item.id).agentMessage.agent, "claude");
+  // The question does not also ride the rail's quiet agent-message carrier:
+  // one card, one place the question is said, and that place is the loud one.
+  assert.equal(rail.getCard(item.id).agentMessage, null);
 });
 
 test("an agent with no name in its reply is called agent", () => {

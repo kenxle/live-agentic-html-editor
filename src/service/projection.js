@@ -43,6 +43,7 @@ var lifecycle = require("../shared/lifecycle.js");
 var reviewFormat = require("../shared/review_format.js");
 var reviewWriter = require("./review_writer.js");
 var stateDir = require("./state_dir.js");
+var fs = require("node:fs");
 var replies = require("./replies.js");
 
 var EVENT = protocol.EVENT;
@@ -242,6 +243,30 @@ function createProjector(options) {
   var timer = null;
   var counters = { ticks: 0, folds: 0, writes: 0 };
 
+  /**
+   * Every review on disk, so a review created after the helper started (which
+   * is every review `add` mints) is watched without anybody remembering to
+   * register it. Cheap: one readdir of a directory holding one entry per
+   * review, on the same tick that reads the reply files anyway.
+   */
+  function discoverReviews() {
+    var root = stateDir.reviewsRoot(dir);
+    var entries;
+    try {
+      entries = fs.readdirSync(root, { withFileTypes: true });
+    } catch (err) {
+      if (err.code === "ENOENT") return [];
+      throw err;
+    }
+    return entries
+      .filter(function (entry) {
+        return entry.isDirectory() && protocol.isSafeId(entry.name);
+      })
+      .map(function (entry) {
+        return entry.name;
+      });
+  }
+
   /** Start watching a review, and write its file once so it exists at all. */
   function watch(reviewId) {
     if (Object.prototype.hasOwnProperty.call(watched, reviewId)) return watched[reviewId];
@@ -263,6 +288,9 @@ function createProjector(options) {
 
   function tick() {
     counters.ticks += 1;
+    discoverReviews().forEach(function (reviewId) {
+      if (!Object.prototype.hasOwnProperty.call(watched, reviewId)) watched[reviewId] = -1;
+    });
     return Object.keys(watched).map(function (reviewId) {
       return tickReview(reviewId);
     });

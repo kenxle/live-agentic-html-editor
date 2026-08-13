@@ -408,11 +408,20 @@
 
       rail.upsertCard(next);
       rail.setCardState(id, next[record.FIELD.STATE]);
-      rail.setAgentMessage(id, next[record.FIELD.REPLY]);
       rail.setCardNotice(id, null);
 
-      if (reply.status === record.REPLY_STATUS.QUESTION) drawQuestion(next);
-      else clearQuestion(id);
+      // A QUESTION IS NOT AN AGENT MESSAGE. The rail's own carrier is the quiet
+      // one, and it is right for "I made the change" and for "I could not, and
+      // here is why". A question gets the block below instead, and only that
+      // block: the same sentence in two places on one card is how the loud one
+      // stops reading as loud.
+      if (reply.status === record.REPLY_STATUS.QUESTION) {
+        rail.setAgentMessage(id, null);
+        drawQuestion(next);
+      } else {
+        rail.setAgentMessage(id, next[record.FIELD.REPLY]);
+        clearQuestion(id);
+      }
 
       return { kind: "folded", item: id, state: next[record.FIELD.STATE], status: reply.status };
     }
