@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+1bf6f1e7fbb5
+ * version 0.0.0+793144709d11
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+1bf6f1e7fbb5";
+  g.LAHE.version = "0.0.0+793144709d11";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -6820,16 +6820,90 @@
   // Highlight colors, as light a touch as a highlight can be and still read.
   // Written with color-mix-free plain rgba so a page-level stylesheet cannot
   // depend on anything the host page defines.
+  //
+  // THE PAGE-SIDE MARKS ARE THE ACCENT, NOT THE AMBER. The rail spends amber on
+  // one thing only, "this needs you", and a commented passage does not need
+  // anyone: it is a selection the reviewer made. An amber wash on the page and
+  // an amber pill in the rail inches away are two languages for one colour, and
+  // the reviewer has to learn which is which. So the wash is the same indigo the
+  // rail's accent is, and it reads as ours rather than as a warning.
   var STYLE_TEXT = [
     "::highlight(" + NAME.COMMENT + ") {",
-    "  background-color: rgba(255, 202, 84, 0.34);",
+    "  background-color: rgba(60, 86, 165, 0.15);",
     "  color: inherit;",
     "}",
     "::highlight(" + NAME.ACTIVE + ") {",
-    "  background-color: rgba(255, 178, 26, 0.46);",
+    "  background-color: rgba(60, 86, 165, 0.26);",
     "  color: inherit;",
     "}"
   ].join("\n");
+
+  // ---------------------------------------------------------------------------
+  // Which scheme the library draws in
+  // ---------------------------------------------------------------------------
+  //
+  // THE PAGE DECIDES, NOT THE OS. The system preference is the right signal for
+  // an application that owns its window and the wrong one for a tool sitting
+  // over someone else's page: with the OS in dark and the reviewed page in light
+  // (the common case, because most apps ship no dark stylesheet), every surface
+  // the library draws becomes a black slab on a white page, which is the loudest
+  // possible way to be a polite overlay.
+  //
+  // So the page's own effective background is sampled and the scheme matched to
+  // it. The system preference is the tiebreak, used only when the page says
+  // nothing readable, which is what a transparent body over a transparent root
+  // amounts to.
+  var SCHEME_ATTR = "data-lahe-scheme";
+
+  /** rgb()/rgba() as {r,g,b,a}, or null for anything else (including keywords). */
+  function parseColor(value) {
+    if (!value || typeof value !== "string") return null;
+    var m = value.replace(/\s+/g, "").match(/^rgba?\((\d+),(\d+),(\d+)(?:,([\d.]+))?\)$/i);
+    if (!m) return null;
+    return {
+      r: Number(m[1]),
+      g: Number(m[2]),
+      b: Number(m[3]),
+      a: m[4] === undefined ? 1 : Number(m[4])
+    };
+  }
+
+  /** Perceived lightness, 0 (black) to 1 (white). The sRGB luma weights. */
+  function luminance(color) {
+    return (0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b) / 255;
+  }
+
+  function systemScheme(win) {
+    if (win && typeof win.matchMedia === "function") {
+      try {
+        if (win.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
+      } catch (e) {
+        // A window with no media-query support says nothing, which is light.
+      }
+    }
+    return "light";
+  }
+
+  /**
+   * The scheme the library should draw in on THIS page.
+   *
+   * @returns {"light"|"dark"}
+   */
+  function schemeForPage(doc, win) {
+    if (!doc || typeof win === "undefined" || !win || typeof win.getComputedStyle !== "function") {
+      return systemScheme(win);
+    }
+    var candidates = [doc.body, doc.documentElement];
+    for (var i = 0; i < candidates.length; i += 1) {
+      if (!candidates[i]) continue;
+      var color = parseColor(win.getComputedStyle(candidates[i]).backgroundColor);
+      // A fully transparent background is the page declining to answer, so the
+      // next candidate is asked and the system preference is the last word.
+      if (!color || color.a < 0.5) continue;
+      return luminance(color) < 0.5 ? "dark" : "light";
+    }
+    return systemScheme(win);
+  }
 
   function createHighlights(options) {
     var opts = options || {};
@@ -7029,7 +7103,30 @@
       (doc.body || doc.documentElement).appendChild(host);
       surfaceHost = host;
       surfaceRoot = root;
+      // Stamped on the host, so every stylesheet inside the closed root selects
+      // its dark rules with :host([data-lahe-scheme='dark']) instead of a media
+      // query. The page decides; see schemeForPage.
+      refreshScheme();
       return { host: surfaceHost, root: surfaceRoot };
+    }
+
+    /**
+     * Re-read the page's background and re-stamp the surface.
+     *
+     * Called when the surface is built and again on every remount, because the
+     * page that comes back from a navigation or a morph is not required to have
+     * the background the page that left it had.
+     *
+     * @returns {"light"|"dark"} the scheme now in force
+     */
+    function refreshScheme() {
+      var next = pageScheme();
+      if (surfaceHost) surfaceHost.setAttribute(SCHEME_ATTR, next);
+      return next;
+    }
+
+    function pageScheme() {
+      return schemeForPage(doc, opts.window || (typeof window !== "undefined" ? window : null));
     }
 
     // Adds a stylesheet INSIDE the shadow root, once per key. Every caller's
@@ -7071,6 +7168,9 @@
       paintedIds: paintedIds,
       surface: surface,
       addSurfaceStyle: addSurfaceStyle,
+      pageScheme: pageScheme,
+      refreshScheme: refreshScheme,
+      SCHEME_ATTR: SCHEME_ATTR,
       teardown: teardown
     };
   }
@@ -7084,7 +7184,9 @@
     STYLE_ID: STYLE_ID,
     STYLE_ATTR: STYLE_ATTR,
     SURFACE_ID: SURFACE_ID,
+    SCHEME_ATTR: SCHEME_ATTR,
     STYLE_TEXT: STYLE_TEXT,
+    schemeForPage: schemeForPage,
     createHighlights: createHighlights,
     shared: shared
   };
@@ -7227,8 +7329,12 @@
   // The named limit from D5, said on the status line rather than claimed as
   // covered: two windows in separate storage with no helper running cannot be
   // refused by anything, so the rail says so out loud.
+  // It is SHOWN ONLY IN THE STATE IT DESCRIBES (see renderStatus): a caveat
+  // about there being no helper, printed under a status line that says the
+  // helper is storing and an agent is reading, contradicts the line above it and
+  // teaches the reviewer to stop reading the footer.
   var LIMIT_SEPARATE_STORAGE_NO_HELPER =
-    "With no helper running, a second window in a separate browser profile cannot be detected.";
+    "A second window in a separate browser profile cannot be detected.";
 
   var CSS = [
     // all: initial stops every inheritable property of the host page (font,
@@ -7241,15 +7347,23 @@
     "--accent-wash:rgba(60,86,165,.09);--warn:#8d5715;--warn-wash:rgba(180,120,30,.12);",
     "--good:#2c6f52;--shadow:0 1px 2px rgba(18,20,26,.06),0 14px 34px rgba(18,20,26,.13);",
     "--radius:14px;--radius-sm:10px}",
-    "@media (prefers-color-scheme:dark){:host{",
+    // THE PAGE PICKS THE SCHEME, NOT THE OS. highlight.js samples the reviewed
+    // page's own background and stamps data-lahe-scheme on this rail's host, so
+    // a dark-mode OS over a light page leaves the rail light and the tool stays
+    // a quiet object on someone else's page instead of a black slab.
+    ":host([data-lahe-scheme='dark']){",
     // Dark keeps the same relationship light has: the card and the rail are the
     // lit surface, the pane behind them is the ground. Inverting that is what
     // makes a dark UI read as a stack of holes.
     "--ink:#e9ebf0;--ink-soft:#a8b0be;--ink-faint:#7b8496;--paper:#1c2028;--surface:#14171c;",
     "--sunken:#0f1216;--line:#2c313b;--line-soft:#242932;--accent:#93a7ea;",
-    "--accent-ink:#b7c4f2;--accent-wash:rgba(147,167,234,.14);--warn:#dfae6a;",
+    // Raised from .14: at the lower alpha the question block was barely
+    // separable from the card behind it, so the block's loudness rested on the
+    // rule alone and D10's promise (a question cannot be scrolled past) was
+    // thinner in dark than in light. Same relationship, not the same alpha.
+    "--accent-ink:#b7c4f2;--accent-wash:rgba(147,167,234,.22);--warn:#dfae6a;",
     "--warn-wash:rgba(223,174,106,.14);--good:#7fc4a2;",
-    "--shadow:0 1px 2px rgba(0,0,0,.4),0 16px 40px rgba(0,0,0,.45)}}",
+    "--shadow:0 1px 2px rgba(0,0,0,.4),0 16px 40px rgba(0,0,0,.45)}",
     "*{box-sizing:border-box;margin:0;padding:0;font:inherit;color:inherit}",
     "button{background:none;border:0;cursor:pointer;font:inherit;color:inherit}",
     ":focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}",
@@ -7324,6 +7438,27 @@
     "resize:none;min-height:3.2em;font:inherit;font-size:13.5px;line-height:1.5;color:var(--ink);",
     "outline:0;padding:0}",
     ".card__body textarea::placeholder{color:var(--ink-faint)}",
+    // THE ONE QUIET ACTION REGISTER FOR ANYTHING INSIDE A CARD. Every tab owner
+    // that puts a control on a card uses it, so the rail has one button voice
+    // rather than one per file. It is deliberately small and outlined: these sit
+    // under the reviewer's own sentence and must not compete with it.
+    ".cardacts{display:flex;align-items:center;gap:7px;flex-wrap:wrap}",
+    ".cardacts:empty{display:none}",
+    ".cardact{font-size:11.5px;font-weight:550;color:var(--ink-soft);border:1px solid var(--line);",
+    "border-radius:7px;padding:3px 9px;background:var(--paper)}",
+    ".cardact:hover{color:var(--ink);background:var(--surface)}",
+    ".cardact--quiet{border-color:transparent;background:none;padding:3px 5px}",
+    ".cardact--quiet:hover{background:var(--surface);border-color:var(--line-soft)}",
+
+    // A HANDLED CARD IS NOT AN ACTIVE ONE, AND IT SAYS EACH THING ONCE. The
+    // Active tab's row stays attached to a card that moved to Done (withdrawing
+    // it would re-parent a node the reviewer may be in, which is the rail's own
+    // law), so the pane it landed in decides what shows. On a handled card the
+    // Done row carries the reviewer's words and Reopen, the rail's own .agent
+    // block carries what the agent said and the files, and the Active row's copy
+    // of the note and its Reword/Delete are not drawn.
+    ".card[data-state='handled'] .card__body > [data-lahe-active-row]{display:none}",
+
     ".card__badges{display:flex;flex-direction:column;gap:5px}",
     ".card__badges:empty{display:none}",
     ".badge{font-size:12px;color:var(--warn);background:var(--warn-wash);border-radius:7px;",
@@ -7373,7 +7508,7 @@
     "border:1px solid var(--line);background:var(--paper);color:var(--ink);text-align:center}",
     ".btn:hover{background:var(--surface)}",
     ".btn--primary{background:var(--accent);border-color:var(--accent);color:#fff}",
-    "@media (prefers-color-scheme:dark){.btn--primary{color:#12151a}}",
+    ":host([data-lahe-scheme='dark']) .btn--primary{color:#12151a}",
     ".btn--primary:hover{filter:brightness(1.06);background:var(--accent)}",
 
     // The keyboard hints are readable, not fine print (D10).
@@ -7392,7 +7527,8 @@
     ".pill[hidden]{display:none}",
     ".pill:hover{background:var(--surface)}",
     ".pill__dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}",
-    ".pill__count{font-variant-numeric:tabular-nums;color:var(--ink-faint);font-weight:500}"
+    ".pill__count{font-variant-numeric:tabular-nums;color:var(--ink-faint);font-weight:500}",
+    ".pill__count[hidden]{display:none}"
   ].join("");
 
   var HINTS = [
@@ -7457,6 +7593,9 @@
 
       var host = doc.createElement("div");
       markers.markChrome(host);
+      // The scheme the rail draws in, taken from the PAGE's own background
+      // rather than the OS (highlight.js decides; the rail only wears it).
+      host.setAttribute(highlightModule.SCHEME_ATTR, highlights.pageScheme());
       // CLOSED, per D8. Nothing outside the library can reach in, which is also
       // why this module answers holdsFocus and activeElementInfo itself.
       var shadow = host.attachShadow({ mode: "closed" });
@@ -7626,6 +7765,20 @@
       return mounted;
     }
 
+    /**
+     * Re-read the page's background and re-stamp the rail with the scheme it
+     * asks for. Called after a remount: the page that comes back is not required
+     * to have the background the page that left had.
+     *
+     * @returns {"light"|"dark"|null} null when there is nothing mounted
+     */
+    function refreshScheme() {
+      if (!dom) return null;
+      var next = highlights.refreshScheme();
+      dom.host.setAttribute(highlightModule.SCHEME_ATTR, next);
+      return next;
+    }
+
     function setReview(id) {
       reviewId = id;
       loadChips();
@@ -7770,6 +7923,9 @@
       p.kind.textContent = KIND_LABEL[item[record.FIELD.KIND]] || item[record.FIELD.KIND];
       p.state.textContent = STATE_LABEL[card.state] || card.state;
       p.state.setAttribute("data-state", card.state);
+      // On the card itself too, so anything a tab owner attached can be shown or
+      // withdrawn by the card's own state without a second file being told.
+      card.node.setAttribute("data-state", card.state);
       var quote = (item[record.FIELD.CONTEXT] && item[record.FIELD.CONTEXT].quote) || "";
       p.quote.textContent = quote;
       p.quote.style.display = quote ? "" : "none";
@@ -8119,7 +8275,13 @@
       dom.statusRow.setAttribute("data-status", status || "");
       dom.statusText.textContent = status ? STATUS_SHORT[status] : "Kept in this browser";
       dom.statusRow.title = status ? STATUS_TEXT[status] : "";
-      dom.limit.textContent = limitText || "";
+      // ONLY IN THE STATE IT DESCRIBES. The limit is about there being no helper
+      // to see across two storage buckets, so it is on screen exactly while the
+      // rail is saying nothing reached a helper. Under "Stored · agent reading"
+      // it was a permanent sentence contradicting the line above it, and a
+      // caveat that is always on screen is a caveat nobody reads.
+      var showLimit = !status || status === STATUS.KEPT_LOCALLY;
+      dom.limit.textContent = showLimit && limitText ? limitText : "";
     }
 
     function renderTabs() {
@@ -8129,7 +8291,11 @@
         dom.panes[name].setAttribute("data-current", name === activeTab ? "true" : "false");
         dom.counts[name].textContent = String(countFor(name));
       });
-      dom.pillCount.textContent = String(countFor(TAB.ACTIVE));
+      // An empty pill invites; it does not report a zero. "Review 0" on an
+      // untouched page prints the one number that is not information.
+      var open = countFor(TAB.ACTIVE);
+      dom.pillCount.textContent = open ? String(open) : "";
+      dom.pillCount.hidden = open === 0;
     }
 
     function selectTab(tab) {
@@ -8208,6 +8374,7 @@
       mount: mount,
       unmount: unmount,
       isMounted: isMounted,
+      refreshScheme: refreshScheme,
       setReview: setReview,
       collapse: collapse,
       isCollapsed: isCollapsed,
@@ -8418,12 +8585,66 @@
     "  z-index: 2;",
     "}",
     ".lahe-rail-pill[hidden] { display: none; }",
-    "@media (prefers-color-scheme: dark) {",
-    "  ." + PANEL_CLASS + ", ." + ROW_CLASS + ", .lahe-rail-pill { background: #1b1b1d; color: #f2f2f2; border-color: rgba(255,255,255,0.16); }",
-    "  .lahe-rail-count, .lahe-rail-quote, .lahe-rail-rowfoot, .lahe-rail-hints, .lahe-rail-footlabel { color: rgba(242,242,242,0.6); }",
-    "  .lahe-rail-keys { color: rgba(242,242,242,0.85); }",
-    "}"
+    // The page picks the scheme, not the OS (highlight.js stamps the host).
+    ":host([data-lahe-scheme='dark']) ." + PANEL_CLASS + ",",
+    ":host([data-lahe-scheme='dark']) ." + ROW_CLASS + ",",
+    ":host([data-lahe-scheme='dark']) .lahe-rail-pill { background: #1b1b1d; color: #f2f2f2; border-color: rgba(255,255,255,0.16); }",
+    ":host([data-lahe-scheme='dark']) .lahe-rail-count,",
+    ":host([data-lahe-scheme='dark']) .lahe-rail-quote,",
+    ":host([data-lahe-scheme='dark']) .lahe-rail-rowfoot,",
+    ":host([data-lahe-scheme='dark']) .lahe-rail-hints,",
+    ":host([data-lahe-scheme='dark']) .lahe-rail-footlabel { color: rgba(242,242,242,0.6); }",
+    ":host([data-lahe-scheme='dark']) .lahe-rail-keys { color: rgba(242,242,242,0.85); }"
   ].join("\n");
+
+  // ---------------------------------------------------------------------------
+  // What this tab draws INSIDE the rail
+  // ---------------------------------------------------------------------------
+  //
+  // PANEL_STYLE above draws the standalone panel and is added to the library's
+  // outer surface. It is NOT the rail's stylesheet and never was: the rail lives
+  // in a second, closed shadow root of its own, so nothing added to the outer
+  // surface reaches a hosted row. The hosted path used to add no stylesheet at
+  // all, which is why every `.lahe-rail-*` element in the rail rendered naked:
+  // full-ink prose where a hint list should be, and two unstyled buttons run
+  // together into "RewordDelete" under the reviewer's own sentence.
+  //
+  // So the hosted path has its own sheet, injected into the rail's root the way
+  // 3A's Done tab injects its own (by appending it inside the first node this
+  // file attaches). It is small on purpose: the rail already owns the card, the
+  // quote, the state chip and the button register (`.cardact`), and this file
+  // adds only the three things it actually draws.
+  var HOSTED_STYLE = [
+    ".lahe-rail-foot{display:flex;flex-direction:column;gap:9px;padding:2px 0 0}",
+    ".lahe-rail-footlabel{font-size:10px;font-weight:600;letter-spacing:.08em;",
+    "text-transform:uppercase;color:var(--ink-faint)}",
+    ".lahe-rail-note{white-space:pre-wrap;overflow-wrap:anywhere}",
+    ".lahe-rail-note[data-empty='true']{color:var(--ink-faint)}",
+    // The one hint surface is the rail footer's keycaps. Every OTHER gesture is
+    // still reachable, and still rendered from the one gesture table (R43), but
+    // it is behind a disclosure instead of being an eight-line wall of prose
+    // that is the loudest thing in an empty rail.
+    ".lahe-rail-more{font-size:11.5px;color:var(--ink-soft)}",
+    ".lahe-rail-more>summary{list-style:none;cursor:pointer;display:flex;align-items:center;",
+    "gap:5px;color:var(--ink-faint);font-size:11px;font-weight:550;letter-spacing:.01em}",
+    ".lahe-rail-more>summary::-webkit-details-marker{display:none}",
+    ".lahe-rail-more>summary::before{content:'›';display:inline-block;font-size:13px;line-height:1;",
+    "transform:translateY(-1px);transition:transform 120ms ease}",
+    ".lahe-rail-more[open]>summary::before{transform:rotate(90deg) translateX(-1px)}",
+    ".lahe-rail-more>summary:hover{color:var(--ink-soft)}",
+    ".lahe-rail-hints{list-style:none;display:flex;flex-direction:column;gap:6px;",
+    "margin-top:8px;font-size:11.5px;color:var(--ink-soft);line-height:1.4}",
+    ".lahe-rail-hints li{display:flex;gap:8px;align-items:baseline}",
+    // The same keycap the footer's hints use, so there is one hint language.
+    ".lahe-rail-keys{flex:0 0 auto;font-size:10.5px;font-weight:600;color:var(--ink);",
+    "background:var(--sunken);border:1px solid var(--line);border-bottom-width:2px;",
+    "border-radius:5px;padding:1px 5px;white-space:nowrap}",
+    ".lahe-rail-hint{flex:1}",
+    // F10: the note box is not in a .card__body, so it never picked up the
+    // rail's resize:none and wore the browser's diagonal grabber. It is the one
+    // place the rail looked like a form control instead of a surface.
+    ".lahe-rail-foot textarea{resize:none}"
+  ].join("");
 
   function createActiveTab(options) {
     var opts = options || {};
@@ -8452,6 +8673,7 @@
     var noteHandle = null;
     var collapsed = false;
     var mounted = false;
+    var hostedStyleAttached = false;
     var unsubscribe = null;
     // id -> row node. The reason there is no rebuild path.
     var rows = Object.create(null);
@@ -8534,7 +8756,11 @@
     function mountInRail(host) {
       footEl = el("footer", "lahe-rail-foot");
       footEl.style.order = "9";
-      footEl.appendChild(el("span", "lahe-rail-footlabel", "A note about the page, tied to nothing"));
+      // The stylesheet goes in with the first node this file puts in the rail's
+      // closed root. Without it every class below is a name with nothing behind
+      // it, which is exactly what shipped.
+      ensureHostedStyle(footEl);
+      footEl.appendChild(el("span", "lahe-rail-footlabel", "A note about the page"));
       host.appendChild(footEl);
       footEl.appendChild(hintList());
 
@@ -8553,11 +8779,27 @@
     function openNoteBox() {
       if (!footEl) return null;
       noteHandle = comments.openNote({ host: footEl, focus: false });
-      // Keep the hint list last, under the box.
-      footEl.appendChild(footEl.querySelector(".lahe-rail-hints"));
+      // Keep the hint disclosure last, under the box.
+      var more = footEl.querySelector(".lahe-rail-more") || footEl.querySelector(".lahe-rail-hints");
+      if (more) footEl.appendChild(more);
       return noteHandle;
     }
 
+    /** The hosted stylesheet, once, inside the rail's own closed root. */
+    function ensureHostedStyle(node) {
+      if (!hosted || hostedStyleAttached || !doc || !node) return;
+      var style = doc.createElement("style");
+      style.textContent = HOSTED_STYLE;
+      node.appendChild(style);
+      hostedStyleAttached = true;
+    }
+
+    // Every gesture, from the one gesture table (R43), rendered as keycaps
+    // rather than as prose. Hosted, it is behind a disclosure: the rail's footer
+    // already teaches the three gestures a reviewer needs on the first day, and
+    // printing eight more above them made the reviewer read the rules twice in
+    // two registers in one column. Standalone there is no footer to defer to, so
+    // the list is open.
     function hintList() {
       var list = el("ul", "lahe-rail-hints");
       gestures.hintLines().forEach(function (line) {
@@ -8566,7 +8808,11 @@
         li.appendChild(el("span", "lahe-rail-hint", line.hint));
         list.appendChild(li);
       });
-      return list;
+      if (!hosted) return list;
+      var more = el("details", "lahe-rail-more");
+      more.appendChild(el("summary", null, "All shortcuts"));
+      more.appendChild(list);
+      return more;
     }
 
     function hintText() {
@@ -8650,6 +8896,12 @@
       var row = el("article", ROW_CLASS);
       row.setAttribute("data-lahe-item", id);
       row.setAttribute("data-kind", item[record.FIELD.KIND]);
+      // What the rail hides on a card that moved to Done: the note and the two
+      // actions below are the ACTIVE tab's carriers, and a handled card gets
+      // both from the Done row and the rail's own agent block instead. The
+      // marker rather than a call, because a row is never withdrawn from a card
+      // the reviewer may be typing in.
+      if (hosted) row.setAttribute("data-lahe-active-row", "");
 
       // The rail's card already carries the quote and the lifecycle chip, so a
       // hosted row would say both of them twice. It draws what is left.
@@ -8661,16 +8913,22 @@
       var note = el("p", "lahe-rail-note", "");
       row.appendChild(note);
 
-      var foot = el("div", "lahe-rail-rowfoot");
+      // Hosted, these are the rail's own quiet card actions (one register for
+      // every control that sits on a card). Standalone they keep the panel's own
+      // button class, which its stylesheet does draw.
+      var actionClass = hosted ? "cardact cardact--quiet" : "lahe-rail-btn";
+      var foot = el("div", hosted ? "cardacts" : "lahe-rail-rowfoot");
       if (!hosted) foot.appendChild(el("span", "lahe-rail-state", ""));
-      var reword = el("button", "lahe-rail-btn", "Reword");
+      var reword = el("button", actionClass, "Reword");
+      reword.setAttribute("data-lahe-act", "reword");
       reword.setAttribute("type", "button");
       reword.addEventListener("click", function () {
         // In the rail, the box the reviewer rewords in lives in the card
         // itself; standalone, it opens over the page as before.
         comments.reopen(id, hosted ? { host: rail.cardBody(id), placement: "inline" } : undefined).focus();
       });
-      var del = el("button", "lahe-rail-btn", "Delete");
+      var del = el("button", actionClass, "Delete");
+      del.setAttribute("data-lahe-act", "delete");
       del.setAttribute("type", "button");
       del.addEventListener("click", function () {
         comments.remove(id);
@@ -8795,6 +9053,9 @@
       noteHandle = null;
       rows = Object.create(null);
       mounted = false;
+      // The sheet went with the foot it was appended inside, so the next mount
+      // has to put it back or the rail's rows come back naked.
+      hostedStyleAttached = false;
     }
 
     function isMounted() {
@@ -8929,15 +9190,11 @@
   // the first node this file attaches to a card. The rail's own stylesheet is
   // 1B's and is not edited; these rules add the two things this file draws.
   var STYLE = [
-    "." + ROW_CLASS + "{display:flex;flex-direction:column;gap:7px}",
-    "." + ROW_CLASS + " .lahe-done-said{font-size:13.5px;line-height:1.5;color:var(--ink)}",
-    "." + ROW_CLASS + " .lahe-done-agent{font-size:12.5px;color:var(--ink-soft)}",
-    "." + ROW_CLASS + " .lahe-done-files{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;",
-    "font-size:11px;color:var(--ink-faint);overflow-wrap:anywhere}",
-    "." + ROW_CLASS + " .lahe-done-foot{display:flex;gap:8px;align-items:center}",
-    "." + ROW_CLASS + " .lahe-done-reopen{font-size:11.5px;font-weight:550;color:var(--ink-soft);",
-    "border:1px solid var(--line);border-radius:7px;padding:3px 9px}",
-    "." + ROW_CLASS + " .lahe-done-reopen:hover{color:var(--ink);background:var(--surface)}",
+    "." + ROW_CLASS + "{display:flex;flex-direction:column;gap:8px}",
+    "." + ROW_CLASS + " .lahe-done-said{font-size:13.5px;line-height:1.5;color:var(--ink);",
+    "white-space:pre-wrap;overflow-wrap:anywhere}",
+    // Reopen wears the rail's own card-action register (`.cardact`), so every
+    // control that sits on a card has one voice rather than one per file.
 
     // The question. Full bleed to the card's padding, so the rule runs the
     // whole height of the block rather than sitting in a box inside a box.
@@ -8953,7 +9210,12 @@
     "overflow-wrap:anywhere;white-space:pre-wrap}",
     "." + ASK_CLASS + " .lahe-ask-answer{align-self:flex-start;font-size:12px;font-weight:600;",
     "padding:5px 12px;border-radius:8px;background:var(--accent);color:#fff}",
-    "@media (prefers-color-scheme:dark){." + ASK_CLASS + " .lahe-ask-answer{color:#12151a}}",
+    // The page picks the scheme, not the OS (highlight.js stamps the rail host).
+    ":host([data-lahe-scheme='dark']) ." + ASK_CLASS + " .lahe-ask-answer{color:#12151a}",
+    // In dark the wash alone carries less separation from the card behind it, so
+    // the block gets a hairline as well. Same relationship, drawn twice.
+    ":host([data-lahe-scheme='dark']) ." + ASK_CLASS + "{",
+    "border-top:1px solid rgba(147,167,234,.28);border-bottom:1px solid rgba(147,167,234,.28)}",
     "." + ASK_CLASS + " .lahe-ask-answer:hover{filter:brightness(1.06)}",
     // The card carrying a question is pulled to the top of its pane and given
     // the accent border, so it is the first thing in the tab and reads as one
@@ -9031,7 +9293,12 @@
         seen[id] = true;
         rail.upsertCard(item);
         rail.setCardState(id, record.STATE.HANDLED);
-        if (item[record.FIELD.REPLY]) rail.setAgentMessage(id, item[record.FIELD.REPLY]);
+        // R37, the half that is on the PAGE: a handled item loses its highlight.
+        // Here rather than only in the fold path, because an item can arrive
+        // handled from storage on a fresh load too, and the page it lands on has
+        // the same right not to be covered in marks on finished passages.
+        unpaintHandled(id);
+        if (item[record.FIELD.REPLY]) rail.setAgentMessage(id, agentMessageFor(item));
         if (!rows[id]) {
           rows[id] = buildRow(item);
           ensureStyle(rows[id]);
@@ -9050,15 +9317,21 @@
       return api;
     }
 
+    // ONE CARRIER PER FACT. A handled card used to say the reviewer's note
+    // twice, the agent's sentence twice and the file list twice: the Active
+    // tab's row, this row, and the rail's own `.agent` block all drew the same
+    // three things. The rail's `.agent` block is the good one, so it keeps the
+    // agent's sentence and the files; this row keeps the reviewer's own words
+    // and Reopen; and the Active row is not drawn on a card in the Done pane
+    // (the rail hides it by the card's state). Six blocks for three facts
+    // becomes three.
     function buildRow(item) {
       var row = el("div", ROW_CLASS);
       row.setAttribute("data-lahe-item", item[record.FIELD.ID]);
       row.appendChild(el("div", "lahe-done-said", ""));
-      row.appendChild(el("div", "lahe-done-agent", ""));
-      row.appendChild(el("div", "lahe-done-files", ""));
 
-      var foot = el("div", "lahe-done-foot");
-      var reopen = el("button", "lahe-done-reopen", "Reopen");
+      var foot = el("div", "cardacts");
+      var reopen = el("button", "cardact", "Reopen");
       reopen.setAttribute("type", "button");
       reopen.addEventListener("click", function () {
         reopenItem(item[record.FIELD.ID]);
@@ -9078,17 +9351,43 @@
 
     function updateRow(row, item) {
       row.querySelector(".lahe-done-said").textContent = saidBy(item);
+    }
 
-      var reply = item[record.FIELD.REPLY] || {};
-      var who = agentName(reply);
-      var line = who + " made this change.";
-      if (reply.reason) line = who + ": " + boundedText(reply.reason);
-      row.querySelector(".lahe-done-agent").textContent = line;
+    /**
+     * What the rail's own agent carrier says on a handled card.
+     *
+     * The reply as stored, with `reason` folded into `text` when the agent gave
+     * a reason and nothing else, so the one carrier says the one sentence
+     * whichever field the agent used. Bounded here, once, because this is the
+     * only path a handled reply reaches the card by now.
+     */
+    function agentMessageFor(item) {
+      var reply = item[record.FIELD.REPLY];
+      if (!reply) return null;
+      var said = reply.text || reply.reason;
+      return {
+        status: reply.status || null,
+        agent: agentName(reply),
+        // The reply's own fields are kept as they came, so nothing reading the
+        // card's model loses what the agent actually said in which field. Only
+        // `text` is what gets DRAWN, which is what makes it one carrier.
+        reason: reply.reason || null,
+        text: said ? boundedText(said) : agentName(reply) + " made this change.",
+        files: Array.isArray(reply.files) ? reply.files : [],
+        at: reply.at || null
+      };
+    }
 
-      var filesNode = row.querySelector(".lahe-done-files");
-      var files = Array.isArray(reply.files) ? reply.files : [];
-      filesNode.textContent = files.join("  ");
-      filesNode.hidden = files.length === 0;
+    // R37's page half. The paint is 1D's, so this file says WHEN and never how:
+    // a retired item drops its highlight, a reopened one gets it back with its
+    // anchor resolved against the page as it is now (the agent's change is
+    // usually what retired it, so the old range is stale by construction).
+    function unpaintHandled(id) {
+      if (comments && typeof comments.unpaint === "function") comments.unpaint(id);
+    }
+
+    function repaintReopened(id) {
+      if (comments && typeof comments.repaint === "function") comments.repaint(id);
     }
 
     // The name comes from the reply itself, and absent one the card says
@@ -9128,6 +9427,9 @@
       rail.setCardState(id, record.STATE.READY);
       rail.setAgentMessage(id, null);
       rail.setCardNotice(id, "Reopened. It is back in front of the agent.");
+      // Back in front of the agent, and back on the page: an open item is
+      // painted, which is the other half of R37.
+      repaintReopened(id);
       postReopened(reopened);
       counters.reopened += 1;
       refresh();
@@ -9259,7 +9561,7 @@
         rail.setAgentMessage(id, null);
         drawQuestion(next);
       } else {
-        rail.setAgentMessage(id, next[record.FIELD.REPLY]);
+        rail.setAgentMessage(id, agentMessageFor(next));
         clearQuestion(id);
       }
 
@@ -9475,7 +9777,12 @@
   var BAR_ORDER = -100000;
 
   var DELETED_TEXT = "Deleted";
-  var EXPORT_LABEL = "Export the edit list";
+  // Shortened from "Export the edit list": it was the widest, heaviest thing in
+  // the pane, opposite an 11.5px count, and on the empty tab it was a large
+  // disabled button over "No hand edits yet." Two words rather than one,
+  // because the rail's footer already holds a button called exactly "Export"
+  // and two of those in one rail is a coin toss for anyone reading it.
+  var EXPORT_LABEL = "Export edits";
   var EXPORT_MISSING_TITLE =
     "Export is arriving with the copy-and-export module; the list export wires up at the Phase 3 stitch.";
   var EXPORT_TITLE = "The hand edits on this page, as text, for a style guide or a chat window.";
@@ -9513,8 +9820,12 @@
     "border-bottom:1px solid var(--line-soft)}",
     "." + BAR_CLASS + "__count{font-size:11.5px;color:var(--ink-faint);",
     "font-variant-numeric:tabular-nums}",
-    "." + BAR_CLASS + "__btn{margin-left:auto;font-size:12px;font-weight:550;padding:6px 10px;",
-    "border-radius:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink)}",
+    // The footer's Copy and Export are the full-size pair; this one is a card-
+    // scale action, so it matches the rail's quiet register instead of being
+    // heavier than the buttons that do more.
+    "." + BAR_CLASS + "__btn{margin-left:auto;font-size:11.5px;font-weight:550;padding:3px 9px;",
+    "border-radius:7px;border:1px solid var(--line);background:var(--paper);color:var(--ink-soft)}",
+    "." + BAR_CLASS + "__btn:hover:not(:disabled){color:var(--ink)}",
     "." + BAR_CLASS + "__btn:hover:not(:disabled){background:var(--surface)}",
     "." + BAR_CLASS + "__btn:disabled{color:var(--ink-faint);cursor:default}"
   ].join("");
@@ -11254,7 +11565,9 @@
     ".lahe-comment-quote {",
     "  margin: 0;",
     "  padding-left: 8px;",
-    "  border-left: 2px solid rgba(255, 178, 26, 0.9);",
+    // The accent, not the amber. Amber means "this needs you" everywhere else in
+    // the product, and a quote of the passage being commented on needs nobody.
+    "  border-left: 2px solid rgba(60, 86, 165, 0.75);",
     "  color: rgba(17, 17, 17, 0.62);",
     "  font-size: 12px;",
     "  max-height: 3.2em;",
@@ -11263,7 +11576,9 @@
     "." + INPUT_CLASS + " {",
     "  width: 100%;",
     "  min-height: 66px;",
-    "  resize: vertical;",
+    // No native grabber. It is the one place the box looked like a form control
+    // dropped on the page instead of a surface, and the box already grows.
+    "  resize: none;",
     "  border: 1px solid rgba(17, 17, 17, 0.16);",
     "  border-radius: 6px;",
     "  padding: 7px 8px;",
@@ -11272,7 +11587,7 @@
     "  background: #ffffff;",
     "}",
     "." + INPUT_CLASS + ":focus-visible, ." + INPUT_CLASS + ":focus {",
-    "  outline: 2px solid rgba(255, 158, 0, 0.85);",
+    "  outline: 2px solid rgba(60, 86, 165, 0.9);",
     "  outline-offset: 1px;",
     "  border-color: transparent;",
     "}",
@@ -11285,22 +11600,29 @@
     "  font-size: 11px;",
     "}",
     ".lahe-comment-state[data-state='ready'] { color: rgba(17, 17, 17, 0.72); }",
+    // Pick mode is the reviewer choosing something, not the tool warning them,
+    // so the outline is the one accent rather than a saturated orange. It was
+    // the loudest colour moment anywhere in the product and it meant "normal".
     "." + OUTLINE_CLASS + " {",
     "  position: fixed;",
     "  pointer-events: none;",
     "  border-radius: 4px;",
-    "  outline: 2px solid rgba(255, 158, 0, 0.95);",
+    "  outline: 2px solid rgba(60, 86, 165, 0.95);",
     "  outline-offset: 2px;",
-    "  background: rgba(255, 202, 84, 0.12);",
+    "  background: rgba(60, 86, 165, 0.10);",
     "  z-index: 1;",
     "  display: none;",
     "}",
-    "@media (prefers-color-scheme: dark) {",
-    "  ." + BOX_CLASS + " { background: #1b1b1d; color: #f2f2f2; border-color: rgba(255,255,255,0.16); }",
-    "  ." + INPUT_CLASS + " { background: #111113; color: inherit; border-color: rgba(255,255,255,0.18); }",
-    "  .lahe-comment-quote { color: rgba(242,242,242,0.66); }",
-    "  .lahe-comment-foot { color: rgba(242,242,242,0.55); }",
-    "}"
+    // The PAGE picks the scheme, not the OS: a black comment card floating on a
+    // white page is the loudest possible way to be a polite overlay.
+    // highlight.js samples the page's background and stamps the surface host.
+    ":host([data-lahe-scheme='dark']) ." + BOX_CLASS + " { background: #1b1b1d; color: #f2f2f2; border-color: rgba(255,255,255,0.16); }",
+    ":host([data-lahe-scheme='dark']) ." + INPUT_CLASS + " { background: #111113; color: inherit; border-color: rgba(255,255,255,0.18); }",
+    ":host([data-lahe-scheme='dark']) ." + OUTLINE_CLASS + " { outline-color: rgba(147, 167, 234, 0.95);",
+    "  background: rgba(147, 167, 234, 0.12); }",
+    ":host([data-lahe-scheme='dark']) .lahe-comment-quote { color: rgba(242,242,242,0.66);",
+    "  border-left-color: rgba(147, 167, 234, 0.8); }",
+    ":host([data-lahe-scheme='dark']) .lahe-comment-foot { color: rgba(242,242,242,0.55); }"
   ].join("\n");
 
   function createComments(options) {
@@ -11650,24 +11972,86 @@
       };
     }
 
-    // Places an anchored box under its passage, kept inside the viewport and
-    // clear of the rail. Fixed positioning, inside the shadow root: the page's
-    // own layout never learns this happened.
+    // Places an anchored box, kept inside the viewport and clear of the rail.
+    // Fixed positioning, inside the shadow root: the page's own layout never
+    // learns this happened.
+    //
+    // THE GUTTER FIRST, THEN BELOW. A box under the passage covers the paragraph
+    // after it, so the reviewer is writing about the page with the page hidden.
+    // Most reviewed pages are a content column with empty space between it and
+    // the rail; when that space is wide enough the box goes there, beside its
+    // passage, and nothing is covered. Below is the fallback for a page whose
+    // content runs the full width.
+    var BOX_WIDTH = 288;
+    var GUTTER_GAP = 14;
+    // Roughly the box's own height, for the "is there room below" question. The
+    // box is measured when it is on screen; before that this is the estimate.
+    var BOX_HEIGHT_ESTIMATE = 180;
+
     function positionAt(node, range) {
       if (!node || !win) return node;
       var vw = win.innerWidth || 1024;
       var vh = win.innerHeight || 768;
-      var width = 288;
       var rect = range && typeof range.getBoundingClientRect === "function" ? range.getBoundingClientRect() : null;
-      var top = rect ? rect.bottom + 10 : 24;
-      var left = rect ? rect.left : 24;
-      var rightLimit = Math.max(16, vw - width - 16 - RAIL_ALLOWANCE);
+      var rightLimit = Math.max(16, vw - BOX_WIDTH - 16 - RAIL_ALLOWANCE);
+      var top;
+      var left;
+
+      // The gutter starts at the edge of the CONTENT COLUMN, not at the end of
+      // the selected run. A short selection (a heading, a few words) ends in the
+      // middle of the column, and a box placed there covers the text beside it,
+      // which is the thing being fixed rather than a smaller version of it.
+      var columnRight = columnEdge(range, rect);
+      if (columnRight !== null && columnRight + GUTTER_GAP <= rightLimit) {
+        left = columnRight + GUTTER_GAP;
+        top = rect.top;
+      } else {
+        top = rect ? rect.bottom + 10 : 24;
+        left = rect ? rect.left : 24;
+      }
+
       if (left > rightLimit) left = rightLimit;
       if (left < 16) left = 16;
-      if (top > vh - 180) top = Math.max(16, (rect ? rect.top : vh) - 180);
+      if (top > vh - BOX_HEIGHT_ESTIMATE) top = Math.max(16, (rect ? rect.top : vh) - BOX_HEIGHT_ESTIMATE);
+      if (top < 16) top = 16;
+
+      top = nudgeOffEditBar(node, top, left);
       node.style.top = Math.round(top) + "px";
       node.style.left = Math.round(left) + "px";
       return node;
+    }
+
+    /** The right edge of the block the passage sits in, in viewport pixels. */
+    function columnEdge(range, rect) {
+      if (!rect) return null;
+      var node = range && range.commonAncestorContainer;
+      var element = node && node.nodeType === 1 ? node : node && node.parentElement;
+      if (!element || typeof element.getBoundingClientRect !== "function") return rect.right;
+      var block = element.getBoundingClientRect();
+      return Math.max(rect.right, block.right);
+    }
+
+    /**
+     * Move the box below a live edit bar it would land on top of.
+     *
+     * Two floating chromes stacking on each other is the one collision the
+     * reviewer reads as the tool being broken. The bar is 2A's and lives in the
+     * same surface root; this asks the DOM where it is rather than asking the
+     * editing surface, so nothing new is wired between the two files for a
+     * placement nudge.
+     */
+    function nudgeOffEditBar(node, top, left) {
+      var root = surfaceRoot;
+      if (!root || typeof root.querySelector !== "function") return top;
+      var bar = root.querySelector(".lahe-edit-bar");
+      if (!bar || !bar.getBoundingClientRect) return top;
+      if (bar.style && bar.style.display === "none") return top;
+      var b = bar.getBoundingClientRect();
+      if (!b.width || !b.height) return top;
+      var overlapsX = left < b.right && b.left < left + BOX_WIDTH;
+      var overlapsY = top < b.bottom && b.top < top + BOX_HEIGHT_ESTIMATE;
+      if (!overlapsX || !overlapsY) return top;
+      return b.bottom + 10;
     }
 
     // ------------------------------------------------------------------------
@@ -11857,6 +12241,51 @@
       return removed;
     }
 
+    // ------------------------------------------------------------------------
+    // A handled item's paint (R37 / AC3)
+    // ------------------------------------------------------------------------
+    //
+    // A HANDLED ITEM LOSES ITS HIGHLIGHT. It is finished, the reviewer is not
+    // being asked to look at that passage again, and a page that keeps every
+    // answered passage painted accumulates marks all session until the reviewer
+    // cannot see which ones are still open. It is the paint that goes, never the
+    // record: the item is kept, it is in Done, and it is reopenable (R38).
+    //
+    // The two calls are a pair and both are here, because the paint is this
+    // file's. tab_done.js says WHEN; this file knows HOW.
+
+    /** Drop one item's paint. The record and its box are untouched. */
+    function unpaint(id) {
+      if (!highlights) return false;
+      return highlights.clear(id);
+    }
+
+    /**
+     * Paint one item again, resolving its anchor against the page as it is now.
+     *
+     * The live Range died with the paint, and the page has moved on anyway
+     * (usually because the agent's change is what retired the item), so the
+     * range is rebuilt from the record's own reference rather than remembered.
+     * An anchor that no longer binds is an honest miss: nothing is painted and
+     * the caller is told so, which is the same answer replay gives.
+     *
+     * @returns {boolean} true when the item is painted now
+     */
+    function repaint(id) {
+      if (!highlights || !doc) return false;
+      var item = store.readItem(requireReview(), id);
+      if (!item) return false;
+      var region = item[record.FIELD.REGION];
+      var ref = region && region.ref;
+      if (!ref) return false;
+      var verdict = anchor.resolve(ref, doc);
+      if (!verdict || !verdict.element) return false;
+      var range = doc.createRange();
+      range.selectNodeContents(verdict.element);
+      highlights.paint(id, range, highlightModule.NAME.COMMENT);
+      return true;
+    }
+
     function items() {
       return store.read(requireReview());
     }
@@ -12011,6 +12440,8 @@
       openNote: openNote,
       reopen: reopen,
       remove: remove,
+      unpaint: unpaint,
+      repaint: repaint,
       items: items,
       outstanding: outstanding,
       boxFor: boxFor,
@@ -12287,14 +12718,16 @@
     ".lahe-edit-bar__btn[data-lahe-command='bold'] { font-weight: 700; }",
     ".lahe-edit-bar__btn[data-lahe-command='italic'] { font-style: italic; }",
     ".lahe-edit-bar__hint { color: rgba(17, 17, 17, 0.5); white-space: nowrap; }",
-    "@media (prefers-color-scheme: dark) {",
-    "  ." + FRAME_CLASS + " { border-color: #93a7ea; background: rgba(147, 167, 234, 0.10);",
+    // The PAGE picks the scheme, not the OS: highlight.js samples the reviewed
+    // page's own background and stamps it on the surface host. A dark-mode OS
+    // over a light page used to turn this bar into a black card floating on a
+    // white document.
+    ":host([data-lahe-scheme='dark']) ." + FRAME_CLASS + " { border-color: #93a7ea; background: rgba(147, 167, 234, 0.10);",
     "    box-shadow: 0 0 0 4px rgba(147, 167, 234, 0.14), 0 6px 20px rgba(0, 0, 0, 0.4); }",
-    "  ." + BAR_CLASS + " { background: #1b1b1d; color: #f2f2f2; border-color: rgba(255,255,255,0.16); }",
-    "  .lahe-edit-bar__label { color: #b7c4f2; }",
-    "  .lahe-edit-bar__hint { color: rgba(242,242,242,0.55); }",
-    "  .lahe-edit-bar__sep { background: rgba(255,255,255,0.16); }",
-    "}"
+    ":host([data-lahe-scheme='dark']) ." + BAR_CLASS + " { background: #1b1b1d; color: #f2f2f2; border-color: rgba(255,255,255,0.16); }",
+    ":host([data-lahe-scheme='dark']) .lahe-edit-bar__label { color: #b7c4f2; }",
+    ":host([data-lahe-scheme='dark']) .lahe-edit-bar__hint { color: rgba(242,242,242,0.55); }",
+    ":host([data-lahe-scheme='dark']) .lahe-edit-bar__sep { background: rgba(255,255,255,0.16); }"
   ].join("\n");
 
   // ---------------------------------------------------------------------------
@@ -12918,6 +13351,40 @@
       return { reverted: true, kind: kind, reason: null };
     }
 
+    /**
+     * Drop ONE record and leave the page exactly as it is.
+     *
+     * The seam undo ends with, minus the write. It exists for one caller: the
+     * conflict card's "take the page's", where the reviewer is accepting what
+     * the page already says. Reverting to `before` there would be wrong twice
+     * over, because `before` is neither version in the collision.
+     *
+     * @param {string} itemId
+     * @returns {{retired: boolean, kind: (string|null), reason: (string|null)}}
+     */
+    function retire(itemId) {
+      var item = store.readItem(requireReview(), itemId);
+      if (!item) return { retired: false, kind: null, reason: "no record " + String(itemId) };
+
+      if (session && session.itemId === itemId) {
+        // Retiring the record the reviewer is inside. Edit state goes first, and
+        // it goes without committing: retiring is the decision.
+        var open = session;
+        session = null;
+        unbindBlock();
+        clearEditableAttrs(open.block);
+        protect.release(open.block);
+        hideFrame();
+      }
+
+      store.remove(requireReview(), itemId);
+      forget(itemId);
+      delete deleted[itemId];
+      emit(item, "undone");
+      scheduleReplay("undo");
+      return { retired: true, kind: item[record.FIELD.KIND], reason: null };
+    }
+
     function restoreRegion(item) {
       var el = elementFor(item);
       if (!el) return { element: null, reason: "the region this record points at is not on the page" };
@@ -13350,6 +13817,7 @@
       deleteBlock: deleteBlock,
       format: format,
       undo: undo,
+      retire: retire,
       capture: capture,
       itemFor: itemFor,
       elementFor: elementFor,
@@ -13542,6 +14010,10 @@
   //             into a region the reviewer is in
   //   anchor    the anchor engine. 1C's, unless a caller injects one
   //   document  where a conflict card's nodes are created
+  //   editing   2A's editing surface, for ONE thing: the conflict card's "take
+  //             the page's" button, which retires a record without writing to
+  //             the page. Replay never edits through it and a missing one only
+  //             costs that button
   //   hooks     one function per PASS_ORDER step that replay does not own:
   //             fold_replies, merge_store, retire_handled, update_rail. A
   //             missing hook is a no-op and is reported as one in the summary,
@@ -13553,6 +14025,7 @@
     protect: null,
     anchor: null,
     document: null,
+    editing: null,
     hooks: null
   };
 
@@ -13822,15 +14295,61 @@
   // link. The reviewer decides which one stands, and they cannot decide that
   // from a summary of the difference.
 
-  var CONFLICT_TITLE = "The page changed under this edit. Nothing was written.";
+  // The block asks the QUESTION; the card's badge (REPLAY_NEITHER_MATCHES)
+  // already says what happened and why nothing was written. Two sentences for
+  // one fact on one card is how the reviewer learns to skip both, and the block
+  // is where the decision is, so it carries the decision's own words.
+  var CONFLICT_TITLE = "Which version stands?";
   var YOURS_LABEL = "Your version";
   var THEIRS_LABEL = "On the page now";
+  // The two decisions, as the reviewer reads them. Constants, so the button a
+  // test presses and the button the reviewer presses are the same string.
+  var KEEP_MINE_LABEL = "Keep mine";
+  var TAKE_THEIRS_LABEL = "Take the page's";
+
+  // AND THE REVIEWER CAN ACTUALLY DECIDE. Both versions in full was only half of
+  // it: the card told the reviewer the decision was theirs and gave them nothing
+  // to press, so the collision sat on the card forever and the only way out was
+  // to edit the block again by hand.
+  //
+  //   Keep mine        re-applies this record's own version to the page and
+  //                    clears the collision. The record stands
+  //   Take the page's  retires the record and leaves the page exactly as it is.
+  //                    Per-record, like undo, and it touches nothing else
+  //
+  // Drawn as two labelled panes rather than five paragraphs of one size: an
+  // eyebrow per side, a left rule (the reviewer's in the accent, the page's in
+  // the neutral line colour), and the two buttons under both.
+  var CONFLICT_STYLE = [
+    "[data-lahe-conflict]{display:flex;flex-direction:column;gap:9px;",
+    "border-top:1px solid var(--line-soft);padding-top:9px}",
+    "[data-lahe-conflict][hidden]{display:none}",
+    "[data-lahe-conflict-title]{font-size:12.5px;font-weight:600;line-height:1.45;color:var(--ink)}",
+    "[data-lahe-conflict-sides]{display:flex;flex-direction:column;gap:8px}",
+    "[data-lahe-conflict-side]{padding-left:9px;border-left:2px solid var(--line);",
+    "display:flex;flex-direction:column;gap:3px}",
+    "[data-lahe-conflict-side='yours']{border-left-color:var(--accent)}",
+    "[data-lahe-conflict-label]{font-size:10px;font-weight:600;letter-spacing:.08em;",
+    "text-transform:uppercase;color:var(--ink-faint)}",
+    "[data-lahe-conflict-side='yours'] [data-lahe-conflict-label]{color:var(--accent-ink)}",
+    "[data-lahe-conflict-text]{font-size:12.5px;line-height:1.45;color:var(--ink-soft);",
+    "white-space:pre-wrap;overflow-wrap:anywhere}",
+    "[data-lahe-conflict-side='yours'] [data-lahe-conflict-text]{color:var(--ink)}",
+    // The run that actually differs, so the reviewer is comparing two sentences
+    // rather than reading two nearly identical ones and hunting for the change.
+    "[data-lahe-conflict-diff]{background:var(--accent-wash);border-radius:3px;",
+    "padding:0 2px;box-shadow:0 1px 0 var(--accent)}",
+    "[data-lahe-conflict-side='theirs'] [data-lahe-conflict-diff]{background:var(--warn-wash);",
+    "box-shadow:0 1px 0 var(--warn)}"
+  ].join("");
 
   // One node per item, reused. Building a fresh node on every pass would be the
   // rail's own law broken from the outside: a card the reviewer is reading (or
   // typing in) must not be rebuilt underneath them.
   var conflictNodes = Object.create(null);
   var conflicts = Object.create(null);
+  // The one style element, or null. See ensureConflictStyle.
+  var conflictStyleAttached = null;
 
   function cardsIn(ctx) {
     return ctx && ctx.cards ? ctx.cards : null;
@@ -13853,15 +14372,36 @@
       var title = doc.createElement("div");
       title.setAttribute("data-lahe-conflict-title", "");
       node.appendChild(title);
-      node.appendChild(sideNode(doc, "yours", YOURS_LABEL));
-      node.appendChild(sideNode(doc, "theirs", THEIRS_LABEL));
+      var sides = doc.createElement("div");
+      sides.setAttribute("data-lahe-conflict-sides", "");
+      sides.appendChild(sideNode(doc, "yours", YOURS_LABEL));
+      sides.appendChild(sideNode(doc, "theirs", THEIRS_LABEL));
+      node.appendChild(sides);
+      node.appendChild(decideNode(ctx, doc, id));
+      // The stylesheet rides in with the node, into the rail's own closed root,
+      // the way 3A's Done tab puts its own in. Without it these are attribute
+      // names with nothing behind them and the card that matters most in the
+      // product draws in no system at all.
+      ensureConflictStyle(doc, node);
       conflictNodes[id] = node;
     }
     node.firstChild.textContent = CONFLICT_TITLE;
-    textIn(node, "yours").textContent = yours === null || yours === undefined ? "" : String(yours);
-    textIn(node, "theirs").textContent = theirs === null || theirs === undefined ? "" : String(theirs);
+    writeSide(doc, node, "yours", yours, theirs);
+    writeSide(doc, node, "theirs", theirs, yours);
     node.removeAttribute("hidden");
     return node;
+  }
+
+  // Connectedness, not a boolean. The sheet rides inside the first conflict node
+  // built, and that node can leave the document with its card or with a
+  // remounted root; a flag alone would then say "installed" about a style
+  // element that is not in any tree, and the next conflict would draw naked.
+  function ensureConflictStyle(doc, node) {
+    if (conflictStyleAttached && conflictStyleAttached.isConnected !== false) return;
+    var style = doc.createElement("style");
+    style.textContent = CONFLICT_STYLE;
+    node.appendChild(style);
+    conflictStyleAttached = style;
   }
 
   function sideNode(doc, side, label) {
@@ -13877,8 +14417,146 @@
     return wrap;
   }
 
+  /**
+   * One side's text, with the run that differs from the other side marked.
+   *
+   * Both versions still appear IN FULL and untruncated; the mark is only a
+   * pointer at where they diverge, which is the difference between two legible
+   * paragraphs and a comparison a reviewer can actually make. textContent
+   * everywhere: neither side is ever parsed as markup.
+   */
+  function writeSide(doc, node, side, text, other) {
+    var body = textIn(node, side);
+    if (!body) return;
+    body.textContent = "";
+    var mine = text === null || text === undefined ? "" : String(text);
+    var theirs = other === null || other === undefined ? "" : String(other);
+    var span = commonAffixes(mine, theirs);
+    if (!mine) return;
+    if (span.head) body.appendChild(doc.createTextNode(span.head));
+    var middle = mine.slice(span.head.length, mine.length - span.tail.length);
+    if (middle) {
+      var mark = doc.createElement("span");
+      mark.setAttribute("data-lahe-conflict-diff", "");
+      mark.textContent = middle;
+      body.appendChild(mark);
+    }
+    if (span.tail) body.appendChild(doc.createTextNode(span.tail));
+  }
+
+  /** The shared start and the shared end of two strings. */
+  function commonAffixes(a, b) {
+    var head = 0;
+    while (head < a.length && head < b.length && a.charAt(head) === b.charAt(head)) head += 1;
+    var tail = 0;
+    while (
+      tail < a.length - head &&
+      tail < b.length - head &&
+      a.charAt(a.length - 1 - tail) === b.charAt(b.length - 1 - tail)
+    ) {
+      tail += 1;
+    }
+    return { head: a.slice(0, head), tail: tail ? a.slice(a.length - tail) : "" };
+  }
+
   function textIn(node, side) {
     return node.querySelector('[data-lahe-conflict-side="' + side + '"] [data-lahe-conflict-text]');
+  }
+
+  /** The two buttons. A decision the reviewer is told is theirs needs both. */
+  function decideNode(ctx, doc, id) {
+    var acts = doc.createElement("div");
+    acts.setAttribute("data-lahe-conflict-actions", "");
+    // The rail's own card-action register, so these read as the rail's buttons
+    // rather than as a third button voice inside one card.
+    acts.className = "cardacts";
+    acts.appendChild(button(doc, "cardact", KEEP_MINE_LABEL, "keep_mine", id));
+    acts.appendChild(button(doc, "cardact cardact--quiet", TAKE_THEIRS_LABEL, "take_theirs", id));
+    return acts;
+  }
+
+  function button(doc, className, label, choice, id) {
+    var b = doc.createElement("button");
+    b.className = className;
+    b.setAttribute("type", "button");
+    b.setAttribute("data-lahe-conflict-choice", choice);
+    b.textContent = label;
+    if (typeof b.addEventListener === "function") {
+      b.addEventListener("click", function () {
+        resolveConflict(id, choice);
+      });
+    }
+    return b;
+  }
+
+  /**
+   * The reviewer's decision on a collision, applied.
+   *
+   * @param {string} id      the record the conflict is on
+   * @param {string} choice  "keep_mine" or "take_theirs"
+   * @returns {{resolved: boolean, choice: string, reason: (string|null)}}
+   */
+  function resolveConflict(id, choice) {
+    var ctx = contextFor(null);
+    var flagged = conflicts[id];
+    if (!flagged) return { resolved: false, choice: choice, reason: "no conflict is flagged on " + String(id) };
+
+    if (choice === "take_theirs") {
+      // The page stands and the record goes. Nothing is written to the page:
+      // what the reviewer is accepting is already what is on it. `retire` is
+      // editing's per-record seam, the same one undo ends with, minus the write.
+      if (!ctx.editing || typeof ctx.editing.retire !== "function") {
+        return { resolved: false, choice: choice, reason: "no editing surface to retire the record with" };
+      }
+      var retired = ctx.editing.retire(id);
+      if (!retired || retired.retired !== true) {
+        return { resolved: false, choice: choice, reason: (retired && retired.reason) || "the record was not retired" };
+      }
+      delete conflicts[id];
+      forceClearConflict(ctx, id);
+      callCard(ctx, "removeCard", id);
+      return { resolved: true, choice: choice, reason: null };
+    }
+
+    if (choice !== "keep_mine") {
+      return { resolved: false, choice: choice, reason: "unknown choice " + String(choice) };
+    }
+
+    // The reviewer's version stands, so it is written to the page exactly as an
+    // ordinary re-apply would write it, and the collision is answered.
+    var item = itemWithId(ctx, id);
+    var element = lastElement[id];
+    if (!item) return { resolved: false, choice: choice, reason: "no record " + String(id) };
+    if (!element || (element.isConnected === false)) {
+      return { resolved: false, choice: choice, reason: "the region this record points at is not on the page" };
+    }
+    epoch.write("replay.keep_mine", function () {
+      writeRegion(element, item);
+    });
+    counters.regionsWritten += 1;
+    delete conflicts[id];
+    forceClearConflict(ctx, id);
+    return { resolved: true, choice: choice, reason: null };
+  }
+
+  function itemWithId(ctx, id) {
+    var found = null;
+    itemsIn(ctx).forEach(function (item) {
+      if (item[record.FIELD.ID] === id) found = item;
+    });
+    return found;
+  }
+
+  /**
+   * Clear a conflict the REVIEWER answered.
+   *
+   * Separate from clearConflict because that one deliberately refuses to clear a
+   * displaced conflict: an ordinary pass must not wipe a warning nobody has
+   * answered yet. A button press is the answer, so this one clears regardless.
+   */
+  function forceClearConflict(ctx, id) {
+    delete conflicts[id];
+    clearConflict(ctx, id);
   }
 
   // A conflict that resolved: the node stays where it is (removing it from a
@@ -14334,9 +15012,12 @@
     lastPass: lastPass,
     conflictFor: conflictFor,
     conflictIds: conflictIds,
+    resolveConflict: resolveConflict,
     CONFLICT_TITLE: CONFLICT_TITLE,
     YOURS_LABEL: YOURS_LABEL,
     THEIRS_LABEL: THEIRS_LABEL,
+    KEEP_MINE_LABEL: KEEP_MINE_LABEL,
+    TAKE_THEIRS_LABEL: TAKE_THEIRS_LABEL,
     REASON: REASON,
     REASONS: REASONS,
     PASS_ORDER: PASS_ORDER,
@@ -14816,7 +15497,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+1bf6f1e7fbb5";
+  var VERSION = "0.0.0+793144709d11";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -15109,7 +15790,10 @@
       },
       cards: rail,
       protect: protect,
-      document: doc
+      document: doc,
+      // For one thing only: the conflict card's "take the page's" button, which
+      // retires a record and writes nothing. See replay's `context`.
+      editing: editing
     });
 
     // "The page changed, so replay gets a pass."
@@ -15188,6 +15872,10 @@
       rebind: function () {
         comments.bind({ page: page });
         editing.bind({ page: page });
+        // The page that comes back from a navigation or a morph is not required
+        // to have the background the page that left had, and the library wears
+        // the PAGE's scheme rather than the OS's.
+        rail.refreshScheme();
       },
       merge: merge,
       onRemount: opts.onRemount || null
