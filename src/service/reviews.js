@@ -21,11 +21,25 @@
 // exactly once. The file:// case registers the literal origin "null", which is
 // what a browser sends from a page opened off disk (see the 1A spike in D11).
 //
-// ONE SESSION PER REVIEW, WITH A HEARTBEAT. A second window is refused with a
-// reason naming the first. A holder whose heartbeat has been quiet for thirty
-// seconds has lost the review, and the next window takes over rather than being
-// locked out: a reviewer shut out of their own review after a crash is a
-// work-losing outcome in a tool whose whole thesis is never losing work.
+// ONE SESSION PER REVIEW, WITH A HEARTBEAT. A second window is refused, and the
+// refusal does NOT disclose the holder's window id: a window that merely knows
+// the holder's id must not be able to pass itself off as the holder's heartbeat
+// (that was a live replay hole). Instead the grant hands the holder a server-
+// minted SESSION SECRET, and only a request carrying that secret is recognized
+// as the holder's continued possession. A holder whose heartbeat has been quiet
+// for thirty seconds has lost the review, and the next window takes over rather
+// than being locked out: a reviewer shut out of their own review after a crash
+// is a work-losing outcome in a tool whose whole thesis is never losing work.
+//
+// TAKEOVER IS A SAME-TOKEN-TRUSTED ACTION, not a secret-proven one. Every
+// window.claim already passes D11's per-review token check, and D11 says the
+// token is the working trust factor. So any window holding the token may take
+// over: automatically once the holder goes stale, or on the reviewer's explicit
+// "Review here instead", which deposes even a live holder. The session secret is
+// required only to be recognized as the CURRENT holder on a heartbeat; it is not
+// asked of a takeover, because a taking-over window is a different window that
+// never had the holder's secret. This keeps at most one live window while making
+// "knows the holder's id" no longer mean "is the holder".
 //
 // Node-only.
 
@@ -47,6 +61,21 @@ var STALE_AFTER_MS = 30 * 1000;
 
 function mintToken() {
   return crypto.randomBytes(TOKEN_BYTES).toString("hex");
+}
+
+// The per-session secret the holder proves possession with on every heartbeat.
+// Unguessable, minted server-side on the grant, never disclosed in a refusal.
+function mintSessionSecret() {
+  return crypto.randomBytes(24).toString("hex");
+}
+
+// Constant-time secret compare, so "does this request carry the holder's secret"
+// leaks nothing through timing. Unequal lengths are simply not equal.
+function secretsMatch(a, b) {
+  if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length || a.length === 0) {
+    return false;
+  }
+  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
 
 /** A fresh review id, in the safe character set, because it is a path component. */
@@ -105,22 +134,99 @@ function createReviews(options) {
         log.helperLog("ignoring a review directory the path rules refuse: " + err.message);
         return;
       }
-      if (!fs.existsSync(metaPath)) return;
+      if (!fs.existsSync(metaPath)) {
+        // No meta at all, but a directory named like a review. Its log may still
+        // hold everything needed to bring it back. Fail loud, then recover.
+        recoverFromLog(entry.name, "its " + stateDir.FILES.meta + " is missing");
+        return;
+      }
+      var parsed = null;
       try {
-        var parsed = JSON.parse(fs.readFileSync(metaPath, "utf8"));
-        if (parsed && typeof parsed.token === "string" && parsed.token) {
-          reviews[entry.name] = {
-            id: entry.name,
-            token: parsed.token,
-            origins: Array.isArray(parsed.origins) ? parsed.origins.slice() : [],
-            created_at: parsed.created_at || new Date().toISOString()
-          };
-        }
+        parsed = JSON.parse(fs.readFileSync(metaPath, "utf8"));
       } catch (err) {
-        log.helperLog("review " + entry.name + " has an unreadable " + stateDir.FILES.meta + ": " + err.message);
+        // NEW-3: an unreadable meta.json used to silently de-register the whole
+        // review, leaving its edits unreachable in events.jsonl. That is exactly
+        // the silent loss this tool exists to remove. Fail LOUD (the operator
+        // sees it) and recover the token and origins from the append-only log.
+        loud("review " + entry.name + " has an unreadable " + stateDir.FILES.meta + " (" + err.message + ")");
+        recoverFromLog(entry.name, "its " + stateDir.FILES.meta + " is corrupt");
+        return;
+      }
+      if (parsed && typeof parsed.token === "string" && parsed.token) {
+        reviews[entry.name] = {
+          id: entry.name,
+          token: parsed.token,
+          origins: Array.isArray(parsed.origins) ? parsed.origins.slice() : [],
+          created_at: parsed.created_at || new Date().toISOString()
+        };
+      } else {
+        loud("review " + entry.name + " has a " + stateDir.FILES.meta + " with no usable token");
+        recoverFromLog(entry.name, "its " + stateDir.FILES.meta + " carries no token");
       }
     });
     return reviews;
+  }
+
+  // A startup problem the operator must see, not a quiet diagnostic line. It goes
+  // to the helper log AND to stderr, because a review that vanished on restart is
+  // the kind of thing someone has to notice.
+  function loud(message) {
+    log.helperLog("STARTUP ERROR: " + message);
+    if (typeof console !== "undefined" && typeof console.error === "function") {
+      console.error("[lahe] STARTUP ERROR: " + message);
+    }
+  }
+
+  // Rebuild a review's registration from its append-only log when meta.json is
+  // gone or corrupt. The token rides the REVIEW_CREATED event, origins ride the
+  // ORIGIN_REGISTERED events. If the log has neither, the review's edits are
+  // genuinely unreachable, and that is said loudly rather than swallowed.
+  function recoverFromLog(reviewId, why) {
+    var events;
+    try {
+      events = log.read(reviewId);
+    } catch (err) {
+      loud("review " + reviewId + " could not be recovered (" + why + "): the log is unreadable (" + err.message + ")");
+      return null;
+    }
+    var token = null;
+    var origins = [];
+    var createdAt = null;
+    events.forEach(function (event) {
+      var type = event[protocol.EVENT_FIELD.EVENT];
+      if (type === protocol.EVENT.REVIEW_CREATED) {
+        if (event.token && typeof event.token === "string") token = event.token;
+        if (!createdAt) createdAt = event[protocol.EVENT_FIELD.TS] || null;
+      } else if (type === protocol.EVENT.ORIGIN_REGISTERED) {
+        var origin = event.origin || (event.payload && event.payload.origin);
+        if (typeof origin === "string" && origins.indexOf(origin) === -1) origins.push(origin);
+      }
+    });
+    if (!token) {
+      loud(
+        "review " +
+          reviewId +
+          " could not be recovered (" +
+          why +
+          "): the log has no REVIEW_CREATED token, so its edits are unreachable"
+      );
+      return null;
+    }
+    var recovered = {
+      id: reviewId,
+      token: token,
+      origins: origins,
+      created_at: createdAt || new Date().toISOString()
+    };
+    reviews[reviewId] = recovered;
+    // Re-persist a clean meta so the next restart is not another recovery.
+    try {
+      persist(recovered);
+    } catch (err) {
+      loud("review " + reviewId + " was recovered from its log but its " + stateDir.FILES.meta + " could not be rewritten (" + err.message + ")");
+    }
+    log.helperLog("review " + reviewId + " recovered from its log after " + why);
+    return recovered;
   }
 
   function get(reviewId) {
@@ -166,7 +272,13 @@ function createReviews(options) {
       protocol.newEvent({
         event: protocol.EVENT.REVIEW_CREATED,
         event_id: "ev_" + crypto.randomBytes(8).toString("hex"),
-        review: id
+        review: id,
+        // The token rides the created event too, not only meta.json, so a
+        // corrupt meta on restart can be recovered from the append-only log
+        // instead of orphaning the whole review's edits (NEW-3). events.jsonl is
+        // owner-only, the same class of secret as meta.json; the no-token rule is
+        // about the diagnostic helper.log, not the source-of-truth log.
+        payload: { token: review.token }
       })
     ]);
     log.helperLog("review " + id + " created");
@@ -253,10 +365,18 @@ function createReviews(options) {
   /**
    * Claim, or keep, the one session on a review.
    *
+   * Identity as the CURRENT holder is possession of the session secret, never
+   * the window id: a request whose secret matches the holder's is the holder's
+   * heartbeat, whatever id it carries. A window with a valid review token but no
+   * matching secret is either a refused second window (holder alive) or a
+   * takeover (holder stale, or takeover:true asked explicitly).
+   *
    * @param {string} reviewId
-   * @param {{window_id: string, takeover?: boolean}} request
-   * @returns {{granted: boolean, holder: string, since: string,
-   *            heartbeat_seconds: number, reason: string|null, took_over: boolean}}
+   * @param {{window_id: string, session_secret?: string, takeover?: boolean}} request
+   * @returns {{granted: boolean, since: string, heartbeat_seconds: number,
+   *            reason: string|null, took_over: boolean, session_secret?: string}}
+   *   The `session_secret` is present on a grant only, and is the holder's to
+   *   keep. A refusal discloses neither the holder's window id nor its secret.
    */
   function claimWindow(reviewId, request) {
     var req = request || {};
@@ -267,27 +387,29 @@ function createReviews(options) {
     var holder = sessions[reviewId] || null;
     var at = clock();
 
-    if (holder && holder.window_id === windowId) {
-      // The holder saying it is still there. This is the heartbeat.
+    if (holder && secretsMatch(holder.session_secret, req.session_secret)) {
+      // The holder proving it is still there, with the secret only it was given.
+      // This is the heartbeat, and it is the ONLY thing recognized as the holder.
       holder.last_seen = at;
+      holder.window_id = windowId;
       return granted(holder, false, null);
     }
 
-    if (holder && !holderIsStale(holder)) {
+    var wantsTakeover = req.takeover === true;
+
+    if (holder && !holderIsStale(holder) && !wantsTakeover) {
+      // A window that is not the holder and did not ask to take over, while the
+      // holder is alive. Refused, and the refusal names NOTHING about the holder:
+      // no window id (which a rival used to replay as a heartbeat) and no secret.
       var reason =
-        "this review is already open in another window (" +
-        holder.window_id +
-        "), which has been holding it since " +
+        "this review is already open in another window, which has been holding it since " +
         holder.since +
         ". Close that window, or wait " +
         Math.ceil(STALE_AFTER_MS / 1000) +
         " seconds after it stops responding and this one takes over.";
-      log.helperLog(
-        "review " + reviewId + ": refused window " + windowId + ", held by " + holder.window_id
-      );
+      log.helperLog("review " + reviewId + ": refused window " + windowId + " (holder still alive)");
       return {
         granted: false,
-        holder: holder.window_id,
         since: holder.since,
         heartbeat_seconds: HEARTBEAT_SECONDS,
         reason: reason,
@@ -295,6 +417,9 @@ function createReviews(options) {
       };
     }
 
+    // Granted: either there was no holder, the holder went stale, or a token-
+    // bearing window explicitly took over. A fresh secret is minted every time,
+    // so a deposed holder's old secret can never re-assert possession.
     var tookOver = !!holder;
     if (tookOver) {
       log.helperLog(
@@ -302,15 +427,16 @@ function createReviews(options) {
           reviewId +
           ": window " +
           windowId +
-          " took over from " +
-          holder.window_id +
-          ", whose heartbeat had been quiet for more than " +
-          Math.ceil(STALE_AFTER_MS / 1000) +
-          " seconds"
+          (holderIsStale(holder)
+            ? " took over from a holder whose heartbeat had been quiet for more than " +
+              Math.ceil(STALE_AFTER_MS / 1000) +
+              " seconds"
+            : " took over on an explicit Review-here-instead")
       );
     }
     sessions[reviewId] = {
       window_id: windowId,
+      session_secret: mintSessionSecret(),
       since: new Date().toISOString(),
       last_seen: at
     };
@@ -320,11 +446,13 @@ function createReviews(options) {
   function granted(holder, tookOver, reason) {
     return {
       granted: true,
-      holder: holder.window_id,
       since: holder.since,
       heartbeat_seconds: HEARTBEAT_SECONDS,
       reason: reason,
-      took_over: !!tookOver
+      took_over: !!tookOver,
+      // The holder's own secret, handed back to the holder only. The heartbeat
+      // carries it; a refusal never sees it.
+      session_secret: holder.session_secret
     };
   }
 

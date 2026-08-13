@@ -141,6 +141,9 @@ var HANDLERS = {
     }
     var outcome = deps.reviews.claimWindow(request.review, {
       window_id: body.window_id,
+      // Possession proof of the CURRENT holder. The route passes it through; the
+      // registry decides. A refusal returns no secret and no holder id.
+      session_secret: typeof body.session_secret === "string" ? body.session_secret : undefined,
       takeover: body.takeover === true
     });
     return {
