@@ -152,7 +152,6 @@ var LAYER_FILES = [
   {
     path: "src/layer/tab_edits.js",
     owner: "3D",
-    planned: true,
     why: "Edits tab contents"
   },
   {

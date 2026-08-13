@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Edits Tab Fixture</title>
+  <style>
+    body { font: 16px/1.6 system-ui, sans-serif; max-width: 46rem; margin: 2rem auto; color: #1c1c1c; }
+    h1 { font-size: 2rem; margin: 0 0 1rem; }
+    p { margin: 0 0 1rem; }
+  </style>
+</head>
+<body>
+  <!--
+    3D's fixture: enough blocks for a session of six hand edits, plus one
+    paragraph to comment on so the spec can prove hand edits and comments are
+    kept apart rather than assuming it.
+
+    Six blocks, because the done bar is six rows:
+      #one .. #four   four text edits
+      #gone           deleted
+      #format         a formatting-only change (already carries inline markup)
+      #say            the comment, which must NOT appear in the Edits tab
+
+    Served from the REPO ROOT so /dist/lahe-layer.js is reachable beside it.
+  -->
+  <h1 id="title">Every week, in the reviewer's words</h1>
+
+  <p id="one">The trainer writes the plan every week.</p>
+  <p id="two">Clients get the plan on Sunday night.</p>
+  <p id="three">Nobody reads the plan on Sunday night.</p>
+  <p id="four">The plan is three pages long.</p>
+  <p id="gone">This paragraph exists to be deleted.</p>
+  <p id="format">Warm up for ten minutes before every session.</p>
+  <p id="say">This heading says the opposite of the paragraph under it.</p>
+
+  <script src="/dist/lahe-layer.js"></script>
+  <script src="/test/fixtures/assets/edits-tab-boot.js"></script>
+</body>
+</html>
