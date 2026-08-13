@@ -307,18 +307,41 @@ async function run(argv, options) {
     return EXIT.TIMEOUT;
   }
 
-  var projection = null;
-  try {
-    var read = await fetchImpl(
-      helper.origin + protocol.route("review.read").path + "?review=" + encodeURIComponent(args.review),
-      { method: "GET", headers: headers(helper) }
-    );
-    projection = await read.json();
-  } catch (error) {
-    projection = null;
+  // The wait route already said this review has new work, so there ARE items
+  // behind these events. The follow-up read resolves them to their current
+  // shape. If that read fails or comes back unreadable, projection is null and
+  // itemsFor returns nothing: printing the cursor anyway and exiting NEW_WORK
+  // would advance the caller's watermark past work it never saw, a silent and
+  // permanent skip. So the read is retried, and if it still resolves no items
+  // the cursor is NOT printed and the exit is HELPER_UNREACHABLE: the next run
+  // re-reads from the same --since and the ready work comes back.
+  var readUrl =
+    helper.origin + protocol.route("review.read").path + "?review=" + encodeURIComponent(args.review);
+  var items = [];
+  for (var attempt = 0; attempt < 3; attempt += 1) {
+    var projection = null;
+    try {
+      var read = await fetchImpl(readUrl, { method: "GET", headers: headers(helper) });
+      projection = read && read.ok ? await read.json() : null;
+    } catch (error) {
+      projection = null;
+    }
+    items = itemsFor(projection, events);
+    if (items.length > 0) break;
   }
 
-  var items = itemsFor(projection, events);
+  if (items.length === 0) {
+    err(
+      "lahe wait: " +
+        events.length +
+        " new event(s) at " +
+        helper.origin +
+        ", but the projection resolved no items: the helper's review.read did not answer with them. " +
+        "Not advancing the cursor, so the work is not skipped; re-run to retry.\n"
+    );
+    return EXIT.HELPER_UNREACHABLE;
+  }
+
   items.forEach(function (item) {
     out(JSON.stringify(item) + "\n");
   });
