@@ -93,9 +93,18 @@ var HANDLERS = {
 
   // The projection the library reconciles against on load and on every
   // reconnect. 3A owns the projector; this is its one call site.
+  //
+  // It is the SAME projection the agent reads off disk, with `seq` added, so a
+  // reconnecting page and an agent opening review.json are looking at one
+  // thing. Answering a read also puts the review under the projector's watch,
+  // which is what starts the reply loop in an ordinary session: the page asks
+  // on load and on every reconnect.
   "review.read": function (request, deps) {
     if (!deps.projection || typeof deps.projection.project !== "function") {
       throw notImplemented("review.read", "3A");
+    }
+    if (typeof deps.projection.startWatching === "function") {
+      deps.projection.startWatching(deps, [request.review]);
     }
     var projected = deps.projection.project(request.review, deps.log.read(request.review));
     return {

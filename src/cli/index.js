@@ -1,9 +1,9 @@
 // The command dispatcher. Three commands: serve, add, wait.
 //
-// Owner: 1A, which wires `serve`. `add` is 3B's and `wait` is 3A's, and both are
-// dispatch stubs here that say so and exit 4 (bad usage, protocol.WAIT.EXIT).
-// They are stubs rather than absent entries on purpose: a user who types
-// `lahe add` should read what is missing, not "unknown command".
+// Owner: 1A, which wires `serve`. `wait` is 3A's and is wired below. `add` is
+// 3B's and is still a dispatch stub here that says so and exits 4 (bad usage,
+// protocol.WAIT.EXIT). It is a stub rather than an absent entry on purpose: a
+// user who types `lahe add` should read what is missing, not "unknown command".
 //
 // The three commands are the whole surface. The agent-facing pair from the
 // archived send model (`next` and `ack`) is gone: an agent answers by appending
@@ -43,21 +43,6 @@ function addNotYet() {
   return protocol.WAIT.EXIT.BAD_USAGE;
 }
 
-// TODO(3A): replace with require("./commands/wait.js"). The route it calls
-// already exists and blocks correctly; only the command is missing.
-function waitNotYet() {
-  process.stderr.write(
-    [
-      "lahe wait is not built yet. Task 3A owns it.",
-      "",
-      "The helper already serves the route it will call:",
-      "  GET " + protocol.BASE + "/wait?review=<id>&since=<cursor>&timeout=<seconds>",
-      "It blocks until something new passes the watermark, consumes nothing, and acknowledges nothing."
-    ].join("\n") + "\n"
-  );
-  return protocol.WAIT.EXIT.BAD_USAGE;
-}
-
 /**
  * @param {string[]} argv everything after the program name
  * @returns {Promise<number>} the process exit code
@@ -74,7 +59,7 @@ async function main(argv) {
 
   if (command === "serve") return require("./commands/serve.js").run(rest);
   if (command === "add") return addNotYet();
-  if (command === "wait") return waitNotYet();
+  if (command === "wait") return require("./commands/wait.js").run(rest);
 
   process.stderr.write("lahe: unknown command " + JSON.stringify(command) + "\n\n" + USAGE + "\n");
   return protocol.WAIT.EXIT.BAD_USAGE;
