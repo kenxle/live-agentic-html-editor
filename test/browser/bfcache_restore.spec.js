@@ -185,6 +185,11 @@ test.describe("ranked test 24: restored from the back/forward cache", () => {
     await pollPage(page, () => !!(window.__lahe && window.__lahe.booted), undefined, {
       message: "the layer to boot from its script tag"
     });
+    // This test drives the persisted branch with a synthetic event, so the
+    // app's own poll timer buys nothing and can slip an extra raw morph (and
+    // with it a second remount) between the two counter reads. Stop it: the
+    // exact-count assertion below is only meaningful with one actor on stage.
+    await page.evaluate(() => window.__app.morph.stop());
     await commentOnSelection(page, ".lede", "Nine and four again.");
 
     const before = await page.evaluate(() => ({
