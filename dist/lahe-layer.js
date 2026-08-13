@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+713562f0c2e7
+ * version 0.0.0+6d80b17ee56a
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+713562f0c2e7";
+  g.LAHE.version = "0.0.0+6d80b17ee56a";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -4329,45 +4329,6 @@
   // must all spell them the same way.
   var FILE_NAMES = { json: "review.json", events: "events.jsonl", replies: "replies.jsonl" };
 
-  // ---------------------------------------------------------------------------
-  // DEAD: the per-file random fencing delimiter machinery
-  // ---------------------------------------------------------------------------
-  //
-  // D6 replaced fencing with JSON structure, so nothing below is called by the
-  // projection or by the text renderer. It is left in place rather than deleted
-  // because deletions are batched (Phase 4B), and it is on that list. The only
-  // remaining caller anywhere is src/service/review_writer.js, which 3A reworks
-  // onto projectReview; when that lands, this whole section goes.
-
-  var DELIMITER_PREFIX = "LAHE-DATA-";
-
-  function makeDelimiter(randomHex) {
-    if (typeof randomHex !== "function") {
-      throw new TypeError("makeDelimiter expects a function returning hex characters");
-    }
-    var hex = String(randomHex(16));
-    if (!/^[0-9a-f]{16,}$/i.test(hex)) {
-      throw new Error("makeDelimiter: randomHex must return at least 16 hex characters");
-    }
-    return DELIMITER_PREFIX + hex.slice(0, 16).toLowerCase();
-  }
-
-  function fenceOpen(delimiter) {
-    return "<<<" + delimiter;
-  }
-
-  function fenceClose(delimiter) {
-    return delimiter + ">>>";
-  }
-
-  function escapeDataLine(line, delimiter) {
-    var trimmed = line.replace(/^\s+/, "");
-    if (trimmed.indexOf(delimiter) === 0 || trimmed.indexOf("<<<" + delimiter) === 0) {
-      return "\\" + line;
-    }
-    return line;
-  }
-
   return {
     SCHEMA: SCHEMA,
     CONTRACT: CONTRACT,
@@ -4391,14 +4352,7 @@
     projectReview: projectReview,
     stringifyReview: stringifyReview,
     countItems: countItems,
-    renderText: renderText,
-
-    // Dead, on the Phase 4B cleanup batch. See the section comment above.
-    DELIMITER_PREFIX: DELIMITER_PREFIX,
-    makeDelimiter: makeDelimiter,
-    fenceOpen: fenceOpen,
-    fenceClose: fenceClose,
-    escapeDataLine: escapeDataLine
+    renderText: renderText
   };
 });
 
@@ -16130,7 +16084,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+713562f0c2e7";
+  var VERSION = "0.0.0+6d80b17ee56a";
 
   var protocol = ns.protocol;
   var record = ns.record;

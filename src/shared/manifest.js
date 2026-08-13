@@ -195,12 +195,6 @@ var LAYER_FILES = [
 var NON_BUNDLE_FILES = [
   { path: "src/shared/contracts.js", owner: "0A-kernel", why: "Node-side barrel re-export. Nothing is defined in it" },
   { path: "src/shared/manifest.js", owner: "0A-kernel, FROZEN at CP0", why: "Node only. This file" },
-  {
-    path: "src/shared/cli_contract.js",
-    owner: "none (CUT)",
-    cut: true,
-    why: "the blocking next-and-ack exit-code contract is the dead send model. Removed in the Phase 4B batch"
-  },
 
   { path: "src/service/index.js", owner: "1A", why: "serve" },
   { path: "src/service/routes.js", owner: "1A", why: "the router, pinned to protocol.js" },
@@ -211,21 +205,11 @@ var NON_BUNDLE_FILES = [
   { path: "src/service/projection.js", owner: "3A", why: "the log projected into review.json and the reply state the library polls" },
   { path: "src/service/review_writer.js", owner: "3A", why: "the single writer of review.json, and the path-safety rules" },
   { path: "src/service/replies.js", owner: "3A", why: "reply file discovery, byte-offset reading, folding, the conflict rule" },
-  {
-    path: "src/service/verification.js",
-    owner: "none (CUT)",
-    cut: true,
-    why: "checking an agent's claim is a deliberate v1 cut, with the reply's files field kept as the seam"
-  },
 
   { path: "src/cli/index.js", owner: "1A", why: "the command dispatcher: serve, add, wait" },
   { path: "src/cli/commands/serve.js", owner: "1A", why: "serve" },
   { path: "src/cli/commands/add.js", owner: "3B", why: "add" },
-  { path: "src/cli/commands/wait.js", owner: "3A", why: "wait" },
-  { path: "src/cli/commands/next.js", owner: "none (CUT)", cut: true, why: "the blocking next command is the dead send model" },
-  { path: "src/cli/commands/ack.js", owner: "none (CUT)", cut: true, why: "acknowledgement is an appended reply line, not a command" },
-  { path: "src/cli/commands/open.js", owner: "none (CUT)", cut: true, why: "superseded by add, which mints the review and its token in one act" },
-  { path: "src/cli/commands/setup.js", owner: "none (CUT)", cut: true, why: "superseded by add. No instruction files are written now; the contract is the file" }
+  { path: "src/cli/commands/wait.js", owner: "3A", why: "wait" }
 ];
 
 var BUNDLE_OUTPUT = "dist/lahe-layer.js";
