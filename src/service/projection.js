@@ -71,7 +71,9 @@ function recordFromEvent(event) {
  * @param {object[]} events every event for one review, in seq order
  * @returns {object[]} records, each carrying its folded reply in `reply`
  */
-function itemsFrom(events) {
+function itemsFrom(events, options) {
+  var opts = options || {};
+  var onDropped = typeof opts.onDropped === "function" ? opts.onDropped : null;
   var byId = Object.create(null);
   var order = [];
   // id -> the revision the current reply answered. Rule 2 above reads it.
@@ -83,7 +85,16 @@ function itemsFrom(events) {
 
     if (type === EVENT.ITEM_CREATED || type === EVENT.ITEM_CONTENT || type === EVENT.ITEM_READY) {
       var next = recordFromEvent(event);
-      if (!next || !next[F.ID]) return;
+      if (!next || !next[F.ID]) {
+        // A malformed item event: the log accepted it (the type is known) but it
+        // carries no usable record. Dropping it silently is asymmetric with the
+        // reply path, which reports a rejected line (NEW-5). Report it so the
+        // drop is on the record rather than invisible.
+        if (onDropped) {
+          onDropped(event, !next ? "the event carried no record object" : "the carried record has no id");
+        }
+        return;
+      }
       var prev = byId[next[F.ID]];
       if (!prev) order.push(next[F.ID]);
       if (prev && prev[F.REPLY] && replyRev[next[F.ID]] === next[F.REV]) {
@@ -182,7 +193,7 @@ function project(reviewId, events, options) {
     started_at: times.started_at,
     ended_at: times.ended_at,
     generated_at: opts.generated_at || undefined,
-    items: actionableItems(itemsFrom(events))
+    items: actionableItems(itemsFrom(events, { onDropped: opts.onDropped }))
   });
 }
 
@@ -209,7 +220,7 @@ function regenerate(args) {
   var a = args || {};
   if (!a.dir || !a.log || !a.review) throw new Error("projection.regenerate: dir, log and review are all required");
   var events = a.log.read(a.review);
-  var projected = project(a.review, events);
+  var projected = project(a.review, events, { onDropped: a.onDropped });
   var written = reviewWriter.writeReviewJson(projected, { dir: a.dir, review: a.review });
   return { path: written, seq: a.log.currentSeq(a.review), items: countItems(projected) };
 }
@@ -241,7 +252,25 @@ function createProjector(options) {
 
   var watched = Object.create(null); // review id -> the seq at the last write
   var timer = null;
-  var counters = { ticks: 0, folds: 0, writes: 0 };
+  var counters = { ticks: 0, folds: 0, writes: 0, dropped: 0 };
+  // event_id of every malformed item event already reported, so a drop is logged
+  // once rather than on every regenerate that re-reads the same log (NEW-5).
+  var droppedSeen = Object.create(null);
+
+  function reportDropped(reviewId, event, reason) {
+    var key = event && event[protocol.EVENT_FIELD.EVENT_ID];
+    if (key && droppedSeen[key]) return;
+    if (key) droppedSeen[key] = true;
+    counters.dropped += 1;
+    log.helperLog(
+      "review " +
+        reviewId +
+        ": dropped a malformed item event " +
+        JSON.stringify(key || "(no event_id)") +
+        ": " +
+        reason
+    );
+  }
 
   /**
    * Every review on disk, so a review created after the helper started (which
@@ -280,7 +309,14 @@ function createProjector(options) {
     if (summary.accepted.length || summary.rejected.length || summary.refused.length) counters.folds += 1;
     var seq = log.currentSeq(reviewId);
     if (watched[reviewId] === seq) return { wrote: false, seq: seq };
-    regenerate({ dir: dir, log: log, review: reviewId });
+    regenerate({
+      dir: dir,
+      log: log,
+      review: reviewId,
+      onDropped: function (event, reason) {
+        reportDropped(reviewId, event, reason);
+      }
+    });
     watched[reviewId] = seq;
     counters.writes += 1;
     return { wrote: true, seq: seq, summary: summary };

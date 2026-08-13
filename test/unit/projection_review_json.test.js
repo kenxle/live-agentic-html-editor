@@ -217,6 +217,45 @@ test("an agent's reply text is data too, plain and bounded, and never an instruc
   assert.equal(parsed.field_classes["reply.reason"], "data");
 });
 
+// --- NEW-5: a malformed item event is dropped loudly, not silently -----------
+
+test("a malformed item event is reported, not silently dropped (NEW-5)", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-proj-bad-"));
+  const lines = [];
+  const log = logModule.createEventLog({ dir: dir, onHelperLog: (l) => lines.push(l) });
+  stateDir.ensureReviewDir(dir, REVIEW);
+
+  // A well-formed ready item, so the projection has real work to do.
+  post(log, itemOf({ id: "itm_ok", note: "this one is fine" }));
+
+  // An item event carrying NO record. The log accepts it (the event type is
+  // known); the projection cannot build an item from it. Before NEW-5 this was
+  // dropped with no log, no reject and no chip, asymmetric with the reply path.
+  log.append(REVIEW, [
+    protocol.newEvent({
+      event: protocol.EVENT.ITEM_READY,
+      event_id: "evt_bad",
+      review: REVIEW,
+      item: "itm_bad",
+      rev: 1,
+      payload: { draft: false }
+    })
+  ]);
+
+  const projector = projection.createProjector({ dir: dir, log: log });
+  projector.watch(REVIEW);
+  projector.tick();
+
+  // The good item still reaches the file.
+  const parsed = JSON.parse(fs.readFileSync(stateDir.reviewJsonPath(dir, REVIEW), "utf8"));
+  assert.equal(allItems(parsed).length, 1);
+  assert.equal(allItems(parsed)[0].id, "itm_ok");
+
+  // And the drop is reported, naming the dropped event.
+  const diagnostic = lines.filter((l) => /malformed item event/i.test(l) && l.includes("evt_bad"));
+  assert.equal(diagnostic.length >= 1, true, "the dropped item event is reported, not silently discarded");
+});
+
 // --- ranked test 20 ----------------------------------------------------------
 
 test("a draft never appears in review.json, and the same record after Cmd-Enter does", () => {

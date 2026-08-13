@@ -44,8 +44,15 @@ GREEN (after boundData(title, CONTEXT_MAX) + explicit PROJECTED_FIELD_CLASS):
 # fail 0
 ```
 
-### NEW-5 (loud drop of a malformed item event)
-RED/GREEN recorded below once implemented.
+### NEW-5 (loud drop of a malformed item event) — test/unit/projection_review_json.test.js
+RED (before fix): `not ok 4 - a malformed item event is reported, not silently dropped (NEW-5)`.
+GREEN (after threading onDropped through itemsFrom -> project -> regenerate ->
+projector.reportDropped, deduped by event_id + helperLog): `# pass 13 # fail 0`.
+Note: full parity with the reply path (a rejected EVENT + a rail chip) would
+require a new event type in protocol.js EVENT_TYPES (frozen wire, off-limits)
+and a chip in overlay.js/index.js (off-limits). The fix makes the drop LOUD via
+the helper log diagnostic (deduped), which removes the "no log" asymmetry the
+finding names; the reject-event/chip parity is left as a wire-owned follow-up.
 
 ## Per-finding one-liners
 - Finding 24 + NEW-6 committed together (both are in review_format.js, not
