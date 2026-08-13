@@ -1,9 +1,10 @@
 // The command dispatcher. Three commands: serve, add, wait.
 //
-// Owner: 1A, which wires `serve`. `add` is 3B's and `wait` is 3A's, and both are
-// dispatch stubs here that say so and exit 4 (bad usage, protocol.WAIT.EXIT).
-// They are stubs rather than absent entries on purpose: a user who types
-// `lahe add` should read what is missing, not "unknown command".
+// Owner: 1A, which wires `serve`. `add` is 3B's and is wired the same way serve
+// is. `wait` is 3A's and is still a dispatch stub here that says so and exits 4
+// (bad usage, protocol.WAIT.EXIT). It is a stub rather than an absent entry on
+// purpose: a user who types `lahe wait` should read what is missing, not
+// "unknown command".
 //
 // The three commands are the whole surface. The agent-facing pair from the
 // archived send model (`next` and `ack`) is gone: an agent answers by appending
@@ -24,24 +25,6 @@ var USAGE = [
   "",
   "Run `lahe <command> --help` for a command's own options."
 ].join("\n");
-
-// TODO(3B): replace with require("./commands/add.js"). `add` mints the review
-// through src/service/reviews.js, which 1A built, and starts the helper when it
-// is not already up.
-function addNotYet() {
-  process.stderr.write(
-    [
-      "lahe add is not built yet. Task 3B owns it.",
-      "",
-      "Until it lands, the same two acts are available directly:",
-      "  lahe serve --review <id> --origin <your dev server's origin>",
-      "then read the review's token out of the helper's service.json and put it on the script tag as " +
-        protocol.SCRIPT_ATTR.TOKEN +
-        "."
-    ].join("\n") + "\n"
-  );
-  return protocol.WAIT.EXIT.BAD_USAGE;
-}
 
 // TODO(3A): replace with require("./commands/wait.js"). The route it calls
 // already exists and blocks correctly; only the command is missing.
@@ -73,7 +56,7 @@ async function main(argv) {
   }
 
   if (command === "serve") return require("./commands/serve.js").run(rest);
-  if (command === "add") return addNotYet();
+  if (command === "add") return require("./commands/add.js").run(rest);
   if (command === "wait") return waitNotYet();
 
   process.stderr.write("lahe: unknown command " + JSON.stringify(command) + "\n\n" + USAGE + "\n");
