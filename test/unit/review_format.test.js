@@ -142,6 +142,36 @@ test("the projected item spells the page's text into data-named fields", () => {
 });
 
 // ---------------------------------------------------------------------------
+// NEW-4: the page title is page-controlled, so it is bounded, and the
+// field_classes map names the fields the projection actually emits
+// ---------------------------------------------------------------------------
+
+test("a long page title is bounded at the group header, with the marker visible", () => {
+  const longTitle = "T".repeat(rf.CONTEXT_MAX + 500);
+  const json = rf.projectReview(reviewWith([anEdit({ page_title: longTitle })], null));
+  const page = json.pages[0];
+  assert.equal(page.title.length < longTitle.length, true, "page.title is page-controlled, so it is boundable");
+  assert.equal(page.title.startsWith("T".repeat(rf.CONTEXT_MAX)), true);
+  assert.equal(page.title.includes(rf.TRUNCATION_MARKER.split("{n}")[0]), true, "the bound is visible in the value");
+});
+
+test("field_classes names the fields the projection emits, and no stale ones", () => {
+  const json = rf.projectReview(reviewWith([anEdit()], null));
+  const fc = json.field_classes;
+  // The emitted page-group header fields.
+  assert.equal(fc.title, record.CLASS_DATA);
+  assert.equal(fc.origin, record.CLASS_DATA);
+  assert.equal(fc.path, record.CLASS_DATA);
+  // The emitted item field name, not the record's dotted internal name.
+  assert.equal(fc.region_label, record.CLASS_DATA);
+  assert.equal(Object.prototype.hasOwnProperty.call(fc, "region.label"), false, "the record's internal name is not emitted");
+  // Stale keys that name nothing in the file are gone.
+  assert.equal(Object.prototype.hasOwnProperty.call(fc, "after_history"), false, "after_history is not projected");
+  assert.equal(Object.prototype.hasOwnProperty.call(fc, "page_title"), false, "emitted as title, not page_title");
+  assert.equal(Object.prototype.hasOwnProperty.call(fc, "page_path"), false, "emitted as path, not page_path");
+});
+
+// ---------------------------------------------------------------------------
 // Ranked test 28's unit half: injected instructions stay data
 // ---------------------------------------------------------------------------
 

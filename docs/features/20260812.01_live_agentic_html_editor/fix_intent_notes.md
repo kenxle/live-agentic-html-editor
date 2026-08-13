@@ -31,5 +31,21 @@ GREEN (after commit sets change = record.editChangeText(kind, before.text, after
 The real edit produces `change` = `Added "..."` and the projection carries it
 verbatim; a >2000-char edit keeps `change` whole while `after_full` is bounded.
 
+### NEW-4 (title bound + field_classes align) — test/unit/review_format.test.js
+RED (before fix):
+```
+not ok 6 - a long page title is bounded at the group header, with the marker visible
+not ok 7 - field_classes names the fields the projection emits, and no stale ones
+# fail 2
+```
+GREEN (after boundData(title, CONTEXT_MAX) + explicit PROJECTED_FIELD_CLASS):
+```
+# pass 24
+# fail 0
+```
+
+### NEW-5 (loud drop of a malformed item event)
+RED/GREEN recorded below once implemented.
+
 ## Cleanup needed
 (none yet)

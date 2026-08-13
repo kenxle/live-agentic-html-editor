@@ -110,21 +110,34 @@
     PROJECTED.REGION_LABEL
   ];
 
-  // Built from the record's own classification so there is one rule, not two.
-  // The only difference is the `after` to `after_full` rename and the two
-  // fields the projection adds (`quote` lifted out of context, `region_label`).
-  var PROJECTED_FIELD_CLASS = (function () {
-    var out = {};
-    Object.keys(record.FIELD_CLASS).forEach(function (k) {
-      if (k === record.FIELD.AFTER) return;
-      out[k] = record.FIELD_CLASS[k];
-    });
-    out[PROJECTED.AFTER_FULL] = record.CLASS_DATA;
-    out[PROJECTED.QUOTE] = record.CLASS_DATA;
-    out[PROJECTED.CONTEXT] = record.CLASS_DATA;
-    out[PROJECTED.REGION_LABEL] = record.CLASS_DATA;
-    return out;
-  })();
+  // The classification travels with the file, so an agent sees the rule as
+  // structure and not only as prose. Every key here names a field the
+  // projection ACTUALLY emits (NEW-4): the record's internal, dotted field names
+  // (`region.label`, `after_history`, `page_title`) are not what an agent reads,
+  // so listing them would describe fields that are not in the file. The two
+  // intent fields, then every data-named carrier the projection writes,
+  // including the page-group header fields the agent reads as labels.
+  var PROJECTED_FIELD_CLASS = {
+    // intent (D12): the reviewer's own words, verbatim, never bounded
+    note: record.CLASS_INSTRUCTION,
+    change: record.CLASS_INSTRUCTION,
+    // data: everything that came off the page, boundable
+    quote: record.CLASS_DATA,
+    before: record.CLASS_DATA,
+    after_full: record.CLASS_DATA,
+    context: record.CLASS_DATA,
+    before_html: record.CLASS_DATA,
+    after_html: record.CLASS_DATA,
+    region_label: record.CLASS_DATA,
+    // the page-group header fields, all page-controlled
+    title: record.CLASS_DATA,
+    origin: record.CLASS_DATA,
+    path: record.CLASS_DATA,
+    // the agent's own reply text, its own trust class: plain data (D6)
+    "reply.agent": record.CLASS_DATA,
+    "reply.reason": record.CLASS_DATA,
+    "reply.text": record.CLASS_DATA
+  };
 
   // ---------------------------------------------------------------------------
   // Bounding (D12): data may be bounded, intent never is
@@ -317,7 +330,10 @@
           key: g.key,
           origin: g.origin,
           path: g.path,
-          title: g.title,
+          // The title comes from doc.title, so it is fully page-controlled and
+          // an agent reads it as a label. Bounded like every other page-derived
+          // field, with the marker visible (NEW-4).
+          title: boundData(g.title, CONTEXT_MAX),
           source_hint: sourceHint(g.hint),
           items: g.items.map(projectItem)
         };
