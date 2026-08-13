@@ -68,6 +68,23 @@ Severity, source, where, what, fix. B = blocker, I = important, M = minor.
 | 31 | M | code-lead 9 | protect.js:697 | onMutations restores every snapshot key; release evicts only the active one (latent, not live) | Scope restoration to the active region |
 | 32 | M | misc | record_fixtures.js:34, protocol.js:523, progress doc | Hardcoded port literal; dead "blur" flush trigger; progress doc says 325 not 403 | Import DEFAULT_HELPER_ORIGIN; drop/ wire blur; fix the count |
 
+## Adversary pass (ran last, on the union)
+
+Confirmed all 6 blockers and both clusters against the code. Six new findings, all on the seams
+between the five reviewers' areas. Its highest-priority instruction: **findings 1, 2, 3, 12 plus
+NEW-1 and NEW-2 are one window-session state machine, not six patches** (hold / refused-read-only-
+but-still-polling / takeover), because landing them independently breaks D5's auto-takeover and
+leaves the session secret's anti-replay undercut by a takeover path that still asks no proof.
+
+| # | Sev | Where | What | Fix |
+|---|-----|-------|------|-----|
+| NEW-1 | I | tab_done.js:314, lifecycle.js:164, merge.js:47 | Reopen keeps the same rev, so a stale/duplicate same-rev reply re-buries a just-reopened item, and merge discards an offline reopen (STATE/REPLY aren't in CONTENT_FIELDS) | Bump rev on reopen (like reword) so the rev rule + BROWSER_NEWER_REV protect it; add a fold-vs-reopen interleaving test |
+| NEW-2 | I | the C1 fix wave as a whole | The four C1 fixes interact and partly cancel: read-only + stop-heartbeat kills auto-takeover; takeover still needs no possession proof | Write the window-session state machine first; refused window keeps a lightweight liveness poll; takeover requires the same proof as a heartbeat |
+| NEW-3 | I | reviews.js:104 loadFromDisk | Corrupt/unreadable meta.json silently de-registers a whole review on restart; its edits sit unreachable in events.jsonl | Fail loud; recover the token from the log's REVIEW_CREATED event |
+| NEW-4 | I | review_format.js:315 | page.title (page-controlled) reaches review.json unbounded, and field_classes keys don't match the emitted field names (title/origin/path/no after_history) | boundData(title) with the marker; align field_classes keys to reality |
+| NEW-5 | M | projection.js:84 | A malformed item event is silently dropped from the projection: no log, no reject, no chip (asymmetric with the reply path) | Log + emit a reject/diagnostic, matching the reply path |
+| NEW-6 | M | review_format.js:171 | source_hint.note and lost.note ride the intent field name `note` outside the two declared intent fields | Rename the nested keys (source_hint.instruction, lost.hint); bound hint.path |
+
 ## Landed and confirmed (do not regress)
 
 Server-side checks with one call site and no branch-around; constant-time token compare (complete);
