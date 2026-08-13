@@ -175,6 +175,17 @@
     hooks: null
   };
 
+  // Finding 30: the wired product (src/layer/index.js) calls configure with NO
+  // hooks, so fold_replies, merge_store, retire_handled and update_rail record
+  // {ran:false} in the summary and run on their own independent schedules rather
+  // than folded into the pass in PASS_ORDER. This is intended, not an oversight:
+  // the "Honest note for 3A" at the top of this file anticipates exactly this in
+  // a host page, where the agent's source write arrives as a morph seconds
+  // before its reply, so replay may show a provisional collision that clears
+  // when the reply is folded on its own schedule. The un-hooked order is the
+  // truth about a live page, not a guarantee we silently dropped. (index.js's
+  // configure call site wants a one-line pointer back here; the orchestrator
+  // adds it at merge, since index.js is not this task's file.)
   function configure(next) {
     var patch = next || {};
     Object.keys(patch).forEach(function (key) {
@@ -266,6 +277,42 @@
    * whichever one gets there first cancels the other, so the pass runs exactly
    * once either way.
    */
+  // The microtask defer used to run an owed pass AFTER the write epoch closes.
+  // Injectable through nothing on purpose: it is the same primitive the epoch
+  // uses to schedule its own close, so an owed pass queued here always runs
+  // after the epoch's depth has unwound.
+  var deferMicrotask =
+    typeof queueMicrotask === "function"
+      ? queueMicrotask
+      : function (fn) {
+          Promise.resolve().then(fn);
+        };
+
+  /**
+   * Finding 9: consume the "a pass is owed" flag the epoch remembers.
+   *
+   * A genuine repaint can land in the same microtask batch as one of replay's
+   * own writes. The observer early-returns while the write epoch is open and
+   * only records that a pass is owed (epoch.noteExternalMutation). That seam was
+   * written and never consumed, so a committed edit the repaint reverted sat
+   * un-reapplied until some later unrelated mutation happened to schedule a
+   * pass. This runs the owed pass instead.
+   *
+   * The take happens INSIDE the microtask, never synchronously here: the
+   * observer's own noteExternalMutation is itself a microtask queued during this
+   * pass's writes and has not run yet, and the epoch's depth is still non-zero
+   * until its deferred close runs. Both settle before this microtask, so the
+   * flag reads true when it should and schedule() is accepted rather than
+   * refused (a refusal would only re-arm the flag we just took, and nobody would
+   * run it).
+   */
+  function scheduleOwedPass() {
+    deferMicrotask(function () {
+      if (!epoch.shared || typeof epoch.shared.takePendingExternal !== "function") return;
+      if (epoch.shared.takePendingExternal()) schedule(REASON.MUTATION);
+    });
+  }
+
   function defer(fn) {
     var done = false;
     var frame = null;
@@ -345,6 +392,9 @@
     }
 
     lastSummary = summary;
+    // Finding 9: run any pass a colliding repaint owed but that the observer
+    // could only remember while replay's own write epoch was open.
+    scheduleOwedPass();
     return summary;
   }
 
@@ -615,9 +665,15 @@
     acts.setAttribute("data-lahe-conflict-actions", "");
     // The rail's own card-action register, so these read as the rail's buttons
     // rather than as a third button voice inside one card.
+    // N2 (design re-check): the two choices are weighted equally, because this
+    // is the one screen whose whole claim is that the decision belongs to the
+    // reviewer. Both get the same register (the outlined cardact), so neither
+    // "Keep mine" nor "Take the page's" reads as the default. Drawing one as a
+    // button and the other as a text link put a thumb on the scale toward
+    // keeping your own version, which nothing about branch four justifies.
     acts.className = "cardacts";
     acts.appendChild(button(doc, "cardact", KEEP_MINE_LABEL, "keep_mine", id));
-    acts.appendChild(button(doc, "cardact cardact--quiet", TAKE_THEIRS_LABEL, "take_theirs", id));
+    acts.appendChild(button(doc, "cardact", TAKE_THEIRS_LABEL, "take_theirs", id));
     return acts;
   }
 
@@ -680,6 +736,13 @@
       writeRegion(element, item);
     });
     counters.regionsWritten += 1;
+    // Finding 25: this is an ordinary re-apply, so it clears the same two pieces
+    // of state the ordinary write path clears. A record that was both lost and
+    // conflict-flagged would otherwise keep a stale region.lost stamp (which 3A
+    // projects into review.json) after the reviewer resolved in its favour, and
+    // the element memory would point at a node that is no longer the truth.
+    clearLost(item);
+    lastElement[id] = element;
     delete conflicts[id];
     forceClearConflict(ctx, id);
     return { resolved: true, choice: choice, reason: null };

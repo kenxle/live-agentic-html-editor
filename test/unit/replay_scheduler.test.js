@@ -20,6 +20,66 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const replay = require("../../src/layer/replay.js");
+const epoch = require("../../src/shared/epoch.js");
+const { nextTask } = require("../helpers/poll.js");
+
+test("finding 9: a repaint that owed a pass during replay's own write actually gets that pass", async () => {
+  // The seam is written and never consumed. During a tool write the observer
+  // early-returns and only remembers that a pass is owed (noteExternalMutation).
+  // If nothing takes that flag, a committed edit a genuine repaint reverted in
+  // the same batch is never re-applied until some later unrelated mutation.
+  const originalRaf = global.requestAnimationFrame;
+  const originalCancel = global.cancelAnimationFrame;
+  // A painting page: the deferred follow-up pass runs on the next microtask.
+  global.requestAnimationFrame = function (fn) {
+    Promise.resolve().then(fn);
+    return 1;
+  };
+  global.cancelAnimationFrame = function () {};
+
+  const ranReasons = [];
+  try {
+    replay.resetCounters();
+    replay.configure({
+      root: null,
+      items: [],
+      cards: null,
+      document: null,
+      hooks: {
+        update_rail: function (ctx, summary) {
+          ranReasons.push(summary.reason);
+        }
+      }
+    });
+
+    // The observer saw a repaint it could not attribute to the tool and only
+    // remembered that a pass is owed. Nothing in src consumes this today.
+    epoch.shared.noteExternalMutation();
+
+    // A pass runs; its end must notice the owed flag and schedule the follow-up.
+    replay.runPass(replay.REASON.BOOT);
+
+    // Drain the microtask queue and the one task boundary the deferred pass
+    // rides on. nextTask is the harness's sanctioned wait (see helpers/poll.js).
+    await nextTask();
+
+    assert.ok(
+      ranReasons.indexOf(replay.REASON.MUTATION) !== -1,
+      "the owed pass ran, as a MUTATION pass"
+    );
+    assert.equal(
+      epoch.shared.takePendingExternal(),
+      false,
+      "and the owed flag was consumed, not left set forever"
+    );
+  } finally {
+    replay.configure({ items: null, hooks: null });
+    if (originalRaf === undefined) delete global.requestAnimationFrame;
+    else global.requestAnimationFrame = originalRaf;
+    if (originalCancel === undefined) delete global.cancelAnimationFrame;
+    else global.cancelAnimationFrame = originalCancel;
+  }
+});
 
 test("a deferred pass still runs when the frame never comes", async () => {
   const originalRaf = global.requestAnimationFrame;
