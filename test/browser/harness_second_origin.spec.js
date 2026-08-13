@@ -161,6 +161,93 @@ test.describe("the helper cannot be driven from outside", () => {
     }
   });
 
+  test("a cross-origin page cannot READ the feedback, asserted on what it received", async ({
+    page,
+    fixtureServer,
+    attackerServer
+  }) => {
+    // The read direction of "cannot be driven from outside". The write probes
+    // above prove a hostile page cannot APPEND; this proves it cannot READ a
+    // review's feedback back off the two read routes (review.read, replies.poll).
+    // A page that could read the projection has driven the helper just as surely
+    // as one that could write it (D9). Asserted on what the attacker RECEIVED
+    // (nothing readable) AND on the helper log naming the failed check, with the
+    // mandatory positive control (an allowed origin with a valid token reads the
+    // projection back) in the same test, same state directory, same reader.
+    const stateDir = makeStateDir();
+    const service = await startHelper({
+      stateDir: stateDir,
+      allowedOrigins: [fixtureServer.origin],
+      reviews: [REVIEW]
+    });
+
+    try {
+      const token = service.tokenFor(REVIEW);
+      const reviewUrl = service.url + protocol.route("review.read").path + "?review=" + REVIEW;
+      const repliesUrl = service.url + protocol.route("replies.poll").path + "?review=" + REVIEW + "&since=0";
+      // The projection names itself with this schema marker. A reader that gets
+      // it back has read the review's feedback; a reader that does not has read
+      // nothing. It is the one string present in every review.json and in no
+      // opaque body.
+      const MARKER = "lahe.review/2";
+
+      // THE POSITIVE CONTROL. From the ALLOWED origin with a valid token, read
+      // the projection back and confirm the feedback really is readable to a
+      // legitimate reader. Without this, "the attacker read nothing" also passes
+      // against a helper that serves nothing to anyone.
+      await page.goto(fixtureServer.urlFor("built-doc.html"));
+      const legit = await page.evaluate(
+        async (a) => {
+          const res = await fetch(a.url, { method: "GET", headers: { "x-lahe-client": "layer", "x-lahe-token": a.token } });
+          return { status: res.status, body: await res.text() };
+        },
+        { url: reviewUrl, token: token }
+      );
+      expect(legit.status).toBe(200);
+      expect(legit.body, "a legitimate reader reads the projection back").toContain(MARKER);
+
+      // NOW THE ATTACKER. A second origin, no registered credential.
+      await page.goto(attackerServer.urlFor("attacker.html"));
+      expect(attackerServer.origin).not.toBe(fixtureServer.origin);
+
+      const before = readHelperLog(stateDir).length;
+
+      const reviewSimple = await page.evaluate((u) => window.__attack.simpleGet(u), reviewUrl);
+      const repliesSimple = await page.evaluate((u) => window.__attack.simpleGet(u), repliesUrl);
+      const reviewCors = await page.evaluate((u) => window.__attack.corsGet(u), reviewUrl);
+      const repliesCors = await page.evaluate((u) => window.__attack.corsGet(u), repliesUrl);
+
+      // WHAT THE ATTACKER RECEIVED: nothing readable. The projection marker is in
+      // none of the four, the no-cors reads came back opaque with an empty body,
+      // and the cors reads threw at the refused preflight.
+      for (const got of [reviewSimple, repliesSimple, reviewCors, repliesCors]) {
+        expect(got, "the attacker read the projection back: " + got).not.toContain(MARKER);
+      }
+      expect(reviewSimple).toContain("type:opaque");
+      expect(repliesSimple).toContain("type:opaque");
+      expect(reviewSimple.endsWith("body:"), "an opaque body is unreadable, so empty: " + reviewSimple).toBe(true);
+      expect(repliesSimple.endsWith("body:"), "an opaque body is unreadable, so empty: " + repliesSimple).toBe(true);
+      expect(reviewCors).toContain("threw:");
+      expect(repliesCors).toContain("threw:");
+
+      // THE NAMED REFUSAL, per read route. This is the assertion that bites a
+      // fork letting a read route skip its checks: CORS would still hide the
+      // opaque body, but the helper log would carry no refusal for the route.
+      const added = readHelperLog(stateDir).slice(before);
+      expect(added, "review.read refused the credential-less read by name").toContain(
+        "refused review.read: check " + protocol.CHECK.CUSTOM_HEADER + " failed"
+      );
+      expect(added, "replies.poll refused the credential-less read by name").toContain(
+        "refused replies.poll: check " + protocol.CHECK.CUSTOM_HEADER + " failed"
+      );
+      // And the preflighted cors reads died at the origin, for an origin no
+      // review registered.
+      expect(added).toContain("refused preflight: origin " + attackerServer.origin);
+    } finally {
+      await service.kill9();
+    }
+  });
+
   test("the positive control writes one line, then each omitted check leaves it at one", async ({
     page,
     fixtureServer

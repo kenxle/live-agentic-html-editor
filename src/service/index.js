@@ -86,7 +86,12 @@ async function serve(options) {
   var opts = options || {};
   var host = opts.host || protocol.DEFAULT_HOST;
   var port = typeof opts.port === "number" ? opts.port : protocol.DEFAULT_PORT;
-  var dir = opts.stateDir || stateDirModule.stateDir();
+  // An explicit stateDir runs through the same in-checkout refusal as the
+  // env-derived default (finding 19). allowInsideCheckout is reserved for the
+  // test harness, which serves from a temp directory it controls.
+  var dir = opts.stateDir
+    ? stateDirModule.stateDir({ dir: opts.stateDir, allowInsideCheckout: opts.allowInsideCheckout })
+    : stateDirModule.stateDir();
   var startedAt = new Date().toISOString();
 
   stateDirModule.ensureDir(dir);

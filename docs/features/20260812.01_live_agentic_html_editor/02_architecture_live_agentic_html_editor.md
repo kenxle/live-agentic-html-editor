@@ -455,6 +455,17 @@ is in a repository, and the snippet it writes for a dev server belongs in a deve
 The final boundary is the user account: a process already running as the reviewer can touch the store
 directly, and no local helper can defend against that.
 
+There is a second, smaller residual on the same boundary: **the helper-restart window.** When `add`
+finds a helper that predates this review, it stops that helper and starts a new one, so the fixed port
+is briefly unbound. A local process that grabs the port in that window and answers `/health` with
+`{ok:true}` could collect the review's token off the freshly written script line. `add` narrows this by
+confirming the server on the port reports the same start instant that the helper wrote into the
+owner-only `service.json` before it accepts the port as its own, and it refuses to signal a pid whose
+recorded start instant no longer matches what answers. Both checks defeat a bare squatter, but neither
+is a boundary against a same-user process that can read `service.json` and echo the value: that is the
+account boundary above, restated. The port is loopback-only, so the window is reachable only from the
+reviewer's own machine.
+
 **Resolved (1A spike): a `file://` page does reach the helper, on all three browsers.** The plan asked
 1A to settle this before it closed, because a page opened from disk has a null origin and a browser
 might refuse the request outright no matter what the helper allowed. It does not. Chromium, Firefox and

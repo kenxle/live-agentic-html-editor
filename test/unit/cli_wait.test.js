@@ -226,6 +226,39 @@ test("a draft is never new work", async () => {
   });
 });
 
+test("new events with an unreadable projection do not advance the cursor", async () => {
+  // Finding 14: the wait route reported new work, but the follow-up review.read
+  // fails. itemsFor then resolves nothing. Printing the cursor and exiting
+  // NEW_WORK here would step the caller's watermark past events it never saw: a
+  // silent, permanent skip. The command must refuse to advance instead.
+  await withHelper(async ({ dir, helper }) => {
+    const since = helper.log.currentSeq(REVIEW);
+    postReadyItem(helper, { note: "ready work the read cannot resolve" });
+
+    const realFetch = fetch;
+    const readPath = protocol.route("review.read").path;
+    const fakeFetch = async (url, init) => {
+      if (String(url).indexOf(readPath) !== -1) {
+        throw new Error("simulated review.read failure");
+      }
+      return realFetch(url, init);
+    };
+
+    const out = collector();
+    const err = collector();
+    const code = await wait.run(["--review", REVIEW, "--since", String(since), "--timeout", "5"], {
+      stateDir: dir,
+      stdout: out,
+      stderr: err,
+      fetch: fakeFetch
+    });
+
+    assert.equal(code, EXIT.HELPER_UNREACHABLE, "an unresolved read is unreachable, not new work");
+    assert.equal(out.text(), "", "the cursor is NOT printed, so the caller cannot advance past the ready work");
+    assert.match(err.text(), /not advancing the cursor/i);
+  });
+});
+
 test("a folded reply wakes a waiting agent", async () => {
   await withHelper(async ({ dir, helper }) => {
     const item = postReadyItem(helper, { note: "the item another agent answered" });
