@@ -63,9 +63,40 @@ confirmed review-id-newline vector even though it enters via protocol.js:340's
 refusal builder (off-limits, off my file list).
 
 ## Per-finding one-liners
-- Finding 24 + NEW-6 committed together (both are in review_format.js, not
-  cleanly separable): reply.files typed/capped/bounded; source_hint.note ->
-  source_hint.instruction; lost.note -> lost.hint; hint.path bounded.
+- Finding 7: edit commit now sets `change` via record.editChangeText(kind,
+  before, after) (the changed span stated in one line; delete + format_only get
+  their own sentence). The tool's primary gesture ships a real, verbatim,
+  non-truncated intent field instead of null.
+- Finding 8: log.js helperLog neutralizes C0/C1 control chars + caps length (one
+  chokepoint, covers the protocol.js review-id vector I can't edit); auth.js
+  JSON.stringify+caps the request-supplied values.
+- Finding 22: bounded agent name + rejection reason in tab_done.js (the two
+  boundData(CONTEXT_MAX) calls). Landed in tab_done.js, NOT the projection layer,
+  because the browser rail's reply comes from sync.js (off-limits), not the
+  server-side projectItem. Kept to exactly the two calls for a trivial merge.
+- Finding 24: reply.files typed to strings, count capped (REPLY_FILES_MAX=100),
+  each entry bounded (review_format.js).
+- NEW-4: page.title bounded with the marker; PROJECTED_FIELD_CLASS rewritten to
+  name the emitted fields (title/origin/path/region_label, dropped
+  after_history/region.label/page_title/page_path).
+- NEW-5: a malformed item event is now reported via a deduped helper-log
+  diagnostic (onDropped threaded itemsFrom -> project -> regenerate -> projector).
+- NEW-6: source_hint.note -> source_hint.instruction; lost.note -> lost.hint;
+  hint.path bounded. `note` now means exactly one thing (an intent field).
+
+Findings 24 and NEW-6 share review_format.js and were committed together (not
+cleanly separable).
+
+## Gate
+`npm run gate:builder` GREEN: lint passed; unit `# tests 409 # pass 409 # fail 0`;
+browser `151 passed, 1 skipped`.
+```
+  1 skipped
+  151 passed (25.7s)
+```
 
 ## Cleanup needed
-(none yet)
+- None requiring deletion. Note: `dist/lahe-layer.js` was rebuilt locally to run
+  the browser tests and is intentionally left UNSTAGED (builders never commit
+  dist; the orchestrator rebuilds/commits it at the checkpoint). `package-lock.json`
+  is also modified (npm install) and left unstaged.
