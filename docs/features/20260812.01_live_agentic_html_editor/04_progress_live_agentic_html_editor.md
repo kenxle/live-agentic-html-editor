@@ -430,3 +430,14 @@ real-Back bfcache test, a platform limitation, with a synthetic-event twin cover
 
 Remaining before ship: the 4B cleanup batch (one human approval), and two genuinely human checks queued
 for live review (the AC6 unprimed-user half and the 60-second IME composition check).
+
+## Agent cold-start closed (2026-08-13)
+
+Ken's first real use surfaced an unmet requirement: an agent told "use
+live-agentic-html-editor" had no way to resolve the name. The human install path
+(AC6) was verified, but nothing bootstrapped an agent from zero. Closed with
+three pieces: `AGENTS.md` at the repo root (a self-driving playbook, served at
+the raw GitHub URL), a "tell your agent" one-liner section at the top of the
+README's install docs, and a local `/lahe` skill in Ken's `~/.claude/skills` so
+his own agents resolve the name offline. The public repo is live at
+https://github.com/kenxle/live-agentic-html-editor with main as default.
