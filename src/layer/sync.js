@@ -191,6 +191,12 @@
           // Drafts flow to the helper marked draft, and never appear as
           // actionable in what the agent reads (D5, R7).
           draft: record.isDraft(item),
+          // Finding 18: an item.content event only wakes `lahe wait` when it
+          // carries lost:true (protocol.countsAsNew). replay's markLost stamps
+          // region.lost on the record; lift it to the event so an anchor going
+          // lost is not a dead capability at the wait watermark. newEvent spreads
+          // these payload keys onto the top-level event countsAsNew reads.
+          lost: !!(item[record.FIELD.REGION] && item[record.FIELD.REGION].lost),
           record: item
         }
       });

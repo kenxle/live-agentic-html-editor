@@ -408,6 +408,11 @@
       }
     });
 
+    // Finding 30: replay is configured with no fold/merge/retire/rail hooks on
+    // purpose. Those four steps run on their own schedules (replies on the sync
+    // poll, merge on remount, rail on onChange), so a replay pass may raise a
+    // provisional collision that a later fold clears. That is the intended
+    // trade, documented at replay.js configure(); see its "Honest note for 3A".
     ns.replay.configure({
       root: doc.body || doc,
       items: function () {
