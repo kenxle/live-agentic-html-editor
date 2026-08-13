@@ -289,6 +289,14 @@ test.describe("AC3: a human and an agent at the same time", () => {
       expect(edit.before, "before is pinned to the application's wording at first touch").toBe(base);
       expect(edit.after).toBe(base + SAID.typed);
 
+      // The state of every OTHER item, captured BEFORE the collision, so the
+      // "nothing else moved" assertion at the end has something real to fail
+      // against. Comparing the post-collision snapshot to a snapshot taken
+      // microseconds later cannot fail no matter what the collision did (finding
+      // 5). The handled item and the colliding edit are excluded because they DO
+      // change; everything else must be byte-identical afterwards.
+      const othersBeforeCollision = await snapshot(page, [handledItem.id, edit.id]);
+
       // Protection is off now, so the application's newer wording for this
       // region lands. Driven one pass at a time until the page really is
       // showing something that is neither version, which is the only state in
@@ -371,9 +379,7 @@ test.describe("AC3: a human and an agent at the same time", () => {
       // were. A collision on one card moves nothing else.
       expect((await cardOf(page, handledItem.id)).pane).toBe("done");
       const finalOthers = await snapshot(page, [handledItem.id, edit.id]);
-      expect(finalOthers, "the untouched items never moved").toBe(
-        await snapshot(page, [handledItem.id, edit.id])
-      );
+      expect(finalOthers, "the untouched items never moved").toBe(othersBeforeCollision);
       expect(finalOthers.indexOf(SAID.otherComment)).toBeGreaterThan(-1);
       expect(finalOthers.indexOf(SAID.note)).toBeGreaterThan(-1);
 
