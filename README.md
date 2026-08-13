@@ -37,6 +37,19 @@ browsers.
 **macOS, Linux, or Windows.** Nothing here is platform-specific. The library is
 standard DOM APIs and the helper is standard Node.
 
+## The fastest start: tell your agent
+
+This tool is usually driven through a coding agent, and the repo carries an
+agent-readable playbook. Paste this to your agent, filling in the page:
+
+> Read https://raw.githubusercontent.com/kenxle/live-agentic-html-editor/main/AGENTS.md
+> and follow it to set up a live review of `path/to/page.html`, then act on my
+> feedback as it arrives.
+
+The agent installs the tool, starts the review, tells you what to open, and
+works your comments and edits as you leave them. Everything below is the same
+path done by hand.
+
 ## Install
 
 ```sh
