@@ -192,6 +192,11 @@
         seen[id] = true;
         rail.upsertCard(item);
         rail.setCardState(id, record.STATE.HANDLED);
+        // R37, the half that is on the PAGE: a handled item loses its highlight.
+        // Here rather than only in the fold path, because an item can arrive
+        // handled from storage on a fresh load too, and the page it lands on has
+        // the same right not to be covered in marks on finished passages.
+        unpaintHandled(id);
         if (item[record.FIELD.REPLY]) rail.setAgentMessage(id, agentMessageFor(item));
         if (!rows[id]) {
           rows[id] = buildRow(item);
@@ -262,10 +267,26 @@
       return {
         status: reply.status || null,
         agent: agentName(reply),
+        // The reply's own fields are kept as they came, so nothing reading the
+        // card's model loses what the agent actually said in which field. Only
+        // `text` is what gets DRAWN, which is what makes it one carrier.
+        reason: reply.reason || null,
         text: said ? boundedText(said) : agentName(reply) + " made this change.",
         files: Array.isArray(reply.files) ? reply.files : [],
         at: reply.at || null
       };
+    }
+
+    // R37's page half. The paint is 1D's, so this file says WHEN and never how:
+    // a retired item drops its highlight, a reopened one gets it back with its
+    // anchor resolved against the page as it is now (the agent's change is
+    // usually what retired it, so the old range is stale by construction).
+    function unpaintHandled(id) {
+      if (comments && typeof comments.unpaint === "function") comments.unpaint(id);
+    }
+
+    function repaintReopened(id) {
+      if (comments && typeof comments.repaint === "function") comments.repaint(id);
     }
 
     // The name comes from the reply itself, and absent one the card says
@@ -305,6 +326,9 @@
       rail.setCardState(id, record.STATE.READY);
       rail.setAgentMessage(id, null);
       rail.setCardNotice(id, "Reopened. It is back in front of the agent.");
+      // Back in front of the agent, and back on the page: an open item is
+      // painted, which is the other half of R37.
+      repaintReopened(id);
       postReopened(reopened);
       counters.reopened += 1;
       refresh();

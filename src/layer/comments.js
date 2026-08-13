@@ -803,6 +803,51 @@
       return removed;
     }
 
+    // ------------------------------------------------------------------------
+    // A handled item's paint (R37 / AC3)
+    // ------------------------------------------------------------------------
+    //
+    // A HANDLED ITEM LOSES ITS HIGHLIGHT. It is finished, the reviewer is not
+    // being asked to look at that passage again, and a page that keeps every
+    // answered passage painted accumulates marks all session until the reviewer
+    // cannot see which ones are still open. It is the paint that goes, never the
+    // record: the item is kept, it is in Done, and it is reopenable (R38).
+    //
+    // The two calls are a pair and both are here, because the paint is this
+    // file's. tab_done.js says WHEN; this file knows HOW.
+
+    /** Drop one item's paint. The record and its box are untouched. */
+    function unpaint(id) {
+      if (!highlights) return false;
+      return highlights.clear(id);
+    }
+
+    /**
+     * Paint one item again, resolving its anchor against the page as it is now.
+     *
+     * The live Range died with the paint, and the page has moved on anyway
+     * (usually because the agent's change is what retired the item), so the
+     * range is rebuilt from the record's own reference rather than remembered.
+     * An anchor that no longer binds is an honest miss: nothing is painted and
+     * the caller is told so, which is the same answer replay gives.
+     *
+     * @returns {boolean} true when the item is painted now
+     */
+    function repaint(id) {
+      if (!highlights || !doc) return false;
+      var item = store.readItem(requireReview(), id);
+      if (!item) return false;
+      var region = item[record.FIELD.REGION];
+      var ref = region && region.ref;
+      if (!ref) return false;
+      var verdict = anchor.resolve(ref, doc);
+      if (!verdict || !verdict.element) return false;
+      var range = doc.createRange();
+      range.selectNodeContents(verdict.element);
+      highlights.paint(id, range, highlightModule.NAME.COMMENT);
+      return true;
+    }
+
     function items() {
       return store.read(requireReview());
     }
@@ -957,6 +1002,8 @@
       openNote: openNote,
       reopen: reopen,
       remove: remove,
+      unpaint: unpaint,
+      repaint: repaint,
       items: items,
       outstanding: outstanding,
       boxFor: boxFor,
