@@ -54,6 +54,14 @@ and a chip in overlay.js/index.js (off-limits). The fix makes the drop LOUD via
 the helper log diagnostic (deduped), which removes the "no log" asymmetry the
 finding names; the reject-event/chip parity is left as a wire-owned follow-up.
 
+### Finding 8 (log injection) — test/unit/log_injection.test.js
+RED: both assertions failed (a newline forged a 2nd physical line; no cap).
+GREEN after adding sanitizeLogLine chokepoint in log.js helperLog (escape
+C0/C1 controls, cap length) + JSON.stringify/cap of attacker-controlled values
+at the auth.js call sites: `# pass 2 # fail 0`. The chokepoint closes the
+confirmed review-id-newline vector even though it enters via protocol.js:340's
+refusal builder (off-limits, off my file list).
+
 ## Per-finding one-liners
 - Finding 24 + NEW-6 committed together (both are in review_format.js, not
   cleanly separable): reply.files typed/capped/bounded; source_hint.note ->

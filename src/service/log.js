@@ -37,6 +37,27 @@ var stateDir = require("./state_dir.js");
 var EVENT_ID = protocol.IDEMPOTENCE_KEY;
 var SEQ = protocol.EVENT_FIELD.SEQ;
 
+// helper.log is one line per call, and it is the file AC8 ("outside cannot get
+// in") is judged from. Any attacker-controlled value that reaches it (a review
+// id, a request path, an origin header) could otherwise carry a newline and
+// forge a whole line, including a forged refusal (finding 8, confirmed live).
+// Every line goes through this chokepoint, which is more robust than escaping at
+// each call site: it also covers callers in files this task does not own
+// (protocol.js's refusal builder, reviews.js), where the raw value is
+// interpolated before it ever reaches here.
+var HELPER_LOG_MAX = 4000;
+
+function sanitizeLogLine(line) {
+  // Escape C0 and C1 control characters (newline, carriage return, NUL, and the
+  // rest), so no value can end the line early or start a new one. The forged
+  // text is not hidden, only neutralized onto the one line it belongs to.
+  var text = String(line).replace(/[\u0000-\u001F\u007F-\u009F]/g, function (ch) {
+    return "\\x" + ("0" + ch.charCodeAt(0).toString(16)).slice(-2);
+  });
+  if (text.length > HELPER_LOG_MAX) text = text.slice(0, HELPER_LOG_MAX) + " [log line truncated]";
+  return text;
+}
+
 /**
  * Repair a log whose last line was cut in half by a kill -9.
  *
@@ -82,7 +103,7 @@ function createEventLog(options) {
   var loaded = Object.create(null);
 
   function helperLog(line) {
-    var stamped = new Date().toISOString() + " " + line + "\n";
+    var stamped = new Date().toISOString() + " " + sanitizeLogLine(line) + "\n";
     stateDir.ensureDir(dir);
     stateDir.appendLine(stateDir.helperLogPath(dir), stamped);
     if (typeof opts.onHelperLog === "function") opts.onHelperLog(stamped);

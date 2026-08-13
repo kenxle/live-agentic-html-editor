@@ -59,16 +59,19 @@ function createAuth(options) {
 
     // THE NAMED REFUSAL. protocol.checkRequest builds the sentence, because the
     // check names belong to the wire and not to the helper; this adds who asked.
+    //
+    // The request-supplied values (path, method, request id, origin) are
+    // attacker-controlled, so each is JSON.stringify'd and capped before it joins
+    // the line (finding 8). helperLog neutralizes control characters as a second
+    // layer, including in result.log, which carries the review id built upstream.
     log.helperLog(
       result.log +
         " [request " +
-        String(req.requestId || "-") +
+        field(req.requestId) +
         ", " +
-        String(req.method || "-") +
-        " " +
-        String(req.path || req.routeName || "-") +
+        field(String(req.method || "-") + " " + String(req.path || req.routeName || "-")) +
         ", origin " +
-        String(headerOrNone(req.headers, protocol.HEADER.ORIGIN)) +
+        field(headerOrNone(req.headers, protocol.HEADER.ORIGIN)) +
         "]"
     );
 
@@ -88,17 +91,25 @@ function createAuth(options) {
     return value;
   }
 
+  // One attacker-controlled value, delimited and capped for the helper log
+  // (finding 8). JSON.stringify quotes and escapes it; the cap keeps a runaway
+  // value from flooding the line even before helperLog's own cap.
+  var FIELD_MAX = 200;
+  function field(value) {
+    return JSON.stringify(String(value === undefined || value === null ? "-" : value).slice(0, FIELD_MAX));
+  }
+
   /** Anything the helper refuses for a reason that is not a wire check. */
   function refuse(request, code, detail) {
     var req = request || {};
     log.helperLog(
       "refused " +
-        String(req.routeName || req.path || "-") +
+        field(req.routeName || req.path || "-") +
         ": " +
         code +
-        (detail ? " (" + detail + ")" : "") +
+        (detail ? " (" + field(detail) + ")" : "") +
         " [request " +
-        String(req.requestId || "-") +
+        field(req.requestId) +
         "]"
     );
     return { ok: false, check: null, code: code, status: protocol.statusFor(code), log: null };
