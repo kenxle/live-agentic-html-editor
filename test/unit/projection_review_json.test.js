@@ -372,7 +372,7 @@ test("the projection groups by page in first-visit order", () => {
   const projected = projectOf(log);
   assert.deepEqual(projected.pages.map((p) => p.path), ["/", "/clients"]);
   assert.equal(projected.pages[1].items.length, 2);
-  assert.ok(projected.pages[0].source_hint.note.length > 0, "every page says what it knows about its source");
+  assert.ok(projected.pages[0].source_hint.instruction.length > 0, "every page says what it knows about its source");
 });
 
 // --- the writer ---------------------------------------------------------------

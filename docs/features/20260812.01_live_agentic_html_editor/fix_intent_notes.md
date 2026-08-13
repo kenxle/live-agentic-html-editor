@@ -47,5 +47,10 @@ GREEN (after boundData(title, CONTEXT_MAX) + explicit PROJECTED_FIELD_CLASS):
 ### NEW-5 (loud drop of a malformed item event)
 RED/GREEN recorded below once implemented.
 
+## Per-finding one-liners
+- Finding 24 + NEW-6 committed together (both are in review_format.js, not
+  cleanly separable): reply.files typed/capped/bounded; source_hint.note ->
+  source_hint.instruction; lost.note -> lost.hint; hint.path bounded.
+
 ## Cleanup needed
 (none yet)
