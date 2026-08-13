@@ -70,6 +70,58 @@
           } catch (err) {
             return record("corsPost", "threw:" + err.name);
           }
+        },
+
+        // The READ shapes. "Cannot be driven from outside" is not only about
+        // writing: a page that could READ a review's feedback back off the
+        // helper has driven it just as surely (D9). These two mirror the write
+        // probes for the read routes (review.read, replies.poll).
+        //
+        //   simpleGet  a no-cors GET. It carries no custom header (a no-cors
+        //              request cannot set one), so it reaches the handler and is
+        //              refused there, and the response is opaque: the attacker
+        //              cannot read a byte of the body even if the helper answered.
+        //   corsGet    a GET with the custom header, which forces a preflight the
+        //              helper refuses for an unregistered origin, so the fetch
+        //              throws before any body is seen.
+        //
+        // Both return what the attacker actually RECEIVED, which is what the test
+        // asserts on: nothing readable.
+        async simpleGet(url) {
+          try {
+            const res = await fetch(url, { method: "GET", mode: "no-cors" });
+            let body = "";
+            try {
+              body = await res.text();
+            } catch (readErr) {
+              body = "unreadable:" + readErr.name;
+            }
+            return record("simpleGet", "type:" + res.type + " body:" + body);
+          } catch (err) {
+            return record("simpleGet", "threw:" + err.name);
+          }
+        },
+
+        async corsGet(url, token) {
+          try {
+            const res = await fetch(url, {
+              method: "GET",
+              mode: "cors",
+              headers: {
+                "x-lahe-client": "layer",
+                "x-lahe-token": token || "guessed-token"
+              }
+            });
+            let body = "";
+            try {
+              body = await res.text();
+            } catch (readErr) {
+              body = "unreadable:" + readErr.name;
+            }
+            return record("corsGet", "status:" + res.status + " body:" + body);
+          } catch (err) {
+            return record("corsGet", "threw:" + err.name);
+          }
         }
       };
     })();

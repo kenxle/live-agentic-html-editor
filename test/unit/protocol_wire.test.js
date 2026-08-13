@@ -197,6 +197,49 @@ test("every refusal names the check that failed", () => {
   }
 });
 
+test("the read routes are checked exactly like the write route", () => {
+  // Finding 4: review.read and replies.poll are AUTH.REVIEW_TOKEN too. A fork
+  // that let a read route skip the token, the custom header, or the origin would
+  // let a page READ a review's feedback from anywhere, which is being driven from
+  // outside just as surely as a forged write. Pinned at the unit layer so it
+  // bites even where the browser cannot reach.
+  ["review.read", "replies.poll"].forEach((routeName) => {
+    // A well-formed read from the registered origin passes. Read routes are
+    // non-mutating, so a JSON content type is not required and its absence here
+    // (a GET carries no body) is fine.
+    const ok = protocol.checkRequest({ routeName, review: "rev_a", headers: headers() }, CONFIG);
+    assert.equal(ok.ok, true, routeName + " should pass a valid read");
+    assert.equal(ok.review, "rev_a");
+
+    const noHeaderH = headers();
+    delete noHeaderH["x-lahe-client"];
+    const noHeader = protocol.checkRequest({ routeName, review: "rev_a", headers: noHeaderH }, CONFIG);
+    assert.equal(noHeader.ok, false, routeName + " must refuse a read with no custom header");
+    assert.equal(noHeader.check, protocol.CHECK.CUSTOM_HEADER);
+
+    const badToken = protocol.checkRequest(
+      { routeName, review: "rev_a", headers: headers({ "x-lahe-token": "tok_wrong" }) },
+      CONFIG
+    );
+    assert.equal(badToken.ok, false, routeName + " must refuse a read with a wrong token");
+    assert.equal(badToken.check, protocol.CHECK.TOKEN);
+
+    const noTokenH = headers();
+    delete noTokenH["x-lahe-token"];
+    const noToken = protocol.checkRequest({ routeName, review: "rev_a", headers: noTokenH }, CONFIG);
+    assert.equal(noToken.ok, false, routeName + " must refuse a read with no token");
+    assert.equal(noToken.check, protocol.CHECK.TOKEN);
+
+    const badOrigin = protocol.checkRequest(
+      { routeName, review: "rev_a", headers: headers({ origin: "https://attacker.example" }) },
+      CONFIG
+    );
+    assert.equal(badOrigin.ok, false, routeName + " must refuse a read from an unregistered origin");
+    assert.equal(badOrigin.check, protocol.CHECK.ORIGIN);
+    assert.equal(badOrigin.log.includes(routeName), true, "the refusal names the read route: " + badOrigin.log);
+  });
+});
+
 test("absent configuration fails closed", () => {
   const noConfig = protocol.checkRequest({ routeName: "events.append", review: "rev_a", headers: headers() }, null);
   assert.equal(noConfig.ok, false);
