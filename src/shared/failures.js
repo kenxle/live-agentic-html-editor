@@ -259,6 +259,28 @@
       SURFACE.CLI,
       "A write was refused because the destination resolved outside the review folder or is a symlink.",
       null
+    ),
+
+    // --- copy and export (3C, R10 and R11) ---------------------------------
+    //
+    // Copy and Export are always visible and always meant to work, so the case
+    // that needs a code is the one where they did not: a clipboard the browser
+    // refused, or a file the page could not save. A control that looked like it
+    // worked and did not is the failure this tool exists to remove, and the
+    // reviewer only finds out at the moment they paste.
+    COPY_FAILED: def(
+      SEVERITY.BLOCKING,
+      true,
+      SURFACE.FAILURES_LIST,
+      "The review was not copied to the clipboard, so there is nothing to paste.",
+      "Use Export to save it as a file instead."
+    ),
+    EXPORT_FAILED: def(
+      SEVERITY.BLOCKING,
+      true,
+      SURFACE.FAILURES_LIST,
+      "The review could not be saved as a file.",
+      "Use Copy to put it on the clipboard instead."
     )
   };
 

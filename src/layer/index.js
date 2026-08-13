@@ -62,7 +62,8 @@
         tabActive: require("./tab_active.js"),
         sync: require("./sync.js"),
         editing: require("./editing.js"),
-        protect: require("./protect.js")
+        protect: require("./protect.js"),
+        exporter: require("./export.js")
       }),
       null
     );
@@ -214,6 +215,25 @@
         rail.setLimitNote(text);
       }
     });
+
+    // Copy and Export (3C). The rail holds the buttons and hands the click on;
+    // this is where the click meets the work. Both controls are visible at all
+    // times (D10), so both are wired at all times: a handler registered only
+    // when the helper is missing is a button that does nothing on the day the
+    // reviewer needs it.
+    var exporter = opts.exporter || ns.exporter.createExport({
+      review: reviewId,
+      token: config.token,
+      helperOrigin: config.helper,
+      store: store,
+      sync: sync,
+      rail: rail,
+      document: doc,
+      window: win
+    });
+    ns.exporter.configure(exporter);
+    rail.onAction("copy", exporter.copyReview);
+    rail.onAction("export", exporter.exportReview);
 
     // The editing surface. It is handed sync, because a record is posted by the
     // same act that writes it, and it is bound to the document the way the
@@ -410,6 +430,7 @@
         return tab;
       },
       sync: sync,
+      exporter: exporter,
       editing: editing,
       protect: protect,
       injector: injector,
@@ -589,6 +610,11 @@
       pickMode: function () {
         return handle.comments.pickMode().active;
       },
+
+      // Copy and Export. The buttons are the reviewer's path; this is here so a
+      // spec can read what the last click actually did, which is the only way
+      // to tell a copy that worked from one that quietly did not.
+      exporter: handle.exporter,
 
       // The remount contract, observable. Ranked test 24 asserts the remount
       // RAN on a bfcache restore, which is a different claim from the rail

@@ -158,7 +158,6 @@ var LAYER_FILES = [
   {
     path: "src/layer/export.js",
     owner: "3C",
-    planned: true,
     why: "copy and export, calling 0A-wire's frozen human-readable formatter"
   },
   {
