@@ -378,9 +378,17 @@
 
     var history = (item[FIELD.AFTER_HISTORY] || []).slice();
     var newAfter = next[FIELD.AFTER];
+    var newAfterHtml = next[FIELD.AFTER_HTML];
     var last = history.length ? history[history.length - 1] : null;
-    if (typeof newAfter === "string" && (!last || last.after !== newAfter)) {
-      history.push(historyEntry(next[FIELD.REV], newAfter, next[FIELD.AFTER_HTML], next[FIELD.UPDATED_AT]));
+    // Dedupe on the field this record actually compares on (comparisonFields):
+    // a format-only record's `after` text never moves, so gating on it alone
+    // drops every formatting revision from the history and replay's branch three
+    // then misses, flagging a false conflict on the reviewer's own change. Push
+    // when EITHER the compared after OR the after_html moved.
+    var afterMoved = typeof newAfter === "string" && (!last || last.after !== newAfter);
+    var htmlMoved = typeof newAfterHtml === "string" && (!last || last.after_html !== newAfterHtml);
+    if (afterMoved || htmlMoved) {
+      history.push(historyEntry(next[FIELD.REV], newAfter, newAfterHtml, next[FIELD.UPDATED_AT]));
     }
     next[FIELD.AFTER_HISTORY] = history;
     return next;

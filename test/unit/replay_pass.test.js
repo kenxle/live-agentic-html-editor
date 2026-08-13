@@ -258,6 +258,35 @@ test("a format-only record compares on structure, so a text-equal change is stil
   assert.match(page.blocks[1].innerHTML, /<strong>matters<\/strong>/);
 });
 
+test("finding 11: two successive format-only rewordings resolve as branch three, not a false conflict", () => {
+  // A formatting-only edit reworded TWICE. A format-only record's after TEXT
+  // never moves (it equals its before by construction); only the after_html
+  // does. bumpRev must extend the applied-after history when the MARKUP moves,
+  // or replay's branch three has nothing to compare against and flags a false
+  // collision on the reviewer's own third formatting revision.
+  const v1 = fixtures.formatOnly();
+  const v2 = record.bumpRev(v1, { after_html: "<p>This part <em>matters</em>.</p>" });
+  const v3 = record.bumpRev(v2, { after_html: "<p><strong>This part matters</strong>.</p>" });
+
+  const priors = record.priorAfters(v3, record.FIELD.AFTER_HTML);
+  assert.ok(
+    priors.indexOf("<p>This part <em>matters</em>.</p>") !== -1,
+    "the earlier formatting revision must be in the applied-after history for branch three"
+  );
+
+  // The page holds v2's markup (an earlier revision landed). Replay must read
+  // branch three and re-apply v3, not flag a collision on the reviewer.
+  const page = pageOf([{ text: "Before it." }, { html: "This part <em>matters</em>." }, { text: "After it." }]);
+  const anchoredItem = anchored(v3, page.blocks[1], page.root);
+
+  const ran = runOne(anchoredItem, page.root);
+
+  assert.equal(ran.result.branch, replay.BRANCH.EARLIER_REVISION, "branch three, not branch four");
+  assert.equal(replay.counters.regionsConflicted, 0, "no false conflict on the reviewer's own change");
+  assert.equal(replay.counters.regionsEarlierRevision, 1);
+  assert.equal(replay.counters.regionsWritten, 1, "the current revision is what lands");
+});
+
 test("a delete is idempotent by absence: the block gone is applied, the block back is re-applied", () => {
   const item = fixtures.deletion();
   const page = pageOf(["Before it.", item.before, "After it."]);
