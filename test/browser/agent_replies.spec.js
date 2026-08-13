@@ -360,12 +360,6 @@ test.describe("3A: an agent answers by appending one line", () => {
       );
       expect(queued, "the rewording is queued, undelivered").toBeGreaterThan(0);
 
-      // Meanwhile the agent, which read rev 1 before any of this, answers it.
-      fs.appendFileSync(
-        path.join(stateDir, "reviews", REVIEW, "replies-claude.jsonl"),
-        JSON.stringify({ item: first.id, rev: 1, status: "handled", agent: "claude" }) + "\n"
-      );
-
       // The helper comes back on the same port, with the same state directory:
       // the page has the port baked into its script tag and cannot learn a new
       // one, which is why the port is fixed by default.
@@ -377,8 +371,10 @@ test.describe("3A: an agent answers by appending one line", () => {
         allowedOrigins: [app.origin]
       });
 
-      // On reconnect the backlog drains and the two sides meet. Whichever order
-      // they land in, the rewording is what survives.
+      // On reconnect the backlog drains: the rewording made while the helper was
+      // dead reaches the helper and its file, and the item is at rev 2. This is
+      // the offline-only half a helper-side unit test cannot reach: the rev 2
+      // lived in browser storage across the kill and nowhere else.
       await pollUntil(
         () => {
           const got = reviewJson(helper);
@@ -393,6 +389,42 @@ test.describe("3A: an agent answers by appending one line", () => {
           })
         }
       );
+
+      // Only now does the agent, which read rev 1 before any of this, answer it.
+      // Appending after the offline rewording has landed makes the fold
+      // deterministic: the reply meets an item already at rev 2, so it must be
+      // refused on the first and only fold. (Appended before reconnect, the reply
+      // races the drain and can fold against rev 1 first, and the fold is
+      // idempotent by file+line so it never re-folds; that race is what made the
+      // fold-order assertion flaky.)
+      fs.appendFileSync(
+        path.join(stateDir, "reviews", REVIEW, "replies-claude.jsonl"),
+        JSON.stringify({ item: first.id, rev: 1, status: "handled", agent: "claude" }) + "\n"
+      );
+
+      // ASSERT THE REFUSAL ITSELF, not just the end-state (finding 6). The
+      // end-state (rewording survives) is also what the reconnect merge restores
+      // even if the helper had wrongly accepted the stale reply, so a fork that
+      // accepted every reply regardless of revision stayed green on the end-state
+      // alone. Reading the fold event and asserting it was refused, naming rev 1,
+      // is what actually bites that fork.
+      const folded = await pollUntil(
+        () => {
+          const lines = readEventLog(helper.stateDir, REVIEW).filter((e) => e.event === "reply.folded");
+          return lines.length ? lines : null;
+        },
+        {
+          message: "the stale reply to be folded",
+          describe: () => ({
+            folds: readEventLog(helper.stateDir, REVIEW)
+              .filter((e) => e.event === "reply.folded")
+              .map((e) => ({ accepted: e.accepted, refusal: e.refusal }))
+          })
+        }
+      );
+      const lastFold = folded[folded.length - 1];
+      expect(lastFold.accepted, "the stale answer was refused, not accepted").toBe(false);
+      expect(lastFold.refusal, "the refusal names the stale revision").toContain("rev 1");
 
       const projected = projectedItems(reviewJson(helper)).find((i) => i.id === first.id);
       expect(projected.state, "the rewording stays outstanding").toBe("ready");
