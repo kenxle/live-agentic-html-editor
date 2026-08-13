@@ -146,8 +146,7 @@ var LAYER_FILES = [
   {
     path: "src/layer/tab_done.js",
     owner: "3A",
-    planned: true,
-    why: "Done tab contents"
+    why: "Done tab contents, the agent-reply attachments, and the question treatment"
   },
   {
     path: "src/layer/tab_edits.js",
@@ -213,7 +212,7 @@ var NON_BUNDLE_FILES = [
   { path: "src/service/reviews.js", owner: "1A", why: "review creation, per-review token minting, origin registration, the second-window session" },
   { path: "src/service/projection.js", owner: "3A", why: "the log projected into review.json and the reply state the library polls" },
   { path: "src/service/review_writer.js", owner: "3A", why: "the single writer of review.json, and the path-safety rules" },
-  { path: "src/service/replies.js", owner: "3A", planned: true, why: "reply file discovery, byte-offset reading, folding, the conflict rule" },
+  { path: "src/service/replies.js", owner: "3A", why: "reply file discovery, byte-offset reading, folding, the conflict rule" },
   {
     path: "src/service/verification.js",
     owner: "none (CUT)",
@@ -224,7 +223,7 @@ var NON_BUNDLE_FILES = [
   { path: "src/cli/index.js", owner: "1A", why: "the command dispatcher: serve, add, wait" },
   { path: "src/cli/commands/serve.js", owner: "1A", why: "serve" },
   { path: "src/cli/commands/add.js", owner: "3B", planned: true, why: "add" },
-  { path: "src/cli/commands/wait.js", owner: "3A", planned: true, why: "wait" },
+  { path: "src/cli/commands/wait.js", owner: "3A", why: "wait" },
   { path: "src/cli/commands/next.js", owner: "none (CUT)", cut: true, why: "the blocking next command is the dead send model" },
   { path: "src/cli/commands/ack.js", owner: "none (CUT)", cut: true, why: "acknowledgement is an appended reply line, not a command" },
   { path: "src/cli/commands/open.js", owner: "none (CUT)", cut: true, why: "superseded by add, which mints the review and its token in one act" },
