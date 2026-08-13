@@ -411,3 +411,22 @@ Nothing was deleted. For the Phase 4B batch:
 - `test/fixtures/cp2-mid-doc.html` and `test/fixtures/assets/cp2-mid-boot.js` — still carried from
   CP2-mid. The boot file is now genuinely redundant with `src/layer/index.js`; cut it only when
   `cp2_mid.spec.js` is retired or re-pointed at the real boot.
+
+## Phase 3 through Phase 5: complete
+
+All four Phase 3 builders (agent loop, install/add, copy/export, Edits tab) merged. Phase 4A
+acceptance walks scored every criterion PASS on three lanes (scorecard in `4a_acceptance_scorecard.md`);
+the staff-designer eye scored the rail "close, not shippable", a fix pass answered all 13 findings plus
+the handled-highlight defect, and the verdict re-check flipped to "this is one product and it ships".
+
+Phase 5: five reviewers plus the adversary produced 38 findings (`05_review_findings.md`). A four-builder
+fix wave closed all 6 blockers and every important, each TDD (test fails against the broken mechanism
+first). The two exploits confirmed live in review (helper-log injection, second-window id replay) are
+now pinned by passing tests.
+
+Current state: **419 unit, 459 tri-browser, 0 failures**; every checkpoint (CP1, CP2-mid, CP2) and
+acceptance (AC1-AC3) spec green on Chromium, Firefox, and WebKit. One honest skip remains per lane (the
+real-Back bfcache test, a platform limitation, with a synthetic-event twin covering the handler).
+
+Remaining before ship: the 4B cleanup batch (one human approval), and two genuinely human checks queued
+for live review (the AC6 unprimed-user half and the 60-second IME composition check).

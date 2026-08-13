@@ -85,6 +85,28 @@ leaves the session secret's anti-replay undercut by a takeover path that still a
 | NEW-5 | M | projection.js:84 | A malformed item event is silently dropped from the projection: no log, no reject, no chip (asymmetric with the reply path) | Log + emit a reject/diagnostic, matching the reply path |
 | NEW-6 | M | review_format.js:171 | source_hint.note and lost.note ride the intent field name `note` outside the two declared intent fields | Rename the nested keys (source_hint.instruction, lost.hint); bound hint.path |
 
+## Fix-wave disposition
+
+Four parallel builders, four merges, all green (419 unit, 459 tri-browser, every checkpoint and
+acceptance spec on three lanes). Each blocker was TDD: the test failed against the broken mechanism
+first, then passed fixed. The two exploits the reviewers confirmed live (log injection, window-id
+replay) are now pinned by passing tests.
+
+- **Fixed:** all 6 blockers (1-6), all importants (7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
+  NEW-1, NEW-2, NEW-3, NEW-4), and minors 15, 18, 19, 21, 22, 23, 24, 25, 27, 29, 30, NEW-5, NEW-6.
+- **N2 (27)** conflict-button register: fixed. **N1 (26)** badge placement above the buttons:
+  routed to Ken's live review as a minor taste call (DOM-order tweak the design eye should confirm).
+- **Deferred to live review / accepted residual (all minor, none blocking):**
+  - **20** health route reflects the raw Origin into ACAO (fingerprint only, no review data; the
+    comment misdescribes the control). Small, real, not shipped-blocking. Fix at live review or next pass.
+  - **28** comment-box no-gutter fallback: the edit-bar collision is fixed; the "covers the
+    paragraph below when there is no gutter" half needs the fallback to actually fire. Minor, was minor.
+  - **31** protect.js onMutations restores every snapshot key while release evicts only the active
+    one: latent, not reachable through the wired product today. Guard when a future caller snapshots a
+    non-active element.
+  - **32** cosmetic: hardcoded port literal in record_fixtures.js, the dead "blur" flush trigger.
+    Sweep at 4B.
+
 ## Landed and confirmed (do not regress)
 
 Server-side checks with one call site and no branch-around; constant-time token compare (complete);
