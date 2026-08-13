@@ -115,6 +115,34 @@ Browsing is the page untouched: links navigate, buttons act, forms submit. Edit
 state is entered deliberately, one block at a time, and the block is visibly
 framed while it is in it.
 
+## Every invocation
+
+**Things a person says to their agent.** The agent-readable playbook is
+[`AGENTS.md`](AGENTS.md); an agent that has never seen this tool needs the URL
+once, and after that a plain sentence works:
+
+> Set up a live review of `path/to/page.html` — follow
+> https://raw.githubusercontent.com/kenxle/live-agentic-html-editor/main/AGENTS.md
+
+> Open this page for a live review. You have `lahe` installed.
+
+**The CLI.** Every command also runs uninstalled as `node bin/lahe.js ...`.
+
+| Command | What it does |
+| --- | --- |
+| `lahe add path/to/page.html` | Start a review on a static file: writes the one script line, mints the review and its token, starts the helper if it is not running, prints what to open |
+| `lahe add path/to/project --origin http://localhost:3000` | Dev-server variant: edits nothing, prints the one guarded line for your layout |
+| `lahe add ... --new` | Mint a fresh review even though the page already carries one |
+| `lahe add ... --source path/to/template` | Record where the source lives, so an agent edits the template rather than build output |
+| `lahe serve [--port N]` | Run the helper by hand (`add` starts it for you, so this is rarely needed) |
+| `lahe wait --review <id> [--since <cursor>] [--timeout <seconds>]` | Block until new items are ready; prints them as JSON lines plus the next cursor. Exit codes: 0 new work, 1 timeout, 2 helper unreachable, 3 unknown review, 4 bad usage. Reading acknowledges nothing |
+
+**The files, which are the agent's real interface.** In the review folder that
+`add` names: `review.json` is what an agent reads (its top-level `contract`
+field is the whole contract), and `replies.jsonl` (or `replies-<agent>.jsonl`)
+is where an agent answers, one appended JSON line per item. `events.jsonl` is
+the append-only history underneath both.
+
 ## License
 
 MIT. See `LICENSE`.
