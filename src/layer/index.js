@@ -60,6 +60,7 @@
         highlight: require("./highlight.js"),
         comments: require("./comments.js"),
         tabActive: require("./tab_active.js"),
+        tabEdits: require("./tab_edits.js"),
         sync: require("./sync.js"),
         editing: require("./editing.js"),
         protect: require("./protect.js")
@@ -227,6 +228,24 @@
     });
     editing.bind({ page: page });
 
+    // The Edits tab's contents, inside the rail's own Edits pane, the way the
+    // Active tab lives inside the Active one. It is created after the edit
+    // surface because it subscribes to it: a hand edit becomes a row on the
+    // same act that writes the record.
+    var editsTab = makeEditsTab();
+
+    function makeEditsTab() {
+      var made = ns.tabEdits.createEditsTab({
+        store: store,
+        reviewId: reviewId,
+        overlay: rail,
+        host: rail.tabBody(ns.overlay.TAB.EDITS),
+        editing: editing
+      });
+      made.mount();
+      return made;
+    }
+
     // The records replay runs over. Read from the store and CACHED between
     // changes, not re-read per pass: replay stamps a lost region on the object
     // it was handed, and a fresh copy every pass would throw that stamp away and
@@ -361,11 +380,13 @@
       // keystroke and not on the close.
       comments.closeAll();
       tab.unmount();
+      editsTab.unmount();
       rail.unmount();
       rail.mount();
       // The tab holds the pane node it was given, and that node went with the
       // old root, so the tab is built again against the new one.
       tab = createTab();
+      editsTab = makeEditsTab();
       hostNode = doc.getElementById(markers.OVERLAY_ROOT_ID);
       merge();
       return !!hostNode;
@@ -409,6 +430,9 @@
       tab: function () {
         return tab;
       },
+      editsTab: function () {
+        return editsTab;
+      },
       sync: sync,
       editing: editing,
       protect: protect,
@@ -430,6 +454,7 @@
         editing.teardown();
         comments.teardown();
         tab.unmount();
+        editsTab.unmount();
         rail.unmount();
         if (win[GLOBAL] && win[GLOBAL].handle === handle) delete win[GLOBAL];
         current = null;
