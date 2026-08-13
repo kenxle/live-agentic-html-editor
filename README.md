@@ -1,14 +1,111 @@
 # live-agentic-html-editor
 
-A zero-runtime-dependency tool for reviewing a live HTML page in your own
-browser. Highlight text, edit it directly, or leave a comment; every change
-is captured, sent to a local service, and handed to your coding agent to
-apply. Targets macOS and Chromium for v1.
+Review a live HTML page in your own browser. Select a passage and comment on it,
+or edit the text directly on the page. Every change is captured as a record, sent
+to a small local process, and handed to your coding agent to apply against the
+source.
 
-**Status: not ready yet.** This repository is scaffolding. The service, the
-review layer, and the agent surface described in `docs/features/` are being
-built out; nothing here is functional yet.
+Two pieces, and that is the whole design:
 
-Credit: the interaction model (page beside a rail, select text to comment,
-edit directly) was established by [human-review](https://github.com/petergyang/human-review)
-by Peter Yang (MIT), which this tool learned from and builds on.
+- **The library.** One built JavaScript file, added to the page with one
+  `<script>` line. It runs alone: if the local process is not up, the work is
+  kept in browser storage and posted when it comes back.
+- **The helper.** One Node process beside the page (`lahe serve`), listening on
+  `127.0.0.1:7817`. It keeps an append-only log of the review and writes the
+  file your agent reads.
+
+**Status: not ready yet.** The service, the review layer, and the agent surface
+described in `docs/features/` are being built out.
+
+## What you need
+
+**Node 20 or later.** The helper is plain Node with no runtime dependencies: it
+uses `node:`-prefixed core modules and the global `fetch`, both of which are
+stable from Node 20 on. Nothing else is installed to run the tool.
+
+**A current Chrome, Edge, Safari, or Firefox.** The floor is the
+[Custom Highlight API](https://developer.mozilla.org/en-US/docs/Web/API/CSS_Custom_Highlight_API),
+and it is a floor for a reason worth stating: it is how the library draws a
+highlight over your text **without putting anything into the page's DOM**. The
+alternative is wrapping the highlighted words in `<span>` elements, which changes
+the page you are trying to review: the app's own scripts see nodes that were
+never there, its CSS selectors match differently, and its own re-renders fight
+whatever was inserted. The API is available in current versions of all four
+browsers.
+
+**macOS, Linux, or Windows.** Nothing here is platform-specific. The library is
+standard DOM APIs and the helper is standard Node.
+
+## Install
+
+```sh
+git clone <this repo>
+cd live-agentic-html-editor
+npm install
+npm link          # once, so `lahe` is a command on your PATH
+```
+
+Then, for any page you want to review:
+
+```sh
+lahe add path/to/page.html
+```
+
+`add` does the whole install: it writes the one script line into the page,
+mints that review's token, registers the page's origin, and **starts the helper
+if it is not already running**. It prints what it did and what to open.
+
+For a dev server, point it at the project instead:
+
+```sh
+lahe add path/to/project --origin http://localhost:3000
+```
+
+Nothing in your application is edited. `add` prints the one line for your layout,
+inside a development-only guard, for you to paste.
+
+### Without installing
+
+`npm link` is a convenience. If you would rather not put anything on your PATH,
+every command works the same way from the clone:
+
+```sh
+node bin/lahe.js add path/to/page.html
+node bin/lahe.js serve
+```
+
+### A note on the token
+
+The script line carries a per-review token, and the helper refuses any request
+that does not present it. That means a token ends up written into a file. If that
+file is in a repository, the token can be committed and shared with everyone who
+reads it. It is scoped to **one review**: a leak opens that review's feedback and
+nothing else, not your machine and not another review. `add` says so at the
+moment it writes.
+
+## Using it
+
+The gestures are also shown as hint lines on the rail beside the page, so you do
+not need this file open to work them out.
+
+| Gesture | What it does |
+| --- | --- |
+| Cmd-Shift-C with text selected | Comment on the selection |
+| Cmd-Shift-C with nothing selected | Element-pick mode: hover to outline, click to comment, Esc to cancel |
+| Cmd-Shift-E | Edit the block under the cursor |
+| Esc, or a click outside | Commit the edit and give the block back to the page |
+| Cmd-Enter in a comment box | This comment is done, and the agent may act on it |
+| The open box at the foot of the rail | A note tied to nothing in particular |
+
+Browsing is the page untouched: links navigate, buttons act, forms submit. Edit
+state is entered deliberately, one block at a time, and the block is visibly
+framed while it is in it.
+
+## License
+
+MIT. See `LICENSE`.
+
+Credit: the interaction model (page beside a rail, select text to comment, edit
+directly) was established by
+[human-review](https://github.com/petergyang/human-review) by Peter Yang (MIT),
+which this tool learned from and builds on.

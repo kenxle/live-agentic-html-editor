@@ -221,7 +221,7 @@ var NON_BUNDLE_FILES = [
 
   { path: "src/cli/index.js", owner: "1A", why: "the command dispatcher: serve, add, wait" },
   { path: "src/cli/commands/serve.js", owner: "1A", why: "serve" },
-  { path: "src/cli/commands/add.js", owner: "3B", planned: true, why: "add" },
+  { path: "src/cli/commands/add.js", owner: "3B", why: "add" },
   { path: "src/cli/commands/wait.js", owner: "3A", planned: true, why: "wait" },
   { path: "src/cli/commands/next.js", owner: "none (CUT)", cut: true, why: "the blocking next command is the dead send model" },
   { path: "src/cli/commands/ack.js", owner: "none (CUT)", cut: true, why: "acknowledgement is an appended reply line, not a command" },
