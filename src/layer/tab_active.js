@@ -158,12 +158,66 @@
     "  z-index: 2;",
     "}",
     ".lahe-rail-pill[hidden] { display: none; }",
-    "@media (prefers-color-scheme: dark) {",
-    "  ." + PANEL_CLASS + ", ." + ROW_CLASS + ", .lahe-rail-pill { background: #1b1b1d; color: #f2f2f2; border-color: rgba(255,255,255,0.16); }",
-    "  .lahe-rail-count, .lahe-rail-quote, .lahe-rail-rowfoot, .lahe-rail-hints, .lahe-rail-footlabel { color: rgba(242,242,242,0.6); }",
-    "  .lahe-rail-keys { color: rgba(242,242,242,0.85); }",
-    "}"
+    // The page picks the scheme, not the OS (highlight.js stamps the host).
+    ":host([data-lahe-scheme='dark']) ." + PANEL_CLASS + ",",
+    ":host([data-lahe-scheme='dark']) ." + ROW_CLASS + ",",
+    ":host([data-lahe-scheme='dark']) .lahe-rail-pill { background: #1b1b1d; color: #f2f2f2; border-color: rgba(255,255,255,0.16); }",
+    ":host([data-lahe-scheme='dark']) .lahe-rail-count,",
+    ":host([data-lahe-scheme='dark']) .lahe-rail-quote,",
+    ":host([data-lahe-scheme='dark']) .lahe-rail-rowfoot,",
+    ":host([data-lahe-scheme='dark']) .lahe-rail-hints,",
+    ":host([data-lahe-scheme='dark']) .lahe-rail-footlabel { color: rgba(242,242,242,0.6); }",
+    ":host([data-lahe-scheme='dark']) .lahe-rail-keys { color: rgba(242,242,242,0.85); }"
   ].join("\n");
+
+  // ---------------------------------------------------------------------------
+  // What this tab draws INSIDE the rail
+  // ---------------------------------------------------------------------------
+  //
+  // PANEL_STYLE above draws the standalone panel and is added to the library's
+  // outer surface. It is NOT the rail's stylesheet and never was: the rail lives
+  // in a second, closed shadow root of its own, so nothing added to the outer
+  // surface reaches a hosted row. The hosted path used to add no stylesheet at
+  // all, which is why every `.lahe-rail-*` element in the rail rendered naked:
+  // full-ink prose where a hint list should be, and two unstyled buttons run
+  // together into "RewordDelete" under the reviewer's own sentence.
+  //
+  // So the hosted path has its own sheet, injected into the rail's root the way
+  // 3A's Done tab injects its own (by appending it inside the first node this
+  // file attaches). It is small on purpose: the rail already owns the card, the
+  // quote, the state chip and the button register (`.cardact`), and this file
+  // adds only the three things it actually draws.
+  var HOSTED_STYLE = [
+    ".lahe-rail-foot{display:flex;flex-direction:column;gap:9px;padding:2px 0 0}",
+    ".lahe-rail-footlabel{font-size:10px;font-weight:600;letter-spacing:.08em;",
+    "text-transform:uppercase;color:var(--ink-faint)}",
+    ".lahe-rail-note{white-space:pre-wrap;overflow-wrap:anywhere}",
+    ".lahe-rail-note[data-empty='true']{color:var(--ink-faint)}",
+    // The one hint surface is the rail footer's keycaps. Every OTHER gesture is
+    // still reachable, and still rendered from the one gesture table (R43), but
+    // it is behind a disclosure instead of being an eight-line wall of prose
+    // that is the loudest thing in an empty rail.
+    ".lahe-rail-more{font-size:11.5px;color:var(--ink-soft)}",
+    ".lahe-rail-more>summary{list-style:none;cursor:pointer;display:flex;align-items:center;",
+    "gap:5px;color:var(--ink-faint);font-size:11px;font-weight:550;letter-spacing:.01em}",
+    ".lahe-rail-more>summary::-webkit-details-marker{display:none}",
+    ".lahe-rail-more>summary::before{content:'›';display:inline-block;font-size:13px;line-height:1;",
+    "transform:translateY(-1px);transition:transform 120ms ease}",
+    ".lahe-rail-more[open]>summary::before{transform:rotate(90deg) translateX(-1px)}",
+    ".lahe-rail-more>summary:hover{color:var(--ink-soft)}",
+    ".lahe-rail-hints{list-style:none;display:flex;flex-direction:column;gap:6px;",
+    "margin-top:8px;font-size:11.5px;color:var(--ink-soft);line-height:1.4}",
+    ".lahe-rail-hints li{display:flex;gap:8px;align-items:baseline}",
+    // The same keycap the footer's hints use, so there is one hint language.
+    ".lahe-rail-keys{flex:0 0 auto;font-size:10.5px;font-weight:600;color:var(--ink);",
+    "background:var(--sunken);border:1px solid var(--line);border-bottom-width:2px;",
+    "border-radius:5px;padding:1px 5px;white-space:nowrap}",
+    ".lahe-rail-hint{flex:1}",
+    // F10: the note box is not in a .card__body, so it never picked up the
+    // rail's resize:none and wore the browser's diagonal grabber. It is the one
+    // place the rail looked like a form control instead of a surface.
+    ".lahe-rail-foot textarea{resize:none}"
+  ].join("");
 
   function createActiveTab(options) {
     var opts = options || {};
@@ -192,6 +246,7 @@
     var noteHandle = null;
     var collapsed = false;
     var mounted = false;
+    var hostedStyleAttached = false;
     var unsubscribe = null;
     // id -> row node. The reason there is no rebuild path.
     var rows = Object.create(null);
@@ -274,7 +329,11 @@
     function mountInRail(host) {
       footEl = el("footer", "lahe-rail-foot");
       footEl.style.order = "9";
-      footEl.appendChild(el("span", "lahe-rail-footlabel", "A note about the page, tied to nothing"));
+      // The stylesheet goes in with the first node this file puts in the rail's
+      // closed root. Without it every class below is a name with nothing behind
+      // it, which is exactly what shipped.
+      ensureHostedStyle(footEl);
+      footEl.appendChild(el("span", "lahe-rail-footlabel", "A note about the page"));
       host.appendChild(footEl);
       footEl.appendChild(hintList());
 
@@ -293,11 +352,27 @@
     function openNoteBox() {
       if (!footEl) return null;
       noteHandle = comments.openNote({ host: footEl, focus: false });
-      // Keep the hint list last, under the box.
-      footEl.appendChild(footEl.querySelector(".lahe-rail-hints"));
+      // Keep the hint disclosure last, under the box.
+      var more = footEl.querySelector(".lahe-rail-more") || footEl.querySelector(".lahe-rail-hints");
+      if (more) footEl.appendChild(more);
       return noteHandle;
     }
 
+    /** The hosted stylesheet, once, inside the rail's own closed root. */
+    function ensureHostedStyle(node) {
+      if (!hosted || hostedStyleAttached || !doc || !node) return;
+      var style = doc.createElement("style");
+      style.textContent = HOSTED_STYLE;
+      node.appendChild(style);
+      hostedStyleAttached = true;
+    }
+
+    // Every gesture, from the one gesture table (R43), rendered as keycaps
+    // rather than as prose. Hosted, it is behind a disclosure: the rail's footer
+    // already teaches the three gestures a reviewer needs on the first day, and
+    // printing eight more above them made the reviewer read the rules twice in
+    // two registers in one column. Standalone there is no footer to defer to, so
+    // the list is open.
     function hintList() {
       var list = el("ul", "lahe-rail-hints");
       gestures.hintLines().forEach(function (line) {
@@ -306,7 +381,11 @@
         li.appendChild(el("span", "lahe-rail-hint", line.hint));
         list.appendChild(li);
       });
-      return list;
+      if (!hosted) return list;
+      var more = el("details", "lahe-rail-more");
+      more.appendChild(el("summary", null, "All shortcuts"));
+      more.appendChild(list);
+      return more;
     }
 
     function hintText() {
@@ -390,6 +469,12 @@
       var row = el("article", ROW_CLASS);
       row.setAttribute("data-lahe-item", id);
       row.setAttribute("data-kind", item[record.FIELD.KIND]);
+      // What the rail hides on a card that moved to Done: the note and the two
+      // actions below are the ACTIVE tab's carriers, and a handled card gets
+      // both from the Done row and the rail's own agent block instead. The
+      // marker rather than a call, because a row is never withdrawn from a card
+      // the reviewer may be typing in.
+      if (hosted) row.setAttribute("data-lahe-active-row", "");
 
       // The rail's card already carries the quote and the lifecycle chip, so a
       // hosted row would say both of them twice. It draws what is left.
@@ -401,16 +486,22 @@
       var note = el("p", "lahe-rail-note", "");
       row.appendChild(note);
 
-      var foot = el("div", "lahe-rail-rowfoot");
+      // Hosted, these are the rail's own quiet card actions (one register for
+      // every control that sits on a card). Standalone they keep the panel's own
+      // button class, which its stylesheet does draw.
+      var actionClass = hosted ? "cardact cardact--quiet" : "lahe-rail-btn";
+      var foot = el("div", hosted ? "cardacts" : "lahe-rail-rowfoot");
       if (!hosted) foot.appendChild(el("span", "lahe-rail-state", ""));
-      var reword = el("button", "lahe-rail-btn", "Reword");
+      var reword = el("button", actionClass, "Reword");
+      reword.setAttribute("data-lahe-act", "reword");
       reword.setAttribute("type", "button");
       reword.addEventListener("click", function () {
         // In the rail, the box the reviewer rewords in lives in the card
         // itself; standalone, it opens over the page as before.
         comments.reopen(id, hosted ? { host: rail.cardBody(id), placement: "inline" } : undefined).focus();
       });
-      var del = el("button", "lahe-rail-btn", "Delete");
+      var del = el("button", actionClass, "Delete");
+      del.setAttribute("data-lahe-act", "delete");
       del.setAttribute("type", "button");
       del.addEventListener("click", function () {
         comments.remove(id);
@@ -535,6 +626,9 @@
       noteHandle = null;
       rows = Object.create(null);
       mounted = false;
+      // The sheet went with the foot it was appended inside, so the next mount
+      // has to put it back or the rail's rows come back naked.
+      hostedStyleAttached = false;
     }
 
     function isMounted() {

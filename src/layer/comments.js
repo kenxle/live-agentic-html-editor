@@ -127,7 +127,9 @@
     ".lahe-comment-quote {",
     "  margin: 0;",
     "  padding-left: 8px;",
-    "  border-left: 2px solid rgba(255, 178, 26, 0.9);",
+    // The accent, not the amber. Amber means "this needs you" everywhere else in
+    // the product, and a quote of the passage being commented on needs nobody.
+    "  border-left: 2px solid rgba(60, 86, 165, 0.75);",
     "  color: rgba(17, 17, 17, 0.62);",
     "  font-size: 12px;",
     "  max-height: 3.2em;",
@@ -136,7 +138,9 @@
     "." + INPUT_CLASS + " {",
     "  width: 100%;",
     "  min-height: 66px;",
-    "  resize: vertical;",
+    // No native grabber. It is the one place the box looked like a form control
+    // dropped on the page instead of a surface, and the box already grows.
+    "  resize: none;",
     "  border: 1px solid rgba(17, 17, 17, 0.16);",
     "  border-radius: 6px;",
     "  padding: 7px 8px;",
@@ -145,7 +149,7 @@
     "  background: #ffffff;",
     "}",
     "." + INPUT_CLASS + ":focus-visible, ." + INPUT_CLASS + ":focus {",
-    "  outline: 2px solid rgba(255, 158, 0, 0.85);",
+    "  outline: 2px solid rgba(60, 86, 165, 0.9);",
     "  outline-offset: 1px;",
     "  border-color: transparent;",
     "}",
@@ -158,22 +162,29 @@
     "  font-size: 11px;",
     "}",
     ".lahe-comment-state[data-state='ready'] { color: rgba(17, 17, 17, 0.72); }",
+    // Pick mode is the reviewer choosing something, not the tool warning them,
+    // so the outline is the one accent rather than a saturated orange. It was
+    // the loudest colour moment anywhere in the product and it meant "normal".
     "." + OUTLINE_CLASS + " {",
     "  position: fixed;",
     "  pointer-events: none;",
     "  border-radius: 4px;",
-    "  outline: 2px solid rgba(255, 158, 0, 0.95);",
+    "  outline: 2px solid rgba(60, 86, 165, 0.95);",
     "  outline-offset: 2px;",
-    "  background: rgba(255, 202, 84, 0.12);",
+    "  background: rgba(60, 86, 165, 0.10);",
     "  z-index: 1;",
     "  display: none;",
     "}",
-    "@media (prefers-color-scheme: dark) {",
-    "  ." + BOX_CLASS + " { background: #1b1b1d; color: #f2f2f2; border-color: rgba(255,255,255,0.16); }",
-    "  ." + INPUT_CLASS + " { background: #111113; color: inherit; border-color: rgba(255,255,255,0.18); }",
-    "  .lahe-comment-quote { color: rgba(242,242,242,0.66); }",
-    "  .lahe-comment-foot { color: rgba(242,242,242,0.55); }",
-    "}"
+    // The PAGE picks the scheme, not the OS: a black comment card floating on a
+    // white page is the loudest possible way to be a polite overlay.
+    // highlight.js samples the page's background and stamps the surface host.
+    ":host([data-lahe-scheme='dark']) ." + BOX_CLASS + " { background: #1b1b1d; color: #f2f2f2; border-color: rgba(255,255,255,0.16); }",
+    ":host([data-lahe-scheme='dark']) ." + INPUT_CLASS + " { background: #111113; color: inherit; border-color: rgba(255,255,255,0.18); }",
+    ":host([data-lahe-scheme='dark']) ." + OUTLINE_CLASS + " { outline-color: rgba(147, 167, 234, 0.95);",
+    "  background: rgba(147, 167, 234, 0.12); }",
+    ":host([data-lahe-scheme='dark']) .lahe-comment-quote { color: rgba(242,242,242,0.66);",
+    "  border-left-color: rgba(147, 167, 234, 0.8); }",
+    ":host([data-lahe-scheme='dark']) .lahe-comment-foot { color: rgba(242,242,242,0.55); }"
   ].join("\n");
 
   function createComments(options) {
@@ -523,24 +534,86 @@
       };
     }
 
-    // Places an anchored box under its passage, kept inside the viewport and
-    // clear of the rail. Fixed positioning, inside the shadow root: the page's
-    // own layout never learns this happened.
+    // Places an anchored box, kept inside the viewport and clear of the rail.
+    // Fixed positioning, inside the shadow root: the page's own layout never
+    // learns this happened.
+    //
+    // THE GUTTER FIRST, THEN BELOW. A box under the passage covers the paragraph
+    // after it, so the reviewer is writing about the page with the page hidden.
+    // Most reviewed pages are a content column with empty space between it and
+    // the rail; when that space is wide enough the box goes there, beside its
+    // passage, and nothing is covered. Below is the fallback for a page whose
+    // content runs the full width.
+    var BOX_WIDTH = 288;
+    var GUTTER_GAP = 14;
+    // Roughly the box's own height, for the "is there room below" question. The
+    // box is measured when it is on screen; before that this is the estimate.
+    var BOX_HEIGHT_ESTIMATE = 180;
+
     function positionAt(node, range) {
       if (!node || !win) return node;
       var vw = win.innerWidth || 1024;
       var vh = win.innerHeight || 768;
-      var width = 288;
       var rect = range && typeof range.getBoundingClientRect === "function" ? range.getBoundingClientRect() : null;
-      var top = rect ? rect.bottom + 10 : 24;
-      var left = rect ? rect.left : 24;
-      var rightLimit = Math.max(16, vw - width - 16 - RAIL_ALLOWANCE);
+      var rightLimit = Math.max(16, vw - BOX_WIDTH - 16 - RAIL_ALLOWANCE);
+      var top;
+      var left;
+
+      // The gutter starts at the edge of the CONTENT COLUMN, not at the end of
+      // the selected run. A short selection (a heading, a few words) ends in the
+      // middle of the column, and a box placed there covers the text beside it,
+      // which is the thing being fixed rather than a smaller version of it.
+      var columnRight = columnEdge(range, rect);
+      if (columnRight !== null && columnRight + GUTTER_GAP <= rightLimit) {
+        left = columnRight + GUTTER_GAP;
+        top = rect.top;
+      } else {
+        top = rect ? rect.bottom + 10 : 24;
+        left = rect ? rect.left : 24;
+      }
+
       if (left > rightLimit) left = rightLimit;
       if (left < 16) left = 16;
-      if (top > vh - 180) top = Math.max(16, (rect ? rect.top : vh) - 180);
+      if (top > vh - BOX_HEIGHT_ESTIMATE) top = Math.max(16, (rect ? rect.top : vh) - BOX_HEIGHT_ESTIMATE);
+      if (top < 16) top = 16;
+
+      top = nudgeOffEditBar(node, top, left);
       node.style.top = Math.round(top) + "px";
       node.style.left = Math.round(left) + "px";
       return node;
+    }
+
+    /** The right edge of the block the passage sits in, in viewport pixels. */
+    function columnEdge(range, rect) {
+      if (!rect) return null;
+      var node = range && range.commonAncestorContainer;
+      var element = node && node.nodeType === 1 ? node : node && node.parentElement;
+      if (!element || typeof element.getBoundingClientRect !== "function") return rect.right;
+      var block = element.getBoundingClientRect();
+      return Math.max(rect.right, block.right);
+    }
+
+    /**
+     * Move the box below a live edit bar it would land on top of.
+     *
+     * Two floating chromes stacking on each other is the one collision the
+     * reviewer reads as the tool being broken. The bar is 2A's and lives in the
+     * same surface root; this asks the DOM where it is rather than asking the
+     * editing surface, so nothing new is wired between the two files for a
+     * placement nudge.
+     */
+    function nudgeOffEditBar(node, top, left) {
+      var root = surfaceRoot;
+      if (!root || typeof root.querySelector !== "function") return top;
+      var bar = root.querySelector(".lahe-edit-bar");
+      if (!bar || !bar.getBoundingClientRect) return top;
+      if (bar.style && bar.style.display === "none") return top;
+      var b = bar.getBoundingClientRect();
+      if (!b.width || !b.height) return top;
+      var overlapsX = left < b.right && b.left < left + BOX_WIDTH;
+      var overlapsY = top < b.bottom && b.top < top + BOX_HEIGHT_ESTIMATE;
+      if (!overlapsX || !overlapsY) return top;
+      return b.bottom + 10;
     }
 
     // ------------------------------------------------------------------------
@@ -730,6 +803,51 @@
       return removed;
     }
 
+    // ------------------------------------------------------------------------
+    // A handled item's paint (R37 / AC3)
+    // ------------------------------------------------------------------------
+    //
+    // A HANDLED ITEM LOSES ITS HIGHLIGHT. It is finished, the reviewer is not
+    // being asked to look at that passage again, and a page that keeps every
+    // answered passage painted accumulates marks all session until the reviewer
+    // cannot see which ones are still open. It is the paint that goes, never the
+    // record: the item is kept, it is in Done, and it is reopenable (R38).
+    //
+    // The two calls are a pair and both are here, because the paint is this
+    // file's. tab_done.js says WHEN; this file knows HOW.
+
+    /** Drop one item's paint. The record and its box are untouched. */
+    function unpaint(id) {
+      if (!highlights) return false;
+      return highlights.clear(id);
+    }
+
+    /**
+     * Paint one item again, resolving its anchor against the page as it is now.
+     *
+     * The live Range died with the paint, and the page has moved on anyway
+     * (usually because the agent's change is what retired the item), so the
+     * range is rebuilt from the record's own reference rather than remembered.
+     * An anchor that no longer binds is an honest miss: nothing is painted and
+     * the caller is told so, which is the same answer replay gives.
+     *
+     * @returns {boolean} true when the item is painted now
+     */
+    function repaint(id) {
+      if (!highlights || !doc) return false;
+      var item = store.readItem(requireReview(), id);
+      if (!item) return false;
+      var region = item[record.FIELD.REGION];
+      var ref = region && region.ref;
+      if (!ref) return false;
+      var verdict = anchor.resolve(ref, doc);
+      if (!verdict || !verdict.element) return false;
+      var range = doc.createRange();
+      range.selectNodeContents(verdict.element);
+      highlights.paint(id, range, highlightModule.NAME.COMMENT);
+      return true;
+    }
+
     function items() {
       return store.read(requireReview());
     }
@@ -884,6 +1002,8 @@
       openNote: openNote,
       reopen: reopen,
       remove: remove,
+      unpaint: unpaint,
+      repaint: repaint,
       items: items,
       outstanding: outstanding,
       boxFor: boxFor,

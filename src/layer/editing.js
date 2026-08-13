@@ -245,14 +245,16 @@
     ".lahe-edit-bar__btn[data-lahe-command='bold'] { font-weight: 700; }",
     ".lahe-edit-bar__btn[data-lahe-command='italic'] { font-style: italic; }",
     ".lahe-edit-bar__hint { color: rgba(17, 17, 17, 0.5); white-space: nowrap; }",
-    "@media (prefers-color-scheme: dark) {",
-    "  ." + FRAME_CLASS + " { border-color: #93a7ea; background: rgba(147, 167, 234, 0.10);",
+    // The PAGE picks the scheme, not the OS: highlight.js samples the reviewed
+    // page's own background and stamps it on the surface host. A dark-mode OS
+    // over a light page used to turn this bar into a black card floating on a
+    // white document.
+    ":host([data-lahe-scheme='dark']) ." + FRAME_CLASS + " { border-color: #93a7ea; background: rgba(147, 167, 234, 0.10);",
     "    box-shadow: 0 0 0 4px rgba(147, 167, 234, 0.14), 0 6px 20px rgba(0, 0, 0, 0.4); }",
-    "  ." + BAR_CLASS + " { background: #1b1b1d; color: #f2f2f2; border-color: rgba(255,255,255,0.16); }",
-    "  .lahe-edit-bar__label { color: #b7c4f2; }",
-    "  .lahe-edit-bar__hint { color: rgba(242,242,242,0.55); }",
-    "  .lahe-edit-bar__sep { background: rgba(255,255,255,0.16); }",
-    "}"
+    ":host([data-lahe-scheme='dark']) ." + BAR_CLASS + " { background: #1b1b1d; color: #f2f2f2; border-color: rgba(255,255,255,0.16); }",
+    ":host([data-lahe-scheme='dark']) .lahe-edit-bar__label { color: #b7c4f2; }",
+    ":host([data-lahe-scheme='dark']) .lahe-edit-bar__hint { color: rgba(242,242,242,0.55); }",
+    ":host([data-lahe-scheme='dark']) .lahe-edit-bar__sep { background: rgba(255,255,255,0.16); }"
   ].join("\n");
 
   // ---------------------------------------------------------------------------
@@ -876,6 +878,40 @@
       return { reverted: true, kind: kind, reason: null };
     }
 
+    /**
+     * Drop ONE record and leave the page exactly as it is.
+     *
+     * The seam undo ends with, minus the write. It exists for one caller: the
+     * conflict card's "take the page's", where the reviewer is accepting what
+     * the page already says. Reverting to `before` there would be wrong twice
+     * over, because `before` is neither version in the collision.
+     *
+     * @param {string} itemId
+     * @returns {{retired: boolean, kind: (string|null), reason: (string|null)}}
+     */
+    function retire(itemId) {
+      var item = store.readItem(requireReview(), itemId);
+      if (!item) return { retired: false, kind: null, reason: "no record " + String(itemId) };
+
+      if (session && session.itemId === itemId) {
+        // Retiring the record the reviewer is inside. Edit state goes first, and
+        // it goes without committing: retiring is the decision.
+        var open = session;
+        session = null;
+        unbindBlock();
+        clearEditableAttrs(open.block);
+        protect.release(open.block);
+        hideFrame();
+      }
+
+      store.remove(requireReview(), itemId);
+      forget(itemId);
+      delete deleted[itemId];
+      emit(item, "undone");
+      scheduleReplay("undo");
+      return { retired: true, kind: item[record.FIELD.KIND], reason: null };
+    }
+
     function restoreRegion(item) {
       var el = elementFor(item);
       if (!el) return { element: null, reason: "the region this record points at is not on the page" };
@@ -1308,6 +1344,7 @@
       deleteBlock: deleteBlock,
       format: format,
       undo: undo,
+      retire: retire,
       capture: capture,
       itemFor: itemFor,
       elementFor: elementFor,

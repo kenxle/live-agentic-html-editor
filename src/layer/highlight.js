@@ -87,16 +87,90 @@
   // Highlight colors, as light a touch as a highlight can be and still read.
   // Written with color-mix-free plain rgba so a page-level stylesheet cannot
   // depend on anything the host page defines.
+  //
+  // THE PAGE-SIDE MARKS ARE THE ACCENT, NOT THE AMBER. The rail spends amber on
+  // one thing only, "this needs you", and a commented passage does not need
+  // anyone: it is a selection the reviewer made. An amber wash on the page and
+  // an amber pill in the rail inches away are two languages for one colour, and
+  // the reviewer has to learn which is which. So the wash is the same indigo the
+  // rail's accent is, and it reads as ours rather than as a warning.
   var STYLE_TEXT = [
     "::highlight(" + NAME.COMMENT + ") {",
-    "  background-color: rgba(255, 202, 84, 0.34);",
+    "  background-color: rgba(60, 86, 165, 0.15);",
     "  color: inherit;",
     "}",
     "::highlight(" + NAME.ACTIVE + ") {",
-    "  background-color: rgba(255, 178, 26, 0.46);",
+    "  background-color: rgba(60, 86, 165, 0.26);",
     "  color: inherit;",
     "}"
   ].join("\n");
+
+  // ---------------------------------------------------------------------------
+  // Which scheme the library draws in
+  // ---------------------------------------------------------------------------
+  //
+  // THE PAGE DECIDES, NOT THE OS. The system preference is the right signal for
+  // an application that owns its window and the wrong one for a tool sitting
+  // over someone else's page: with the OS in dark and the reviewed page in light
+  // (the common case, because most apps ship no dark stylesheet), every surface
+  // the library draws becomes a black slab on a white page, which is the loudest
+  // possible way to be a polite overlay.
+  //
+  // So the page's own effective background is sampled and the scheme matched to
+  // it. The system preference is the tiebreak, used only when the page says
+  // nothing readable, which is what a transparent body over a transparent root
+  // amounts to.
+  var SCHEME_ATTR = "data-lahe-scheme";
+
+  /** rgb()/rgba() as {r,g,b,a}, or null for anything else (including keywords). */
+  function parseColor(value) {
+    if (!value || typeof value !== "string") return null;
+    var m = value.replace(/\s+/g, "").match(/^rgba?\((\d+),(\d+),(\d+)(?:,([\d.]+))?\)$/i);
+    if (!m) return null;
+    return {
+      r: Number(m[1]),
+      g: Number(m[2]),
+      b: Number(m[3]),
+      a: m[4] === undefined ? 1 : Number(m[4])
+    };
+  }
+
+  /** Perceived lightness, 0 (black) to 1 (white). The sRGB luma weights. */
+  function luminance(color) {
+    return (0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b) / 255;
+  }
+
+  function systemScheme(win) {
+    if (win && typeof win.matchMedia === "function") {
+      try {
+        if (win.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
+      } catch (e) {
+        // A window with no media-query support says nothing, which is light.
+      }
+    }
+    return "light";
+  }
+
+  /**
+   * The scheme the library should draw in on THIS page.
+   *
+   * @returns {"light"|"dark"}
+   */
+  function schemeForPage(doc, win) {
+    if (!doc || typeof win === "undefined" || !win || typeof win.getComputedStyle !== "function") {
+      return systemScheme(win);
+    }
+    var candidates = [doc.body, doc.documentElement];
+    for (var i = 0; i < candidates.length; i += 1) {
+      if (!candidates[i]) continue;
+      var color = parseColor(win.getComputedStyle(candidates[i]).backgroundColor);
+      // A fully transparent background is the page declining to answer, so the
+      // next candidate is asked and the system preference is the last word.
+      if (!color || color.a < 0.5) continue;
+      return luminance(color) < 0.5 ? "dark" : "light";
+    }
+    return systemScheme(win);
+  }
 
   function createHighlights(options) {
     var opts = options || {};
@@ -296,7 +370,30 @@
       (doc.body || doc.documentElement).appendChild(host);
       surfaceHost = host;
       surfaceRoot = root;
+      // Stamped on the host, so every stylesheet inside the closed root selects
+      // its dark rules with :host([data-lahe-scheme='dark']) instead of a media
+      // query. The page decides; see schemeForPage.
+      refreshScheme();
       return { host: surfaceHost, root: surfaceRoot };
+    }
+
+    /**
+     * Re-read the page's background and re-stamp the surface.
+     *
+     * Called when the surface is built and again on every remount, because the
+     * page that comes back from a navigation or a morph is not required to have
+     * the background the page that left it had.
+     *
+     * @returns {"light"|"dark"} the scheme now in force
+     */
+    function refreshScheme() {
+      var next = pageScheme();
+      if (surfaceHost) surfaceHost.setAttribute(SCHEME_ATTR, next);
+      return next;
+    }
+
+    function pageScheme() {
+      return schemeForPage(doc, opts.window || (typeof window !== "undefined" ? window : null));
     }
 
     // Adds a stylesheet INSIDE the shadow root, once per key. Every caller's
@@ -338,6 +435,9 @@
       paintedIds: paintedIds,
       surface: surface,
       addSurfaceStyle: addSurfaceStyle,
+      pageScheme: pageScheme,
+      refreshScheme: refreshScheme,
+      SCHEME_ATTR: SCHEME_ATTR,
       teardown: teardown
     };
   }
@@ -351,7 +451,9 @@
     STYLE_ID: STYLE_ID,
     STYLE_ATTR: STYLE_ATTR,
     SURFACE_ID: SURFACE_ID,
+    SCHEME_ATTR: SCHEME_ATTR,
     STYLE_TEXT: STYLE_TEXT,
+    schemeForPage: schemeForPage,
     createHighlights: createHighlights,
     shared: shared
   };

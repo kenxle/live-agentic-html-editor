@@ -388,27 +388,22 @@ test.describe("AC3: a human and an agent at the same time", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // AC3's RED half, and the reason it is marked rather than deleted.
+  // AC3's second half: the page, not the rail.
   // ---------------------------------------------------------------------------
   //
   // AC3 says "The handled item loses its highlight and moves to Done", and
-  // tab_done.js's own header repeats it: "A HANDLED ITEM IS KEPT AND REOPENABLE
-  // (R38). It loses its highlight and ...". It does not. The only call to
-  // highlights.clear in the whole library is in comments.remove (src/layer/
-  // comments.js), which is the reviewer deleting their own comment. Nothing
-  // clears or repaints a highlight when an item retires, so a handled item stays
-  // painted on the page for the rest of the session and the page accumulates
-  // marks on passages that are finished.
+  // tab_done.js's own header repeats it. It did not: the only call to
+  // highlights.clear in the library was in comments.remove, which is the
+  // reviewer deleting their own comment, so a handled item stayed painted for
+  // the rest of the session and the page accumulated marks on finished
+  // passages. This carried a test.fail() marker until 4B fixed it.
   //
-  // test.fail() rather than a deletion or a loosened assertion: the suite stays
-  // green, the defect is checked on every run, and the day someone fixes it this
-  // test reports "expected to fail but passed" and forces the marker off. What
-  // green looks like: retiring an item into Done clears its highlight (or
-  // repaints it in a finished paint), so paintedIds() no longer holds it and the
-  // CSS registry no longer carries its range.
+  // The fix is a pair, both in 1D's comment surface because the paint is 1D's:
+  // comments.unpaint(id) drops it when an item retires, comments.repaint(id)
+  // puts it back on a reopen with the anchor resolved against the page as it is
+  // NOW (the agent's change is usually what retired the item, so the old live
+  // range is stale by construction). tab_done.js says when; it never paints.
   test("the handled item loses its highlight", async ({ page }) => {
-    test.fail(true, "AC3 RED: a handled item keeps its highlight; nothing clears it when it retires");
-
     const app = await startAppServer();
     const helper = await startService({
       entry: SERVICE_ENTRY,
@@ -465,6 +460,21 @@ test.describe("AC3: a human and an agent at the same time", () => {
         ),
         "a retired item is no longer painted"
       ).toBe(-1);
+
+      // And the other half of R38: reopening it puts it back in front of the
+      // agent AND back on the page. An item the reviewer can act on that carries
+      // no mark is the same defect pointed the other way.
+      await page.evaluate((id) => window.__lahe.handle.doneTab().reopen(id), item.id);
+      await pollPage(page, (id) => window.__lahe.itemById(id).state === "ready", item.id, {
+        message: "the item to reopen"
+      });
+      expect(
+        await page.evaluate(
+          (id) => window.__lahe.handle.comments.highlights.paintedIds().indexOf(id) !== -1,
+          item.id
+        ),
+        "a reopened item is painted again"
+      ).toBe(true);
     } finally {
       await helper.kill9();
       await app.close();

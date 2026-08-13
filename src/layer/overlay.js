@@ -134,8 +134,12 @@
   // The named limit from D5, said on the status line rather than claimed as
   // covered: two windows in separate storage with no helper running cannot be
   // refused by anything, so the rail says so out loud.
+  // It is SHOWN ONLY IN THE STATE IT DESCRIBES (see renderStatus): a caveat
+  // about there being no helper, printed under a status line that says the
+  // helper is storing and an agent is reading, contradicts the line above it and
+  // teaches the reviewer to stop reading the footer.
   var LIMIT_SEPARATE_STORAGE_NO_HELPER =
-    "With no helper running, a second window in a separate browser profile cannot be detected.";
+    "A second window in a separate browser profile cannot be detected.";
 
   var CSS = [
     // all: initial stops every inheritable property of the host page (font,
@@ -148,15 +152,23 @@
     "--accent-wash:rgba(60,86,165,.09);--warn:#8d5715;--warn-wash:rgba(180,120,30,.12);",
     "--good:#2c6f52;--shadow:0 1px 2px rgba(18,20,26,.06),0 14px 34px rgba(18,20,26,.13);",
     "--radius:14px;--radius-sm:10px}",
-    "@media (prefers-color-scheme:dark){:host{",
+    // THE PAGE PICKS THE SCHEME, NOT THE OS. highlight.js samples the reviewed
+    // page's own background and stamps data-lahe-scheme on this rail's host, so
+    // a dark-mode OS over a light page leaves the rail light and the tool stays
+    // a quiet object on someone else's page instead of a black slab.
+    ":host([data-lahe-scheme='dark']){",
     // Dark keeps the same relationship light has: the card and the rail are the
     // lit surface, the pane behind them is the ground. Inverting that is what
     // makes a dark UI read as a stack of holes.
     "--ink:#e9ebf0;--ink-soft:#a8b0be;--ink-faint:#7b8496;--paper:#1c2028;--surface:#14171c;",
     "--sunken:#0f1216;--line:#2c313b;--line-soft:#242932;--accent:#93a7ea;",
-    "--accent-ink:#b7c4f2;--accent-wash:rgba(147,167,234,.14);--warn:#dfae6a;",
+    // Raised from .14: at the lower alpha the question block was barely
+    // separable from the card behind it, so the block's loudness rested on the
+    // rule alone and D10's promise (a question cannot be scrolled past) was
+    // thinner in dark than in light. Same relationship, not the same alpha.
+    "--accent-ink:#b7c4f2;--accent-wash:rgba(147,167,234,.22);--warn:#dfae6a;",
     "--warn-wash:rgba(223,174,106,.14);--good:#7fc4a2;",
-    "--shadow:0 1px 2px rgba(0,0,0,.4),0 16px 40px rgba(0,0,0,.45)}}",
+    "--shadow:0 1px 2px rgba(0,0,0,.4),0 16px 40px rgba(0,0,0,.45)}",
     "*{box-sizing:border-box;margin:0;padding:0;font:inherit;color:inherit}",
     "button{background:none;border:0;cursor:pointer;font:inherit;color:inherit}",
     ":focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}",
@@ -231,6 +243,27 @@
     "resize:none;min-height:3.2em;font:inherit;font-size:13.5px;line-height:1.5;color:var(--ink);",
     "outline:0;padding:0}",
     ".card__body textarea::placeholder{color:var(--ink-faint)}",
+    // THE ONE QUIET ACTION REGISTER FOR ANYTHING INSIDE A CARD. Every tab owner
+    // that puts a control on a card uses it, so the rail has one button voice
+    // rather than one per file. It is deliberately small and outlined: these sit
+    // under the reviewer's own sentence and must not compete with it.
+    ".cardacts{display:flex;align-items:center;gap:7px;flex-wrap:wrap}",
+    ".cardacts:empty{display:none}",
+    ".cardact{font-size:11.5px;font-weight:550;color:var(--ink-soft);border:1px solid var(--line);",
+    "border-radius:7px;padding:3px 9px;background:var(--paper)}",
+    ".cardact:hover{color:var(--ink);background:var(--surface)}",
+    ".cardact--quiet{border-color:transparent;background:none;padding:3px 5px}",
+    ".cardact--quiet:hover{background:var(--surface);border-color:var(--line-soft)}",
+
+    // A HANDLED CARD IS NOT AN ACTIVE ONE, AND IT SAYS EACH THING ONCE. The
+    // Active tab's row stays attached to a card that moved to Done (withdrawing
+    // it would re-parent a node the reviewer may be in, which is the rail's own
+    // law), so the pane it landed in decides what shows. On a handled card the
+    // Done row carries the reviewer's words and Reopen, the rail's own .agent
+    // block carries what the agent said and the files, and the Active row's copy
+    // of the note and its Reword/Delete are not drawn.
+    ".card[data-state='handled'] .card__body > [data-lahe-active-row]{display:none}",
+
     ".card__badges{display:flex;flex-direction:column;gap:5px}",
     ".card__badges:empty{display:none}",
     ".badge{font-size:12px;color:var(--warn);background:var(--warn-wash);border-radius:7px;",
@@ -280,7 +313,7 @@
     "border:1px solid var(--line);background:var(--paper);color:var(--ink);text-align:center}",
     ".btn:hover{background:var(--surface)}",
     ".btn--primary{background:var(--accent);border-color:var(--accent);color:#fff}",
-    "@media (prefers-color-scheme:dark){.btn--primary{color:#12151a}}",
+    ":host([data-lahe-scheme='dark']) .btn--primary{color:#12151a}",
     ".btn--primary:hover{filter:brightness(1.06);background:var(--accent)}",
 
     // The keyboard hints are readable, not fine print (D10).
@@ -299,7 +332,8 @@
     ".pill[hidden]{display:none}",
     ".pill:hover{background:var(--surface)}",
     ".pill__dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}",
-    ".pill__count{font-variant-numeric:tabular-nums;color:var(--ink-faint);font-weight:500}"
+    ".pill__count{font-variant-numeric:tabular-nums;color:var(--ink-faint);font-weight:500}",
+    ".pill__count[hidden]{display:none}"
   ].join("");
 
   var HINTS = [
@@ -364,6 +398,9 @@
 
       var host = doc.createElement("div");
       markers.markChrome(host);
+      // The scheme the rail draws in, taken from the PAGE's own background
+      // rather than the OS (highlight.js decides; the rail only wears it).
+      host.setAttribute(highlightModule.SCHEME_ATTR, highlights.pageScheme());
       // CLOSED, per D8. Nothing outside the library can reach in, which is also
       // why this module answers holdsFocus and activeElementInfo itself.
       var shadow = host.attachShadow({ mode: "closed" });
@@ -533,6 +570,20 @@
       return mounted;
     }
 
+    /**
+     * Re-read the page's background and re-stamp the rail with the scheme it
+     * asks for. Called after a remount: the page that comes back is not required
+     * to have the background the page that left had.
+     *
+     * @returns {"light"|"dark"|null} null when there is nothing mounted
+     */
+    function refreshScheme() {
+      if (!dom) return null;
+      var next = highlights.refreshScheme();
+      dom.host.setAttribute(highlightModule.SCHEME_ATTR, next);
+      return next;
+    }
+
     function setReview(id) {
       reviewId = id;
       loadChips();
@@ -677,6 +728,9 @@
       p.kind.textContent = KIND_LABEL[item[record.FIELD.KIND]] || item[record.FIELD.KIND];
       p.state.textContent = STATE_LABEL[card.state] || card.state;
       p.state.setAttribute("data-state", card.state);
+      // On the card itself too, so anything a tab owner attached can be shown or
+      // withdrawn by the card's own state without a second file being told.
+      card.node.setAttribute("data-state", card.state);
       var quote = (item[record.FIELD.CONTEXT] && item[record.FIELD.CONTEXT].quote) || "";
       p.quote.textContent = quote;
       p.quote.style.display = quote ? "" : "none";
@@ -1026,7 +1080,13 @@
       dom.statusRow.setAttribute("data-status", status || "");
       dom.statusText.textContent = status ? STATUS_SHORT[status] : "Kept in this browser";
       dom.statusRow.title = status ? STATUS_TEXT[status] : "";
-      dom.limit.textContent = limitText || "";
+      // ONLY IN THE STATE IT DESCRIBES. The limit is about there being no helper
+      // to see across two storage buckets, so it is on screen exactly while the
+      // rail is saying nothing reached a helper. Under "Stored · agent reading"
+      // it was a permanent sentence contradicting the line above it, and a
+      // caveat that is always on screen is a caveat nobody reads.
+      var showLimit = !status || status === STATUS.KEPT_LOCALLY;
+      dom.limit.textContent = showLimit && limitText ? limitText : "";
     }
 
     function renderTabs() {
@@ -1036,7 +1096,11 @@
         dom.panes[name].setAttribute("data-current", name === activeTab ? "true" : "false");
         dom.counts[name].textContent = String(countFor(name));
       });
-      dom.pillCount.textContent = String(countFor(TAB.ACTIVE));
+      // An empty pill invites; it does not report a zero. "Review 0" on an
+      // untouched page prints the one number that is not information.
+      var open = countFor(TAB.ACTIVE);
+      dom.pillCount.textContent = open ? String(open) : "";
+      dom.pillCount.hidden = open === 0;
     }
 
     function selectTab(tab) {
@@ -1115,6 +1179,7 @@
       mount: mount,
       unmount: unmount,
       isMounted: isMounted,
+      refreshScheme: refreshScheme,
       setReview: setReview,
       collapse: collapse,
       isCollapsed: isCollapsed,
