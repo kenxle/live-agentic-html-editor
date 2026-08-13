@@ -29,6 +29,9 @@
 "use strict";
 
 const path = require("node:path");
+// The product's own string, not a copy of it: a conflict block's heading is
+// design copy, and a spec that re-types it drifts the day the copy changes.
+const LAHE_CONFLICT_TITLE = require("../../src/layer/replay.js").CONFLICT_TITLE;
 const {
   test,
   expect,
@@ -272,7 +275,11 @@ test.describe("CP2-mid: ranked test 2 with real records", () => {
     expect(card.badges).toContain("REPLAY_NEITHER_MATCHES");
     expect(card.conflict.yours).toBe(mine);
     expect(card.conflict.theirs).toBe(AGENTS_VERSION);
-    expect(card.conflict.title).toContain("Nothing was written");
+    // The block asks the DECISION; "nothing was written" is the badge's line
+    // (REPLAY_NEITHER_MATCHES, asserted above) and the page's own text, which
+    // this test already checked. Two sentences for one fact on one card is what
+    // 4B took out.
+    expect(card.conflict.title).toBe(LAHE_CONFLICT_TITLE);
 
     const flaggedElsewhere = await page.evaluate(() =>
       ["#region-b", "#region-c"].filter(

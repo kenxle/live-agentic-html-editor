@@ -263,8 +263,6 @@
     // block carries what the agent said and the files, and the Active row's copy
     // of the note and its Reword/Delete are not drawn.
     ".card[data-state='handled'] .card__body > [data-lahe-active-row]{display:none}",
-    ".pane[data-pane='done'] .cardact[data-lahe-act='reword'],",
-    ".pane[data-pane='done'] .cardact[data-lahe-act='delete']{display:none}",
 
     ".card__badges{display:flex;flex-direction:column;gap:5px}",
     ".card__badges:empty{display:none}",

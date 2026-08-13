@@ -182,11 +182,36 @@ test.describe("the rail as a shipping surface", () => {
         message: "the card to move to the Done pane"
       });
 
+      // Looking at the pane the reviewer is looking at. A pane that is not the
+      // current tab renders nothing at all, so "is this drawn" is only a real
+      // question inside the open one.
+      await page.evaluate(() => window.__lahe.rail.selectTab("done"));
+
       const card = await page.evaluate((id) => {
         const node = window.__lahe.rail.cardNode(id);
-        const visible = (el) => !!el && window.getComputedStyle(el).display !== "none";
+        // Rendered at all, ancestors included. A computed display of its own
+        // says nothing about a button inside a hidden row.
+        const visible = (el) => !!el && el.getClientRects().length > 0;
+        // What the reviewer actually reads. NOT textContent, which counts the
+        // Active row that is attached-but-not-drawn and the injected stylesheets
+        // as text; and not innerText either, which falls back to textContent for
+        // content this deep in nested closed shadow roots.
+        const visibleText = (root) => {
+          let out = "";
+          const walk = (el) => {
+            if (el.tagName === "STYLE" || el.tagName === "SCRIPT") return;
+            if (window.getComputedStyle(el).display === "none") return;
+            el.childNodes.forEach((child) => {
+              if (child.nodeType === 3) out += child.nodeValue;
+              else if (child.nodeType === 1) walk(child);
+            });
+          };
+          walk(root);
+          return out;
+        };
+
         return {
-          text: node.textContent,
+          text: visibleText(node),
           // The Active tab's row is still ATTACHED (withdrawing a node from a
           // card the reviewer may be typing in is the rail's own law), and it is
           // not DRAWN on a card that moved to Done.
@@ -194,7 +219,7 @@ test.describe("the rail as a shipping surface", () => {
           activeRowVisible: visible(node.querySelector("[data-lahe-active-row]")),
           rewordVisible: visible(node.querySelector('[data-lahe-act="reword"]')),
           deleteVisible: visible(node.querySelector('[data-lahe-act="delete"]')),
-          reopenVisible: visible(node.querySelector(".cardacts .cardact"))
+          reopenVisible: visible(node.querySelector(".lahe-done-row .cardact"))
         };
       }, item.id);
 

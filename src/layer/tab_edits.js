@@ -92,10 +92,12 @@
   var BAR_ORDER = -100000;
 
   var DELETED_TEXT = "Deleted";
-  // The tab already says Edits, so the button does not have to. It was the
-  // widest, heaviest thing in the pane, opposite an 11.5px count, and on the
-  // empty tab it was a large disabled button over "No hand edits yet."
-  var EXPORT_LABEL = "Export";
+  // Shortened from "Export the edit list": it was the widest, heaviest thing in
+  // the pane, opposite an 11.5px count, and on the empty tab it was a large
+  // disabled button over "No hand edits yet." Two words rather than one,
+  // because the rail's footer already holds a button called exactly "Export"
+  // and two of those in one rail is a coin toss for anyone reading it.
+  var EXPORT_LABEL = "Export edits";
   var EXPORT_MISSING_TITLE =
     "Export is arriving with the copy-and-export module; the list export wires up at the Phase 3 stitch.";
   var EXPORT_TITLE = "The hand edits on this page, as text, for a style guide or a chat window.";
