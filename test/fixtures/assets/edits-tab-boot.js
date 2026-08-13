@@ -142,8 +142,15 @@
       if (!t) return null;
       var button = t.exportButton();
       if (!button) return null;
+      if (button.disabled) {
+        // A disabled button's click never runs, so answer with what the button
+        // itself tells the reviewer.
+        return { ok: false, reason: button.title, text: null };
+      }
       button.click();
-      return t.lastExport();
+      // exportList is a promise now (3C's seam delivers the file); the click
+      // handler kicked it off, and page.evaluate awaits what we return.
+      return t.exportDone() || t.lastExport();
     }
   };
 })();

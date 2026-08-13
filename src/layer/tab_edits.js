@@ -256,6 +256,7 @@
     var countNode = null;
     var buttonNode = null;
     var lastExport = null;
+    var lastExportPromise = null;
 
     function el(tag, className, text) {
       var node = doc.createElement(tag);
@@ -444,11 +445,29 @@
       var items = handEdits().reverse();
       if (!mod) {
         lastExport = { ok: false, reason: EXPORT_MISSING_TITLE, text: null, count: items.length };
-        return lastExport;
+        lastExportPromise = Promise.resolve(lastExport);
+        return lastExportPromise;
       }
-      var text = mod.exportRecords(items, { review: reviewId, scope: "edits" });
-      lastExport = { ok: true, reason: null, text: text, count: items.length };
-      return lastExport;
+      // 3C's seam is a promise that also delivers the file. The list is a
+      // subset of this browser's records, so its honest scope is "slice";
+      // exportRecords labels it and downloads it.
+      lastExportPromise = mod
+        .exportRecords(items, { scope: mod.SCOPE.SLICE, label: "hand-edits" })
+        .then(function (result) {
+          lastExport = {
+            ok: result.ok,
+            reason: null,
+            text: result.text,
+            count: items.length,
+            filename: result.filename
+          };
+          return lastExport;
+        })
+        .catch(function (err) {
+          lastExport = { ok: false, reason: err.message, text: null, count: items.length };
+          return lastExport;
+        });
+      return lastExportPromise;
     }
 
     function unmount() {
@@ -505,6 +524,9 @@
       },
       lastExport: function () {
         return lastExport;
+      },
+      exportDone: function () {
+        return lastExportPromise;
       }
     };
 

@@ -164,19 +164,19 @@ test.describe("3D: the Edits tab", () => {
     expect(inEditsPane.length, "all six rows are in the Edits pane").toBe(6);
     expect(inEditsPane.map((r) => r.id)).not.toContain(commentId);
 
-    // The list exports through the pinned seam.
+    // The list exports through 3C's real seam: the click delivers the file and
+    // hands back the formatter's text, labeled as a slice (the edit list is a
+    // subset of the review, never the whole).
     expect(await page.evaluate(() => window.__laheEdits.exportEnabled()), "the export button is live").toBe(true);
-    const exported = await page.evaluate(() => window.__laheEdits.clickExport());
+    const [download, exported] = await Promise.all([
+      page.waitForEvent("download"),
+      page.evaluate(() => window.__laheEdits.clickExport())
+    ]);
+    expect(exported.ok, "the export succeeded").toBe(true);
     expect(typeof exported.text, "the button returns the formatter's text").toBe("string");
-
-    const stub = await page.evaluate(() => ({
-      calls: window.__laheExportStub.calls().length,
-      records: window.__laheExportStub.lastRecords()
-    }));
-    expect(stub.calls, "exportRecords was called once, by the button").toBe(1);
-    expect(stub.records.length, "the six hand edits went through the seam").toBe(6);
-    expect(stub.records.map((r) => r.id)).not.toContain(commentId);
+    expect(exported.count, "the six hand edits went through the seam").toBe(6);
     expect(exported.text).toContain(TYPED[0].add.trim());
+    expect(download.suggestedFilename(), "the click really delivered a file").toMatch(/\.txt$/);
   });
 
   // A CROSS-TASK DEFECT 3D found and cannot fix in its own file.
@@ -203,15 +203,24 @@ test.describe("3D: the Edits tab", () => {
     expect(cardText, "no draft label and no Reword/Delete pair on a hand edit").not.toMatch(/Empty draft|Reword/);
   });
 
-  test("with no export module on the page, the button says so instead of failing quietly", async ({ page }) => {
+  // The export module ships in the bundle now, so "absent" can only mean the
+  // namespace was lost at runtime. The guard's promise is unchanged: the button
+  // says so instead of failing quietly.
+  test("with the export namespace gone, the button says so instead of failing quietly", async ({ page }) => {
     await page.goto(fixtureUrl(pages));
     await pollPage(page, () => !!window.__lahe && !!window.__laheEdits, undefined, {
       message: "the real boot to put the library and the fixture's readers on the page"
     });
+    await page.evaluate(() => {
+      delete window.LAHE.exporter;
+      delete window.LAHE.export;
+    });
     await typeEdit(page, "one", " One line is enough to make a row.");
 
     expect(await page.evaluate(() => window.__laheEdits.rowCount())).toBe(1);
-    expect(await page.evaluate(() => window.__laheEdits.exportEnabled())).toBe(false);
+    const result = await page.evaluate(() => window.__laheEdits.clickExport());
+    expect(result.ok, "the export reports failure rather than pretending").toBe(false);
+    expect(result.reason).toMatch(/export/i);
     expect(await page.evaluate(() => window.__laheEdits.exportTitle())).toMatch(/export/i);
   });
 });
