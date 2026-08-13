@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Quarter three coaching report</title>
+  <style>
+    body { font: 16px/1.6 system-ui, sans-serif; max-width: 44rem; margin: 2rem auto; color: #1c1c1c; }
+    h1 { font-size: 2rem; margin: 0 0 1rem; }
+    h2 { font-size: 1.25rem; margin: 2rem 0 0.5rem; }
+    p { margin: 0 0 1rem; }
+    figure { margin: 1.5rem 0; }
+    .chart { border: 1px solid #ddd; padding: 1rem; background: #fafafa; }
+  </style>
+</head>
+<body>
+  <!--
+    AC1's built document: a finished HTML report of the kind this tool is pointed
+    at, with nothing on it that re-renders and no framework of any kind. It is a
+    separate fixture from built-doc.html because that one loads the harness stub
+    and AC1 has to run against the real library, arriving the same way it arrives
+    anywhere else: one script tag, appended to the built file.
+
+    Three paragraphs carry the sentences AC1's prepared strings replace. Each is
+    deliberately unique on the page, because AC1 is not an anchoring test and a
+    duplicate sentence would fail it for a reason it is not about.
+  -->
+  <h1 id="report-title">Quarter three coaching report</h1>
+
+  <p id="report-intro">This report covers July through September for the nine clients on a written program. It is meant to be read once, argued with, and then acted on before the next block starts.</p>
+
+  <h2 id="heading-summary">What the weekly summary says</h2>
+
+  <p id="fix-summary">The weekly summary counts sessions and nothing else.</p>
+
+  <h2 id="heading-rest">How rest is scheduled</h2>
+
+  <p id="fix-rest">Rest days land on Sunday for everybody, whatever their week looked like.</p>
+
+  <h2 id="heading-checkin">Check-in reminders</h2>
+
+  <p id="fix-checkin">Everyone gets the same three reminders a week regardless of how often they train.</p>
+
+  <h2 id="heading-chart">Adherence over the quarter</h2>
+
+  <figure id="adherence-figure">
+    <div class="chart" id="adherence-chart">
+      <svg width="320" height="90" role="img" aria-label="Adherence by month">
+        <rect x="10" y="58" width="60" height="24" fill="#4a6fa5"></rect>
+        <rect x="90" y="56" width="60" height="26" fill="#4a6fa5"></rect>
+        <rect x="170" y="57" width="60" height="25" fill="#4a6fa5"></rect>
+        <line x1="4" y1="84" x2="316" y2="84" stroke="#888"></line>
+      </svg>
+    </div>
+    <figcaption id="adherence-caption">Adherence by month, July through September.</figcaption>
+  </figure>
+
+  <p id="report-outro">Questions go to the coach who wrote the program, not to the person who compiled this file.</p>
+</body>
+</html>

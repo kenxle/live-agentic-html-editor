@@ -1,0 +1,5 @@
+STRING 1 (fix, sentence): The weekly summary now includes protein targets alongside training volume.
+STRING 2 (fix, sentence): Rest days are scheduled after every second heavy session, not weekly.
+STRING 3 (fix, sentence): Clients on the 2-day plan see one check-in reminder, never three.
+STRING 4 (comment, on a diagram/figure): This chart reads as flat even on a good week. Scale it to the client's own range.
+STRING 5 (untethered note): Overall the report tone is right, but tighten the intro paragraph before it ships.
