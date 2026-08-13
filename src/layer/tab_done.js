@@ -89,15 +89,11 @@
   // the first node this file attaches to a card. The rail's own stylesheet is
   // 1B's and is not edited; these rules add the two things this file draws.
   var STYLE = [
-    "." + ROW_CLASS + "{display:flex;flex-direction:column;gap:7px}",
-    "." + ROW_CLASS + " .lahe-done-said{font-size:13.5px;line-height:1.5;color:var(--ink)}",
-    "." + ROW_CLASS + " .lahe-done-agent{font-size:12.5px;color:var(--ink-soft)}",
-    "." + ROW_CLASS + " .lahe-done-files{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;",
-    "font-size:11px;color:var(--ink-faint);overflow-wrap:anywhere}",
-    "." + ROW_CLASS + " .lahe-done-foot{display:flex;gap:8px;align-items:center}",
-    "." + ROW_CLASS + " .lahe-done-reopen{font-size:11.5px;font-weight:550;color:var(--ink-soft);",
-    "border:1px solid var(--line);border-radius:7px;padding:3px 9px}",
-    "." + ROW_CLASS + " .lahe-done-reopen:hover{color:var(--ink);background:var(--surface)}",
+    "." + ROW_CLASS + "{display:flex;flex-direction:column;gap:8px}",
+    "." + ROW_CLASS + " .lahe-done-said{font-size:13.5px;line-height:1.5;color:var(--ink);",
+    "white-space:pre-wrap;overflow-wrap:anywhere}",
+    // Reopen wears the rail's own card-action register (`.cardact`), so every
+    // control that sits on a card has one voice rather than one per file.
 
     // The question. Full bleed to the card's padding, so the rule runs the
     // whole height of the block rather than sitting in a box inside a box.
@@ -113,7 +109,12 @@
     "overflow-wrap:anywhere;white-space:pre-wrap}",
     "." + ASK_CLASS + " .lahe-ask-answer{align-self:flex-start;font-size:12px;font-weight:600;",
     "padding:5px 12px;border-radius:8px;background:var(--accent);color:#fff}",
-    "@media (prefers-color-scheme:dark){." + ASK_CLASS + " .lahe-ask-answer{color:#12151a}}",
+    // The page picks the scheme, not the OS (highlight.js stamps the rail host).
+    ":host([data-lahe-scheme='dark']) ." + ASK_CLASS + " .lahe-ask-answer{color:#12151a}",
+    // In dark the wash alone carries less separation from the card behind it, so
+    // the block gets a hairline as well. Same relationship, drawn twice.
+    ":host([data-lahe-scheme='dark']) ." + ASK_CLASS + "{",
+    "border-top:1px solid rgba(147,167,234,.28);border-bottom:1px solid rgba(147,167,234,.28)}",
     "." + ASK_CLASS + " .lahe-ask-answer:hover{filter:brightness(1.06)}",
     // The card carrying a question is pulled to the top of its pane and given
     // the accent border, so it is the first thing in the tab and reads as one
@@ -191,7 +192,7 @@
         seen[id] = true;
         rail.upsertCard(item);
         rail.setCardState(id, record.STATE.HANDLED);
-        if (item[record.FIELD.REPLY]) rail.setAgentMessage(id, item[record.FIELD.REPLY]);
+        if (item[record.FIELD.REPLY]) rail.setAgentMessage(id, agentMessageFor(item));
         if (!rows[id]) {
           rows[id] = buildRow(item);
           ensureStyle(rows[id]);
@@ -210,15 +211,21 @@
       return api;
     }
 
+    // ONE CARRIER PER FACT. A handled card used to say the reviewer's note
+    // twice, the agent's sentence twice and the file list twice: the Active
+    // tab's row, this row, and the rail's own `.agent` block all drew the same
+    // three things. The rail's `.agent` block is the good one, so it keeps the
+    // agent's sentence and the files; this row keeps the reviewer's own words
+    // and Reopen; and the Active row is not drawn on a card in the Done pane
+    // (the rail hides it by the card's state). Six blocks for three facts
+    // becomes three.
     function buildRow(item) {
       var row = el("div", ROW_CLASS);
       row.setAttribute("data-lahe-item", item[record.FIELD.ID]);
       row.appendChild(el("div", "lahe-done-said", ""));
-      row.appendChild(el("div", "lahe-done-agent", ""));
-      row.appendChild(el("div", "lahe-done-files", ""));
 
-      var foot = el("div", "lahe-done-foot");
-      var reopen = el("button", "lahe-done-reopen", "Reopen");
+      var foot = el("div", "cardacts");
+      var reopen = el("button", "cardact", "Reopen");
       reopen.setAttribute("type", "button");
       reopen.addEventListener("click", function () {
         reopenItem(item[record.FIELD.ID]);
@@ -238,17 +245,27 @@
 
     function updateRow(row, item) {
       row.querySelector(".lahe-done-said").textContent = saidBy(item);
+    }
 
-      var reply = item[record.FIELD.REPLY] || {};
-      var who = agentName(reply);
-      var line = who + " made this change.";
-      if (reply.reason) line = who + ": " + boundedText(reply.reason);
-      row.querySelector(".lahe-done-agent").textContent = line;
-
-      var filesNode = row.querySelector(".lahe-done-files");
-      var files = Array.isArray(reply.files) ? reply.files : [];
-      filesNode.textContent = files.join("  ");
-      filesNode.hidden = files.length === 0;
+    /**
+     * What the rail's own agent carrier says on a handled card.
+     *
+     * The reply as stored, with `reason` folded into `text` when the agent gave
+     * a reason and nothing else, so the one carrier says the one sentence
+     * whichever field the agent used. Bounded here, once, because this is the
+     * only path a handled reply reaches the card by now.
+     */
+    function agentMessageFor(item) {
+      var reply = item[record.FIELD.REPLY];
+      if (!reply) return null;
+      var said = reply.text || reply.reason;
+      return {
+        status: reply.status || null,
+        agent: agentName(reply),
+        text: said ? boundedText(said) : agentName(reply) + " made this change.",
+        files: Array.isArray(reply.files) ? reply.files : [],
+        at: reply.at || null
+      };
     }
 
     // The name comes from the reply itself, and absent one the card says
@@ -419,7 +436,7 @@
         rail.setAgentMessage(id, null);
         drawQuestion(next);
       } else {
-        rail.setAgentMessage(id, next[record.FIELD.REPLY]);
+        rail.setAgentMessage(id, agentMessageFor(next));
         clearQuestion(id);
       }
 

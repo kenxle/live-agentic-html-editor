@@ -367,7 +367,10 @@
       },
       cards: rail,
       protect: protect,
-      document: doc
+      document: doc,
+      // For one thing only: the conflict card's "take the page's" button, which
+      // retires a record and writes nothing. See replay's `context`.
+      editing: editing
     });
 
     // "The page changed, so replay gets a pass."
@@ -446,6 +449,10 @@
       rebind: function () {
         comments.bind({ page: page });
         editing.bind({ page: page });
+        // The page that comes back from a navigation or a morph is not required
+        // to have the background the page that left had, and the library wears
+        // the PAGE's scheme rather than the OS's.
+        rail.refreshScheme();
       },
       merge: merge,
       onRemount: opts.onRemount || null

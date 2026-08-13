@@ -156,6 +156,10 @@
   //             into a region the reviewer is in
   //   anchor    the anchor engine. 1C's, unless a caller injects one
   //   document  where a conflict card's nodes are created
+  //   editing   2A's editing surface, for ONE thing: the conflict card's "take
+  //             the page's" button, which retires a record without writing to
+  //             the page. Replay never edits through it and a missing one only
+  //             costs that button
   //   hooks     one function per PASS_ORDER step that replay does not own:
   //             fold_replies, merge_store, retire_handled, update_rail. A
   //             missing hook is a no-op and is reported as one in the summary,
@@ -167,6 +171,7 @@
     protect: null,
     anchor: null,
     document: null,
+    editing: null,
     hooks: null
   };
 
@@ -436,15 +441,61 @@
   // link. The reviewer decides which one stands, and they cannot decide that
   // from a summary of the difference.
 
-  var CONFLICT_TITLE = "The page changed under this edit. Nothing was written.";
+  // The block asks the QUESTION; the card's badge (REPLAY_NEITHER_MATCHES)
+  // already says what happened and why nothing was written. Two sentences for
+  // one fact on one card is how the reviewer learns to skip both, and the block
+  // is where the decision is, so it carries the decision's own words.
+  var CONFLICT_TITLE = "Which version stands?";
   var YOURS_LABEL = "Your version";
   var THEIRS_LABEL = "On the page now";
+  // The two decisions, as the reviewer reads them. Constants, so the button a
+  // test presses and the button the reviewer presses are the same string.
+  var KEEP_MINE_LABEL = "Keep mine";
+  var TAKE_THEIRS_LABEL = "Take the page's";
+
+  // AND THE REVIEWER CAN ACTUALLY DECIDE. Both versions in full was only half of
+  // it: the card told the reviewer the decision was theirs and gave them nothing
+  // to press, so the collision sat on the card forever and the only way out was
+  // to edit the block again by hand.
+  //
+  //   Keep mine        re-applies this record's own version to the page and
+  //                    clears the collision. The record stands
+  //   Take the page's  retires the record and leaves the page exactly as it is.
+  //                    Per-record, like undo, and it touches nothing else
+  //
+  // Drawn as two labelled panes rather than five paragraphs of one size: an
+  // eyebrow per side, a left rule (the reviewer's in the accent, the page's in
+  // the neutral line colour), and the two buttons under both.
+  var CONFLICT_STYLE = [
+    "[data-lahe-conflict]{display:flex;flex-direction:column;gap:9px;",
+    "border-top:1px solid var(--line-soft);padding-top:9px}",
+    "[data-lahe-conflict][hidden]{display:none}",
+    "[data-lahe-conflict-title]{font-size:12.5px;font-weight:600;line-height:1.45;color:var(--ink)}",
+    "[data-lahe-conflict-sides]{display:flex;flex-direction:column;gap:8px}",
+    "[data-lahe-conflict-side]{padding-left:9px;border-left:2px solid var(--line);",
+    "display:flex;flex-direction:column;gap:3px}",
+    "[data-lahe-conflict-side='yours']{border-left-color:var(--accent)}",
+    "[data-lahe-conflict-label]{font-size:10px;font-weight:600;letter-spacing:.08em;",
+    "text-transform:uppercase;color:var(--ink-faint)}",
+    "[data-lahe-conflict-side='yours'] [data-lahe-conflict-label]{color:var(--accent-ink)}",
+    "[data-lahe-conflict-text]{font-size:12.5px;line-height:1.45;color:var(--ink-soft);",
+    "white-space:pre-wrap;overflow-wrap:anywhere}",
+    "[data-lahe-conflict-side='yours'] [data-lahe-conflict-text]{color:var(--ink)}",
+    // The run that actually differs, so the reviewer is comparing two sentences
+    // rather than reading two nearly identical ones and hunting for the change.
+    "[data-lahe-conflict-diff]{background:var(--accent-wash);border-radius:3px;",
+    "padding:0 2px;box-shadow:0 1px 0 var(--accent)}",
+    "[data-lahe-conflict-side='theirs'] [data-lahe-conflict-diff]{background:var(--warn-wash);",
+    "box-shadow:0 1px 0 var(--warn)}"
+  ].join("");
 
   // One node per item, reused. Building a fresh node on every pass would be the
   // rail's own law broken from the outside: a card the reviewer is reading (or
   // typing in) must not be rebuilt underneath them.
   var conflictNodes = Object.create(null);
   var conflicts = Object.create(null);
+  // The one style element, or null. See ensureConflictStyle.
+  var conflictStyleAttached = null;
 
   function cardsIn(ctx) {
     return ctx && ctx.cards ? ctx.cards : null;
@@ -467,15 +518,36 @@
       var title = doc.createElement("div");
       title.setAttribute("data-lahe-conflict-title", "");
       node.appendChild(title);
-      node.appendChild(sideNode(doc, "yours", YOURS_LABEL));
-      node.appendChild(sideNode(doc, "theirs", THEIRS_LABEL));
+      var sides = doc.createElement("div");
+      sides.setAttribute("data-lahe-conflict-sides", "");
+      sides.appendChild(sideNode(doc, "yours", YOURS_LABEL));
+      sides.appendChild(sideNode(doc, "theirs", THEIRS_LABEL));
+      node.appendChild(sides);
+      node.appendChild(decideNode(ctx, doc, id));
+      // The stylesheet rides in with the node, into the rail's own closed root,
+      // the way 3A's Done tab puts its own in. Without it these are attribute
+      // names with nothing behind them and the card that matters most in the
+      // product draws in no system at all.
+      ensureConflictStyle(doc, node);
       conflictNodes[id] = node;
     }
     node.firstChild.textContent = CONFLICT_TITLE;
-    textIn(node, "yours").textContent = yours === null || yours === undefined ? "" : String(yours);
-    textIn(node, "theirs").textContent = theirs === null || theirs === undefined ? "" : String(theirs);
+    writeSide(doc, node, "yours", yours, theirs);
+    writeSide(doc, node, "theirs", theirs, yours);
     node.removeAttribute("hidden");
     return node;
+  }
+
+  // Connectedness, not a boolean. The sheet rides inside the first conflict node
+  // built, and that node can leave the document with its card or with a
+  // remounted root; a flag alone would then say "installed" about a style
+  // element that is not in any tree, and the next conflict would draw naked.
+  function ensureConflictStyle(doc, node) {
+    if (conflictStyleAttached && conflictStyleAttached.isConnected !== false) return;
+    var style = doc.createElement("style");
+    style.textContent = CONFLICT_STYLE;
+    node.appendChild(style);
+    conflictStyleAttached = style;
   }
 
   function sideNode(doc, side, label) {
@@ -491,8 +563,146 @@
     return wrap;
   }
 
+  /**
+   * One side's text, with the run that differs from the other side marked.
+   *
+   * Both versions still appear IN FULL and untruncated; the mark is only a
+   * pointer at where they diverge, which is the difference between two legible
+   * paragraphs and a comparison a reviewer can actually make. textContent
+   * everywhere: neither side is ever parsed as markup.
+   */
+  function writeSide(doc, node, side, text, other) {
+    var body = textIn(node, side);
+    if (!body) return;
+    body.textContent = "";
+    var mine = text === null || text === undefined ? "" : String(text);
+    var theirs = other === null || other === undefined ? "" : String(other);
+    var span = commonAffixes(mine, theirs);
+    if (!mine) return;
+    if (span.head) body.appendChild(doc.createTextNode(span.head));
+    var middle = mine.slice(span.head.length, mine.length - span.tail.length);
+    if (middle) {
+      var mark = doc.createElement("span");
+      mark.setAttribute("data-lahe-conflict-diff", "");
+      mark.textContent = middle;
+      body.appendChild(mark);
+    }
+    if (span.tail) body.appendChild(doc.createTextNode(span.tail));
+  }
+
+  /** The shared start and the shared end of two strings. */
+  function commonAffixes(a, b) {
+    var head = 0;
+    while (head < a.length && head < b.length && a.charAt(head) === b.charAt(head)) head += 1;
+    var tail = 0;
+    while (
+      tail < a.length - head &&
+      tail < b.length - head &&
+      a.charAt(a.length - 1 - tail) === b.charAt(b.length - 1 - tail)
+    ) {
+      tail += 1;
+    }
+    return { head: a.slice(0, head), tail: tail ? a.slice(a.length - tail) : "" };
+  }
+
   function textIn(node, side) {
     return node.querySelector('[data-lahe-conflict-side="' + side + '"] [data-lahe-conflict-text]');
+  }
+
+  /** The two buttons. A decision the reviewer is told is theirs needs both. */
+  function decideNode(ctx, doc, id) {
+    var acts = doc.createElement("div");
+    acts.setAttribute("data-lahe-conflict-actions", "");
+    // The rail's own card-action register, so these read as the rail's buttons
+    // rather than as a third button voice inside one card.
+    acts.className = "cardacts";
+    acts.appendChild(button(doc, "cardact", KEEP_MINE_LABEL, "keep_mine", id));
+    acts.appendChild(button(doc, "cardact cardact--quiet", TAKE_THEIRS_LABEL, "take_theirs", id));
+    return acts;
+  }
+
+  function button(doc, className, label, choice, id) {
+    var b = doc.createElement("button");
+    b.className = className;
+    b.setAttribute("type", "button");
+    b.setAttribute("data-lahe-conflict-choice", choice);
+    b.textContent = label;
+    if (typeof b.addEventListener === "function") {
+      b.addEventListener("click", function () {
+        resolveConflict(id, choice);
+      });
+    }
+    return b;
+  }
+
+  /**
+   * The reviewer's decision on a collision, applied.
+   *
+   * @param {string} id      the record the conflict is on
+   * @param {string} choice  "keep_mine" or "take_theirs"
+   * @returns {{resolved: boolean, choice: string, reason: (string|null)}}
+   */
+  function resolveConflict(id, choice) {
+    var ctx = contextFor(null);
+    var flagged = conflicts[id];
+    if (!flagged) return { resolved: false, choice: choice, reason: "no conflict is flagged on " + String(id) };
+
+    if (choice === "take_theirs") {
+      // The page stands and the record goes. Nothing is written to the page:
+      // what the reviewer is accepting is already what is on it. `retire` is
+      // editing's per-record seam, the same one undo ends with, minus the write.
+      if (!ctx.editing || typeof ctx.editing.retire !== "function") {
+        return { resolved: false, choice: choice, reason: "no editing surface to retire the record with" };
+      }
+      var retired = ctx.editing.retire(id);
+      if (!retired || retired.retired !== true) {
+        return { resolved: false, choice: choice, reason: (retired && retired.reason) || "the record was not retired" };
+      }
+      delete conflicts[id];
+      forceClearConflict(ctx, id);
+      callCard(ctx, "removeCard", id);
+      return { resolved: true, choice: choice, reason: null };
+    }
+
+    if (choice !== "keep_mine") {
+      return { resolved: false, choice: choice, reason: "unknown choice " + String(choice) };
+    }
+
+    // The reviewer's version stands, so it is written to the page exactly as an
+    // ordinary re-apply would write it, and the collision is answered.
+    var item = itemWithId(ctx, id);
+    var element = lastElement[id];
+    if (!item) return { resolved: false, choice: choice, reason: "no record " + String(id) };
+    if (!element || (element.isConnected === false)) {
+      return { resolved: false, choice: choice, reason: "the region this record points at is not on the page" };
+    }
+    epoch.write("replay.keep_mine", function () {
+      writeRegion(element, item);
+    });
+    counters.regionsWritten += 1;
+    delete conflicts[id];
+    forceClearConflict(ctx, id);
+    return { resolved: true, choice: choice, reason: null };
+  }
+
+  function itemWithId(ctx, id) {
+    var found = null;
+    itemsIn(ctx).forEach(function (item) {
+      if (item[record.FIELD.ID] === id) found = item;
+    });
+    return found;
+  }
+
+  /**
+   * Clear a conflict the REVIEWER answered.
+   *
+   * Separate from clearConflict because that one deliberately refuses to clear a
+   * displaced conflict: an ordinary pass must not wipe a warning nobody has
+   * answered yet. A button press is the answer, so this one clears regardless.
+   */
+  function forceClearConflict(ctx, id) {
+    delete conflicts[id];
+    clearConflict(ctx, id);
   }
 
   // A conflict that resolved: the node stays where it is (removing it from a
@@ -948,9 +1158,12 @@
     lastPass: lastPass,
     conflictFor: conflictFor,
     conflictIds: conflictIds,
+    resolveConflict: resolveConflict,
     CONFLICT_TITLE: CONFLICT_TITLE,
     YOURS_LABEL: YOURS_LABEL,
     THEIRS_LABEL: THEIRS_LABEL,
+    KEEP_MINE_LABEL: KEEP_MINE_LABEL,
+    TAKE_THEIRS_LABEL: TAKE_THEIRS_LABEL,
     REASON: REASON,
     REASONS: REASONS,
     PASS_ORDER: PASS_ORDER,

@@ -92,7 +92,10 @@
   var BAR_ORDER = -100000;
 
   var DELETED_TEXT = "Deleted";
-  var EXPORT_LABEL = "Export the edit list";
+  // The tab already says Edits, so the button does not have to. It was the
+  // widest, heaviest thing in the pane, opposite an 11.5px count, and on the
+  // empty tab it was a large disabled button over "No hand edits yet."
+  var EXPORT_LABEL = "Export";
   var EXPORT_MISSING_TITLE =
     "Export is arriving with the copy-and-export module; the list export wires up at the Phase 3 stitch.";
   var EXPORT_TITLE = "The hand edits on this page, as text, for a style guide or a chat window.";
@@ -130,8 +133,12 @@
     "border-bottom:1px solid var(--line-soft)}",
     "." + BAR_CLASS + "__count{font-size:11.5px;color:var(--ink-faint);",
     "font-variant-numeric:tabular-nums}",
-    "." + BAR_CLASS + "__btn{margin-left:auto;font-size:12px;font-weight:550;padding:6px 10px;",
-    "border-radius:8px;border:1px solid var(--line);background:var(--paper);color:var(--ink)}",
+    // The footer's Copy and Export are the full-size pair; this one is a card-
+    // scale action, so it matches the rail's quiet register instead of being
+    // heavier than the buttons that do more.
+    "." + BAR_CLASS + "__btn{margin-left:auto;font-size:11.5px;font-weight:550;padding:3px 9px;",
+    "border-radius:7px;border:1px solid var(--line);background:var(--paper);color:var(--ink-soft)}",
+    "." + BAR_CLASS + "__btn:hover:not(:disabled){color:var(--ink)}",
     "." + BAR_CLASS + "__btn:hover:not(:disabled){background:var(--surface)}",
     "." + BAR_CLASS + "__btn:disabled{color:var(--ink-faint);cursor:default}"
   ].join("");
