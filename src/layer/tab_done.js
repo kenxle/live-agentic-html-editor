@@ -316,10 +316,16 @@
       if (!item) return null;
       lifecycle.assertTransition(item[record.FIELD.STATE], record.STATE.READY, lifecycle.ACTOR.REVIEWER);
 
-      var reopened = Object.assign({}, item);
+      // Reopen BUMPS THE REV, the way a reword does (NEW-1). Two things depend on
+      // it: a stale or duplicate reply.folded still naming the old rev now fails
+      // the revision rule and cannot send the just-reopened item back to Done;
+      // and an offline reopen arrives at a rev the store has never seen, so
+      // merge's BROWSER_NEWER_REV protects it instead of it being discarded at
+      // equal rev (STATE/REPLY are not content fields). bumpRev adds no history
+      // entry here because the `after` text is unchanged.
+      var reopened = record.bumpRev(item, {});
       reopened[record.FIELD.STATE] = record.STATE.READY;
       reopened[record.FIELD.REPLY] = null;
-      reopened[record.FIELD.UPDATED_AT] = record.nowIso();
       store.write(reviewId, reopened);
 
       rail.upsertCard(reopened);
