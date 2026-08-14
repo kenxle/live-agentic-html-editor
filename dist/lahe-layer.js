@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+a853dc1cb866
+ * version 0.0.0+45c27b0c3978
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+a853dc1cb866";
+  g.LAHE.version = "0.0.0+45c27b0c3978";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -1149,8 +1149,14 @@
   // ×N counter: a reviewer whose window was refused across four Turbo
   // navigations read ×4 as four other windows (first-real-use finding,
   // 2026-08-14).
+  //
+  // The helper being unreachable is the same shape: the page retries forever on
+  // a backoff, so "×7" counted the retries rather than telling the reviewer
+  // anything. It is one condition, it stands while it is true, and the thing
+  // that ends it (the helper answering again) clears the chip.
   var STANDING = {
-    SECOND_WINDOW_REFUSED: true
+    SECOND_WINDOW_REFUSED: true,
+    HELPER_UNREACHABLE: true
   };
 
   function failure(code, detail) {
@@ -7506,12 +7512,20 @@
   // TRANSITIONS rather than the presence of a sentence. The sentences live here
   // so two builders cannot write two wordings for the same state.
   var STATUS = {
+    // Something FAILED: a request the helper refused, could not take, or never
+    // answered. Saying the helper is away is a fact here.
     KEPT_LOCALLY: "kept_locally",
+    // Nothing has failed and the helper has not confirmed anything yet. The work
+    // is in this browser, which is true, and no outage is asserted, because
+    // asserting one before a single request has failed is an invention (the
+    // status line lied on every freshly loaded page; walkers, 2026-08-14).
+    KEPT_UNCONFIRMED: "kept_unconfirmed",
     STORED: "stored",
     AGENT_CONNECTED: "agent_connected"
   };
   var STATUS_TEXT = {
     kept_locally: "Kept in this browser. Nothing is lost; it will be stored when the helper is back.",
+    kept_unconfirmed: "Kept in this browser. It is stored the moment the helper confirms it.",
     stored: "Stored.",
     agent_connected: "Stored, and an agent is reading."
   };
@@ -7520,6 +7534,7 @@
   // away entirely.
   var STATUS_SHORT = {
     kept_locally: "Kept in this browser",
+    kept_unconfirmed: "Kept in this browser",
     stored: "Stored",
     agent_connected: "Stored · agent reading"
   };
@@ -8476,11 +8491,16 @@
       // Remove a chip because its condition ENDED, without the dismissed mark
       // that would suppress the code forever. A window that just took the
       // review over must not keep wearing "another window is reviewing this
-      // page", and the next real refusal must still get its chip.
+      // page", and a page whose helper just answered must not keep wearing "the
+      // local helper is not reachable"; the next real failure still gets a chip.
+      //
+      // With no code, every chip goes. It used to be TWO clear functions in this
+      // one object literal, so the no-argument one silently won and clearing one
+      // standing chip wiped the whole list.
       clear: function (code) {
         var n = chips.length;
         chips = chips.filter(function (f) {
-          return f.code !== code;
+          return code === undefined || code === null ? false : f.code !== code;
         });
         saveChips();
         renderChips();
@@ -8494,11 +8514,6 @@
       },
       count: function () {
         return chips.length;
-      },
-      clear: function () {
-        chips = [];
-        saveChips();
-        renderChips();
       }
     };
 
@@ -8612,7 +8627,7 @@
       // rail is saying nothing reached a helper. Under "Stored · agent reading"
       // it was a permanent sentence contradicting the line above it, and a
       // caveat that is always on screen is a caveat nobody reads.
-      var showLimit = !status || status === STATUS.KEPT_LOCALLY;
+      var showLimit = !status || status === STATUS.KEPT_LOCALLY || status === STATUS.KEPT_UNCONFIRMED;
       dom.limit.textContent = showLimit && limitText ? limitText : "";
     }
 
@@ -11287,6 +11302,10 @@
     var fetchImpl = opts.fetch || (typeof fetch === "function" ? fetch.bind(typeof globalThis !== "undefined" ? globalThis : null) : null);
     var onStatus = opts.onStatus || function () {};
     var onFailure = opts.onFailure || function () {};
+    // The mirror of onFailure: a standing failure whose condition ENDED. The
+    // rail clears that chip (clear, not dismiss, so the next real failure still
+    // gets one). Raised with a failure code, the same vocabulary onFailure uses.
+    var onRecovered = opts.onRecovered || function () {};
     var onReplies = opts.onReplies || function () {};
     var onLimit = opts.onLimit || function () {};
     // The window-session state machine (D5, findings 1/2/3/12, NEW-2). onRefused
@@ -11302,6 +11321,11 @@
     var started = false;
     var cspRefused = false;
     var lastFailure = null;
+    // Whether the helper has answered THIS page. null until it has been heard
+    // from either way, and it is learnable without a POST: a page with nothing
+    // queued never posts, and before this it read "kept in this browser, it will
+    // be stored when the helper is back" forever with a healthy helper.
+    var helperReachable = null;
     var backoffIndex = 0;
     var debounceTimer = null;
     var retryTimer = null;
@@ -11317,6 +11341,14 @@
     var heartbeatMs = 10000;
     var flushing = false;
     var deliveredOnce = false;
+    // True from pagehide/beforeunload until this document is shown again. A post
+    // the browser cancels because the document is going away is NOT the helper
+    // being unreachable: the record is already in browser storage and it
+    // re-posts on the next load. Calling that abort a failure raised a permanent
+    // "the local helper is not reachable" chip on every page after a
+    // commit-then-click-a-link, with the helper up the whole time (walkers,
+    // 2026-08-14).
+    var unloading = false;
     var cursor = 0;
     var repliesSeen = [];
     var seenItems = Object.create(null);
@@ -11349,22 +11381,42 @@
       // Anything the helper refused, could not take, or never answered means
       // the reviewer's typing is living in this browser and nowhere else.
       if (lastFailure || cspRefused) return setStatus(overlay.STATUS.KEPT_LOCALLY);
-      if (pending === 0 && deliveredOnce) {
+      if (pending === 0 && (deliveredOnce || helperReachable === true)) {
+        // Nothing is queued and the helper is there. Everything durable IS
+        // stored, whether this page ever had anything of its own to post.
         if (repliesSeen.length > 0) return setStatus(overlay.STATUS.AGENT_CONNECTED);
         return setStatus(overlay.STATUS.STORED);
       }
       // Queued and in flight with nothing wrong: HOLD the current reading
-      // rather than flickering to kept-locally between every keystroke and its
-      // acknowledgement. Before the first successful post there is no reading
-      // to hold, and kept-locally is the true one.
-      if (status === null) return setStatus(overlay.STATUS.KEPT_LOCALLY);
+      // rather than flickering between every keystroke and its acknowledgement.
+      // Before there is any reading to hold, the true one is that the work is in
+      // this browser and the helper has not confirmed it YET. It does not claim
+      // an outage: nothing has failed, so saying the helper is away would be an
+      // invention (walkers, 2026-08-14).
+      if (status === null) return setStatus(overlay.STATUS.KEPT_UNCONFIRMED);
       return status;
     }
 
     function raise(failure) {
       lastFailure = failure;
+      if (failures.canonical(failure.code) === "HELPER_UNREACHABLE") helperReachable = false;
       onFailure(failure);
       return failure;
+    }
+
+    /**
+     * The helper answered something. Any acknowledged exchange counts: a reply
+     * poll, a granted claim, a heartbeat. It feeds the status line and it ENDS
+     * the standing unreachable chip, which is a condition rather than an
+     * occurrence and so has to be cleared by the thing that ended it.
+     */
+    function markReachable() {
+      var was = helperReachable;
+      helperReachable = true;
+      lastFailure = null;
+      if (was !== true) onRecovered("HELPER_UNREACHABLE");
+      recomputeStatus();
+      return helperReachable;
     }
 
     // -------------------------------------------------------------------------
@@ -11552,7 +11604,7 @@
           }
           deliveredOnce = true;
           counters.acknowledged += accepted.length;
-          lastFailure = null;
+          markReachable();
           backoffIndex = 0;
           state = STATE.IDLE;
           if (typeof (result.body && result.body.seq) === "number" && cursor === 0) {
@@ -11564,6 +11616,15 @@
           return { sent: accepted.length, remaining: remaining };
         }
 
+        // The document went away mid-request. Nothing failed and nothing is
+        // lost, so nothing is said: the events are in browser storage and the
+        // next load posts them.
+        if (abortedByTeardown(result)) {
+          state = STATE.IDLE;
+          recomputeStatus();
+          return { sent: 0, remaining: pendingCount(), aborted: true };
+        }
+
         counters.postsFailed += 1;
         state = STATE.RETRYING;
         raise(classify(result.error, { status: result.status, detail: describe(result) }));
@@ -11571,6 +11632,24 @@
         if (!fo.unload) scheduleRetry();
         return { sent: 0, remaining: pendingCount(), failed: true };
       });
+    }
+
+    /**
+     * True when this request died because the page is being torn down, rather
+     * than because anything is wrong with the helper. Two shapes:
+     *
+     *   - the document is unloading (pagehide/beforeunload has fired), so every
+     *     in-flight request is cancelled by the browser
+     *   - an AbortError this client did not ask for: our own deadline sets
+     *     timedOut, and a timeout IS a real failure, so it is excluded here
+     *
+     * Either way the queue is untouched and the next load re-posts it.
+     */
+    function abortedByTeardown(result) {
+      if (result.timedOut) return false;
+      if (unloading) return true;
+      var error = result.error;
+      return !!error && error.name === "AbortError";
     }
 
     function describe(result) {
@@ -11620,11 +11699,15 @@
       return request("replies.poll", { method: "GET", query: { review: requireReview(), since: cursor } }).then(
         function (result) {
           if (!result.ok) {
+            // A poll the navigation cancelled says nothing about the helper.
+            if (abortedByTeardown(result)) return { events: [] };
             raise(classify(result.error, { status: result.status, detail: describe(result) }));
             recomputeStatus();
             return { events: [] };
           }
-          lastFailure = null;
+          // The helper answered. That is proof it is there, and it is the ONLY
+          // proof a page with an empty outbox can have: it never posts.
+          markReachable();
           var events = (result.body && result.body.events) || [];
           if (typeof (result.body && result.body.seq) === "number") cursor = result.body.seq;
           if (events.length) {
@@ -11706,6 +11789,7 @@
         // names navigation, so a link click cannot be a losing move.
         win.addEventListener("pagehide", commitOnUnload);
         win.addEventListener("beforeunload", commitOnUnload);
+        win.addEventListener("pageshow", onPageShow);
       }
 
       startPolling();
@@ -11753,6 +11837,9 @@
 
     function parseClaim(result) {
       if (result.ok) {
+        // A granted claim or heartbeat is an acknowledged exchange, so it is
+        // proof of reachability just like a reply poll is.
+        markReachable();
         var b = result.body || {};
         return {
           granted: true,
@@ -11936,7 +12023,14 @@
     }
 
     function commitOnUnload() {
-      flush({ unload: true });
+      unloading = true;
+      return flush({ unload: true });
+    }
+
+    // A page restored from the bfcache, or a beforeunload the reviewer cancelled,
+    // is a live document again: real failures have to be audible from here on.
+    function onPageShow() {
+      unloading = false;
     }
 
     function stop() {
@@ -11954,6 +12048,7 @@
       if (win && typeof win.removeEventListener === "function") {
         win.removeEventListener("pagehide", commitOnUnload);
         win.removeEventListener("beforeunload", commitOnUnload);
+        win.removeEventListener("pageshow", onPageShow);
       }
       if (store) store.releaseWindow(review);
       started = false;
@@ -16149,7 +16244,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+a853dc1cb866";
+  var VERSION = "0.0.0+45c27b0c3978";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -16341,6 +16436,11 @@
       },
       onFailure: function (failure) {
         rail.failures.add(failure);
+      },
+      // A standing failure whose condition ended: the chip goes (clear, not
+      // dismiss, so the next real failure of that code still gets one).
+      onRecovered: function (code) {
+        rail.failures.clear(code);
       },
       onLimit: function (text) {
         rail.setLimitNote(text);
