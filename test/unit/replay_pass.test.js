@@ -242,6 +242,49 @@ test("branch four: neither version matches, so nothing is written and the card s
   assert.equal(badge.detail.theirs, theirs);
 });
 
+// The reviewer's answer to branch four, and the reason it is a record field
+// rather than a single write: on a live page the source that disagrees is still
+// the source, so it renders again on the next pass. Found live on 2026-08-14.
+test("keep mine: the answered page state is branch two from then on, and nothing re-raises", () => {
+  const item = fixtures.edit();
+  const theirs = item.before + " It is reviewed on Sunday by both of them.";
+  const page = pageOf(["Before it.", item.before, "After it."]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+  page.blocks[1].textContent = theirs;
+
+  const first = runOne(anchoredItem, page.root);
+  assert.equal(first.result.branch, replay.BRANCH.CONTENT_CHANGED, "the collision is raised once");
+
+  // The reviewer presses Keep mine. resolveConflict reads the configured
+  // context, which is the wiring index.js does.
+  const written = [];
+  replay.configure({
+    root: page.root,
+    items: [anchoredItem],
+    cards: first.cards,
+    persist: function (saved) {
+      written.push(saved);
+    }
+  });
+  const answered = replay.resolveConflict(item.id, "keep_mine");
+  assert.equal(answered.resolved, true, answered.reason || "");
+  assert.equal(page.blocks[1].textContent, item.after, "the press writes the reviewer's version");
+  assert.deepEqual(record.acceptedPageTexts(anchoredItem), [theirs], "and the record remembers what it answered");
+  assert.equal(written.length > 0, true, "the answer is written down, not only held in memory");
+  assert.equal(replay.conflictFor(item.id), null);
+
+  // The page renders itself from its own source again, which still says theirs.
+  page.blocks[1].textContent = theirs;
+  const again = runOne(anchoredItem, page.root);
+
+  assert.equal(again.result.branch, replay.BRANCH.REAPPLY, "an answered page state is branch two");
+  assert.equal(page.blocks[1].textContent, item.after, "so the reviewer's version goes back, pass after pass");
+  assert.equal(replay.counters.regionsConflicted, 0, "and the collision is not raised again");
+  assert.equal(anchoredItem.before, item.before, "R29: the diff base is untouched");
+
+  replay.configure({ root: null, items: null, cards: null, persist: null });
+});
+
 test("a format-only record compares on structure, so a text-equal change is still a change", () => {
   const item = fixtures.formatOnly();
   const page = pageOf([

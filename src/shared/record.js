@@ -171,6 +171,9 @@
     "context.heading": CLASS_DATA,
     "context.element": CLASS_DATA,
     "region.label": CLASS_DATA,
+    // The page's own words, kept so replay knows which page states the reviewer
+    // has already answered. Data, and emphatically not intent.
+    "region.accepted_page_texts": CLASS_DATA,
     page_title: CLASS_DATA,
     page_path: CLASS_DATA,
     "reply.reason": CLASS_DATA,
@@ -283,8 +286,72 @@
       // Display only. Pinned at first touch, never recomputed. See regions.js.
       label: null,
       // null, or {code, reason, at} when the subject can no longer be found.
-      lost: null
+      lost: null,
+      // The page states the reviewer has already answered "keep mine" to. See
+      // acceptedPageTexts below.
+      accepted_page_texts: []
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // The accepted page states: what "Keep mine" has to remember
+  // ---------------------------------------------------------------------------
+  //
+  // The reviewer's decision on a collision has to survive the next repaint, and
+  // on a live page there is always a next repaint. Writing the reviewer's
+  // version once is not enough: the page's own source still says the agent's
+  // sentence, so the very next morph renders it again, replay reads a fourth
+  // branch and raises the same collision, forever. (Found by a walker on
+  // 2026-08-14 at /?morph=raw&poll=250.)
+  //
+  // So the record remembers WHICH PAGE STATE the reviewer already answered. The
+  // page holding one of those states is not a new collision: it is the same
+  // question, already decided, and replay treats it exactly like the `before`
+  // (branch two) and re-applies the current `after`.
+  //
+  // `before` is NOT touched by any of this, per R29: it is the agent's diff base
+  // and it stays pristine.
+  //
+  // ADD-ONLY, AND BOUNDED. Add-only because a decision the reviewer made is not
+  // something a later pass gets to un-make. Bounded because a page whose source
+  // genuinely churns (a feed, a clock, a cursor in a URL) would otherwise hand
+  // the record a new state on every pass and grow it without limit, in browser
+  // storage and in every event this record posts. The cap keeps the NEWEST
+  // states, because the reviewer's most recent decisions describe the page as it
+  // is now; the oldest one falling off means a page state from long ago can
+  // raise the collision once more, which is honest (it asks again rather than
+  // guessing) and is the price of the bound.
+  var ACCEPTED_PAGE_TEXTS_MAX = 8;
+
+  /** The page states this record's reviewer has already accepted. Never null. */
+  function acceptedPageTexts(item) {
+    var region = item && item[FIELD.REGION];
+    var list = region && region.accepted_page_texts;
+    return Array.isArray(list) ? list : [];
+  }
+
+  /**
+   * Remember one page state as answered. Add-only, deduped, capped.
+   *
+   * Writes a NEW region object rather than pushing into the old one, the way
+   * every other region stamp in this tool does, so a caller holding the previous
+   * region sees the value it read.
+   *
+   * @returns {Array} the accepted list as it now stands
+   */
+  function acceptPageText(item, text) {
+    if (!item || typeof text !== "string" || !text) return acceptedPageTexts(item);
+    var region = item[FIELD.REGION] || emptyRegion();
+    var list = acceptedPageTexts(item).slice();
+    if (list.indexOf(text) === -1) list.push(text);
+    if (list.length > ACCEPTED_PAGE_TEXTS_MAX) list = list.slice(list.length - ACCEPTED_PAGE_TEXTS_MAX);
+    var next = {};
+    Object.keys(region).forEach(function (key) {
+      next[key] = region[key];
+    });
+    next.accepted_page_texts = list;
+    item[FIELD.REGION] = next;
+    return list;
   }
 
   function emptyContext() {
@@ -560,6 +627,9 @@
     bumpRev: bumpRev,
     historyEntry: historyEntry,
     priorAfters: priorAfters,
+    ACCEPTED_PAGE_TEXTS_MAX: ACCEPTED_PAGE_TEXTS_MAX,
+    acceptedPageTexts: acceptedPageTexts,
+    acceptPageText: acceptPageText,
     changedSpan: changedSpan,
     editChangeText: editChangeText,
     comparisonFields: comparisonFields,

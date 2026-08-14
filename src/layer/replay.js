@@ -26,6 +26,12 @@
 //      so flag it on the card and WRITE NOTHING (R5). The conflict card shows
 //      both versions in full and the reviewer picks which one stands.
 //
+// Branch two has a second door into it: a page state the reviewer already
+// answered with "Keep mine" (region.accepted_page_texts, in record.js). Their
+// decision is not re-litigated every time the page renders itself from a source
+// that still disagrees, so that state is branch-two-equivalent and the current
+// `after` is re-applied. See resolveConflict.
+//
 // Branch three is the one a builder skips. Without the applied-`after` history
 // on the record (0A-kernel's field), a two-rewording case falls into branch
 // four and flags a collision that is not one.
@@ -160,6 +166,15 @@
   //             the page's" button, which retires a record without writing to
   //             the page. Replay never edits through it and a missing one only
   //             costs that button
+  //   persist   optional. Writes one record back to durable storage. Replay
+  //             mutates records in place (the lost stamp, the accepted page
+  //             states) and the items it is handed are a CACHE that any later
+  //             merge replaces from the store, so a mutation nobody wrote down
+  //             lives until the next remount and no longer. The reviewer's
+  //             answer to a collision has to outlive that, so keep_mine writes
+  //             through this. A caller that supplies none keeps the old
+  //             memory-only behaviour, which is what the simulated-DOM unit
+  //             tests run on
   //   hooks     one function per PASS_ORDER step that replay does not own:
   //             fold_replies, merge_store, retire_handled, update_rail. A
   //             missing hook is a no-op and is reported as one in the summary,
@@ -172,8 +187,16 @@
     anchor: null,
     document: null,
     editing: null,
+    persist: null,
     hooks: null
   };
+
+  /** Write one record back to durable storage, when a caller gave us the seam. */
+  function persistItem(ctx, item) {
+    if (!ctx || typeof ctx.persist !== "function" || !item) return false;
+    ctx.persist(item);
+    return true;
+  }
 
   // Finding 30: the wired product (src/layer/index.js) calls configure with NO
   // hooks, so fold_replies, merge_store, retire_handled and update_rail record
@@ -446,6 +469,9 @@
       if (typeof item[F.BEFORE] === "string" && normalize.equalsInMode(mode, domText, item[F.BEFORE])) {
         return { branch: BRANCH.REAPPLY, earlierAfter: null };
       }
+      if (matchesAcceptedPageState(item, mode, domText)) {
+        return { branch: BRANCH.REAPPLY, earlierAfter: null, accepted: true };
+      }
       return { branch: BRANCH.CONTENT_CHANGED, earlierAfter: null };
     }
 
@@ -469,7 +495,26 @@
       }
     }
 
+    // A page state the reviewer already answered with "Keep mine". Their
+    // decision stands until they change it, so this is branch two: re-apply the
+    // current `after` and raise nothing. Without it the reviewer's answer lives
+    // exactly one pass on any page that still renders the agent's sentence from
+    // its own source, which is every live page.
+    if (matchesAcceptedPageState(item, mode, domText)) {
+      return { branch: BRANCH.REAPPLY, earlierAfter: null, accepted: true };
+    }
+
     return { branch: BRANCH.CONTENT_CHANGED, earlierAfter: null };
+  }
+
+  // Has the reviewer already said "keep mine" about the page looking like this?
+  function matchesAcceptedPageState(item, mode, domText) {
+    if (typeof domText !== "string") return false;
+    var accepted = record.acceptedPageTexts(item);
+    for (var i = 0; i < accepted.length; i += 1) {
+      if (normalize.equalsInMode(mode, domText, accepted[i])) return true;
+    }
+    return false;
   }
 
   // What the card says when branch three fires. Written once here so the
@@ -727,9 +772,32 @@
     // The reviewer's version stands, so it is written to the page exactly as an
     // ordinary re-apply would write it, and the collision is answered.
     var item = itemWithId(ctx, id);
-    var element = lastElement[id];
     if (!item) return { resolved: false, choice: choice, reason: "no record " + String(id) };
-    if (!element || (element.isConnected === false)) {
+
+    // FIRST, AND BEFORE THE WRITE: the record remembers that the reviewer
+    // answered THIS page state. That memory is what makes the decision durable,
+    // because the write below lasts exactly until the next repaint: the page's
+    // own source still says the agent's sentence, so it renders it again, and
+    // from then on the ordinary replay pass is the only thing carrying the
+    // reviewer's version. It reads the accepted state as branch two and
+    // re-applies, pass after pass, like any committed record. (The one-shot
+    // write was the whole bug: found live on 2026-08-14, at
+    // /?morph=raw&poll=250, where the press was undone 150ms later and the
+    // collision re-raised forever with nothing said to the reviewer.)
+    record.acceptPageText(item, flagged.theirs);
+    persistItem(ctx, item);
+
+    // The node from the last pass, or a fresh resolve when a repaint has been
+    // through since. On a morphing page the element replay bound a moment ago is
+    // routinely gone by the time a hand reaches the button, and refusing the
+    // press for that is the same defect wearing a different hat.
+    var element = lastElement[id];
+    if (!element || element.isConnected === false) {
+      var ref = item[record.FIELD.REGION] ? item[record.FIELD.REGION].ref : null;
+      var verdict = ref ? resolveRegion(item, ref, ctx) : null;
+      element = verdict ? verdict.element : null;
+    }
+    if (!element) {
       return { resolved: false, choice: choice, reason: "the region this record points at is not on the page" };
     }
     epoch.write("replay.keep_mine", function () {
@@ -742,6 +810,7 @@
     // projects into review.json) after the reviewer resolved in its favour, and
     // the element memory would point at a node that is no longer the truth.
     clearLost(item);
+    persistItem(ctx, item);
     lastElement[id] = element;
     delete conflicts[id];
     forceClearConflict(ctx, id);
@@ -917,6 +986,11 @@
     push(item[fields.before]);
     push(item[record.FIELD.BEFORE]);
     record.priorAfters(item, fields.after).forEach(push);
+    // A page state the reviewer answered with "keep mine" is a spelling of this
+    // region that was really on the page, so it belongs in the probe list beside
+    // the record's own texts: on the next repaint it is what the page holds
+    // again, and the region has to be findable before it can be re-written.
+    record.acceptedPageTexts(item).forEach(push);
     if (ref && typeof ref.probe === "string") push(ref.probe);
     return out;
   }

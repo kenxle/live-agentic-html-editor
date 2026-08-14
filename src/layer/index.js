@@ -431,7 +431,17 @@
       document: doc,
       // For one thing only: the conflict card's "take the page's" button, which
       // retires a record and writes nothing. See replay's `context`.
-      editing: editing
+      editing: editing,
+      // How a record replay changed gets written down. `items` above is a
+      // CACHE, and merge() replaces it from the store on every remount, so a
+      // change replay only made in memory dies at the next morph. That is what
+      // made "Keep mine" a one-shot: the accepted page state it recorded was
+      // gone before the pass that needed it (2026-08-14).
+      persist: function (item) {
+        store.write(reviewId, item);
+        refreshItems();
+        rail.upsertCard(item);
+      }
     });
 
     // "The page changed, so replay gets a pass."
