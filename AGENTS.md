@@ -120,6 +120,14 @@ It prints newly ready items as JSON lines plus your next cursor, and exits 0
 review), 4 (bad usage). Waiting consumes nothing and acknowledges nothing; the
 only way to mark an item handled is a reply line.
 
+## Step 5: take it back out when they are done
+
+`lahe add path/to/page.html --remove` deletes the script line from the page and
+changes nothing else (for a dev server, delete the line you pasted). Stop the
+helper with Ctrl-C, or by killing the pid in `service.json` in the state
+directory. Deleting the state directory forgets every review and its history, so
+do that only when your human asks: `Removing it` in the README has the detail.
+
 ## Rules that are yours specifically
 
 - **Never hold the page open in your own browser.** A review allows one live

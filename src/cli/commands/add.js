@@ -92,6 +92,8 @@ var USAGE = [
   "                       line is printed for you to paste, inside a development-only guard.",
   "",
   "  --new                mint a second review even though the file already carries one.",
+  "  --remove             take the script line back out of the page and change nothing else.",
+  "                       The review's history stays where it is; see `Removing it` in the README.",
   "  --origin <origin>    an origin to register for this review. Repeatable. A static file needs",
   "                       none: a page opened from disk sends the origin " + FILE_ORIGIN + ".",
   "  --source <path>      where this page's source lives, so an agent edits the template rather",
@@ -108,7 +110,7 @@ var USAGE = [
 
 function parseArgs(argv) {
   var list = argv || [];
-  var options = { target: null, isNew: false, origins: [], source: null };
+  var options = { target: null, isNew: false, remove: false, origins: [], source: null };
   var index = 0;
 
   function takeValue(name, inline) {
@@ -133,6 +135,8 @@ function parseArgs(argv) {
       if (name === "--help" || name === "-h") return { ok: false, message: USAGE };
       if (name === "--new") {
         options.isNew = true;
+      } else if (name === "--remove") {
+        options.remove = true;
       } else if (name === "--origin") {
         options.origins.push(takeValue("--origin", inline));
       } else if (name === "--source") {
@@ -241,6 +245,30 @@ function replaceScriptLine(html, tag) {
     where: "in the place it already had",
     indent: indent
   };
+}
+
+/**
+ * Take the script line back out, and take nothing else.
+ *
+ * The match is the same attribute-keyed one `add` writes with, so the only tag
+ * that can be removed is one `add` put there. The line's own indentation and the
+ * newline that ends it go with it, so no blank line is left behind; a tag that
+ * shares its line with other markup loses only itself.
+ *
+ * @returns {{html: string, review: string}|null} null when there was no line.
+ */
+function removeScriptLine(html) {
+  var found = EXISTING_TAG.exec(html);
+  if (!found) return null;
+  var start = found.index;
+  var end = start + found[0].length;
+  var lineStart = html.lastIndexOf("\n", start - 1) + 1;
+  var onItsOwnLine = /^[ \t]*$/.test(html.slice(lineStart, start));
+  if (onItsOwnLine) {
+    start = lineStart;
+    if (html.slice(end, end + 1) === "\n") end += 1;
+  }
+  return { html: html.slice(0, start) + html.slice(end), review: found[1] };
 }
 
 function reviewAlreadyInFile(html) {
@@ -544,6 +572,20 @@ function guardedSnippet(tag) {
 // The command
 // ---------------------------------------------------------------------------
 
+/**
+ * Where the reviews live, named if it can be resolved and described if it
+ * cannot. `--remove` must work even when the state directory would be refused,
+ * because taking a line out of a page has nothing to do with the helper.
+ */
+function reviewsRootOrPhrase(explicit) {
+  try {
+    var dir = explicit ? stateDirModule.stateDir({ dir: explicit }) : stateDirModule.stateDir();
+    return stateDirModule.reviewsRoot(dir);
+  } catch (err) {
+    return "the helper's state directory";
+  }
+}
+
 function classify(targetPath) {
   var stat = fs.statSync(targetPath);
   if (stat.isDirectory()) return "dev-server";
@@ -572,6 +614,48 @@ async function run(argv) {
     process.stderr.write("lahe add: there is nothing at " + target + "\n");
     return EXIT.FAILED;
   }
+  // --- taking it back out ----------------------------------------------------
+  //
+  // Before the bundle check, deliberately: uninstalling a page must not depend
+  // on the library being built. Nothing here touches the helper or the state
+  // directory. The review's history is the reviewer's work, and a flag that
+  // edits a page is not the thing that should delete it; the README says how.
+  if (options.remove) {
+    if (classify(target) !== "static") {
+      process.stdout.write(
+        [
+          "lahe add --remove: " + target,
+          "",
+          "  Nothing was edited, because `add` never edited this. It printed a line for you to",
+          "  paste into your layout: delete that line (the one carrying data-lahe-review) and the",
+          "  development-only comment above it.",
+          ""
+        ].join("\n")
+      );
+      return EXIT.OK;
+    }
+    var current = fs.readFileSync(target, "utf8");
+    var stripped = removeScriptLine(current);
+    if (!stripped) {
+      process.stdout.write(
+        "lahe add --remove: " + target + " carries no lahe script line. Nothing to take out.\n"
+      );
+      return EXIT.OK;
+    }
+    fs.writeFileSync(target, stripped.html);
+    process.stdout.write(
+      [
+        "lahe add --remove: " + target,
+        "",
+        "  Took out the script line for review " + stripped.review + ", and nothing else.",
+        "  That review's history is still in " + (reviewsRootOrPhrase(options.stateDir) + "."),
+        "  Stop the helper and delete that directory to forget it. See `Removing it` in the README.",
+        ""
+      ].join("\n")
+    );
+    return EXIT.OK;
+  }
+
   if (!fs.existsSync(BUNDLE)) {
     process.stderr.write(
       "lahe add: the built library is missing (" +
@@ -867,6 +951,7 @@ module.exports = {
   parseArgs: parseArgs,
   placeScriptLine: placeScriptLine,
   replaceScriptLine: replaceScriptLine,
+  removeScriptLine: removeScriptLine,
   reviewAlreadyInFile: reviewAlreadyInFile,
   classify: classify,
   run: run

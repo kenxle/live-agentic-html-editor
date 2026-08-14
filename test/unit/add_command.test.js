@@ -441,6 +441,65 @@ test("a second review on a running helper works without the user restarting anyt
   }
 });
 
+test("--remove takes the script line out and leaves everything else in the page alone", async () => {
+  const work = await aWorkspace();
+  try {
+    const before = work.read();
+    const run = work.add();
+    assert.equal(run.code, 0, run.stdout + run.stderr);
+    assert.equal(scriptTagsIn(work.read()).length, 1, "there is a line to remove");
+
+    const removed = runAdd([work.page, "--remove"]);
+    assert.equal(removed.code, 0, removed.stdout + removed.stderr);
+    assert.equal(
+      work.read(),
+      before,
+      "the page is byte for byte what it was before add touched it:\n" + JSON.stringify(work.read())
+    );
+    assert.match(removed.stdout, /Took out the script line/);
+
+    // Removing again is a plain no-op, not a failure: a page with no line is
+    // already in the state --remove is asking for.
+    const again = runAdd([work.page, "--remove"]);
+    assert.equal(again.code, 0);
+    assert.match(again.stdout, /no lahe script line/i);
+  } finally {
+    await work.stop();
+  }
+});
+
+test("--remove removes the lahe tag and no other script on the page", () => {
+  const add = require("../../src/cli/commands/add.js");
+  const page = [
+    "<html>",
+    "  <body>",
+    "    <script src=\"app.js\"></script>",
+    "    <script defer src=\"lahe-layer.js\" data-lahe-review=\"r1\" data-lahe-token=\"t\"></script>",
+    "    <script>window.theirs = 1;</script>",
+    "  </body>",
+    "</html>",
+    ""
+  ].join("\n");
+
+  const removed = add.removeScriptLine(page);
+  assert.equal(removed.review, "r1");
+  assert.equal(
+    removed.html,
+    [
+      "<html>",
+      "  <body>",
+      "    <script src=\"app.js\"></script>",
+      "    <script>window.theirs = 1;</script>",
+      "  </body>",
+      "</html>",
+      ""
+    ].join("\n"),
+    "their two scripts stay, the blank line does not"
+  );
+
+  assert.equal(add.removeScriptLine("<html><body><p>no line here</p></body></html>"), null);
+});
+
 test("add prints the review folder, because that is the only way an agent finds review.json", async () => {
   const work = await aWorkspace();
   try {

@@ -97,6 +97,29 @@ reads it. It is scoped to **one review**: a leak opens that review's feedback an
 nothing else, not your machine and not another review. `add` says so at the
 moment it writes.
 
+### Removing it
+
+Three separate things, because they come apart:
+
+**Take the library out of a page.**
+
+```sh
+lahe add path/to/page.html --remove
+```
+
+That deletes the one script line `add` wrote and changes nothing else in the
+file. For a dev server, delete the line you pasted into your layout yourself:
+it is the one carrying `data-lahe-review`. If `add` copied `lahe-layer.js` into
+your assets or `public/` directory, that copy is yours to delete too.
+
+**Stop the helper.** Ctrl-C in the window running `lahe serve`, or, when `add`
+started it for you, kill the pid in `service.json` in the state directory.
+
+**Forget the reviews.** Delete the state directory (`$LAHE_STATE_DIR`, or
+`$XDG_STATE_HOME/lahe`, or `~/.local/state/lahe`). It holds every review's
+history and token, so this is the step that throws work away; nothing does it
+for you. Uninstalling the command itself is `npm unlink` in the clone.
+
 ## Using it
 
 The gestures are also shown as hint lines on the rail beside the page, so you do
@@ -133,6 +156,7 @@ once, and after that a plain sentence works:
 | `lahe add path/to/page.html` | Start a review on a static file: writes the one script line, mints the review and its token, starts the helper if it is not running, prints what to open |
 | `lahe add path/to/project --origin http://localhost:3000` | Dev-server variant: edits nothing, prints the one guarded line for your layout |
 | `lahe add ... --new` | Mint a fresh review even though the page already carries one |
+| `lahe add path/to/page.html --remove` | Take the script line back out of the page, and change nothing else |
 | `lahe add ... --source path/to/template` | Record where the source lives, so an agent edits the template rather than build output |
 | `lahe serve [--port N]` | Run the helper by hand (`add` starts it for you, so this is rarely needed) |
 | `lahe wait --review <id> [--since <cursor>] [--timeout <seconds>] [--state-dir <path>]` | Block until new items are ready; prints them as JSON lines plus the next cursor. Exit codes: 0 new work, 1 timeout, 2 helper unreachable, 3 unknown review, 4 bad usage. Reading acknowledges nothing |
