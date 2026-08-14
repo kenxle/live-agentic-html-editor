@@ -84,6 +84,10 @@
     var fetchImpl = opts.fetch || (typeof fetch === "function" ? fetch.bind(typeof globalThis !== "undefined" ? globalThis : null) : null);
     var onStatus = opts.onStatus || function () {};
     var onFailure = opts.onFailure || function () {};
+    // The mirror of onFailure: a standing failure whose condition ENDED. The
+    // rail clears that chip (clear, not dismiss, so the next real failure still
+    // gets one). Raised with a failure code, the same vocabulary onFailure uses.
+    var onRecovered = opts.onRecovered || function () {};
     var onReplies = opts.onReplies || function () {};
     var onLimit = opts.onLimit || function () {};
     // The window-session state machine (D5, findings 1/2/3/12, NEW-2). onRefused
@@ -99,6 +103,11 @@
     var started = false;
     var cspRefused = false;
     var lastFailure = null;
+    // Whether the helper has answered THIS page. null until it has been heard
+    // from either way, and it is learnable without a POST: a page with nothing
+    // queued never posts, and before this it read "kept in this browser, it will
+    // be stored when the helper is back" forever with a healthy helper.
+    var helperReachable = null;
     var backoffIndex = 0;
     var debounceTimer = null;
     var retryTimer = null;
@@ -114,6 +123,14 @@
     var heartbeatMs = 10000;
     var flushing = false;
     var deliveredOnce = false;
+    // True from pagehide/beforeunload until this document is shown again. A post
+    // the browser cancels because the document is going away is NOT the helper
+    // being unreachable: the record is already in browser storage and it
+    // re-posts on the next load. Calling that abort a failure raised a permanent
+    // "the local helper is not reachable" chip on every page after a
+    // commit-then-click-a-link, with the helper up the whole time (walkers,
+    // 2026-08-14).
+    var unloading = false;
     var cursor = 0;
     var repliesSeen = [];
     var seenItems = Object.create(null);
@@ -146,22 +163,42 @@
       // Anything the helper refused, could not take, or never answered means
       // the reviewer's typing is living in this browser and nowhere else.
       if (lastFailure || cspRefused) return setStatus(overlay.STATUS.KEPT_LOCALLY);
-      if (pending === 0 && deliveredOnce) {
+      if (pending === 0 && (deliveredOnce || helperReachable === true)) {
+        // Nothing is queued and the helper is there. Everything durable IS
+        // stored, whether this page ever had anything of its own to post.
         if (repliesSeen.length > 0) return setStatus(overlay.STATUS.AGENT_CONNECTED);
         return setStatus(overlay.STATUS.STORED);
       }
       // Queued and in flight with nothing wrong: HOLD the current reading
-      // rather than flickering to kept-locally between every keystroke and its
-      // acknowledgement. Before the first successful post there is no reading
-      // to hold, and kept-locally is the true one.
-      if (status === null) return setStatus(overlay.STATUS.KEPT_LOCALLY);
+      // rather than flickering between every keystroke and its acknowledgement.
+      // Before there is any reading to hold, the true one is that the work is in
+      // this browser and the helper has not confirmed it YET. It does not claim
+      // an outage: nothing has failed, so saying the helper is away would be an
+      // invention (walkers, 2026-08-14).
+      if (status === null) return setStatus(overlay.STATUS.KEPT_UNCONFIRMED);
       return status;
     }
 
     function raise(failure) {
       lastFailure = failure;
+      if (failures.canonical(failure.code) === "HELPER_UNREACHABLE") helperReachable = false;
       onFailure(failure);
       return failure;
+    }
+
+    /**
+     * The helper answered something. Any acknowledged exchange counts: a reply
+     * poll, a granted claim, a heartbeat. It feeds the status line and it ENDS
+     * the standing unreachable chip, which is a condition rather than an
+     * occurrence and so has to be cleared by the thing that ended it.
+     */
+    function markReachable() {
+      var was = helperReachable;
+      helperReachable = true;
+      lastFailure = null;
+      if (was !== true) onRecovered("HELPER_UNREACHABLE");
+      recomputeStatus();
+      return helperReachable;
     }
 
     // -------------------------------------------------------------------------
@@ -349,7 +386,7 @@
           }
           deliveredOnce = true;
           counters.acknowledged += accepted.length;
-          lastFailure = null;
+          markReachable();
           backoffIndex = 0;
           state = STATE.IDLE;
           if (typeof (result.body && result.body.seq) === "number" && cursor === 0) {
@@ -361,6 +398,15 @@
           return { sent: accepted.length, remaining: remaining };
         }
 
+        // The document went away mid-request. Nothing failed and nothing is
+        // lost, so nothing is said: the events are in browser storage and the
+        // next load posts them.
+        if (abortedByTeardown(result)) {
+          state = STATE.IDLE;
+          recomputeStatus();
+          return { sent: 0, remaining: pendingCount(), aborted: true };
+        }
+
         counters.postsFailed += 1;
         state = STATE.RETRYING;
         raise(classify(result.error, { status: result.status, detail: describe(result) }));
@@ -368,6 +414,24 @@
         if (!fo.unload) scheduleRetry();
         return { sent: 0, remaining: pendingCount(), failed: true };
       });
+    }
+
+    /**
+     * True when this request died because the page is being torn down, rather
+     * than because anything is wrong with the helper. Two shapes:
+     *
+     *   - the document is unloading (pagehide/beforeunload has fired), so every
+     *     in-flight request is cancelled by the browser
+     *   - an AbortError this client did not ask for: our own deadline sets
+     *     timedOut, and a timeout IS a real failure, so it is excluded here
+     *
+     * Either way the queue is untouched and the next load re-posts it.
+     */
+    function abortedByTeardown(result) {
+      if (result.timedOut) return false;
+      if (unloading) return true;
+      var error = result.error;
+      return !!error && error.name === "AbortError";
     }
 
     function describe(result) {
@@ -417,11 +481,15 @@
       return request("replies.poll", { method: "GET", query: { review: requireReview(), since: cursor } }).then(
         function (result) {
           if (!result.ok) {
+            // A poll the navigation cancelled says nothing about the helper.
+            if (abortedByTeardown(result)) return { events: [] };
             raise(classify(result.error, { status: result.status, detail: describe(result) }));
             recomputeStatus();
             return { events: [] };
           }
-          lastFailure = null;
+          // The helper answered. That is proof it is there, and it is the ONLY
+          // proof a page with an empty outbox can have: it never posts.
+          markReachable();
           var events = (result.body && result.body.events) || [];
           if (typeof (result.body && result.body.seq) === "number") cursor = result.body.seq;
           if (events.length) {
@@ -503,6 +571,7 @@
         // names navigation, so a link click cannot be a losing move.
         win.addEventListener("pagehide", commitOnUnload);
         win.addEventListener("beforeunload", commitOnUnload);
+        win.addEventListener("pageshow", onPageShow);
       }
 
       startPolling();
@@ -550,6 +619,9 @@
 
     function parseClaim(result) {
       if (result.ok) {
+        // A granted claim or heartbeat is an acknowledged exchange, so it is
+        // proof of reachability just like a reply poll is.
+        markReachable();
         var b = result.body || {};
         return {
           granted: true,
@@ -733,7 +805,14 @@
     }
 
     function commitOnUnload() {
-      flush({ unload: true });
+      unloading = true;
+      return flush({ unload: true });
+    }
+
+    // A page restored from the bfcache, or a beforeunload the reviewer cancelled,
+    // is a live document again: real failures have to be audible from here on.
+    function onPageShow() {
+      unloading = false;
     }
 
     function stop() {
@@ -751,6 +830,7 @@
       if (win && typeof win.removeEventListener === "function") {
         win.removeEventListener("pagehide", commitOnUnload);
         win.removeEventListener("beforeunload", commitOnUnload);
+        win.removeEventListener("pageshow", onPageShow);
       }
       if (store) store.releaseWindow(review);
       started = false;

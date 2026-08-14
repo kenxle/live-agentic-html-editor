@@ -131,8 +131,131 @@ test("the status line never says stored before anything has been acknowledged", 
   const { sync, statuses } = harness();
   t.after(() => sync.stop());
   sync.recordItem(draft("something"));
+  // Queued, with the helper never heard from: not stored, and not an outage
+  // either, because nothing has failed yet.
+  assert.equal(sync.status().status, overlay.STATUS.KEPT_UNCONFIRMED);
+  assert.deepEqual(statuses, [overlay.STATUS.KEPT_UNCONFIRMED]);
+  assert.notEqual(sync.status().status, overlay.STATUS.STORED);
+});
+
+// ---------------------------------------------------------------------------
+// The status-truth cluster (three walkers, 2026-08-14)
+// ---------------------------------------------------------------------------
+
+test("a page with nothing queued and no helper answer yet does not claim the helper is away", (t) => {
+  const { sync } = harness();
+  t.after(() => sync.stop());
+  sync.flush();
+  assert.equal(sync.status().status, overlay.STATUS.KEPT_UNCONFIRMED);
+  const text = overlay.STATUS_TEXT[overlay.STATUS.KEPT_UNCONFIRMED];
+  assert.doesNotMatch(text, /helper is back|not reachable|is down|away/i, "no invented outage");
+  assert.match(text, /Kept in this browser/);
+});
+
+test("a successful poll is enough to read stored, with no post and no typing", async (t) => {
+  const store = storeModule.createStore();
+  const recovered = [];
+  const sync = syncModule.createSync({
+    review: "review-1",
+    token: "t",
+    helperOrigin: "http://127.0.0.1:7817",
+    store: store,
+    document: null,
+    window: null,
+    fetch: async () => ({ ok: true, status: 200, json: async () => ({ events: [], seq: 3 }) }),
+    onRecovered: (code) => recovered.push(code)
+  });
+  t.after(() => sync.stop());
+
+  await sync.poll();
+  assert.equal(sync.status().status, overlay.STATUS.STORED, "a reachable helper with an empty outbox IS stored");
+  assert.deepEqual(recovered, ["HELPER_UNREACHABLE"], "and the standing unreachable chip is cleared");
+});
+
+test("a post the navigation aborted is not a failure, and raises no chip", async (t) => {
+  const listeners = {};
+  const fakeWindow = {
+    addEventListener: (type, fn) => {
+      listeners[type] = fn;
+    },
+    removeEventListener: () => {}
+  };
+  const store = storeModule.createStore();
+  const raised = [];
+  const abort = new Error("The user aborted a request.");
+  abort.name = "AbortError";
+  const sync = syncModule.createSync({
+    review: "review-1",
+    token: "t",
+    helperOrigin: "http://127.0.0.1:7817",
+    store: store,
+    document: null,
+    window: fakeWindow,
+    fetch: async () => {
+      throw abort;
+    },
+    onFailure: (failure) => raised.push(failure.code)
+  });
+  t.after(() => sync.stop());
+
+  await sync.start();
+  raised.length = 0;
+  sync.recordItem(readyEdit("committed on the way out"), { immediate: "ready" });
+  // The reviewer clicks a link: pagehide fires, the keepalive post goes out,
+  // and the document going away aborts it.
+  await listeners.pagehide();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.deepEqual(raised, [], "an aborted unload post raises nothing");
+  assert.notEqual(sync.status().status, overlay.STATUS.KEPT_LOCALLY, "and the status line does not flap");
+  assert.ok(store.pendingEvents("review-1").length > 0, "the record is still queued, and re-posts on the next load");
+});
+
+test("a genuine transport failure still raises the unreachable chip", async (t) => {
+  const store = storeModule.createStore();
+  const raised = [];
+  const sync = syncModule.createSync({
+    review: "review-1",
+    token: "t",
+    helperOrigin: "http://127.0.0.1:7817",
+    store: store,
+    document: null,
+    window: null,
+    fetch: async () => {
+      throw new TypeError("Failed to fetch");
+    },
+    onFailure: (failure) => raised.push(failure.code)
+  });
+  t.after(() => sync.stop());
+
+  sync.recordItem(readyEdit("typed against a dead helper"), { immediate: "ready" });
+  await sync.flush();
+  assert.deepEqual(raised, ["HELPER_UNREACHABLE"], "the true-failure path is untouched");
   assert.equal(sync.status().status, overlay.STATUS.KEPT_LOCALLY);
-  assert.deepEqual(statuses, [overlay.STATUS.KEPT_LOCALLY]);
+});
+
+test("the unreachable helper is a standing state, so its chip never counts", () => {
+  const failuresModule = require("../../src/shared/failures.js");
+  assert.equal(failuresModule.failure("HELPER_UNREACHABLE").standing, true);
+  const rail = overlay.createRail();
+  rail.failures.add(failuresModule.failure("HELPER_UNREACHABLE", "one"));
+  rail.failures.add(failuresModule.failure("HELPER_UNREACHABLE", "two"));
+  rail.failures.add(failuresModule.failure("HELPER_UNREACHABLE", "three"));
+  const chips = rail.failures.list();
+  assert.equal(chips.length, 1);
+  assert.equal(chips[0].count, 1, "still true, not four occurrences");
+});
+
+test("clearing one code leaves every other chip standing", () => {
+  const failuresModule = require("../../src/shared/failures.js");
+  const rail = overlay.createRail();
+  rail.failures.add(failuresModule.failure("HELPER_UNREACHABLE", null));
+  rail.failures.add(failuresModule.failure("COPY_FAILED", null));
+  rail.failures.clear("HELPER_UNREACHABLE");
+  assert.deepEqual(
+    rail.failures.list().map((chip) => chip.code),
+    ["COPY_FAILED"]
+  );
 });
 
 test("the flush policy is imported, not restated", () => {

@@ -323,8 +323,14 @@
   // ×N counter: a reviewer whose window was refused across four Turbo
   // navigations read ×4 as four other windows (first-real-use finding,
   // 2026-08-14).
+  //
+  // The helper being unreachable is the same shape: the page retries forever on
+  // a backoff, so "×7" counted the retries rather than telling the reviewer
+  // anything. It is one condition, it stands while it is true, and the thing
+  // that ends it (the helper answering again) clears the chip.
   var STANDING = {
-    SECOND_WINDOW_REFUSED: true
+    SECOND_WINDOW_REFUSED: true,
+    HELPER_UNREACHABLE: true
   };
 
   function failure(code, detail) {

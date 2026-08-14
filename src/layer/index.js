@@ -267,6 +267,11 @@
       onFailure: function (failure) {
         rail.failures.add(failure);
       },
+      // A standing failure whose condition ended: the chip goes (clear, not
+      // dismiss, so the next real failure of that code still gets one).
+      onRecovered: function (code) {
+        rail.failures.clear(code);
+      },
       onLimit: function (text) {
         rail.setLimitNote(text);
       },

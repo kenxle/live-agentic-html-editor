@@ -39,6 +39,11 @@
     onFailure: function (failure) {
       rail.failures.add(failure);
     },
+    // Mirrors the real boot (src/layer/index.js): a standing chip whose
+    // condition ended is cleared by whatever ended it.
+    onRecovered: function (code) {
+      rail.failures.clear(code);
+    },
     onLimit: function (text) {
       limitNote = text;
       rail.setLimitNote(text);

@@ -87,12 +87,29 @@ test.describe("failure chips", () => {
   test("a repeated failure counts up on one chip rather than stacking duplicates", async ({ page }) => {
     await page.goto(railUrl(pages));
     await page.evaluate(() => {
-      window.__laheRail.addChip("HELPER_UNREACHABLE");
-      window.__laheRail.addChip("HELPER_UNREACHABLE");
-      window.__laheRail.addChip("HELPER_UNREACHABLE");
+      window.__laheRail.addChip("COPY_FAILED");
+      window.__laheRail.addChip("COPY_FAILED");
+      window.__laheRail.addChip("COPY_FAILED");
     });
     const chips = await page.evaluate(() => window.__laheRail.chips());
     expect(chips).toHaveLength(1);
     expect(chips[0].count).toBe(3);
+  });
+
+  // The exception, and the reason there is one: a STANDING code is a condition,
+  // not an occurrence. The helper being down re-raises on every retry, and a
+  // reviewer who read "×4" on a refusal chip counted four other windows
+  // (first-real-use finding, 2026-08-14). Re-raising means "still true".
+  test("a standing failure re-raised says still true, and never grows a count", async ({ page }) => {
+    await page.goto(railUrl(pages));
+    await page.evaluate(() => {
+      window.__laheRail.addChip("HELPER_UNREACHABLE");
+      window.__laheRail.addChip("HELPER_UNREACHABLE");
+      window.__laheRail.addChip("HELPER_UNREACHABLE");
+      window.__laheRail.addChip("SECOND_WINDOW_REFUSED");
+      window.__laheRail.addChip("SECOND_WINDOW_REFUSED");
+    });
+    const chips = await page.evaluate(() => window.__laheRail.chips());
+    expect(chips.map((chip) => chip.count)).toEqual([1, 1]);
   });
 });
