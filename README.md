@@ -80,8 +80,9 @@ inside a development-only guard, for you to paste.
 
 ### Without installing
 
-`npm link` is a convenience. If you would rather not put anything on your PATH,
-every command works the same way from the clone:
+`npm link` is a convenience, and on some machines it needs a writable npm prefix
+(`npm config set prefix ~/.npm-global`) or `sudo`. You never have to sort that
+out: every command works the same way from the clone, with nothing on your PATH:
 
 ```sh
 node bin/lahe.js add path/to/page.html
