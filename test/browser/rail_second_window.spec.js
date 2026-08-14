@@ -125,6 +125,18 @@ test.describe("a second window is refused with a reason", () => {
       const refusedCollapsed = await contexts.second.page.evaluate(() => window.__laheRail.isCollapsed());
       expect(refusedCollapsed, "the rail is expanded so the refusal can be seen").toBe(false);
 
+      // And it SURVIVES A REMOUNT: a Turbo app rebuilds the rail on its first
+      // navigation, and the panel used to vanish while the chip telling the
+      // reviewer to press its button survived (first-real-use finding,
+      // 2026-08-14). The refusal is rail state now, re-applied by mount.
+      await contexts.second.page.evaluate(() => window.__laheRail.remount());
+      const afterRemount = await contexts.second.page.evaluate(() => ({
+        refusalShown: window.__laheRail.refusalShown(),
+        collapsed: window.__laheRail.isCollapsed()
+      }));
+      expect(afterRemount.refusalShown, "the refusal panel is back after a remount").toBe(true);
+      expect(afterRemount.collapsed, "and still expanded").toBe(false);
+
       // Positive control again, on the window that was there first.
       const opened = await contexts.first.page.evaluate(() => window.__laheRail.openCard());
       await contexts.first.page.keyboard.type("The first window keeps going", { delay: 5 });

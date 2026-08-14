@@ -42,6 +42,16 @@
     onLimit: function (text) {
       limitNote = text;
       rail.setLimitNote(text);
+    },
+    // Mirrors the real boot (src/layer/index.js): a refused window shows the
+    // refusal panel; becoming the holder hides it. Without this wiring the
+    // harness silently diverged from the product on the exact surface the
+    // second-window specs judge.
+    onRefused: function (info) {
+      rail.showRefusal(info);
+    },
+    onHeld: function () {
+      rail.hideRefusal();
     }
   });
 

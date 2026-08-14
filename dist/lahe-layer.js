@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+d0ca2dbfc26c
+ * version 0.0.0+0f8b8bfccf11
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+d0ca2dbfc26c";
+  g.LAHE.version = "0.0.0+0f8b8bfccf11";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -1144,6 +1144,15 @@
 
   // The shape every failure travels in, whether it lands in the rail's failures
   // list, on a card, or in a helper error body.
+  // Codes that describe a STANDING STATE rather than an occurrence. Raising one
+  // again means "still true", not "happened again", so the chip must not grow a
+  // ×N counter: a reviewer whose window was refused across four Turbo
+  // navigations read ×4 as four other windows (first-real-use finding,
+  // 2026-08-14).
+  var STANDING = {
+    SECOND_WINDOW_REFUSED: true
+  };
+
   function failure(code, detail) {
     var d = describe(code);
     return {
@@ -1151,6 +1160,7 @@
       canonical_code: canonical(code),
       severity: d.severity,
       persistent: d.persistent,
+      standing: STANDING[canonical(code)] === true,
       surface: d.surface,
       message: d.message,
       remedy: d.remedy,
@@ -7773,6 +7783,12 @@
     var collapsed = false;
     var mounted = false;
     var limitText = null;
+    // The refusal is STATE, not a one-shot paint. A Turbo app remounts the rail
+    // on its first navigation, and a refusal painted imperatively vanished with
+    // the old dom while the (stateful) chip survived: the reviewer read a chip
+    // telling them to press a button that no longer existed (first-real-use
+    // finding, 2026-08-14). Mount re-applies it like every other piece of state.
+    var refusalInfo = null;
     var actionHandlers = Object.create(null);
 
     // The DOM, all of it, or all nulls when there is no document (Node).
@@ -7974,6 +7990,7 @@
       renderTabs();
       renderCollapsed();
       if (mo.hidden) collapse(true);
+      if (refusalInfo) showRefusal(refusalInfo);
       return { rootId: markers.OVERLAY_ROOT_ID, remounted: false };
     }
 
@@ -8429,7 +8446,11 @@
           return f.code === failure.code;
         })[0];
         if (existing) {
-          existing.count = (existing.count || 1) + 1;
+          // A standing failure re-raised means "still true", never "again":
+          // its chip updates in place and never counts (failures.js STANDING).
+          if (!failure.standing && !existing.standing) {
+            existing.count = (existing.count || 1) + 1;
+          }
           existing.at = failure.at;
           existing.detail = failure.detail;
           saveChips();
@@ -8511,6 +8532,9 @@
     // use, so boot owns what the button actually does.
     function showRefusal(info) {
       var i = info || {};
+      // Remembered before the dom check on purpose: a refusal that arrives
+      // before mount (or between remounts) is re-applied by mount, not lost.
+      refusalInfo = { reason: i.reason || null };
       if (!dom) return false;
       dom.refusalReason.textContent = i.reason || "This review is already open in another window.";
       dom.refusalBtn.disabled = false;
@@ -8525,6 +8549,7 @@
     }
 
     function hideRefusal() {
+      refusalInfo = null;
       if (!dom) return false;
       dom.refusal.removeAttribute("data-shown");
       return true;
@@ -16089,7 +16114,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+d0ca2dbfc26c";
+  var VERSION = "0.0.0+0f8b8bfccf11";
 
   var protocol = ns.protocol;
   var record = ns.record;

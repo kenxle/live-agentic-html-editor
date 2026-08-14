@@ -318,6 +318,15 @@
 
   // The shape every failure travels in, whether it lands in the rail's failures
   // list, on a card, or in a helper error body.
+  // Codes that describe a STANDING STATE rather than an occurrence. Raising one
+  // again means "still true", not "happened again", so the chip must not grow a
+  // ×N counter: a reviewer whose window was refused across four Turbo
+  // navigations read ×4 as four other windows (first-real-use finding,
+  // 2026-08-14).
+  var STANDING = {
+    SECOND_WINDOW_REFUSED: true
+  };
+
   function failure(code, detail) {
     var d = describe(code);
     return {
@@ -325,6 +334,7 @@
       canonical_code: canonical(code),
       severity: d.severity,
       persistent: d.persistent,
+      standing: STANDING[canonical(code)] === true,
       surface: d.surface,
       message: d.message,
       remedy: d.remedy,
