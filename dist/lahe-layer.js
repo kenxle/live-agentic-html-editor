@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+ec03bb57019f
+ * version 0.0.0+61ec3adccffa
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+ec03bb57019f";
+  g.LAHE.version = "0.0.0+61ec3adccffa";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -12385,6 +12385,9 @@
   var BOX_CLASS = "lahe-comment-box";
   var INPUT_CLASS = "lahe-comment-input";
   var OUTLINE_CLASS = "lahe-pick-outline";
+  var PILL_CLASS = "lahe-sel-pill";
+  var PILL_BTN_CLASS = "lahe-sel-act";
+  var PILL_TIP_CLASS = "lahe-sel-tip";
   // The registry group, from the one place both this file and inject.js read it.
   // The remount clears exactly the groups it re-registers, so this name has to be
   // a constant rather than a literal in two files.
@@ -12392,6 +12395,141 @@
 
   // Ken's copy, exactly. One spelling, used on every card.
   var HINT_READY = "Cmd-Enter when done with this comment";
+
+  // ---------------------------------------------------------------------------
+  // The selection popover
+  // ---------------------------------------------------------------------------
+  //
+  // Ken, after using the tool for real: "when i highlight things, i no longer get
+  // the button popup with the comment button. that was actually nice." The
+  // hotkeys are unchanged and remain the fast path. This is the affordance ON TOP
+  // of them, and it teaches the keystroke while it is used: hovering a button
+  // shows the keycap for the gesture that button runs.
+  //
+  // It obeys D3 (browse is the page untouched) by intercepting nothing. It reads
+  // selectionchange, which every page fires anyway, and draws a pill in the
+  // library's own closed surface at the selection's own rectangle. The page's
+  // DOM, layout and events are exactly what they were, which is why the
+  // page-identical law still holds with the library booted and nothing selected.
+  //
+  // The one event it does take is a mousedown on its own buttons, and it takes it
+  // to PREVENT the default: without that, pressing the button collapses the
+  // selection before the gesture that needs the selection can run.
+  //
+  // It is bound in the comments listener group, so a window that goes read-only
+  // loses the pill with the rest of the gestures. An affordance offering to do
+  // something the window cannot do is worse than no affordance.
+
+  // How long after the last selectionchange the pill appears. A drag fires the
+  // event on every mouse move, and a pill that chased the cursor through a drag
+  // would be the loudest thing on the page.
+  var POPOVER_DELAY_MS = 150;
+  var POPOVER_GAP = 8;
+
+  // The keycaps, per platform, matching the family gestures.js actually accepts
+  // (isPrimaryModifier: Cmd on macOS, Ctrl everywhere else). One place, so the
+  // tooltip cannot promise a key the table does not take.
+  function isMacPlatform() {
+    var nav = typeof navigator !== "undefined" ? navigator : null;
+    if (!nav) return false;
+    var uaData = nav.userAgentData;
+    var name = (uaData && uaData.platform) || nav.platform || nav.userAgent || "";
+    return /mac/i.test(String(name));
+  }
+
+  var IS_MAC = isMacPlatform();
+  var PRIMARY_CAP = IS_MAC ? "⌘" : "Ctrl";
+  var SHIFT_CAP = IS_MAC ? "⇧" : "Shift";
+  var POPOVER_KEYS = {
+    comment: [PRIMARY_CAP, SHIFT_CAP, "C"],
+    edit: [PRIMARY_CAP, SHIFT_CAP, "E"]
+  };
+
+  // The two offers, in the order a reviewer wants them: commenting is the common
+  // act, editing is the deliberate one.
+  var POPOVER_ACTIONS = [
+    { action: "comment", label: "Comment", keys: POPOVER_KEYS.comment, aria: "Comment on this selection" },
+    { action: "edit", label: "Edit", keys: POPOVER_KEYS.edit, aria: "Edit the block holding this selection" }
+  ];
+
+  // The pill's look. The rail's register, restated in hex because the rail's CSS
+  // variables live in the RAIL's shadow root and this stylesheet goes into the
+  // surface root. The keycap rule is the rail's keycap rule, value for value, so
+  // the two read as one product.
+  var PILL_STYLE = [
+    "." + PILL_CLASS + " {",
+    "  position: fixed;",
+    "  display: none;",
+    "  align-items: center;",
+    "  gap: 2px;",
+    "  padding: 3px;",
+    "  border-radius: 999px;",
+    "  border: 1px solid rgba(17, 17, 17, 0.12);",
+    "  background: #ffffff;",
+    "  box-shadow: 0 6px 20px rgba(17, 17, 17, 0.16), 0 1px 2px rgba(17, 17, 17, 0.08);",
+    "  font: 12.5px/1 ui-sans-serif, system-ui, -apple-system, sans-serif;",
+    "  color: #15171c;",
+    "  pointer-events: auto;",
+    "  z-index: 3;",
+    "}",
+    "." + PILL_CLASS + "[data-lahe-shown='true'] { display: flex; }",
+    "." + PILL_BTN_CLASS + " {",
+    "  border: 0;",
+    "  background: transparent;",
+    "  border-radius: 999px;",
+    "  padding: 6px 12px;",
+    "  font: inherit;",
+    "  font-weight: 550;",
+    "  color: inherit;",
+    "  cursor: pointer;",
+    "  white-space: nowrap;",
+    "}",
+    "." + PILL_BTN_CLASS + ":hover { background: rgba(60, 86, 165, 0.10); color: #2c3f7d; }",
+    "." + PILL_BTN_CLASS + ":focus-visible { outline: 2px solid #3c56a5; outline-offset: -1px; }",
+    ".lahe-sel-sep { width: 1px; height: 15px; background: rgba(17, 17, 17, 0.12); flex: none; }",
+    // The tooltip. Never over the passage: it goes on the far side of the pill
+    // from the selection, which is what the placement attribute decides.
+    "." + PILL_TIP_CLASS + " {",
+    "  position: absolute;",
+    "  display: none;",
+    "  align-items: center;",
+    "  gap: 3px;",
+    "  padding: 5px 7px;",
+    "  border-radius: 8px;",
+    "  border: 1px solid rgba(17, 17, 17, 0.12);",
+    "  background: #ffffff;",
+    "  box-shadow: 0 4px 14px rgba(17, 17, 17, 0.14);",
+    "  transform: translateX(-50%);",
+    "  white-space: nowrap;",
+    "  pointer-events: none;",
+    "}",
+    "." + PILL_TIP_CLASS + "[data-lahe-shown='true'] { display: flex; }",
+    "." + PILL_CLASS + "[data-lahe-placement='above'] ." + PILL_TIP_CLASS + " { bottom: calc(100% + 6px); }",
+    "." + PILL_CLASS + "[data-lahe-placement='below'] ." + PILL_TIP_CLASS + " { top: calc(100% + 6px); }",
+    // The rail's keycap, value for value.
+    ".lahe-sel-cap {",
+    "  font-family: inherit;",
+    "  font-size: 11px;",
+    "  font-weight: 600;",
+    "  color: #15171c;",
+    "  background: #eef0f4;",
+    "  border: 1px solid #e2e5eb;",
+    "  border-bottom-width: 2px;",
+    "  border-radius: 5px;",
+    "  padding: 1px 5px;",
+    "  letter-spacing: 0.01em;",
+    "}",
+    ":host([data-lahe-scheme='dark']) ." + PILL_CLASS + " { background: #1c2028; color: #e9ebf0;",
+    "  border-color: rgba(255,255,255,0.16);",
+    "  box-shadow: 0 1px 2px rgba(0,0,0,.4), 0 16px 40px rgba(0,0,0,.45); }",
+    ":host([data-lahe-scheme='dark']) ." + PILL_BTN_CLASS + ":hover { background: rgba(147, 167, 234, 0.18);",
+    "  color: #b7c4f2; }",
+    ":host([data-lahe-scheme='dark']) .lahe-sel-sep { background: rgba(255,255,255,0.16); }",
+    ":host([data-lahe-scheme='dark']) ." + PILL_TIP_CLASS + " { background: #1c2028;",
+    "  border-color: rgba(255,255,255,0.16); }",
+    ":host([data-lahe-scheme='dark']) .lahe-sel-cap { background: #0f1216; border-color: #2c313b;",
+    "  color: #e9ebf0; }"
+  ].join("\n");
 
   // The box's own look. Quiet: a card the reviewer can ignore while they read,
   // and unmistakably not part of the page. It lives in the shadow root, so
@@ -12480,7 +12618,8 @@
     "  background: rgba(147, 167, 234, 0.12); }",
     ":host([data-lahe-scheme='dark']) .lahe-comment-quote { color: rgba(242,242,242,0.66);",
     "  border-left-color: rgba(147, 167, 234, 0.8); }",
-    ":host([data-lahe-scheme='dark']) .lahe-comment-foot { color: rgba(242,242,242,0.55); }"
+    ":host([data-lahe-scheme='dark']) .lahe-comment-foot { color: rgba(242,242,242,0.55); }",
+    PILL_STYLE
   ].join("\n");
 
   function createComments(options) {
@@ -12511,6 +12650,14 @@
     var RAIL_ALLOWANCE = 340;
     var outlineNode = null;
     var surfaceRoot = null;
+    // The selection popover. `pill` holds the nodes; the rest is what it is
+    // showing right now, so selectionPopover() can answer without measuring
+    // anything the caller cannot see.
+    var pill = null;
+    var pillTimer = null;
+    var pillShown = false;
+    var pillPlacement = "above";
+    var pillTipFor = null;
 
     function requireReview() {
       if (!reviewId) throw new Error("comments: a reviewId is required before a comment can be stored");
@@ -12636,6 +12783,9 @@
       // load. It mints on its first keystroke instead, still synchronously, and
       // still before anything else happens.
       if (!src.deferred) persist(item, "opened");
+
+      // A box is open, so the offer to open one is stale.
+      hidePopover();
 
       var handle = buildHandle(item, src);
       open[item[record.FIELD.ID]] = handle;
@@ -12991,6 +13141,7 @@
     // Esc cancels (R17).
     function enterPickMode() {
       if (!doc) return pickState();
+      hidePopover();
       pick.active = true;
       pick.element = null;
       showOutline(null);
@@ -13134,6 +13285,287 @@
     }
 
     // ------------------------------------------------------------------------
+    // The selection popover: the pill the reviewer gets for free
+    // ------------------------------------------------------------------------
+
+    function ensurePill() {
+      if (!doc) return null;
+      if (pill && pill.node && pill.node.isConnected) return pill;
+      var host = surface();
+      if (!host) return null;
+
+      var node = doc.createElement("div");
+      node.className = PILL_CLASS;
+      node.setAttribute("role", "toolbar");
+      node.setAttribute("aria-label", "What to do with this selection");
+      node.setAttribute("data-lahe-placement", "above");
+      markers.markChrome(node);
+
+      var tip = doc.createElement("span");
+      tip.className = PILL_TIP_CLASS;
+      markers.markChrome(tip);
+
+      var buttons = [];
+      POPOVER_ACTIONS.forEach(function (spec, index) {
+        if (index > 0) {
+          var sep = doc.createElement("span");
+          sep.className = "lahe-sel-sep";
+          markers.markChrome(sep);
+          node.appendChild(sep);
+        }
+        var button = doc.createElement("button");
+        button.type = "button";
+        button.className = PILL_BTN_CLASS;
+        button.setAttribute("data-lahe-action", spec.action);
+        // The keystroke is on the button for a screen reader too, not only in
+        // the hover tooltip a keyboard user never sees.
+        button.setAttribute("aria-label", spec.aria + " (" + spec.keys.join("") + ")");
+        button.textContent = spec.label;
+        markers.markChrome(button);
+
+        // THE ONE EVENT THIS TAKES, AND WHY. A mousedown on a button collapses
+        // the selection, and both gestures below need the selection that is
+        // still on screen. preventDefault here is what makes the button work at
+        // all; without it the reviewer clicks Comment and comments on nothing.
+        button.addEventListener("mousedown", function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+        });
+        button.addEventListener("click", function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          runPopoverAction(spec.action);
+        });
+        button.addEventListener("mouseenter", function () {
+          showTip(spec);
+        });
+        button.addEventListener("mouseleave", function () {
+          hideTip();
+        });
+        button.addEventListener("focus", function () {
+          showTip(spec);
+        });
+        button.addEventListener("blur", function () {
+          hideTip();
+        });
+
+        node.appendChild(button);
+        buttons.push({ spec: spec, node: button });
+      });
+
+      node.appendChild(tip);
+      host.appendChild(node);
+      pill = { node: node, tip: tip, buttons: buttons };
+      return pill;
+    }
+
+    function showTip(spec) {
+      if (!pill || !pillShown) return null;
+      pillTipFor = spec.action;
+      pill.tip.textContent = "";
+      spec.keys.forEach(function (key) {
+        var cap = doc.createElement("kbd");
+        cap.className = "lahe-sel-cap";
+        cap.textContent = key;
+        pill.tip.appendChild(cap);
+      });
+      // Centred on the button it belongs to, in the pill's own coordinates.
+      var button = pill.buttons.filter(function (b) {
+        return b.spec.action === spec.action;
+      })[0];
+      if (button) {
+        var pillRect = pill.node.getBoundingClientRect();
+        var btnRect = button.node.getBoundingClientRect();
+        pill.tip.style.left = Math.round(btnRect.left + btnRect.width / 2 - pillRect.left) + "px";
+      }
+      pill.tip.setAttribute("data-lahe-shown", "true");
+      return pill.tip;
+    }
+
+    function hideTip() {
+      pillTipFor = null;
+      if (pill && pill.tip) pill.tip.setAttribute("data-lahe-shown", "false");
+      return null;
+    }
+
+    /**
+     * The pill's two buttons, each running the gesture it names.
+     *
+     * Comment is this file's own selection path, the one Cmd-Shift-C takes.
+     * Edit belongs to the editing surface, and this file does not hold a
+     * reference to it, so the button presses the KEY: a real Cmd-Shift-E keydown
+     * on the document, decided by the same pure table and handled by the same
+     * one handler. There is no second way into edit state to keep in step.
+     */
+    function runPopoverAction(action) {
+      if (action === "comment") {
+        hidePopover();
+        return commentOnSelection({});
+      }
+      if (action === "edit") {
+        var sent = pressEditGesture();
+        hidePopover();
+        return sent;
+      }
+      return null;
+    }
+
+    function pressEditGesture() {
+      if (!doc || !win || typeof win.KeyboardEvent !== "function") return false;
+      var event = new win.KeyboardEvent("keydown", {
+        key: "e",
+        code: "KeyE",
+        metaKey: IS_MAC,
+        ctrlKey: !IS_MAC,
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+        composed: true
+      });
+      doc.dispatchEvent(event);
+      return true;
+    }
+
+    // Everything that must NOT get a pill, in one place, so the read-only,
+    // editing and library-surface cases cannot drift apart.
+    function selectionWorthOffering() {
+      if (!doc || !win || !win.getSelection) return null;
+      if (pick.active) return null;
+      if (focusedBox()) return null;
+      var selection = win.getSelection();
+      if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return null;
+      if (!String(selection.toString()).trim()) return null;
+      var range = selection.getRangeAt(0);
+      var node = range.commonAncestorContainer;
+      var element = node && node.nodeType === 1 ? node : node && node.parentElement;
+      if (!element) return null;
+      // The library's own UI is not the reviewed page.
+      if (markers.isInsideOverlay(element)) return null;
+      // A block in edit state already has the reviewer inside it; offering to
+      // start editing what they are editing is noise.
+      if (typeof element.closest === "function" && element.closest("[contenteditable='true']")) return null;
+      return range;
+    }
+
+    function evaluatePopover() {
+      pillTimer = null;
+      var range = selectionWorthOffering();
+      if (!range) return hidePopover();
+      return showPopover(range);
+    }
+
+    function schedulePopover() {
+      if (!win) return null;
+      if (pillTimer) win.clearTimeout(pillTimer);
+      // A selection that is gone goes NOW. Waiting out the debounce would leave
+      // the pill sitting over a page the reviewer has already moved on from.
+      if (!selectionWorthOffering()) return hidePopover();
+      pillTimer = win.setTimeout(evaluatePopover, POPOVER_DELAY_MS);
+      return pillTimer;
+    }
+
+    function showPopover(range) {
+      var made = ensurePill();
+      if (!made) return null;
+      made.node.setAttribute("data-lahe-shown", "true");
+      pillShown = true;
+      hideTip();
+      positionPill(range);
+      return made.node;
+    }
+
+    function hidePopover() {
+      if (win && pillTimer) {
+        win.clearTimeout(pillTimer);
+        pillTimer = null;
+      }
+      pillShown = false;
+      hideTip();
+      if (pill && pill.node) pill.node.setAttribute("data-lahe-shown", "false");
+      return null;
+    }
+
+    /**
+     * Places the pill at the END of the selection, above it when there is room
+     * and below it when there is not.
+     *
+     * The end rather than the middle, because that is where the reviewer's
+     * pointer finished; above rather than below, because below is where the next
+     * line of the page is and the pill would sit on the words they are about to
+     * read.
+     */
+    function positionPill(range) {
+      if (!pill || !win) return null;
+      var rects = typeof range.getClientRects === "function" ? range.getClientRects() : null;
+      var end = rects && rects.length ? rects[rects.length - 1] : range.getBoundingClientRect();
+      var size = pill.node.getBoundingClientRect();
+      var vw = win.innerWidth || 1024;
+      var vh = win.innerHeight || 768;
+
+      var placement = "above";
+      var top = end.top - size.height - POPOVER_GAP;
+      if (top < POPOVER_GAP) {
+        placement = "below";
+        top = end.bottom + POPOVER_GAP;
+      }
+      if (top > vh - size.height - POPOVER_GAP) top = Math.max(POPOVER_GAP, vh - size.height - POPOVER_GAP);
+
+      var left = end.right - size.width / 2;
+      // Clear of the rail, the same allowance the comment box uses, so the pill
+      // is never drawn underneath it.
+      var railLimit = vw - RAIL_ALLOWANCE - size.width - POPOVER_GAP;
+      var rightLimit = railLimit > POPOVER_GAP ? railLimit : vw - size.width - POPOVER_GAP;
+      if (left > rightLimit) left = rightLimit;
+      if (left < POPOVER_GAP) left = POPOVER_GAP;
+
+      pillPlacement = placement;
+      pill.node.setAttribute("data-lahe-placement", placement);
+      pill.node.style.top = Math.round(top) + "px";
+      pill.node.style.left = Math.round(left) + "px";
+      return pill.node;
+    }
+
+    /**
+     * What the pill is showing, for a caller that cannot reach into the closed
+     * root: the specs' way in, and the same geometry a real mouse click uses.
+     */
+    function selectionPopover() {
+      var node = pill && pill.node ? pill.node : null;
+      var visible = !!(pillShown && node && node.isConnected);
+      var rect = visible ? node.getBoundingClientRect() : { x: 0, y: 0, width: 0, height: 0 };
+      var tipRect = visible && pillTipFor ? pill.tip.getBoundingClientRect() : null;
+      return {
+        visible: visible,
+        placement: pillPlacement,
+        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        buttons: !visible
+          ? []
+          : pill.buttons.map(function (b) {
+              var r = b.node.getBoundingClientRect();
+              return {
+                action: b.spec.action,
+                label: b.spec.label,
+                keys: b.spec.keys.slice(),
+                rect: { x: r.x, y: r.y, width: r.width, height: r.height }
+              };
+            }),
+        tooltip: {
+          visible: !!(visible && pillTipFor),
+          for: visible ? pillTipFor : null,
+          keys: visible && pillTipFor ? keysFor(pillTipFor) : null,
+          text: tipRect ? String(pill.tip.textContent) : null
+        }
+      };
+    }
+
+    function keysFor(action) {
+      var spec = POPOVER_ACTIONS.filter(function (s) {
+        return s.action === action;
+      })[0];
+      return spec ? spec.keys.slice() : null;
+    }
+
+    // ------------------------------------------------------------------------
     // The reviewer's own edits to their own comments
     // ------------------------------------------------------------------------
 
@@ -13256,6 +13688,23 @@
       listenerHandles.push(listeners.on(target, "keydown", onKeydown, true, LISTENER_GROUP));
       listenerHandles.push(listeners.on(target, "mousemove", onMouseMove, true, LISTENER_GROUP));
       listenerHandles.push(listeners.on(target, "click", onClick, true, LISTENER_GROUP));
+      // The selection popover rides in this group deliberately: a read-only
+      // window unbinds the group, and the pill has to go with the gestures it
+      // offers. A remount re-registers the group, and the pill comes back with
+      // the reviewer's next selection, which is the whole of its state.
+      listenerHandles.push(listeners.on(target, "selectionchange", onSelectionChange, false, LISTENER_GROUP));
+      if (win) {
+        // Scrolling moves the passage out from under the pill. Hiding is honest
+        // and cheap; a pill that chases the page during a scroll is neither.
+        listenerHandles.push(listeners.on(win, "scroll", onScroll, true, LISTENER_GROUP));
+      }
+      // RE-DERIVED FROM STATE, NOT LEFT TO THE NEXT EVENT. A remount unbinds and
+      // rebinds this group, and the reviewer's selection survives that: on the
+      // app fixture's morphing page the pill appeared, the next morph took it
+      // away, and it never came back, because selectionchange had already
+      // happened and was not going to happen again. The selection IS the state;
+      // bind re-reads it.
+      schedulePopover();
       return { bound: true, listeners: listenerHandles.length };
     }
 
@@ -13264,6 +13713,7 @@
         handle.off();
       });
       listenerHandles = [];
+      hidePopover();
     }
 
     function describe(event) {
@@ -13281,10 +13731,22 @@
       };
     }
 
+    function onSelectionChange() {
+      schedulePopover();
+    }
+
+    function onScroll() {
+      hidePopover();
+    }
+
     function onKeydown(event) {
       // The library's own UI handles its own keys; the box's handler already
       // ran by the time this sees it.
       if (markers.isInsideOverlay(event.target)) return;
+      // Esc dismisses the pill and keeps the selection. It is not a CANCEL in
+      // the table's sense (nothing of the library's is open), so it is decided
+      // here and the key still reaches the page.
+      if (event.key === "Escape") hidePopover();
       var got = gestures.gestureFor(describe(event));
       if (got.gesture === gestures.GESTURE.COMMENT_ON_SELECTION) {
         if (got.preventDefault) event.preventDefault();
@@ -13330,12 +13792,15 @@
       if (highlights) highlights.teardown();
       surfaceRoot = null;
       outlineNode = null;
+      pill = null;
     }
 
     return {
       BOX_CLASS: BOX_CLASS,
       INPUT_CLASS: INPUT_CLASS,
       OUTLINE_CLASS: OUTLINE_CLASS,
+      PILL_CLASS: PILL_CLASS,
+      POPOVER_KEYS: POPOVER_KEYS,
       HINT_READY: HINT_READY,
       setReview: setReview,
       setPage: setPage,
@@ -13357,6 +13822,8 @@
       enterPickMode: enterPickMode,
       exitPickMode: exitPickMode,
       pickMode: pickState,
+      selectionPopover: selectionPopover,
+      hideSelectionPopover: hidePopover,
       highlights: highlights,
       bind: bind,
       unbind: unbind,
@@ -13368,6 +13835,12 @@
     BOX_CLASS: BOX_CLASS,
     INPUT_CLASS: INPUT_CLASS,
     OUTLINE_CLASS: OUTLINE_CLASS,
+    PILL_CLASS: PILL_CLASS,
+    PILL_BTN_CLASS: PILL_BTN_CLASS,
+    PILL_TIP_CLASS: PILL_TIP_CLASS,
+    POPOVER_KEYS: POPOVER_KEYS,
+    POPOVER_ACTIONS: POPOVER_ACTIONS,
+    POPOVER_DELAY_MS: POPOVER_DELAY_MS,
     HINT_READY: HINT_READY,
     BOX_STYLE: BOX_STYLE,
     createComments: createComments
@@ -16553,7 +17026,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+ec03bb57019f";
+  var VERSION = "0.0.0+61ec3adccffa";
 
   var protocol = ns.protocol;
   var record = ns.record;
