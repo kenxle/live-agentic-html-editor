@@ -81,7 +81,36 @@ test("the kinds are exactly D4's closed list", () => {
 
 test("the region reference carries its lost-anchor state as a named field (R20)", () => {
   const item = anItem();
-  assert.deepEqual(Object.keys(item.region).sort(), ["label", "lost", "ref"]);
+  assert.deepEqual(Object.keys(item.region).sort(), ["accepted_page_texts", "label", "lost", "ref"]);
+});
+
+// The accepted page states: what "Keep mine" remembers so the reviewer's
+// decision outlives the next repaint. See record.js.
+test("an accepted page state is remembered, add-only, deduped and bounded", () => {
+  const item = anItem();
+  assert.deepEqual(record.acceptedPageTexts(item), [], "a new record has accepted nothing");
+
+  record.acceptPageText(item, "the page said this");
+  record.acceptPageText(item, "the page said this");
+  assert.deepEqual(item.region.accepted_page_texts, ["the page said this"], "the same state is not doubled");
+
+  record.acceptPageText(item, "and then it said this");
+  assert.deepEqual(item.region.accepted_page_texts, ["the page said this", "and then it said this"]);
+
+  // The bound. A page whose source genuinely churns would otherwise hand the
+  // record a new state on every pass, forever.
+  for (let i = 0; i < record.ACCEPTED_PAGE_TEXTS_MAX + 5; i += 1) {
+    record.acceptPageText(item, "churn " + i);
+  }
+  assert.equal(item.region.accepted_page_texts.length, record.ACCEPTED_PAGE_TEXTS_MAX);
+  assert.equal(
+    item.region.accepted_page_texts[record.ACCEPTED_PAGE_TEXTS_MAX - 1],
+    "churn " + (record.ACCEPTED_PAGE_TEXTS_MAX + 4),
+    "the newest states are the ones kept"
+  );
+
+  // The diff base is never touched by any of this (R29).
+  assert.equal(item.before, anItem().before);
 });
 
 test("ids are unique and minted in the browser", () => {
