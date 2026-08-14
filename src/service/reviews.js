@@ -59,6 +59,28 @@ var TOKEN_BYTES = 32;
 var HEARTBEAT_SECONDS = 10;
 var STALE_AFTER_MS = 30 * 1000;
 
+// A REVIEW MINTED AFTER THIS HELPER STARTED IS ON DISK BUT NOT IN MEMORY, and
+// there is no create-review route to tell the helper about it (on purpose). The
+// helper therefore looks on disk once for a review it is asked about and does
+// not hold, which is what lets `add` stop bouncing a running helper that may be
+// holding somebody else's live review.
+//
+// The look is triggered by a request that has NOT proved anything yet: the token
+// check happens after it, because an unknown review has no token to check
+// against. So it is bounded on both axes rather than trusted:
+//
+//   - one look per unknown id per RESCAN_INTERVAL_MS, so hammering one id costs
+//     one readdir every few seconds and nothing in between,
+//   - at most RESCAN_TRACKED_MAX ids remembered, oldest evicted, so hammering
+//     invented ids cannot grow the map. An evicted id can look again, which is
+//     the ceiling: a flood of distinct ids costs one small stat per interval per
+//     tracked id, never a walk of the whole directory.
+//
+// The path rules are state_dir's, unchanged: a safe id, resolved inside the
+// state root, no symlink at any level, and the directory must be owner-only.
+var RESCAN_INTERVAL_MS = 3000;
+var RESCAN_TRACKED_MAX = 64;
+
 function mintToken() {
   return crypto.randomBytes(TOKEN_BYTES).toString("hex");
 }
@@ -233,6 +255,104 @@ function createReviews(options) {
     return Object.prototype.hasOwnProperty.call(reviews, reviewId) ? reviews[reviewId] : null;
   }
 
+  // ---------------------------------------------------------------------------
+  // Learning a review that was minted after this helper started
+  // ---------------------------------------------------------------------------
+
+  // id -> the clock reading of the last look. Insertion-ordered, so the oldest
+  // entry is the first key, which is what the eviction below takes.
+  var rescanAttempts = new Map();
+
+  /**
+   * Is this directory owner-only?
+   *
+   * The state root and every review folder under it are created 0700 by
+   * state_dir.ensureDir. A folder under the root that is readable by anyone else
+   * was not put there the way this helper puts things there, so it is not read.
+   * POSIX only: Windows does not carry these bits and reports whatever it likes.
+   */
+  function ownerOnly(target) {
+    if (process.platform === "win32") return true;
+    try {
+      return (fs.statSync(target).mode & 0o077) === 0;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  /**
+   * Read ONE review off disk, by id, or return null.
+   *
+   * Deliberately narrower than loadFromDisk: it reads meta.json and nothing
+   * else, and it does NOT run the log recovery. Recovery is a startup act with
+   * loud output; an unauthenticated request must not be able to drive it.
+   */
+  function loadOne(reviewId) {
+    var metaPath;
+    var folder;
+    try {
+      folder = stateDir.reviewDir(dir, reviewId);
+      metaPath = stateDir.metaPath(dir, reviewId);
+    } catch (err) {
+      // A path rule refused it: an unsafe id, an escape, or a symlink.
+      log.helperLog("not learning review " + JSON.stringify(reviewId) + ": " + err.message);
+      return null;
+    }
+    if (!fs.existsSync(metaPath)) return null;
+    if (!ownerOnly(folder)) {
+      log.helperLog("not learning review " + JSON.stringify(reviewId) + ": its folder is not owner-only");
+      return null;
+    }
+    var parsed;
+    try {
+      parsed = JSON.parse(fs.readFileSync(metaPath, "utf8"));
+    } catch (err) {
+      log.helperLog("not learning review " + JSON.stringify(reviewId) + ": its " + stateDir.FILES.meta + " is unreadable (" + err.message + ")");
+      return null;
+    }
+    if (!parsed || typeof parsed.token !== "string" || !parsed.token) {
+      log.helperLog("not learning review " + JSON.stringify(reviewId) + ": its " + stateDir.FILES.meta + " carries no token");
+      return null;
+    }
+    reviews[reviewId] = {
+      id: reviewId,
+      token: parsed.token,
+      origins: Array.isArray(parsed.origins) ? parsed.origins.slice() : [],
+      created_at: parsed.created_at || new Date().toISOString()
+    };
+    log.helperLog("review " + reviewId + " learned from disk without a restart");
+    // The readiness file is how everything else on the machine finds a review's
+    // token, `lahe wait` included, so it is rewritten the moment the set of
+    // reviews changes. Skipping this would leave service.json quietly wrong.
+    if (lastReadyDetails) writeReadyFile(lastReadyDetails);
+    return reviews[reviewId];
+  }
+
+  /**
+   * The review this id names, looking on disk once if it is not in memory.
+   *
+   * Free when the review is already held, which is every ordinary request.
+   *
+   * @param {string} reviewId
+   * @returns {object|null} the review, or null if there is nothing to learn
+   */
+  function ensureKnown(reviewId) {
+    if (typeof reviewId !== "string" || !reviewId) return null;
+    var held = get(reviewId);
+    if (held) return held;
+    if (!protocol.isSafeId(reviewId)) return null;
+
+    var at = clock();
+    var last = rescanAttempts.get(reviewId);
+    if (last !== undefined && at - last < RESCAN_INTERVAL_MS) return null;
+    if (rescanAttempts.size >= RESCAN_TRACKED_MAX) {
+      var oldest = rescanAttempts.keys().next();
+      if (!oldest.done) rescanAttempts.delete(oldest.value);
+    }
+    rescanAttempts.set(reviewId, at);
+    return loadOne(reviewId);
+  }
+
   function list() {
     return Object.keys(reviews).sort();
   }
@@ -337,12 +457,18 @@ function createReviews(options) {
    * written AFTER the listener is bound, never before: a readiness file that
    * arrives before the socket is a lie a test will race.
    */
+  // What the last writeReadyFile was told: the port and the start instant. Held
+  // so the file can be rewritten when the set of reviews changes without the
+  // caller having to hand those two facts over again.
+  var lastReadyDetails = null;
+
   function writeReadyFile(details) {
     var d = details || {};
+    lastReadyDetails = { port: d.port, started_at: d.started_at || new Date().toISOString() };
     var payload = {
-      port: d.port,
+      port: lastReadyDetails.port,
       pid: process.pid,
-      started_at: d.started_at || new Date().toISOString(),
+      started_at: lastReadyDetails.started_at,
       api: protocol.API_VERSION,
       reviews: {}
     };
@@ -488,9 +614,12 @@ function createReviews(options) {
   return {
     HEARTBEAT_SECONDS: HEARTBEAT_SECONDS,
     STALE_AFTER_MS: STALE_AFTER_MS,
+    RESCAN_INTERVAL_MS: RESCAN_INTERVAL_MS,
+    RESCAN_TRACKED_MAX: RESCAN_TRACKED_MAX,
     loadFromDisk: loadFromDisk,
     create: create,
     get: get,
+    ensureKnown: ensureKnown,
     list: list,
     registerOrigin: registerOrigin,
     config: config,
@@ -505,6 +634,8 @@ module.exports = {
   TOKEN_BYTES: TOKEN_BYTES,
   HEARTBEAT_SECONDS: HEARTBEAT_SECONDS,
   STALE_AFTER_MS: STALE_AFTER_MS,
+  RESCAN_INTERVAL_MS: RESCAN_INTERVAL_MS,
+  RESCAN_TRACKED_MAX: RESCAN_TRACKED_MAX,
   mintToken: mintToken,
   mintReviewId: mintReviewId,
   createReviews: createReviews

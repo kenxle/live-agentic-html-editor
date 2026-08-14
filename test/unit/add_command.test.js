@@ -419,6 +419,7 @@ test("a second review on a running helper works without the user restarting anyt
     const one = first.add();
     assert.equal(one.code, 0, one.stdout + one.stderr);
     const firstReview = reviewIdIn(first.read());
+    const pidBefore = JSON.parse(fs.readFileSync(path.join(first.stateDir, "service.json"), "utf8")).pid;
 
     const two = runAdd([secondPage, "--port", String(first.port), "--state-dir", first.stateDir]);
     assert.equal(two.code, 0, two.stdout + two.stderr);
@@ -429,7 +430,9 @@ test("a second review on a running helper works without the user restarting anyt
     const ready = JSON.parse(fs.readFileSync(path.join(first.stateDir, "service.json"), "utf8"));
     assert.ok(ready.reviews[firstReview], "the running helper still holds the first review");
     assert.ok(ready.reviews[secondReview], "and now holds the second one too");
-    assert.match(two.stdout, /restarted/i, "and add says plainly that it restarted the helper");
+    assert.equal(ready.pid, pidBefore, "and it is the SAME helper process: nothing was bounced");
+    assert.doesNotMatch(two.stdout, /restarted/i, "so add does not claim it restarted anything");
+    assert.match(two.stdout, /without a restart/i, "and says what really happened");
 
     const up = await service.probeHealth("127.0.0.1", first.port);
     assert.ok(up && up.ok, "the helper is answering when add returns");

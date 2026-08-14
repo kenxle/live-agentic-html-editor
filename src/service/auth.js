@@ -50,6 +50,16 @@ function createAuth(options) {
    */
   function check(request) {
     var req = request || {};
+
+    // A review this helper does not hold may still be one `add` minted on disk a
+    // moment ago, after the helper started. Look for it once before the check
+    // block refuses it, so a second review does not cost a restart of a helper
+    // that may be holding someone else's live review. The look is free when the
+    // review is already held, and reviews.js bounds it for every other case.
+    // Nothing is widened by it: the token and origin checks below are unchanged
+    // and still decide the request.
+    reviews.ensureKnown(req.review);
+
     var result = protocol.checkRequest(
       { routeName: req.routeName, headers: req.headers, review: req.review },
       reviews.config()

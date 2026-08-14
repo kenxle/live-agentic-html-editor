@@ -22,11 +22,14 @@
 //     replaces the line.
 //  3. The helper is made to know about it. `serve` is idempotent, so `add`
 //     starts one when none is answering, which is what makes the install one
-//     command (AC6). A helper that IS answering but was started before this
-//     review existed cannot learn about it over the wire (there is no
-//     create-review route, on purpose), so it is stopped and started again. That
-//     is safe and it is said out loud: the log is append-only, tokens persist
-//     across restarts, and the library re-posts anything unacknowledged.
+//     command (AC6). A helper that IS answering and was started before this
+//     review existed learns about it FROM DISK: there is no create-review route
+//     (on purpose), so `add` writes the review and then asks the helper for it,
+//     and the helper looks on disk once for a review it does not hold. No
+//     restart, because a restart bounces a helper that may be holding somebody
+//     else's live review. If that ask does not come back, the restart is the
+//     fallback, and the reason is printed: the log is append-only, tokens
+//     persist across restarts, and the library re-posts anything unacknowledged.
 //  4. Only then is the script line written, so a page loaded the instant after
 //     `add` prints has a helper that will accept it.
 //
@@ -476,6 +479,34 @@ async function startHelper(host, port, dir) {
  * helper. This is best effort, not a boundary: a same-user process that can read
  * service.json can still echo the value, which is the stated residual in D11.
  */
+/**
+ * Ask the running helper for a review that was just written to disk.
+ *
+ * This is the whole no-restart path. There is no create-review route (on
+ * purpose), so the helper learns a new review by finding it on disk when it is
+ * asked about one it does not hold. A 200 here is that having happened: the
+ * helper answered for the review, with this review's token, which it could only
+ * do by reading the meta.json `add` wrote a moment ago. Anything else means it
+ * did not learn the review, and the caller falls back to a restart and says so.
+ *
+ * A command-line process has no origin of its own, so it presents one this
+ * review just registered, which is what `lahe wait` does for the same reason.
+ */
+async function helperLearnedReview(host, port, review, origins) {
+  var target =
+    "http://" + host + ":" + port + protocol.route("review.read").path + "?review=" + encodeURIComponent(review.id);
+  var headers = {};
+  headers[protocol.HEADER.CLIENT] = protocol.CLIENT_CLI;
+  headers[protocol.HEADER.TOKEN] = review.token;
+  if (origins.length > 0) headers[protocol.HEADER.ORIGIN] = origins[0];
+  try {
+    var res = await fetch(target, { method: "GET", headers: headers });
+    return res.status === 200;
+  } catch (err) {
+    return false;
+  }
+}
+
 async function confirmOurHelper(host, port, dir, what) {
   return pollFor(
     async function () {
@@ -613,6 +644,8 @@ async function run(argv) {
   var review = null;
   var restarted = false;
   var started = false;
+  var learned = false;
+  var restartReason = null;
 
   // The one case where nothing has to be written and nothing has to be
   // restarted: the page already carries a live review, the helper is up, and it
@@ -627,18 +660,32 @@ async function run(argv) {
   if (nothingToWrite) {
     review = { id: reuseId, token: ready.reviews[reuseId].token };
   } else {
-    if (alive) {
-      if (!ready) {
-        process.stderr.write(
-          "lahe add: something is answering on " +
-            helperOrigin +
-            " but " +
-            stateDirModule.readyPath(dir) +
-            " is not there, so it is not this state directory's helper.\n" +
-            "Free the port, or run add with --port <n> and put that port on the script tag.\n"
-        );
-        return EXIT.FAILED;
-      }
+    if (alive && !ready) {
+      process.stderr.write(
+        "lahe add: something is answering on " +
+          helperOrigin +
+          " but " +
+          stateDirModule.readyPath(dir) +
+          " is not there, so it is not this state directory's helper.\n" +
+          "Free the port, or run add with --port <n> and put that port on the script tag.\n"
+      );
+      return EXIT.FAILED;
+    }
+
+    // CAN THE RUNNING HELPER JUST LEARN THIS REVIEW? It can, when the review
+    // this run writes is one it does not already hold: nothing else is touching
+    // that review's events.jsonl, so writing it beside a running helper cannot
+    // collide on a seq, and the helper finds it on disk the first time it is
+    // asked about it. That is the ordinary case (a second page, or `--new`), and
+    // it is exactly the case that used to bounce a helper which may have been
+    // holding somebody else's live review.
+    //
+    // A review the helper DOES hold is the other case: it is appending to that
+    // review, so the write goes through the old path, with the helper stopped.
+    var helperHoldsTarget = !!(alive && reuseId && ready.reviews && ready.reviews[reuseId]);
+    var tryWithoutRestart = alive && !helperHoldsTarget;
+
+    if (alive && !tryWithoutRestart) {
       try {
         await stopHelper(Object.assign({ dir: dir }, ready), host, port, alive);
       } catch (err) {
@@ -671,22 +718,46 @@ async function run(argv) {
       ]);
     }
 
-    try {
-      await startHelper(host, port, dir);
-      // Finding 21: a plain probeHealth would accept a squatter on the freed
-      // port. Confirm the port holds the helper we just started before the
-      // token is ever written onto the page.
-      await confirmOurHelper(
-        host,
-        port,
-        dir,
-        "the server on " + host + ":" + port + " to identify itself as the helper this run started"
-      );
-    } catch (err) {
-      process.stderr.write("lahe add: " + err.message + "\n");
-      return EXIT.FAILED;
+    if (tryWithoutRestart) {
+      learned = await helperLearnedReview(host, port, review, origins);
+      if (!learned) {
+        // The helper is up and did not pick the review up. Restarting is the
+        // fallback, not the plan, so the reason is carried through to the
+        // output rather than a restart happening for no stated cause.
+        restartReason = "the helper that was already running did not pick this review up from disk";
+        try {
+          await stopHelper(Object.assign({ dir: dir }, ready), host, port, alive);
+          restarted = true;
+          await startHelper(host, port, dir);
+          await confirmOurHelper(
+            host,
+            port,
+            dir,
+            "the server on " + host + ":" + port + " to identify itself as the helper this run started"
+          );
+        } catch (err) {
+          process.stderr.write("lahe add: " + err.message + "\n");
+          return EXIT.FAILED;
+        }
+      }
+    } else {
+      try {
+        await startHelper(host, port, dir);
+        // Finding 21: a plain probeHealth would accept a squatter on the freed
+        // port. Confirm the port holds the helper we just started before the
+        // token is ever written onto the page.
+        await confirmOurHelper(
+          host,
+          port,
+          dir,
+          "the server on " + host + ":" + port + " to identify itself as the helper this run started"
+        );
+      } catch (err) {
+        process.stderr.write("lahe add: " + err.message + "\n");
+        return EXIT.FAILED;
+      }
+      started = !restarted;
     }
-    started = !restarted;
   }
 
   // --- the line --------------------------------------------------------------
@@ -715,7 +786,13 @@ async function run(argv) {
   say(
     "  helper    " +
       helperOrigin +
-      (started ? "  (started just now)" : restarted ? "  (restarted, so it knows this review)" : "  (already running)")
+      (started
+        ? "  (started just now)"
+        : restarted
+          ? "  (restarted, so it knows this review)"
+          : learned
+            ? "  (already running, and it picked this review up without a restart)"
+            : "  (already running)")
   );
   say("  origin    " + originNote);
   if (options.source) say("  source    " + options.source);
@@ -765,6 +842,7 @@ async function run(argv) {
 
   if (restarted) {
     say();
+    if (restartReason) say("  " + restartReason.charAt(0).toUpperCase() + restartReason.slice(1) + ", so it was started again.");
     say("  The helper was already running and was started again so it holds this review.");
     say("  Nothing was lost: the log is append-only, tokens survive a restart, and any page still");
     say("  open re-posts what it was holding as soon as it reconnects.");

@@ -279,6 +279,57 @@ test("a review's token and origins persist across a restart", () => {
   assert.equal(restarted.create({ id: REVIEW }).token, created.token);
 });
 
+test("a review minted after the helper started is learned from disk, and a bogus one still is not", () => {
+  const dir = tempDir();
+  // `add` runs in its own process, so the review it writes is written by a
+  // registry the running helper knows nothing about. That is what these two are.
+  const helperSide = reviewsModule.createReviews({ dir: dir, log: logModule.createEventLog({ dir: dir }) });
+  const addSide = reviewsModule.createReviews({ dir: dir, log: logModule.createEventLog({ dir: dir }) });
+  helperSide.writeReadyFile({ port: 7817 });
+
+  const minted = addSide.create({ id: "r-after-start", origins: ["null"] });
+  assert.equal(helperSide.get("r-after-start"), null, "the helper does not hold it: it started first");
+
+  const learned = helperSide.ensureKnown("r-after-start");
+  assert.ok(learned, "asked about it once, the helper finds it on disk");
+  assert.equal(learned.token, minted.token, "with the token it was minted with, not a new one");
+  assert.deepEqual(learned.origins, ["null"]);
+
+  // The readiness file is how `lahe wait` and anything else on the machine finds
+  // a token, so learning a review has to show up there too.
+  const ready = JSON.parse(fs.readFileSync(path.join(dir, "service.json"), "utf8"));
+  assert.equal(ready.reviews["r-after-start"].token, minted.token);
+
+  // Nothing on disk is still nothing. A rescan is a look, never a grant.
+  assert.equal(helperSide.ensureKnown("r-not-real"), null);
+  assert.equal(helperSide.get("r-not-real"), null);
+  assert.equal(helperSide.ensureKnown("../etc"), null, "and an unsafe id never becomes a path");
+});
+
+test("hammering unknown review ids does not rescan the disk every time", () => {
+  const dir = tempDir();
+  let now = 1000;
+  const helperSide = reviewsModule.createReviews({
+    dir: dir,
+    log: logModule.createEventLog({ dir: dir }),
+    now: () => now
+  });
+  const addSide = reviewsModule.createReviews({ dir: dir, log: logModule.createEventLog({ dir: dir }) });
+
+  // The look is triggered by a request that has proved nothing yet, so it is
+  // bounded. Whether it happened is observable: the review appears on disk
+  // BETWEEN two asks, and an ask that really looked would find it.
+  assert.equal(helperSide.ensureKnown("r-hammered"), null, "the first ask looked, and there was nothing");
+  addSide.create({ id: "r-hammered", origins: ["null"] });
+
+  for (let i = 0; i < 50; i += 1) {
+    assert.equal(helperSide.ensureKnown("r-hammered"), null, "no look inside the interval, however hard it is asked");
+  }
+
+  now += reviewsModule.RESCAN_INTERVAL_MS + 1;
+  assert.ok(helperSide.ensureKnown("r-hammered"), "and the interval later, one look, which finds it");
+});
+
 test("serve is idempotent: a second one reports the running helper and exits 0", async () => {
   const dir = tempDir();
   const first = await service.serve({ port: 0, stateDir: dir, reviews: [REVIEW], quiet: true });
