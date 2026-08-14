@@ -12,8 +12,9 @@
 // So nothing in this file calls review_format.renderText, and nothing calls
 // LAHE.exporter's own functions to produce the text under assertion. The text
 // comes out of the operating system's clipboard and out of a downloaded file,
-// both of them produced by a real mouse click on the real button in the rail's
-// closed shadow root. The only thing imported from the library is the slice
+// both of them produced by real mouse clicks on the real controls in the rail's
+// closed shadow root: the head's "More actions" button, then the item chosen out
+// of the menu it opens. The only thing imported from the library is the slice
 // label's wording, which is the string the test has to look FOR.
 //
 // R10 is what this protects: with nothing running there is still a way to take
@@ -111,56 +112,60 @@ async function commentOnSelection(page, selector, text) {
 // --- the real controls -------------------------------------------------------
 
 /**
- * Click the rail's own button, by its label, inside the closed shadow root.
+ * Choose one of the review's actions out of the rail's header menu.
  *
- * The rail is closed, so no selector from outside can reach it. A node the rail
- * hands out (its Active pane) answers getRootNode() with the shadow root it
- * lives in, and the button is found from there by the text a reviewer reads. It
- * is dispatched as a real click on the real element, so the whole path the
- * reviewer's click takes is the path under test.
+ * Copy and Export are not standing buttons any more: they live behind the head's
+ * "More actions" button, beside the collapse arrow (D10, revised). The rail's
+ * root is closed, so no selector from outside can reach either control; the rail
+ * reports its own geometry and the test clicks a REAL mouse at it, which is the
+ * whole of the path the reviewer's own click takes.
  */
-function clickRailButton(page, label) {
-  return page.evaluate(function (wanted) {
-    var pane = window.__lahe.rail.tabBody("active");
-    if (!pane) throw new Error("the rail is not mounted, so it has no buttons");
-    var root = pane.getRootNode();
-    var buttons = Array.prototype.slice.call(root.querySelectorAll("button"));
-    var button = buttons.filter(function (node) {
-      return (node.textContent || "").trim() === wanted;
-    })[0];
-    if (!button) {
-      throw new Error(
-        "no button labelled " + wanted + " in the rail. It holds: " + buttons.map(function (n) {
-          return JSON.stringify((n.textContent || "").trim());
-        }).join(", ")
-      );
-    }
-    button.click();
-    return true;
-  }, label);
+async function chooseFromRailMenu(page, label) {
+  const opened = await pollUntil(
+    async () => {
+      const info = await page.evaluate(() => window.__lahe.rail.menuInfo());
+      if (!info.present) throw new Error("the rail is not mounted, so it has no menu");
+      if (info.open) return info;
+      const at = info.rect;
+      await page.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
+      return null;
+    },
+    { message: "the rail's header menu to open on a real click" }
+  );
+  const item = opened.items.filter((one) => one.label === label)[0];
+  if (!item) {
+    throw new Error(
+      "no menu item labelled " + label + ". The menu holds: " + opened.items.map((one) => one.label).join(", ")
+    );
+  }
+  await page.mouse.click(item.rect.x + item.rect.width / 2, item.rect.y + item.rect.height / 2);
+  return true;
 }
 
 const SENTINEL = "clipboard has not been written yet";
 
-/** Click Copy and read what actually landed on the system clipboard. */
+/** Choose Copy review and read what actually landed on the system clipboard. */
 async function copyThroughTheButton(page) {
   await page.evaluate((text) => navigator.clipboard.writeText(text), SENTINEL);
-  await clickRailButton(page, "Copy");
+  await chooseFromRailMenu(page, "Copy review");
   return pollUntil(
     async () => {
       const got = await page.evaluate(() => navigator.clipboard.readText());
       return got && got !== SENTINEL ? got : null;
     },
     {
-      message: "the Copy button to put the review on the clipboard",
+      message: "Copy review to put the review on the clipboard",
       describe: async () => ({ last: await page.evaluate(() => window.__lahe.exporter.last()) })
     }
   );
 }
 
-/** Click Export and read the file the browser actually downloaded. */
+/** Choose Export review and read the file the browser actually downloaded. */
 async function exportThroughTheButton(page) {
-  const [download] = await Promise.all([page.waitForEvent("download"), clickRailButton(page, "Export")]);
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    chooseFromRailMenu(page, "Export review")
+  ]);
   const path = await download.path();
   return { text: fs.readFileSync(path, "utf8"), filename: download.suggestedFilename() };
 }

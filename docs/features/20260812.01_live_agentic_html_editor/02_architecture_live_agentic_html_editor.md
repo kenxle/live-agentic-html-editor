@@ -413,6 +413,8 @@ How the rail behaves:
   go to a different agent, and when something is wrong is exactly when the reviewer cannot tell.
   They cover the whole review when the helper is reachable; with nothing running, the export carries
   what this browser holds and is labeled as this page's slice, never passed off as the whole.
+  Revised (Ken, 2026-08-14): Copy and Export live in the rail's header menu beside the collapse
+  control: always one click away, never standing UI.
 - **An agent's question is the loudest thing on a card**: a distinct treatment, not a tinted label,
   because a question the reviewer scrolls past is a stalled agent.
 - **The agent's name comes from its own reply** (absent, the card says "agent"). That is the whole
