@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+61ec3adccffa
+ * version 0.0.0+4f0dec51a080
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+61ec3adccffa";
+  g.LAHE.version = "0.0.0+4f0dec51a080";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -7643,6 +7643,13 @@
     "--sunken:#eef0f4;--line:#e2e5eb;--line-soft:#eceef2;--accent:#3c56a5;--accent-ink:#2c3f7d;",
     "--accent-wash:rgba(60,86,165,.09);--warn:#8d5715;--warn-wash:rgba(180,120,30,.12);",
     "--good:#2c6f52;--shadow:0 1px 2px rgba(18,20,26,.06),0 14px 34px rgba(18,20,26,.13);",
+    // THE CARD'S STATE IS A COLOR AS WELL AS A WORD. A draft the reviewer has
+    // not submitted wears the rail's needs-you amber, a submitted one wears its
+    // green, and the whole list can be read without reading a single chip. They
+    // are washes over the card's paper, not fills: the reviewer's own sentence
+    // stays the strongest thing on the card, so these sit a few points off
+    // --paper rather than announcing themselves.
+    "--draft-wash:#fdf8ef;--draft-line:#ecdcbe;--ready-wash:#f1f8f4;--ready-line:#cee2d6;",
     "--radius:14px;--radius-sm:10px}",
     // THE PAGE PICKS THE SCHEME, NOT THE OS. highlight.js samples the reviewed
     // page's own background and stamps data-lahe-scheme on this rail's host, so
@@ -7660,6 +7667,11 @@
     // thinner in dark than in light. Same relationship, not the same alpha.
     "--accent-ink:#b7c4f2;--accent-wash:rgba(147,167,234,.22);--warn:#dfae6a;",
     "--warn-wash:rgba(223,174,106,.14);--good:#7fc4a2;",
+    // The same two washes, derived the way every other dark token here is: the
+    // same relationship to the card's paper, not the same numbers. A light tint
+    // carried into dark reads as a lit panel; these are the dark paper with the
+    // hue mixed into it.
+    "--draft-wash:#26221b;--draft-line:#3b3327;--ready-wash:#1a2420;--ready-line:#2a3d34;",
     "--shadow:0 1px 2px rgba(0,0,0,.4),0 16px 40px rgba(0,0,0,.45)}",
     "*{box-sizing:border-box;margin:0;padding:0;font:inherit;color:inherit}",
     "button{background:none;border:0;cursor:pointer;font:inherit;color:inherit}",
@@ -7676,7 +7688,8 @@
     "overflow:hidden;font-size:13px;line-height:1.45;letter-spacing:.005em}",
     ".rail[hidden]{display:none}",
 
-    ".head{display:flex;align-items:center;gap:10px;padding:13px 14px 12px;",
+    // position/z-index so the head's menu can hang over the panes below it.
+    ".head{position:relative;z-index:3;display:flex;align-items:center;gap:10px;padding:13px 14px 12px;",
     "border-bottom:1px solid var(--line-soft)}",
     ".mark{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none}",
     ".title{font-size:13px;font-weight:600;letter-spacing:-.005em}",
@@ -7686,6 +7699,22 @@
     ".iconbtn{width:26px;height:26px;border-radius:7px;color:var(--ink-soft);",
     "display:flex;align-items:center;justify-content:center;font-size:14px}",
     ".iconbtn:hover{background:var(--surface);color:var(--ink)}",
+    ".iconbtn[aria-expanded='true']{background:var(--surface);color:var(--ink)}",
+
+    // --- the head's menu ------------------------------------------------------
+    // Copy and Export are HERE now, not standing in the footer (D10, revised
+    // from Ken's real use): reachable in one click, in the reviewer's face
+    // never. The button is the collapse arrow's twin, same hit area and same
+    // quiet register, so the head reads as two controls rather than as one
+    // control and one advertisement.
+    ".menuwrap{position:relative;display:flex;flex:none}",
+    ".menu{position:absolute;top:calc(100% + 7px);right:0;min-width:172px;z-index:4;",
+    "display:flex;flex-direction:column;gap:1px;padding:5px;background:var(--paper);",
+    "border:1px solid var(--line);border-radius:var(--radius-sm);box-shadow:var(--shadow)}",
+    ".menu[hidden]{display:none}",
+    ".menuitem{display:block;width:100%;text-align:left;white-space:nowrap;font-size:12.5px;",
+    "font-weight:500;color:var(--ink);padding:7px 10px;border-radius:7px}",
+    ".menuitem:hover{background:var(--surface)}",
 
     // --- tabs ---------------------------------------------------------------
     ".tabs{display:flex;gap:2px;padding:8px 10px 0;border-bottom:1px solid var(--line-soft)}",
@@ -7711,6 +7740,13 @@
     ".card{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius-sm);",
     "padding:11px 12px 12px;display:flex;flex-direction:column;gap:8px;",
     "box-shadow:0 1px 1px rgba(18,20,26,.03)}",
+    // The state, in color. Draft is the amber the rail already uses for "this
+    // one needs you", which is exactly what an unsubmitted comment is; ready is
+    // green. A HANDLED card keeps the plain paper it has always had, so the two
+    // greens never sit next to each other meaning different things: handled
+    // wears an outlined green chip on paper, ready wears the wash.
+    ".card[data-state='draft']{background:var(--draft-wash);border-color:var(--draft-line)}",
+    ".card[data-state='ready']{background:var(--ready-wash);border-color:var(--ready-line)}",
     ".card:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-wash)}",
     ".card__top{display:flex;align-items:center;gap:8px}",
     ".card__kind{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;",
@@ -7772,8 +7808,15 @@
     ".agent.is-loud{background:var(--accent-wash);border-left:3px solid var(--accent);",
     "color:var(--ink);font-size:13.5px;line-height:1.5}",
     ".agent.is-loud .agent__who{color:var(--accent-ink)}",
+    // ONE PATH PER LINE, AND IT BREAKS. Repo-relative paths are long and have
+    // no natural break points, so joined on one line with normal wrapping they
+    // ran straight out of the card (Ken, Done tab, first real use). A path is a
+    // unit the reviewer scans, so it gets its own line, and anywhere-breaking
+    // keeps the longest one inside the card at rail width.
     ".agent__files{margin-top:5px;font-size:11px;color:var(--ink-faint);",
-    "font-family:ui-monospace,SFMono-Regular,Menlo,monospace}",
+    "font-family:ui-monospace,SFMono-Regular,Menlo,monospace;",
+    "display:flex;flex-direction:column;gap:2px;min-width:0}",
+    ".agent__file{overflow-wrap:anywhere;word-break:break-word;line-height:1.35}",
 
     // --- footer -------------------------------------------------------------
     ".foot{border-top:1px solid var(--line-soft);background:var(--paper);",
@@ -7813,16 +7856,6 @@
     ".refusal__btn:hover{filter:brightness(1.06)}",
     ".refusal__btn[disabled]{opacity:.6;cursor:default}",
 
-    // Copy and export are ALWAYS visible, not only when nothing is connected
-    // (D10): when something is wrong is exactly when the reviewer cannot tell.
-    ".actions{display:flex;gap:7px}",
-    ".btn{flex:1;font-size:12px;font-weight:550;padding:7px 10px;border-radius:8px;",
-    "border:1px solid var(--line);background:var(--paper);color:var(--ink);text-align:center}",
-    ".btn:hover{background:var(--surface)}",
-    ".btn--primary{background:var(--accent);border-color:var(--accent);color:#fff}",
-    ":host([data-lahe-scheme='dark']) .btn--primary{color:#12151a}",
-    ".btn--primary:hover{filter:brightness(1.06);background:var(--accent)}",
-
     // The keyboard hints are readable, not fine print (D10).
     ".hints{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11.5px;color:var(--ink-soft)}",
     ".hint{display:flex;align-items:center;gap:5px}",
@@ -7842,6 +7875,14 @@
     ".pill__count{font-variant-numeric:tabular-nums;color:var(--ink-faint);font-weight:500}",
     ".pill__count[hidden]{display:none}"
   ].join("");
+
+  // The review-level actions, in the head's menu. They are the same two the
+  // footer used to stand up as buttons, and they run through the same
+  // runAction seam, so what they DO is still boot's business (D10, revised).
+  var MENU_ITEMS = [
+    { action: "copy", label: "Copy review" },
+    { action: "export", label: "Export review" }
+  ];
 
   var HINTS = [
     { keys: ["⌘", "⇧", "C"], what: "comment" },
@@ -7875,6 +7916,14 @@
     // finding, 2026-08-14). Mount re-applies it like every other piece of state.
     var refusalInfo = null;
     var actionHandlers = Object.create(null);
+    // The head menu is OPEN or not, and open is a moment rather than a piece of
+    // rail state: the button is chrome and comes back with every mount, the
+    // open menu does not, which is what a transient overlay should do.
+    var menuOpen = false;
+    // Removed the moment the menu closes, so the page carries no listener of
+    // ours while nothing is open.
+    var menuOutsideListener = null;
+    var menuShadowListener = null;
 
     // The DOM, all of it, or all nulls when there is no document (Node).
     var dom = null;
@@ -7895,7 +7944,12 @@
 
     function mount(mountOptions) {
       var mo = mountOptions || {};
-      if (mounted) return { rootId: markers.OVERLAY_ROOT_ID, remounted: false };
+      if (mounted) {
+        // A remount over a rail that is already up still puts the menu away: a
+        // menu is a moment, and the page under it has just been rebuilt.
+        closeMenu(false);
+        return { rootId: markers.OVERLAY_ROOT_ID, remounted: false };
+      }
       mounted = true;
       loadChips();
       if (!doc || !doc.body) return { rootId: markers.OVERLAY_ROOT_ID, headless: true };
@@ -7930,6 +7984,54 @@
       head.appendChild(el("span", "title", "Review"));
       head.appendChild(el("span", "review", reviewId || ""));
       head.appendChild(el("span", "spacer"));
+
+      // The review's own actions, behind one quiet control beside the collapse
+      // arrow. Nothing here decides what Copy or Export DO: each item runs the
+      // same runAction seam the footer's buttons ran, so boot's wiring is
+      // untouched by the move.
+      var menuWrap = el("div", "menuwrap");
+      var menuBtn = el("button", "iconbtn", "⋯");
+      menuBtn.setAttribute("type", "button");
+      menuBtn.setAttribute("aria-label", "More actions");
+      menuBtn.setAttribute("aria-haspopup", "menu");
+      menuBtn.setAttribute("aria-expanded", "false");
+      menuBtn.title = "More actions";
+      var menuList = el("div", "menu");
+      menuList.setAttribute("role", "menu");
+      menuList.setAttribute("aria-label", "More actions");
+      menuList.hidden = true;
+      var menuItems = MENU_ITEMS.map(function (entry) {
+        var item = el("button", "menuitem", entry.label);
+        item.setAttribute("type", "button");
+        item.setAttribute("role", "menuitem");
+        item.setAttribute("data-action", entry.action);
+        item.tabIndex = -1;
+        item.addEventListener("click", function () {
+          // Closed first, so the reviewer's click leaves nothing hanging over
+          // the rail while the work runs, and the focus goes back where they
+          // left it.
+          closeMenu(true);
+          runAction(entry.action);
+        });
+        menuList.appendChild(item);
+        return item;
+      });
+      menuBtn.addEventListener("click", function () {
+        toggleMenu();
+      });
+      menuBtn.addEventListener("keydown", function (event) {
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault();
+          openMenu(event.key === "ArrowUp" ? menuItems.length - 1 : 0);
+        }
+      });
+      menuList.addEventListener("keydown", function (event) {
+        onMenuKey(event);
+      });
+      menuWrap.appendChild(menuBtn);
+      menuWrap.appendChild(menuList);
+      head.appendChild(menuWrap);
+
       var collapseBtn = el("button", "iconbtn", "→");
       collapseBtn.setAttribute("aria-label", "Collapse the rail");
       collapseBtn.title = "Collapse the rail";
@@ -8001,19 +8103,9 @@
       var limit = el("div", "limit");
       foot.appendChild(limit);
 
-      var actions = el("div", "actions");
-      var copyBtn = el("button", "btn btn--primary", "Copy");
-      copyBtn.addEventListener("click", function () {
-        runAction("copy");
-      });
-      var exportBtn = el("button", "btn", "Export");
-      exportBtn.addEventListener("click", function () {
-        runAction("export");
-      });
-      actions.appendChild(copyBtn);
-      actions.appendChild(exportBtn);
-      foot.appendChild(actions);
-
+      // No action buttons here. Copy and Export moved into the head's menu
+      // (D10, revised): they read as submit buttons under the reviewer's own
+      // words, and the footer's job is the status line and the hints.
       var hints = el("div", "hints");
       HINTS.forEach(function (hint) {
         var row = el("span", "hint");
@@ -8059,6 +8151,11 @@
         refusal: refusal,
         refusalReason: refusalReason,
         refusalBtn: refusalBtn,
+        menuBtn: menuBtn,
+        menuList: menuList,
+        menuItems: menuItems,
+        menuWrap: menuWrap,
+        collapseBtn: collapseBtn,
         pill: pill,
         pillCount: pillCount
       };
@@ -8089,6 +8186,9 @@
     // a remount (2D's, on navigation) cheap and lossless. Chips that were
     // dismissed stay dismissed because dismissal is state, not markup.
     function unmount() {
+      // Before the dom goes: the document-level listener the open menu installed
+      // belongs to a menu that is about to stop existing.
+      closeMenu(false);
       if (dom && dom.host && dom.host.parentNode) dom.host.parentNode.removeChild(dom.host);
       Object.keys(cards).forEach(function (id) {
         cards[id].node = null;
@@ -8112,6 +8212,11 @@
      */
     function refreshScheme() {
       if (!dom) return null;
+      // Called on every remount, which is the moment the page under the rail was
+      // rebuilt. A menu the reviewer opened before a navigation is not something
+      // they still want open after it, so it goes away with the page it belonged
+      // to. The BUTTON is chrome and stays; the open menu is a moment.
+      closeMenu(false);
       var next = highlights.refreshScheme();
       dom.host.setAttribute(highlightModule.SCHEME_ATTR, next);
       return next;
@@ -8287,7 +8392,11 @@
           el("span", null, card.agentMessage.text || card.agentMessage.reason || "")
         );
         if (card.agentMessage.files && card.agentMessage.files.length) {
-          p.agent.appendChild(el("div", "agent__files", card.agentMessage.files.join("  ")));
+          var fileList = el("div", "agent__files");
+          card.agentMessage.files.forEach(function (name) {
+            fileList.appendChild(el("div", "agent__file", name));
+          });
+          p.agent.appendChild(fileList);
         }
         if (card.agentMessage.loud) p.agent.className = "agent is-loud";
       }
@@ -8726,8 +8835,9 @@
       return activeTab;
     }
 
-    // Copy and Export are always visible; who does the work is 3C's. The rail
-    // holds the buttons and hands the click on.
+    // Copy and Export are always one click away, in the head's menu; who does
+    // the work is 3C's. The rail holds the controls and hands the click on, and
+    // this seam did not move when they did.
     function onAction(name, fn) {
       actionHandlers[name] = fn;
       return function () {
@@ -8740,10 +8850,171 @@
       return null;
     }
 
+    // -------------------------------------------------------------------------
+    // The head's menu
+    // -------------------------------------------------------------------------
+    //
+    // It closes on every way out a reviewer might take: choosing an item, Esc,
+    // a click anywhere else (on the page or elsewhere in the rail), collapsing,
+    // and unmounting. A menu that survives one of those is a menu that hangs
+    // over someone's page after they have moved on.
+
+    function openMenu(index) {
+      if (!dom || menuOpen) return menuOpen;
+      menuOpen = true;
+      dom.menuList.hidden = false;
+      dom.menuBtn.setAttribute("aria-expanded", "true");
+      focusMenuItem(index || 0);
+      // TWO listeners, because the root is CLOSED. A closed root hides its own
+      // nodes from composedPath(), so a click on a menu item arrives at the
+      // document retargeted to the host and looks exactly like a click on the
+      // page: the document listener alone closed the menu before the item's own
+      // click handler ever ran, and Export silently did nothing.
+      //
+      // So the document listener only handles what really came from outside our
+      // tree, and the listener inside the shadow root, which can see real
+      // targets, decides for everything within it.
+      menuOutsideListener = function (event) {
+        if (event.type === "keydown") {
+          if (event.key !== "Escape") return;
+          event.preventDefault();
+          event.stopPropagation();
+          closeMenu(true);
+          return;
+        }
+        if (fromOurTree(event)) return;
+        closeMenu(false);
+      };
+      menuShadowListener = function (event) {
+        if (dom.menuWrap.contains(event.target)) return;
+        closeMenu(false);
+      };
+      doc.addEventListener("pointerdown", menuOutsideListener, true);
+      doc.addEventListener("keydown", menuOutsideListener, true);
+      dom.shadow.addEventListener("pointerdown", menuShadowListener, true);
+      return menuOpen;
+    }
+
+    /**
+     * Did this event start inside the library's own (closed) tree?
+     *
+     * A closed root retargets everything to its host, and the rail lives inside
+     * a second closed root (the highlight surface's), so the honest test is the
+     * chain of hosts from the rail's own host outwards.
+     */
+    function fromOurTree(event) {
+      if (!dom) return false;
+      var path = typeof event.composedPath === "function" ? event.composedPath() : [];
+      if (path.indexOf(dom.menuWrap) !== -1) return true;
+      var node = dom.host;
+      while (node) {
+        if (node === event.target || path.indexOf(node) !== -1) return true;
+        var root = typeof node.getRootNode === "function" ? node.getRootNode() : null;
+        node = root && root.host ? root.host : null;
+      }
+      return false;
+    }
+
+    function closeMenu(returnFocus) {
+      if (menuOutsideListener) {
+        doc.removeEventListener("pointerdown", menuOutsideListener, true);
+        doc.removeEventListener("keydown", menuOutsideListener, true);
+        menuOutsideListener = null;
+      }
+      if (menuShadowListener) {
+        if (dom) dom.shadow.removeEventListener("pointerdown", menuShadowListener, true);
+        menuShadowListener = null;
+      }
+      if (!menuOpen) return false;
+      menuOpen = false;
+      if (!dom) return true;
+      dom.menuList.hidden = true;
+      dom.menuBtn.setAttribute("aria-expanded", "false");
+      if (returnFocus) dom.menuBtn.focus();
+      return true;
+    }
+
+    function toggleMenu() {
+      return menuOpen ? closeMenu(true) : openMenu(0);
+    }
+
+    function focusMenuItem(index) {
+      if (!dom || !dom.menuItems.length) return -1;
+      var count = dom.menuItems.length;
+      var next = ((index % count) + count) % count;
+      dom.menuItems[next].focus();
+      return next;
+    }
+
+    function focusedMenuIndex() {
+      if (!dom) return -1;
+      var active = dom.shadow.activeElement;
+      return dom.menuItems.indexOf(active);
+    }
+
+    function onMenuKey(event) {
+      if (!dom) return;
+      var index = focusedMenuIndex();
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        focusMenuItem(index + 1);
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        focusMenuItem(index - 1);
+      } else if (event.key === "Home") {
+        event.preventDefault();
+        focusMenuItem(0);
+      } else if (event.key === "End") {
+        event.preventDefault();
+        focusMenuItem(dom.menuItems.length - 1);
+      } else if (event.key === "Tab") {
+        closeMenu(false);
+      }
+    }
+
+    function menuIsOpen() {
+      return menuOpen;
+    }
+
+    /**
+     * Self-report for the closed root: where the menu button is, whether it is
+     * open, and where each item is. A test cannot query a closed root, and a
+     * click that lands at the wrong coordinates is the failure this exists to
+     * make impossible to fake, so the geometry comes from the rail itself the
+     * way the refusal button's does.
+     */
+    function menuInfo() {
+      if (!dom || !dom.menuBtn) return { present: false, open: false, items: [] };
+      var rect = dom.menuBtn.getBoundingClientRect();
+      var collapse = dom.collapseBtn.getBoundingClientRect();
+      return {
+        present: true,
+        label: dom.menuBtn.getAttribute("aria-label"),
+        title: dom.menuBtn.title,
+        expanded: dom.menuBtn.getAttribute("aria-expanded"),
+        open: menuOpen,
+        buttonFocused: dom.shadow.activeElement === dom.menuBtn,
+        focusedIndex: focusedMenuIndex(),
+        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height, right: rect.right },
+        collapseRect: { x: collapse.x, y: collapse.y, width: collapse.width, height: collapse.height },
+        items: dom.menuItems.map(function (node) {
+          var r = node.getBoundingClientRect();
+          return {
+            action: node.getAttribute("data-action"),
+            label: (node.textContent || "").trim(),
+            rect: { x: r.x, y: r.y, width: r.width, height: r.height }
+          };
+        })
+      };
+    }
+
     // The collapsed pill never overlaps the open rail (D10), and the mechanism
     // is that the two are never on screen at the same time.
     function collapse(next) {
       collapsed = next === undefined ? !collapsed : !!next;
+      // A menu hanging where the rail used to be is the reviewer's page wearing
+      // a fragment of a tool they just put away.
+      if (collapsed) closeMenu(false);
       renderCollapsed();
       return collapsed;
     }
@@ -8818,6 +9089,10 @@
       countFor: countFor,
       failures: failuresApi,
       onAction: onAction,
+      menuInfo: menuInfo,
+      menuIsOpen: menuIsOpen,
+      openMenu: openMenu,
+      closeMenu: closeMenu,
       showRefusal: showRefusal,
       hideRefusal: hideRefusal,
       markRefusalPending: markRefusalPending,
@@ -17026,7 +17301,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+61ec3adccffa";
+  var VERSION = "0.0.0+4f0dec51a080";
 
   var protocol = ns.protocol;
   var record = ns.record;
