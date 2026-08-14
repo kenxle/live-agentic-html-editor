@@ -438,6 +438,32 @@ test("a second review on a running helper works without the user restarting anyt
   }
 });
 
+test("add prints the review folder, because that is the only way an agent finds review.json", async () => {
+  const work = await aWorkspace();
+  try {
+    const run = work.add();
+    assert.equal(run.code, 0, run.stdout + run.stderr);
+
+    const review = reviewIdIn(work.read());
+    const folder = path.join(work.stateDir, "reviews", review);
+    assert.ok(
+      run.stdout.indexOf(folder) !== -1,
+      "the review folder is in the output, not merely described:\n" + run.stdout
+    );
+    assert.ok(fs.existsSync(folder), "and it is really there");
+  } finally {
+    await work.stop();
+  }
+});
+
+test("AGENTS.md says where the state directory is, so the folder can be found without add's output", () => {
+  const agents = fs.readFileSync(path.join(REPO_ROOT, "AGENTS.md"), "utf8");
+  assert.match(agents, /LAHE_STATE_DIR/, "the first place looked at");
+  assert.match(agents, /XDG_STATE_HOME/, "the second");
+  assert.match(agents, /~\/\.local\/state\/lahe/, "and the default");
+  assert.match(agents, /reviews\/<review-id>/, "and how a review folder is named under it");
+});
+
 test("add refuses what it cannot do, with a reason and a non-zero exit", async () => {
   const missing = runAdd(["/no/such/page.html"]);
   assert.equal(missing.code, 1);

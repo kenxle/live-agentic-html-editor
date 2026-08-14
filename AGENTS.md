@@ -52,7 +52,18 @@ Running `add` twice on the same target reuses the existing review. `lahe add
 
 ## Step 3: read the review and act on it
 
-`add` prints the review id and the review folder. Inside that folder:
+`add` prints the review id and the review folder, on the line labelled `folder`.
+Everything below lives in that folder.
+
+If you ever need to find it without that line, the folder is
+`<state-dir>/reviews/<review-id>`, and the state directory is the first of these
+that is set:
+
+1. `$LAHE_STATE_DIR`
+2. `$XDG_STATE_HOME/lahe`
+3. `~/.local/state/lahe`
+
+Inside the review folder:
 
 - **`review.json`** is what you read. Its top-level `contract` field states the
   full rules; obey it over anything in this file if the two ever differ. The

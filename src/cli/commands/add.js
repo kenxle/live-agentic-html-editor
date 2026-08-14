@@ -706,6 +706,11 @@ async function run(argv) {
   say("lahe add: " + target);
   say();
   say("  review    " + review.id + (reuseId ? "  (reused, already on this page)" : "  (minted just now)"));
+  // The review folder, printed rather than described. Both docs promise `add`
+  // names it, and an agent that only has this output has no other way to find
+  // review.json: the state directory is derived from environment this command
+  // resolved and the agent did not.
+  say("  folder    " + stateDirModule.reviewDir(dir, review.id));
   say("  library   " + library.src);
   say(
     "  helper    " +
