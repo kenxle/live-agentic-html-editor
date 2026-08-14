@@ -441,3 +441,24 @@ the raw GitHub URL), a "tell your agent" one-liner section at the top of the
 README's install docs, and a local `/lahe` skill in Ken's `~/.claude/skills` so
 his own agents resolve the name offline. The public repo is live at
 https://github.com/kenxle/live-agentic-html-editor with main as default.
+
+## First real use (2026-08-14): three bugs, one process lesson
+
+Ken's first session on his real Rails app failed: he could not type, saw a chip telling him to press
+a button that did not exist, and a x4 count that read as four phantom windows. Root causes and fixes,
+all shipped same-day:
+
+1. The setup agent held the page open in its own browser, becoming the one-window holder and locking
+   Ken out (AGENTS.md now forbids holding the page open).
+2. The refusal panel was painted imperatively and vanished on the first Turbo remount while the
+   stateful chip survived; the refusal is now rail STATE re-applied by mount, the rail expands so a
+   refusal is never hidden behind the pill, and standing failures never grow a xN count.
+3. The rail harness never wired onRefused/onHeld, so the second-window specs judged a surface the
+   product wires differently; the harness now mirrors the boot.
+
+The process lesson: every spec and evaluator ran feature-level journeys, and both real failures lived
+in seams nobody composed (refusal x remount; two actors, agent then human). The plan's open question
+3 (run AC2 on the fixture or on Ken's real dev server) was answered "fixture" by assumption, and the
+assumption is exactly where it bit. The verification that closed it was the one that was missing:
+driving the real Rails page in a real browser as a second window, across a real Turbo navigation,
+with a self-report accessor (refusalButtonInfo) proving the button's geometry on screen.
