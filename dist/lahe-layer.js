@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+213ee6c8fe9f
+ * version 0.0.0+0f3c83c358ca
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+213ee6c8fe9f";
+  g.LAHE.version = "0.0.0+0f3c83c358ca";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -8552,6 +8552,10 @@
       refusalInfo = null;
       if (!dom) return false;
       dom.refusal.removeAttribute("data-shown");
+      // Reset the button out of its "Moving the review here…" pending state,
+      // so the next refusal (or a probe) never meets a stuck disabled button.
+      dom.refusalBtn.disabled = false;
+      dom.refusalBtn.textContent = "Review here instead";
       return true;
     }
 
@@ -16132,7 +16136,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+213ee6c8fe9f";
+  var VERSION = "0.0.0+0f3c83c358ca";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -16292,7 +16296,12 @@
       }
       readOnlyActive = true;
       comments.closeAll();
-      comments.teardown();
+      // unbind, NEVER comments.teardown(): teardown also tears down the SHARED
+      // highlight surface the rail lives in, and the next gesture after a
+      // takeover then died on highlight.surface's second-host guard. The
+      // reviewer pressed "Review here instead", the helper granted it, and the
+      // window still could not comment (first-real-use bug two, 2026-08-14).
+      comments.unbind();
       editing.teardown();
       rail.showRefusal(info);
     }
@@ -16558,8 +16567,14 @@
       window: win,
       ensureRoot: ensureRoot,
       rebind: function () {
-        comments.bind({ page: page });
-        editing.bind({ page: page });
+        // A remount must not resurrect the gestures in a refused window: Ken's
+        // read-only tab re-armed Cmd-Shift-C on its first Turbo navigation and
+        // opened comment boxes that could do nothing (first-real-use bug,
+        // 2026-08-14). exitReadOnly re-binds when the window becomes holder.
+        if (!readOnlyActive) {
+          comments.bind({ page: page });
+          editing.bind({ page: page });
+        }
         // The page that comes back from a navigation or a morph is not required
         // to have the background the page that left had, and the library wears
         // the PAGE's scheme rather than the OS's.

@@ -1145,6 +1145,10 @@
       refusalInfo = null;
       if (!dom) return false;
       dom.refusal.removeAttribute("data-shown");
+      // Reset the button out of its "Moving the review here…" pending state,
+      // so the next refusal (or a probe) never meets a stuck disabled button.
+      dom.refusalBtn.disabled = false;
+      dom.refusalBtn.textContent = "Review here instead";
       return true;
     }
 

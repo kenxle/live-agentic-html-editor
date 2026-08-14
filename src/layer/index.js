@@ -234,7 +234,12 @@
       }
       readOnlyActive = true;
       comments.closeAll();
-      comments.teardown();
+      // unbind, NEVER comments.teardown(): teardown also tears down the SHARED
+      // highlight surface the rail lives in, and the next gesture after a
+      // takeover then died on highlight.surface's second-host guard. The
+      // reviewer pressed "Review here instead", the helper granted it, and the
+      // window still could not comment (first-real-use bug two, 2026-08-14).
+      comments.unbind();
       editing.teardown();
       rail.showRefusal(info);
     }
@@ -500,8 +505,14 @@
       window: win,
       ensureRoot: ensureRoot,
       rebind: function () {
-        comments.bind({ page: page });
-        editing.bind({ page: page });
+        // A remount must not resurrect the gestures in a refused window: Ken's
+        // read-only tab re-armed Cmd-Shift-C on its first Turbo navigation and
+        // opened comment boxes that could do nothing (first-real-use bug,
+        // 2026-08-14). exitReadOnly re-binds when the window becomes holder.
+        if (!readOnlyActive) {
+          comments.bind({ page: page });
+          editing.bind({ page: page });
+        }
         // The page that comes back from a navigation or a morph is not required
         // to have the background the page that left had, and the library wears
         // the PAGE's scheme rather than the OS's.
