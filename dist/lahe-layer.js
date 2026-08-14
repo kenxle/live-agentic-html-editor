@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+0f3c83c358ca
+ * version 0.0.0+a853dc1cb866
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+0f3c83c358ca";
+  g.LAHE.version = "0.0.0+a853dc1cb866";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -8473,6 +8473,19 @@
         renderChips();
         return chips.length !== n;
       },
+      // Remove a chip because its condition ENDED, without the dismissed mark
+      // that would suppress the code forever. A window that just took the
+      // review over must not keep wearing "another window is reviewing this
+      // page", and the next real refusal must still get its chip.
+      clear: function (code) {
+        var n = chips.length;
+        chips = chips.filter(function (f) {
+          return f.code !== code;
+        });
+        saveChips();
+        renderChips();
+        return chips.length !== n;
+      },
       isDismissed: function (code) {
         return dismissed[code] === true;
       },
@@ -16136,7 +16149,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+0f3c83c358ca";
+  var VERSION = "0.0.0+a853dc1cb866";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -16312,6 +16325,9 @@
       comments.bind({ page: page });
       editing.bind({ page: page });
       rail.hideRefusal();
+      // The condition ended, so its chip goes too (clear, not dismiss: dismiss
+      // would suppress every future refusal's chip).
+      rail.failures.clear("SECOND_WINDOW_REFUSED");
     }
 
     var sync = opts.sync || ns.sync.createSync({

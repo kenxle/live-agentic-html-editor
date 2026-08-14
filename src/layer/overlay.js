@@ -1066,6 +1066,19 @@
         renderChips();
         return chips.length !== n;
       },
+      // Remove a chip because its condition ENDED, without the dismissed mark
+      // that would suppress the code forever. A window that just took the
+      // review over must not keep wearing "another window is reviewing this
+      // page", and the next real refusal must still get its chip.
+      clear: function (code) {
+        var n = chips.length;
+        chips = chips.filter(function (f) {
+          return f.code !== code;
+        });
+        saveChips();
+        renderChips();
+        return chips.length !== n;
+      },
       isDismissed: function (code) {
         return dismissed[code] === true;
       },

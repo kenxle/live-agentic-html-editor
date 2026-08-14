@@ -250,6 +250,9 @@
       comments.bind({ page: page });
       editing.bind({ page: page });
       rail.hideRefusal();
+      // The condition ended, so its chip goes too (clear, not dismiss: dismiss
+      // would suppress every future refusal's chip).
+      rail.failures.clear("SECOND_WINDOW_REFUSED");
     }
 
     var sync = opts.sync || ns.sync.createSync({
