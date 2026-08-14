@@ -369,8 +369,44 @@
         rail.upsertCard(item);
         counters.cardsDrawn += 1;
       });
+      repaintHighlights(merged);
       counters.merges += 1;
       return merged;
+    }
+
+    // The kinds that carry a mark on the page. An edit is not one of them: its
+    // mark IS the changed text, which replay puts back.
+    var PAINTED_KINDS = [record.KIND.COMMENT, record.KIND.NOTE];
+
+    /**
+     * Put the reviewer's marks back on the page.
+     *
+     * A highlight is DOM, so it dies with the page and it is not restored by
+     * anything else here: the records come back from browser storage, the cards
+     * are redrawn above, replay puts committed edits back, and until this
+     * existed the passages themselves came back bare (found on a reload,
+     * 2026-08-14). The reviewer's marks are their map of what they have already
+     * looked at, so a reload that erases them is a reviewer reading the page
+     * twice.
+     *
+     * comments.repaint resolves the record's own anchor against the page as it
+     * is now and paints nothing when it does not bind, which is the honest
+     * answer and the same one replay gives: a passage the agent deleted stays
+     * unpainted and keeps its lost state.
+     *
+     * A HANDLED item is skipped, because a handled item having no highlight is
+     * the rule (R37), not an accident. An item whose box is open is skipped too:
+     * its paint is the louder ACTIVE one, and repainting would quietly downgrade
+     * the passage the reviewer is looking at right now.
+     */
+    function repaintHighlights(merged) {
+      merged.forEach(function (item) {
+        if (PAINTED_KINDS.indexOf(item[record.FIELD.KIND]) === -1) return;
+        if (item[record.FIELD.STATE] === record.STATE.HANDLED) return;
+        var id = item[record.FIELD.ID];
+        if (comments.boxFor(id)) return;
+        comments.repaint(id);
+      });
     }
 
     merge();
