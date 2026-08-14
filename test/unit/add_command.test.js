@@ -462,6 +462,8 @@ test("AGENTS.md says where the state directory is, so the folder can be found wi
   assert.match(agents, /XDG_STATE_HOME/, "the second");
   assert.match(agents, /~\/\.local\/state\/lahe/, "and the default");
   assert.match(agents, /reviews\/<review-id>/, "and how a review folder is named under it");
+  assert.match(agents, /--state-dir/, "the isolation flags an agent needs on a shared machine");
+  assert.match(agents, /--port/);
 });
 
 test("add refuses what it cannot do, with a reason and a non-zero exit", async () => {

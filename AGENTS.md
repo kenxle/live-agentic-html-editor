@@ -50,6 +50,27 @@ your human), restart nothing, reload the page.
 Running `add` twice on the same target reuses the existing review. `lahe add
 --new` mints a fresh one.
 
+### Running isolated
+
+`add` and `serve` both take `--port <n>` and `--state-dir <path>`, and both
+default to one port (7817) and one state directory per machine. So two agents
+working on the same machine share a helper and share a review history by
+default. That is usually what you want: one helper can hold many reviews at
+once.
+
+Give yourself your own pair when you do not want that, and pass the same two
+flags to every command in the session:
+
+```sh
+lahe add path/to/page.html --port 7818 --state-dir ~/.local/state/lahe-mine
+lahe wait --review <id> --state-dir ~/.local/state/lahe-mine
+```
+
+The port is baked into the page's script line, so a review started on one port
+cannot be moved to another without running `add` again. The state directory
+must sit outside any git checkout: it holds the review's token, and a
+`git add -A` would publish it.
+
 ## Step 3: read the review and act on it
 
 `add` prints the review id and the review folder, on the line labelled `folder`.
