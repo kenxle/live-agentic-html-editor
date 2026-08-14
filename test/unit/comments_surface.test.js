@@ -73,16 +73,57 @@ test("a comment box mints a draft and every keystroke is durable at once", () =>
   assert.equal(store.readItem("rev_1", box.id).rev, 1, "a draft does not bump rev");
 });
 
-test("Cmd-Enter marks it ready, and rewording after that bumps the revision", () => {
+test("Cmd-Enter marks it ready, and one rewording after that bumps the revision once", () => {
   const { store, comments } = surface();
   const box = comments.openBox({ quote: "q" });
   box.type("say this instead");
   box.markReady();
   assert.equal(store.readItem("rev_1", box.id).state, record.STATE.READY);
+  assert.equal(store.readItem("rev_1", box.id).rev, 1);
 
-  comments.reopen(box.id).type("no, say this instead");
-  assert.equal(store.readItem("rev_1", box.id).rev, 2);
+  // A rewording SESSION is one revision. The keystrokes on the way are durable
+  // at once and are content, not revisions: rev is what an agent's reply names,
+  // and a rev that races the typing refuses every reply as stale (R21).
+  const reword = comments.reopen(box.id);
+  reword.type("no, say ");
+  reword.type("no, say this ");
+  reword.type("no, say this instead");
+  assert.equal(store.readItem("rev_1", box.id).rev, 1, "typing a reword does not bump rev");
+  assert.equal(store.readItem("rev_1", box.id).note, "no, say this instead", "and it is durable at once");
+
+  reword.markReady();
+  assert.equal(store.readItem("rev_1", box.id).rev, 2, "the commit bumps it, once");
   assert.equal(store.readItem("rev_1", box.id).note, "no, say this instead");
+
+  // Closing the box after the commit has nothing left to commit.
+  reword.close();
+  assert.equal(store.readItem("rev_1", box.id).rev, 2);
+});
+
+test("a rewording ended with Esc still commits at one revision", () => {
+  const { store, comments } = surface();
+  const box = comments.openBox({ quote: "q" });
+  box.type("say this instead");
+  box.markReady();
+
+  const reword = comments.reopen(box.id);
+  reword.type("no, say this instead");
+  reword.close();
+  assert.equal(store.readItem("rev_1", box.id).rev, 2, "closing ends the session, so the revision moves");
+  assert.equal(store.readItem("rev_1", box.id).note, "no, say this instead");
+});
+
+test("reopening and typing the same words back is not a rewording", () => {
+  const { store, comments } = surface();
+  const box = comments.openBox({ quote: "q" });
+  box.type("say this instead");
+  box.markReady();
+
+  const reword = comments.reopen(box.id);
+  reword.type("say this inste");
+  reword.type("say this instead");
+  reword.close();
+  assert.equal(store.readItem("rev_1", box.id).rev, 1, "the words the agent reads did not change");
 });
 
 test("the note box standing open at the foot mints nothing until it is typed in", () => {

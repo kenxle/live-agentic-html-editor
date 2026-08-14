@@ -17,7 +17,9 @@
 //   Cmd-Enter                          marks the comment ready. Nothing that is
 //                                      not ready is actionable (R7)
 //   Esc                                closes the box, KEEPING the draft
-//   rewording a ready comment          bumps its revision (R21)
+//   rewording a ready comment          bumps its revision ONCE, when the
+//                                      rewording commits, never per keystroke
+//                                      (R21)
 //   deleting                           the reviewer's own act, and the only
 //                                      thing that ever removes an item
 //
@@ -459,22 +461,29 @@
         if (placement === "anchored") positionAt(node, src && src.range ? src.range : null);
       }
 
+      // The note this box last COMMITTED. A rewording is measured against it, so
+      // typing a word and taking it back again is not a revision.
+      var committedNote = String(item[record.FIELD.NOTE] || "");
+
       // Every keystroke. Synchronous, before anything else.
       function type(text) {
         var current = handleItem();
-        // A draft does not bump rev: drafts flow to the helper and the log
+        // NEITHER A DRAFT NOR A REWORDING IN PROGRESS BUMPS rev.
+        //
+        // A draft does not, because drafts flow to the helper and the log
         // legitimately holds many events at one revision (idempotence is by
         // event id, never by item and rev).
-        var next;
-        if (record.isDraft(current)) {
-          next = Object.assign({}, current);
-          next[record.FIELD.NOTE] = String(text);
-          next[record.FIELD.UPDATED_AT] = record.nowIso();
-        } else {
-          // Rewording something already ready bumps the revision, which is what
-          // makes a stale reply naming the old revision refusable (R21).
-          next = record.bumpRev(current, { note: String(text) });
-        }
+        //
+        // A rewording in progress does not, for the same reason plus a sharper
+        // one. rev is what an agent's reply names, and a reply naming an older
+        // rev is refused as stale (R21). Bumping per keystroke made every reply
+        // stale the moment the reviewer touched the box, so the protection
+        // became reply-blocking noise: one sentence reworded took rev 1 to 29 on
+        // the 2026-08-14 walk. The keystrokes are still durable at once; they are
+        // CONTENT. The revision moves once, at the commit, in flushReword.
+        var next = Object.assign({}, current);
+        next[record.FIELD.NOTE] = String(text);
+        next[record.FIELD.UPDATED_AT] = record.nowIso();
         store.write(requireReview(), next);
         if (inputEl && inputEl.value !== next[record.FIELD.NOTE]) inputEl.value = next[record.FIELD.NOTE];
         paintState(next);
@@ -482,13 +491,43 @@
         return next;
       }
 
-      function markReady() {
+      /**
+       * The end of a rewording session: ONE bump, carrying the committed words.
+       *
+       * Called by both ways a session ends, Cmd-Enter and closing the box, and
+       * it is idempotent between them: whichever gets there first moves the
+       * revision, and the second sees nothing left to commit.
+       *
+       * A draft has nothing to bump; it starts at rev 1 and reaches the agent
+       * when it is marked ready.
+       */
+      function flushReword() {
         var current = handleItem();
+        var note = String(current[record.FIELD.NOTE] || "");
+        if (record.isDraft(current)) {
+          committedNote = note;
+          return current;
+        }
+        if (note === committedNote) return current;
+        // bumpRev carries the record as it stands, so the applied-after history
+        // records the committed version and not the keystrokes on the way to it
+        // (it appends only when the compared after moved).
+        var next = record.bumpRev(current, {});
+        committedNote = String(next[record.FIELD.NOTE] || "");
+        store.write(requireReview(), next);
+        paintState(next);
+        emit(next, "reworded");
+        return next;
+      }
+
+      function markReady() {
+        var current = flushReword();
         var next = Object.assign({}, current);
         next[record.FIELD.STATE] = record.STATE.READY;
         next[record.FIELD.UPDATED_AT] = record.nowIso();
         record.validateItem(next);
         store.write(requireReview(), next);
+        committedNote = String(next[record.FIELD.NOTE] || "");
         paintState(next);
         emit(next, "ready");
         return next;
@@ -501,6 +540,11 @@
       }
 
       function close() {
+        // Closing ends a rewording session as surely as Cmd-Enter does, so the
+        // words the reviewer leaves behind are committed at one revision here
+        // too. Without this, a reword ended with Esc would change what the
+        // agent reads while the number the agent checks against stayed put.
+        flushReword();
         // The draft is kept. Closing a box is not discarding work; only the
         // reviewer's own delete removes an item.
         if (node && node.parentNode) node.parentNode.removeChild(node);
@@ -530,6 +574,10 @@
         focus: focus,
         type: type,
         markReady: markReady,
+        // Ending a rewording session without closing the box. Cmd-Enter and
+        // close both go through it; this is the same seam for a caller that has
+        // neither.
+        commitReword: flushReword,
         close: close
       };
     }
