@@ -135,7 +135,7 @@ once, and after that a plain sentence works:
 | `lahe add ... --new` | Mint a fresh review even though the page already carries one |
 | `lahe add ... --source path/to/template` | Record where the source lives, so an agent edits the template rather than build output |
 | `lahe serve [--port N]` | Run the helper by hand (`add` starts it for you, so this is rarely needed) |
-| `lahe wait --review <id> [--since <cursor>] [--timeout <seconds>]` | Block until new items are ready; prints them as JSON lines plus the next cursor. Exit codes: 0 new work, 1 timeout, 2 helper unreachable, 3 unknown review, 4 bad usage. Reading acknowledges nothing |
+| `lahe wait --review <id> [--since <cursor>] [--timeout <seconds>] [--state-dir <path>]` | Block until new items are ready; prints them as JSON lines plus the next cursor. Exit codes: 0 new work, 1 timeout, 2 helper unreachable, 3 unknown review, 4 bad usage. Reading acknowledges nothing |
 
 **The files, which are the agent's real interface.** In the review folder that
 `add` names: `review.json` is what an agent reads (its top-level `contract`

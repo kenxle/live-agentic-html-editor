@@ -51,6 +51,8 @@ var USAGE = [
   "  --timeout <seconds>  how long to block. Default " + protocol.WAIT.DEFAULT_TIMEOUT_SECONDS,
   "  --helper <origin>    the helper's origin. Default: read from the helper's state directory",
   "  --token <token>      the review's token. Default: read from the helper's state directory",
+  "  --state-dir <path>   where the helper keeps its data, the same flag `add` and `serve` take.",
+  "                       Default $LAHE_STATE_DIR, then $XDG_STATE_HOME/lahe, then ~/.local/state/lahe.",
   "",
   "It prints one JSON line per new item, then one line holding the next cursor.",
   "It consumes nothing and acknowledges nothing: to say you handled an item,",
@@ -81,6 +83,7 @@ function parseArgs(argv) {
     timeout: protocol.WAIT.DEFAULT_TIMEOUT_SECONDS,
     helper: null,
     token: null,
+    stateDir: null,
     help: false,
     error: null
   };
@@ -113,6 +116,9 @@ function parseArgs(argv) {
     } else if (arg === "--token") {
       if (!needsValue(arg, list[i + 1])) break;
       out.token = list[(i += 1)];
+    } else if (arg === "--state-dir") {
+      if (!needsValue(arg, list[i + 1])) break;
+      out.stateDir = list[(i += 1)];
     } else {
       out.error = "unknown option " + JSON.stringify(arg);
       break;
@@ -140,7 +146,13 @@ function readReadyFile(stateDir) {
 
 function resolveHelper(args, options) {
   var opts = options || {};
-  var dir = opts.stateDir || stateDirModule.stateDir();
+  // A typed --state-dir wins, and runs through the SAME in-checkout refusal as
+  // the env-derived default, exactly as `add` and `serve` do with the flag. The
+  // caller-supplied `opts.stateDir` behind it is the test harness's, which
+  // serves from a directory it controls.
+  var dir = args.stateDir
+    ? stateDirModule.stateDir({ dir: args.stateDir })
+    : opts.stateDir || stateDirModule.stateDir();
   var ready = readReadyFile(dir);
   var origin = args.helper || (ready && ready.port ? "http://" + protocol.DEFAULT_HOST + ":" + ready.port : null);
   var token = args.token;

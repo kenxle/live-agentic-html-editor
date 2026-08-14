@@ -123,6 +123,30 @@ test("a review the helper has never heard of exits 3", async () => {
   });
 });
 
+test("--state-dir points wait at a helper somewhere other than the default", async () => {
+  await withHelper(async ({ dir, helper }) => {
+    // No `stateDir` option: everything wait knows about this helper has to come
+    // from the flag. `add` and `serve` both take it; before this, an agent on a
+    // non-default state directory could only reach it through the environment.
+    const parsed = wait.parseArgs(["--review", REVIEW, "--state-dir", dir]);
+    assert.equal(parsed.error, null, "the flag is not a usage error");
+    assert.equal(parsed.stateDir, dir);
+
+    const out = collector();
+    const err = collector();
+    const code = await wait.run(
+      ["--review", REVIEW, "--since", String(helper.log.currentSeq(REVIEW)), "--timeout", "0", "--state-dir", dir],
+      { stdout: out, stderr: err }
+    );
+    assert.equal(
+      code,
+      EXIT.TIMEOUT,
+      "it found the helper and the review's token through the flag alone:\n" + err.text()
+    );
+    assert.equal(out.json()[0].items, 0);
+  });
+});
+
 test("nothing new inside the timeout exits 1, and still prints the cursor", async () => {
   await withHelper(async ({ dir, helper }) => {
     const seqBefore = helper.log.currentSeq(REVIEW);
