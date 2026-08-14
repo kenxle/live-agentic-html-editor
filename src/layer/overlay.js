@@ -99,12 +99,20 @@
   // TRANSITIONS rather than the presence of a sentence. The sentences live here
   // so two builders cannot write two wordings for the same state.
   var STATUS = {
+    // Something FAILED: a request the helper refused, could not take, or never
+    // answered. Saying the helper is away is a fact here.
     KEPT_LOCALLY: "kept_locally",
+    // Nothing has failed and the helper has not confirmed anything yet. The work
+    // is in this browser, which is true, and no outage is asserted, because
+    // asserting one before a single request has failed is an invention (the
+    // status line lied on every freshly loaded page; walkers, 2026-08-14).
+    KEPT_UNCONFIRMED: "kept_unconfirmed",
     STORED: "stored",
     AGENT_CONNECTED: "agent_connected"
   };
   var STATUS_TEXT = {
     kept_locally: "Kept in this browser. Nothing is lost; it will be stored when the helper is back.",
+    kept_unconfirmed: "Kept in this browser. It is stored the moment the helper confirms it.",
     stored: "Stored.",
     agent_connected: "Stored, and an agent is reading."
   };
@@ -113,6 +121,7 @@
   // away entirely.
   var STATUS_SHORT = {
     kept_locally: "Kept in this browser",
+    kept_unconfirmed: "Kept in this browser",
     stored: "Stored",
     agent_connected: "Stored · agent reading"
   };
@@ -1069,11 +1078,16 @@
       // Remove a chip because its condition ENDED, without the dismissed mark
       // that would suppress the code forever. A window that just took the
       // review over must not keep wearing "another window is reviewing this
-      // page", and the next real refusal must still get its chip.
+      // page", and a page whose helper just answered must not keep wearing "the
+      // local helper is not reachable"; the next real failure still gets a chip.
+      //
+      // With no code, every chip goes. It used to be TWO clear functions in this
+      // one object literal, so the no-argument one silently won and clearing one
+      // standing chip wiped the whole list.
       clear: function (code) {
         var n = chips.length;
         chips = chips.filter(function (f) {
-          return f.code !== code;
+          return code === undefined || code === null ? false : f.code !== code;
         });
         saveChips();
         renderChips();
@@ -1087,11 +1101,6 @@
       },
       count: function () {
         return chips.length;
-      },
-      clear: function () {
-        chips = [];
-        saveChips();
-        renderChips();
       }
     };
 
@@ -1205,7 +1214,7 @@
       // rail is saying nothing reached a helper. Under "Stored · agent reading"
       // it was a permanent sentence contradicting the line above it, and a
       // caveat that is always on screen is a caveat nobody reads.
-      var showLimit = !status || status === STATUS.KEPT_LOCALLY;
+      var showLimit = !status || status === STATUS.KEPT_LOCALLY || status === STATUS.KEPT_UNCONFIRMED;
       dom.limit.textContent = showLimit && limitText ? limitText : "";
     }
 
