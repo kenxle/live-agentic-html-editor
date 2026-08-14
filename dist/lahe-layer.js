@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+4f8885557770
+ * version 0.0.0+ec03bb57019f
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+4f8885557770";
+  g.LAHE.version = "0.0.0+ec03bb57019f";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -1374,6 +1374,9 @@
     "context.heading": CLASS_DATA,
     "context.element": CLASS_DATA,
     "region.label": CLASS_DATA,
+    // The page's own words, kept so replay knows which page states the reviewer
+    // has already answered. Data, and emphatically not intent.
+    "region.accepted_page_texts": CLASS_DATA,
     page_title: CLASS_DATA,
     page_path: CLASS_DATA,
     "reply.reason": CLASS_DATA,
@@ -1486,8 +1489,72 @@
       // Display only. Pinned at first touch, never recomputed. See regions.js.
       label: null,
       // null, or {code, reason, at} when the subject can no longer be found.
-      lost: null
+      lost: null,
+      // The page states the reviewer has already answered "keep mine" to. See
+      // acceptedPageTexts below.
+      accepted_page_texts: []
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // The accepted page states: what "Keep mine" has to remember
+  // ---------------------------------------------------------------------------
+  //
+  // The reviewer's decision on a collision has to survive the next repaint, and
+  // on a live page there is always a next repaint. Writing the reviewer's
+  // version once is not enough: the page's own source still says the agent's
+  // sentence, so the very next morph renders it again, replay reads a fourth
+  // branch and raises the same collision, forever. (Found by a walker on
+  // 2026-08-14 at /?morph=raw&poll=250.)
+  //
+  // So the record remembers WHICH PAGE STATE the reviewer already answered. The
+  // page holding one of those states is not a new collision: it is the same
+  // question, already decided, and replay treats it exactly like the `before`
+  // (branch two) and re-applies the current `after`.
+  //
+  // `before` is NOT touched by any of this, per R29: it is the agent's diff base
+  // and it stays pristine.
+  //
+  // ADD-ONLY, AND BOUNDED. Add-only because a decision the reviewer made is not
+  // something a later pass gets to un-make. Bounded because a page whose source
+  // genuinely churns (a feed, a clock, a cursor in a URL) would otherwise hand
+  // the record a new state on every pass and grow it without limit, in browser
+  // storage and in every event this record posts. The cap keeps the NEWEST
+  // states, because the reviewer's most recent decisions describe the page as it
+  // is now; the oldest one falling off means a page state from long ago can
+  // raise the collision once more, which is honest (it asks again rather than
+  // guessing) and is the price of the bound.
+  var ACCEPTED_PAGE_TEXTS_MAX = 8;
+
+  /** The page states this record's reviewer has already accepted. Never null. */
+  function acceptedPageTexts(item) {
+    var region = item && item[FIELD.REGION];
+    var list = region && region.accepted_page_texts;
+    return Array.isArray(list) ? list : [];
+  }
+
+  /**
+   * Remember one page state as answered. Add-only, deduped, capped.
+   *
+   * Writes a NEW region object rather than pushing into the old one, the way
+   * every other region stamp in this tool does, so a caller holding the previous
+   * region sees the value it read.
+   *
+   * @returns {Array} the accepted list as it now stands
+   */
+  function acceptPageText(item, text) {
+    if (!item || typeof text !== "string" || !text) return acceptedPageTexts(item);
+    var region = item[FIELD.REGION] || emptyRegion();
+    var list = acceptedPageTexts(item).slice();
+    if (list.indexOf(text) === -1) list.push(text);
+    if (list.length > ACCEPTED_PAGE_TEXTS_MAX) list = list.slice(list.length - ACCEPTED_PAGE_TEXTS_MAX);
+    var next = {};
+    Object.keys(region).forEach(function (key) {
+      next[key] = region[key];
+    });
+    next.accepted_page_texts = list;
+    item[FIELD.REGION] = next;
+    return list;
   }
 
   function emptyContext() {
@@ -1763,6 +1830,9 @@
     bumpRev: bumpRev,
     historyEntry: historyEntry,
     priorAfters: priorAfters,
+    ACCEPTED_PAGE_TEXTS_MAX: ACCEPTED_PAGE_TEXTS_MAX,
+    acceptedPageTexts: acceptedPageTexts,
+    acceptPageText: acceptPageText,
     changedSpan: changedSpan,
     editChangeText: editChangeText,
     comparisonFields: comparisonFields,
@@ -14729,6 +14799,12 @@
 //      so flag it on the card and WRITE NOTHING (R5). The conflict card shows
 //      both versions in full and the reviewer picks which one stands.
 //
+// Branch two has a second door into it: a page state the reviewer already
+// answered with "Keep mine" (region.accepted_page_texts, in record.js). Their
+// decision is not re-litigated every time the page renders itself from a source
+// that still disagrees, so that state is branch-two-equivalent and the current
+// `after` is re-applied. See resolveConflict.
+//
 // Branch three is the one a builder skips. Without the applied-`after` history
 // on the record (0A-kernel's field), a two-rewording case falls into branch
 // four and flags a collision that is not one.
@@ -14863,6 +14939,15 @@
   //             the page's" button, which retires a record without writing to
   //             the page. Replay never edits through it and a missing one only
   //             costs that button
+  //   persist   optional. Writes one record back to durable storage. Replay
+  //             mutates records in place (the lost stamp, the accepted page
+  //             states) and the items it is handed are a CACHE that any later
+  //             merge replaces from the store, so a mutation nobody wrote down
+  //             lives until the next remount and no longer. The reviewer's
+  //             answer to a collision has to outlive that, so keep_mine writes
+  //             through this. A caller that supplies none keeps the old
+  //             memory-only behaviour, which is what the simulated-DOM unit
+  //             tests run on
   //   hooks     one function per PASS_ORDER step that replay does not own:
   //             fold_replies, merge_store, retire_handled, update_rail. A
   //             missing hook is a no-op and is reported as one in the summary,
@@ -14875,8 +14960,16 @@
     anchor: null,
     document: null,
     editing: null,
+    persist: null,
     hooks: null
   };
+
+  /** Write one record back to durable storage, when a caller gave us the seam. */
+  function persistItem(ctx, item) {
+    if (!ctx || typeof ctx.persist !== "function" || !item) return false;
+    ctx.persist(item);
+    return true;
+  }
 
   // Finding 30: the wired product (src/layer/index.js) calls configure with NO
   // hooks, so fold_replies, merge_store, retire_handled and update_rail record
@@ -15149,6 +15242,9 @@
       if (typeof item[F.BEFORE] === "string" && normalize.equalsInMode(mode, domText, item[F.BEFORE])) {
         return { branch: BRANCH.REAPPLY, earlierAfter: null };
       }
+      if (matchesAcceptedPageState(item, mode, domText)) {
+        return { branch: BRANCH.REAPPLY, earlierAfter: null, accepted: true };
+      }
       return { branch: BRANCH.CONTENT_CHANGED, earlierAfter: null };
     }
 
@@ -15172,7 +15268,26 @@
       }
     }
 
+    // A page state the reviewer already answered with "Keep mine". Their
+    // decision stands until they change it, so this is branch two: re-apply the
+    // current `after` and raise nothing. Without it the reviewer's answer lives
+    // exactly one pass on any page that still renders the agent's sentence from
+    // its own source, which is every live page.
+    if (matchesAcceptedPageState(item, mode, domText)) {
+      return { branch: BRANCH.REAPPLY, earlierAfter: null, accepted: true };
+    }
+
     return { branch: BRANCH.CONTENT_CHANGED, earlierAfter: null };
+  }
+
+  // Has the reviewer already said "keep mine" about the page looking like this?
+  function matchesAcceptedPageState(item, mode, domText) {
+    if (typeof domText !== "string") return false;
+    var accepted = record.acceptedPageTexts(item);
+    for (var i = 0; i < accepted.length; i += 1) {
+      if (normalize.equalsInMode(mode, domText, accepted[i])) return true;
+    }
+    return false;
   }
 
   // What the card says when branch three fires. Written once here so the
@@ -15430,9 +15545,32 @@
     // The reviewer's version stands, so it is written to the page exactly as an
     // ordinary re-apply would write it, and the collision is answered.
     var item = itemWithId(ctx, id);
-    var element = lastElement[id];
     if (!item) return { resolved: false, choice: choice, reason: "no record " + String(id) };
-    if (!element || (element.isConnected === false)) {
+
+    // FIRST, AND BEFORE THE WRITE: the record remembers that the reviewer
+    // answered THIS page state. That memory is what makes the decision durable,
+    // because the write below lasts exactly until the next repaint: the page's
+    // own source still says the agent's sentence, so it renders it again, and
+    // from then on the ordinary replay pass is the only thing carrying the
+    // reviewer's version. It reads the accepted state as branch two and
+    // re-applies, pass after pass, like any committed record. (The one-shot
+    // write was the whole bug: found live on 2026-08-14, at
+    // /?morph=raw&poll=250, where the press was undone 150ms later and the
+    // collision re-raised forever with nothing said to the reviewer.)
+    record.acceptPageText(item, flagged.theirs);
+    persistItem(ctx, item);
+
+    // The node from the last pass, or a fresh resolve when a repaint has been
+    // through since. On a morphing page the element replay bound a moment ago is
+    // routinely gone by the time a hand reaches the button, and refusing the
+    // press for that is the same defect wearing a different hat.
+    var element = lastElement[id];
+    if (!element || element.isConnected === false) {
+      var ref = item[record.FIELD.REGION] ? item[record.FIELD.REGION].ref : null;
+      var verdict = ref ? resolveRegion(item, ref, ctx) : null;
+      element = verdict ? verdict.element : null;
+    }
+    if (!element) {
       return { resolved: false, choice: choice, reason: "the region this record points at is not on the page" };
     }
     epoch.write("replay.keep_mine", function () {
@@ -15445,6 +15583,7 @@
     // projects into review.json) after the reviewer resolved in its favour, and
     // the element memory would point at a node that is no longer the truth.
     clearLost(item);
+    persistItem(ctx, item);
     lastElement[id] = element;
     delete conflicts[id];
     forceClearConflict(ctx, id);
@@ -15620,6 +15759,11 @@
     push(item[fields.before]);
     push(item[record.FIELD.BEFORE]);
     record.priorAfters(item, fields.after).forEach(push);
+    // A page state the reviewer answered with "keep mine" is a spelling of this
+    // region that was really on the page, so it belongs in the probe list beside
+    // the record's own texts: on the next repaint it is what the page holds
+    // again, and the region has to be findable before it can be re-written.
+    record.acceptedPageTexts(item).forEach(push);
     if (ref && typeof ref.probe === "string") push(ref.probe);
     return out;
   }
@@ -16409,7 +16553,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+4f8885557770";
+  var VERSION = "0.0.0+ec03bb57019f";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -16709,8 +16853,44 @@
         rail.upsertCard(item);
         counters.cardsDrawn += 1;
       });
+      repaintHighlights(merged);
       counters.merges += 1;
       return merged;
+    }
+
+    // The kinds that carry a mark on the page. An edit is not one of them: its
+    // mark IS the changed text, which replay puts back.
+    var PAINTED_KINDS = [record.KIND.COMMENT, record.KIND.NOTE];
+
+    /**
+     * Put the reviewer's marks back on the page.
+     *
+     * A highlight is DOM, so it dies with the page and it is not restored by
+     * anything else here: the records come back from browser storage, the cards
+     * are redrawn above, replay puts committed edits back, and until this
+     * existed the passages themselves came back bare (found on a reload,
+     * 2026-08-14). The reviewer's marks are their map of what they have already
+     * looked at, so a reload that erases them is a reviewer reading the page
+     * twice.
+     *
+     * comments.repaint resolves the record's own anchor against the page as it
+     * is now and paints nothing when it does not bind, which is the honest
+     * answer and the same one replay gives: a passage the agent deleted stays
+     * unpainted and keeps its lost state.
+     *
+     * A HANDLED item is skipped, because a handled item having no highlight is
+     * the rule (R37), not an accident. An item whose box is open is skipped too:
+     * its paint is the louder ACTIVE one, and repainting would quietly downgrade
+     * the passage the reviewer is looking at right now.
+     */
+    function repaintHighlights(merged) {
+      merged.forEach(function (item) {
+        if (PAINTED_KINDS.indexOf(item[record.FIELD.KIND]) === -1) return;
+        if (item[record.FIELD.STATE] === record.STATE.HANDLED) return;
+        var id = item[record.FIELD.ID];
+        if (comments.boxFor(id)) return;
+        comments.repaint(id);
+      });
     }
 
     merge();
@@ -16771,7 +16951,17 @@
       document: doc,
       // For one thing only: the conflict card's "take the page's" button, which
       // retires a record and writes nothing. See replay's `context`.
-      editing: editing
+      editing: editing,
+      // How a record replay changed gets written down. `items` above is a
+      // CACHE, and merge() replaces it from the store on every remount, so a
+      // change replay only made in memory dies at the next morph. That is what
+      // made "Keep mine" a one-shot: the accepted page state it recorded was
+      // gone before the pass that needed it (2026-08-14).
+      persist: function (item) {
+        store.write(reviewId, item);
+        refreshItems();
+        rail.upsertCard(item);
+      }
     });
 
     // "The page changed, so replay gets a pass."
