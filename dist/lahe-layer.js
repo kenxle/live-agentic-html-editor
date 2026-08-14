@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+45c27b0c3978
+ * version 0.0.0+4f8885557770
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+45c27b0c3978";
+  g.LAHE.version = "0.0.0+4f8885557770";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -10085,6 +10085,21 @@
 // revert mechanism the rail's law exists to stop.
 //
 // ---------------------------------------------------------------------------
+// Undo lives on the row (R28)
+// ---------------------------------------------------------------------------
+//
+// R28 says every edit can be undone on its own. 2A's editing.undo(id) does the
+// work; this tab is where the reviewer can reach it, because the row is the only
+// place a hand edit is listed. The button wears the rail's own card-action
+// register (`.cardact.cardact--quiet`), the same one Reword and Delete wear on a
+// comment card, so the two tabs read as one product.
+//
+// undo reverts that record's region and retires the record, which drops the row
+// on the next refresh. When it CANNOT (`reverted: false`), the row says why,
+// under the before-and-after. An undo that quietly does nothing teaches the
+// reviewer not to trust the button.
+//
+// ---------------------------------------------------------------------------
 // The export seam
 // ---------------------------------------------------------------------------
 //
@@ -10137,6 +10152,15 @@
   var BAR_ORDER = -100000;
 
   var DELETED_TEXT = "Deleted";
+  // R28's reviewer-facing half. The row is the only place a hand edit is listed,
+  // so it is the only place the reviewer can take one back. One word, in the
+  // rail's card-action register, the same register Reword and Delete wear on a
+  // comment card.
+  var UNDO_LABEL = "Undo";
+  var UNDO_TITLE = "Put this region back the way the page had it, and drop this record.";
+  // Undo needs 2A's surface. Without it the button says so rather than sitting
+  // there doing nothing when pressed.
+  var UNDO_MISSING_TITLE = "Undo needs the editing surface, which is not on this page.";
   // Shortened from "Export the edit list": it was the widest, heaviest thing in
   // the pane, opposite an 11.5px count, and on the empty tab it was a large
   // disabled button over "No hand edits yet." Two words rather than one,
@@ -10175,6 +10199,11 @@
     "." + ROW_CLASS + "__structure:empty{display:none}",
     "." + ROW_CLASS + "__said{font-size:12px;color:var(--ink-soft)}",
     "." + ROW_CLASS + "__said:empty{display:none}",
+    // An undo that could not be carried out says so here, on the row it failed
+    // on, in the rail's warning color. Never a silent no-op.
+    "." + ROW_CLASS + "__failed{font-size:11.5px;color:var(--warn);",
+    "background:var(--warn-wash);border-radius:7px;padding:5px 8px;margin:0}",
+    "." + ROW_CLASS + "__failed:empty{display:none}",
 
     "." + BAR_CLASS + "{display:flex;align-items:center;gap:8px;padding:0 2px 10px;",
     "border-bottom:1px solid var(--line-soft)}",
@@ -10311,6 +10340,7 @@
     var buttonNode = null;
     var lastExport = null;
     var lastExportPromise = null;
+    var lastUndo = null;
 
     function el(tag, className, text) {
       var node = doc.createElement(tag);
@@ -10452,7 +10482,80 @@
       // the only intent field a hand edit carries, and a style guide is built
       // out of exactly this.
       row.appendChild(el("p", ROW_CLASS + "__said", ""));
+
+      // What an undo said when it could not do it. Built empty, and drawn only
+      // when there is something to say (`:empty` hides it).
+      var failed = el("p", ROW_CLASS + "__failed", "");
+      failed.setAttribute("data-lahe-undo-failed", "");
+      row.appendChild(failed);
+
+      // R28's one gesture, in the rail's own card-action register: the same
+      // quiet outline Reword and Delete wear on a comment card, so the Edits tab
+      // and the Active tab read as one product rather than two.
+      var foot = el("div", "cardacts");
+      var undoBtn = el("button", "cardact cardact--quiet", UNDO_LABEL);
+      undoBtn.setAttribute("type", "button");
+      undoBtn.setAttribute("data-lahe-act", "undo");
+      undoBtn.addEventListener("click", function () {
+        undoRow(item[record.FIELD.ID]);
+      });
+      foot.appendChild(undoBtn);
+      row.appendChild(foot);
+      paintUndoButton(undoBtn);
       return row;
+    }
+
+    // The editing surface, asked for every time rather than captured: the tab is
+    // usable without it (the list still renders), and the button is honest about
+    // that instead of throwing on click.
+    function editingSurface() {
+      if (editing && typeof editing.undo === "function") return editing;
+      var ns = root && root.LAHE ? root.LAHE : null;
+      if (ns && ns.editing && typeof ns.editing.undo === "function") return ns.editing;
+      return null;
+    }
+
+    function paintUndoButton(button) {
+      if (!button) return button;
+      var available = !!editingSurface();
+      button.disabled = !available;
+      button.title = available ? UNDO_TITLE : UNDO_MISSING_TITLE;
+      return button;
+    }
+
+    /**
+     * Undo ONE hand edit, from its own row.
+     *
+     * editing.undo reverts that record's region and retires the record; the row
+     * then leaves the tab on the next refresh, which the tab already does in
+     * place. A refusal (`reverted: false`) is written onto the row, because an
+     * undo that quietly does nothing is how a reviewer learns not to trust the
+     * button.
+     */
+    function undoRow(id) {
+      var surface = editingSurface();
+      var row = rows[id];
+      if (!surface) {
+        sayFailed(row, UNDO_MISSING_TITLE);
+        lastUndo = { id: id, reverted: false, kind: null, reason: UNDO_MISSING_TITLE };
+        return lastUndo;
+      }
+      sayFailed(row, "");
+      var result = surface.undo(id) || { reverted: false, kind: null, reason: "undo answered nothing" };
+      lastUndo = { id: id, reverted: !!result.reverted, kind: result.kind || null, reason: result.reason || null };
+      if (!result.reverted) sayFailed(row, "Could not undo this: " + String(result.reason || "no reason given"));
+      // editing.undo emits its own change, which the tab is subscribed to; the
+      // refresh here is for a caller that handed in no editing surface to
+      // subscribe to.
+      refresh();
+      return lastUndo;
+    }
+
+    function sayFailed(row, text) {
+      if (!row) return null;
+      var said = row.querySelector("[data-lahe-undo-failed]");
+      if (said) said.textContent = text || "";
+      return said;
     }
 
     function updateRow(row, item) {
@@ -10465,6 +10568,7 @@
       after.setAttribute("data-empty", text.emptyAfter ? "true" : "false");
       row.querySelector("." + ROW_CLASS + "__structure").textContent = text.structure;
       row.querySelector("." + ROW_CLASS + "__said").textContent = item[record.FIELD.CHANGE] || "";
+      paintUndoButton(row.querySelector("[data-lahe-act='undo']"));
       return row;
     }
 
@@ -10566,6 +10670,16 @@
             };
           });
       },
+      // R28, from the row. The button is what a reviewer presses; these are for
+      // a caller that cannot reach into the rail's closed root.
+      undoRow: undoRow,
+      undoButton: function (id) {
+        var row = rows[id];
+        return row ? row.querySelector("[data-lahe-act='undo']") : null;
+      },
+      lastUndo: function () {
+        return lastUndo;
+      },
       exportList: exportList,
       exportButton: function () {
         return buttonNode;
@@ -10595,6 +10709,9 @@
     DELETED_TEXT: DELETED_TEXT,
     EXPORT_LABEL: EXPORT_LABEL,
     EXPORT_MISSING_TITLE: EXPORT_MISSING_TITLE,
+    UNDO_LABEL: UNDO_LABEL,
+    UNDO_TITLE: UNDO_TITLE,
+    UNDO_MISSING_TITLE: UNDO_MISSING_TITLE,
     isHandEdit: isHandEdit,
     structuralSummary: structuralSummary,
     rowText: rowText,
@@ -12124,7 +12241,9 @@
 //   Cmd-Enter                          marks the comment ready. Nothing that is
 //                                      not ready is actionable (R7)
 //   Esc                                closes the box, KEEPING the draft
-//   rewording a ready comment          bumps its revision (R21)
+//   rewording a ready comment          bumps its revision ONCE, when the
+//                                      rewording commits, never per keystroke
+//                                      (R21)
 //   deleting                           the reviewer's own act, and the only
 //                                      thing that ever removes an item
 //
@@ -12566,22 +12685,29 @@
         if (placement === "anchored") positionAt(node, src && src.range ? src.range : null);
       }
 
+      // The note this box last COMMITTED. A rewording is measured against it, so
+      // typing a word and taking it back again is not a revision.
+      var committedNote = String(item[record.FIELD.NOTE] || "");
+
       // Every keystroke. Synchronous, before anything else.
       function type(text) {
         var current = handleItem();
-        // A draft does not bump rev: drafts flow to the helper and the log
+        // NEITHER A DRAFT NOR A REWORDING IN PROGRESS BUMPS rev.
+        //
+        // A draft does not, because drafts flow to the helper and the log
         // legitimately holds many events at one revision (idempotence is by
         // event id, never by item and rev).
-        var next;
-        if (record.isDraft(current)) {
-          next = Object.assign({}, current);
-          next[record.FIELD.NOTE] = String(text);
-          next[record.FIELD.UPDATED_AT] = record.nowIso();
-        } else {
-          // Rewording something already ready bumps the revision, which is what
-          // makes a stale reply naming the old revision refusable (R21).
-          next = record.bumpRev(current, { note: String(text) });
-        }
+        //
+        // A rewording in progress does not, for the same reason plus a sharper
+        // one. rev is what an agent's reply names, and a reply naming an older
+        // rev is refused as stale (R21). Bumping per keystroke made every reply
+        // stale the moment the reviewer touched the box, so the protection
+        // became reply-blocking noise: one sentence reworded took rev 1 to 29 on
+        // the 2026-08-14 walk. The keystrokes are still durable at once; they are
+        // CONTENT. The revision moves once, at the commit, in flushReword.
+        var next = Object.assign({}, current);
+        next[record.FIELD.NOTE] = String(text);
+        next[record.FIELD.UPDATED_AT] = record.nowIso();
         store.write(requireReview(), next);
         if (inputEl && inputEl.value !== next[record.FIELD.NOTE]) inputEl.value = next[record.FIELD.NOTE];
         paintState(next);
@@ -12589,13 +12715,43 @@
         return next;
       }
 
-      function markReady() {
+      /**
+       * The end of a rewording session: ONE bump, carrying the committed words.
+       *
+       * Called by both ways a session ends, Cmd-Enter and closing the box, and
+       * it is idempotent between them: whichever gets there first moves the
+       * revision, and the second sees nothing left to commit.
+       *
+       * A draft has nothing to bump; it starts at rev 1 and reaches the agent
+       * when it is marked ready.
+       */
+      function flushReword() {
         var current = handleItem();
+        var note = String(current[record.FIELD.NOTE] || "");
+        if (record.isDraft(current)) {
+          committedNote = note;
+          return current;
+        }
+        if (note === committedNote) return current;
+        // bumpRev carries the record as it stands, so the applied-after history
+        // records the committed version and not the keystrokes on the way to it
+        // (it appends only when the compared after moved).
+        var next = record.bumpRev(current, {});
+        committedNote = String(next[record.FIELD.NOTE] || "");
+        store.write(requireReview(), next);
+        paintState(next);
+        emit(next, "reworded");
+        return next;
+      }
+
+      function markReady() {
+        var current = flushReword();
         var next = Object.assign({}, current);
         next[record.FIELD.STATE] = record.STATE.READY;
         next[record.FIELD.UPDATED_AT] = record.nowIso();
         record.validateItem(next);
         store.write(requireReview(), next);
+        committedNote = String(next[record.FIELD.NOTE] || "");
         paintState(next);
         emit(next, "ready");
         return next;
@@ -12608,6 +12764,11 @@
       }
 
       function close() {
+        // Closing ends a rewording session as surely as Cmd-Enter does, so the
+        // words the reviewer leaves behind are committed at one revision here
+        // too. Without this, a reword ended with Esc would change what the
+        // agent reads while the number the agent checks against stayed put.
+        flushReword();
         // The draft is kept. Closing a box is not discarding work; only the
         // reviewer's own delete removes an item.
         if (node && node.parentNode) node.parentNode.removeChild(node);
@@ -12637,6 +12798,10 @@
         focus: focus,
         type: type,
         markReady: markReady,
+        // Ending a rewording session without closing the box. Cmd-Enter and
+        // close both go through it; this is the same seam for a caller that has
+        // neither.
+        commitReword: flushReword,
         close: close
       };
     }
@@ -16244,7 +16409,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+45c27b0c3978";
+  var VERSION = "0.0.0+4f8885557770";
 
   var protocol = ns.protocol;
   var record = ns.record;
