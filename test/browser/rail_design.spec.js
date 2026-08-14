@@ -73,6 +73,30 @@ async function commentOn(page, selector, text) {
   });
 }
 
+/**
+ * Open a comment box, type into it, and STOP: no Cmd-Enter, so the item stays a
+ * draft. This is the state Ken reads off color, so a test about the color needs
+ * a real one rather than a hand-set attribute.
+ */
+async function openDraftOn(page, selector, text) {
+  await page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }, selector);
+  await page.keyboard.press("ControlOrMeta+Shift+KeyC");
+  await pollPage(page, () => !!window.__lahe.focusedBoxQuote(), undefined, {
+    message: "the comment box to open on the passage"
+  });
+  await page.keyboard.type(text);
+  await pollPage(page, () => window.__lahe.items().some((i) => i.state === "draft"), undefined, {
+    message: "the draft to reach the rail"
+  });
+}
+
 /** Fold an agent reply the way the helper's poll loop delivers one. */
 function fold(page, item, reply, state) {
   return page.evaluate((a) => {
@@ -154,6 +178,190 @@ test.describe("the rail as a shipping surface", () => {
       expect(styled.labels).toEqual(["Reword", "Delete"]);
       expect(styled.gap, "Reword and Delete are two buttons, not one word").toBeGreaterThanOrEqual(4);
       expect(parseFloat(styled.actPadding), "and they are drawn as buttons").toBeGreaterThan(0);
+    } finally {
+      await helper.stop().catch(() => {});
+      await app.close();
+    }
+  });
+
+  // --- the card's state is a color, not only a word --------------------------
+  //
+  // Ken read state off color in the module this one replaces: a comment he had
+  // not submitted yet was yellow, a submitted one was green, and he could see
+  // the state of the whole list without reading a single chip. The chips stay;
+  // the color comes back as a WASH, quiet enough that the reviewer's own
+  // sentence is still the strongest thing on the card.
+  //
+  // Asserted on COMPUTED background, in both schemes, because "the attribute is
+  // on the node" was true the whole time the rail had no color coding at all.
+
+  test("a draft card is washed warm and a ready card green, in both schemes, and the wash changes in place", async ({
+    page
+  }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+
+      // Two cards: one left as a draft, one submitted, so both washes are read
+      // off the same pane at the same moment.
+      await commentOn(page, REGION.lede, "Pick one number and use it twice.");
+      await openDraftOn(page, REGION.rest, "Half written, not submitted yet.");
+
+      const read = () =>
+        page.evaluate(() => {
+          const rail = window.__lahe.rail;
+          const items = window.__lahe.items();
+          const idFor = (state) => (items.filter((i) => i.state === state)[0] || {}).id || null;
+          const bg = (id) => {
+            const node = id ? rail.cardNode(id) : null;
+            return node ? window.getComputedStyle(node).backgroundColor : null;
+          };
+          const draftId = idFor("draft");
+          const readyId = idFor("ready");
+          const railNode = rail.tabBody("active").getRootNode().querySelector(".rail");
+          return {
+            draftId: draftId,
+            readyId: readyId,
+            draft: bg(draftId),
+            ready: bg(readyId),
+            paper: window.getComputedStyle(railNode).getPropertyValue("--paper").trim(),
+            scheme: rail
+              .tabBody("active")
+              .getRootNode()
+              .host.getAttribute("data-lahe-scheme")
+          };
+        });
+
+      const rgb = (value) => {
+        const m = String(value).match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+        if (!m) throw new Error("not an rgb color: " + value);
+        return { r: Number(m[1]), g: Number(m[2]), b: Number(m[3]) };
+      };
+
+      const light = await read();
+      expect(light.scheme, "the page is light, so the rail is").toBe("light");
+      expect(light.draftId, "there is a draft card on screen").toBeTruthy();
+      expect(light.readyId, "and a ready one").toBeTruthy();
+
+      const lightDraft = rgb(light.draft);
+      const lightReady = rgb(light.ready);
+      expect(light.draft, "draft and ready do not wear the same background").not.toBe(light.ready);
+      expect(lightDraft.r - lightDraft.b, "the draft wash is warm: amber, the rail's own needs-you color").toBeGreaterThanOrEqual(8);
+      expect(lightReady.g - lightReady.r, "the ready wash is green").toBeGreaterThanOrEqual(4);
+      expect(lightReady.g - lightReady.b, "green, not blue").toBeGreaterThanOrEqual(2);
+      // Quiet: a wash over the card's paper, not a fill. The reviewer's sentence
+      // is still the strongest thing on the card.
+      const paper = (() => {
+        if (!light.paper.startsWith("#")) return rgb(light.paper);
+        const hex = light.paper.slice(1);
+        const full = hex.length === 3 ? hex.split("").map((c) => c + c).join("") : hex;
+        return {
+          r: parseInt(full.slice(0, 2), 16),
+          g: parseInt(full.slice(2, 4), 16),
+          b: parseInt(full.slice(4, 6), 16)
+        };
+      })();
+      ["r", "g", "b"].forEach((channel) => {
+        expect(
+          Math.abs(lightDraft[channel] - paper[channel]),
+          "the draft wash stays quiet on " + channel
+        ).toBeLessThanOrEqual(30);
+        expect(
+          Math.abs(lightReady[channel] - paper[channel]),
+          "the ready wash stays quiet on " + channel
+        ).toBeLessThanOrEqual(30);
+      });
+
+      // --- the wash follows the state, in place ------------------------------
+      const before = await page.evaluate((id) => {
+        window.__lahe.rail.cardNode(id).setAttribute("data-wash-probe", "1");
+        return window.getComputedStyle(window.__lahe.rail.cardNode(id)).backgroundColor;
+      }, light.draftId);
+      await page.keyboard.press("ControlOrMeta+Enter");
+      await pollPage(page, (id) => window.__lahe.rail.getCard(id).state === "ready", light.draftId, {
+        message: "Cmd-Enter to submit the draft"
+      });
+      const after = await page.evaluate((id) => {
+        const node = window.__lahe.rail.cardNode(id);
+        return {
+          bg: window.getComputedStyle(node).backgroundColor,
+          sameNode: node.getAttribute("data-wash-probe") === "1"
+        };
+      }, light.draftId);
+      expect(after.sameNode, "the card was repainted, never rebuilt").toBe(true);
+      expect(after.bg, "and its wash went from draft to ready").not.toBe(before);
+      expect(after.bg).toBe(light.ready);
+
+      // --- the same two washes in dark ---------------------------------------
+      await openDraftOn(page, REGION.lede, "Another one, still unsent.");
+      await page.evaluate(() => {
+        document.documentElement.style.background = "#12151a";
+        document.body.style.background = "#12151a";
+        window.__lahe.rail.refreshScheme();
+      });
+
+      const dark = await read();
+      expect(dark.scheme, "a dark page puts the rail in dark").toBe("dark");
+      const darkDraft = rgb(dark.draft);
+      const darkReady = rgb(dark.ready);
+      expect(dark.draft).not.toBe(dark.ready);
+      expect(darkDraft.r + darkDraft.g + darkDraft.b, "the dark draft wash is dark").toBeLessThan(330);
+      expect(darkReady.r + darkReady.g + darkReady.b, "the dark ready wash is dark").toBeLessThan(330);
+      expect(darkDraft.r - darkDraft.b, "still warm in dark").toBeGreaterThanOrEqual(4);
+      expect(darkReady.g - darkReady.r, "still green in dark").toBeGreaterThanOrEqual(3);
+    } finally {
+      await helper.stop().catch(() => {});
+      await app.close();
+    }
+  });
+
+  // --- a long file path stays inside the card --------------------------------
+
+  test("a very long reply file path wraps inside the card instead of running out of it", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    const LONG = "app/views/dashboard/components/roster/weekly_digest/_client_activity_summary_row.html.erb";
+    try {
+      await bootedPage(page, app, helper, token);
+      await commentOn(page, REGION.lede, "Name the client in this row.");
+
+      const item = (await page.evaluate(() => window.__lahe.items())).filter((i) => i.state === "ready")[0];
+      await fold(page, item, {
+        status: "handled",
+        agent: "claude",
+        reason: "Named the client in the row and dropped the duplicate count.",
+        files: [LONG, "app/helpers/digest_helper.rb"]
+      }, "handled");
+      await pollPage(page, (id) => window.__lahe.rail.getCard(id).pane === "done", item.id, {
+        message: "the card to move to the Done pane"
+      });
+      await page.evaluate(() => window.__lahe.rail.selectTab("done"));
+
+      const box = await page.evaluate((id) => {
+        const node = window.__lahe.rail.cardNode(id);
+        const files = node.querySelector(".agent__files");
+        const cardRect = node.getBoundingClientRect();
+        const filesRect = files.getBoundingClientRect();
+        const pane = window.__lahe.rail.tabBody("done").getBoundingClientRect();
+        return {
+          cardScroll: node.scrollWidth,
+          cardClient: node.clientWidth,
+          filesRight: filesRect.right,
+          cardRight: cardRect.right,
+          filesLeft: filesRect.left,
+          cardLeft: cardRect.left,
+          paneRight: pane.right,
+          // Wrapped rather than clipped: two paths on more than two lines.
+          filesHeight: filesRect.height,
+          lineCount: files.querySelectorAll(".agent__file").length
+        };
+      }, item.id);
+
+      expect(box.cardScroll, "the card holds its own contents").toBeLessThanOrEqual(box.cardClient);
+      expect(box.filesRight, "the file list ends inside the card").toBeLessThanOrEqual(box.cardRight);
+      expect(box.filesLeft).toBeGreaterThanOrEqual(box.cardLeft);
+      expect(box.filesRight, "and inside the pane").toBeLessThanOrEqual(box.paneRight);
+      expect(box.lineCount, "one path per line").toBe(2);
+      expect(box.filesHeight, "the long path really wrapped rather than being cut off").toBeGreaterThan(30);
     } finally {
       await helper.stop().catch(() => {});
       await app.close();

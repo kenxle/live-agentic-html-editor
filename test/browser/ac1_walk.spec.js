@@ -28,9 +28,9 @@
 //   REAL  the helper and the token: the helper minted the review, and it is
 //         then KILLED, so the whole review is made with nothing running
 //   REAL  the records: five, made by the reviewer's own gestures
-//   REAL  the way the review comes out: a click on the rail's own Export
-//         button, read back off the downloaded file, and (on Chromium) a click
-//         on Copy read back off the system clipboard
+//   REAL  the way the review comes out: real clicks on the rail's own header
+//         menu, Export review read back off the downloaded file, and (on
+//         Chromium) Copy review read back off the system clipboard
 //
 // NO AGENT EVER RUNS. Asserted rather than assumed: no reply file is ever
 // written, and every item in review.json comes back with a null reply.
@@ -136,52 +136,54 @@ async function untetheredNote(page, text) {
 
 // --- the real controls -------------------------------------------------------
 
-/** Click the rail's own button, by its label, inside the closed shadow root. */
-function clickRailButton(page, label) {
-  return page.evaluate(function (wanted) {
-    var pane = window.__lahe.rail.tabBody("active");
-    if (!pane) throw new Error("the rail is not mounted, so it has no buttons");
-    var root = pane.getRootNode();
-    var buttons = Array.prototype.slice.call(root.querySelectorAll("button"));
-    var button = buttons.filter(function (node) {
-      return (node.textContent || "").trim() === wanted;
-    })[0];
-    if (!button) {
-      throw new Error(
-        "no button labelled " +
-          wanted +
-          " in the rail. It holds: " +
-          buttons
-            .map(function (n) {
-              return JSON.stringify((n.textContent || "").trim());
-            })
-            .join(", ")
-      );
-    }
-    button.click();
-    return true;
-  }, label);
+/**
+ * Choose one of the review's actions out of the rail's header menu.
+ *
+ * Copy and Export are behind the head's "More actions" button now (D10,
+ * revised), so the reviewer's path is two real clicks: the button, then the
+ * item. The root is closed, so the geometry comes from the rail's own report.
+ */
+async function chooseFromRailMenu(page, label) {
+  const opened = await pollUntil(
+    async () => {
+      const info = await page.evaluate(() => window.__lahe.rail.menuInfo());
+      if (!info.present) throw new Error("the rail is not mounted, so it has no menu");
+      if (info.open) return info;
+      const at = info.rect;
+      await page.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
+      return null;
+    },
+    { message: "the rail's header menu to open on a real click" }
+  );
+  const item = opened.items.filter((one) => one.label === label)[0];
+  if (!item) {
+    throw new Error(
+      "no menu item labelled " + label + ". The menu holds: " + opened.items.map((one) => one.label).join(", ")
+    );
+  }
+  await page.mouse.click(item.rect.x + item.rect.width / 2, item.rect.y + item.rect.height / 2);
+  return true;
 }
 
 const SENTINEL = "clipboard has not been written yet";
 
 async function copyThroughTheButton(page) {
   await page.evaluate((text) => navigator.clipboard.writeText(text), SENTINEL);
-  await clickRailButton(page, "Copy");
+  await chooseFromRailMenu(page, "Copy review");
   return pollUntil(
     async () => {
       const got = await page.evaluate(() => navigator.clipboard.readText());
       return got && got !== SENTINEL ? got : null;
     },
     {
-      message: "the Copy button to put the review on the clipboard",
+      message: "Copy review to put the review on the clipboard",
       describe: async () => ({ last: await page.evaluate(() => window.__lahe.exporter.last()) })
     }
   );
 }
 
 async function exportThroughTheButton(page) {
-  const [download] = await Promise.all([page.waitForEvent("download"), clickRailButton(page, "Export")]);
+  const [download] = await Promise.all([page.waitForEvent("download"), chooseFromRailMenu(page, "Export review")]);
   const file = await download.path();
   return { text: fs.readFileSync(file, "utf8"), filename: download.suggestedFilename() };
 }
