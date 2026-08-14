@@ -274,11 +274,23 @@ test.describe("1D: comments, gestures, and highlights", () => {
     expect(items[0].rev).toBe(1);
     const id = items[0].id;
 
+    // A rewording SESSION is one revision: the keystrokes move the words, the
+    // commit moves rev (R21). Typing in halves here so the "once" is a real
+    // claim rather than an artefact of a single call.
     await page.evaluate(function (itemId) {
-      window.__lahe.comments.reopen(itemId).type("no, say this instead");
+      const box = window.__lahe.comments.reopen(itemId);
+      box.type("no, say ");
+      box.type("no, say this instead");
     }, id);
     items = await itemsIn(page);
-    expect(items[0].rev).toBe(2);
+    expect(items[0].rev, "typing a reword does not bump rev").toBe(1);
+    expect(items[0].note).toBe("no, say this instead");
+
+    await page.evaluate(function (itemId) {
+      window.__lahe.comments.reopen(itemId).close();
+    }, id);
+    items = await itemsIn(page);
+    expect(items[0].rev, "the commit bumps it, once").toBe(2);
     expect(items[0].note).toBe("no, say this instead");
 
     // Deleting takes its highlight with it.

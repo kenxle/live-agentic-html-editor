@@ -96,6 +96,30 @@
       return ready ? ready.id : null;
     },
 
+    // --- the page itself -----------------------------------------------------
+
+    blockExists: function (id) {
+      return !!document.getElementById(id);
+    },
+    blockText: function (id) {
+      var el = document.getElementById(id);
+      return el ? el.textContent : null;
+    },
+    blockHtml: function (id) {
+      var el = document.getElementById(id);
+      return el ? el.innerHTML : null;
+    },
+
+    // Replay's counters, read straight off 2C's module: an undone record must
+    // not be re-applied by the next pass.
+    replay: function (passes) {
+      for (var i = 0; i < (passes || 1); i += 1) LAHE.replay.runPass("undo");
+      return Object.assign({}, LAHE.replay.counters);
+    },
+    replayCounters: function () {
+      return Object.assign({}, LAHE.replay.counters);
+    },
+
     // --- what the rail holds -------------------------------------------------
 
     currentTab: function () {
@@ -129,6 +153,51 @@
       var t = tab();
       return t ? t.rows() : null;
     },
+    // The Edits pane, open and on screen, which is what a geometry click needs.
+    showEditsTab: function () {
+      rail.collapse(false);
+      return rail.selectTab("edits");
+    },
+
+    // The row's own Undo button, where it really is on screen. The root is
+    // closed, so a selector from the spec cannot reach it and hit-testing is the
+    // only honest way in: it is also what a hand does.
+    undoButtonInfo: function (id) {
+      var pane = rail.tabBody("edits");
+      if (!pane) return null;
+      var row = pane.querySelector('[data-lahe-edit-row="' + id + '"]');
+      if (!row) return null;
+      var button = row.querySelector('[data-lahe-act="undo"]');
+      if (!button) return null;
+      // The pane scrolls, so a row further down the list is behind the fold
+      // until the reviewer scrolls to it. Measuring without this reports a
+      // position the mouse cannot reach.
+      button.scrollIntoView({ block: "center" });
+      var rect = button.getBoundingClientRect();
+      return {
+        label: button.textContent,
+        disabled: !!button.disabled,
+        title: button.title || null,
+        visible: rect.width > 0 && rect.height > 0,
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+        cx: rect.x + rect.width / 2,
+        cy: rect.y + rect.height / 2
+      };
+    },
+
+    // What a row says when an undo could not be carried out.
+    rowFailure: function (id) {
+      var pane = rail.tabBody("edits");
+      if (!pane) return null;
+      var row = pane.querySelector('[data-lahe-edit-row="' + id + '"]');
+      if (!row) return null;
+      var said = row.querySelector("[data-lahe-undo-failed]");
+      return said && said.textContent ? said.textContent : null;
+    },
+
     exportEnabled: function () {
       var t = tab();
       return t ? t.exportEnabled() : null;

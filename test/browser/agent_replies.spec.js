@@ -105,10 +105,19 @@ async function untetheredNote(page, text) {
   await page.keyboard.press("ControlOrMeta+Enter");
 }
 
-/** Reword an item the way the rail's Reword button does: reopen it and retype. */
+/**
+ * Reword an item the way the reviewer does: reopen it, retype, and commit.
+ *
+ * The commit is not decoration. A rewording SESSION is one revision, so the
+ * typing moves the words and the commit moves rev (R21); typing alone leaves the
+ * item at the revision the agent already read, which is the point.
+ */
 async function reword(page, itemId, newText) {
   await page.evaluate((args) => {
-    window.__lahe.handle.comments.reopen(args[0]).type(args[1]);
+    const box = window.__lahe.handle.comments.reopen(args[0]);
+    box.type(args[1]);
+    box.markReady();
+    box.close();
   }, [itemId, newText]);
   await pollPage(page, (id) => window.__lahe.itemById(id).rev >= 2, itemId, {
     message: "the rewording to bump the revision"
