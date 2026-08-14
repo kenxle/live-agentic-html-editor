@@ -1161,6 +1161,23 @@
       return !!(dom && dom.refusal.getAttribute("data-shown") === "true");
     }
 
+    // Self-report for the closed root: is the Review-here button really on
+    // screen, pressable, and labeled? The panel showing while its button is
+    // missing was a real failure mode (a chip told the reviewer to press a
+    // button that did not exist), so tests and probes ask for the geometry,
+    // not just the flag.
+    function refusalButtonInfo() {
+      if (!dom || !dom.refusalBtn) return { present: false };
+      var rect = dom.refusalBtn.getBoundingClientRect();
+      return {
+        present: true,
+        label: dom.refusalBtn.textContent,
+        disabled: !!dom.refusalBtn.disabled,
+        visible: refusalShown() && rect.width > 0 && rect.height > 0,
+        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+      };
+    }
+
     function renderStatus() {
       if (!dom) return;
       dom.statusRow.setAttribute("data-status", status || "");
@@ -1296,6 +1313,7 @@
       hideRefusal: hideRefusal,
       markRefusalPending: markRefusalPending,
       refusalShown: refusalShown,
+      refusalButtonInfo: refusalButtonInfo,
       setStatusLine: setStatusLine,
       getStatusLine: getStatusLine,
       statusText: statusText,
