@@ -462,3 +462,26 @@ in seams nobody composed (refusal x remount; two actors, agent then human). The 
 assumption is exactly where it bit. The verification that closed it was the one that was missing:
 driving the real Rails page in a real browser as a second window, across a real Turbo navigation,
 with a self-report accessor (refusalButtonInfo) proving the button's geometry on screen.
+
+## The full-feature walk and its fix wave (2026-08-14)
+
+Three real-browser walkers ran composed journeys after the first-real-use bugs: the static-document
+journey, the living-app two-actor journey, and the cold install from the public GitHub artifact.
+38 features passed as walked; 8 defects and 6 doc/CLI gaps were found and fixed by a four-builder
+wave the same day, each fix TDD'd failing-first and click-verified by its builder in a real browser:
+
+- keep-mine now survives a continuously repainting page (accepted-page-states in the record; replay
+  treats an accepted state as branch-two-equivalent and re-applies the reviewer's version)
+- highlights repaint after a reload; handled stays unpainted; lost stays honestly lost
+- the status line tells the truth at rest (reachability learnable without a POST; aborted unload
+  posts are not failures; HELPER_UNREACHABLE is standing and clears on recovery); a duplicate
+  object key that made the takeover path clear EVERY chip was caught and pinned
+- Undo lives on every hand-edit row (R28's missing reviewer path); reword bumps rev once at commit,
+  not per keystroke
+- add prints the review folder; a running helper learns new reviews from disk without a restart;
+  wait takes --state-dir; add --remove strips the tag; AGENTS.md/README carry isolation and removal
+
+Final state: 379 unit, 165 Chromium, 495 tri-browser, key walks 39/39 on three engines; bundle
+deployed to the live worktree and re-probed on the real Rails page (refusal panel + button + one
+un-inflated chip). The composed-journey walkers are now the release bar: feature-level suites green
+is not "walked".
