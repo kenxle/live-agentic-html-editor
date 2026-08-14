@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+6d80b17ee56a
+ * version 0.0.0+d0ca2dbfc26c
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+6d80b17ee56a";
+  g.LAHE.version = "0.0.0+d0ca2dbfc26c";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -8516,6 +8516,11 @@
       dom.refusalBtn.disabled = false;
       dom.refusalBtn.textContent = "Review here instead";
       dom.refusal.setAttribute("data-shown", "true");
+      // A refusal behind the collapsed pill is invisible, and a reviewer who
+      // cannot type and is told nothing reads it as "broken" (Ken hit exactly
+      // this on first real use). Expanding is safe here: a refused window is
+      // read-only, so there is no focused card for the expand to disturb.
+      collapse(false);
       return true;
     }
 
@@ -16084,7 +16089,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+6d80b17ee56a";
+  var VERSION = "0.0.0+d0ca2dbfc26c";
 
   var protocol = ns.protocol;
   var record = ns.record;

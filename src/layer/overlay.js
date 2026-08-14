@@ -1119,6 +1119,11 @@
       dom.refusalBtn.disabled = false;
       dom.refusalBtn.textContent = "Review here instead";
       dom.refusal.setAttribute("data-shown", "true");
+      // A refusal behind the collapsed pill is invisible, and a reviewer who
+      // cannot type and is told nothing reads it as "broken" (Ken hit exactly
+      // this on first real use). Expanding is safe here: a refused window is
+      // read-only, so there is no focused card for the expand to disturb.
+      collapse(false);
       return true;
     }
 

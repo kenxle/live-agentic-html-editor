@@ -115,6 +115,16 @@ test.describe("a second window is refused with a reason", () => {
       expect(second.refusedBy).toBe("helper");
       expect(second.reason).toContain("already open in another window");
 
+      // The refusal is LOUD: the rail expands so the panel is on screen. A
+      // refusal behind the collapsed pill reads as "the tool is broken" to a
+      // reviewer who was told nothing (first-real-use finding, 2026-08-14).
+      // Polled, not read once: the panel shows a beat after the claim answer.
+      await pollPage(contexts.second.page, () => window.__laheRail.refusalShown(), undefined, {
+        message: "the refusal panel to be shown on the refused window"
+      });
+      const refusedCollapsed = await contexts.second.page.evaluate(() => window.__laheRail.isCollapsed());
+      expect(refusedCollapsed, "the rail is expanded so the refusal can be seen").toBe(false);
+
       // Positive control again, on the window that was there first.
       const opened = await contexts.first.page.evaluate(() => window.__laheRail.openCard());
       await contexts.first.page.keyboard.type("The first window keeps going", { delay: 5 });

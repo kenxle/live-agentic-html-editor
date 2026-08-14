@@ -176,6 +176,12 @@
     collapse: function (next) {
       return rail.collapse(next);
     },
+    isCollapsed: function () {
+      return rail.isCollapsed();
+    },
+    refusalShown: function () {
+      return rail.refusalShown();
+    },
     geometry: function () {
       return rail.geometry();
     },
