@@ -17,6 +17,11 @@
 //   Cmd-Enter                          marks the comment ready. Nothing that is
 //                                      not ready is actionable (R7)
 //   Esc                                closes the box, KEEPING the draft
+//   typing in a card's own note        THE rewording gesture. There is no
+//                                      button: the words on the card are the
+//                                      input, and editing a ready comment drops
+//                                      it back to draft (green wash to amber)
+//                                      until the reviewer commits it again
 //   rewording a ready comment          bumps its revision ONCE, when the
 //                                      rewording commits, never per keystroke
 //                                      (R21)
@@ -101,6 +106,81 @@
 
   // Ken's copy, exactly. One spelling, used on every card.
   var HINT_READY = "Cmd-Enter when done with this comment";
+
+  // ---------------------------------------------------------------------------
+  // Editing the words in place
+  // ---------------------------------------------------------------------------
+  //
+  // Ken, on the Reword button: "do we really need a button for 'reword'? before
+  // we could just edit a comment and the color would go from green to yellow and
+  // that was how we knew."
+  //
+  // So a card's note is the input. The gesture is the oldest one there is: click
+  // the words and type. What it starts is exactly the rewording session the
+  // button used to start, so there is ONE set of rules for a rewording (R21):
+  // keystrokes are content, the commit is the revision.
+  //
+  // The node is a contenteditable one and NOT a textarea, deliberately:
+  //
+  //   the rail's law is that a card holding focus is never re-created, and a
+  //   node swapped for a control on click is that same revert by another name.
+  //   The note the reviewer reads and the note they type in are ONE node, which
+  //   is created once with the row and never replaced.
+  //
+  //   a textarea would also need its own height driven from its scrollHeight on
+  //   every keystroke to keep flowing like prose, and a card whose height is
+  //   computed in two places is a card that jumps.
+  //
+  // plaintext-only where the engine has it, so a paste cannot put markup inside
+  // the reviewer's sentence. The value is FEATURE-DETECTED rather than assumed:
+  // an engine that does not know it maps the attribute to plain "true", which is
+  // still editable, and the read below flattens whatever it produces anyway.
+  var EDITABLE_PLAIN = "plaintext-only";
+  var EDITABLE_ANY = "true";
+
+  function editableValue(doc) {
+    if (!doc || typeof doc.createElement !== "function") return EDITABLE_ANY;
+    try {
+      var probe = doc.createElement("div");
+      probe.setAttribute("contenteditable", EDITABLE_PLAIN);
+      return probe.contentEditable === EDITABLE_PLAIN ? EDITABLE_PLAIN : EDITABLE_ANY;
+    } catch (err) {
+      return EDITABLE_ANY;
+    }
+  }
+
+  /**
+   * The plain text of an editable node, with its line breaks kept.
+   *
+   * textContent alone would run two typed lines together, because a browser
+   * makes a line break out of a <br> or a wrapper element rather than out of a
+   * newline character. innerText would be right and is not usable here: it
+   * returns the rendered text, and these nodes live in a closed shadow root
+   * inside a rail that may be collapsed, where it falls back to textContent
+   * anyway.
+   */
+  function plainTextOf(node) {
+    if (!node) return "";
+    var out = "";
+    var children = node.childNodes || [];
+    for (var i = 0; i < children.length; i += 1) {
+      var child = children[i];
+      if (child.nodeType === 3) {
+        out += child.nodeValue;
+      } else if (child.nodeType === 1) {
+        var tag = String(child.tagName || "").toUpperCase();
+        if (tag === "BR") {
+          out += "\n";
+        } else {
+          // A block the engine wrapped a new line in. The first one continues
+          // the line above it; every later one starts its own.
+          if (out && !/\n$/.test(out)) out += "\n";
+          out += plainTextOf(child);
+        }
+      }
+    }
+    return out;
+  }
 
   // ---------------------------------------------------------------------------
   // The selection popover
@@ -364,6 +444,13 @@
     var pillShown = false;
     var pillPlacement = "above";
     var pillTipFor = null;
+    // The cards' own note nodes, by item id, and whether this window may type in
+    // them. A window that loses the review goes read-only by unbinding this
+    // group (index.js), and an editable node left editable there would be an
+    // offer to write into a review this window no longer holds.
+    var noteEditors = Object.create(null);
+    var gesturesBound = false;
+    var EDITABLE = editableValue(doc);
 
     function requireReview() {
       if (!reviewId) throw new Error("comments: a reviewId is required before a comment can be stored");
@@ -529,9 +616,25 @@
       var node = null;
       var inputEl = null;
       var stateEl = null;
-      var placement = src && src.placement === "inline" ? "inline" : "anchored";
+      // A session the reviewer started by typing in the card's own words: the
+      // note node IS the input, so no box is built and none is torn down.
+      var inNote = (src && src.inputNode) || null;
+      var placement = inNote ? "in-note" : src && src.placement === "inline" ? "inline" : "anchored";
+      // What the session put on the note node, so close() takes it all off again
+      // and the node goes back to being the words on the card.
+      var sessionOff = [];
 
-      if (doc) {
+      if (inNote) {
+        node = inNote;
+        inputEl = inNote;
+        sessionOff.push(listenOn(inNote, "input", onInput));
+        sessionOff.push(listenOn(inNote, "keydown", onKeydown));
+        // Clicking away ends the session the way closing the box does: the words
+        // are committed at one revision. The STATE is left where the reviewer
+        // left it, so a comment they walked away from mid-sentence is still
+        // amber when they come back, and still off the agent's desk.
+        sessionOff.push(listenOn(inNote, "focusout", onFocusOut));
+      } else if (doc) {
         var host = (src && src.host) || surface();
         ensureBoxStyleIn(host);
         node = doc.createElement("div");
@@ -574,38 +677,8 @@
         foot.appendChild(stateEl);
         node.appendChild(foot);
 
-        inputEl.addEventListener("input", function () {
-          type(inputEl.value);
-        });
-        inputEl.addEventListener("keydown", function (event) {
-          var got = gestures.gestureFor({
-            type: "keydown",
-            key: event.key,
-            metaKey: event.metaKey,
-            ctrlKey: event.ctrlKey,
-            shiftKey: event.shiftKey,
-            inCommentBox: true
-          });
-          if (got.gesture === gestures.GESTURE.MARK_READY) {
-            if (got.preventDefault) event.preventDefault();
-            markReady();
-            close();
-          } else if (got.gesture === gestures.GESTURE.CANCEL) {
-            if (got.preventDefault) event.preventDefault();
-            // Esc cancels the thing that is open. Picking is more recent than
-            // the box, so it goes first; a second Esc closes the box, with the
-            // draft kept.
-            if (pick.active) exitPickMode();
-            else close();
-          } else if (got.gesture === gestures.GESTURE.ENTER_ELEMENT_PICK) {
-            // Starting the next comment without leaving the box first. The
-            // document-level handler cannot see this one: the event retargets
-            // to the library's own host, and everything of the library's is
-            // skipped there by design.
-            if (got.preventDefault) event.preventDefault();
-            enterPickMode();
-          }
-        });
+        inputEl.addEventListener("input", onInput);
+        inputEl.addEventListener("keydown", onKeydown);
 
         if (host) host.appendChild(node);
         if (placement === "anchored") positionAt(node, src && src.range ? src.range : null);
@@ -614,6 +687,91 @@
       // The note this box last COMMITTED. A rewording is measured against it, so
       // typing a word and taking it back again is not a revision.
       var committedNote = String(item[record.FIELD.NOTE] || "");
+      // Has this item ever been committed at all? A draft has not: it starts at
+      // rev 1 and reaches the agent when it is marked ready, so nothing it does
+      // before that is a revision. Read ONCE, at the start of the session,
+      // because the session itself drops a ready item to draft while the
+      // reviewer is mid-sentence and that transient draft is not a new record.
+      var committed = !record.isDraft(item);
+      // ...and was it on the agent's desk? That is the state the reviewer takes
+      // it back from when they start typing in it.
+      var wasReady = record.isReady(item);
+
+      // The words in the session's input, whichever kind of node that is.
+      function readInput() {
+        if (!inputEl) return "";
+        return inNote ? plainTextOf(inputEl) : String(inputEl.value || "");
+      }
+
+      function writeInput(text) {
+        if (!inputEl) return;
+        if (inNote) {
+          // Only when it really differs: writing textContent under the
+          // reviewer's own caret would put the caret back at the start.
+          if (plainTextOf(inputEl) !== text) inputEl.textContent = text;
+          return;
+        }
+        if (inputEl.value !== text) inputEl.value = text;
+      }
+
+      function onInput() {
+        type(readInput());
+      }
+
+      function onFocusOut() {
+        close();
+      }
+
+      function onKeydown(event) {
+        var got = gestures.gestureFor({
+          type: "keydown",
+          key: event.key,
+          metaKey: event.metaKey,
+          ctrlKey: event.ctrlKey,
+          shiftKey: event.shiftKey,
+          inCommentBox: true
+        });
+        if (got.gesture === gestures.GESTURE.MARK_READY) {
+          if (got.preventDefault) event.preventDefault();
+          markReady();
+          // A box has done its job and goes. The card's own note stays where it
+          // is with the reviewer still in it: they are looking at the words they
+          // just committed, and typing on is simply the next rewording.
+          if (!inNote) close();
+        } else if (got.gesture === gestures.GESTURE.CANCEL) {
+          if (got.preventDefault) event.preventDefault();
+          // Esc cancels the thing that is open. Picking is more recent than
+          // the box, so it goes first; a second Esc closes the box, with the
+          // draft kept.
+          if (pick.active) exitPickMode();
+          else if (inNote) leaveNote();
+          else close();
+        } else if (got.gesture === gestures.GESTURE.ENTER_ELEMENT_PICK) {
+          // Starting the next comment without leaving the box first. The
+          // document-level handler cannot see this one: the event retargets
+          // to the library's own host, and everything of the library's is
+          // skipped there by design.
+          if (got.preventDefault) event.preventDefault();
+          if (inNote) leaveNote();
+          enterPickMode();
+        }
+      }
+
+      /**
+       * Esc in a card's note: the reviewer saying they are done with it.
+       *
+       * It COMMITS, never discards (closing a box has always kept the words).
+       * An item that was on the agent's desk when the session started goes back
+       * onto it, because leaving it silently amber would take a comment off the
+       * agent's queue as a side effect of pressing Esc. A draft stays a draft:
+       * nothing here ever readies a comment the reviewer never readied.
+       */
+      function leaveNote() {
+        if (wasReady) markReady();
+        close();
+        if (inputEl && typeof inputEl.blur === "function") inputEl.blur();
+        return handleItem();
+      }
 
       // Every keystroke. Synchronous, before anything else.
       function type(text) {
@@ -634,8 +792,22 @@
         var next = Object.assign({}, current);
         next[record.FIELD.NOTE] = String(text);
         next[record.FIELD.UPDATED_AT] = record.nowIso();
+        // EDITING A READY COMMENT TAKES IT BACK OFF THE AGENT'S DESK.
+        //
+        // This is the whole of Ken's "the color would go from green to yellow
+        // and that was how we knew": a comment being rewritten is not something
+        // an agent should act on, and draft is already the state that is not in
+        // review.json (R7). The wash follows the state through the rail's own
+        // setCardState, so the colour cannot drift from what the file says.
+        //
+        // Typing the words back exactly as they were puts it back: nothing about
+        // what the agent would read has changed, so nothing has been withdrawn.
+        if (wasReady) {
+          next[record.FIELD.STATE] =
+            String(text) === committedNote ? record.STATE.READY : record.STATE.DRAFT;
+        }
         store.write(requireReview(), next);
-        if (inputEl && inputEl.value !== next[record.FIELD.NOTE]) inputEl.value = next[record.FIELD.NOTE];
+        writeInput(next[record.FIELD.NOTE]);
         paintState(next);
         emit(next, "typed");
         return next;
@@ -649,12 +821,15 @@
        * revision, and the second sees nothing left to commit.
        *
        * A draft has nothing to bump; it starts at rev 1 and reaches the agent
-       * when it is marked ready.
+       * when it is marked ready. That is read from the state the session
+       * STARTED in, not from the state right now: a comment the reviewer is
+       * rewriting is a draft this second, and reading it here would mean a
+       * rewording never moved the revision at all.
        */
       function flushReword() {
         var current = handleItem();
         var note = String(current[record.FIELD.NOTE] || "");
-        if (record.isDraft(current)) {
+        if (!committed) {
           committedNote = note;
           return current;
         }
@@ -678,6 +853,10 @@
         record.validateItem(next);
         store.write(requireReview(), next);
         committedNote = String(next[record.FIELD.NOTE] || "");
+        // The item is on the agent's desk now, so the next keystroke in this
+        // same session is a new rewording and takes it back off again.
+        committed = true;
+        wasReady = true;
         paintState(next);
         emit(next, "ready");
         return next;
@@ -697,7 +876,15 @@
         flushReword();
         // The draft is kept. Closing a box is not discarding work; only the
         // reviewer's own delete removes an item.
-        if (node && node.parentNode) node.parentNode.removeChild(node);
+        //
+        // A session in a card's own note takes its listeners off and LEAVES THE
+        // NODE: those words are the card, and removing them would be the rail
+        // rebuilding a row, which is the one thing it must never do.
+        sessionOff.forEach(function (off) {
+          off();
+        });
+        sessionOff = [];
+        if (!inNote && node && node.parentNode) node.parentNode.removeChild(node);
         delete open[id];
         if (highlights) highlights.setActive(id, false);
         emit(handleItem(), "closed");
@@ -706,6 +893,10 @@
 
       function focus() {
         if (inputEl && typeof inputEl.focus === "function") inputEl.focus();
+        // A note focused rather than clicked is a reviewer who means to add to
+        // the sentence, so the caret goes to the end of it rather than to the
+        // start, where an empty selection in an editable node otherwise lands.
+        if (inNote) caretToEnd(inputEl);
         return inputEl;
       }
 
@@ -1272,6 +1463,125 @@
     }
 
     // ------------------------------------------------------------------------
+    // The card's own words as the input
+    // ------------------------------------------------------------------------
+    //
+    // A tab file draws the note; this file decides what happens when a reviewer
+    // types in it, because a rewording is a rewording wherever it is entered.
+    // The tab hands its note node over once, when it builds the row, and never
+    // again: the node is created with the row and outlives every session in it.
+
+    function listenOn(node, type, fn) {
+      node.addEventListener(type, fn);
+      return function () {
+        node.removeEventListener(type, fn);
+      };
+    }
+
+    /** Put the caret after the last character of an editable node. */
+    function caretToEnd(node) {
+      if (!doc || !win || !node || typeof win.getSelection !== "function") return null;
+      try {
+        var range = doc.createRange();
+        range.selectNodeContents(node);
+        range.collapse(false);
+        var selection = win.getSelection();
+        if (!selection) return null;
+        selection.removeAllRanges();
+        selection.addRange(range);
+        return range;
+      } catch (err) {
+        // A selection API that will not take a range inside a closed root is a
+        // caret in the wrong place, not a broken rewording.
+        return null;
+      }
+    }
+
+    function setNoteEditable(entry, editable) {
+      if (!entry || !entry.node) return null;
+      entry.node.setAttribute("contenteditable", editable ? EDITABLE : "false");
+      return entry.node;
+    }
+
+    /**
+     * Make a card's note the reviewer's way into rewording that item.
+     *
+     * @param {string} id      the item the note belongs to
+     * @param {Element} node   the node holding the reviewer's own words
+     * @returns {object|null}  the registration, or null with no document
+     */
+    function attachNoteEditor(id, node) {
+      if (!doc || !node) return null;
+      detachNoteEditor(id);
+      var entry = { node: node, off: [] };
+      node.setAttribute("data-lahe-note-editor", "");
+      node.setAttribute("role", "textbox");
+      node.setAttribute("aria-multiline", "true");
+      node.setAttribute("aria-label", "Your comment. " + HINT_READY + ".");
+      node.setAttribute("spellcheck", "false");
+      entry.off.push(
+        listenOn(node, "focus", function () {
+          editInPlace(id, node);
+        })
+      );
+      noteEditors[id] = entry;
+      // A window that has not bound its gestures is a window that may not write
+      // to this review, so the words are readable and nothing more.
+      setNoteEditable(entry, gesturesBound);
+      return entry;
+    }
+
+    function detachNoteEditor(id) {
+      var entry = noteEditors[id];
+      if (!entry) return false;
+      if (open[id] && open[id].placement === "in-note") open[id].close();
+      entry.off.forEach(function (off) {
+        off();
+      });
+      delete noteEditors[id];
+      return true;
+    }
+
+    function eachNoteEditor(fn) {
+      Object.keys(noteEditors).forEach(function (id) {
+        fn(noteEditors[id], id);
+      });
+    }
+
+    /**
+     * Start (or return) the rewording session living in a card's own note.
+     *
+     * The same session the box runs: type() writes every keystroke at once, the
+     * commit moves the revision once (R21). Returning the open one is the box's
+     * law restated for the note: a session is never re-created under a caret.
+     */
+    function editInPlace(id, node) {
+      var target = node || (noteEditors[id] ? noteEditors[id].node : null);
+      if (!target || !gesturesBound) return null;
+      if (open[id]) return open[id];
+      var item = store.readItem(requireReview(), id);
+      if (!item) throw new Error("comments.editInPlace: no item " + String(id) + " in review " + requireReview());
+      // The reviewer is in the rail now, so an offer about a page selection is
+      // stale.
+      hidePopover();
+      var handle = buildHandle(item, { inputNode: target });
+      open[id] = handle;
+      return handle;
+    }
+
+    /** Is this window offering the note as an input right now? */
+    function noteEditor(id) {
+      var entry = noteEditors[id];
+      if (!entry) return null;
+      return {
+        id: id,
+        node: entry.node,
+        editable: entry.node.getAttribute("contenteditable") !== "false",
+        editing: !!(open[id] && open[id].placement === "in-note")
+      };
+    }
+
+    // ------------------------------------------------------------------------
     // The reviewer's own edits to their own comments
     // ------------------------------------------------------------------------
 
@@ -1411,6 +1721,12 @@
       // happened and was not going to happen again. The selection IS the state;
       // bind re-reads it.
       schedulePopover();
+      // The cards' notes are gestures too. A window that may comment may type in
+      // the words it already wrote; a window that may not, may not.
+      gesturesBound = true;
+      eachNoteEditor(function (entry) {
+        setNoteEditable(entry, true);
+      });
       return { bound: true, listeners: listenerHandles.length };
     }
 
@@ -1420,6 +1736,13 @@
       });
       listenerHandles = [];
       hidePopover();
+      gesturesBound = false;
+      // Read-only, so the words stay readable and stop being an input. Without
+      // this the refused window still offered a caret in every comment on
+      // screen, and the review it would have written into is another window's.
+      eachNoteEditor(function (entry) {
+        setNoteEditable(entry, false);
+      });
     }
 
     function describe(event) {
@@ -1495,6 +1818,7 @@
     function teardown() {
       unbind();
       closeAll();
+      Object.keys(noteEditors).forEach(detachNoteEditor);
       if (highlights) highlights.teardown();
       surfaceRoot = null;
       outlineNode = null;
@@ -1514,6 +1838,10 @@
       openBox: openBox,
       openNote: openNote,
       reopen: reopen,
+      attachNoteEditor: attachNoteEditor,
+      detachNoteEditor: detachNoteEditor,
+      editInPlace: editInPlace,
+      noteEditor: noteEditor,
       remove: remove,
       unpaint: unpaint,
       repaint: repaint,

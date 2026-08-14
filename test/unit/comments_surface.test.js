@@ -113,6 +113,38 @@ test("a rewording ended with Esc still commits at one revision", () => {
   assert.equal(store.readItem("rev_1", box.id).note, "no, say this instead");
 });
 
+// Ken: "before we could just edit a comment and the color would go from green to
+// yellow and that was how we knew." Editing a ready comment takes it back off
+// the agent's desk (draft is the state that is not in review.json, R7) and the
+// commit puts it back. The half that is easy to break: the session must still
+// know it is rewording a COMMITTED item while that transient draft is on, or the
+// revision never moves and a stale reply is accepted.
+test("editing a ready comment drops it to draft, and the commit still moves the revision once", () => {
+  const { store, comments } = surface();
+  const box = comments.openBox({ quote: "q" });
+  box.type("say this instead");
+  box.markReady();
+  box.close();
+
+  const reword = comments.reopen(box.id);
+  reword.type("no, say this instead");
+  assert.equal(store.readItem("rev_1", box.id).state, record.STATE.DRAFT, "off the agent's desk while it is rewritten");
+  assert.equal(store.readItem("rev_1", box.id).rev, 1, "and typing is still not a revision");
+
+  reword.markReady();
+  assert.equal(store.readItem("rev_1", box.id).state, record.STATE.READY);
+  assert.equal(store.readItem("rev_1", box.id).rev, 2, "the commit moves it, once");
+
+  // Typing the words back exactly puts it straight back: nothing an agent would
+  // read has changed, so nothing has been withdrawn.
+  reword.type("no, say this");
+  assert.equal(store.readItem("rev_1", box.id).state, record.STATE.DRAFT);
+  reword.type("no, say this instead");
+  assert.equal(store.readItem("rev_1", box.id).state, record.STATE.READY);
+  reword.close();
+  assert.equal(store.readItem("rev_1", box.id).rev, 2, "and the revision did not move again");
+});
+
 test("reopening and typing the same words back is not a rewording", () => {
   const { store, comments } = surface();
   const box = comments.openBox({ quote: "q" });

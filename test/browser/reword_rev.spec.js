@@ -13,8 +13,11 @@
 // lands, and only a genuinely older rev is refused.
 //
 // It runs on the real app fixture with a real helper, and the rewording is made
-// the way a reviewer makes it: pressing the card's own Reword button at its
-// on-screen geometry, typing, and pressing Cmd-Enter.
+// the way a reviewer makes it: clicking into the card's own words at their
+// on-screen geometry, typing, and pressing Cmd-Enter. (There is no Reword button
+// any more; the note IS the input. test/browser/inline_reword.spec.js is where
+// that surface is specified. What is asserted HERE is the arithmetic, which the
+// new entry path must not change.)
 
 "use strict";
 
@@ -98,16 +101,17 @@ async function commentOnSelection(page, selector, text) {
   await page.keyboard.press("ControlOrMeta+Enter");
 }
 
-/** The card's own Reword button, where it really is on screen. */
-function rewordButtonInfo(page, id) {
+/** The card's own words, where they really are on screen. */
+function noteInfo(page, id) {
   return page.evaluate((itemId) => {
     const card = window.__lahe.rail.cardNode(itemId);
     if (!card) return null;
-    const button = card.querySelector("[data-lahe-act='reword']");
-    if (!button) return null;
-    button.scrollIntoView({ block: "center" });
-    const rect = button.getBoundingClientRect();
+    const note = card.querySelector(".lahe-rail-note");
+    if (!note) return null;
+    note.scrollIntoView({ block: "center" });
+    const rect = note.getBoundingClientRect();
     return {
+      editable: note.isContentEditable === true,
       visible: rect.width > 0 && rect.height > 0,
       cx: rect.x + rect.width / 2,
       cy: rect.y + rect.height / 2
@@ -132,13 +136,14 @@ test.describe("R21: one rewording moves rev exactly once", () => {
       expect(first.state).toBe("ready");
       const revBefore = first.rev;
 
-      // The reviewer's own gesture: the card's Reword button, pressed.
-      const button = await rewordButtonInfo(page, first.id);
-      expect(button, "the card offers Reword").toBeTruthy();
-      expect(button.visible, "and it is on screen").toBe(true);
-      await page.mouse.click(button.cx, button.cy);
+      // The reviewer's own gesture: a click into the words on the card.
+      const note = await noteInfo(page, first.id);
+      expect(note, "the card carries the reviewer's own words").toBeTruthy();
+      expect(note.visible, "and they are on screen").toBe(true);
+      expect(note.editable, "and they are the input").toBe(true);
+      await page.mouse.click(note.cx, note.cy);
       await pollPage(page, () => !!window.__lahe.focusedBoxQuote(), undefined, {
-        message: "the reword box to open on the card"
+        message: "the rewording session to open on the card"
       });
 
       // Replace the words, one keystroke at a time, the way a hand does.
@@ -153,6 +158,8 @@ test.describe("R21: one rewording moves rev exactly once", () => {
         midway.rev,
         "an uncommitted rewording is content, not a revision: rev has not moved yet"
       ).toBe(revBefore);
+      // ...and the item is off the agent's desk while it is being rewritten.
+      expect(midway.state, "a comment being rewritten is a draft again").toBe("draft");
 
       await page.keyboard.press("ControlOrMeta+Enter");
       await pollPage(page, (args) => window.__lahe.itemById(args[0]).rev > args[1], [first.id, revBefore], {

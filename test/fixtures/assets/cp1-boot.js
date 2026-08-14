@@ -87,15 +87,15 @@
       box.input.scrollIntoView({ block: "nearest" });
       return rectOf(box.input);
     },
-    rewordButtonRect: function (id) {
+    // The reviewer's own words on the card, which ARE the rewording surface:
+    // there is no Reword button, you click the sentence and type.
+    noteRect: function (id) {
       var body = rail.cardBody(id);
       if (!body) return null;
-      var parent = body.parentNode;
-      var buttons = parent ? parent.querySelectorAll("button") : [];
-      for (var i = 0; i < buttons.length; i += 1) {
-        if (buttons[i].textContent === "Reword") return rectOf(buttons[i]);
-      }
-      return null;
+      var note = body.querySelector(".lahe-rail-note");
+      if (!note) return null;
+      note.scrollIntoView({ block: "nearest" });
+      return rectOf(note);
     },
 
     // The seam-3 reading: a card really holds what the reviewer is typing in.

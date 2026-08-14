@@ -131,13 +131,12 @@ test.describe("the rail as a shipping surface", () => {
         const keys = pane.querySelector(".lahe-rail-keys");
         const note = pane.querySelector(".lahe-rail-note");
         const acts = pane.querySelector(".cardacts");
-        const reword = pane.querySelector('[data-lahe-act="reword"]');
         const del = pane.querySelector('[data-lahe-act="delete"]');
         const cs = (el) => (el ? window.getComputedStyle(el) : null);
         const keyStyle = cs(keys);
-        const actStyle = cs(reword);
+        const actStyle = cs(del);
         const rowActs = acts ? acts.getBoundingClientRect() : null;
-        const rewordRect = reword ? reword.getBoundingClientRect() : null;
+        const noteRect = note ? note.getBoundingClientRect() : null;
         const delRect = del ? del.getBoundingClientRect() : null;
         return {
           // The tab's sheet reached the rail's own closed root at all: the foot
@@ -157,12 +156,17 @@ test.describe("the rail as a shipping surface", () => {
             return ta ? cs(ta).resize : null;
           })(),
           noteWhiteSpace: note ? cs(note).whiteSpace : null,
-          // The two card actions are buttons in a row, with real space between
-          // them. "RewordDelete" was two zero-gap inline buttons.
+          // The note is the reviewer's way into rewording it (there is no button
+          // any more), so it is drawn as something you can type in: a text
+          // cursor, and a real editing surface underneath.
+          noteEditable: note ? note.isContentEditable === true : null,
+          noteCursor: note ? cs(note).cursor : null,
+          // The card's actions are buttons in a row, clear of the reviewer's own
+          // sentence. "RewordDelete" was two zero-gap inline buttons.
           actsDisplay: rowActs && actStyle ? window.getComputedStyle(acts).display : null,
           actPadding: actStyle ? actStyle.paddingLeft : null,
-          gap: rewordRect && delRect ? Math.round(delRect.left - rewordRect.right) : null,
-          labels: [reword && reword.textContent, del && del.textContent]
+          noteToActs: noteRect && delRect ? Math.round(delRect.top - noteRect.bottom) : null,
+          labels: Array.from(pane.querySelectorAll(".cardacts button")).map((b) => b.textContent)
         };
       });
 
@@ -174,10 +178,12 @@ test.describe("the rail as a shipping surface", () => {
       expect(styled.hintsHidden, "and closed, so it is not a wall in an empty rail").toBe(true);
       expect(styled.noteResize, "no native resize grabber on the note box").toBe("none");
       expect(styled.noteWhiteSpace).toBe("pre-wrap");
+      expect(styled.noteEditable, "the reviewer's own words are the input").toBe(true);
+      expect(styled.noteCursor, "and they are drawn as something you type in").toBe("text");
       expect(styled.actsDisplay).toBe("flex");
-      expect(styled.labels).toEqual(["Reword", "Delete"]);
-      expect(styled.gap, "Reword and Delete are two buttons, not one word").toBeGreaterThanOrEqual(4);
-      expect(parseFloat(styled.actPadding), "and they are drawn as buttons").toBeGreaterThan(0);
+      expect(styled.labels, "one action on the card: Delete. Rewording is the note itself").toEqual(["Delete"]);
+      expect(styled.noteToActs, "the action row is clear of the reviewer's sentence").toBeGreaterThanOrEqual(2);
+      expect(parseFloat(styled.actPadding), "and it is drawn as a button").toBeGreaterThan(0);
     } finally {
       await helper.stop().catch(() => {});
       await app.close();
@@ -425,7 +431,10 @@ test.describe("the rail as a shipping surface", () => {
           // not DRAWN on a card that moved to Done.
           activeRowAttached: !!node.querySelector("[data-lahe-active-row]"),
           activeRowVisible: visible(node.querySelector("[data-lahe-active-row]")),
-          rewordVisible: visible(node.querySelector('[data-lahe-act="reword"]')),
+          // The note is the rewording surface, so "no rewording a handled item"
+          // is now a claim about the note rather than about a button.
+          noteAttached: !!node.querySelector(".lahe-rail-note"),
+          noteVisible: visible(node.querySelector(".lahe-rail-note")),
           deleteVisible: visible(node.querySelector('[data-lahe-act="delete"]')),
           reopenVisible: visible(node.querySelector(".lahe-done-row .cardact"))
         };
@@ -438,7 +447,8 @@ test.describe("the rail as a shipping surface", () => {
 
       expect(card.activeRowAttached, "the row is never withdrawn from a card").toBe(true);
       expect(card.activeRowVisible, "and it is not drawn on a card in Done").toBe(false);
-      expect(card.rewordVisible, "Reword makes no sense on a handled item").toBe(false);
+      expect(card.noteAttached, "the row is never withdrawn, so the note is still there").toBe(true);
+      expect(card.noteVisible, "but rewording makes no sense on a handled item, so it is not drawn").toBe(false);
       expect(card.deleteVisible, "and neither does Delete").toBe(false);
       expect(card.reopenVisible, "Done keeps Reopen").toBe(true);
     } finally {

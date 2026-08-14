@@ -395,12 +395,14 @@ test.describe("CP1: the four branches as one library", () => {
 
     // The tab's rows are inside the rail's own cards, so the rail has a node to
     // hold and holdsFocus can be true for a tab's contents at all.
-    const reword = await page.evaluate((itemId) => window.__laheCp1.rewordButtonRect(itemId), id);
-    expect(reword, "the row is inside the card, in the rail's Active tab").toBeTruthy();
+    const note = await page.evaluate((itemId) => window.__laheCp1.noteRect(itemId), id);
+    expect(note, "the row is inside the card, in the rail's Active tab").toBeTruthy();
 
-    await page.mouse.click(reword.cx, reword.cy);
+    // The rewording gesture: click the reviewer's own words and type. The card
+    // holds the caret because the row really is inside the card's own node.
+    await page.mouse.click(note.cx, note.cy);
     await pollPage(page, () => window.__laheCp1.focusedCardId() !== null, undefined, {
-      message: "the reworded card to hold focus"
+      message: "the card being reworded to hold focus"
     });
     expect(await page.evaluate((itemId) => window.__laheCp1.holdsFocus(itemId), id)).toBe(true);
 
@@ -409,7 +411,11 @@ test.describe("CP1: the four branches as one library", () => {
     await page.evaluate((itemId) => {
       window.__laheCp1.rememberCardNode(itemId);
     }, id);
-    await page.keyboard.type(" And name the week it starts.");
+    // Select-all rather than trusting where the click landed in the sentence,
+    // then write the whole thing out again: the same keystroke-by-keystroke
+    // stream, with an end state a test can name.
+    await page.keyboard.press("ControlOrMeta+KeyA");
+    await page.keyboard.type(SAID.intro + " And name the week it starts.");
 
     const after = await page.evaluate(
       (itemId) => ({

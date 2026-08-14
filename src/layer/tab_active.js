@@ -122,6 +122,16 @@
     "}",
     ".lahe-rail-note { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }",
     ".lahe-rail-note[data-empty='true'] { color: rgba(17, 17, 17, 0.4); }",
+    // The note is the input (there is no Reword button), so it says so: a
+    // pointer that means text, a quiet hover, and a real focus ring when the
+    // reviewer is in it.
+    ".lahe-rail-note[data-lahe-note-editor] { cursor: text; border-radius: 6px;",
+    "  margin: 0 -4px; padding: 2px 4px; }",
+    ".lahe-rail-note[data-lahe-note-editor]:hover { background: rgba(17, 17, 17, 0.04); }",
+    ".lahe-rail-note[data-lahe-note-editor]:focus { outline: 2px solid rgba(60, 86, 165, 0.9);",
+    "  outline-offset: 1px; background: #ffffff; }",
+    ".lahe-rail-note[contenteditable='false'] { cursor: default; }",
+    ".lahe-rail-note[data-empty='true']::before { content: 'Empty draft'; }",
     ".lahe-rail-rowfoot { display: flex; align-items: center; gap: 8px; font-size: 11px; color: rgba(17, 17, 17, 0.5); }",
     ".lahe-rail-state { text-transform: none; }",
     ".lahe-rail-btn {",
@@ -191,8 +201,28 @@
     ".lahe-rail-foot{display:flex;flex-direction:column;gap:9px;padding:2px 0 0}",
     ".lahe-rail-footlabel{font-size:10px;font-weight:600;letter-spacing:.08em;",
     "text-transform:uppercase;color:var(--ink-faint)}",
+    // The hosted row is a column with real air in it. Without this the note and
+    // the action under it touched, which is worse now the note is a surface the
+    // reviewer clicks into: the click target ended where Delete began.
+    "[data-lahe-active-row]{display:flex;flex-direction:column;gap:8px}",
     ".lahe-rail-note{white-space:pre-wrap;overflow-wrap:anywhere}",
     ".lahe-rail-note[data-empty='true']{color:var(--ink-faint)}",
+    // THE NOTE IS THE INPUT. Ken: "do we really need a button for 'reword'?
+    // before we could just edit a comment and the color would go from green to
+    // yellow and that was how we knew." So the words carry the affordance the
+    // button used to: a text cursor, a hover that lifts them off the card, and a
+    // focus ring while the reviewer is typing in them.
+    ".lahe-rail-note[data-lahe-note-editor]{cursor:text;border-radius:6px;",
+    "margin:0 -4px;padding:2px 4px;transition:background 90ms ease}",
+    ".lahe-rail-note[data-lahe-note-editor]:hover{background:var(--sunken)}",
+    ".lahe-rail-note[data-lahe-note-editor]:focus{outline:2px solid var(--accent);",
+    "outline-offset:1px;background:var(--paper)}",
+    // A window that may not write to the review reads as prose again.
+    ".lahe-rail-note[contenteditable='false']{cursor:default}",
+    ".lahe-rail-note[contenteditable='false']:hover{background:transparent}",
+    // The empty-draft label is drawn, not typed: text inside the node would be
+    // text the reviewer has to delete before writing their own sentence.
+    ".lahe-rail-note[data-empty='true']::before{content:'Empty draft'}",
     // The one hint surface is the rail footer's keycaps. Every OTHER gesture is
     // still reachable, and still rendered from the one gesture table (R43), but
     // it is behind a disclosure instead of being an eight-line wall of prose
@@ -483,8 +513,21 @@
         row.appendChild(quote);
       }
 
+      // THE ROW'S NOTE IS THE INPUT, and it is created once with the row.
+      //
+      // There is no Reword button any more. Ken, after using the rail: "do we
+      // really need a button for 'reword'? before we could just edit a comment
+      // and the color would go from green to yellow and that was how we knew."
+      // Clicking into these words starts the same rewording session the button
+      // used to open, and the rules of that session (keystrokes are content, the
+      // commit is the revision, R21) live in one place, in comments.js.
+      //
+      // The node the reviewer READS and the node they TYPE IN are the same node.
+      // Swapping one for a control on click would be the rail rebuilding a row
+      // under a caret, which is the revert mechanism this file exists to avoid.
       var note = el("p", "lahe-rail-note", "");
       row.appendChild(note);
+      comments.attachNoteEditor(id, note);
 
       // Hosted, these are the rail's own quiet card actions (one register for
       // every control that sits on a card). Standalone they keep the panel's own
@@ -492,21 +535,12 @@
       var actionClass = hosted ? "cardact cardact--quiet" : "lahe-rail-btn";
       var foot = el("div", hosted ? "cardacts" : "lahe-rail-rowfoot");
       if (!hosted) foot.appendChild(el("span", "lahe-rail-state", ""));
-      var reword = el("button", actionClass, "Reword");
-      reword.setAttribute("data-lahe-act", "reword");
-      reword.setAttribute("type", "button");
-      reword.addEventListener("click", function () {
-        // In the rail, the box the reviewer rewords in lives in the card
-        // itself; standalone, it opens over the page as before.
-        comments.reopen(id, hosted ? { host: rail.cardBody(id), placement: "inline" } : undefined).focus();
-      });
       var del = el("button", actionClass, "Delete");
       del.setAttribute("data-lahe-act", "delete");
       del.setAttribute("type", "button");
       del.addEventListener("click", function () {
         comments.remove(id);
       });
-      foot.appendChild(reword);
       foot.appendChild(del);
       row.appendChild(foot);
       return row;
@@ -522,12 +556,33 @@
 
       var note = row.querySelector(".lahe-rail-note");
       var text = item[record.FIELD.NOTE];
-      note.textContent = text ? text : "Empty draft";
+      // NEVER WRITE OVER THE REVIEWER'S CARET. Every keystroke in the note comes
+      // back through here as a changed item, and putting the same words back
+      // into the node the reviewer is typing in would collapse their caret to
+      // the start of the sentence on every letter. The record is already what
+      // they typed; the node is already showing it.
+      if (!isBeingEdited(note)) note.textContent = text ? text : "";
+      // The empty-draft label is drawn by the stylesheet, so this attribute is
+      // kept current even mid-sentence: without it the label would sit beside
+      // the first letter the reviewer types.
       note.setAttribute("data-empty", text ? "false" : "true");
 
       var state = row.querySelector(".lahe-rail-state");
       if (state) state.textContent = stateLabel(item);
       row.setAttribute("data-state", item[record.FIELD.STATE]);
+    }
+
+    /**
+     * Is the reviewer's cursor in this note right now?
+     *
+     * Asked of the note's own root rather than of the document: the rail is a
+     * closed shadow root, and document.activeElement outside one only ever names
+     * the host.
+     */
+    function isBeingEdited(note) {
+      if (!note || typeof note.getRootNode !== "function") return false;
+      var rootNode = note.getRootNode();
+      return !!rootNode && rootNode.activeElement === note;
     }
 
     // Nothing that is not ready is actionable (R7), and the row says so in
@@ -541,6 +596,9 @@
     }
 
     function dropRow(id) {
+      // The note goes with the row it was drawn in: a session left registered
+      // against a node nobody can see is a rewording nobody can end.
+      comments.detachNoteEditor(id);
       var row = rows[id];
       if (row && row.parentNode) row.parentNode.removeChild(row);
       delete rows[id];
@@ -614,6 +672,9 @@
     function unmount() {
       if (unsubscribe) unsubscribe();
       unsubscribe = null;
+      Object.keys(rows).forEach(function (id) {
+        comments.detachNoteEditor(id);
+      });
       if (panel && panel.parentNode) panel.parentNode.removeChild(panel);
       if (pill && pill.parentNode) pill.parentNode.removeChild(pill);
       if (footEl && footEl.parentNode) footEl.parentNode.removeChild(footEl);
