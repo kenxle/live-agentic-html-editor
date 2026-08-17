@@ -130,14 +130,6 @@ do that only when your human asks: `Removing it` in the README has the detail.
 
 ## Rules that are yours specifically
 
-- **Never hold the page open in your own browser.** A review allows one live
-  window, and the first window to load the page claims it. If you open the page
-  to verify your setup (fine), close that tab or browser BEFORE telling your
-  human to open it, or their window is refused into read-only until your claim
-  goes stale (about 30 seconds after your tab closes). The reviewer's browser is
-  the only one that should be on the page while they work; your interface is the
-  files and `lahe wait`, never the page itself.
-
 - **Never rewrite a whole document.** Each item is one targeted change.
 - **Never edit `review.json`, `events.jsonl`, or another agent's reply file.**
   Your one write surface is your own reply file, append-only.
