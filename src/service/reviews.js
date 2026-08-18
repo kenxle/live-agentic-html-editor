@@ -483,6 +483,53 @@ function createReviews(options) {
   }
 
   // ---------------------------------------------------------------------------
+  // Has the reviewed FILE changed on disk?
+  // ---------------------------------------------------------------------------
+  //
+  // R36 says the page updates itself as the agent lands changes, and D7 assumed
+  // the serving environment supplies that refresh (a dev server hot-reloads, and
+  // the agent's landed change arrives as a repaint). The dominant real case is a
+  // built static page behind a plain http server, which reloads nothing ever, so
+  // R36 shipped unmet there: the reviewer had to be told to press reload. This
+  // is the missing TRIGGER. The survival half (replay of their outstanding work
+  // over the agent's landed changes) is D7's pass and already runs on load.
+  //
+  // A cheap fs.stat when asked, not a watcher. The library asks once a second on
+  // its reply poll, one stat per review per second is nothing, and a watcher
+  // would mean fd lifetimes, rename handling, and a restart story for a fact
+  // that is one syscall to recompute. The TTL is there so several requests in
+  // one tick share a stat, not to make it cheap enough to do at all.
+  //
+  // Fail soft: a review with no recorded path, a file the build deleted, or a
+  // stat that throws all answer null. This number is a convenience on top of a
+  // route the reviewer's page depends on, and it may never cost them that route.
+  var MTIME_TTL_MS = 500;
+  var mtimeCache = Object.create(null);
+
+  /**
+   * The reviewed file's modification time, as an ISO string, or null.
+   *
+   * @param {string} reviewId
+   * @returns {string|null} null when the review has no target path, the file is
+   *   gone, or the stat failed for any reason at all
+   */
+  function targetMtime(reviewId) {
+    var review = get(reviewId);
+    if (!review || typeof review.target_path !== "string" || !review.target_path) return null;
+    var cached = mtimeCache[reviewId];
+    var now = clock();
+    if (cached && cached.path === review.target_path && now - cached.at < MTIME_TTL_MS) return cached.mtime;
+    var mtime = null;
+    try {
+      mtime = fs.statSync(review.target_path).mtime.toISOString();
+    } catch (error) {
+      mtime = null;
+    }
+    mtimeCache[reviewId] = { path: review.target_path, at: now, mtime: mtime };
+    return mtime;
+  }
+
+  // ---------------------------------------------------------------------------
   // Liveness: when did this review's PAGE last say anything?
   // ---------------------------------------------------------------------------
   //
@@ -700,6 +747,7 @@ function createReviews(options) {
     recordPaths: recordPaths,
     touch: touch,
     lastSeenAt: lastSeenAt,
+    targetMtime: targetMtime,
     config: config,
     writeReadyFile: writeReadyFile,
     claimWindow: claimWindow,

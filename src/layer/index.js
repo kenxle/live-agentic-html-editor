@@ -285,6 +285,20 @@
         // 1B's poll loop brings folded replies and rejected lines back; 3A's
         // file decides what each one does to a card.
         done.applyReplies(events);
+      },
+      // R36's reload, the two halves boot owns. Mid-work means an open edit
+      // session or a comment box on screen: the reload waits for both, because a
+      // page that swaps under a half-typed sentence is worse than a late reload.
+      isBusy: function () {
+        if (editing && typeof editing.isEditing === "function" && editing.isEditing()) return true;
+        if (comments && typeof comments.openBoxes === "function" && comments.openBoxes().length > 0) return true;
+        return false;
+      },
+      // Said before the document goes away, so the reload is announced rather
+      // than a surprise. The reviewer's outstanding work is replayed onto the
+      // new page by D7's pass, which is why this sentence can promise it.
+      onPageChanged: function () {
+        rail.setStatusLine(ns.overlay.STATUS.PAGE_RELOADING);
       }
     });
 

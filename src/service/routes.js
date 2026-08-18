@@ -225,7 +225,11 @@ var HANDLERS = {
     });
     return {
       status: 200,
-      body: { events: events, seq: deps.log.currentSeq(request.review) }
+      // `target_mtime` is R36's refresh trigger for a static page: when the
+      // agent rebuilds the reviewed file, this number changes and the library
+      // reloads the page itself. Null when the review has no recorded path or
+      // the file is not there, which the library reads as "nothing to say".
+      body: { events: events, seq: deps.log.currentSeq(request.review), target_mtime: deps.reviews.targetMtime(request.review) }
     };
   },
 

@@ -108,13 +108,18 @@
     // status line lied on every freshly loaded page; walkers, 2026-08-14).
     KEPT_UNCONFIRMED: "kept_unconfirmed",
     STORED: "stored",
-    AGENT_CONNECTED: "agent_connected"
+    AGENT_CONNECTED: "agent_connected",
+    // R36: the agent rebuilt the page and the library is about to reload it.
+    // A moment long, and it exists so the reload is something the reviewer was
+    // told about rather than something that happened to them.
+    PAGE_RELOADING: "page_reloading"
   };
   var STATUS_TEXT = {
     kept_locally: "Kept in this browser. Nothing is lost; it will be stored when the helper is back.",
     kept_unconfirmed: "Kept in this browser. It is stored the moment the helper confirms it.",
     stored: "Stored.",
-    agent_connected: "Stored, and an agent is reading."
+    agent_connected: "Stored, and an agent is reading.",
+    page_reloading: "Page updated. Reloading, your comments and edits come with it."
   };
   // The short form, for the one line that is always on screen. The long form
   // above is the title attribute, so the plain statement is never truncated
@@ -123,7 +128,8 @@
     kept_locally: "Kept in this browser",
     kept_unconfirmed: "Kept in this browser",
     stored: "Stored",
-    agent_connected: "Stored · agent reading"
+    agent_connected: "Stored · agent reading",
+    page_reloading: "Page updated. Reloading..."
   };
 
   var STATE_LABEL = {

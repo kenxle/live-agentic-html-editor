@@ -79,6 +79,40 @@
   // timestamp.
   var POLL_INTERVAL_MS = 1000;
 
+  // -------------------------------------------------------------------------
+  // R36: the page updates itself as the agent lands changes
+  // -------------------------------------------------------------------------
+  //
+  // D7 grounded R36 but assumed the serving environment supplies the refresh: a
+  // dev server hot-reloads and the agent's landed change arrives as a repaint.
+  // A built static page behind a plain http server refreshes nothing, ever, so
+  // for the commonest case R36 was unmet and the reviewer had to be told to
+  // press reload. The reply poll already runs every second and now carries the
+  // reviewed file's mtime, so the trigger is free: a DIFFERENT non-null value
+  // from the one this page last saw means the file was rebuilt under it.
+  //
+  // This does not fight a framework that hot-reloads on its own. The comparison
+  // is against the mtime this page last SAW, so a page its own dev server
+  // already repainted still holds the old value here and gets exactly one
+  // reload, and after any reload the fresh page starts from the current mtime
+  // and is quiet again. Reloading a page that repainted itself costs the
+  // reviewer nothing anyway: the replay pass is what makes a reload safe.
+  //
+  // Two waits, both here rather than at the call sites:
+  //
+  //  1. DEBOUNCE. A rebuild writes the file more than once, so a change starts a
+  //     timer rather than a reload, and further changes inside the window just
+  //     update the target. One rebuild is one reload.
+  //  2. NEVER MID-WORK. An open edit session or a comment being typed defers the
+  //     reload (isBusy), and it fires on the first poll after they are done. A
+  //     page that swaps under a half-typed sentence is the one failure this
+  //     feature could introduce.
+  var RELOAD_DEBOUNCE_MS = 1500;
+
+  // The pause between saying "Page updated. Reloading..." and doing it, so the
+  // sentence is on screen before the page goes away.
+  var RELOAD_NOTICE_MS = 250;
+
   /**
    * Which failure a refused or failed request really is.
    *
@@ -120,6 +154,13 @@
     var onRecovered = opts.onRecovered || function () {};
     var onReplies = opts.onReplies || function () {};
     var onLimit = opts.onLimit || function () {};
+    // R36's reload. isBusy answers "is the reviewer mid-work right now?" (boot
+    // wires it to the edit session and the open comment boxes); onPageChanged is
+    // the moment before the reload, where the rail says so in plain words.
+    var isBusy = opts.isBusy || function () { return false; };
+    var onPageChanged = opts.onPageChanged || function () {};
+    var reloadDebounceMs = typeof opts.reloadDebounceMs === "number" ? opts.reloadDebounceMs : RELOAD_DEBOUNCE_MS;
+    var reloadNoticeMs = typeof opts.reloadNoticeMs === "number" ? opts.reloadNoticeMs : RELOAD_NOTICE_MS;
     // The window-session state machine (D5, findings 1/2/3/12, NEW-2). onRefused
     // fires when this window loses the claim (client lock or helper); the boot
     // layer goes READ-ONLY and shows the refusal panel. onHeld fires only on the
@@ -162,6 +203,16 @@
     // 2026-08-14).
     var unloading = false;
     var cursor = 0;
+    // R36. The mtime this page last saw, the armed-but-not-yet-fired reload, and
+    // its debounce timer.
+    var targetMtime = null;
+    var reloadPending = false;
+    var reloadTimer = null;
+    var reloadsFired = 0;
+    // Every time the debounce window closed and the reload was DECIDED, whether
+    // it went ahead or was deferred for a busy reviewer. It is what a test waits
+    // on to assert that a reload did not happen, instead of sleeping and hoping.
+    var reloadChecks = 0;
     var repliesSeen = [];
     var seenItems = Object.create(null);
     var lock = { checked: false, acquired: null, holder: null, reason: null, unchecked: false };
@@ -535,6 +586,7 @@
           markReachable();
           var events = (result.body && result.body.events) || [];
           if (typeof (result.body && result.body.seq) === "number") cursor = result.body.seq;
+          noteTargetMtime(result.body && result.body.target_mtime);
           if (events.length) {
             repliesSeen = repliesSeen.concat(events);
             onReplies(events);
@@ -543,6 +595,78 @@
           return { events: events, seq: cursor };
         }
       );
+    }
+
+    /**
+     * The reviewed file's mtime, as this poll reported it (R36).
+     *
+     * The FIRST value seen is just the baseline: this page is already showing
+     * that version of the file, so it arms nothing. Any later value that differs
+     * means the agent rebuilt the page underneath the reviewer.
+     *
+     * A null answers nothing at all: the review has no recorded path, or the
+     * file is momentarily absent because a build is writing it. Treating a null
+     * as a change would reload the page every time a build was mid-write.
+     *
+     * @param {string|null} value an ISO string, or null
+     * @returns {boolean} true when this call armed a reload
+     */
+    function noteTargetMtime(value) {
+      if (typeof value !== "string" || !value) return false;
+      if (targetMtime === null) {
+        targetMtime = value;
+        return false;
+      }
+      if (value === targetMtime) {
+        // Nothing changed. If a reload is still waiting on the reviewer to stop
+        // typing, this is the tick that gets to ask again.
+        if (reloadPending && !reloadTimer) armReload(0);
+        return false;
+      }
+      targetMtime = value;
+      reloadPending = true;
+      // Restart the window rather than reload now: a rebuild that touches the
+      // file three times in a second is one change to the reviewer.
+      armReload(reloadDebounceMs);
+      return true;
+    }
+
+    function armReload(delayMs) {
+      if (reloadTimer) clearTimeout(reloadTimer);
+      // harness-allow-timer: R36's rebuild debounce, pinned at RELOAD_DEBOUNCE_MS
+      // above. One rebuild is one reload.
+      reloadTimer = setTimeout(function () {
+        reloadTimer = null;
+        fireReload();
+      }, delayMs);
+    }
+
+    /**
+     * Reload, unless the reviewer is mid-work. A deferral is not a cancellation:
+     * reloadPending stays true and the next poll that finds them idle arms it
+     * again, so the page catches up the moment they finish.
+     */
+    function fireReload() {
+      if (!reloadPending) return false;
+      reloadChecks += 1;
+      var busy = false;
+      try {
+        busy = !!isBusy();
+      } catch (error) {
+        // A busy check that throws must not cost the reviewer their page. Treat
+        // it as busy: a late reload is recoverable, one over a live edit is not.
+        busy = true;
+      }
+      if (busy) return false;
+      reloadPending = false;
+      reloadsFired += 1;
+      onPageChanged();
+      // harness-allow-timer: the pause that lets "Page updated. Reloading..."
+      // paint before the document goes away.
+      setTimeout(function () {
+        if (win && win.location && typeof win.location.reload === "function") win.location.reload();
+      }, reloadNoticeMs);
+      return true;
     }
 
     function startPolling() {
@@ -940,6 +1064,8 @@
       if (debounceTimer) clearTimeout(debounceTimer);
       if (retryTimer) clearTimeout(retryTimer);
       if (pollTimer) clearInterval(pollTimer);
+      if (reloadTimer) clearTimeout(reloadTimer);
+      reloadTimer = null;
       stopHeartbeat();
       stopLiveness();
       debounceTimer = null;
@@ -964,6 +1090,10 @@
         status: status,
         queued: pendingCount(),
         cursor: cursor,
+        targetMtime: targetMtime,
+        reloadPending: reloadPending,
+        reloadsFired: reloadsFired,
+        reloadChecks: reloadChecks,
         readOnly: readOnly,
         cspRefused: cspRefused,
         lastFailure: lastFailure ? lastFailure.code : null,
@@ -987,6 +1117,7 @@
         return readOnly;
       },
       poll: poll,
+      noteTargetMtime: noteTargetMtime,
       classify: classify,
       repliesSeen: function () {
         return repliesSeen.slice();
@@ -1003,6 +1134,8 @@
     BACKOFF_MS: BACKOFF_MS,
     REQUEST_TIMEOUT_MS: REQUEST_TIMEOUT_MS,
     POLL_INTERVAL_MS: POLL_INTERVAL_MS,
+    RELOAD_DEBOUNCE_MS: RELOAD_DEBOUNCE_MS,
+    RELOAD_NOTICE_MS: RELOAD_NOTICE_MS,
     decideFailureCode: decideFailureCode,
     createSync: createSync
   };

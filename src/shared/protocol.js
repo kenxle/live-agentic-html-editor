@@ -174,9 +174,12 @@
       path: BASE + "/replies",
       auth: AUTH.REVIEW_TOKEN,
       mutating: false,
-      why: "the library's reply poll loop. The cursor is a seq, never a timestamp and never an offset",
+      why:
+        "the library's reply poll loop. The cursor is a seq, never a timestamp and never an offset. It also carries " +
+        "the reviewed file's mtime, which is R36's refresh trigger for a static page: a changed value means the " +
+        "agent rebuilt the page and the library reloads it",
       request: "?review=<id>&since=<seq>",
-      response: "{events: [event...], seq}"
+      response: "{events: [event...], seq, target_mtime}; target_mtime is an ISO string, or null when the review has no recorded path or the file is missing"
     },
     {
       name: "window.claim",
