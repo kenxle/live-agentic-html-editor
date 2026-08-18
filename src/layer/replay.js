@@ -1257,19 +1257,19 @@
       // text matcher to re-find, and the settle recheck was marking it lost
       // while the reviewer was looking straight at it — which is how AC1's
       // Copy and Export came to disagree by one lost-anchor note (2026-08-18).
+      //
+      // The binding replaces the RESOLVE, never the rest of the pass: the
+      // element continues into the content branches below, so a bound element
+      // whose text changed underneath still surfaces its collision. An early
+      // return here silently swallowed AC3's neither-matches conflict for a
+      // whole morning.
       var bound = lastElement[id];
       if (bound && bound.isConnected) {
         clearLost(ctx, item);
-        return {
-          wrote: false,
-          branch: null,
-          lost: false,
-          reason: "still bound to a connected element",
-          item: item,
-          element: bound
-        };
+        element = bound;
+      } else {
+        return markLost(item, verdict, ctx);
       }
-      return markLost(item, verdict, ctx);
     }
 
     lastElement[id] = element;
