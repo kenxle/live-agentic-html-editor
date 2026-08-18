@@ -1227,14 +1227,23 @@
       // With no code, every chip goes. It used to be TWO clear functions in this
       // one object literal, so the no-argument one silently won and clearing one
       // standing chip wiped the whole list.
+      //
+      // CLEARING NOTHING CHANGES NOTHING. A save is a browser-storage write and
+      // a render tears the whole chip list down and rebuilds it, so a caller
+      // that clears a code with no chip on it (the sync client does, on every
+      // successful poll) was destroying and recreating the OTHER chips' buttons
+      // once a second: the "Copy for your agent" button lost its "Copied"
+      // confirmation, and a click straddling a rebuild landed on a detached
+      // node (review, 2026-08-17).
       clear: function (code) {
         var n = chips.length;
         chips = chips.filter(function (f) {
           return code === undefined || code === null ? false : f.code !== code;
         });
+        if (chips.length === n) return false;
         saveChips();
         renderChips();
-        return chips.length !== n;
+        return true;
       },
       isDismissed: function (code) {
         return dismissed[code] === true;

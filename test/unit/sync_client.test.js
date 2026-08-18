@@ -16,6 +16,7 @@ const record = require("../../src/shared/record.js");
 const storeModule = require("../../src/layer/store.js");
 const syncModule = require("../../src/layer/sync.js");
 const overlay = require("../../src/layer/overlay.js");
+const failuresModule = require("../../src/shared/failures.js");
 
 function draft(note) {
   return record.newItem({
@@ -169,11 +170,108 @@ test("a successful poll is enough to read stored, with no post and no typing", a
 
   await sync.poll();
   assert.equal(sync.status().status, overlay.STATUS.STORED, "a reachable helper with an empty outbox IS stored");
+  assert.deepEqual(recovered, ["HELPER_UNREACHABLE"], "the first answer ends the one chip that was standing");
+
+  // A healthy page polls every second, and each clear is a browser-storage
+  // write and a full chip-list rebuild. Clearing codes that were never raised
+  // destroyed and recreated every OTHER chip's buttons once a second, which is
+  // what stole the "Copy for your agent" confirmation (review, 2026-08-17).
+  recovered.length = 0;
+  await sync.poll();
+  await sync.poll();
+  assert.deepEqual(recovered, [], "a poll that changes nothing clears nothing");
+});
+
+test("an origin refusal that ended is cleared by the first authenticated success", async (t) => {
+  const store = storeModule.createStore();
+  const recovered = [];
+  let originAllowed = false;
+  const sync = syncModule.createSync({
+    review: "review-1",
+    token: "t",
+    helperOrigin: "http://127.0.0.1:7817",
+    store: store,
+    document: null,
+    window: null,
+    fetch: async (url) => {
+      if (String(url).indexOf("/health") !== -1) return { ok: true, status: 200, json: async () => ({}) };
+      if (!originAllowed) throw new TypeError("Failed to fetch");
+      return { ok: true, status: 200, json: async () => ({ events: [], seq: 1 }) };
+    },
+    onRecovered: (code) => recovered.push(code)
+  });
+  t.after(() => sync.stop());
+
+  await sync.poll();
+  recovered.length = 0;
+  originAllowed = true;
+  await sync.poll();
   assert.deepEqual(
-    recovered,
+    recovered.slice().sort(),
     ["HELPER_UNREACHABLE", "SYNC_ORIGIN_NOT_ALLOWED", "SYNC_UNAUTHORIZED"],
-    "an authenticated success ends every standing access chip: unreachable, origin, and token"
+    "registering the origin ends the chip that said it was broken"
   );
+});
+
+// ---------------------------------------------------------------------------
+// The origin diagnosis is a claim about right now (review, 2026-08-17)
+// ---------------------------------------------------------------------------
+
+test("a diagnosed origin refusal does not resurrect the unreachable chip on later failures", async (t) => {
+  const store = storeModule.createStore();
+  const raised = [];
+  const recovered = [];
+  let healthAnswers = true;
+  const sync = syncModule.createSync({
+    review: "review-1",
+    token: "t",
+    helperOrigin: "http://127.0.0.1:7817",
+    store: store,
+    document: null,
+    window: null,
+    fetch: async (url) => {
+      if (String(url).indexOf("/health") !== -1) {
+        if (!healthAnswers) throw new TypeError("Failed to fetch");
+        return { ok: true, status: 200, json: async () => ({}) };
+      }
+      // Every authenticated route is refused at the preflight, which reaches
+      // fetch as a plain network error with no status.
+      throw new TypeError("Failed to fetch");
+    },
+    onFailure: (failure) => raised.push(failure.code),
+    onRecovered: (code) => recovered.push(code)
+  });
+  t.after(() => sync.stop());
+
+  // Fail, diagnose, then fail twice more. The page must end with exactly one
+  // chip standing and it must be the origin one.
+  await sync.poll();
+  await sync.poll();
+  await sync.poll();
+
+  const standing = [];
+  raised.forEach((code) => {
+    if (standing.indexOf(code) === -1) standing.push(code);
+  });
+  recovered.forEach((code) => {
+    const at = standing.indexOf(code);
+    if (at !== -1) standing.splice(at, 1);
+  });
+  assert.deepEqual(standing, ["SYNC_ORIGIN_NOT_ALLOWED"], "one chip, and the origin one");
+  assert.equal(
+    raised.filter((code) => code === "SYNC_ORIGIN_NOT_ALLOWED").length,
+    1,
+    "a standing condition is raised once, never once per retry"
+  );
+
+  // Now the helper actually dies: health stops answering too. Unreachable is
+  // the truth again, and the origin chip has to go.
+  healthAnswers = false;
+  raised.length = 0;
+  recovered.length = 0;
+  await sync.poll();
+  assert.ok(raised.indexOf("HELPER_UNREACHABLE") !== -1, "a helper that really went down surfaces as unreachable");
+  assert.ok(recovered.indexOf("SYNC_ORIGIN_NOT_ALLOWED") !== -1, "the origin diagnosis is over");
 });
 
 test("a post the navigation aborted is not a failure, and raises no chip", async (t) => {
@@ -434,4 +532,33 @@ test("finding 12/NEW-2: the refused window's takeover makes it the holder and li
   // The window can write again now that it is the holder.
   const ev = sync.recordItem(draft("now I can type"));
   assert.ok(ev, "the write path is live again");
+});
+
+// ---------------------------------------------------------------------------
+// Clearing a chip that is not there (review, 2026-08-17)
+// ---------------------------------------------------------------------------
+
+test("clearing a code with no chip on it writes nothing and rebuilds nothing", () => {
+  var writes = 0;
+  const rail = overlay.createRail({
+    document: null,
+    reviewId: "review-1",
+    store: {
+      readChips: () => ({ chips: [], dismissed: [] }),
+      writeChips: () => {
+        writes += 1;
+      }
+    }
+  });
+  rail.failures.add(failuresModule.failure("REPLY_LINE_MALFORMED", "replies.jsonl line 4"));
+  const after = writes;
+
+  // The sync client clears these on every successful poll, once a second.
+  for (let i = 0; i < 5; i += 1) {
+    assert.equal(rail.failures.clear("HELPER_UNREACHABLE"), false);
+    assert.equal(rail.failures.clear("SYNC_ORIGIN_NOT_ALLOWED"), false);
+  }
+  assert.equal(writes, after, "no chip changed, so no storage write and no chip-list rebuild");
+  assert.equal(rail.failures.count(), 1, "the unrelated chip is untouched");
+  assert.equal(rail.failures.clear("REPLY_LINE_MALFORMED"), true, "a chip that IS there still clears");
 });

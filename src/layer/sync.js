@@ -262,7 +262,19 @@
 
     function raise(failure) {
       lastFailure = failure;
-      if (failures.canonical(failure.code) === "HELPER_UNREACHABLE") helperReachable = false;
+      var code = failures.canonical(failure.code);
+      if (code === "HELPER_UNREACHABLE") helperReachable = false;
+      if (code === "SYNC_ORIGIN_NOT_ALLOWED" || code === "SYNC_UNAUTHORIZED") {
+        // The helper ANSWERED and refused us, so it is not unreachable. Clear
+        // that chip here rather than at one call site, or the page wears both
+        // and the wrong one last (review, 2026-08-17).
+        onRecovered("HELPER_UNREACHABLE");
+        // These two are standing conditions, not occurrences. Re-raising the
+        // one already standing would grow a ×N counter that counts our own
+        // retries, so a repeat is dropped and the chip stays as it is.
+        if (accessRefused === code) return failure;
+        accessRefused = code;
+      }
       onFailure(failure);
       return failure;
     }
@@ -284,8 +296,18 @@
       // over the moment this runs, and their standing chips end here too.
       // Without this, registering the origin fixed the review while the chip
       // kept saying it was broken (Ken, live, 2026-08-17).
-      onRecovered("SYNC_ORIGIN_NOT_ALLOWED");
-      onRecovered("SYNC_UNAUTHORIZED");
+      //
+      // Only on the STATE CHANGE, though. A healthy page polls every second,
+      // and clearing a chip that was never raised still wrote browser storage
+      // and rebuilt the whole chip list, which destroyed and recreated any
+      // other standing chip's buttons once a second: the "Copy for your agent"
+      // button lost its "Copied" confirmation, and a click that straddled a
+      // rebuild landed on a detached node (review, 2026-08-17).
+      if (accessRefused) {
+        accessRefused = null;
+        onRecovered("SYNC_ORIGIN_NOT_ALLOWED");
+        onRecovered("SYNC_UNAUTHORIZED");
+      }
       originDiagnosed = false;
       recomputeStatus();
       return helperReachable;
@@ -577,7 +599,14 @@
             // A poll the navigation cancelled says nothing about the helper.
             if (abortedByTeardown(result)) return { events: [] };
             raise(classify(result.error, { status: result.status, detail: describe(result) }));
-            if (result.status === undefined) diagnoseUnreachable();
+            if (result.status === undefined) {
+              // Returned rather than fired and forgotten, so one awaited poll
+              // is one settled diagnosis and a test can assert the chips.
+              return diagnoseUnreachable().then(function () {
+                recomputeStatus();
+                return { events: [] };
+              });
+            }
             recomputeStatus();
             return { events: [] };
           }
@@ -685,7 +714,13 @@
 
     function classify(error, hints) {
       var h = hints || {};
-      var code = decideFailureCode({ cspRefused: cspRefused, status: h.status, healthAnswered: h.healthAnswered });
+      // A diagnosis already made still holds. classify has no memory of the
+      // health probe, so without this every later failing poll re-raised
+      // HELPER_UNREACHABLE on a page whose real problem was its origin, and the
+      // reviewer wore both chips with the wrong one last (review, 2026-08-17).
+      var answered = h.healthAnswered;
+      if (answered === undefined && originDiagnosed) answered = true;
+      var code = decideFailureCode({ cspRefused: cspRefused, status: h.status, healthAnswered: answered });
       if (code === "SYNC_ORIGIN_NOT_ALLOWED") return failures.failure(code, originRemedy());
       return failures.failure(code, h.detail || (error && error.message) || null);
     }
@@ -708,6 +743,10 @@
     // is unauthenticated, needs no custom header, and therefore no preflight. If
     // health answers, the helper is up and the origin is the problem.
     var originDiagnosed = false;
+    // The access refusal currently STANDING, as a canonical code, or null.
+    // It is what tells a re-raise from a first raise and a real recovery from a
+    // healthy page's every-second poll.
+    var accessRefused = null;
 
     function pageOrigin() {
       if (win && win.location && win.location.origin) return String(win.location.origin);
@@ -756,15 +795,29 @@
     /**
      * After a network-level failure, work out whether this is really the helper
      * being down or this page's origin being unregistered, and say so once.
+     *
+     * The probe RE-RUNS on every failing poll rather than stopping at the first
+     * diagnosis. A diagnosis is a claim about right now, and a helper that dies
+     * an hour after the origin was refused has to surface as unreachable rather
+     * than leave the page insisting on an origin problem forever. Re-running
+     * costs one unauthenticated local request per failing poll, and a page whose
+     * polls are all succeeding never gets here at all.
      */
     function diagnoseUnreachable() {
-      if (originDiagnosed || cspRefused) return Promise.resolve(null);
+      if (cspRefused) return Promise.resolve(null);
       return probeHealth().then(function (healthAnswered) {
-        if (healthAnswered !== true) return null;
+        if (healthAnswered !== true) {
+          if (!originDiagnosed) return null;
+          // Health stopped answering. The origin diagnosis is over, and this is
+          // now a helper that is genuinely down.
+          originDiagnosed = false;
+          accessRefused = null;
+          onRecovered("SYNC_ORIGIN_NOT_ALLOWED");
+          return raise(failures.failure("HELPER_UNREACHABLE", "health stopped answering after an origin refusal"));
+        }
         originDiagnosed = true;
-        // The helper answers, so it is not unreachable. Clear that chip before
-        // raising the real one, or the page wears both and the wrong one first.
-        onRecovered("HELPER_UNREACHABLE");
+        // The helper answers, so it is not unreachable. raise clears that chip
+        // before this one lands, and it drops the repeat while it stands.
         return raise(failures.failure("SYNC_ORIGIN_NOT_ALLOWED", originRemedy()));
       });
     }
