@@ -13,9 +13,9 @@
 //
 //  1. The target is read and classified. An .html file is a static page and gets
 //     the line written into it. Anything else (a directory, a layout template)
-//     is a dev server, and the line is PRINTED for a human to paste into a
-//     layout behind a development-only guard. `add` never edits application
-//     code: a token committed inside a layout is worse than a paste.
+//     is a dev server, and the line is PRINTED with a comment telling the human
+//     to add the framework's real development-only conditional. `add` never
+//     edits application code because it cannot know that framework-specific guard.
 //  2. The review is settled, from three things in this order: `--review <id>`
 //     names one outright, the script line already in the page names one, and
 //     failing both, THE RECORDED TARGET PATH matches one. That third rule is
@@ -141,7 +141,8 @@ var USAGE = [
   "",
   "  <file-or-directory>  an .html file gets the script line written into it. Anything else",
   "                       (a directory, a layout template) is treated as a dev server and the",
-  "                       line is printed for you to paste, inside a development-only guard.",
+  "                       line is printed with a reminder comment. Before pasting it, wrap the",
+  "                       line in your framework's actual development-only conditional.",
   "",
   "  --new                mint a second review even though the file already carries one.",
   "  --review <id>        re-attach this page to a review that already exists, by id. Use it when a",
@@ -186,7 +187,7 @@ function parseArgs(argv) {
         inline = arg.slice(eq + 1);
       }
 
-      if (name === "--help" || name === "-h") return { ok: false, message: USAGE };
+      if (name === "--help" || name === "-h") return { ok: false, help: true, message: USAGE };
       if (name === "--new") {
         options.isNew = true;
       } else if (name === "--remove") {
@@ -671,10 +672,11 @@ function tokenWarning(where) {
   ].join("\n");
 }
 
-function guardedSnippet(tag) {
+function commentedSnippet(tag) {
   return [
-    "<!-- lahe: development only. Remove this before you ship, or wrap it in your framework's",
-    "     development-only conditional. It carries a per-review token. -->",
+    "<!-- lahe setup note: this comment is not a development guard.",
+    "     Wrap the script in your framework's actual development-only conditional before pasting it.",
+    "     It carries a per-review token. -->",
     tag
   ].join("\n");
 }
@@ -711,8 +713,8 @@ function classify(targetPath) {
 async function run(argv) {
   var parsed = parseArgs(argv);
   if (!parsed.ok) {
-    process.stderr.write(parsed.message + "\n");
-    return EXIT.BAD_USAGE;
+    process[parsed.help ? "stdout" : "stderr"].write(parsed.message + "\n");
+    return parsed.help ? EXIT.OK : EXIT.BAD_USAGE;
   }
   var options = parsed.options;
   var out = [];
@@ -739,7 +741,7 @@ async function run(argv) {
           "",
           "  Nothing was edited, because `add` never edited this. It printed a line for you to",
           "  paste into your layout: delete that line (the one carrying data-lahe-review) and the",
-          "  development-only comment above it.",
+          "  lahe setup comment above it.",
           ""
         ].join("\n")
       );
@@ -1120,10 +1122,11 @@ async function run(argv) {
       say("    lahe add " + options.target + " --origin <origin>   (for example http://127.0.0.1:8000)");
     }
   } else {
-    say("  Nothing was edited. Paste this into your layout, inside a development-only guard:");
+    say("  Nothing was edited. This is a commented snippet, not a development guard.");
+    say("  Wrap the script in your framework's actual development-only conditional before pasting it:");
     say();
     say(
-      guardedSnippet(tag)
+      commentedSnippet(tag)
         .split("\n")
         .map(function (line) {
           return "    " + line;

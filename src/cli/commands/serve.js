@@ -60,7 +60,7 @@ function parseArgs(argv) {
       }
 
       if (name === "--help" || name === "-h") {
-        return { ok: false, message: USAGE };
+        return { ok: false, help: true, message: USAGE };
       }
       if (name === "--port") {
         var port = Number(takeValue("--port", inline));
@@ -102,8 +102,8 @@ function parseArgs(argv) {
 async function run(argv) {
   var parsed = parseArgs(argv);
   if (!parsed.ok) {
-    process.stderr.write(parsed.message + "\n");
-    return protocol.CLI_EXIT.BAD_USAGE;
+    process[parsed.help ? "stdout" : "stderr"].write(parsed.message + "\n");
+    return parsed.help ? protocol.CLI_EXIT.OK : protocol.CLI_EXIT.BAD_USAGE;
   }
 
   var helper;

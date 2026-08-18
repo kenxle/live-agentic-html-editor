@@ -49,6 +49,24 @@ test("missing and unknown commands use the shared CLI bad-usage exit", async () 
   assert.match(unknown.stderr, /unknown command/);
 });
 
+test("add and serve help use stdout and the successful help exit", async () => {
+  for (const command of ["add", "serve"]) {
+    const help = await captureMain([command, "--help"]);
+    assert.equal(help.code, protocol.CLI_EXIT.OK, command + " --help exits successfully");
+    assert.match(help.stdout, new RegExp("usage: lahe " + command));
+    assert.equal(help.stderr, "", command + " --help is not an error");
+  }
+});
+
+test("malformed add and serve options remain bad usage on stderr", async () => {
+  for (const command of ["add", "serve"]) {
+    const malformed = await captureMain([command, "--not-an-option"]);
+    assert.equal(malformed.code, protocol.CLI_EXIT.BAD_USAGE);
+    assert.match(malformed.stderr, /unknown option/);
+    assert.equal(malformed.stdout, "");
+  }
+});
+
 test("status owns the active read exits under CLI_EXIT", () => {
   assert.deepEqual(protocol.CLI_EXIT, {
     OK: 0,

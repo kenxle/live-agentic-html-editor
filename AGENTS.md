@@ -16,7 +16,9 @@ files are the whole interface.
 
 ## Step 1: install (once per machine)
 
-Requires Node 18+ (`node --version`).
+Requires Node 18+ (`node --version`). The documented `install-cli` wrapper is
+for macOS and Linux POSIX shells; Windows is not yet part of the tested public
+CLI workflow.
 
 ```sh
 git clone https://github.com/kenxle/live-agentic-html-editor
@@ -46,7 +48,7 @@ should be opening:
 ```sh
 cd path/to                                   # the folder holding page.html
 python3 -m http.server 8000 --bind 127.0.0.1 &
-lahe add path/to/page.html --origin http://127.0.0.1:8000
+lahe add page.html --origin http://127.0.0.1:8000
 # tell your human to open http://127.0.0.1:8000/page.html
 ```
 
@@ -78,9 +80,10 @@ For a dev-server app, point at the project and name the origin:
 lahe add path/to/project --origin http://localhost:3000
 ```
 
-This edits nothing in the app. It prints one script line for the layout, inside
-a development-only guard. Paste it where the layout's scripts go (or show it to
-your human), restart nothing, reload the page. The line's `onerror` names a
+This edits nothing in the app. It prints one script line with a reminder comment;
+the comment is not a guard. Wrap the script in the framework's actual
+development-only conditional, then paste it where the layout's scripts go (or
+show it to your human), restart nothing, reload the page. The line's `onerror` names a
 fallback path (`/lahe-layer.js`) for the helper-is-down case; copy the built
 library to whatever your app publishes there if you want that half, or edit
 `data-lahe-fallback` to a path it does serve. A strict development CSP can refuse

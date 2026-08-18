@@ -404,7 +404,7 @@ test("add starts the helper when none is running, which is what makes the instal
   }
 });
 
-test("a dev server target prints a guarded line and edits nothing", async () => {
+test("a dev server target prints a commented snippet that requires the framework's real guard", async () => {
   const project = tempDir();
   const layoutDir = path.join(project, "app", "views", "layouts");
   fs.mkdirSync(layoutDir, { recursive: true });
@@ -433,7 +433,8 @@ test("a dev server target prints a guarded line and edits nothing", async () => 
       "<html><body><%= yield %></body></html>",
       "add never edits application code"
     );
-    assert.match(run.stdout, /development only/i, "the printed line is inside a development-only guard");
+    assert.match(run.stdout, /commented snippet, not a development guard/i);
+    assert.match(run.stdout, /framework's actual development-only conditional/i);
     assert.match(run.stdout, /data-lahe-review="r/, "and the line itself is printed");
     assert.match(run.stdout, /Nothing was edited/);
 
@@ -860,6 +861,7 @@ test("add refuses what it cannot do, with a reason and a non-zero exit", async (
 
 test("package.json installs one command, and it is bin/lahe.js", () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, "package.json"), "utf8"));
+  assert.equal(pkg.private, true, "the package remains GitHub-only rather than npm-publishable");
   assert.deepEqual(pkg.bin, { lahe: "bin/lahe.js" });
   assert.ok(fs.existsSync(path.join(REPO_ROOT, "bin", "lahe.js")), "and that file is there");
   assert.match(
@@ -869,21 +871,29 @@ test("package.json installs one command, and it is bin/lahe.js", () => {
   );
 });
 
-test("the README states the real requirements and claims no single platform or browser", () => {
+test("the README states the tested platform and browser requirements", () => {
   const readme = fs.readFileSync(path.join(REPO_ROOT, "README.md"), "utf8");
+  const agents = fs.readFileSync(path.join(REPO_ROOT, "AGENTS.md"), "utf8");
 
   // The claim the plan sends 3B to delete (S13): it contradicted D1 and the
   // cross-browser lanes, both of which are real.
   assert.doesNotMatch(readme, /macOS and Chromium/i);
   assert.doesNotMatch(readme, /Chromium only/i);
-  assert.doesNotMatch(readme, /macOS only/i);
-
-  assert.match(readme, /Node 20/, "the one stated platform requirement");
+  assert.match(readme, /macOS or Linux/, "the documented installer names its supported operating systems");
+  assert.match(readme, /Windows is not yet/, "Windows is not presented as tested CLI support");
+  assert.match(readme, /Node 18/, "the runtime floor is stated");
   assert.match(readme, /Custom Highlight API/, "and the browser floor");
   assert.match(readme, /MIT/, "the license");
   assert.match(readme, /npm link/, "the documented install");
   assert.match(readme, /node bin\/lahe\.js/, "and the no-install fallback");
   assert.match(readme, /lahe add/, "and the one command that installs the library into a page");
+  assert.match(readme, /git clone https:\/\/github\.com\/kenxle\/live-agentic-html-editor/);
+  assert.match(readme, /lahe add page\.html --origin http:\/\/127\.0\.0\.1:8000/);
+  assert.match(agents, /lahe add page\.html --origin http:\/\/127\.0\.0\.1:8000/);
+  assert.doesNotMatch(readme, /lahe add path\/to\/page\.html --origin/);
+  assert.doesNotMatch(agents, /lahe add path\/to\/page\.html --origin/);
+  assert.match(readme, /comment is not a guard/);
+  assert.match(agents, /comment is not a guard/);
 
   // The in-page hints, so a new user can work the tool out without this file.
   assert.match(readme, /Cmd-Shift-C/);

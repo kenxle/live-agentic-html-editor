@@ -40,8 +40,9 @@ never there, its CSS selectors match differently, and its own re-renders fight
 whatever was inserted. The API is available in current versions of all four
 browsers.
 
-**macOS, Linux, or Windows.** Nothing here is platform-specific. The library is
-standard DOM APIs and the helper is standard Node.
+**macOS or Linux.** The documented `install-cli` flow writes a POSIX shell
+wrapper to `~/.local/bin`, and those are the platforms currently supported by
+that installer. Windows is not yet part of the tested public CLI workflow.
 
 ## The fastest start: tell your agent
 
@@ -59,7 +60,7 @@ path done by hand.
 ## Install
 
 ```sh
-git clone <this repo>
+git clone https://github.com/kenxle/live-agentic-html-editor
 cd live-agentic-html-editor
 npm install
 npm run install-cli    # puts a `lahe` wrapper in ~/.local/bin
@@ -95,7 +96,7 @@ the page's own folder and register that origin:
 ```sh
 cd path/to            # the folder holding page.html
 python3 -m http.server 8000 --bind 127.0.0.1 &
-lahe add path/to/page.html --origin http://127.0.0.1:8000
+lahe add page.html --origin http://127.0.0.1:8000
 # then open http://127.0.0.1:8000/page.html
 ```
 
@@ -111,8 +112,9 @@ For a dev server, point it at the project instead:
 lahe add path/to/project --origin http://localhost:3000
 ```
 
-Nothing in your application is edited. `add` prints the one line for your layout,
-inside a development-only guard, for you to paste.
+Nothing in your application is edited. `add` prints the one line with a reminder
+comment. That comment is not a guard: wrap the script in your framework's actual
+development-only conditional before pasting it into the layout.
 
 ### Without installing
 
@@ -195,7 +197,7 @@ once, and after that a plain sentence works:
 | Command | What it does |
 | --- | --- |
 | `lahe add path/to/page.html` | Start a review on a static file: writes the one script line, mints the review and its token, starts the helper if it is not running, prints what to open |
-| `lahe add path/to/project --origin http://localhost:3000` | Dev-server variant: edits nothing, prints the one guarded line for your layout |
+| `lahe add path/to/project --origin http://localhost:3000` | Dev-server variant: edits nothing, prints a commented snippet that you must wrap in your framework's development-only conditional |
 | `lahe add ... --new` | Mint a fresh review even though the page already carries one |
 | `lahe add path/to/page.html --remove` | Take the script line back out of the page, and change nothing else |
 | `lahe add ... --source path/to/template` | Record where the source lives, so an agent edits the template rather than build output |
