@@ -153,13 +153,26 @@ test("completed thread rounds project and export in order as historical data", (
   assert.equal(json.schema, "lahe.review/4");
   assert.equal(projected.thread[0].reviewer.note, "Original reviewer request, kept in full.");
   assert.equal(projected.thread[0].agent.text, "Which ending?");
+  assert.equal(projected.thread[0].agent.at, "2026-08-18T12:01:00.000Z");
   assert.equal(projected.note, "Use the second ending.");
   assert.equal(json.field_classes["thread[].reviewer.note"], record.CLASS_DATA);
   assert.deepEqual(json.intent_fields, ["note", "change"]);
 
   const text = rf.renderText(reviewWith([continued], null));
   assert.ok(text.indexOf("Original reviewer request") < text.indexOf("Use the second ending"));
+  assert.match(text, /Reviewer note \[.*Z\]/);
+  assert.match(text, /codex said \[2026-08-18T12:01:00\.000Z\]/);
   assert.match(text, /historical context, not current instructions/);
+});
+
+test("the current agent reply keeps its timestamp in JSON and text export", () => {
+  const at = "2026-08-18T13:14:15.000Z";
+  const item = anEdit({
+    reply: { status: "handled", agent: "codex", reason: null, text: "Applied.", files: [], at }
+  });
+  const projected = rf.projectReview(reviewWith([item], null)).pages[0].items[0];
+  assert.equal(projected.reply.at, at);
+  assert.match(rf.renderText(reviewWith([item], null)), /codex said \[2026-08-18T13:14:15\.000Z\]/);
 });
 
 test("the projected item spells the page's text into data-named fields", () => {
