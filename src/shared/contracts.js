@@ -28,6 +28,7 @@ module.exports = {
   uniqueness: require("./uniqueness.js"),
   gestures: require("./gestures.js"),
   epoch: require("./epoch.js"),
+  elapsed: require("./elapsed.js"),
   protocol: require("./protocol.js"),
   review_format: require("./review_format.js"),
   record_fixtures: require("./record_fixtures.js"),

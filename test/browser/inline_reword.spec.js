@@ -360,7 +360,10 @@ test.describe("the note is the input: rewording without a button", () => {
       await pollPage(second, () => !!(window.__lahe && window.__lahe.booted), undefined, {
         message: "the second window to boot"
       });
-      await pollPage(second, () => window.__lahe.failures().some((f) => f.code === "SECOND_WINDOW_REFUSED"), undefined, {
+      // The refusal shows as the PANEL on a read-only window, not as a chip
+      // beside it (one surface per fact, 2026-08-18), so read-only itself is
+      // the thing to wait on.
+      await pollPage(second, () => window.__lahe.handle.sync.status().readOnly === true, undefined, {
         message: "the second window to be refused and go read-only"
       });
 

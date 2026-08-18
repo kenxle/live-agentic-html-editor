@@ -174,11 +174,15 @@
         return { code: chip.code, count: chip.count };
       });
     },
-    addChip: function (code) {
+    addChip: function (code, detail) {
       // Null is the answer for a code the reviewer already dismissed. It is a
       // real answer, not a miss, so it is passed through rather than smoothed.
-      var got = rail.failures.add(LAHE.failures.failure(code, null));
+      var got = rail.failures.add(LAHE.failures.failure(code, detail === undefined ? null : detail));
       return got ? got.code : null;
+    },
+    // What each chip offers: its own action button, a copy button, or neither.
+    chipControls: function () {
+      return rail.chipControls();
     },
     dismissChip: function (code) {
       return rail.failures.dismiss(code);
@@ -211,6 +215,11 @@
     },
     removeCard: function (id) {
       return rail.removeCard(id);
+    },
+    // The lifecycle chip, which is also what moves a card between tabs: the
+    // pill's burn-down count is read off exactly this.
+    setCardState: function (id, state) {
+      return rail.setCardState(id, state);
     },
 
     /**

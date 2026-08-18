@@ -8,10 +8,11 @@
   },
   "license": "MIT",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=18.2.0"
   },
   "scripts": {
     "lint": "node scripts/lint.js",
+    "install-cli": "node scripts/install-cli.js",
     "build:layer": "node scripts/build-layer.js",
     "check:layer": "node scripts/build-layer.js --check",
     "test:unit": "node --test test/unit/",

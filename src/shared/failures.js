@@ -78,8 +78,8 @@
       SEVERITY.BLOCKING,
       true,
       SURFACE.FAILURES_LIST,
-      "This page's origin is not registered with this review, so the helper refuses its events.",
-      "Run the add step from this page's origin."
+      "This page's address is not registered for this review. The helper is fine; it refuses addresses it does not know.",
+      "Have your agent re-run the add step with this page's address, then reload."
     ),
 
     // --- browser storage and windows ---------------------------------------
@@ -137,7 +137,7 @@
       SEVERITY.WARNING,
       true,
       SURFACE.CARD,
-      "The passage this item is about is no longer on the page. The item is kept and the agent is told.",
+      "The passage this comment points at is gone from the page. Your comment is kept, and the agent still sees it.",
       null
     ),
     REPLAY_CONTENT_CHANGED: def(
@@ -333,6 +333,46 @@
     HELPER_UNREACHABLE: true
   };
 
+  // ---------------------------------------------------------------------------
+  // What a chip of this code may OFFER
+  // ---------------------------------------------------------------------------
+  //
+  // Beside the definitions on purpose. These two tables used to live in the
+  // rail, three files away from the codes they answer for, so a new failure
+  // could be added and silently get neither control. Adding a code here is the
+  // same edit as defining it.
+  //
+  // CHIP_ACTIONS: the reviewer fixes this one right here, with a button. The
+  // click runs through the rail's runAction seam, so boot still owns what the
+  // button DOES.
+  var CHIP_ACTIONS = {
+    SECOND_WINDOW_REFUSED: { label: "Review here", action: "takeover" }
+  };
+
+  // COPYABLE: the failure is fixed somewhere the reviewer is not, and the chip's
+  // detail line is written as a sentence to hand to their agent verbatim. Never
+  // on a chip that has its own action: the copy button displaced the one button
+  // that actually fixed the failure (Ken, live, 2026-08-18).
+  var COPYABLE = {
+    SYNC_ORIGIN_NOT_ALLOWED: true,
+    CSP_REFUSED: true,
+    // Both of these ARE agent work: an agent wrote the reply line this tool
+    // could not read, and an agent re-runs the add step that mints the token.
+    // The allowlist dropped them, so the codes whose remedy is literally "hand
+    // this line to your agent" were the two with no way to hand it over.
+    REPLY_LINE_MALFORMED: true,
+    SYNC_UNAUTHORIZED: true
+  };
+
+  function chipAction(code) {
+    var name = canonical(code);
+    return Object.prototype.hasOwnProperty.call(CHIP_ACTIONS, name) ? CHIP_ACTIONS[name] : null;
+  }
+
+  function isCopyable(code) {
+    return COPYABLE[canonical(code)] === true && !chipAction(code);
+  }
+
   function failure(code, detail) {
     var d = describe(code);
     return {
@@ -360,7 +400,11 @@
     CODE_NAMES: CODE_NAMES,
     ALIASES: ALIASES,
     ALIAS_NAMES: ALIAS_NAMES,
+    CHIP_ACTIONS: CHIP_ACTIONS,
+    COPYABLE: COPYABLE,
     canonical: canonical,
+    chipAction: chipAction,
+    isCopyable: isCopyable,
     describe: describe,
     failure: failure,
     isPersistent: isPersistent

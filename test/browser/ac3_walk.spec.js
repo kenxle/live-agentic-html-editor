@@ -355,8 +355,15 @@ test.describe("AC3: a human and an agent at the same time", () => {
           })
         }
       );
+      // REPLAY_NEITHER_MATCHES is D7's collision code, and it is the more
+      // truthful surface here: the region still exists (the record is still
+      // bound to its element), its content just matches neither side. This
+      // spec used to accept ANCHOR_LOST because a failed re-resolve used to
+      // short-circuit the pass before the content comparison could run; the
+      // still-bound rule (2026-08-18) carries the element through to the real
+      // verdict instead.
       expect(badge, "the collision is surfaced on the card rather than swallowed").toContain(
-        "ANCHOR_LOST"
+        "REPLAY_NEITHER_MATCHES"
       );
 
       // NOTHING WAS OVERWRITTEN, IN EITHER DIRECTION.
@@ -370,8 +377,12 @@ test.describe("AC3: a human and an agent at the same time", () => {
         countersAfter.regionsWritten - countersBeforeCommit.regionsWritten,
         "nothing was written over the application's new wording"
       ).toBe(0);
+      // regionsBlockedChanged is the conflict counter (regionsConflicted under
+      // its fixture-era name); regionsLost was the old accounting from when a
+      // failed re-resolve short-circuited into markLost before the content
+      // comparison could run. Same reasoning as the badge assertion above.
       expect(
-        countersAfter.regionsLost - countersBeforeCommit.regionsLost,
+        countersAfter.regionsBlockedChanged - countersBeforeCommit.regionsBlockedChanged,
         "and the collision was surfaced rather than swallowed"
       ).toBeGreaterThanOrEqual(1);
 

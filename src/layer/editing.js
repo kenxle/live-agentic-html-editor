@@ -10,8 +10,12 @@
 //   Cmd-Shift-E           the block under the caret becomes editable, that one
 //                         block and nothing else, visibly framed
 //   typing                every keystroke is durable, synchronously
-//   Esc, or a click       the edit commits, protection lifts, and the block
-//   outside               rejoins the page
+//   Esc, or the pointer   the edit commits, protection lifts, and the block
+//   going down outside    rejoins the page. Outside means outside: the rest of
+//   the block            the page, AND the library's own rail, AND the window
+//                         losing focus altogether. An edit left in `draft`
+//                         reaches no agent at all, so every way of leaving the
+//                         block has to end the same way.
 //   navigating away       the open edit commits on the way out, and the event
 //                         is durable in browser storage whether or not the
 //                         keepalive post makes it (R1: navigation cannot be a
@@ -1253,6 +1257,18 @@
 
       listenerHandles.push(listeners.on(target, "keydown", onKeydown, true, LISTENER_GROUP));
       listenerHandles.push(listeners.on(target, "click", onClick, true, LISTENER_GROUP));
+      // Pointerdown, in capture, so a click that lands on the rail (or on
+      // anything that stops the click from propagating) still commits the open
+      // edit. mousedown as well, because a synthetic click in a test and an
+      // engine without pointer events both still produce one; commit() is
+      // idempotent, so the pair costs nothing.
+      listenerHandles.push(listeners.on(target, "pointerdown", onPointerDown, true, LISTENER_GROUP));
+      listenerHandles.push(listeners.on(target, "mousedown", onPointerDown, true, LISTENER_GROUP));
+
+      if (win) {
+        // The window losing focus is the reviewer leaving too.
+        listenerHandles.push(listeners.on(win, "blur", onWindowBlur, false, LISTENER_GROUP));
+      }
 
       if (win) {
         // Navigation cannot be a losing move (R1). Both events are bound
@@ -1276,9 +1292,62 @@
       listenerHandles = [];
     }
 
+    /**
+     * Did this press land on a scrollbar rather than on content?
+     *
+     * A scrollbar drag fires pointerdown and no click, so the commit-outside
+     * rule read the reviewer scrolling as the reviewer leaving and stripped
+     * contenteditable out from under their pointer (review, 2026-08-17).
+     *
+     * This function only MEASURES. gestures.isScrollbarPress decides, so the
+     * rule is unit-testable with no browser, the way every other gesture rule
+     * is. Two measurements, because a page has two kinds of scrollbar: the
+     * root's, which sits outside the document element with the viewport as its
+     * outer edge, and an element's own, which sits in the gutter between its
+     * content box and its border box.
+     *
+     * @param {Object} event a pointerdown or mousedown
+     * @returns {boolean}
+     */
+    function pressedOnScrollbar(event) {
+      var node = event.target;
+      if (!node || node.nodeType !== 1) return false;
+      if (typeof event.clientX !== "number" || typeof event.clientY !== "number") return false;
+
+      var docEl = doc && doc.documentElement ? doc.documentElement : null;
+      if (docEl && win && (node === docEl || node === doc.body)) {
+        var onRootBar = gestures.isScrollbarPress({
+          x: event.clientX,
+          y: event.clientY,
+          contentWidth: docEl.clientWidth,
+          contentHeight: docEl.clientHeight,
+          boxWidth: win.innerWidth || docEl.clientWidth,
+          boxHeight: win.innerHeight || docEl.clientHeight
+        });
+        if (onRootBar) return true;
+      }
+
+      if (typeof node.getBoundingClientRect !== "function") return false;
+      var rect = node.getBoundingClientRect();
+      return gestures.isScrollbarPress({
+        x: event.clientX - rect.left - (node.clientLeft || 0),
+        y: event.clientY - rect.top - (node.clientTop || 0),
+        contentWidth: node.clientWidth,
+        contentHeight: node.clientHeight,
+        boxWidth: rect.width,
+        boxHeight: rect.height
+      });
+    }
+
     function describe(event) {
       return {
         type: event.type,
+        // Which mouse button, and whether the press was on a scrollbar. Both
+        // exist for the commit-outside rule: only a primary press on content is
+        // the reviewer leaving the block.
+        button: typeof event.button === "number" ? event.button : undefined,
+        onScrollbar:
+          event.type === "pointerdown" || event.type === "mousedown" ? pressedOnScrollbar(event) : false,
         key: event.key,
         metaKey: event.metaKey === true,
         ctrlKey: event.ctrlKey === true,
@@ -1301,6 +1370,72 @@
         if (got.preventDefault) event.preventDefault();
         commit({ reason: "escape" });
       }
+    }
+
+    /**
+     * The pointer went down somewhere. If an edit is open and this is outside
+     * it, that is the reviewer leaving the block, so it commits.
+     *
+     * DELIBERATELY NOT SKIPPED FOR THE OVERLAY. onClick below returns early on
+     * anything inside the library's own rail, and a click on the rail retargets
+     * to the overlay host, so an edit the reviewer finished by clicking the rail
+     * stayed in `draft` forever. A draft never passes protocol.countsAsNew, so
+     * no agent ever saw it and the reviewer had no way to tell (Ken's session,
+     * 2026-08-16). Nothing is prevented and nothing is stopped here: the rail
+     * and the page both still get their event.
+     *
+     * This is not the blur hazard rule 3 warns about. That hazard is the ELEMENT
+     * blur that firing when contenteditable comes off would commit a second
+     * time; commit() clears the session before it touches the DOM, so a second
+     * call is a no-op, and this handler never runs while no session is open.
+     */
+    function onPointerDown(event) {
+      if (!session) return;
+      // THE ONE EXEMPTION: the edit frame's own bar (Bold, Italic, Delete
+      // block). Those buttons act ON the open edit, so a pointer landing on one
+      // is the reviewer still editing, not leaving. The bar lives in the
+      // library's closed shadow root, so the event's target as the document
+      // sees it is the overlay host and is no help; composedPath is what can
+      // tell the frame's bar from the rest of the rail.
+      if (onOwnFrame(event)) return;
+      var got = gestures.gestureFor(describe(event));
+      if (got.gesture !== gestures.GESTURE.COMMIT_EDIT) return;
+      commit({ reason: "pointer outside" });
+    }
+
+    /**
+     * The whole window lost focus: another window, another tab, the desktop.
+     *
+     * The reviewer has left the block by any reading, and leaving an edit open
+     * across a tab switch is how one comes back to a page whose edit never
+     * reached the agent. Guarded to the window's own blur: element blur does not
+     * bubble, but a stray retarget must not be read as the reviewer leaving.
+     */
+    /**
+     * Did this pointer land on the frame's own bar, which belongs to this edit?
+     *
+     * BY GEOMETRY, not by node identity. The bar lives in the library's CLOSED
+     * shadow root, and a closed root is exactly what composedPath refuses to
+     * reveal to a listener outside it, so from the document the target is the
+     * overlay host and nothing distinguishes the bar from the rail. The bar's
+     * rectangle does.
+     */
+    function onOwnFrame(event) {
+      if (!barNode || typeof event.clientX !== "number") return false;
+      var rect = barNode.getBoundingClientRect();
+      if (!rect || (rect.width === 0 && rect.height === 0)) return false;
+      return (
+        event.clientX >= rect.left &&
+        event.clientX <= rect.right &&
+        event.clientY >= rect.top &&
+        event.clientY <= rect.bottom
+      );
+    }
+
+    function onWindowBlur(event) {
+      if (!session) return;
+      if (event && event.target && win && event.target !== win && event.target !== doc) return;
+      commit({ reason: "window blur" });
     }
 
     function onClick(event) {

@@ -132,11 +132,38 @@ test.describe("the reviewer's decision on a collision, on a page that keeps repa
 
     // --- the reviewer's edit, made while the page is repainting --------------
 
-    await placeCaret(page, { selector: REGION, offset: 0 });
-    await page.keyboard.press("ControlOrMeta+Shift+KeyE");
-    await pollPage(page, () => window.__lahe.isEditing(), undefined, {
-      message: "Cmd-Shift-E to put the coach note into edit state"
-    });
+    // The gesture is retried until the session really opened ON THE COACH NOTE.
+    //
+    // The morph is running, which is the point of this spec, and a repaint
+    // landing between placing the caret and pressing the keys destroys the
+    // paragraph the caret was in. The keystroke then resolves a block from a
+    // detached selection and opens the session on the feed CONTAINER: the edit
+    // commits with the whole feed as its text, and every wait after this one
+    // times out looking for a record that was never going to exist. Retrying is
+    // what a reviewer does when a repaint eats their click, and `before` is the
+    // editing surface's own answer to "which block is open", so the retry ends
+    // on the right one rather than on a hope about timing.
+    await pollUntil(
+      async () => {
+        const open = await page.evaluate(() => window.__lahe.handle.editing.state());
+        if (open.open && open.before === ORIGINAL) return open;
+        if (open.open) {
+          // A session on the wrong block: leave it and go again.
+          await page.keyboard.press("Escape");
+          await pollPage(page, () => window.__lahe.isEditing() === false, undefined, {
+            message: "the session on the wrong block to close before retrying"
+          });
+          return null;
+        }
+        await placeCaret(page, { selector: REGION, offset: 0 });
+        await page.keyboard.press("ControlOrMeta+Shift+KeyE");
+        return null;
+      },
+      {
+        message: "Cmd-Shift-E to put the coach note, and not its container, into edit state",
+        describe: () => page.evaluate(() => window.__lahe.handle.editing.state())
+      }
+    );
     await placeCaret(page, { selector: REGION, offset: ORIGINAL.length });
     await page.keyboard.type(REVIEWER_TAIL);
     await page.keyboard.press("Escape");
@@ -237,11 +264,20 @@ test.describe("the reviewer's decision on a collision, on a page that keeps repa
     // I looked" is what the one-shot write also produced, for about 150ms.
     const answered = await snapshot(page, id);
     const samples = [];
+    // The wait is for eight passes THIS TEST ACTUALLY SAW, not for the counter
+    // to have moved by eight. One sample is one round trip into the page, and
+    // on a busy machine the counter jumps two or three at a time between
+    // samples, so the old condition finished with six observed passes in hand
+    // and the assertion below then failed on the sampling gap rather than on
+    // the behaviour. Waiting on the same thing the assertion reads makes the
+    // test slower on a loaded machine and never wrong.
+    const seenPasses = new Set();
     await pollUntil(
       async () => {
         const sample = await snapshot(page, id);
         samples.push(sample);
-        return sample.passes >= answered.passes + 8;
+        if (sample.passes > answered.passes) seenPasses.add(sample.passes);
+        return seenPasses.size >= 8 && sample.passes >= answered.passes + 8;
       },
       {
         intervalMs: 20,

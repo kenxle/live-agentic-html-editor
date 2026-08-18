@@ -494,3 +494,90 @@ test("every DOM write happens inside the write epoch, so replay does not retrigg
   replay.applyRecord(anchoredItem, { root: page.root, element: spy, cards: fakeCards() });
   assert.deepEqual(seen, [true], "the write must be inside epoch.write");
 });
+
+// ---------------------------------------------------------------------------
+// The lost state ENDS: reported live on 2026-08-17
+// ---------------------------------------------------------------------------
+//
+// A comment card said "The passage this comment points at is gone from the
+// page" over a passage the reviewer could see. The record was clean (review.json
+// carried no lost flag), so the loss had already ended; only the card had not
+// heard. These two tests are the two halves of that: a verdict reached while
+// the page is still drawing itself is not surfaced at all, and a verdict that
+// was surfaced is taken back the moment a pass finds the passage again.
+
+test("a lost card and a lost stamp both end when a later pass finds the passage again", () => {
+  const item = fixtures.edit();
+  const page = pageOf(["Before it.", item.before, "After it."]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+  const cards = fakeCards();
+  const written = [];
+  const context = {
+    root: page.root,
+    items: [anchoredItem],
+    cards: cards,
+    persist: function (record_) {
+      written.push(record_);
+    }
+  };
+
+  replay.resetCounters();
+  replay.noteSettling(0);
+
+  // The page rewrote the block, so the anchor binds to nothing.
+  const original = page.blocks[1].textContent;
+  page.blocks[1].textContent = "Nothing here resembles the region any more.";
+  replay.runPass(replay.REASON.MUTATION, context);
+
+  assert.equal(replay.counters.regionsLost, 1);
+  assert.equal(anchoredItem.region.lost.code, "ANCHOR_LOST", "the record says so");
+  assert.equal(cards.badges[item.id][0].canonical_code, "ANCHOR_LOST", "and so does the card");
+  assert.equal(written.length, 1, "a lost stamp is written down, not left on the cache");
+
+  // The page put it back, which is what a re-render of a section does.
+  page.blocks[1].textContent = original;
+  replay.runPass(replay.REASON.MUTATION, context);
+
+  assert.equal(anchoredItem.region.lost, null, "the stamp is gone from the record");
+  assert.deepEqual(cards.badges[item.id], [], "and the card no longer says the passage is gone");
+  assert.equal(replay.counters.regionsLostCleared, 1);
+  assert.equal(written.length, 2, "the clear is written down too, so a remount does not restore it");
+});
+
+test("a lost verdict while the page is still drawing itself is deferred, and stands once it settles", () => {
+  const item = fixtures.edit();
+  const page = pageOf(["Before it.", item.before, "After it."]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+  const cards = fakeCards();
+  const context = { root: page.root, items: [anchoredItem], cards: cards };
+
+  replay.resetCounters();
+  // What a load or a remount does. The mermaid case: the section this comment
+  // is in is replaced by a rendered diagram a few hundred milliseconds later.
+  replay.noteSettling(300);
+  page.blocks[1].textContent = "A diagram is being rendered over this section.";
+
+  const deferred = replay.runPass(replay.REASON.MUTATION, context).results[0];
+  assert.equal(deferred.deferred, true);
+  assert.equal(deferred.lost, false, "nothing is claimed about a page that is not finished");
+  assert.equal(anchoredItem.region.lost, null, "no stamp on the record");
+  assert.equal(cards.badges[item.id], undefined, "and nothing on the card");
+  assert.equal(replay.counters.regionsLostDeferred, 1);
+  assert.equal(replay.counters.regionsLost, 0);
+
+  // The window closes and the passage is still not there: a real loss, said
+  // about a second later than before, never dropped (R20).
+  replay.noteSettling(0);
+  const lost = replay.runPass(replay.REASON.MUTATION, context).results[0];
+  assert.equal(lost.lost, true);
+  assert.equal(anchoredItem.region.lost.code, "ANCHOR_LOST");
+  assert.equal(cards.badges[item.id][0].canonical_code, "ANCHOR_LOST");
+});
+
+test("a load opens the settling window, so the pass a reload schedules does not flag anything", () => {
+  replay.noteSettling(0);
+  assert.equal(replay.isSettling(), false);
+  replay.schedule(replay.REASON.BOOT, { immediate: true });
+  assert.equal(replay.isSettling(), true, "boot and remount are the two moments the page redraws");
+  replay.noteSettling(0);
+});

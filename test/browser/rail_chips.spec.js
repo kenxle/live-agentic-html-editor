@@ -96,6 +96,31 @@ test.describe("failure chips", () => {
     expect(chips[0].count).toBe(3);
   });
 
+  // Copy-for-your-agent went on EVERY chip that had a detail, which put it on
+  // the second-window chip and displaced the one button that fixes that failure
+  // (Ken, live, 2026-08-18). It is opt in per code now, and never on a chip that
+  // has its own action.
+  test("a chip offers its own action, or a copy button, never both and never by accident", async ({ page }) => {
+    await page.goto(railUrl(pages));
+    await page.evaluate(() => {
+      window.__laheRail.addChip("SECOND_WINDOW_REFUSED", "the window on page.html, open for the last 4 minutes");
+      window.__laheRail.addChip("SYNC_ORIGIN_NOT_ALLOWED", "Register the origin http://127.0.0.1:8000 for review review-1.");
+      window.__laheRail.addChip("COPY_FAILED", "the clipboard refused");
+    });
+    const controls = await page.evaluate(() => window.__laheRail.chipControls());
+    const byCode = {};
+    controls.forEach((c) => {
+      byCode[c.code] = c.buttons;
+    });
+    expect(byCode.SECOND_WINDOW_REFUSED, "the second window is fixed right here, with one button").toEqual([
+      "Review here"
+    ]);
+    expect(byCode.SYNC_ORIGIN_NOT_ALLOWED, "an unregistered origin is fixed by an agent, so the line is copyable").toEqual([
+      "Copy for your agent"
+    ]);
+    expect(byCode.COPY_FAILED, "a code on neither list offers nothing, detail or not").toEqual([]);
+  });
+
   // The exception, and the reason there is one: a STANDING code is a condition,
   // not an occurrence. The helper being down re-raises on every retry, and a
   // reviewer who read "×4" on a refusal chip counted four other windows

@@ -184,6 +184,43 @@
       return decide(GESTURE.NONE, true, false, "not a library gesture; the page and the edited block keep it");
     }
 
+    // THE POINTER GOING DOWN ANYWHERE OUTSIDE THE EDITED BLOCK COMMITS IT,
+    // INCLUDING INSIDE THE LIBRARY'S OWN RAIL. The click rule below cannot do
+    // this job on its own: a click on the rail retargets to the overlay host,
+    // hits the overlay rule above, and the edit was left sitting in `draft`
+    // forever. A draft never passes protocol.countsAsNew, so the reviewer
+    // watched an edit they considered finished reach no agent at all (Ken's
+    // session, 2026-08-16). Pointerdown is the honest moment the reviewer left
+    // the block, it fires before focus moves, and the event still passes
+    // through untouched so the rail and the page both get their click.
+    //
+    // TWO PRESSES THIS RULE MUST NOT READ AS LEAVING THE BLOCK:
+    //
+    //  1. A SCROLLBAR DRAG. Dragging the root or an inner scrollbar fires
+    //     pointerdown on the element with no click after it, so the reviewer
+    //     scrolling to see the rest of their edit had contenteditable stripped
+    //     out from under their pointer mid-drag. `onScrollbar` is the caller's
+    //     answer: the press landed past the target's content box.
+    //  2. A SECONDARY BUTTON. Right-click opens a context menu; the reviewer is
+    //     still on the page and still editing. Only button 0 is leaving.
+    //
+    // Both were regressions of the widening from click to pointerdown (review,
+    // 2026-08-17). Window blur is the other way of leaving and is unaffected.
+    if (e.type === "pointerdown" || e.type === "mousedown") {
+      if (e.editing === true && e.inEditedBlock !== true) {
+        if (e.onScrollbar === true) {
+          return decide(GESTURE.PAGE_DEFAULT, true, false, "the press was on a scrollbar, which is scrolling rather than leaving the block");
+        }
+        // Undefined means a caller that cannot tell, and every keyboard-driven
+        // and synthetic press in that shape is a primary one.
+        if (e.button !== undefined && e.button !== null && e.button !== 0) {
+          return decide(GESTURE.PAGE_DEFAULT, true, false, "only a primary-button press is the reviewer leaving the block");
+        }
+        return decide(GESTURE.COMMIT_EDIT, true, false, "the pointer went down outside the edited block, so the edit commits");
+      }
+      return decide(GESTURE.PAGE_DEFAULT, true, false, "a pointer going down with no edit open is the page's");
+    }
+
     if (e.type !== "click") {
       return decide(GESTURE.NONE, true, false, "not a click or a keydown");
     }
@@ -202,6 +239,29 @@
     }
 
     return decide(GESTURE.PAGE_DEFAULT, true, false, "browse is the page untouched (D3, R13)");
+  }
+
+  /**
+   * Did a press land on a scrollbar rather than on content?
+   *
+   * The geometry, not the DOM: the caller measures, this decides, so the rule is
+   * unit-testable with no browser the way every other rule in this file is. One
+   * shape covers both scrollbars a page has. An element's `clientWidth` stops at
+   * its content box while its border box includes the scrollbar gutter, and the
+   * root's scrollbar sits outside the document element with the viewport as the
+   * outer edge; either way the press is past the content and inside the box.
+   *
+   * @param {{x: number, y: number, contentWidth: number, contentHeight: number,
+   *          boxWidth: number, boxHeight: number}} geometry
+   *   `x` and `y` are the press relative to the content box's top-left corner.
+   * @returns {boolean}
+   */
+  function isScrollbarPress(geometry) {
+    var g = geometry || {};
+    if (typeof g.x !== "number" || typeof g.y !== "number") return false;
+    if (g.contentWidth > 0 && g.x >= g.contentWidth && g.x <= g.boxWidth) return true;
+    if (g.contentHeight > 0 && g.y >= g.contentHeight && g.y <= g.boxHeight) return true;
+    return false;
   }
 
   // KeyboardEvent.key is lowercase unless Shift is held, and it is the layout's
@@ -239,6 +299,7 @@
     GESTURE: GESTURE,
     TABLE: TABLE,
     gestureFor: gestureFor,
+    isScrollbarPress: isScrollbarPress,
     hintFor: hintFor,
     hintLines: hintLines,
     isPrimaryModifier: isPrimaryModifier

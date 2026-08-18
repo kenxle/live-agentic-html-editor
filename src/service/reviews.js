@@ -49,7 +49,9 @@ var crypto = require("node:crypto");
 var fs = require("node:fs");
 
 var protocol = require("../shared/protocol.js");
+var elapsed = require("../shared/elapsed.js");
 var stateDir = require("./state_dir.js");
+var healModule = require("./heal.js");
 
 var TOKEN_BYTES = 32;
 
@@ -179,6 +181,13 @@ function createReviews(options) {
           id: entry.name,
           token: parsed.token,
           origins: Array.isArray(parsed.origins) ? parsed.origins.slice() : [],
+          // Absent in every meta.json written before path-matching existed, and
+          // null is the right answer there: an old review never matches by path.
+          target_path: typeof parsed.target_path === "string" ? parsed.target_path : null,
+          // Every page ever added to this review, so path-matching keeps finding
+          // all of them and the reload watcher does not follow only the last.
+          target_paths: Array.isArray(parsed.target_paths) ? parsed.target_paths.slice() : [],
+          source_path: typeof parsed.source_path === "string" ? parsed.source_path : null,
           created_at: parsed.created_at || new Date().toISOString()
         };
       } else {
@@ -318,6 +327,9 @@ function createReviews(options) {
       id: reviewId,
       token: parsed.token,
       origins: Array.isArray(parsed.origins) ? parsed.origins.slice() : [],
+      target_path: typeof parsed.target_path === "string" ? parsed.target_path : null,
+      target_paths: Array.isArray(parsed.target_paths) ? parsed.target_paths.slice() : [],
+      source_path: typeof parsed.source_path === "string" ? parsed.source_path : null,
       created_at: parsed.created_at || new Date().toISOString()
     };
     log.helperLog("review " + reviewId + " learned from disk without a restart");
@@ -376,6 +388,7 @@ function createReviews(options) {
       (spec.origins || []).forEach(function (origin) {
         registerOrigin(id, origin);
       });
+      recordPaths(id, spec);
       return existing;
     }
 
@@ -383,6 +396,11 @@ function createReviews(options) {
       id: id,
       token: mintToken(),
       origins: [],
+      // Where this review's page lives, so a rebuild that strips the script
+      // line does not splinter one document into three reviews. See recordPaths.
+      target_path: typeof spec.target_path === "string" ? spec.target_path : null,
+      target_paths: typeof spec.target_path === "string" && spec.target_path ? [spec.target_path] : [],
+      source_path: typeof spec.source_path === "string" ? spec.source_path : null,
       created_at: new Date().toISOString()
     };
     reviews[id] = review;
@@ -432,7 +450,190 @@ function createReviews(options) {
       })
     ]);
     log.helperLog("review " + reviewId + " registered origin " + value);
+    // service.json lists each review's origins, and it is how everything else on
+    // the machine (`add`, `wait`, `status`) knows what this helper holds. An
+    // origin registered while the helper is running has to reach it, or `add`
+    // would keep believing the origin is missing and writing it again.
+    if (lastReadyDetails) writeReadyFile(lastReadyDetails);
     return review;
+  }
+
+  /**
+   * Remember which page this review is of.
+   *
+   * IDENTITY USED TO LIVE ONLY IN THE SCRIPT LINE INSIDE THE PAGE. Rebuild the
+   * page and the line is gone, so the next `add` minted a new review and the
+   * history of one document ended up split across three of them. The resolved
+   * absolute target path (and the --source path, when one was given) is written
+   * into meta.json here, and `add` looks through it before minting. Old meta
+   * files have neither field and simply never match, which is the intended
+   * fallback rather than a migration.
+   *
+   * ONE REVIEW IS OFTEN SEVERAL PAGES. A scalar target_path meant every `add`
+   * overwrote the last one: the reload watcher then pointed at whichever page
+   * was added most recently, and path-matching only ever found that one, so a
+   * multi-page review splintered into new reviews as the reviewer moved around.
+   * So target paths accumulate in `target_paths`, newest last and deduped.
+   * `target_path` stays as the most recent one, because `add` reads that field
+   * off meta.json (reviewMatchingPath) and old meta files carry only it.
+   *
+   * @param {string} reviewId
+   * @param {{target_path?: string|null, source_path?: string|null}} paths
+   */
+  function recordPaths(reviewId, paths) {
+    var review = get(reviewId);
+    if (!review) return null;
+    var p = paths || {};
+    var changed = false;
+    if (typeof p.target_path === "string" && p.target_path) {
+      if (review.target_path !== p.target_path) {
+        review.target_path = p.target_path;
+        changed = true;
+      }
+      if (!Array.isArray(review.target_paths)) review.target_paths = [];
+      if (review.target_paths.indexOf(p.target_path) === -1) {
+        review.target_paths.push(p.target_path);
+        changed = true;
+      }
+    }
+    if (typeof p.source_path === "string" && p.source_path && review.source_path !== p.source_path) {
+      review.source_path = p.source_path;
+      changed = true;
+    }
+    if (changed) persist(review);
+    return review;
+  }
+
+  /**
+   * Every page recorded for this review, newest last.
+   *
+   * The source template is NOT one of them: it is what the page is built FROM,
+   * so watching it fires the reload before the built page has changed.
+   */
+  function targetPathsOf(review) {
+    var out = Array.isArray(review.target_paths) ? review.target_paths.slice() : [];
+    // Reviews created before target_paths existed, and reviews whose meta was
+    // written by `add` on disk, carry the scalar only.
+    if (typeof review.target_path === "string" && review.target_path && out.indexOf(review.target_path) === -1) {
+      out.push(review.target_path);
+    }
+    return out;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Has the reviewed FILE changed on disk?
+  // ---------------------------------------------------------------------------
+  //
+  // R36 says the page updates itself as the agent lands changes, and D7 assumed
+  // the serving environment supplies that refresh (a dev server hot-reloads, and
+  // the agent's landed change arrives as a repaint). The dominant real case is a
+  // built static page behind a plain http server, which reloads nothing ever, so
+  // R36 shipped unmet there: the reviewer had to be told to press reload. This
+  // is the missing TRIGGER. The survival half (replay of their outstanding work
+  // over the agent's landed changes) is D7's pass and already runs on load.
+  //
+  // A cheap fs.stat when asked, not a watcher. The library asks once a second on
+  // its reply poll, one stat per review per second is nothing, and a watcher
+  // would mean fd lifetimes, rename handling, and a restart story for a fact
+  // that is one syscall to recompute. The TTL is there so several requests in
+  // one tick share a stat, not to make it cheap enough to do at all.
+  //
+  // Fail soft: a review with no recorded path, a file the build deleted, or a
+  // stat that throws all answer null. This number is a convenience on top of a
+  // route the reviewer's page depends on, and it may never cost them that route.
+  var MTIME_TTL_MS = 500;
+  var mtimeCache = Object.create(null);
+
+  // The same stat, extended: when the file it looked at came back from a build
+  // without this review's script line, the healer puts the line back before the
+  // mtime is reported, so the reload the page is about to do lands on a page
+  // that carries the library again. See src/service/heal.js for the rules.
+  var healer = healModule.createHealer({ log: log, now: clock });
+
+  /**
+   * The origin the healed script line names the helper by.
+   *
+   * The port comes from what this helper bound (writeReadyFile is told it when
+   * the listener is up), and falls back to the default, which is the port `add`
+   * writes onto every line it has ever written. The host is the loopback one the
+   * whole tool speaks on; a helper is never remote.
+   */
+  function helperOrigin() {
+    var port = lastReadyDetails && lastReadyDetails.port ? lastReadyDetails.port : protocol.DEFAULT_PORT;
+    return "http://" + protocol.DEFAULT_HOST + ":" + port;
+  }
+
+  /**
+   * The reviewed file's modification time, as an ISO string, or null.
+   *
+   * @param {string} reviewId
+   * @returns {string|null} null when the review has no target path, the file is
+   *   gone, or the stat failed for any reason at all
+   */
+  function targetMtime(reviewId) {
+    var review = get(reviewId);
+    if (!review) return null;
+    var paths = targetPathsOf(review);
+    if (paths.length === 0) return null;
+    var key = paths.join("\n");
+    var cached = mtimeCache[reviewId];
+    var now = clock();
+    if (cached && cached.key === key && now - cached.at < MTIME_TTL_MS) return cached.mtime;
+    // The newest mtime across every page this review holds: any of them being
+    // rebuilt is a reason for the reviewer's page to reload.
+    var newest = null;
+    paths.forEach(function (target) {
+      var at = healer.consider({
+        path: target,
+        review: review.id,
+        token: review.token,
+        helperOrigin: helperOrigin()
+      });
+      if (at && (!newest || at > newest)) newest = at;
+    });
+    mtimeCache[reviewId] = { key: key, at: now, mtime: newest };
+    return newest;
+  }
+
+  /**
+   * When this helper last put a stripped script line back for a review, as an
+   * ISO string, or null.
+   *
+   * In memory only, like the liveness fact beside it: it says what happened in
+   * this helper's lifetime, and a number persisted across a restart would be a
+   * claim about a session nobody is in any more. `lahe status` reads it through
+   * review.read.
+   */
+  function lastHealAt(reviewId) {
+    return healer.lastHealAt(reviewId);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Liveness: when did this review's PAGE last say anything?
+  // ---------------------------------------------------------------------------
+  //
+  // The question a reviewer kept asking out loud mid-session was "are you
+  // getting my edits?", and neither side could answer it. This is the helper's
+  // half of the answer: the instant of the last authenticated request from the
+  // LIBRARY (x-lahe-client: layer) for each review. Only the layer counts, so a
+  // CLI command asking about a review cannot make the page look connected.
+  //
+  // In memory only, on purpose. It is a fact about right now, and a number
+  // persisted across a restart would be a stale claim that a page is connected.
+  // `lahe status` reads it through review.read, and says "unknown" rather than
+  // guessing when no helper is up.
+  var lastSeen = Object.create(null);
+
+  function touch(reviewId, client) {
+    if (client !== protocol.CLIENT_LAYER) return null;
+    if (!Object.prototype.hasOwnProperty.call(reviews, reviewId)) return null;
+    lastSeen[reviewId] = new Date().toISOString();
+    return lastSeen[reviewId];
+  }
+
+  /** The last time the page checked in, as an ISO string, or null. */
+  function lastSeenAt(reviewId) {
+    return Object.prototype.hasOwnProperty.call(lastSeen, reviewId) ? lastSeen[reviewId] : null;
   }
 
   /**
@@ -484,6 +685,21 @@ function createReviews(options) {
   // The one session per review
   // ---------------------------------------------------------------------------
 
+  /**
+   * How long the holder has had this review, in words a reviewer reads.
+   *
+   * The refusal text is shown on the rail, and a raw ISO timestamp ("holding it
+   * since 2026-08-18T02:48:36.137Z") is machine output in a sentence meant for a
+   * person. The wording itself lives in src/shared/elapsed.js, because the RAIL
+   * says the same thing about the same holder and two spellings of one fact is
+   * how the helper and the page ended up disagreeing on screen. The `since`
+   * field of the refusal is untouched: that one IS for machines.
+   */
+  function heldForPhrase(holder) {
+    var startedAt = typeof holder.since_ms === "number" ? holder.since_ms : holder.since;
+    return elapsed.elapsedPhrase(startedAt, { now: clock() });
+  }
+
   function holderIsStale(holder) {
     return clock() - holder.last_seen > STALE_AFTER_MS;
   }
@@ -528,8 +744,8 @@ function createReviews(options) {
       // holder is alive. Refused, and the refusal names NOTHING about the holder:
       // no window id (which a rival used to replay as a heartbeat) and no secret.
       var reason =
-        "this review is already open in another window, which has been holding it since " +
-        holder.since +
+        "this review is already open in another window, which has been holding it " +
+        heldForPhrase(holder) +
         ". Close that window, or wait " +
         Math.ceil(STALE_AFTER_MS / 1000) +
         " seconds after it stops responding and this one takes over.";
@@ -564,6 +780,9 @@ function createReviews(options) {
       window_id: windowId,
       session_secret: mintSessionSecret(),
       since: new Date().toISOString(),
+      // The same instant on the injectable clock, which is what the refusal
+      // measures elapsed time against. `since` is the wire field and stays ISO.
+      since_ms: at,
       last_seen: at
     };
     return granted(sessions[reviewId], tookOver, null);
@@ -622,6 +841,11 @@ function createReviews(options) {
     ensureKnown: ensureKnown,
     list: list,
     registerOrigin: registerOrigin,
+    recordPaths: recordPaths,
+    touch: touch,
+    lastSeenAt: lastSeenAt,
+    targetMtime: targetMtime,
+    lastHealAt: lastHealAt,
     config: config,
     writeReadyFile: writeReadyFile,
     claimWindow: claimWindow,

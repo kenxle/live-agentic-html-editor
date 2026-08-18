@@ -379,6 +379,15 @@ test.describe("AC1: the built-document case", () => {
           return got && projectedItems(got).length === 5 ? got : null;
         },
         {
+          // Long enough for the retry backoff, which is the layer's own
+          // contract rather than a guess: sync.BACKOFF_MS caps at 30 seconds,
+          // and this page has spent the whole walk failing to reach a helper
+          // that was not running, so it can be a full cap into a sleep when the
+          // helper finally answers. The default ten seconds was asserting a
+          // reconnection speed the design never promised, and it held only
+          // while the machine was quick enough to finish the typing before the
+          // backoff deepened.
+          timeoutMs: 45000,
           message: "all five items to reach review.json once the helper is started",
           describe: async () => ({
             inFile: projectedItems(reviewJson(stateDir)).length,

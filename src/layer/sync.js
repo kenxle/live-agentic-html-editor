@@ -23,6 +23,12 @@
 //     one is "start the helper", the other is "this page's policy refuses the
 //     connection". The detection is a real SecurityPolicyViolation event on the
 //     document naming connect-src, not a guess from the error text.
+//  6. TELL AN UNREGISTERED ORIGIN FROM A HELPER THAT IS DOWN, for the same
+//     reason: a refused preflight and a dead helper both surface as a plain
+//     network error, and one of them is fixed by `lahe add --origin`. After a
+//     network-level failure the client asks health (unauthenticated, so no
+//     preflight); if health answers, the helper is up and the origin is the
+//     problem, and the chip says so with this page's origin in it.
 //
 // THE SECOND WINDOW, and the case nothing can cover. Shared storage is refused
 // by store.js's Web Lock, which works with the helper down. Separate storage
@@ -73,6 +79,64 @@
   // timestamp.
   var POLL_INTERVAL_MS = 1000;
 
+  // -------------------------------------------------------------------------
+  // R36: the page updates itself as the agent lands changes
+  // -------------------------------------------------------------------------
+  //
+  // D7 grounded R36 but assumed the serving environment supplies the refresh: a
+  // dev server hot-reloads and the agent's landed change arrives as a repaint.
+  // A built static page behind a plain http server refreshes nothing, ever, so
+  // for the commonest case R36 was unmet and the reviewer had to be told to
+  // press reload. The reply poll already runs every second and now carries the
+  // reviewed file's mtime, so the trigger is free: a DIFFERENT non-null value
+  // from the one this page last saw means the file was rebuilt under it.
+  //
+  // This does not fight a framework that hot-reloads on its own. The comparison
+  // is against the mtime this page last SAW, so a page its own dev server
+  // already repainted still holds the old value here and gets exactly one
+  // reload, and after any reload the fresh page starts from the current mtime
+  // and is quiet again. Reloading a page that repainted itself costs the
+  // reviewer nothing anyway: the replay pass is what makes a reload safe.
+  //
+  // Two waits, both here rather than at the call sites:
+  //
+  //  1. DEBOUNCE. A rebuild writes the file more than once, so a change starts a
+  //     timer rather than a reload, and further changes inside the window just
+  //     update the target. One rebuild is one reload.
+  //  2. NEVER MID-WORK. An open edit session or a comment being typed defers the
+  //     reload (isBusy), and it fires on the first poll after they are done. A
+  //     page that swaps under a half-typed sentence is the one failure this
+  //     feature could introduce.
+  var RELOAD_DEBOUNCE_MS = 1500;
+
+  // The pause between saying "Page updated. Reloading..." and doing it, so the
+  // sentence is on screen before the page goes away.
+  var RELOAD_NOTICE_MS = 250;
+
+  /**
+   * Which failure a refused or failed request really is.
+   *
+   * Pure, and separate from the client, so the decision can be tested without a
+   * browser: it is the difference between a chip that says "start the helper"
+   * and one that says "register this origin", and getting it wrong sends a
+   * reviewer after the wrong fix for the whole session.
+   *
+   * @param {{cspRefused?: boolean, status?: number, healthAnswered?: boolean}} facts
+   *   `healthAnswered` is the second question the client asks after a
+   *   network-level failure: the helper's health route is unauthenticated and
+   *   unpreflighted, so an origin no review registered can still reach it. True
+   *   means the helper is up and the origin is what is being refused.
+   * @returns {string} a failure code from src/shared/failures.js
+   */
+  function decideFailureCode(facts) {
+    var f = facts || {};
+    if (f.cspRefused) return "CSP_REFUSED";
+    if (f.status === 401) return "SYNC_UNAUTHORIZED";
+    if (f.status === 403) return "SYNC_ORIGIN_NOT_ALLOWED";
+    if (f.healthAnswered === true) return "SYNC_ORIGIN_NOT_ALLOWED";
+    return "HELPER_UNREACHABLE";
+  }
+
   function createSync(options) {
     var opts = options || {};
     var review = opts.review || null;
@@ -90,6 +154,13 @@
     var onRecovered = opts.onRecovered || function () {};
     var onReplies = opts.onReplies || function () {};
     var onLimit = opts.onLimit || function () {};
+    // R36's reload. isBusy answers "is the reviewer mid-work right now?" (boot
+    // wires it to the edit session and the open comment boxes); onPageChanged is
+    // the moment before the reload, where the rail says so in plain words.
+    var isBusy = opts.isBusy || function () { return false; };
+    var onPageChanged = opts.onPageChanged || function () {};
+    var reloadDebounceMs = typeof opts.reloadDebounceMs === "number" ? opts.reloadDebounceMs : RELOAD_DEBOUNCE_MS;
+    var reloadNoticeMs = typeof opts.reloadNoticeMs === "number" ? opts.reloadNoticeMs : RELOAD_NOTICE_MS;
     // The window-session state machine (D5, findings 1/2/3/12, NEW-2). onRefused
     // fires when this window loses the claim (client lock or helper); the boot
     // layer goes READ-ONLY and shows the refusal panel. onHeld fires only on the
@@ -132,6 +203,16 @@
     // 2026-08-14).
     var unloading = false;
     var cursor = 0;
+    // R36. The mtime this page last saw, the armed-but-not-yet-fired reload, and
+    // its debounce timer.
+    var targetMtime = null;
+    var reloadPending = false;
+    var reloadTimer = null;
+    var reloadsFired = 0;
+    // Every time the debounce window closed and the reload was DECIDED, whether
+    // it went ahead or was deferred for a busy reviewer. It is what a test waits
+    // on to assert that a reload did not happen, instead of sleeping and hoping.
+    var reloadChecks = 0;
     var repliesSeen = [];
     var seenItems = Object.create(null);
     var lock = { checked: false, acquired: null, holder: null, reason: null, unchecked: false };
@@ -181,7 +262,19 @@
 
     function raise(failure) {
       lastFailure = failure;
-      if (failures.canonical(failure.code) === "HELPER_UNREACHABLE") helperReachable = false;
+      var code = failures.canonical(failure.code);
+      if (code === "HELPER_UNREACHABLE") helperReachable = false;
+      if (code === "SYNC_ORIGIN_NOT_ALLOWED" || code === "SYNC_UNAUTHORIZED") {
+        // The helper ANSWERED and refused us, so it is not unreachable. Clear
+        // that chip here rather than at one call site, or the page wears both
+        // and the wrong one last (review, 2026-08-17).
+        onRecovered("HELPER_UNREACHABLE");
+        // These two are standing conditions, not occurrences. Re-raising the
+        // one already standing would grow a ×N counter that counts our own
+        // retries, so a repeat is dropped and the chip stays as it is.
+        if (accessRefused === code) return failure;
+        accessRefused = code;
+      }
       onFailure(failure);
       return failure;
     }
@@ -197,6 +290,25 @@
       helperReachable = true;
       lastFailure = null;
       if (was !== true) onRecovered("HELPER_UNREACHABLE");
+      // Every call site of markReachable is an AUTHENTICATED exchange the
+      // helper accepted (an append, a reply poll, a claim); the health probe
+      // never calls it. So an unregistered origin and a refused token are both
+      // over the moment this runs, and their standing chips end here too.
+      // Without this, registering the origin fixed the review while the chip
+      // kept saying it was broken (Ken, live, 2026-08-17).
+      //
+      // Only on the STATE CHANGE, though. A healthy page polls every second,
+      // and clearing a chip that was never raised still wrote browser storage
+      // and rebuilt the whole chip list, which destroyed and recreated any
+      // other standing chip's buttons once a second: the "Copy for your agent"
+      // button lost its "Copied" confirmation, and a click that straddled a
+      // rebuild landed on a detached node (review, 2026-08-17).
+      if (accessRefused) {
+        accessRefused = null;
+        onRecovered("SYNC_ORIGIN_NOT_ALLOWED");
+        onRecovered("SYNC_UNAUTHORIZED");
+      }
+      originDiagnosed = false;
       recomputeStatus();
       return helperReachable;
     }
@@ -410,6 +522,9 @@
         counters.postsFailed += 1;
         state = STATE.RETRYING;
         raise(classify(result.error, { status: result.status, detail: describe(result) }));
+        // A failure with no status at all is a network-level one, which is what
+        // a refused preflight looks like. Ask the second question.
+        if (result.status === undefined) diagnoseUnreachable();
         recomputeStatus();
         if (!fo.unload) scheduleRetry();
         return { sent: 0, remaining: pendingCount(), failed: true };
@@ -484,6 +599,14 @@
             // A poll the navigation cancelled says nothing about the helper.
             if (abortedByTeardown(result)) return { events: [] };
             raise(classify(result.error, { status: result.status, detail: describe(result) }));
+            if (result.status === undefined) {
+              // Returned rather than fired and forgotten, so one awaited poll
+              // is one settled diagnosis and a test can assert the chips.
+              return diagnoseUnreachable().then(function () {
+                recomputeStatus();
+                return { events: [] };
+              });
+            }
             recomputeStatus();
             return { events: [] };
           }
@@ -492,6 +615,7 @@
           markReachable();
           var events = (result.body && result.body.events) || [];
           if (typeof (result.body && result.body.seq) === "number") cursor = result.body.seq;
+          noteTargetMtime(result.body && result.body.target_mtime);
           if (events.length) {
             repliesSeen = repliesSeen.concat(events);
             onReplies(events);
@@ -500,6 +624,78 @@
           return { events: events, seq: cursor };
         }
       );
+    }
+
+    /**
+     * The reviewed file's mtime, as this poll reported it (R36).
+     *
+     * The FIRST value seen is just the baseline: this page is already showing
+     * that version of the file, so it arms nothing. Any later value that differs
+     * means the agent rebuilt the page underneath the reviewer.
+     *
+     * A null answers nothing at all: the review has no recorded path, or the
+     * file is momentarily absent because a build is writing it. Treating a null
+     * as a change would reload the page every time a build was mid-write.
+     *
+     * @param {string|null} value an ISO string, or null
+     * @returns {boolean} true when this call armed a reload
+     */
+    function noteTargetMtime(value) {
+      if (typeof value !== "string" || !value) return false;
+      if (targetMtime === null) {
+        targetMtime = value;
+        return false;
+      }
+      if (value === targetMtime) {
+        // Nothing changed. If a reload is still waiting on the reviewer to stop
+        // typing, this is the tick that gets to ask again.
+        if (reloadPending && !reloadTimer) armReload(0);
+        return false;
+      }
+      targetMtime = value;
+      reloadPending = true;
+      // Restart the window rather than reload now: a rebuild that touches the
+      // file three times in a second is one change to the reviewer.
+      armReload(reloadDebounceMs);
+      return true;
+    }
+
+    function armReload(delayMs) {
+      if (reloadTimer) clearTimeout(reloadTimer);
+      // harness-allow-timer: R36's rebuild debounce, pinned at RELOAD_DEBOUNCE_MS
+      // above. One rebuild is one reload.
+      reloadTimer = setTimeout(function () {
+        reloadTimer = null;
+        fireReload();
+      }, delayMs);
+    }
+
+    /**
+     * Reload, unless the reviewer is mid-work. A deferral is not a cancellation:
+     * reloadPending stays true and the next poll that finds them idle arms it
+     * again, so the page catches up the moment they finish.
+     */
+    function fireReload() {
+      if (!reloadPending) return false;
+      reloadChecks += 1;
+      var busy = false;
+      try {
+        busy = !!isBusy();
+      } catch (error) {
+        // A busy check that throws must not cost the reviewer their page. Treat
+        // it as busy: a late reload is recoverable, one over a live edit is not.
+        busy = true;
+      }
+      if (busy) return false;
+      reloadPending = false;
+      reloadsFired += 1;
+      onPageChanged();
+      // harness-allow-timer: the pause that lets "Page updated. Reloading..."
+      // paint before the document goes away.
+      setTimeout(function () {
+        if (win && win.location && typeof win.location.reload === "function") win.location.reload();
+      }, reloadNoticeMs);
+      return true;
     }
 
     function startPolling() {
@@ -518,10 +714,112 @@
 
     function classify(error, hints) {
       var h = hints || {};
-      if (cspRefused) return failures.failure("CSP_REFUSED", h.detail || null);
-      if (h.status === 401) return failures.failure("SYNC_UNAUTHORIZED", h.detail || null);
-      if (h.status === 403) return failures.failure("SYNC_ORIGIN_NOT_ALLOWED", h.detail || null);
-      return failures.failure("HELPER_UNREACHABLE", h.detail || (error && error.message) || null);
+      // A diagnosis already made still holds. classify has no memory of the
+      // health probe, so without this every later failing poll re-raised
+      // HELPER_UNREACHABLE on a page whose real problem was its origin, and the
+      // reviewer wore both chips with the wrong one last (review, 2026-08-17).
+      var answered = h.healthAnswered;
+      if (answered === undefined && originDiagnosed) answered = true;
+      var code = decideFailureCode({ cspRefused: cspRefused, status: h.status, healthAnswered: answered });
+      if (code === "SYNC_ORIGIN_NOT_ALLOWED") return failures.failure(code, originRemedy());
+      return failures.failure(code, h.detail || (error && error.message) || null);
+    }
+
+    // -------------------------------------------------------------------------
+    // Telling an unregistered origin from a helper that is down
+    // -------------------------------------------------------------------------
+    //
+    // THE ORIGIN TRAP. A page added as a static file registers the origin "null"
+    // and nothing else. Serve that same page over http and the browser sends the
+    // server's origin, which no review registered, so the helper refuses every
+    // request. The reviewer's page then said "the local helper is not reachable",
+    // which blames the one thing that is working, and the fix it suggests
+    // (start the helper) does nothing.
+    //
+    // The refusal is invisible to fetch: every route carries the custom header
+    // D11 requires, so the browser preflights, and a refused preflight surfaces
+    // as a plain network error rather than a 403 with a code in it. So the page
+    // ASKS A SECOND QUESTION when a request fails at the network level: health
+    // is unauthenticated, needs no custom header, and therefore no preflight. If
+    // health answers, the helper is up and the origin is the problem.
+    var originDiagnosed = false;
+    // The access refusal currently STANDING, as a canonical code, or null.
+    // It is what tells a re-raise from a first raise and a real recovery from a
+    // healthy page's every-second poll.
+    var accessRefused = null;
+
+    function pageOrigin() {
+      if (win && win.location && win.location.origin) return String(win.location.origin);
+      if (doc && doc.location && doc.location.origin) return String(doc.location.origin);
+      return "this page's origin";
+    }
+
+    function originRemedy() {
+      // A sentence the reviewer can hand to any agent verbatim, so it carries
+      // everything the agent needs: the page URL, the origin to register, and
+      // the review id. The chip renders it with a "Copy for your agent" button.
+      var href =
+        win && win.location && win.location.href
+          ? String(win.location.href)
+          : doc && doc.location && doc.location.href
+            ? String(doc.location.href)
+            : "this page";
+      return (
+        "My lahe review page " +
+        href +
+        " says its address is not registered. Register the origin " +
+        pageOrigin() +
+        " for review " +
+        (review || "(unknown)") +
+        ", then tell me to reload."
+      );
+    }
+
+    /**
+     * Is the helper actually up, asked in the one way an unregistered origin can
+     * still ask? Answers null when the question could not be put at all.
+     */
+    function probeHealth() {
+      if (!fetchImpl) return Promise.resolve(null);
+      // No custom headers, deliberately: a simple request is not preflighted, so
+      // it reaches the handler even from an origin no review registered.
+      return fetchImpl(helperOrigin + protocol.route("health").path, { method: "GET" })
+        .then(function (response) {
+          return !!(response && response.ok);
+        })
+        .catch(function () {
+          return false;
+        });
+    }
+
+    /**
+     * After a network-level failure, work out whether this is really the helper
+     * being down or this page's origin being unregistered, and say so once.
+     *
+     * The probe RE-RUNS on every failing poll rather than stopping at the first
+     * diagnosis. A diagnosis is a claim about right now, and a helper that dies
+     * an hour after the origin was refused has to surface as unreachable rather
+     * than leave the page insisting on an origin problem forever. Re-running
+     * costs one unauthenticated local request per failing poll, and a page whose
+     * polls are all succeeding never gets here at all.
+     */
+    function diagnoseUnreachable() {
+      if (cspRefused) return Promise.resolve(null);
+      return probeHealth().then(function (healthAnswered) {
+        if (healthAnswered !== true) {
+          if (!originDiagnosed) return null;
+          // Health stopped answering. The origin diagnosis is over, and this is
+          // now a helper that is genuinely down.
+          originDiagnosed = false;
+          accessRefused = null;
+          onRecovered("SYNC_ORIGIN_NOT_ALLOWED");
+          return raise(failures.failure("HELPER_UNREACHABLE", "health stopped answering after an origin refusal"));
+        }
+        originDiagnosed = true;
+        // The helper answers, so it is not unreachable. raise clears that chip
+        // before this one lands, and it drops the repeat while it stands.
+        return raise(failures.failure("SYNC_ORIGIN_NOT_ALLOWED", originRemedy()));
+      });
     }
 
     function onPolicyViolation(event) {
@@ -549,7 +847,20 @@
       return sessionSecret;
     }
 
-    function rememberSecret(secret) {
+    // The claims are SEQUENCED. Two claims can be in flight at once (a
+    // double-clicked "Review here", a takeover racing the heartbeat), and the
+    // answers can come back in either order. Storing the older answer's secret
+    // means the next heartbeat presents a secret the helper has already
+    // replaced, and the reviewer's own window is refused as a second window.
+    // A secret from a claim older than the one already applied is dropped.
+    var claimSeq = 0;
+    var appliedClaimSeq = 0;
+
+    function rememberSecret(secret, seq) {
+      if (typeof seq === "number") {
+        if (seq < appliedClaimSeq) return sessionSecret;
+        appliedClaimSeq = seq;
+      }
       sessionSecret = secret || null;
       if (store && typeof store.rememberSessionSecret === "function") {
         store.rememberSessionSecret(requireReview(), sessionSecret);
@@ -594,15 +905,25 @@
             raise(got.failure);
             return lock;
           }
+          // The client lock is held, so any second-window chip left in storage
+          // from an earlier session is stale. Cleared here as well as in
+          // parseClaim, because this half works with the helper down and it is
+          // the only half a helperless page ever runs.
+          onRecovered("SECOND_WINDOW_REFUSED");
           // The two shapes fail differently (D5): the lock above catches two
           // tabs sharing one storage bucket, and only the helper can see two
           // windows that cannot see each other's storage.
           return claimWithHelper();
         })
         .then(function (result) {
-          // Whichever way it went, the case nothing can refuse is said out
-          // loud rather than quietly claimed as covered.
-          onLimit(overlay.LIMIT_SEPARATE_STORAGE_NO_HELPER);
+          // The uncovered case is said out loud only while it is ACTUAL: with
+          // no helper granting claims, separate-storage windows are invisible
+          // and the note earns its line. A helper that answered covers that
+          // case, and a standing disclaimer under a working session is noise
+          // the reviewer learns to ignore (Ken, 2026-08-18). The heartbeat
+          // path keeps this current: it re-runs the claim, so the note comes
+          // and goes with the helper.
+          onLimit(lock.helperGranted ? null : overlay.LIMIT_SEPARATE_STORAGE_NO_HELPER);
           finalizeClaim();
           return result;
         });
@@ -614,7 +935,16 @@
     // takeover carries takeover:true, a first claim or liveness poll carries
     // neither.
     function claimRequest(body) {
-      return request("window.claim", { method: "POST", body: JSON.stringify(body) }).then(parseClaim);
+      claimSeq += 1;
+      var seq = claimSeq;
+      return request("window.claim", { method: "POST", body: JSON.stringify(body) })
+        .then(parseClaim)
+        .then(function (parsed) {
+          // Which claim this answer belongs to, so a late answer cannot overwrite
+          // a newer one's secret (see rememberSecret).
+          parsed.seq = seq;
+          return parsed;
+        });
     }
 
     function parseClaim(result) {
@@ -622,6 +952,15 @@
         // A granted claim or heartbeat is an acknowledged exchange, so it is
         // proof of reachability just like a reply poll is.
         markReachable();
+        // AND this window holds the review, so a second-window refusal is over.
+        // A chip is restored from browser storage on every load and was trusted
+        // as it stood, so a refusal from an earlier session (or from the moment
+        // a reload raced its own outgoing page) stayed on the rail while the
+        // reviewer was typing happily into the review it claimed was locked
+        // (Ken, live, 2026-08-18). Every successful claim re-validates it. The
+        // clear is a no-op when no such chip stands, so the heartbeat every ten
+        // seconds costs nothing.
+        onRecovered("SECOND_WINDOW_REFUSED");
         var b = result.body || {};
         return {
           granted: true,
@@ -663,7 +1002,7 @@
       }).then(function (parsed) {
         if (parsed.granted) {
           lock.helperGranted = true;
-          rememberSecret(parsed.sessionSecret);
+          rememberSecret(parsed.sessionSecret, parsed.seq);
           if (parsed.heartbeatSeconds) heartbeatMs = parsed.heartbeatSeconds * 1000;
           return lock;
         }
@@ -709,7 +1048,7 @@
     // stale, granted by the liveness poll) or on the reviewer's Review-here.
     function becomeHolder(parsed) {
       readOnly = false;
-      rememberSecret(parsed.sessionSecret);
+      rememberSecret(parsed.sessionSecret, parsed.seq);
       if (parsed.heartbeatSeconds) heartbeatMs = parsed.heartbeatSeconds * 1000;
       lock.acquired = true;
       lock.helperGranted = true;
@@ -766,7 +1105,10 @@
       }).then(function (parsed) {
         if (parsed.granted) {
           lock.helperGranted = true;
-          if (parsed.sessionSecret) rememberSecret(parsed.sessionSecret);
+          if (parsed.sessionSecret) rememberSecret(parsed.sessionSecret, parsed.seq);
+          // The helper is covering separate-storage windows again, so the
+          // named limit stops being actual and its note comes down.
+          onLimit(null);
           return;
         }
         if (parsed.refused) {
@@ -778,8 +1120,12 @@
           raise(failures.failure("SECOND_WINDOW_REFUSED", lock.reason));
           recomputeStatus();
           enterReadOnly();
+          return;
         }
-        // Unreachable: keep the heartbeat running and try again next tick.
+        // Unreachable: keep the heartbeat running and try again next tick. The
+        // uncovered case is actual for as long as this lasts, so the note is up.
+        lock.helperGranted = false;
+        onLimit(overlay.LIMIT_SEPARATE_STORAGE_NO_HELPER);
       });
     }
 
@@ -819,6 +1165,8 @@
       if (debounceTimer) clearTimeout(debounceTimer);
       if (retryTimer) clearTimeout(retryTimer);
       if (pollTimer) clearInterval(pollTimer);
+      if (reloadTimer) clearTimeout(reloadTimer);
+      reloadTimer = null;
       stopHeartbeat();
       stopLiveness();
       debounceTimer = null;
@@ -843,6 +1191,10 @@
         status: status,
         queued: pendingCount(),
         cursor: cursor,
+        targetMtime: targetMtime,
+        reloadPending: reloadPending,
+        reloadsFired: reloadsFired,
+        reloadChecks: reloadChecks,
         readOnly: readOnly,
         cspRefused: cspRefused,
         lastFailure: lastFailure ? lastFailure.code : null,
@@ -866,6 +1218,7 @@
         return readOnly;
       },
       poll: poll,
+      noteTargetMtime: noteTargetMtime,
       classify: classify,
       repliesSeen: function () {
         return repliesSeen.slice();
@@ -882,6 +1235,9 @@
     BACKOFF_MS: BACKOFF_MS,
     REQUEST_TIMEOUT_MS: REQUEST_TIMEOUT_MS,
     POLL_INTERVAL_MS: POLL_INTERVAL_MS,
+    RELOAD_DEBOUNCE_MS: RELOAD_DEBOUNCE_MS,
+    RELOAD_NOTICE_MS: RELOAD_NOTICE_MS,
+    decideFailureCode: decideFailureCode,
     createSync: createSync
   };
 });

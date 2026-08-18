@@ -25,10 +25,19 @@ no network access or a locked-down npm registry.
 
 ## Node version
 
-`engines.node` is `>=20.0.0`. Node's built-in test runner (`node:test`) is
-what unit tests use; it's stable from Node 20. Playwright 1.62 also
-requires Node >=20, which is what pins the floor here. A `.nvmrc` (20.19.0)
-is checked in; run `nvm use` if you have nvm.
+`engines.node` is `>=18.2.0`. The tool itself is `node:`-prefixed core modules
+and the global `fetch`, both stable from Node 18, and the unit suite passes on
+18. The floor is 18.2 rather than 18.0 for one API: `server.closeAllConnections()`,
+which shutdown needs to end the library's keep-alive polls. Without it a page
+left open holds the socket and the helper never finishes closing. The DEV floor is higher: Playwright 1.62 requires Node >=20, so
+`npm run test:browser` needs 20. A `.nvmrc` (20.19.0) is checked in; run
+`nvm use` if you have nvm.
+
+Install the command with `npm run install-cli`, not `npm link`. It writes a
+wrapper at `~/.local/bin/lahe` naming absolute paths to the Node that ran it and
+to the clone. `npm link` under nvm puts `lahe` in that version's own bin
+directory, which is off PATH the moment the shell default is a different Node:
+the install reports success and the command is then not found.
 
 ## Directory layout
 
@@ -109,3 +118,21 @@ regions and replay, the per-review token model, path-safety rules,
 prompt-injection fencing). Don't re-litigate a decision in code without
 updating the doc first. Files prefixed `archive_` in the feature folder
 are historical drafts, never current design.
+
+## Agent-facing docs: what is truth, and what travels together
+
+The feature folder (brief, architecture, plan) is HISTORY: what we set out
+to build and why. It is not rewritten as the tool evolves. The living
+truth for how the tool works now is:
+
+- **`AGENTS.md`**: the cold-start playbook any agent follows.
+- **The `contract` field in review.json** (authored in
+  `src/shared/review_format.js`): the only instructions an agent is
+  GUARANTEED to see, embedded into every review at setup time.
+
+These two travel together. A workflow change that lands in AGENTS.md must
+also be folded into the contract text (and its restated copy in
+test/unit/review_format.test.js and docs/CONTRACTS.md, plus a dist
+rebuild, since the contract ships in the bundle). An agent instruction
+that exists only in AGENTS.md is invisible to an agent that only ever
+reads review.json.

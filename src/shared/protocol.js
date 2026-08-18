@@ -58,6 +58,48 @@
   var ALLOWED_HOST_NAMES = ["127.0.0.1", "localhost", "[::1]", "::1"];
 
   // ---------------------------------------------------------------------------
+  // What may be added to a review's origin allowlist OVER THE WIRE
+  // ---------------------------------------------------------------------------
+  //
+  // The security model is two factors: the per-review token AND the origin
+  // allowlist. `review.write` takes origins in its BODY, so without this a
+  // script running on an already-allowed page could read the token off the
+  // script tag and add any origin it liked, which leaves the token as the only
+  // factor. So the route accepts only what `add` legitimately sends: the literal
+  // "null" (a page opened from a file), and http/https on a loopback host. `add`
+  // writing to disk is deliberately wider, because that path is a person at a
+  // terminal typing --origin, not a page.
+  var LOOPBACK_ORIGIN_HOSTS = ["localhost", "127.0.0.1", "[::1]"];
+
+  // Enough for the ordinary spread (127.0.0.1 and localhost, a couple of ports,
+  // http and https) with room to spare, and low enough that a caller quietly
+  // accumulating origins is refused rather than growing the list forever.
+  var ORIGIN_LIMIT = 16;
+
+  /**
+   * May this origin be registered through `review.write`?
+   *
+   * @param {*} origin
+   * @returns {boolean}
+   */
+  function isRegisterableOrigin(origin) {
+    if (typeof origin !== "string" || !origin) return false;
+    if (origin === "null") return true;
+    var parsed;
+    try {
+      parsed = new URL(origin);
+    } catch (err) {
+      return false;
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+    // An origin carries scheme, host and port and nothing else. A value with a
+    // path, a query, credentials or a fragment is not one, whatever it parses to.
+    if (parsed.pathname !== "/" || parsed.search || parsed.hash || parsed.username || parsed.password) return false;
+    if (origin !== parsed.origin) return false;
+    return LOOPBACK_ORIGIN_HOSTS.indexOf(parsed.hostname) !== -1;
+  }
+
+  // ---------------------------------------------------------------------------
   // Headers
   // ---------------------------------------------------------------------------
 
@@ -135,6 +177,34 @@
       response: "{accepted: [event_id...], seq}"
     },
     {
+      name: "library.get",
+      method: "GET",
+      path: "/lahe-layer.js",
+      auth: AUTH.NONE,
+      mutating: false,
+      why:
+        "the helper serves the built library, so the script line can be an absolute URL that works from any folder. " +
+        "Unauthenticated on purpose: these are the tool's own public bytes, the same file that ships in the repo, " +
+        "with no review data and no token in them. It is exempt the same visible way health is, through AUTH.NONE",
+      response: "the built library, as application/javascript"
+    },
+    {
+      name: "review.write",
+      method: "POST",
+      path: BASE + "/review",
+      auth: AUTH.REVIEW_TOKEN,
+      mutating: true,
+      why:
+        "what `add` calls for a review the helper already holds: the helper applies the writes itself, so `add` " +
+        "never has to stop a helper that is holding somebody's live review (and never drops an open `lahe wait`). " +
+        "Its origins are DELIBERATELY NARROWER than what `add` may write to disk: only \"null\" and loopback " +
+        "http/https pass (isRegisterableOrigin), capped at ORIGIN_LIMIT per review. A body-supplied origin is the " +
+        "one way a script on an allowed page could widen the allowlist with a token it read off the script tag, " +
+        "which would leave the token as the only factor guarding the review",
+      request: "{review, origins: [origin...], target_path?, source_path?, source_hint?, page_path?}",
+      response: "{origins, recorded_source, recorded_paths, seq}"
+    },
+    {
       name: "review.read",
       method: "GET",
       path: BASE + "/review",
@@ -150,9 +220,12 @@
       path: BASE + "/replies",
       auth: AUTH.REVIEW_TOKEN,
       mutating: false,
-      why: "the library's reply poll loop. The cursor is a seq, never a timestamp and never an offset",
+      why:
+        "the library's reply poll loop. The cursor is a seq, never a timestamp and never an offset. It also carries " +
+        "the reviewed file's mtime, which is R36's refresh trigger for a static page: a changed value means the " +
+        "agent rebuilt the page and the library reloads it",
       request: "?review=<id>&since=<seq>",
-      response: "{events: [event...], seq}"
+      response: "{events: [event...], seq, target_mtime}; target_mtime is an ISO string, or null when the review has no recorded path or the file is missing"
     },
     {
       name: "window.claim",
@@ -173,17 +246,12 @@
       why: "the reviewer chooses End review on the rail; the review is archived, never truncated",
       request: "{review}",
       response: "{ended_at, outstanding_kept}"
-    },
-    {
-      name: "wait",
-      method: "GET",
-      path: BASE + "/wait",
-      auth: AUTH.REVIEW_TOKEN,
-      mutating: false,
-      why: "what `lahe wait` calls. Blocks until something new passes the watermark, or times out",
-      request: "?review=<id>&since=<seq>&timeout=<seconds>",
-      response: "{events: [event...], seq}"
     }
+    // THE `wait` ROUTE IS RETIRED WITH THE COMMAND THAT CALLED IT. Nothing in
+    // the library ever used it (the page keeps up on replies.poll); it existed
+    // for a blocking CLI that agents ran in the foreground and stalled on. The
+    // keep-up loop is `lahe status --json --seen-file <path>`, which reads the
+    // same projection this table already serves through review.read.
   ];
 
   function route(name) {
@@ -690,12 +758,52 @@
   // ---------------------------------------------------------------------------
   //
   // Public API, because this is the one line a person or an agent types by hand.
+  //
+  // THE LINE CARRIES BOTH HALVES, and needs both.
+  //
+  // The PRIMARY src is the helper's own URL
+  // (http://127.0.0.1:<port>/lahe-layer.js). One URL resolves from any folder,
+  // any origin and any depth, which is what a bare relative path could not do:
+  // a relative path resolves against wherever the page is SERVED from, so the
+  // first time that is another folder the library 404s.
+  //
+  // The FALLBACK is a copy of the built library beside the page, named by a
+  // RELATIVE path in data-lahe-fallback and injected by an inline onerror when
+  // the primary src fails to load. It restores D1's offline half, which the
+  // helper-URL-only form cut: a page opened while the helper is down loaded no
+  // library at all, so there was no rail, no honest "helper is unreachable"
+  // chip, no local capture and no export. That is R10 (there is always a way to
+  // take the work elsewhere, with nothing running), and the claim that "a
+  // review with no helper cannot record anything anyway" was simply false: the
+  // library alone records into browser storage, says out loud that the helper
+  // is unreachable, and posts everything it held when the helper comes back.
+  //
+  // The injected fallback script carries no data attributes on purpose. Its
+  // document.currentScript has none, so boot falls through to SCRIPT_SELECTOR
+  // and reads the config off the original tag, which is still in the document.
+  //
+  // The one place the fallback cannot run is under a strict CSP that refuses
+  // inline event handlers. The primary src still loads there, which is the
+  // ordinary dev-server case; `lahe add` prints that caveat with the snippet.
 
   var SCRIPT_ATTR = {
     REVIEW: "data-lahe-review",
     TOKEN: "data-lahe-token",
-    HELPER: "data-lahe-helper"
+    HELPER: "data-lahe-helper",
+    FALLBACK: "data-lahe-fallback"
   };
+
+  // The inline onerror, kept to one statement-per-clause line so the attribute
+  // stays readable in a page's source. Single quotes only: the attribute is
+  // written inside double quotes. No ">" anywhere in it either, so add.js's
+  // EXISTING_TAG (which scans a negated character class up to the first ">")
+  // still matches, replaces and removes the whole line.
+  var SCRIPT_FALLBACK_ONERROR =
+    "var s=document.createElement('script');" +
+    "s.src=this.getAttribute('" +
+    SCRIPT_ATTR.FALLBACK +
+    "');" +
+    "document.head.appendChild(s)";
 
   // Read via document.currentScript, falling back to this selector for the
   // deferred and re-executed cases.
@@ -706,11 +814,18 @@
     if (!o.src) throw new Error("scriptTag: src is required (the path to the built library)");
     if (!isSafeId(o.review)) throw new Error("scriptTag: review must be a safe id");
     if (!o.token) throw new Error("scriptTag: token is required; absent configuration fails closed");
+    // The fallback half is optional so a caller with nothing beside the page
+    // (a test harness serving the bundle itself) writes the plain line.
+    var fallback = o.fallback
+      ? '        ' + SCRIPT_ATTR.FALLBACK + '="' + o.fallback + '"\n' +
+        '        onerror="' + SCRIPT_FALLBACK_ONERROR + '"\n'
+      : "";
     return (
       '<script src="' + o.src + '"\n' +
       '        ' + SCRIPT_ATTR.REVIEW + '="' + o.review + '"\n' +
       '        ' + SCRIPT_ATTR.TOKEN + '="' + o.token + '"\n' +
       '        ' + SCRIPT_ATTR.HELPER + '="' + (o.helper || DEFAULT_HELPER_ORIGIN) + '"\n' +
+      fallback +
       '        defer><\/script>'
     );
   }
@@ -770,6 +885,9 @@
     DEFAULT_HOST: DEFAULT_HOST,
     DEFAULT_HELPER_ORIGIN: DEFAULT_HELPER_ORIGIN,
     ALLOWED_HOST_NAMES: ALLOWED_HOST_NAMES,
+    LOOPBACK_ORIGIN_HOSTS: LOOPBACK_ORIGIN_HOSTS,
+    ORIGIN_LIMIT: ORIGIN_LIMIT,
+    isRegisterableOrigin: isRegisterableOrigin,
 
     HEADER: HEADER,
     CLIENT_LAYER: CLIENT_LAYER,
@@ -820,6 +938,7 @@
 
     SCRIPT_ATTR: SCRIPT_ATTR,
     SCRIPT_SELECTOR: SCRIPT_SELECTOR,
+    SCRIPT_FALLBACK_ONERROR: SCRIPT_FALLBACK_ONERROR,
     scriptTag: scriptTag,
 
     WAIT: WAIT,

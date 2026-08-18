@@ -108,13 +108,18 @@
     // status line lied on every freshly loaded page; walkers, 2026-08-14).
     KEPT_UNCONFIRMED: "kept_unconfirmed",
     STORED: "stored",
-    AGENT_CONNECTED: "agent_connected"
+    AGENT_CONNECTED: "agent_connected",
+    // R36: the agent rebuilt the page and the library is about to reload it.
+    // A moment long, and it exists so the reload is something the reviewer was
+    // told about rather than something that happened to them.
+    PAGE_RELOADING: "page_reloading"
   };
   var STATUS_TEXT = {
     kept_locally: "Kept in this browser. Nothing is lost; it will be stored when the helper is back.",
     kept_unconfirmed: "Kept in this browser. It is stored the moment the helper confirms it.",
     stored: "Stored.",
-    agent_connected: "Stored, and an agent is reading."
+    agent_connected: "Stored, and an agent is reading.",
+    page_reloading: "Page updated. Reloading, your comments and edits come with it."
   };
   // The short form, for the one line that is always on screen. The long form
   // above is the title attribute, so the plain statement is never truncated
@@ -123,7 +128,8 @@
     kept_locally: "Kept in this browser",
     kept_unconfirmed: "Kept in this browser",
     stored: "Stored",
-    agent_connected: "Stored · agent reading"
+    agent_connected: "Stored · agent reading",
+    page_reloading: "Page updated. Reloading..."
   };
 
   var STATE_LABEL = {
@@ -342,8 +348,18 @@
     ".chips:empty{display:none}",
     ".chip{display:flex;align-items:flex-start;gap:8px;font-size:12px;line-height:1.4;",
     "background:var(--warn-wash);color:var(--ink);border-radius:8px;padding:7px 8px 7px 10px}",
-    ".chip__text{flex:1}",
-    ".chip__remedy{display:block;color:var(--ink-soft);font-size:11.5px;margin-top:2px}",
+    // min-width:0 and the wrap rules are load bearing: a chip is a flex item, a
+    // flex item will not shrink below its content, and one long unbroken path in
+    // the detail line pushed the whole chip wider than the rail so the first
+    // sentence was clipped off the side, unreadable (Ken, live, 2026-08-18).
+    ".chip__text{flex:1;min-width:0;overflow-wrap:anywhere;word-break:break-word}",
+    ".chip__remedy{display:block;color:var(--ink-soft);font-size:11.5px;margin-top:2px;",
+    "overflow-wrap:anywhere;word-break:break-word}",
+    ".chip__copy{margin-top:4px;padding:2px 8px;border-radius:6px;font-size:11.5px;",
+    "background:var(--ink);color:var(--paper,#fff);cursor:pointer}",
+    ".chip__action{margin-top:6px;padding:3px 10px;border-radius:7px;font-size:11.5px;font-weight:600;",
+    "background:var(--accent);color:var(--paper,#fff);cursor:pointer}",
+    ".chip__action[disabled]{opacity:.6;cursor:default}",
     ".chip__x{width:20px;height:20px;border-radius:5px;color:var(--ink-soft);flex:none;",
     "display:flex;align-items:center;justify-content:center;font-size:13px}",
     ".chip__x:hover{background:rgba(0,0,0,.06);color:var(--ink)}",
@@ -364,7 +380,11 @@
     ".refusal{display:none;flex-direction:column;gap:8px;padding:11px 12px;border-radius:var(--radius-sm);",
     "background:var(--warn-wash);border:1px solid rgba(180,120,30,.28);margin-bottom:2px}",
     ".refusal[data-shown='true']{display:flex}",
-    ".refusal__title{font-size:12px;font-weight:700;color:var(--warn);letter-spacing:.02em}",
+    ".refusal__title{font-size:12px;font-weight:700;color:var(--warn);letter-spacing:.02em;",
+    "display:flex;align-items:center;justify-content:space-between;gap:8px}",
+    ".refusal__x{border:0;background:transparent;color:var(--ink-soft);font-size:14px;line-height:1;",
+    "cursor:pointer;padding:0 2px}",
+    ".refusal__x:hover{color:var(--ink)}",
     ".refusal__reason{font-size:11.5px;color:var(--ink-soft);line-height:1.45;",
     "overflow-wrap:anywhere;white-space:pre-wrap}",
     ".refusal__btn{align-self:flex-start;font-size:12px;font-weight:600;padding:6px 12px;border-radius:8px;",
@@ -605,6 +625,17 @@
       refusalBtn.addEventListener("click", function () {
         runAction("takeover");
       });
+      // A WAY OUT. hideRefusal used to be reachable only from the way out of
+      // read-only, so a panel painted on a window that was NOT read-only stood
+      // there forever over a page the reviewer could still edit. The reviewer
+      // gets to close it; a real refusal paints it again on the next claim.
+      var refusalDismiss = el("button", "refusal__x", "×");
+      refusalDismiss.setAttribute("type", "button");
+      refusalDismiss.setAttribute("aria-label", "Dismiss");
+      refusalDismiss.addEventListener("click", function () {
+        hideRefusal();
+      });
+      refusalTitle.appendChild(refusalDismiss);
       refusal.appendChild(refusalTitle);
       refusal.appendChild(refusalReason);
       refusal.appendChild(refusalBtn);
@@ -1129,6 +1160,16 @@
       store.writeChips(reviewId, { chips: chips, dismissed: Object.keys(dismissed) });
     }
 
+    // -------------------------------------------------------------------------
+    // What a chip is allowed to offer
+    // -------------------------------------------------------------------------
+    //
+    // Two closed lists, both opt in by failure code, because the generic version
+    // (any chip with a detail gets a Copy button) put the wrong control on the
+    // wrong failure. They live in src/shared/failures.js, next to the code
+    // definitions, so a new code cannot be added without being asked what its
+    // chip may offer: failuresModule.chipAction and failuresModule.isCopyable.
+
     function renderChips() {
       if (!dom) return;
       dom.chipList.textContent = "";
@@ -1137,6 +1178,65 @@
         var text = el("div", "chip__text");
         text.appendChild(el("span", null, chip.message || chip.code));
         if (chip.remedy) text.appendChild(el("span", "chip__remedy", chip.remedy));
+        // The detail is the specific fact (this page's actual origin, the exact
+        // command) and it is worth showing, so it gets its own line. Without
+        // this the interpolated line was stored and never shown, and the
+        // reviewer only ever saw the generic remedy.
+        if (chip.detail) text.appendChild(el("span", "chip__remedy", chip.detail));
+        // The chip's OWN action, for the failures the reviewer fixes here rather
+        // than by asking an agent. A second window is the one that matters: the
+        // fix is one button, so the chip carries it.
+        var action = failuresModule.chipAction(chip.code);
+        if (action) {
+          var actionBtn = el("button", "chip__action", action.label);
+          actionBtn.setAttribute("type", "button");
+          actionBtn.addEventListener("click", function () {
+            // ONE CLAIM AT A TIME. A double-click posted two takeovers, and the
+            // out-of-order answer stored the older session secret, which the
+            // next heartbeat presented and the helper refused: the reviewer's
+            // own window locked out by pressing its own fix twice. The button
+            // says it is working and cannot be pressed again until the claim
+            // it started has answered.
+            if (actionBtn.disabled) return;
+            actionBtn.disabled = true;
+            var label = actionBtn.textContent;
+            actionBtn.textContent = "Working…";
+            var done = function () {
+              actionBtn.disabled = false;
+              actionBtn.textContent = label;
+            };
+            var ran = runAction(action.action);
+            if (ran && typeof ran.then === "function") ran.then(done, done);
+            else done();
+          });
+          text.appendChild(actionBtn);
+        }
+        // Copy-for-your-agent is OPT IN, per failure code, and never on a chip
+        // that has its own action. It went on every chip with a detail, which
+        // put it on the second-window chip and displaced the one button that
+        // actually fixes that failure (Ken, live, 2026-08-18). A copy button
+        // earns its place only where handing the line to an agent IS the
+        // remedy, which is what COPYABLE_CODES lists.
+        if (chip.detail && failuresModule.isCopyable(chip.code)) {
+          var copy = el("button", "chip__copy", "Copy for your agent");
+          copy.addEventListener("click", function () {
+            var nav = typeof navigator !== "undefined" ? navigator : null;
+            var wrote =
+              nav && nav.clipboard && nav.clipboard.writeText
+                ? nav.clipboard.writeText(chip.detail)
+                : Promise.reject(new Error("no clipboard"));
+            wrote.then(
+              function () {
+                copy.textContent = "Copied";
+              },
+              function () {
+                // No clipboard access: the text is already on screen to select.
+                copy.textContent = "Select the line above";
+              }
+            );
+          });
+          text.appendChild(copy);
+        }
         row.appendChild(text);
         if (chip.count > 1) row.appendChild(el("span", "chip__count", "×" + chip.count));
         var x = el("button", "chip__x", "×");
@@ -1147,6 +1247,32 @@
         row.appendChild(x);
         dom.chipList.appendChild(row);
       });
+    }
+
+    /**
+     * What each chip is OFFERING the reviewer right now: its code, and the label
+     * on every button it drew (its own action, the copy button, or neither).
+     *
+     * The chips live in a closed shadow root, so a spec cannot reach them with a
+     * selector, and "the second-window chip has a Review here button and no Copy
+     * button" is exactly the claim that broke live. This is how it is asserted.
+     *
+     * @returns {Array<{code: string, buttons: Array<string>}>}
+     */
+    function chipControls() {
+      if (!dom) return [];
+      var out = [];
+      var rows = dom.chipList.children;
+      for (var i = 0; i < rows.length; i += 1) {
+        var buttons = [];
+        var found = rows[i].querySelectorAll("button");
+        for (var b = 0; b < found.length; b += 1) {
+          // The dismiss × is chrome on every chip, never an offer.
+          if (found[b].className !== "chip__x") buttons.push(found[b].textContent);
+        }
+        out.push({ code: chips[i] ? chips[i].code : null, buttons: buttons });
+      }
+      return out;
     }
 
     var failuresApi = {
@@ -1193,14 +1319,23 @@
       // With no code, every chip goes. It used to be TWO clear functions in this
       // one object literal, so the no-argument one silently won and clearing one
       // standing chip wiped the whole list.
+      //
+      // CLEARING NOTHING CHANGES NOTHING. A save is a browser-storage write and
+      // a render tears the whole chip list down and rebuilds it, so a caller
+      // that clears a code with no chip on it (the sync client does, on every
+      // successful poll) was destroying and recreating the OTHER chips' buttons
+      // once a second: the "Copy for your agent" button lost its "Copied"
+      // confirmation, and a click straddling a rebuild landed on a detached
+      // node (review, 2026-08-17).
       clear: function (code) {
         var n = chips.length;
         chips = chips.filter(function (f) {
           return code === undefined || code === null ? false : f.code !== code;
         });
+        if (chips.length === n) return false;
         saveChips();
         renderChips();
-        return chips.length !== n;
+        return true;
       },
       isDismissed: function (code) {
         return dismissed[code] === true;
@@ -1334,11 +1469,22 @@
         dom.panes[name].setAttribute("data-current", name === activeTab ? "true" : "false");
         dom.counts[name].textContent = String(countFor(name));
       });
-      // An empty pill invites; it does not report a zero. "Review 0" on an
-      // untouched page prints the one number that is not information.
+      // THE COLLAPSED PILL'S COUNT: still to handle, then the all-time total in
+      // parentheses, "3 (7)". A finished review reads "0 (7)", which is the
+      // burn-down a reviewer wants to see rather than a blank pill. The rail can be
+      // collapsed for most of a session, and with only the open count on it a
+      // reviewer who had answered everything saw the same empty pill as one who
+      // had never written anything: no sense of how much is on the page and no
+      // sign the tool was alive. The total is every card the rail is holding for
+      // this page, whatever tab it sits under, so a finished review reads 0/7
+      // rather than blank.
+      //
+      // An empty pill still invites on an untouched page: "Review 0/0" prints
+      // the one number that is not information.
       var open = countFor(TAB.ACTIVE);
-      dom.pillCount.textContent = open ? String(open) : "";
-      dom.pillCount.hidden = open === 0;
+      var total = Object.keys(cards).length;
+      dom.pillCount.textContent = total ? String(open) + " (" + String(total) + ")" : "";
+      dom.pillCount.hidden = total === 0;
     }
 
     function selectTab(tab) {
@@ -1549,7 +1695,7 @@
     // Rects for both, plus the overlap answer, because "never overlaps" is a
     // geometric claim and a test should be able to check it as one.
     function geometry() {
-      if (!dom) return { railVisible: false, pillVisible: false, overlap: false, rail: null, pill: null };
+      if (!dom) return { railVisible: false, pillVisible: false, pillCount: "", overlap: false, rail: null, pill: null };
       var railRect = dom.rail.hidden ? null : dom.rail.getBoundingClientRect();
       var pillRect = dom.pill.hidden ? null : dom.pill.getBoundingClientRect();
       var overlap = false;
@@ -1563,6 +1709,9 @@
       return {
         railVisible: !!railRect,
         pillVisible: !!pillRect,
+        // The burn-down the pill shows, as the reviewer reads it: "3 (7)", or
+        // "" on a page nothing has been written on yet.
+        pillCount: dom.pillCount.hidden ? "" : dom.pillCount.textContent,
         overlap: overlap,
         rail: railRect ? { top: railRect.top, right: railRect.right, bottom: railRect.bottom, left: railRect.left } : null,
         pill: pillRect ? { top: pillRect.top, right: pillRect.right, bottom: pillRect.bottom, left: pillRect.left } : null
@@ -1604,6 +1753,7 @@
       activeElementInfo: activeElementInfo,
       cardIds: cardIds,
       countFor: countFor,
+      chipControls: chipControls,
       failures: failuresApi,
       onAction: onAction,
       menuInfo: menuInfo,

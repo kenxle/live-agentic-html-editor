@@ -56,7 +56,43 @@ const projects =
 
 module.exports = defineConfig({
   testDir: "./test/browser",
+  // Ninety seconds, not Playwright's thirty.
+  //
+  // A worker here is not one browser page. Each one starts a real Node helper
+  // process, a fixture HTTP server, and a Chromium, and the heavy walks
+  // (ac1..ac4, cp1, cp2) then spend their time on things that cost wall clock
+  // and cannot be hurried: 250ms morph polls, a kill -9 and a restart, a
+  // reload, a hundred repaints. ac1 alone takes about twelve seconds on an idle
+  // machine, so at the default worker count (half the cores, each running that
+  // whole stack) the walks were crossing thirty seconds and failing on the
+  // clock rather than on a claim. Verified against the pre-wave commit f078db0,
+  // which failed the same specs the same way on a loaded machine: the timeout
+  // was always this thin, and a quiet machine was hiding it.
+  //
+  // This is headroom, not a loosened assertion. Every wait inside a test is
+  // still a condition poll with its own shorter timeout (test/helpers/poll.js),
+  // so a genuinely stuck condition still fails fast and says what it wanted.
+  //
+  // Ninety rather than sixty for one waiting-on-the-product case: the sync
+  // client's retry backoff caps at thirty seconds (sync.BACKOFF_MS), so the AC1
+  // walk, which starts its helper after a long stretch of failed polls, can
+  // legitimately spend most of a minute inside one wait.
+  timeout: 90000,
   fullyParallel: true,
+  // Four workers, not "half the cores".
+  //
+  // Playwright's default assumes a worker is a browser page. Here a worker is a
+  // Chromium, a Node helper process, and a fixture HTTP server, and several of
+  // the specs drive a page that re-renders itself every 60 to 250 milliseconds
+  // for the length of the test. Six of those at once saturated a twelve-core
+  // machine (load average over 100 during a run), and the symptom was not a
+  // slow suite but a wrong one: a click that never satisfied Playwright's
+  // stability check because the morph kept moving the element, and walks that
+  // ran out of clock mid-journey. Capping the workers is the fix for that, and
+  // it costs about a minute of wall time.
+  //
+  // LAHE_WORKERS overrides it, for a machine with room to spare.
+  workers: process.env.LAHE_WORKERS ? Number(process.env.LAHE_WORKERS) : 4,
   forbidOnly: !!process.env.CI,
   retries: 0,
   reporter: [["list"]],

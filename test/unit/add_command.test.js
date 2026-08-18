@@ -201,7 +201,8 @@ test("the line add writes is protocol.scriptTag's, byte for byte", async () => {
       src: /src="([^"]+)"/.exec(html)[1],
       review: reviewIdIn(html),
       token: tokenIn(html),
-      helper: "http://127.0.0.1:" + work.port
+      helper: "http://127.0.0.1:" + work.port,
+      fallback: "lahe-layer.js"
     });
 
     // The pinned form is multi-line and indented. What is in the file is that
@@ -222,17 +223,24 @@ test("the line add writes is protocol.scriptTag's, byte for byte", async () => {
       "the helper attribute names the helper"
     );
     assert.ok(
-      /src="[^"]*lahe-layer\.js"/.test(html),
-      "and src names the built library, never the helper"
+      html.indexOf('src="http://127.0.0.1:' + work.port + '/lahe-layer.js"') !== -1,
+      "src is the helper's own library URL, so the line works from any folder the page is served out of"
     );
-    assert.ok(html.indexOf('src="http') === -1, "src is not a URL at the helper");
+    assert.ok(
+      html.indexOf('data-lahe-fallback="lahe-layer.js"') !== -1,
+      "and the line names the sibling copy, which is what loads when the helper is down (R10)"
+    );
+    assert.ok(html.indexOf("onerror=") !== -1, "with the inline onerror that injects it");
   } finally {
     await work.stop();
   }
 });
 
-test("src is a relative path back to the clone, or a copy in the page's own assets", async () => {
-  // A page sitting next to the clone: a short relative path, and no copy.
+test("src is the helper's URL, wherever the page sits and whatever is beside it", async () => {
+  // The failure this replaces: a relative path (or a copy into an assets
+  // directory) resolves against wherever the page is SERVED from, so the first
+  // time that is another folder the library 404s and the page quietly does
+  // nothing. One absolute URL at the helper resolves from anywhere.
   const near = tempDir();
   const nearPage = path.join(near, "report.html");
   fs.writeFileSync(nearPage, PAGE);
@@ -242,17 +250,24 @@ test("src is a relative path back to the clone, or a copy in the page's own asse
     const run = runAdd([nearPage, "--port", String(nearPort), "--state-dir", nearState]);
     assert.equal(run.code, 0, run.stdout + run.stderr);
     const src = /src="([^"]+)"/.exec(fs.readFileSync(nearPage, "utf8"))[1];
-    assert.ok(
-      fs.existsSync(path.resolve(near, src)),
-      "whatever path add wrote, it resolves to a file that is really there: " + src
+    assert.equal(src, "http://127.0.0.1:" + nearPort + "/lahe-layer.js");
+
+    // And the helper really serves it, unauthenticated.
+    const answer = await fetch(src);
+    assert.equal(answer.status, 200);
+    assert.match(answer.headers.get("content-type") || "", /javascript/);
+    const served = await answer.text();
+    assert.equal(
+      served,
+      fs.readFileSync(path.join(REPO_ROOT, "dist", "lahe-layer.js"), "utf8"),
+      "the bytes served are the built bundle"
     );
-    assert.ok(src.endsWith("/lahe-layer.js"), "and that file is the built bundle");
   } finally {
     await stopHelper(nearState);
   }
 
-  // A page with its own assets directory: a copy goes in it, and the src is the
-  // short relative URL, because a page with assets is a thing that gets moved.
+  // A page with its own assets directory: still the helper's URL, and NOTHING
+  // is copied in beside the page.
   const withAssets = tempDir();
   const assetsPage = path.join(withAssets, "report.html");
   fs.writeFileSync(assetsPage, PAGE);
@@ -263,13 +278,48 @@ test("src is a relative path back to the clone, or a copy in the page's own asse
     const run = runAdd([assetsPage, "--port", String(assetsPort), "--state-dir", assetsState]);
     assert.equal(run.code, 0, run.stdout + run.stderr);
     const src = /src="([^"]+)"/.exec(fs.readFileSync(assetsPage, "utf8"))[1];
-    assert.equal(src, "assets/lahe-layer.js");
-    assert.ok(
+    assert.equal(src, "http://127.0.0.1:" + assetsPort + "/lahe-layer.js");
+    assert.equal(
       fs.existsSync(path.join(withAssets, "assets", "lahe-layer.js")),
-      "the built library was copied in beside the page"
+      false,
+      "nothing goes hunting for an assets directory any more"
+    );
+    assert.equal(
+      fs.existsSync(path.join(withAssets, "lahe-layer.js")),
+      true,
+      "the fallback copy goes beside the page, wherever the page sits"
     );
   } finally {
     await stopHelper(assetsState);
+  }
+});
+
+// R10's install half: a page opened with the helper down still loads the
+// library, and that only works if the copy is really there and really current.
+test("add copies the library beside the page, and refreshes it every run", async () => {
+  const work = await aWorkspace();
+  const sibling = path.join(work.dir, "lahe-layer.js");
+  try {
+    const first = work.add();
+    assert.equal(first.code, 0, first.stdout + first.stderr);
+
+    const bundle = fs.readFileSync(path.join(REPO_ROOT, "dist", "lahe-layer.js"), "utf8");
+    assert.equal(fs.existsSync(sibling), true, "the copy is beside the page");
+    assert.equal(fs.readFileSync(sibling, "utf8"), bundle, "and it is the built bundle, byte for byte");
+    assert.match(first.stdout, /fallback/, "and add says the fallback is there");
+
+    // A stale copy is the whole risk of copying anything, so every run rewrites
+    // it: the rebuild loop re-runs add, and that is what keeps it current.
+    fs.writeFileSync(sibling, "// stale bytes from an older build\n");
+    const second = work.add();
+    assert.equal(second.code, 0, second.stdout + second.stderr);
+    assert.equal(
+      fs.readFileSync(sibling, "utf8"),
+      bundle,
+      "the second add refreshed the copy rather than leaving the stale one"
+    );
+  } finally {
+    await work.stop();
   }
 });
 
@@ -389,7 +439,11 @@ test("a dev server target prints a guarded line and edits nothing", async () => 
 
     const review = /data-lahe-review="([^"]+)"/.exec(run.stdout)[1];
     const meta = JSON.parse(fs.readFileSync(path.join(stateDir, "reviews", review, "meta.json"), "utf8"));
-    assert.deepEqual(meta.origins, ["http://localhost:4321"], "the origin that was named is registered");
+    assert.deepEqual(
+      meta.origins,
+      ["http://localhost:4321", "http://127.0.0.1:4321"],
+      "the named origin is registered along with its loopback twin"
+    );
 
     // The source hint is RECORDED, not only printed: it rides a page.visited
     // event so an agent edits the template instead of the build output.
@@ -402,9 +456,14 @@ test("a dev server target prints a guarded line and edits nothing", async () => 
     assert.equal(visited.length, 1, "one page.visited event");
     assert.equal(visited[0].source_hint, "app/views/layouts/application.html.erb");
 
-    assert.ok(
+    assert.equal(
       fs.existsSync(path.join(project, "public", "lahe-layer.js")),
-      "the built library was copied where the app can serve it"
+      false,
+      "the app serves nothing extra: the src is the helper's own URL"
+    );
+    assert.ok(
+      run.stdout.indexOf('src="http://127.0.0.1:' + port + '/lahe-layer.js"') !== -1,
+      "and the printed snippet carries that URL"
     );
   } finally {
     await stopHelper(stateDir);
@@ -441,6 +500,212 @@ test("a second review on a running helper works without the user restarting anyt
   }
 });
 
+test("re-adding a review the helper HOLDS never restarts it, and an open wait survives", async () => {
+  // The flaw this covers: re-running `add` on a page whose review the helper was
+  // already holding stopped the helper, and stopping it drops every blocked
+  // `lahe wait` long-poll. The agent watching the review Ken was reviewing
+  // simply died, mid-session.
+  const work = await aWorkspace();
+  try {
+    const first = work.add();
+    assert.equal(first.code, 0, first.stdout + first.stderr);
+    const review = reviewIdIn(work.read());
+    const before = JSON.parse(fs.readFileSync(path.join(work.stateDir, "service.json"), "utf8"));
+
+    // A blocked wait on that review, held open across the add.
+    const waiting = new Promise(function (resolve) {
+      require("node:child_process").execFile(
+        process.execPath,
+        [BIN, "wait", "--review", review, "--state-dir", work.stateDir, "--timeout", "4"],
+        { encoding: "utf8" },
+        function (error, stdout, stderr) {
+          resolve({ code: error && typeof error.code === "number" ? error.code : 0, stdout: stdout, stderr: stderr });
+        }
+      );
+    });
+    // Let the long-poll actually get to the helper before add runs.
+    await pollUntil(
+      async function () {
+        const up = await service.probeHealth("127.0.0.1", work.port);
+        return up ? true : null;
+      },
+      { message: "the helper to be answering before the wait is interrupted" }
+    );
+
+    // Both of these are WRITES to a review the helper holds: a new origin, and a
+    // source hint. Each one used to force the restart.
+    const again = work.add(["--origin", "http://127.0.0.1:8000", "--source", "src/report.md"]);
+    assert.equal(again.code, 0, again.stdout + again.stderr);
+
+    const after = JSON.parse(fs.readFileSync(path.join(work.stateDir, "service.json"), "utf8"));
+    assert.equal(after.pid, before.pid, "the SAME helper process: nothing was bounced");
+    assert.equal(after.started_at, before.started_at, "and it is the same run of it");
+    assert.doesNotMatch(again.stdout, /restarted/i);
+    assert.match(again.stdout, /did the writing itself/i, "and add says what really happened");
+
+    // The helper applied the writes: the origin is registered and the source
+    // hint is in the log, without add ever touching that events.jsonl.
+    assert.ok(
+      after.reviews[review].origins.indexOf("http://127.0.0.1:8000") !== -1,
+      "the new origin is registered on the running helper"
+    );
+    const log = fs
+      .readFileSync(path.join(work.stateDir, "reviews", review, "events.jsonl"), "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map(JSON.parse);
+    assert.equal(
+      log.filter((event) => event.source_hint === "src/report.md").length,
+      1,
+      "the source hint was recorded once, by the helper"
+    );
+
+    // And the waiter is still waiting: it did not die of HELPER_UNREACHABLE.
+    const result = await waiting;
+    assert.notEqual(
+      result.code,
+      protocol.WAIT.EXIT.HELPER_UNREACHABLE,
+      "the blocked wait survived the add:\n" + result.stderr
+    );
+  } finally {
+    await work.stop();
+  }
+});
+
+test("a brand-new --origin on a held review goes through review.write, not a restart", async () => {
+  // The flaw this covers: the write request presented origins[0] as computed by
+  // THIS run. On a dev-server target that is the origin being ADDED, which the
+  // review has not registered yet, so the helper answered 403 and `add` fell
+  // back to bouncing the helper, dropping every blocked wait. The request now
+  // presents an origin the helper already holds.
+  const project = tempDir();
+  fs.mkdirSync(path.join(project, "public"), { recursive: true });
+  const stateDir = path.join(tempDir(), "state");
+  const port = await freePort();
+  try {
+    const first = runAdd([project, "--port", String(port), "--state-dir", stateDir, "--origin", "http://localhost:4321"]);
+    assert.equal(first.code, 0, first.stdout + first.stderr);
+    const review = /data-lahe-review="([^"]+)"/.exec(first.stdout)[1];
+    const before = JSON.parse(fs.readFileSync(path.join(stateDir, "service.json"), "utf8"));
+
+    const again = runAdd([
+      project,
+      "--port",
+      String(port),
+      "--state-dir",
+      stateDir,
+      "--origin",
+      "http://localhost:5555"
+    ]);
+    assert.equal(again.code, 0, again.stdout + again.stderr);
+    assert.doesNotMatch(again.stdout, /restarted/i, "the helper was not bounced for an origin it can register");
+
+    const after = JSON.parse(fs.readFileSync(path.join(stateDir, "service.json"), "utf8"));
+    assert.equal(after.pid, before.pid, "the SAME helper process");
+    assert.equal(after.started_at, before.started_at, "and the same run of it");
+    assert.ok(
+      after.reviews[review].origins.indexOf("http://localhost:5555") !== -1,
+      "and the helper registered the new origin from the body"
+    );
+  } finally {
+    await stopHelper(stateDir);
+  }
+});
+
+test("a rebuilt page with no script line is matched back to its review by path", async () => {
+  const work = await aWorkspace();
+  try {
+    const first = work.add();
+    assert.equal(first.code, 0, first.stdout + first.stderr);
+    const review = reviewIdIn(work.read());
+
+    // The rebuild: the generator writes the page out fresh, and the only copy of
+    // the review's identity goes with it.
+    fs.writeFileSync(work.page, PAGE);
+    assert.equal(scriptTagsIn(work.read()).length, 0, "the rebuild really did strip the line");
+
+    const again = work.add();
+    assert.equal(again.code, 0, again.stdout + again.stderr);
+    assert.equal(reviewIdIn(work.read()), review, "the same review, matched by the recorded target path");
+    assert.match(again.stdout, /matched by path/i);
+
+    // --new still overrides it, or there would be no way to start a second one.
+    const fresh = work.add(["--new"]);
+    assert.equal(fresh.code, 0, fresh.stdout + fresh.stderr);
+    assert.notEqual(reviewIdIn(work.read()), review);
+  } finally {
+    await work.stop();
+  }
+});
+
+test("--review re-attaches a page to a review by id, and says so when there is none", async () => {
+  const work = await aWorkspace();
+  try {
+    const first = work.add();
+    assert.equal(first.code, 0, first.stdout + first.stderr);
+    const review = reviewIdIn(work.read());
+
+    // A second page, deliberately pointed at the first page's review.
+    const other = path.join(work.dir, "other.html");
+    fs.writeFileSync(other, PAGE);
+    const attached = runAdd([other, "--port", String(work.port), "--state-dir", work.stateDir, "--review", review]);
+    assert.equal(attached.code, 0, attached.stdout + attached.stderr);
+    assert.equal(reviewIdIn(fs.readFileSync(other, "utf8")), review);
+    assert.match(attached.stdout, /named with --review/i);
+
+    const missing = runAdd([other, "--port", String(work.port), "--state-dir", work.stateDir, "--review", "rnope"]);
+    assert.notEqual(missing.code, 0);
+    assert.match(missing.stderr, /there is no review rnope/i);
+  } finally {
+    await work.stop();
+  }
+});
+
+test("a static file registering only null says how to review it over a server", async () => {
+  const work = await aWorkspace();
+  try {
+    const run = work.add();
+    assert.equal(run.code, 0, run.stdout + run.stderr);
+    assert.match(run.stdout, /registered for null only/i);
+    assert.match(run.stdout, /--origin/, "and names the flag that fixes it before it bites");
+
+    // With a served origin registered, the served URL leads and file:// is the
+    // fallback, because reviewing over a local server is the ordinary way.
+    const served = work.add(["--origin", "http://127.0.0.1:8000"]);
+    assert.equal(served.code, 0, served.stdout + served.stderr);
+    assert.match(served.stdout, /likely http:\/\/127\.0\.0\.1:8000\/report\.html/);
+    assert.match(served.stdout, /Fallback: file:\/\//);
+  } finally {
+    await work.stop();
+  }
+});
+
+test("the helper serves the library unauthenticated, and refuses everything else without a token", async () => {
+  const work = await aWorkspace();
+  try {
+    const run = work.add();
+    assert.equal(run.code, 0, run.stdout + run.stderr);
+
+    // No token, no client header, no origin: a plain script-tag fetch.
+    const answer = await fetch("http://127.0.0.1:" + work.port + "/lahe-layer.js");
+    assert.equal(answer.status, 200, "the library route needs no credential");
+    assert.equal(
+      await answer.text(),
+      fs.readFileSync(path.join(REPO_ROOT, "dist", "lahe-layer.js"), "utf8"),
+      "and serves exactly the built bundle"
+    );
+
+    // The exemption is that route's alone.
+    const review = reviewIdIn(work.read());
+    const refused = await fetch(
+      "http://127.0.0.1:" + work.port + protocol.route("review.read").path + "?review=" + review
+    );
+    assert.equal(refused.ok, false, "every other route still asks for the per-review token");
+  } finally {
+    await work.stop();
+  }
+});
+
 test("--remove takes the script line out and leaves everything else in the page alone", async () => {
   const work = await aWorkspace();
   try {
@@ -466,6 +731,38 @@ test("--remove takes the script line out and leaves everything else in the page 
   } finally {
     await work.stop();
   }
+});
+
+// The fallback form put an onerror attribute on the line, and EXISTING_TAG is
+// what finds the line again. It is one regex behind place, replace and remove,
+// so all three are walked here on the real pinned form.
+test("the fallback form still places, replaces and removes as one line", () => {
+  const add = require("../../src/cli/commands/add.js");
+  const page = "<html>\n  <body>\n    <p>x</p>\n  </body>\n</html>\n";
+  const tag = protocol.scriptTag({
+    src: "http://127.0.0.1:7817/lahe-layer.js",
+    review: "rev_one",
+    token: "tok_one",
+    fallback: "lahe-layer.js"
+  });
+
+  const placed = add.placeScriptLine(page, tag);
+  assert.equal(placed.where, "just before </body>");
+  assert.equal(add.reviewAlreadyInFile(placed.html), "rev_one", "the line is findable by its review attribute");
+
+  const second = protocol.scriptTag({
+    src: "http://127.0.0.1:7817/lahe-layer.js",
+    review: "rev_two",
+    token: "tok_two",
+    fallback: "lahe-layer.js"
+  });
+  const replaced = add.replaceScriptLine(placed.html, second);
+  assert.equal(add.reviewAlreadyInFile(replaced.html), "rev_two", "and replaceable in the place it had");
+  assert.equal((replaced.html.match(/data-lahe-review=/g) || []).length, 1, "one line, not two");
+
+  const removed = add.removeScriptLine(replaced.html);
+  assert.equal(removed.review, "rev_two");
+  assert.equal(removed.html, page, "and removable back to the byte the page started at");
 });
 
 test("--remove removes the lahe tag and no other script on the page", () => {

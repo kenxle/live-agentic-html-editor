@@ -17,6 +17,8 @@
 
 "use strict";
 
+var crypto = require("node:crypto");
+
 var protocol = require("../shared/protocol.js");
 
 function notImplemented(routeName, owner) {
@@ -91,6 +93,141 @@ var HANDLERS = {
     };
   },
 
+  // The built library, served by the helper so the script line can be one
+  // absolute URL that resolves from any folder the page happens to be served
+  // out of. UNAUTHENTICATED, and that is deliberate: the bytes are the tool's
+  // own public code, identical to the file in the repo, carrying no review
+  // data and no token. The exemption is protocol.js's (AUTH.NONE), the same
+  // visible way health is exempt, not a branch around the check block.
+  //
+  // The bytes are read once at serve start (deps.library), so a request is a
+  // buffer write and a missing build is a loud failure at startup rather than a
+  // 404 a reviewer meets as a page that does nothing.
+  "library.get": function (request, deps) {
+    if (!deps.library || typeof deps.library.source !== "string") {
+      throw notImplemented("library.get", "1A");
+    }
+    return {
+      status: 200,
+      raw: { contentType: "application/javascript; charset=utf-8", text: deps.library.source }
+    };
+  },
+
+  // What `add` calls for a review this helper ALREADY HOLDS.
+  //
+  // Without it, `add` had to stop the helper to write to such a review (two
+  // writers on one events.jsonl is the thing being avoided), and stopping the
+  // helper drops every blocked `lahe wait` long-poll: an agent waiting on the
+  // review Ken was reviewing died every time he re-ran add. So the writes come
+  // here instead and the helper, the single writer, applies them itself. `add`
+  // now only writes to disk when NO helper is answering.
+  //
+  // Everything here is idempotent: registering an origin twice is a no-op, and
+  // a repeated source hint is one more page.visited event, which the projector
+  // folds onto the same page group.
+  //
+  // THE ORIGINS ARE VALIDATED, and this route is deliberately narrower than
+  // `add` writing meta.json on disk. Origins arrive in the BODY here, so a
+  // script running on a page the review already allows could read the token off
+  // the script tag and post any origin it liked, collapsing the token-plus-
+  // origin pair into the token alone. Only what `add` legitimately sends passes:
+  // the literal "null", and http/https on a loopback host
+  // (protocol.isRegisterableOrigin). `add` on disk stays wider because that path
+  // is a person typing --origin at a terminal, not a page.
+  "review.write": function (request, deps) {
+    var body = request.body || {};
+    var origins = Array.isArray(body.origins) ? body.origins : [];
+    var refused = origins.filter(function (origin) {
+      return !protocol.isRegisterableOrigin(origin);
+    });
+    if (refused.length > 0) {
+      return {
+        status: 400,
+        error: {
+          code: "PROTO_BAD_REQUEST",
+          detail:
+            "refused origin " +
+            JSON.stringify(String(refused[0])) +
+            ": this route registers only \"null\" and http/https origins on " +
+            protocol.LOOPBACK_ORIGIN_HOSTS.join(", ")
+        }
+      };
+    }
+
+    // The cap is the second half: without it a caller may add one legal origin
+    // at a time forever, and an allowlist nobody can read at a glance is not an
+    // allowlist. Counted against what the review already holds, so a repeat of
+    // an origin already registered never trips it.
+    var held = deps.reviews.get(request.review);
+    var heldOrigins = held && Array.isArray(held.origins) ? held.origins : [];
+    var wouldHold = heldOrigins.slice();
+    origins.forEach(function (origin) {
+      if (wouldHold.indexOf(origin) === -1) wouldHold.push(origin);
+    });
+    if (wouldHold.length > protocol.ORIGIN_LIMIT) {
+      return {
+        status: 400,
+        error: {
+          code: "PROTO_BAD_REQUEST",
+          detail:
+            "refused origin " +
+            JSON.stringify(String(origins[origins.length - 1])) +
+            ": review " +
+            request.review +
+            " already holds " +
+            heldOrigins.length +
+            " origins and the limit is " +
+            protocol.ORIGIN_LIMIT
+        }
+      };
+    }
+
+    var applied = [];
+    origins.forEach(function (origin) {
+      deps.reviews.registerOrigin(request.review, origin);
+      applied.push(origin);
+    });
+
+    // The target path, so a rebuilt page that lost its script line can be
+    // matched back to this review instead of minting a fourth one.
+    var recordedPaths = false;
+    if (typeof body.target_path === "string" || typeof body.source_path === "string") {
+      deps.reviews.recordPaths(request.review, {
+        target_path: typeof body.target_path === "string" ? body.target_path : null,
+        source_path: typeof body.source_path === "string" ? body.source_path : null
+      });
+      recordedPaths = true;
+    }
+
+    // The source hint rides a page.visited event, the one event in the closed
+    // vocabulary that carries page facts, so the projector puts it on that
+    // page's group header. The event is minted HERE: the helper owns the log.
+    var recordedSource = false;
+    if (typeof body.source_hint === "string" && body.source_hint) {
+      deps.log.append(request.review, [
+        protocol.newEvent({
+          event: protocol.EVENT.PAGE_VISITED,
+          event_id: "ev_" + crypto.randomBytes(8).toString("hex"),
+          review: request.review,
+          page_path: typeof body.page_path === "string" && body.page_path ? body.page_path : null,
+          page_seq: 1,
+          source_hint: body.source_hint
+        })
+      ]);
+      recordedSource = true;
+    }
+
+    return {
+      status: 200,
+      body: {
+        origins: applied,
+        recorded_source: recordedSource,
+        recorded_paths: recordedPaths,
+        seq: deps.log.currentSeq(request.review)
+      }
+    };
+  },
+
   // The projection the library reconciles against on load and on every
   // reconnect. 3A owns the projector; this is its one call site.
   //
@@ -106,10 +243,33 @@ var HANDLERS = {
     if (typeof deps.projection.startWatching === "function") {
       deps.projection.startWatching(deps, [request.review]);
     }
-    var projected = deps.projection.project(request.review, deps.log.read(request.review));
+    var events = deps.log.read(request.review);
+    var projected = deps.projection.project(request.review, events);
+    // How many items the reviewer is still writing. Drafts are NOT in the
+    // projection (R7: they never reach an agent) and that stays true; this is a
+    // count and nothing else, so `lahe status` can say "3 drafts, the reviewer
+    // is still writing" instead of leaving a stuck draft invisible to everyone.
+    var draftCount = deps.projection.itemsFrom(events).filter(function (item) {
+      return item.state === "draft";
+    }).length;
     return {
       status: 200,
-      body: Object.assign({}, projected, { seq: deps.log.currentSeq(request.review) })
+      // `page_last_seen_at` is the liveness fact `lahe status` reports: when the
+      // reviewer's PAGE last spoke to this helper (reviews.touch counts only
+      // requests from the library). It rides this response because status
+      // already reads the projection here, and because a number that only means
+      // anything while the helper is up should come from the helper.
+      body: Object.assign({}, projected, {
+        seq: deps.log.currentSeq(request.review),
+        page_last_seen_at: deps.reviews.lastSeenAt(request.review),
+        // When the helper last put a stripped script line back into this
+        // review's page. `lahe status` says it out loud, because a heal means a
+        // rebuild landed without the line and somebody may want to know their
+        // build strips it.
+        last_heal_at:
+          typeof deps.reviews.lastHealAt === "function" ? deps.reviews.lastHealAt(request.review) : null,
+        draft_count: draftCount
+      })
     };
   },
 
@@ -124,7 +284,11 @@ var HANDLERS = {
     });
     return {
       status: 200,
-      body: { events: events, seq: deps.log.currentSeq(request.review) }
+      // `target_mtime` is R36's refresh trigger for a static page: when the
+      // agent rebuilds the reviewed file, this number changes and the library
+      // reloads the page itself. Null when the review has no recorded path or
+      // the file is not there, which the library reads as "nothing to say".
+      body: { events: events, seq: deps.log.currentSeq(request.review), target_mtime: deps.reviews.targetMtime(request.review) }
     };
   },
 
@@ -160,40 +324,15 @@ var HANDLERS = {
     return { status: 200, body: { ended_at: ended.ended_at, outstanding_kept: outstanding } };
   },
 
-  // What `lahe wait` calls. It BLOCKS until something new passes the watermark,
-  // or times out. It stores nothing and consumes nothing: a killed wait, a
-  // repeated wait, and two agents waiting at once are all harmless, and two
-  // waiters on one review both wake.
-  wait: async function (request, deps) {
-    var since = numberOr(request.query.since, 0);
-    var timeoutSeconds = numberOr(request.query.timeout, protocol.WAIT.DEFAULT_TIMEOUT_SECONDS);
-    var deadline = Date.now() + timeoutSeconds * 1000;
-
-    for (;;) {
-      var fresh = deps.log.since(request.review, since).filter(protocol.countsAsNew);
-      if (fresh.length > 0) {
-        return {
-          status: 200,
-          body: { events: fresh, seq: deps.log.currentSeq(request.review) }
-        };
-      }
-      if (Date.now() >= deadline) {
-        return { status: 200, body: { events: [], seq: deps.log.currentSeq(request.review) } };
-      }
-      await sleep(Math.min(protocol.REPLY_POLL.INTERVAL_MS, Math.max(0, deadline - Date.now())));
-    }
-  }
+  // THE `wait` HANDLER IS GONE WITH ITS ROUTE. `lahe wait` is retired: it
+  // blocked, so agents stalled in the foreground on it, and it answered for one
+  // review behind a cursor. `lahe status --json --seen-file <path>` reads the
+  // same log through review.read, for every review, without blocking anything.
 };
 
 function numberOr(value, fallback) {
   var parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function sleep(ms) {
-  return new Promise(function (resolve) {
-    setTimeout(resolve, ms);
-  });
 }
 
 // Every route on the wire has a handler, checked at LOAD rather than at request

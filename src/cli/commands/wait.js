@@ -200,6 +200,86 @@ function headers(helper) {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// Surviving a helper that goes away mid-wait
+// ---------------------------------------------------------------------------
+//
+// A blocked `wait` holds one long-poll open for minutes. Anything that bounces
+// the helper (a crash, a `lahe serve` restart, an `add` that had to fall back to
+// one) drops that connection, and `wait` used to exit HELPER_UNREACHABLE at
+// once: the agent watching the review Ken was reviewing simply died, in the
+// middle of the session, and he found out by nothing happening.
+//
+// So a dropped connection is retried rather than reported. THE SAME `--since`
+// GOES BACK OUT, which is what makes this safe: `wait` consumes nothing and the
+// cursor is a seq, so re-asking from the same watermark skips nothing and
+// double-counts nothing.
+//
+// THE GRACE CLOCK STARTS AT THE FIRST FAILURE, not at the start of the wait. A
+// long poll can sit open for minutes, so measuring the window from the start
+// gave a helper bounce five minutes in zero retries: the whole grace was spent
+// before anything went wrong, which is the exact case this exists for. It is
+// still capped by whatever is left of --timeout, because outliving the caller's
+// own deadline would be a different bug, and a reconnect resets it so a second
+// bounce later in the same wait gets its own window.
+
+var RECONNECT_GRACE_MS = 30 * 1000;
+var RECONNECT_BACKOFF_MS = [250, 500, 1000, 2000];
+
+function delay(ms) {
+  // harness-allow-timer: the retry interval of a reconnect, not a wait-and-hope.
+  return new Promise(function (resolve) {
+    setTimeout(resolve, ms);
+  });
+}
+
+/**
+ * The blocking request, retried across a helper bounce.
+ *
+ * @returns {Promise<object>} the fetch response
+ * @throws the last error, once the grace window is spent
+ */
+async function blockingRequest(fetchImpl, helper, args, err) {
+  var startedAt = Date.now();
+  var timeoutDeadline = startedAt + Math.max(0, args.timeout) * 1000;
+  var attempt = 0;
+  var announced = false;
+  // When the connection actually dropped, set on the first failure. Null means
+  // nothing has dropped yet. A request that gets through returns, so the next
+  // long poll starts this over with a fresh window.
+  var droppedAt = null;
+  for (;;) {
+    try {
+      var response = await fetchImpl(url(helper.origin, args), { method: "GET", headers: headers(helper) });
+      // One line on stderr when a reconnect actually happened, so the behavior
+      // is visible rather than a silent gap in the agent's log.
+      if (announced) err("lahe wait: reconnected to the helper at " + helper.origin + "; still waiting from --since " + args.since + "\n");
+      return response;
+    } catch (error) {
+      var now = Date.now();
+      if (droppedAt === null) droppedAt = now;
+      var graceLeft = droppedAt + RECONNECT_GRACE_MS - now;
+      var timeoutLeft = timeoutDeadline - now;
+      if (graceLeft <= 0 || timeoutLeft <= 0) throw error;
+      if (!announced) {
+        announced = true;
+        err(
+          "lahe wait: lost the connection to the helper at " +
+            helper.origin +
+            " (" +
+            (error && error.message) +
+            "). Retrying from the same --since for up to " +
+            Math.ceil(Math.min(graceLeft, timeoutLeft) / 1000) +
+            "s.\n"
+        );
+      }
+      var backoff = RECONNECT_BACKOFF_MS[Math.min(attempt, RECONNECT_BACKOFF_MS.length - 1)];
+      attempt += 1;
+      await delay(Math.max(0, Math.min(backoff, graceLeft, timeoutLeft)));
+    }
+  }
+}
+
 /**
  * The items the new events point at, as they appear in review.json.
  *
@@ -287,7 +367,7 @@ async function run(argv, options) {
 
   var response;
   try {
-    response = await fetchImpl(url(helper.origin, args), { method: "GET", headers: headers(helper) });
+    response = await blockingRequest(fetchImpl, helper, args, err);
   } catch (error) {
     err("lahe wait: the helper at " + helper.origin + " did not answer: " + (error && error.message) + "\n");
     return EXIT.HELPER_UNREACHABLE;
@@ -364,6 +444,9 @@ async function run(argv, options) {
 module.exports = {
   USAGE: USAGE,
   EXIT: EXIT,
+  RECONNECT_GRACE_MS: RECONNECT_GRACE_MS,
+  RECONNECT_BACKOFF_MS: RECONNECT_BACKOFF_MS,
+  blockingRequest: blockingRequest,
   parseArgs: parseArgs,
   resolveHelper: resolveHelper,
   itemsFor: itemsFor,

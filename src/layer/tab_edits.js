@@ -176,9 +176,11 @@
 
   // The three kinds this tab holds. Asked in one place so a fourth kind added
   // later cannot half-appear.
+  // One definition of "the reviewer made this with their hands", in record.js,
+  // because the Done tab has to agree with this list to know when its own card
+  // is already showing the change. Kept on the api because callers ask this tab.
   function isHandEdit(item) {
-    var kind = item[record.FIELD.KIND];
-    return kind === record.KIND.EDIT || kind === record.KIND.DELETE || kind === record.KIND.FORMAT_ONLY;
+    return record.isHandEdit(item);
   }
 
   // ---------------------------------------------------------------------------
@@ -427,16 +429,19 @@
       row.setAttribute(ROW_ATTR, item[record.FIELD.ID]);
       row.setAttribute("data-kind", item[record.FIELD.KIND]);
 
+      // The one-line summary of the change, ABOVE the before-and-after rather
+      // than under it. It is a header for the diff, not a second telling of it:
+      // read the sentence, and read the exact wording below when the sentence
+      // is not enough. It used to sit at the bottom, where it read as the same
+      // change stated a second time after the reviewer had just read it.
+      row.appendChild(el("p", ROW_CLASS + "__said", ""));
+
       var pair = el("div", ROW_CLASS + "__pair");
       pair.appendChild(el("p", ROW_CLASS + "__before", ""));
       pair.appendChild(el("p", ROW_CLASS + "__after", ""));
       row.appendChild(pair);
 
       row.appendChild(el("p", ROW_CLASS + "__structure", ""));
-      // The reviewer's own words about the change, when they wrote any. It is
-      // the only intent field a hand edit carries, and a style guide is built
-      // out of exactly this.
-      row.appendChild(el("p", ROW_CLASS + "__said", ""));
 
       // What an undo said when it could not do it. Built empty, and drawn only
       // when there is something to say (`:empty` hides it).
@@ -490,6 +495,14 @@
     function undoRow(id) {
       var surface = editingSurface();
       var row = rows[id];
+      // The button gives up focus BEFORE the record goes. Undo removes the whole
+      // card, and the rail refuses to remove a card that holds focus (its own
+      // law, so a card the reviewer is typing in never vanishes under them). A
+      // button that was just pressed is not someone typing, and holding focus
+      // there left an empty card behind on every browser that focuses a button
+      // on click.
+      var pressed = row ? row.querySelector("[data-lahe-act='undo']") : null;
+      if (pressed && typeof pressed.blur === "function") pressed.blur();
       if (!surface) {
         sayFailed(row, UNDO_MISSING_TITLE);
         lastUndo = { id: id, reverted: false, kind: null, reason: UNDO_MISSING_TITLE };

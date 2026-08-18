@@ -476,8 +476,18 @@
       };
     }
 
+    // The node each item was CREATED on, while this session holds it. Emitted
+    // as the listener's third argument so boot can hand it to replay as the
+    // item's first binding: an element-picked comment (a chart, an image) has
+    // no unique text for the anchor to re-find, and without this seed the
+    // settle recheck marked it lost while it sat on screen (AC1's Copy/Export
+    // divergence, 2026-08-18). comments loads BEFORE replay in the manifest,
+    // so the bridge lives in index.js rather than here.
+    var createdOn = Object.create(null);
+
     function emit(item, event) {
-      for (var i = 0; i < listenersState.length; i += 1) listenersState[i](item, event || "changed");
+      var el = createdOn[item && item[record.FIELD.ID]] || null;
+      for (var i = 0; i < listenersState.length; i += 1) listenersState[i](item, event || "changed", el);
     }
 
     // The one write path. Synchronous to storage before anything else happens.
@@ -563,6 +573,14 @@
         region: src.region || record.emptyRegion(),
         context: context
       });
+
+      if (src.element && src.element.nodeType === 1) {
+        createdOn[item[record.FIELD.ID]] = src.element;
+      } else if (src.range) {
+        var creationNode = src.range.commonAncestorContainer;
+        if (creationNode && creationNode.nodeType !== 1) creationNode = creationNode.parentElement;
+        if (creationNode) createdOn[item[record.FIELD.ID]] = creationNode;
+      }
 
       // A draft exists the moment the box does. An empty box the reviewer
       // abandons is a draft they can come back to, which costs nothing; a box
@@ -1682,6 +1700,24 @@
       })[0] || null;
     }
 
+    /**
+     * The boxes that make a page reload unsafe: focused, or holding typed
+     * text. NOT every open box: the rail's page-note box is on screen the
+     * whole session, so counting mere openness held R36's auto-reload off
+     * forever on every page (found live 2026-08-18: reloadChecks 90,
+     * reloadsFired 0, openBoxes 1, with nobody typing anything). An empty,
+     * unfocused box is furniture, not work in progress.
+     */
+    function busyBoxes() {
+      return openBoxes().filter(function (handle) {
+        if (!handle.node || !handle.input) return false;
+        if (isFocused(handle.input)) return true;
+        var text =
+          typeof handle.input.value === "string" ? handle.input.value : handle.input.textContent || "";
+        return text.trim().length > 0;
+      });
+    }
+
     function isFocused(el) {
       var rootNode = el.getRootNode ? el.getRootNode() : doc;
       return rootNode && rootNode.activeElement === el;
@@ -1849,6 +1885,7 @@
       outstanding: outstanding,
       boxFor: boxFor,
       openBoxes: openBoxes,
+      busyBoxes: busyBoxes,
       closeAll: closeAll,
       focusedBox: focusedBox,
       commentOnSelection: commentOnSelection,
