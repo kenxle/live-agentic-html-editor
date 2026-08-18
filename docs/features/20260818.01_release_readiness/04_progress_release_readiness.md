@@ -56,6 +56,9 @@
 - Complete: explicit `lahe session takeover` transfers a whole workstream to a
   replacement agent, fences older monitors with `handoff_rev`, and prints an
   unfiltered catch-up command plus a fresh-ledger monitor command.
+- Observed acceptance case: Antigravity exhausted its Gemini allowance after
+  seeing an item, the app was fully closed, and Codex took over the session.
+  Catch-up recovered the unfinished item while leaving completed items alone.
 - Complete: the public static front door now owns an event-driven, read-only
   Node server per session and directory. It chooses and registers the origin,
   prints the exact URL, reuses the process on re-entry, stops it on session

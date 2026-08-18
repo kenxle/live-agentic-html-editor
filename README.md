@@ -280,6 +280,13 @@ once, and after that a plain sentence works:
 | `lahe session takeover <id>` | Explicitly hand an existing workstream to a new agent, fence its older monitors, and print catch-up commands |
 | `lahe serve [--port N]` | Run the helper by hand (`add` starts it for you, so this is rarely needed) |
 
+Takeover is designed for token exhaustion, crashes, and switching agent clients
+mid-review. Its catch-up command intentionally ignores the old agent's
+seen-file, so unfinished items reappear even if that agent had already read
+them. Completed items do not reappear, every review in the session moves
+together, and older monitor processes are fenced. Use it only after the human
+explicitly requests the handoff.
+
 Launch `lahe monitor --session <id> --seen-file <path>` as a background terminal
 task. It polls locally every 15 seconds, stays silent while idle, and exits when
 new work arrives. Task completion wakes the agent. After handling the printed

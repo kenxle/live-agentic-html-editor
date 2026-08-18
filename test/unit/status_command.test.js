@@ -259,6 +259,60 @@ test("--seen-file refuses machine-global monitoring, and quiet emits no idle ter
   assert.equal(idle.stdout, "");
 });
 
+test("takeover recovers seen-but-unfinished work without repeating completed work", async () => {
+  const dir = tempState();
+  const sessions = agentSessionsModule.createStore({ dir });
+  sessions.create({ id: "s_exhausted" });
+  const log = logModule.createEventLog({ dir });
+  const reviews = reviewsModule.createReviews({ dir, log });
+  reviews.create({ id: "r_unfinished", agent_session_id: "s_exhausted" });
+  reviews.create({ id: "r_completed", agent_session_id: "s_exhausted" });
+
+  const unfinished = anItem("work seen before the token limit", record.STATE.READY);
+  const completed = anItem("work the first agent finished", record.STATE.READY);
+  log.append("r_unfinished", [itemEvent("r_unfinished", unfinished, protocol.EVENT.ITEM_READY)]);
+  log.append("r_completed", [itemEvent("r_completed", completed, protocol.EVENT.ITEM_READY)]);
+
+  const oldSeen = path.join(dir, "old-agent-seen");
+  const oldAgent = await runStatus([
+    "--session", "s_exhausted", "--json", "--seen-file", oldSeen
+  ], dir);
+  assert.match(oldAgent.stdout, /work seen before the token limit/);
+  assert.match(oldAgent.stdout, /work the first agent finished/);
+
+  log.append("r_completed", [
+    protocol.newEvent({
+      event: protocol.EVENT.REPLY_FOLDED,
+      event_id: "ev_completed_before_handoff",
+      review: "r_completed",
+      item: completed.id,
+      rev: completed.rev,
+      payload: {
+        accepted: true,
+        state: record.STATE.HANDLED,
+        reply: { status: "handled", agent: "gemini", reason: null, text: null, files: [] }
+      }
+    })
+  ]);
+  sessions.takeover("s_exhausted");
+
+  const catchUp = await runStatus(["--session", "s_exhausted", "--json"], dir);
+  assert.match(catchUp.stdout, /work seen before the token limit/);
+  assert.equal(catchUp.stdout.includes("work the first agent finished"), false);
+
+  const oldLedger = await runStatus([
+    "--session", "s_exhausted", "--json", "--seen-file", oldSeen, "--quiet"
+  ], dir);
+  assert.equal(oldLedger.stdout, "", "the old ledger would incorrectly hide unfinished work");
+
+  const freshSeen = path.join(dir, "replacement-agent-seen");
+  const replacement = await runStatus([
+    "--session", "s_exhausted", "--json", "--seen-file", freshSeen
+  ], dir);
+  assert.match(replacement.stdout, /work seen before the token limit/);
+  assert.equal(replacement.stdout.includes("work the first agent finished"), false);
+});
+
 test("two agent sessions on one state root receive only their own reviews", async () => {
   const dir = tempState();
   const sessions = agentSessionsModule.createStore({ dir });

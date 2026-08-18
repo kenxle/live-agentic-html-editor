@@ -74,6 +74,19 @@ runs un-seen-filtered session status to catch every unanswered item, then starts
 a monitor with a fresh seen-file. This command requires an explicit human
 handoff. Silent reuse or reassignment remains forbidden.
 
+#### Handoff use cases and required outcomes
+
+| Case | Required outcome |
+| --- | --- |
+| Prior agent exhausts its model allowance after status marked an item seen but before replying | Unfiltered catch-up shows the unanswered item to the replacement agent |
+| Prior client crashes or is fully closed without running `session close` | Explicit takeover succeeds from durable state without cooperation from the old client |
+| Prior agent handled some items before stopping | Catch-up omits handled items and retains them as history |
+| One agent session owns several documents and reviews | Takeover transfers the session as one workstream; review ownership does not change |
+| An old exit-on-work monitor remains alive | Changed `handoff_rev` makes it discard buffered output and exit |
+| Feedback lands during takeover or catch-up | Unfiltered catch-up plus a fresh seen-file exposes it exactly once |
+| A different agent discovers the session without an explicit human handoff | Existing foreign-session refusal remains in force |
+| The session was already closed | Takeover reopens its helper and owned static servers while preserving history |
+
 ### Process and energy lifecycle
 
 The shared helper is leased by open agent sessions. It is not a permanent

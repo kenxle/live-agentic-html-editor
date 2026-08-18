@@ -664,6 +664,13 @@ command plus a monitor command that requires a fresh seen-file. The new agent
 therefore sees unanswered work the prior agent may already have seen without
 allowing silent cross-session adoption.
 
+The edge-case contract is deliberate: token exhaustion or a crashed app cannot
+strand seen-but-unanswered work; completed items do not become work again;
+multi-review sessions transfer as a unit; closed sessions reopen; surviving old
+monitors are fenced; feedback racing the handoff is found by catch-up or the new
+ledger; and no takeover occurs without an explicit human request. These are
+independent invariants, not incidental consequences of the current CLI output.
+
 ### `lahe wait` is retired
 
 It blocked, so agents ran it in the foreground and stopped working while the reviewer typed, and it

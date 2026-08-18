@@ -35,6 +35,13 @@ over its existing workstream, run `lahe session takeover <id>` instead. Run the
 printed catch-up command before monitoring, and use the printed fresh seen-file
 guidance. Never infer or silently perform a takeover.
 
+The catch-up step is mandatory after token exhaustion, a crash, or an app
+closure: the prior seen-file may contain work the old agent read but never
+finished. Unfiltered catch-up resurfaces those unanswered items while omitting
+handled ones. Take over the whole multi-review session, never one review; a
+handoff fences surviving old monitors, and a fresh seen-file prevents the new
+agent from inheriting the old agent's blind spots.
+
 ## Work
 
 Launch the exact `lahe monitor` command printed by `lahe review` as a background

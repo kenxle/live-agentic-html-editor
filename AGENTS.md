@@ -229,6 +229,26 @@ seen-file. Do not reuse the prior agent's ledger. Takeover is allowed only when
 the human explicitly requests the handoff; never infer it from an apparently
 idle app, process, or session.
 
+These handoff cases are product invariants:
+
+- **The prior agent runs out of tokens after seeing work.** Its seen-file may
+  contain items it never implemented. Catch-up has no seen-file, so every still
+  unanswered item reaches the replacement agent.
+- **The prior app is closed or crashes without closing LAHE.** The durable
+  session and reviews remain. Explicit takeover reopens infrastructure if
+  needed and does not require the old app to cooperate.
+- **The prior agent completed some items.** Catch-up lists only unanswered
+  `ready` items, so handled work stays historical and is not performed twice.
+- **The session contains several reviews or documents.** The whole session
+  transfers together. Never move one review out of the workstream merely to
+  change agent clients.
+- **An old monitor process survived the app.** The handoff revision makes it
+  discard captured output and exit before it can wake the former agent.
+- **Feedback arrives during the handoff.** Catch-up reads current durable state;
+  the fresh monitor then uses its own ledger, so the boundary skips nothing.
+- **No human requested a handoff.** Foreign-session refusal remains correct.
+  An idle-looking process is not permission to take over.
+
 ## Step 3: read the review and act on it
 
 `review` prints the agent session, review id, and review folder, on labelled lines.
