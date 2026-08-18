@@ -111,20 +111,28 @@ test("the contract field is in the real projection byte for byte, and names no a
   // no longer exists. `lahe status` is the one keep-up command named; `lahe
   // wait` is retired and must not survive here either.
   const wholeFile = fs.readFileSync(written, "utf8");
-  assert.ok(/lahe status --json --seen-file/.test(wholeFile), "the file names the one keep-up command an agent may run");
+  assert.ok(/lahe status --session <agent-session-id> --json --seen-file/.test(wholeFile), "the file names the scoped keep-up command an agent may run");
   assert.equal(/lahe wait/.test(wholeFile), false, "the retired blocking command is named nowhere");
   assert.equal(/lahe ack|lahe next|lahe send/.test(wholeFile), false, "review.json names no acknowledge command");
-  // The only place the word appears at all is the sentence saying the keep-up
-  // loop acknowledges NOTHING, which is the opposite of naming a command.
+  // The retired acknowledgement vocabulary is gone entirely.
   const acknowledgeMentions = onDisk.contract.filter((line) => /acknowledg/i.test(line));
-  assert.deepEqual(acknowledgeMentions, [
-    "To keep up, re-read this file between work items, or run this on a timer: lahe status --json --seen-file <path>. It prints only the items you have not been shown before, so any item line is new work. It blocks on nothing, covers every review, consumes nothing and acknowledges nothing."
-  ]);
+  assert.deepEqual(acknowledgeMentions, []);
   assert.equal(
     onDisk.contract[onDisk.contract.length - 1],
     "The only way to say you handled an item is to append a reply line."
   );
   assert.equal(onDisk.schema, reviewFormat.SCHEMA);
+});
+
+test("review.json carries the immutable agent-session owner from the recovery event", () => {
+  const created = protocol.newEvent({
+    event: protocol.EVENT.REVIEW_CREATED,
+    event_id: eventId(),
+    review: REVIEW,
+    payload: { token: "token", agent_session_id: "s_owner" }
+  });
+  const projected = projection.project(REVIEW, [created]);
+  assert.equal(projected.review.agent_session_id, "s_owner");
 });
 
 // --- ranked test 28 ----------------------------------------------------------

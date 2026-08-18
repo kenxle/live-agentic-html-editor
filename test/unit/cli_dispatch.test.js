@@ -1,4 +1,4 @@
-// The public command dispatcher: serve, add, and status only.
+// The public command dispatcher.
 
 "use strict";
 
@@ -30,10 +30,12 @@ async function captureMain(args) {
   }
 }
 
-test("the dispatcher advertises exactly serve, add, and status", async () => {
+test("the dispatcher advertises review and session lifecycle", async () => {
   const help = await captureMain(["--help"]);
   assert.equal(help.code, protocol.CLI_EXIT.OK);
   assert.match(help.stdout, /\bserve\b/);
+  assert.match(help.stdout, /\breview\b/);
+  assert.match(help.stdout, /\bsession\b/);
   assert.match(help.stdout, /\badd\b/);
   assert.match(help.stdout, /\bstatus\b/);
   assert.equal(/\bwait\b/.test(help.stdout), false);

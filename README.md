@@ -82,10 +82,10 @@ from the clone with no install at all (below).
 Then, for any page you want to review:
 
 ```sh
-lahe add path/to/page.html
+lahe review path/to/page.html
 ```
 
-`add` does the whole install: it writes the one script line into the page, drops
+`review` does the whole setup: it creates the agent session, writes the one script line into the page, drops
 a `lahe-layer.js` copy beside the page as the offline fallback (refreshed every
 run), mints that review's token, registers the page's origin, and **starts the
 helper if it is not already running**. It prints what it did and what to open.
@@ -96,7 +96,7 @@ the page's own folder and register that origin:
 ```sh
 cd path/to            # the folder holding page.html
 python3 -m http.server 8000 --bind 127.0.0.1 &
-lahe add page.html --origin http://127.0.0.1:8000
+lahe review page.html --origin http://127.0.0.1:8000
 # then open http://127.0.0.1:8000/page.html
 ```
 
@@ -109,7 +109,7 @@ you so with the command that fixes it.
 For a dev server, point it at the project instead:
 
 ```sh
-lahe add path/to/project --origin http://localhost:3000
+lahe review path/to/project --origin http://localhost:3000
 ```
 
 Nothing in your application is edited. `add` prints the one line with a reminder
@@ -123,7 +123,7 @@ development-only conditional before pasting it into the layout.
 out: every command works the same way from the clone, with nothing on your PATH:
 
 ```sh
-node bin/lahe.js add path/to/page.html
+node bin/lahe.js review path/to/page.html
 node bin/lahe.js serve
 ```
 
@@ -154,8 +154,10 @@ when the helper was down. Nothing loads it once the line is gone, so delete it
 whenever you like. (Older reviews may also have left one in an `assets/` or
 `public/` directory.)
 
-**Stop the helper.** Ctrl-C in the window running `lahe serve`, or, when `add`
-started it for you, kill the pid in `service.json` in the state directory.
+**Close the agent session.** Run the exact `lahe session close <id>` command
+printed by `lahe review`. It stops the shared helper when no other agent session
+is open, while retaining every review and reply. `session reopen` starts it
+again.
 
 **Forget the reviews.** Delete the state directory (`$LAHE_STATE_DIR`, or
 `$XDG_STATE_HOME/lahe`, or `~/.local/state/lahe`). It holds every review's
@@ -196,21 +198,23 @@ once, and after that a plain sentence works:
 
 | Command | What it does |
 | --- | --- |
-| `lahe add path/to/page.html` | Start a review on a static file: writes the one script line, mints the review and its token, starts the helper if it is not running, prints what to open |
+| `lahe review path/to/page.html` | Start a review and isolated agent session: writes the script line, mints the review and token, starts or reuses the shared helper, and prints the monitor and close commands |
+| `lahe review another.html --session <id>` | Add a later document to the same agent workstream without receiving another agent's comments |
 | `lahe add path/to/project --origin http://localhost:3000` | Dev-server variant: edits nothing, prints a commented snippet that you must wrap in your framework's development-only conditional |
 | `lahe add ... --new` | Mint a fresh review even though the page already carries one |
 | `lahe add path/to/page.html --remove` | Take the script line back out of the page, and change nothing else |
 | `lahe add ... --source path/to/template` | Record where the source lives, so an agent edits the template rather than build output |
 | `lahe add ... --review <id>` | Re-attach this page to a review that already exists, by id |
-| `lahe status [--review <id>] [--json]` | What is open right now: per review, the pages, the counts, the items waiting on you, and whether the reviewer's page is still connected. Blocks on nothing. `--json` prints the contract and field classes on line one, before any page text |
+| `lahe status [--session <id>] [--review <id>] [--json]` | What is open right now. Agent monitors must name their session; plain global status is only a human diagnostic |
+| `lahe session close <id>` | Close an agent workstream. Closing the last open session stops the shared helper and keeps all review history |
+| `lahe session reopen <id>` | Reopen the workstream and start the shared helper again |
 | `lahe serve [--port N]` | Run the helper by hand (`add` starts it for you, so this is rarely needed) |
 
-`lahe status --json --seen-file <path>` is the keep-up loop: run it on a timer,
-and any item line in the output is new work. The seen file records what was
-printed, so nothing is shown twice and a restarted loop misses nothing. There is
-no blocking watch command. Older historical plans may mention `lahe wait`; it
-was retired and removed. Use only the status loop above, which covers every
-review at once and needs no cursor.
+`lahe status --session <id> --json --seen-file <path> --quiet` is the keep-up
+loop: run it on a moderate timer. It prints nothing while idle, and any item line
+when it does print is new work owned by that agent session. The seen key includes
+the session, review, item, and revision. Do not monitor globally or wrap status
+in a parser pipeline. There is no blocking watch command.
 
 **If the page is build output**, an agent should rebuild before it reports an
 item handled: `handled` is supposed to mean your page shows the change. It does

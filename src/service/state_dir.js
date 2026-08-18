@@ -52,6 +52,7 @@ var FILES = {
 };
 
 var REVIEWS_DIR = "reviews";
+var AGENT_SESSIONS_DIR = "agent-sessions";
 
 /**
  * The nearest git checkout at or above a directory, or null.
@@ -197,6 +198,25 @@ function reviewsRoot(dir) {
   return path.join(dir, REVIEWS_DIR);
 }
 
+function agentSessionsRoot(dir) {
+  return path.join(dir, AGENT_SESSIONS_DIR);
+}
+
+function agentSessionDir(dir, sessionId) {
+  assertSafeReviewId(sessionId);
+  return resolveWithin(dir, [AGENT_SESSIONS_DIR, sessionId]);
+}
+
+function agentSessionPath(dir, sessionId) {
+  return resolveWithin(dir, [AGENT_SESSIONS_DIR, assertSafeReviewId(sessionId), "session.json"]);
+}
+
+function ensureAgentSessionDir(dir, sessionId) {
+  ensureDir(dir);
+  ensureDir(agentSessionsRoot(dir));
+  return ensureDir(agentSessionDir(dir, sessionId));
+}
+
 function reviewDir(dir, reviewId) {
   assertSafeReviewId(reviewId);
   return resolveWithin(dir, [REVIEWS_DIR, reviewId]);
@@ -266,6 +286,7 @@ module.exports = {
   RETENTION_DAYS: RETENTION_DAYS,
   FILES: FILES,
   REVIEWS_DIR: REVIEWS_DIR,
+  AGENT_SESSIONS_DIR: AGENT_SESSIONS_DIR,
   stateDir: stateDir,
   checkoutAbove: checkoutAbove,
   ensureDir: ensureDir,
@@ -276,6 +297,10 @@ module.exports = {
   readyPath: readyPath,
   helperLogPath: helperLogPath,
   reviewsRoot: reviewsRoot,
+  agentSessionsRoot: agentSessionsRoot,
+  agentSessionDir: agentSessionDir,
+  agentSessionPath: agentSessionPath,
+  ensureAgentSessionDir: ensureAgentSessionDir,
   reviewDir: reviewDir,
   eventsPath: eventsPath,
   reviewJsonPath: reviewJsonPath,

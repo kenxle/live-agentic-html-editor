@@ -46,19 +46,22 @@ var record = require("../../shared/record.js");
 var stateDirModule = require("../../service/state_dir.js");
 var logModule = require("../../service/log.js");
 var projectionModule = require("../../service/projection.js");
+var agentSessionsModule = require("../../service/agent_sessions.js");
 var reviewFormat = require("../../shared/review_format.js");
 
 // Shared CLI codes. OK means status completed, whether or not it found an item.
 var EXIT = protocol.CLI_EXIT;
 
 var USAGE = [
-  "usage: lahe status [--review <id>] [--json] [--seen-file <path>] [--state-dir <path>]",
+  "usage: lahe status [--session <id>] [--review <id>] [--json] [--seen-file <path>] [--quiet] [--state-dir <path>]",
   "",
-  "  --review <id>        just this review. Default: every review the helper holds",
+  "  --review <id>        just this review. Default: all reviews in the selected scope",
+  "  --session <id>       only reviews owned by this agent session",
   "  --json               one JSON line per unanswered ready item, then one summary line",
-  "  --seen-file <path>   with --json: print only items (id, rev) this file has not recorded,",
+  "  --seen-file <path>   with --json: print only items (session, review, id, rev) not recorded,",
   "                       then record them in it. A watcher becomes: run this, and any item",
   "                       line in the output is new work. No parsing, no hand-rolled dedupe.",
+  "  --quiet              with --seen-file: print nothing when there is no new work.",
   "  --state-dir <path>   where the helper keeps its data, the same flag every command takes.",
   "                       Default $LAHE_STATE_DIR, then $XDG_STATE_HOME/lahe, then ~/.local/state/lahe.",
   "",
@@ -69,7 +72,7 @@ var USAGE = [
 ].join("\n");
 
 function parseArgs(argv) {
-  var out = { review: null, json: false, seenFile: null, stateDir: null, help: false, error: null };
+  var out = { session: null, review: null, json: false, seenFile: null, quiet: false, stateDir: null, help: false, error: null };
   var list = argv || [];
 
   for (var i = 0; i < list.length; i += 1) {
@@ -78,6 +81,14 @@ function parseArgs(argv) {
       out.help = true;
     } else if (arg === "--json") {
       out.json = true;
+    } else if (arg === "--quiet") {
+      out.quiet = true;
+    } else if (arg === "--session") {
+      if (list[i + 1] === undefined) {
+        out.error = "--session needs a value";
+        break;
+      }
+      out.session = list[(i += 1)];
     } else if (arg === "--review") {
       if (list[i + 1] === undefined) {
         out.error = "--review needs a value";
@@ -106,6 +117,9 @@ function parseArgs(argv) {
   if (out.review !== null && !protocol.isSafeId(out.review)) {
     out.error = "--review must be a safe id: " + String(protocol.SAFE_ID);
   }
+  if (out.session !== null && !protocol.isSafeId(out.session)) {
+    out.error = "--session must be a safe id: " + String(protocol.SAFE_ID);
+  }
   if (out.seenFile !== null && !out.json) {
     // The seen file records what was PRINTED, and only the item lines of
     // --json are a stable thing to record. Requiring the pairing keeps the
@@ -113,6 +127,10 @@ function parseArgs(argv) {
     // somebody's watcher.
     out.error = "--seen-file needs --json";
   }
+  if (!out.error && out.seenFile !== null && out.session === null) {
+    out.error = "--seen-file needs --session so one agent cannot receive another session's reviews";
+  }
+  if (out.quiet && out.seenFile === null) out.error = "--quiet needs --seen-file";
   return out;
 }
 
@@ -279,6 +297,15 @@ function reviewsOnDisk(dir) {
     .sort();
 }
 
+function ownerOfReview(dir, reviewId) {
+  try {
+    var parsed = JSON.parse(fs.readFileSync(stateDirModule.metaPath(dir, reviewId), "utf8"));
+    return typeof parsed.agent_session_id === "string" ? parsed.agent_session_id : agentSessionsModule.LEGACY_ID;
+  } catch (err) {
+    return agentSessionsModule.LEGACY_ID;
+  }
+}
+
 async function readThroughHelper(fetchImpl, origin, reviewId, credentials) {
   var target = origin + protocol.route("review.read").path + "?review=" + encodeURIComponent(reviewId);
   var headers = {};
@@ -362,6 +389,19 @@ async function run(argv, options) {
   }
   var helperOrigin = ready && ready.port ? "http://" + protocol.DEFAULT_HOST + ":" + ready.port : null;
 
+  if (args.session) {
+    try {
+      var routed = agentSessionsModule.createStore({ dir: dir }).read(args.session);
+      if (!routed) throw new Error("unknown agent session " + JSON.stringify(args.session));
+      if (args.seenFile && routed.closed_at) {
+        throw new Error("agent session " + args.session + " is closed; monitoring has ended");
+      }
+    } catch (error) {
+      err("lahe status: " + error.message + "\n");
+      return EXIT.BAD_USAGE;
+    }
+  }
+
   // Which reviews. The helper's own list first, because that is what is live,
   // then anything else with state on disk so a review the helper has not been
   // asked about yet is still visible.
@@ -375,15 +415,23 @@ async function run(argv, options) {
     });
     ids.sort();
   }
+  if (args.session) {
+    if (args.review && ownerOfReview(dir, args.review) !== args.session) {
+      err("lahe status: review " + args.review + " is not owned by agent session " + args.session + "\n");
+      return EXIT.UNKNOWN_REVIEW;
+    }
+    ids = ids.filter(function (id) { return ownerOfReview(dir, id) === args.session; });
+  }
 
   if (ids.length === 0) {
+    if (args.quiet) return EXIT.OK;
     if (args.json) {
       // The fencing line goes out even with nothing to list, so a consumer can
       // read line one the same way every time.
       out(JSON.stringify(contractLine()) + "\n");
       out(JSON.stringify({ reviews: 0, unanswered_ready: 0, state_dir: dir }) + "\n");
     } else {
-      out("lahe status: no reviews in " + stateDirModule.reviewsRoot(dir) + ". Start one with `lahe add <page>`.\n");
+      out("lahe status: no reviews in " + stateDirModule.reviewsRoot(dir) + ". Start one with `lahe review <page>`.\n");
     }
     return EXIT.OK;
   }
@@ -458,7 +506,7 @@ async function run(argv, options) {
 
     if (args.json) {
       open.forEach(function (item) {
-        jsonItems.push(Object.assign({ review: id, liveness: liveness }, item));
+        jsonItems.push(Object.assign({ review: id, agent_session_id: ownerOfReview(dir, id), liveness: liveness }, item));
       });
     }
 
@@ -542,12 +590,14 @@ async function run(argv, options) {
         return EXIT.BAD_USAGE;
       }
       toPrint = jsonItems.filter(function (item) {
-        var key = String(item.id) + " " + String(item.rev);
+        var key = String(args.session) + " " + String(item.review) + " " + String(item.id) + " " + String(item.rev);
         if (seen[key]) return false;
         newlySeen.push(key);
         return true;
       });
     }
+
+    if (args.quiet && toPrint.length === 0) return EXIT.OK;
 
     // Line one is the contract and the field classes, before any page-derived
     // text reaches the reader.
@@ -561,6 +611,7 @@ async function run(argv, options) {
         unanswered_ready: totalUnanswered,
         new_since_seen_file: args.seenFile ? toPrint.length : undefined,
         helper: helperOrigin,
+        agent_session_id: args.session,
         state_dir: dir
       }) + "\n"
     );

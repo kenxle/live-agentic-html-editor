@@ -189,7 +189,7 @@ test.describe("the helper cannot be driven from outside", () => {
       // it back has read the review's feedback; a reader that does not has read
       // nothing. It is the one string present in every review.json and in no
       // opaque body.
-      const MARKER = "lahe.review/3";
+      const MARKER = "lahe.review/4";
 
       // THE POSITIVE CONTROL. From the ALLOWED origin with a valid token, read
       // the projection back and confirm the feedback really is readable to a

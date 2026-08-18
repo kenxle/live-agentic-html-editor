@@ -841,8 +841,8 @@ test("AGENTS.md says where the state directory is, so the folder can be found wi
   assert.match(agents, /XDG_STATE_HOME/, "the second");
   assert.match(agents, /~\/\.local\/state\/lahe/, "and the default");
   assert.match(agents, /reviews\/<review-id>/, "and how a review folder is named under it");
-  assert.match(agents, /--state-dir/, "the isolation flags an agent needs on a shared machine");
-  assert.match(agents, /--port/);
+  assert.match(agents, /--session <session-id>/, "the routing identity an agent needs on a shared machine");
+  assert.match(agents, /Never monitor globally/);
 });
 
 test("add refuses what it cannot do, with a reason and a non-zero exit", async () => {
@@ -886,12 +886,12 @@ test("the README states the tested platform and browser requirements", () => {
   assert.match(readme, /MIT/, "the license");
   assert.match(readme, /npm link/, "the documented install");
   assert.match(readme, /node bin\/lahe\.js/, "and the no-install fallback");
-  assert.match(readme, /lahe add/, "and the one command that installs the library into a page");
+  assert.match(readme, /lahe review/, "and the public command that installs the library into a page");
   assert.match(readme, /git clone https:\/\/github\.com\/kenxle\/live-agentic-html-editor/);
-  assert.match(readme, /lahe add page\.html --origin http:\/\/127\.0\.0\.1:8000/);
-  assert.match(agents, /lahe add page\.html --origin http:\/\/127\.0\.0\.1:8000/);
-  assert.doesNotMatch(readme, /lahe add path\/to\/page\.html --origin/);
-  assert.doesNotMatch(agents, /lahe add path\/to\/page\.html --origin/);
+  assert.match(readme, /lahe review page\.html --origin http:\/\/127\.0\.0\.1:8000/);
+  assert.match(agents, /lahe review page\.html --origin http:\/\/127\.0\.0\.1:8000/);
+  assert.doesNotMatch(readme, /lahe review path\/to\/page\.html --origin/);
+  assert.doesNotMatch(agents, /lahe review path\/to\/page\.html --origin/);
   assert.match(readme, /comment is not a guard/);
   assert.match(agents, /comment is not a guard/);
 

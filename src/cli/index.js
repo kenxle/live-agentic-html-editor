@@ -1,4 +1,4 @@
-// The command dispatcher. Three commands: serve, add, status.
+// The command dispatcher.
 //
 // Owner: 1A, which wires `serve`. `add` is 3B's and `status` is 3A's, each wired
 // the same way serve is.
@@ -10,9 +10,9 @@
 // `wait` IS RETIRED, and it is not wired here any more. It blocked, which meant
 // agents ran it in the foreground and stopped working while a reviewer typed,
 // and it answered for one review at a time behind a cursor an agent had to
-// carry. `lahe status --json --seen-file <path>` answers the same question for
-// every review at once, blocks on nothing, needs no cursor and no parser, and
-// survives a restart because the seen file is the state. Two ways to keep up,
+// carry. `lahe status --session <id> --json --seen-file <path> --quiet`
+// answers the same question for one agent workstream, blocks on nothing, needs
+// no cursor or parser, and survives a restart because the seen file is the state. Two ways to keep up,
 // one of them a trap, is not a thing a young tool should carry.
 //
 // Node-only.
@@ -25,9 +25,11 @@ var USAGE = [
   "usage: lahe <command> [options]",
   "",
   "  serve   run the local helper on 127.0.0.1:" + protocol.DEFAULT_PORT + " (configurable with --port)",
+  "  review  start or continue a document review in an isolated agent session",
+  "  session close or reopen an agent session and its helper lease",
   "  add     add the library to a page and mint that review's token",
   "  status  print what is open right now, and whether the page is still connected",
-  "          (--json --seen-file <path> is the keep-up loop: any item line is new work)",
+  "          (--session <id> --json --seen-file <path> --quiet is the agent keep-up loop)",
   "",
   "Run `lahe <command> --help` for a command's own options."
 ].join("\n");
@@ -47,6 +49,8 @@ async function main(argv) {
   }
 
   if (command === "serve") return require("./commands/serve.js").run(rest);
+  if (command === "review") return require("./commands/review.js").run(rest);
+  if (command === "session") return require("./commands/session.js").run(rest);
   if (command === "add") return require("./commands/add.js").run(rest);
   if (command === "status") return require("./commands/status.js").run(rest);
 

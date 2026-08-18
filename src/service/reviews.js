@@ -188,6 +188,7 @@ function createReviews(options) {
           // all of them and the reload watcher does not follow only the last.
           target_paths: Array.isArray(parsed.target_paths) ? parsed.target_paths.slice() : [],
           source_path: typeof parsed.source_path === "string" ? parsed.source_path : null,
+          agent_session_id: typeof parsed.agent_session_id === "string" ? parsed.agent_session_id : "legacy",
           created_at: parsed.created_at || new Date().toISOString()
         };
       } else {
@@ -223,10 +224,12 @@ function createReviews(options) {
     var token = null;
     var origins = [];
     var createdAt = null;
+    var agentSessionId = "legacy";
     events.forEach(function (event) {
       var type = event[protocol.EVENT_FIELD.EVENT];
       if (type === protocol.EVENT.REVIEW_CREATED) {
         if (event.token && typeof event.token === "string") token = event.token;
+        if (typeof event.agent_session_id === "string") agentSessionId = event.agent_session_id;
         if (!createdAt) createdAt = event[protocol.EVENT_FIELD.TS] || null;
       } else if (type === protocol.EVENT.ORIGIN_REGISTERED) {
         var origin = event.origin || (event.payload && event.payload.origin);
@@ -247,6 +250,7 @@ function createReviews(options) {
       id: reviewId,
       token: token,
       origins: origins,
+      agent_session_id: agentSessionId,
       created_at: createdAt || new Date().toISOString()
     };
     reviews[reviewId] = recovered;
@@ -330,6 +334,7 @@ function createReviews(options) {
       target_path: typeof parsed.target_path === "string" ? parsed.target_path : null,
       target_paths: Array.isArray(parsed.target_paths) ? parsed.target_paths.slice() : [],
       source_path: typeof parsed.source_path === "string" ? parsed.source_path : null,
+      agent_session_id: typeof parsed.agent_session_id === "string" ? parsed.agent_session_id : "legacy",
       created_at: parsed.created_at || new Date().toISOString()
     };
     log.helperLog("review " + reviewId + " learned from disk without a restart");
@@ -385,6 +390,15 @@ function createReviews(options) {
 
     var existing = get(id);
     if (existing) {
+      if (
+        typeof spec.agent_session_id === "string" &&
+        existing.agent_session_id !== spec.agent_session_id
+      ) {
+        throw new Error(
+          "review " + id + " belongs to agent session " + existing.agent_session_id +
+            ", not " + spec.agent_session_id
+        );
+      }
       (spec.origins || []).forEach(function (origin) {
         registerOrigin(id, origin);
       });
@@ -401,6 +415,7 @@ function createReviews(options) {
       target_path: typeof spec.target_path === "string" ? spec.target_path : null,
       target_paths: typeof spec.target_path === "string" && spec.target_path ? [spec.target_path] : [],
       source_path: typeof spec.source_path === "string" ? spec.source_path : null,
+      agent_session_id: typeof spec.agent_session_id === "string" ? spec.agent_session_id : "legacy",
       created_at: new Date().toISOString()
     };
     reviews[id] = review;
@@ -416,7 +431,7 @@ function createReviews(options) {
         // instead of orphaning the whole review's edits (NEW-3). events.jsonl is
         // owner-only, the same class of secret as meta.json; the no-token rule is
         // about the diagnostic helper.log, not the source-of-truth log.
-        payload: { token: review.token }
+        payload: { token: review.token, agent_session_id: review.agent_session_id }
       })
     ]);
     log.helperLog("review " + id + " created");
@@ -718,7 +733,11 @@ function createReviews(options) {
       reviews: {}
     };
     Object.keys(reviews).forEach(function (id) {
-      payload.reviews[id] = { token: reviews[id].token, origins: reviews[id].origins.slice() };
+      payload.reviews[id] = {
+        token: reviews[id].token,
+        origins: reviews[id].origins.slice(),
+        agent_session_id: reviews[id].agent_session_id || "legacy"
+      };
     });
     stateDir.ensureDir(dir);
     stateDir.writeAtomic(stateDir.readyPath(dir), JSON.stringify(payload, null, 2) + "\n");

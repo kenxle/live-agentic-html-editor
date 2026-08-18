@@ -48,13 +48,13 @@ should be opening:
 ```sh
 cd path/to                                   # the folder holding page.html
 python3 -m http.server 8000 --bind 127.0.0.1 &
-lahe add page.html --origin http://127.0.0.1:8000
+lahe review page.html --origin http://127.0.0.1:8000
 # tell your human to open http://127.0.0.1:8000/page.html
 ```
 
-Start the server yourself, pick a free port, pass that origin to `add`, and hand
+Start the server yourself, pick a free port, pass that origin to `review`, and hand
 your human the http URL. Serving just the page's own folder is enough: the script
-line loads the library from the helper, and `add` also drops a `lahe-layer.js`
+line loads the library from the helper, and `review` also drops a `lahe-layer.js`
 copy in that same folder as the fallback, so a page opened while the helper is
 down still gets the rail, an honest unreachable status, and everything kept in
 the browser until the helper is back. Serve the folder, not the single file, so
@@ -64,8 +64,9 @@ that fallback is reachable.
 run a server. `add` always registers the `null` origin a page opened from disk
 sends, so the fallback keeps working.
 
-Either way, `add` writes one script line into the page, mints the review and its
-token, starts the helper if it is not already running, and prints what to open.
+Either way, `review` creates an agent session, writes one script line into the
+page, mints the review and token, starts the helper if needed, and prints what to
+open plus the exact monitor and close commands.
 Tell your human to open exactly what you handed them.
 
 **The origin is the trap to avoid.** A review knows only the origins `add`
@@ -77,7 +78,7 @@ started.
 For a dev-server app, point at the project and name the origin:
 
 ```sh
-lahe add path/to/project --origin http://localhost:3000
+lahe review path/to/project --origin http://localhost:3000
 ```
 
 This edits nothing in the app. It prints one script line with a reminder comment;
@@ -89,21 +90,22 @@ library to whatever your app publishes there if you want that half, or edit
 `data-lahe-fallback` to a path it does serve. A strict development CSP can refuse
 the inline `onerror`, which costs you the fallback and nothing else.
 
-Running `add` twice on the same target reuses the existing review, and so does
+Running `review` twice on the same target infers its existing session and review, and so does
 running it on a page a rebuild stripped the script line out of: the review
-remembers the path it was added at. `lahe add --new` mints a fresh one, and
-`lahe add <page> --review <id>` re-attaches a page to a review by id.
+remembers the path it was added at. `lahe review <page> --new-session` deliberately
+starts an independent workstream. Advanced `lahe add <page> --review <id>`
+re-attaches a page to a review by id inside its owning session.
 
 **A different document gets its own review.** `--review <id>` is for putting a
 page back on the review it already belonged to, usually after a rebuild. Do not
 use it to file a second, unrelated document under an existing review to keep
 things together: the reviewer opens the new page, sees the first document's
-comments, and finds that commenting does nothing. `lahe add <page> --new` is
-the fix, and the page works as soon as they reload. From the command line the
+comments, and finds that commenting does nothing. `lahe review <page> --session
+<session-id>` is the ordinary fix. From the command line the
 tell is a `lahe status` entry whose `page` line names a document you did not
 expect (observed 2026-08-18).
 
-Re-running `add` never restarts a helper that is up, so anything else watching
+Re-running `review` never restarts a helper that is up, so anything else watching
 that helper keeps working.
 
 ### One review MAY span pages, and each page shows only its own items
@@ -116,35 +118,28 @@ page's items together, which is where you look for the whole review.
 
 Because of that, a DISTINCT deliverable usually reads better as its own review:
 a one-pager and a full report are two things a reviewer thinks about separately.
-`lahe add <newpage>` with no `--review` mints a new review unless the path is one
-this helper already has a review for, so the default is already the right one.
-Reach for `--review <id>` when the new page really is another page of the same
-thing.
+`lahe review <newpage> --session <session-id>` mints a review in this agent's
+workstream unless the path already belongs there. Reach for advanced `--review
+<id>` only when the new page really is another page of the same thing.
 
-### Running isolated
+### Agent-session isolation
 
-`add` and `serve` both take `--port <n>` and `--state-dir <path>`, and both
-default to one port (7817) and one state directory per machine. So two agents
-working on the same machine share a helper and share a review history by
-default. That is usually what you want: one helper can hold many reviews at
-once.
-
-Give yourself your own pair when you do not want that, and pass the same two
-flags to every command in the session:
+One machine uses one helper, but every top-level agent workstream has its own
+session ID. `lahe review` creates and prints it. Pass that ID when this same
+agent opens another document:
 
 ```sh
-lahe add path/to/page.html --port 7818 --state-dir ~/.local/state/lahe-mine
-lahe status --json --seen-file ~/.lahe-seen --state-dir ~/.local/state/lahe-mine
+lahe review path/to/another.html --session <session-id>
+lahe status --session <session-id> --json --seen-file ~/.lahe-seen-<session-id> --quiet
 ```
 
-The port is baked into the page's script line, so a review started on one port
-cannot be moved to another without running `add` again. The state directory
-must sit outside any git checkout: it holds the review's token, and a
-`git add -A` would publish it.
+Never monitor globally. A review has one immutable agent-session owner, and the
+CLI refuses to attach a page owned by another session. Plain `lahe add` remains
+an advanced legacy command; use `lahe review` for normal work.
 
 ## Step 3: read the review and act on it
 
-`add` prints the review id and the review folder, on the line labelled `folder`.
+`review` prints the agent session, review id, and review folder, on labelled lines.
 Everything below lives in that folder.
 
 If you ever need to find it without that line, the folder is
@@ -253,16 +248,14 @@ not yours: the reviewer is still writing them.
 ### The keep-up loop: one command, on a timer
 
 ```sh
-lahe status --json --seen-file ~/.lahe-seen
+lahe status --session <session-id> --json --seen-file ~/.lahe-seen-<session-id> --quiet
 ```
 
-That is the whole monitor. It prints the contract line, then one JSON line per
-item you have not been shown before, then a summary line, and records what it
-printed. Run it every 20 or 30 seconds: **any item line in the output is new
-work.** No cursor to carry, no parsing, no dedupe of your own, and it covers
-every review the helper holds, including one created after your loop started.
-It blocks on nothing and it acknowledges nothing: the only way to mark an item
-handled is a reply line.
+That is the whole monitor. Run it every 20 or 30 seconds. It emits nothing when
+idle; when it prints, any item line is new work from this session. No cursor, no
+parser, and no dedupe of your own. It covers reviews added later to this session
+and never another agent's reviews. It acknowledges nothing: only a reply line
+marks an item handled.
 
 Restarting the loop, or the machine, changes nothing: the seen file is the
 state, so nothing is re-shown and nothing is skipped.
@@ -277,11 +270,10 @@ Twice in one session a second document got its own review mid-session, the
 monitor stayed pointed at the first one, and the reviewer's comments on the new
 page landed unseen while the agent said it was listening. Two rules stop that:
 
-1. **Watch globally.** The loop runs `lahe status --json --seen-file <path>`
-   with NO `--review`, so a review created mid-session is covered the moment it
-   exists. One loop is all of them; there is nothing per review to remember to
-   start.
-2. **After every `lahe add`, say which review the page landed on.** The output
+1. **Watch the agent session, not one review and not the machine.** The loop
+   names `--session <id>` with no `--review`, so a review created later in this
+   session is covered while other agents remain isolated.
+2. **After every `lahe review`, say which session and review the page landed on.** The output
    says whether it minted a new review, reused one, or matched an existing one by
    path. Tell your human before they start commenting, so a page attached to the
    wrong review is caught while it costs nothing.
@@ -294,8 +286,9 @@ each show only their own items (see "One review MAY span pages" above).
 `lahe add path/to/page.html --remove` deletes the script line from the page and
 changes nothing else (for a dev server, delete the line you pasted). Stop any
 server you started for the review too. Stop the
-helper with Ctrl-C, or by killing the pid in `service.json` in the state
-directory. Deleting the state directory forgets every review and its history, so
+agent session with the printed `lahe session close <id>` command. Closing the
+last open session stops the shared helper automatically. Deleting the state
+directory forgets every review and its history, so
 do that only when your human asks: `Removing it` in the README has the detail.
 
 ## Rules that are yours specifically

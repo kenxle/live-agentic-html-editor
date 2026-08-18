@@ -81,6 +81,7 @@ var scriptLine = require("../../shared/script_line.js");
 var stateDirModule = require("../../service/state_dir.js");
 var logModule = require("../../service/log.js");
 var reviewsModule = require("../../service/reviews.js");
+var agentSessionsModule = require("../../service/agent_sessions.js");
 var service = require("../../service/index.js");
 
 var REPO_ROOT = path.join(__dirname, "..", "..", "..");
@@ -147,6 +148,7 @@ var USAGE = [
   "  --new                mint a second review even though the file already carries one.",
   "  --review <id>        re-attach this page to a review that already exists, by id. Use it when a",
   "                       rebuild stripped the script line and the page did not match by path.",
+  "  --session <id>       enroll or reuse only reviews owned by this open agent session.",
   "  --remove             take the script line back out of the page and change nothing else.",
   "                       The review's history stays where it is; see `Removing it` in the README.",
   "  --origin <origin>    an origin to register for this review. Repeatable. A static file needs",
@@ -165,7 +167,7 @@ var USAGE = [
 
 function parseArgs(argv) {
   var list = argv || [];
-  var options = { target: null, isNew: false, remove: false, origins: [], source: null, review: null };
+  var options = { target: null, isNew: false, remove: false, origins: [], source: null, review: null, session: null };
   var index = 0;
 
   function takeValue(name, inline) {
@@ -196,6 +198,8 @@ function parseArgs(argv) {
         options.origins.push(takeValue("--origin", inline));
       } else if (name === "--review") {
         options.review = takeValue("--review", inline);
+      } else if (name === "--session") {
+        options.session = takeValue("--session", inline);
       } else if (name === "--source") {
         options.source = takeValue("--source", inline);
       } else if (name === "--port") {
@@ -226,6 +230,9 @@ function parseArgs(argv) {
   }
   if (options.review !== null && !protocol.isSafeId(options.review)) {
     return { ok: false, message: "--review must be a review id: " + String(protocol.SAFE_ID) + "\n\n" + USAGE };
+  }
+  if (options.session !== null && !protocol.isSafeId(options.session)) {
+    return { ok: false, message: "--session must be an agent session id: " + String(protocol.SAFE_ID) + "\n\n" + USAGE };
   }
   if (options.review !== null && options.isNew) {
     return { ok: false, message: "--review names a review to re-attach to and --new mints a fresh one; pick one.\n\n" + USAGE };
@@ -424,7 +431,7 @@ function readMetaOnDisk(dir, reviewId) {
  *
  * @returns {string|null} the review id
  */
-function reviewMatchingPath(dir, target) {
+function reviewMatchingPath(dir, target, agentSessionId) {
   var root;
   try {
     root = stateDirModule.reviewsRoot(dir);
@@ -437,6 +444,8 @@ function reviewMatchingPath(dir, target) {
     if (!entry.isDirectory() || !protocol.isSafeId(entry.name)) return;
     var meta = readMetaOnDisk(dir, entry.name);
     if (!meta || typeof meta.token !== "string") return;
+    var owner = typeof meta.agent_session_id === "string" ? meta.agent_session_id : agentSessionsModule.LEGACY_ID;
+    if (agentSessionId && owner !== agentSessionId) return;
     var retainedTargets = Array.isArray(meta.target_paths) ? meta.target_paths : [];
     if (
       meta.target_path !== target &&
@@ -799,6 +808,16 @@ async function run(argv) {
     return EXIT.FAILED;
   }
 
+  var agentSessionId = options.session || agentSessionsModule.LEGACY_ID;
+  if (options.session) {
+    try {
+      agentSessionsModule.createStore({ dir: dir }).requireOpen(options.session);
+    } catch (err) {
+      process.stderr.write("lahe add: " + err.message + "\n");
+      return EXIT.FAILED;
+    }
+  }
+
   // --- the origins this review needs -----------------------------------------
   var namedOrigins = withLoopbackTwins(options.origins);
   var origins;
@@ -836,6 +855,23 @@ async function run(argv) {
     return !!readMetaOnDisk(dir, reviewId);
   }
 
+  function ownershipOf(reviewId) {
+    var meta = readMetaOnDisk(dir, reviewId);
+    return meta && typeof meta.agent_session_id === "string"
+      ? meta.agent_session_id
+      : agentSessionsModule.LEGACY_ID;
+  }
+
+  function refuseForeign(reviewId) {
+    var owner = ownershipOf(reviewId);
+    if (owner === agentSessionId) return false;
+    process.stderr.write(
+      "lahe add: review " + reviewId + " belongs to agent session " + owner +
+        ", not " + agentSessionId + ". Start a new review or use the owning session.\n"
+    );
+    return true;
+  }
+
   if (options.review) {
     if (!liveOnDisk(options.review)) {
       process.stderr.write(
@@ -847,15 +883,17 @@ async function run(argv) {
       );
       return EXIT.FAILED;
     }
+    if (refuseForeign(options.review)) return EXIT.FAILED;
     reuseId = options.review;
     reuseWhy = "reused, named with --review";
   } else if (carried && !options.isNew && liveOnDisk(carried)) {
+    if (refuseForeign(carried)) return EXIT.FAILED;
     reuseId = carried;
     reuseWhy = "reused, already on this page";
   } else if (!carried && !options.isNew) {
     // The rebuild case: this page carries no line, because the build wrote it
     // out fresh. The recorded target path is the identity that survived.
-    var matched = reviewMatchingPath(dir, target);
+    var matched = reviewMatchingPath(dir, target, agentSessionId);
     if (matched) {
       reuseId = matched;
       reuseWhy = "reused, matched by path";
@@ -898,7 +936,8 @@ async function run(argv) {
     var spec = {
       origins: origins,
       target_path: pathWrites.target_path,
-      source_path: pathWrites.source_path
+      source_path: pathWrites.source_path,
+      agent_session_id: agentSessionId
     };
     if (reuseId) spec.id = reuseId;
     review = reviews.create(spec);
@@ -1061,6 +1100,7 @@ async function run(argv) {
   say("lahe add: " + target);
   say();
   say("  review    " + review.id + (reuseId ? "  (" + reuseWhy + ")" : "  (minted just now)"));
+  say("  session   " + agentSessionId);
   // The review folder, printed rather than described. Both docs promise `add`
   // names it, and an agent that only has this output has no other way to find
   // review.json: the state directory is derived from environment this command

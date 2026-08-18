@@ -1,0 +1,120 @@
+"use strict";
+
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const net = require("node:net");
+const os = require("node:os");
+const path = require("node:path");
+
+const reviewCommand = require("../../src/cli/commands/review.js");
+const sessionCommand = require("../../src/cli/commands/session.js");
+const service = require("../../src/service/index.js");
+const agentSessions = require("../../src/service/agent_sessions.js");
+
+function tempDir(prefix) {
+  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+}
+
+async function freePort() {
+  const server = net.createServer();
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const port = server.address().port;
+  await new Promise((resolve) => server.close(resolve));
+  return port;
+}
+
+async function capture(run) {
+  const stdout = [];
+  const stderr = [];
+  const oldOut = process.stdout.write;
+  const oldErr = process.stderr.write;
+  process.stdout.write = (chunk) => { stdout.push(String(chunk)); return true; };
+  process.stderr.write = (chunk) => { stderr.push(String(chunk)); return true; };
+  try {
+    const code = await run();
+    return { code, stdout: stdout.join(""), stderr: stderr.join("") };
+  } finally {
+    process.stdout.write = oldOut;
+    process.stderr.write = oldErr;
+  }
+}
+
+test("review re-entry infers its session, and the final close stops the helper", async (t) => {
+  const root = tempDir("lahe-session-command-");
+  const state = path.join(root, "state");
+  const page = path.join(root, "page.html");
+  fs.writeFileSync(page, "<!doctype html><body><p>Review me</p></body>");
+  const port = await freePort();
+
+  const first = await capture(() => reviewCommand.run([page, "--state-dir", state, "--port", String(port)]));
+  assert.equal(first.code, 0, first.stderr);
+  const sessionId = first.stdout.match(/^\s*session\s+(s_[a-f0-9]+)/m)[1];
+  const reviewId = first.stdout.match(/^\s*review\s+(r[a-f0-9]+)/m)[1];
+  t.after(async () => {
+    await capture(() => sessionCommand.run(["close", sessionId, "--state-dir", state, "--port", String(port)]));
+  });
+
+  const second = await capture(() => reviewCommand.run([page, "--state-dir", state, "--port", String(port)]));
+  assert.equal(second.code, 0, second.stderr);
+  assert.match(second.stdout, new RegExp("session\\s+" + sessionId));
+  assert.match(second.stdout, new RegExp("review\\s+" + reviewId));
+
+  const closed = await capture(() => sessionCommand.run(["close", sessionId, "--state-dir", state, "--port", String(port)]));
+  assert.equal(closed.code, 0, closed.stderr);
+  assert.match(closed.stdout, /shared helper stopped/);
+  assert.equal(await service.probeHealth("127.0.0.1", port), null);
+
+  const reopened = await capture(() => sessionCommand.run(["reopen", sessionId, "--state-dir", state, "--port", String(port)]));
+  assert.equal(reopened.code, 0, reopened.stderr);
+  assert.match(reopened.stdout, /shared helper started/);
+  assert.ok(await service.probeHealth("127.0.0.1", port));
+
+  await capture(() => sessionCommand.run(["close", sessionId, "--state-dir", state, "--port", String(port)]));
+});
+
+test("closing one of several open sessions keeps the shared helper alive", async (t) => {
+  const root = tempDir("lahe-shared-session-command-");
+  const state = path.join(root, "state");
+  const page = path.join(root, "page.html");
+  fs.writeFileSync(page, "<!doctype html><body><p>Shared helper</p></body>");
+  const port = await freePort();
+  const first = await capture(() => reviewCommand.run([page, "--state-dir", state, "--port", String(port)]));
+  assert.equal(first.code, 0, first.stderr);
+  const firstId = first.stdout.match(/^\s*session\s+(s_[a-f0-9]+)/m)[1];
+  const secondId = agentSessions.createStore({ dir: state }).create({ id: "s_second" }).id;
+  t.after(async () => {
+    await capture(() => sessionCommand.run(["close", firstId, "--state-dir", state, "--port", String(port)]));
+    await capture(() => sessionCommand.run(["close", secondId, "--state-dir", state, "--port", String(port)]));
+  });
+
+  const firstClose = await capture(() => sessionCommand.run(["close", firstId, "--state-dir", state, "--port", String(port)]));
+  assert.equal(firstClose.code, 0, firstClose.stderr);
+  assert.equal(firstClose.stdout.includes("helper stopped"), false);
+  assert.ok(await service.probeHealth("127.0.0.1", port));
+
+  const finalClose = await capture(() => sessionCommand.run(["close", secondId, "--state-dir", state, "--port", String(port)]));
+  assert.equal(finalClose.code, 0, finalClose.stderr);
+  assert.match(finalClose.stdout, /shared helper stopped/);
+  assert.equal(await service.probeHealth("127.0.0.1", port), null);
+});
+
+test("closing the final session succeeds when its recorded helper is already down", async () => {
+  const root = tempDir("lahe-stopped-session-command-");
+  const state = path.join(root, "state");
+  const port = await freePort();
+  const sessionId = agentSessions.createStore({ dir: state }).create({ id: "s_stopped" }).id;
+  fs.writeFileSync(
+    path.join(state, "service.json"),
+    JSON.stringify({ pid: 999999, port, started_at: "2026-08-18T00:00:00.000Z" })
+  );
+
+  const closed = await capture(() => sessionCommand.run(["close", sessionId, "--state-dir", state]));
+  assert.equal(closed.code, 0, closed.stderr);
+  assert.match(closed.stdout, /review history kept/);
+  assert.equal(closed.stdout.includes("helper stopped"), false);
+  assert.ok(agentSessions.createStore({ dir: state }).read(sessionId).closed_at);
+});

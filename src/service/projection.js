@@ -182,11 +182,14 @@ function actionableItems(items) {
 
 /** The review's own timestamps, read off the log rather than off a clock. */
 function reviewTimes(events) {
-  var out = { started_at: null, ended_at: null };
+  var out = { started_at: null, ended_at: null, agent_session_id: "legacy" };
   (events || []).forEach(function (event) {
     var type = event[protocol.EVENT_FIELD.EVENT];
     var ts = event[protocol.EVENT_FIELD.TS] || null;
-    if (type === EVENT.REVIEW_CREATED && !out.started_at) out.started_at = ts;
+    if (type === EVENT.REVIEW_CREATED) {
+      if (!out.started_at) out.started_at = ts;
+      if (typeof event.agent_session_id === "string") out.agent_session_id = event.agent_session_id;
+    }
     if (type === EVENT.REVIEW_ARCHIVED) out.ended_at = ts;
   });
   return out;
@@ -209,6 +212,7 @@ function project(reviewId, events, options) {
     id: reviewId,
     started_at: times.started_at,
     ended_at: times.ended_at,
+    agent_session_id: times.agent_session_id,
     generated_at: opts.generated_at || undefined,
     items: actionableItems(itemsFrom(events, { onDropped: opts.onDropped }))
   });

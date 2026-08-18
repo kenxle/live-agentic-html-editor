@@ -20,6 +20,8 @@ const record = require("../../src/shared/record.js");
 const logModule = require("../../src/service/log.js");
 const status = require("../../src/cli/commands/status.js");
 const reviewFormat = require("../../src/shared/review_format.js");
+const reviewsModule = require("../../src/service/reviews.js");
+const agentSessionsModule = require("../../src/service/agent_sessions.js");
 
 function tempState() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "lahe-status-"));
@@ -221,12 +223,12 @@ test("--seen-file prints an item once, again on a rev bump, and fails loud witho
   seed(dir, "rseenfile00001", [anItem("first thing", record.STATE.READY), anItem("second thing", record.STATE.READY)]);
   const seenPath = path.join(dir, "watcher-seen.txt");
 
-  const first = await runStatus(["--json", "--seen-file", seenPath], dir);
+  const first = await runStatus(["--session", "legacy", "--json", "--seen-file", seenPath], dir);
   assert.equal(first.code, 0, first.stderr);
   const firstItems = first.stdout.trim().split("\n").slice(1, -1);
   assert.equal(firstItems.length, 2, "the first run prints both unanswered items");
 
-  const second = await runStatus(["--json", "--seen-file", seenPath], dir);
+  const second = await runStatus(["--session", "legacy", "--json", "--seen-file", seenPath], dir);
   assert.equal(second.code, 0, second.stderr);
   const secondItems = second.stdout.trim().split("\n").slice(1, -1);
   assert.equal(secondItems.length, 0, "the second run prints nothing new");
@@ -235,9 +237,76 @@ test("--seen-file prints an item once, again on a rev bump, and fails loud witho
 
   const recorded = fs.readFileSync(seenPath, "utf8").trim().split("\n");
   assert.equal(recorded.length, 2, "one recorded line per printed item");
-  assert.match(recorded[0], /^itm_[0-9a-f]+ \d+$/, "recorded as id space rev");
+  assert.match(recorded[0], /^legacy rseenfile00001 itm_[0-9a-f]+ \d+$/, "recorded as session review item rev");
 
   const usage = await runStatus(["--seen-file", seenPath], dir);
   assert.equal(usage.code, 4, "--seen-file without --json is a usage error");
   assert.match(usage.stderr, /--seen-file needs --json/);
+});
+
+test("--seen-file refuses machine-global monitoring, and quiet emits no idle terminal output", async () => {
+  const dir = tempState();
+  seed(dir, "rquiet", [anItem("one", record.STATE.READY)]);
+  const seenPath = path.join(dir, "quiet-seen.txt");
+
+  const global = await runStatus(["--json", "--seen-file", seenPath], dir);
+  assert.equal(global.code, protocol.CLI_EXIT.BAD_USAGE);
+  assert.match(global.stderr, /needs --session/);
+
+  await runStatus(["--session", "legacy", "--json", "--seen-file", seenPath, "--quiet"], dir);
+  const idle = await runStatus(["--session", "legacy", "--json", "--seen-file", seenPath, "--quiet"], dir);
+  assert.equal(idle.code, protocol.CLI_EXIT.OK);
+  assert.equal(idle.stdout, "");
+});
+
+test("two agent sessions on one state root receive only their own reviews", async () => {
+  const dir = tempState();
+  const sessions = agentSessionsModule.createStore({ dir });
+  sessions.create({ id: "s_alpha" });
+  sessions.create({ id: "s_beta" });
+  const log = logModule.createEventLog({ dir });
+  const reviews = reviewsModule.createReviews({ dir, log });
+  reviews.create({ id: "r_alpha", agent_session_id: "s_alpha" });
+  reviews.create({ id: "r_beta", agent_session_id: "s_beta" });
+
+  const alphaItem = anItem("alpha only", record.STATE.READY);
+  const betaItem = Object.assign({}, anItem("beta only", record.STATE.READY), { id: alphaItem.id });
+  log.append("r_alpha", [itemEvent("r_alpha", alphaItem, protocol.EVENT.ITEM_READY)]);
+  log.append("r_beta", [itemEvent("r_beta", betaItem, protocol.EVENT.ITEM_READY)]);
+
+  const seen = path.join(dir, "shared-seen-file");
+  const alpha = await runStatus(["--session", "s_alpha", "--json", "--seen-file", seen], dir);
+  assert.match(alpha.stdout, /alpha only/);
+  assert.equal(alpha.stdout.includes("beta only"), false);
+
+  const beta = await runStatus(["--session", "s_beta", "--json", "--seen-file", seen], dir);
+  assert.match(beta.stdout, /beta only/, "session+review identity prevents same item ids from colliding");
+  assert.equal(beta.stdout.includes("alpha only"), false);
+
+  const keys = fs.readFileSync(seen, "utf8").trim().split("\n");
+  assert.equal(keys.length, 2);
+  assert.match(keys[0], /^s_alpha r_alpha /);
+  assert.match(keys[1], /^s_beta r_beta /);
+});
+
+test("closed sessions remain readable for audit but cannot keep monitoring", async () => {
+  const dir = tempState();
+  const sessions = agentSessionsModule.createStore({ dir });
+  sessions.create({ id: "s_closed" });
+  const log = logModule.createEventLog({ dir });
+  const reviews = reviewsModule.createReviews({ dir, log });
+  reviews.create({ id: "r_closed", agent_session_id: "s_closed" });
+  const item = anItem("kept for audit", record.STATE.READY);
+  log.append("r_closed", [itemEvent("r_closed", item, protocol.EVENT.ITEM_READY)]);
+  sessions.close("s_closed");
+
+  const audit = await runStatus(["--session", "s_closed", "--json"], dir);
+  assert.equal(audit.code, protocol.CLI_EXIT.OK);
+  assert.match(audit.stdout, /kept for audit/);
+
+  const monitor = await runStatus([
+    "--session", "s_closed", "--json", "--seen-file", path.join(dir, "closed-seen")
+  ], dir);
+  assert.equal(monitor.code, protocol.CLI_EXIT.BAD_USAGE);
+  assert.match(monitor.stderr, /monitoring has ended/);
 });

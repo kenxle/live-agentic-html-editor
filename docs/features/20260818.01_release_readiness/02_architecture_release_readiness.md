@@ -47,6 +47,19 @@ schema, ID, creation time, and optional close time. Review `meta.json`, the
 `agent_session_id`. Existing unowned reviews are visible only through a
 synthetic `legacy` session; they are not adopted silently.
 
+Agent implementation and project root are deliberately absent from the routing
+key. Two Claude processes in one checkout are two sessions. Claude and Codex in
+one checkout are two sessions. Agents of either kind in different checkouts are
+also two sessions. All four arrangements may share the same helper safely. If
+one top-level agent intentionally works across several project roots, it may
+enroll those reviews in one named session; that explicit enrollment is the only
+thing that joins their work feeds.
+
+Session routing isolates review work, not source-code writes. Two agents editing
+the same checkout still need the project's ordinary worktree or coordination
+rules. Browser-window ownership is independent too: it decides which tab may
+edit a review and does not identify the agent that owns the review.
+
 The session ID is routing metadata, not an authentication claim. The trust
 boundary remains the local user account. No item leases are required. Ownership
 is enforced when a review is created, reattached, or matched by path, because

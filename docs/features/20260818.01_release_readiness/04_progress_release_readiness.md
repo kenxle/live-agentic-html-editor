@@ -43,12 +43,20 @@
   require one-time cleanup because they predate the fix.
 - Added release requirement: closing the final open agent session stops the
   shared helper and its monitor while preserving every review folder.
-- Confirmed blocker: global monitoring crosses independent live agent sessions.
+- Complete: durable agent-session routing now gives every review one immutable
+  owner in meta.json, the recovery event, service readiness, and review.json.
+  Session-scoped status dynamically finds later reviews, seen identity includes
+  session + review + item + revision, global seen-file monitoring is refused,
+  and quiet monitoring emits nothing while idle.
+- Complete: `lahe review` creates or infers the session and prints exact monitor
+  and close commands. `lahe session close` ends monitoring and stops the shared
+  helper only after the final open session closes; reopen starts it again.
+- Resolved blocker: independent live agent sessions can no longer receive one
+  another's reviews through the documented or accepted monitor command.
 - Confirmed known gaps: one-command static front door, cold-start proof,
   documentation pass, multi-page offline path reuse, and
   acceptance evidence.
-- In progress: session-scoped agent monitoring and the remaining correctness
-  cleanup.
+- In progress: one-command static serving and the remaining cold-start cleanup.
 - Pending: human review of this hardening packet before the session-routing
   architecture is implemented.
 

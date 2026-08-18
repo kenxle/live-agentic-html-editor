@@ -211,6 +211,7 @@ var NON_BUNDLE_FILES = [
   { path: "src/service/auth.js", owner: "1A", why: "the per-request check block, and the named refusal reason in the log" },
   { path: "src/service/log.js", owner: "1A", why: "the events.jsonl appender" },
   { path: "src/service/state_dir.js", owner: "1A", why: "reviews/<id>/ layout, owner-only, the safe-id rule" },
+  { path: "src/service/agent_sessions.js", owner: "1A", why: "durable top-level agent-session routing and lifecycle" },
   { path: "src/service/reviews.js", owner: "1A", why: "review creation, per-review token minting, origin registration, the second-window session" },
   {
     path: "src/service/heal.js",
@@ -223,6 +224,8 @@ var NON_BUNDLE_FILES = [
 
   { path: "src/cli/index.js", owner: "1A", why: "the command dispatcher: serve, add, status" },
   { path: "src/cli/commands/serve.js", owner: "1A", why: "serve" },
+  { path: "src/cli/commands/review.js", owner: "1A", why: "session-owning public review entrypoint" },
+  { path: "src/cli/commands/session.js", owner: "1A", why: "agent-session close, reopen, and helper lifetime" },
   { path: "src/cli/commands/add.js", owner: "3B", why: "add" },
   { path: "src/cli/commands/status.js", owner: "3A", why: "status: the one agent-facing read path" }
 ];
