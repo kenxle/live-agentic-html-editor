@@ -173,6 +173,15 @@ path)` when that is what happened; if it ever prints `(minted just now)`, stop
 and re-attach with `lahe add path/to/built/page.html --review <id>` rather than
 leaving the reviewer's comments split across two reviews.
 
+**You never have to tell them to reload.** The page updates itself (R36): the
+helper watches the file the review was added at, and when your rebuild lands,
+their page reloads onto it and re-applies their outstanding comments and edits.
+It waits while they are mid-work, so nothing swaps under an open edit or a
+comment they are still typing, and one rebuild is one reload however many times
+the build touched the file. A dev server that hot-reloads on its own keeps
+working; this does not fight it. So step 3 above is the whole of your obligation:
+rebuild, re-run `add`, reply. Do not add "now reload the page" to a reply.
+
 **Never hold a rebuild back so the page does not swap under the reviewer.** That
 caution is backwards: the library is built for exactly this. It re-applies their
 outstanding work over your landed changes on the new page and flags real

@@ -485,3 +485,22 @@ Final state: 379 unit, 165 Chromium, 495 tri-browser, key walks 39/39 on three e
 deployed to the live worktree and re-probed on the real Rails page (refusal panel + button + one
 un-inflated chip). The composed-journey walkers are now the release bar: feature-level suites green
 is not "walked".
+
+## R36's static-page half, found unmet and closed (2026-08-17)
+
+R36 ("the page updates itself as the agent lands changes") was grounded in D7, which assumed the
+serving environment supplies the refresh: a dev server hot-reloads and the agent's landed change
+arrives as a repaint. That is true for a Rails/Turbo dev server and false for the dominant real
+case, a built static page behind a plain http server, which refreshes nothing ever. So R36 shipped
+unmet for static pages, and it surfaced in live use: the reviewer expected the rebuilt page to come
+back on its own, and the agent had to explain that no auto-reload exists.
+
+Closed on the `fix/review-session-flaws` branch. The helper reports the reviewed file's mtime on
+every `replies.poll` answer (a cheap fs.stat behind a short TTL, null when the file is missing), and
+the library reloads the page when that value moves away from the one it last saw. The reload is
+debounced to one per rebuild and deferred while the reviewer is mid-work (an open edit session or an
+open comment box), and the rail says "Page updated. Reloading..." before it happens. This is only
+the missing TRIGGER: the survival half is D7's replay pass, which already re-applies the reviewer's
+outstanding work over the agent's landed changes on the new page.
+
+Covered by `test/unit/target_mtime.test.js` and `test/browser/auto_reload.spec.js`.

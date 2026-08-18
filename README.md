@@ -204,8 +204,14 @@ once, and after that a plain sentence works:
 the built page before it reports an item handled: `handled` is supposed to mean
 your page shows the change. Re-running `add` on a rebuilt page is one idempotent
 command and keeps the same review, because the review remembers the path it was
-added at. Reloading under you is safe by design: the library re-applies your
-outstanding comments and edits on the new page.
+added at. You do not have to reload: the page updates itself. The helper watches
+the file the review was added at, and when a rebuild lands, your page reloads
+onto the new version and re-applies your outstanding comments and edits (R36).
+It waits while you are mid-work, so a page never swaps under an open edit or a
+comment you are still typing, and it says "Page updated. Reloading..." on the
+rail first. If your page is served by a dev server that hot-reloads on its own,
+that keeps working and this does not fight it: the reload is one per rebuild
+either way.
 
 **The files, which are the agent's real interface.** In the review folder that
 `add` names: `review.json` is what an agent reads (its top-level `contract`
