@@ -73,3 +73,34 @@ multi-document rules (global `status` watcher; one deliverable, one review).
 - Boarded follow-ups: standing-chip registry; no-helper disk path records
   only the last page's target_path; gate:builder cannot catch stale dist;
   steady-thread's worktree hook blocks `git worktree add` in unrelated repos.
+
+## Later in the same session: the helper heals a rebuilt page
+
+Twice in live use on 2026-08-18 a rebuild regenerated a reviewed page and
+took the lahe script line with it, and the reviewer found a dead page. The
+documented cure was "re-run `lahe add` after every rebuild", which agents
+forgot both times. Discipline is not a mechanism, so the helper repairs the
+page itself: on the same stat `replies.poll` already does for `target_mtime`,
+a file that came back without this review's line gets the line written back
+and the sibling `lahe-layer.js` fallback refreshed. The page's own reload
+(R36) then lands on the healed file. The rules that keep it safe are in
+`src/service/heal.js`: examine only an mtime that has stood still for a poll
+interval, write a temp file and rename it, never touch a file carrying
+another review's line, and take the post-write mtime as the new baseline so
+the helper never re-examines its own write. The tag/placement logic moved out
+of `add.js` into `src/shared/script_line.js`, so `add` and the heal write one
+line from one definition. `lahe status` gains one line when a heal happened.
+
+## `lahe wait` was built, hardened, and retired in the same session
+
+It shipped with five exit codes, a cursor, reconnect-from-the-same-`--since`
+handling, and its own suite, and all of it worked. It was retired anyway,
+because it BLOCKED: agents ran it in the foreground and stopped working while
+the reviewer typed, and it watched one review from behind a cursor the caller
+had to carry. `lahe status --json --seen-file <path>` answers the same
+question without blocking, across every review at once, needs no cursor and no
+parser, and survives a restart because the seen file is the state. The command
+is unwired from the dispatcher, its route is off the wire, and the contract
+field, AGENTS.md and the README teach the one loop. `protocol.WAIT.EXIT` keeps
+its name because `status` borrows the table. `src/cli/commands/wait.js` is
+still on disk, unreferenced, on the cleanup batch.

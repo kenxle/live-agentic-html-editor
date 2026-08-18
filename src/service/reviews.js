@@ -51,6 +51,7 @@ var fs = require("node:fs");
 var protocol = require("../shared/protocol.js");
 var elapsed = require("../shared/elapsed.js");
 var stateDir = require("./state_dir.js");
+var healModule = require("./heal.js");
 
 var TOKEN_BYTES = 32;
 
@@ -543,6 +544,25 @@ function createReviews(options) {
   var MTIME_TTL_MS = 500;
   var mtimeCache = Object.create(null);
 
+  // The same stat, extended: when the file it looked at came back from a build
+  // without this review's script line, the healer puts the line back before the
+  // mtime is reported, so the reload the page is about to do lands on a page
+  // that carries the library again. See src/service/heal.js for the rules.
+  var healer = healModule.createHealer({ log: log, now: clock });
+
+  /**
+   * The origin the healed script line names the helper by.
+   *
+   * The port comes from what this helper bound (writeReadyFile is told it when
+   * the listener is up), and falls back to the default, which is the port `add`
+   * writes onto every line it has ever written. The host is the loopback one the
+   * whole tool speaks on; a helper is never remote.
+   */
+  function helperOrigin() {
+    var port = lastReadyDetails && lastReadyDetails.port ? lastReadyDetails.port : protocol.DEFAULT_PORT;
+    return "http://" + protocol.DEFAULT_HOST + ":" + port;
+  }
+
   /**
    * The reviewed file's modification time, as an ISO string, or null.
    *
@@ -563,7 +583,12 @@ function createReviews(options) {
     // rebuilt is a reason for the reviewer's page to reload.
     var newest = null;
     paths.forEach(function (target) {
-      var at = statFileMtime(target);
+      var at = healer.consider({
+        path: target,
+        review: review.id,
+        token: review.token,
+        helperOrigin: helperOrigin()
+      });
       if (at && (!newest || at > newest)) newest = at;
     });
     mtimeCache[reviewId] = { key: key, at: now, mtime: newest };
@@ -571,22 +596,16 @@ function createReviews(options) {
   }
 
   /**
-   * One path's mtime as an ISO string, or null.
+   * When this helper last put a stripped script line back for a review, as an
+   * ISO string, or null.
    *
-   * ONLY A REGULAR FILE ANSWERS. A dev-server review records the project
-   * DIRECTORY as its target, and a directory's mtime moves on every npm install,
-   * git checkout and stray .DS_Store while staying still when the page's own
-   * file is edited. So the reload fired constantly on churn and never on the
-   * change it exists for.
+   * In memory only, like the liveness fact beside it: it says what happened in
+   * this helper's lifetime, and a number persisted across a restart would be a
+   * claim about a session nobody is in any more. `lahe status` reads it through
+   * review.read.
    */
-  function statFileMtime(target) {
-    try {
-      var stat = fs.statSync(target);
-      if (!stat.isFile()) return null;
-      return stat.mtime.toISOString();
-    } catch (error) {
-      return null;
-    }
+  function lastHealAt(reviewId) {
+    return healer.lastHealAt(reviewId);
   }
 
   // ---------------------------------------------------------------------------
@@ -826,6 +845,7 @@ function createReviews(options) {
     touch: touch,
     lastSeenAt: lastSeenAt,
     targetMtime: targetMtime,
+    lastHealAt: lastHealAt,
     config: config,
     writeReadyFile: writeReadyFile,
     claimWindow: claimWindow,

@@ -100,8 +100,8 @@ the fix, and the page works as soon as they reload. From the command line the
 tell is a `lahe status` entry whose `page` line names a document you did not
 expect (observed 2026-08-18).
 
-Re-running `add` never restarts a helper that is up, so a `lahe wait` you have
-blocked on somewhere else keeps waiting.
+Re-running `add` never restarts a helper that is up, so anything else watching
+that helper keeps working.
 
 ### One review MAY span pages, and each page shows only its own items
 
@@ -131,7 +131,7 @@ flags to every command in the session:
 
 ```sh
 lahe add path/to/page.html --port 7818 --state-dir ~/.local/state/lahe-mine
-lahe wait --review <id> --state-dir ~/.local/state/lahe-mine
+lahe status --json --seen-file ~/.lahe-seen --state-dir ~/.local/state/lahe-mine
 ```
 
 The port is baked into the page's script line, so a review started on one port
@@ -190,19 +190,22 @@ Per item, or per small batch:
 ```sh
 # 1. edit the source file the item points at
 # 2. rebuild, however this project builds
-# 3. put the review back on the rebuilt page (one command, and it is idempotent)
-lahe add path/to/built/page.html
-# 4. check the change is actually in the built HTML
+# 3. check the change is actually in the built HTML
 grep -n "the new wording" path/to/built/page.html
-# 5. only now append your reply line
+# 4. only now append your reply line
 ```
 
-Step 3 is cheap and safe: a rebuild strips the script line out, and `add` matches
-the page back to the review it has always had by the path it was added at. Same
-review, same id, same history, no fragmentation. It prints `(reused, matched by
-path)` when that is what happened; if it ever prints `(minted just now)`, stop
-and re-attach with `lahe add path/to/built/page.html --review <id>` rather than
-leaving the reviewer's comments split across two reviews.
+**The rebuild no longer needs a `lahe add` after it.** A rebuild strips the
+script line out of the built page, and with a helper running that is repaired
+for you: the helper is already watching that file, and when it comes back
+without the line, it writes the same line back (same review, same token) and
+refreshes the fallback copy beside the page. The reviewer's page reloads onto
+the healed file and the rail is there. `lahe status` says
+`script line re-injected after a rebuild, Ns ago` when that happened.
+
+Re-running `lahe add path/to/built/page.html` is still harmless, and it is still
+the thing to run in three cases: no helper is up, the page is served from a new
+origin (`--origin`), or you are recording a `--source` path.
 
 **You never have to tell them to reload.** The page updates itself (R36): the
 helper watches the file the review was added at, and when your rebuild lands,
@@ -210,8 +213,8 @@ their page reloads onto it and re-applies their outstanding comments and edits.
 It waits while they are mid-work, so nothing swaps under an open edit or a
 comment they are still typing, and one rebuild is one reload however many times
 the build touched the file. A dev server that hot-reloads on its own keeps
-working; this does not fight it. So step 3 above is the whole of your obligation:
-rebuild, re-run `add`, reply. Do not add "now reload the page" to a reply.
+working; this does not fight it. So the loop is: edit the source, rebuild,
+verify, reply. Do not add "now reload the page" to a reply.
 
 **Never hold a rebuild back so the page does not swap under the reviewer.** That
 caution is backwards: the library is built for exactly this. It re-applies their
@@ -244,32 +247,37 @@ link or an origin this review does not know about, and `lahe add <page> --origin
 <their origin>` is the fix. Items still in `draft` are counted separately and are
 not yours: the reviewer is still writing them.
 
-Either re-read `review.json` between work items, or block for new work:
+### The keep-up loop: one command, on a timer
 
 ```sh
-lahe wait --review <id> --since <cursor>
+lahe status --json --seen-file ~/.lahe-seen
 ```
 
-It prints newly ready items as JSON lines plus your next cursor, and exits 0
-(new work), 1 (timeout, nothing new), 2 (helper unreachable), 3 (unknown
-review), 4 (bad usage). Waiting consumes nothing and acknowledges nothing; the
-only way to mark an item handled is a reply line.
+That is the whole monitor. It prints the contract line, then one JSON line per
+item you have not been shown before, then a summary line, and records what it
+printed. Run it every 20 or 30 seconds: **any item line in the output is new
+work.** No cursor to carry, no parsing, no dedupe of your own, and it covers
+every review the helper holds, including one created after your loop started.
+It blocks on nothing and it acknowledges nothing: the only way to mark an item
+handled is a reply line.
 
-A helper that goes away mid-wait is not the end of the wait: it retries from the
-same cursor for up to thirty seconds after the connection drops, however long
-the wait had already been open, and prints one line on stderr when it
-reconnects.
+Restarting the loop, or the machine, changes nothing: the seen file is the
+state, so nothing is re-shown and nothing is skipped.
+
+`lahe wait` is RETIRED. It blocked, which is how agents ended up sitting in the
+foreground doing no work while a reviewer typed, and it watched one review
+behind a cursor. If you find it in an older doc, use the loop above.
 
 ### More than one document
 
-Twice in one session a second document got its own review mid-session, the wait
-loop stayed pointed at the first one, and the reviewer's comments on the new page
-landed unseen while the agent said it was listening. Two rules stop that:
+Twice in one session a second document got its own review mid-session, the
+monitor stayed pointed at the first one, and the reviewer's comments on the new
+page landed unseen while the agent said it was listening. Two rules stop that:
 
-1. **Watch globally.** A watcher runs `lahe status --json` with NO `--review`, so
-   a review created mid-session is covered the moment it exists. `lahe wait` is
-   per review, so every live review gets its own backgrounded wait; the global
-   status watch is the safety net under them.
+1. **Watch globally.** The loop runs `lahe status --json --seen-file <path>`
+   with NO `--review`, so a review created mid-session is covered the moment it
+   exists. One loop is all of them; there is nothing per review to remember to
+   start.
 2. **After every `lahe add`, say which review the page landed on.** The output
    says whether it minted a new review, reused one, or matched an existing one by
    path. Tell your human before they start commenting, so a page attached to the

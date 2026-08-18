@@ -246,17 +246,12 @@
       why: "the reviewer chooses End review on the rail; the review is archived, never truncated",
       request: "{review}",
       response: "{ended_at, outstanding_kept}"
-    },
-    {
-      name: "wait",
-      method: "GET",
-      path: BASE + "/wait",
-      auth: AUTH.REVIEW_TOKEN,
-      mutating: false,
-      why: "what `lahe wait` calls. Blocks until something new passes the watermark, or times out",
-      request: "?review=<id>&since=<seq>&timeout=<seconds>",
-      response: "{events: [event...], seq}"
     }
+    // THE `wait` ROUTE IS RETIRED WITH THE COMMAND THAT CALLED IT. Nothing in
+    // the library ever used it (the page keeps up on replies.poll); it existed
+    // for a blocking CLI that agents ran in the foreground and stalled on. The
+    // keep-up loop is `lahe status --json --seen-file <path>`, which reads the
+    // same projection this table already serves through review.read.
   ];
 
   function route(name) {

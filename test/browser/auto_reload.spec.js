@@ -76,6 +76,24 @@ function rebuild(filePath, helperOrigin, token, edition) {
   fs.utimesSync(filePath, later, later);
 }
 
+/** A rebuild that lost the lahe script line, which is what a real build does. */
+function rebuildWithoutTheLine(filePath, edition) {
+  fs.writeFileSync(
+    filePath,
+    '<!doctype html>\n<html lang="en">\n<head><meta charset="utf-8" /><title>Steady Pace</title></head>\n' +
+      "<body>\n<main>\n" +
+      '<h1 id="edition">' +
+      edition +
+      "</h1>\n" +
+      '<p id="body">' +
+      PARAGRAPH +
+      "</p>\n" +
+      "</main>\n</body>\n</html>\n"
+  );
+  const later = new Date(Date.now() + 10000);
+  fs.utimesSync(filePath, later, later);
+}
+
 async function booted(page) {
   await pollPage(page, () => !!(window.__lahe && window.__lahe.booted), undefined, {
     message: "the layer to boot from its script tag"
@@ -242,5 +260,49 @@ test.describe("the page updates itself as the agent lands changes (R36)", () => 
       await page.evaluate(() => window.__lahe.items().length),
       "and the edit they made before the reload is still theirs"
     ).toBeGreaterThan(0);
+  });
+
+  test("a rebuild that stripped the script line heals itself, with no CLI call in between", async ({ page }) => {
+    rebuild(filePath, service.url, token, "Fifth edition");
+    await page.goto(pages.origin + "/" + PAGE_FILE);
+    await booted(page);
+    await pollPage(page, () => !!window.__lahe.handle.sync.status().targetMtime, undefined, {
+      message: "the first poll to establish the baseline mtime"
+    });
+
+    await commentOnBody(page, SAID);
+
+    // The real failure, twice on 2026-08-18: the build regenerates the page and
+    // the script line is gone with it. Nobody runs `lahe add`. Nobody touches
+    // the browser. The helper is the only thing awake.
+    rebuildWithoutTheLine(filePath, "Sixth edition");
+
+    await pollUntil(
+      () => {
+        const html = fs.readFileSync(filePath, "utf8");
+        return html.indexOf('data-lahe-review="' + REVIEW + '"') !== -1;
+      },
+      { timeoutMs: 20000, message: "the helper to put the script line back into the rebuilt file" }
+    );
+    expect(
+      fs.readFileSync(filePath, "utf8").indexOf(token),
+      "and it is this review's own token on the line"
+    ).toBeGreaterThan(-1);
+
+    await pollPage(page, () => document.querySelector("#edition").textContent === "Sixth edition", undefined, {
+      message: "the page to reload itself onto the healed file",
+      timeoutMs: 20000
+    });
+    // The rail is back, which is the whole point: a page that reloaded onto a
+    // line-less file would show the new text and nothing to review it with.
+    await booted(page);
+    await pollPage(
+      page,
+      (note) => window.__lahe.items().some((item) => item.note === note),
+      SAID,
+      { message: "the comment to survive the heal and the reload", timeoutMs: 20000 }
+    );
+    expect(await page.evaluate(() => window.__lahe.cardIds().length), "its card is redrawn").toBe(1);
+    expect(await page.evaluate(() => window.__lahe.review), "on the same review").toBe(REVIEW);
   });
 });

@@ -200,6 +200,11 @@ var LAYER_FILES = [
 var NON_BUNDLE_FILES = [
   { path: "src/shared/contracts.js", owner: "0A-kernel", why: "Node-side barrel re-export. Nothing is defined in it" },
   { path: "src/shared/manifest.js", owner: "0A-kernel, FROZEN at CP0", why: "Node only. This file" },
+  {
+    path: "src/shared/script_line.js",
+    owner: "3B",
+    why: "Node only. Finding, placing, replacing and removing the script line in an HTML file. `add` writes it and the helper's heal writes it back, and one definition serves both"
+  },
 
   { path: "src/service/index.js", owner: "1A", why: "serve" },
   { path: "src/service/routes.js", owner: "1A", why: "the router, pinned to protocol.js" },
@@ -207,6 +212,11 @@ var NON_BUNDLE_FILES = [
   { path: "src/service/log.js", owner: "1A", why: "the events.jsonl appender" },
   { path: "src/service/state_dir.js", owner: "1A", why: "reviews/<id>/ layout, owner-only, the safe-id rule" },
   { path: "src/service/reviews.js", owner: "1A", why: "review creation, per-review token minting, origin registration, the second-window session" },
+  {
+    path: "src/service/heal.js",
+    owner: "1A",
+    why: "putting the script line back into a page a rebuild stripped it out of, on the same stat the reload trigger already does"
+  },
   { path: "src/service/projection.js", owner: "3A", why: "the log projected into review.json and the reply state the library polls" },
   { path: "src/service/review_writer.js", owner: "3A", why: "the single writer of review.json, and the path-safety rules" },
   { path: "src/service/replies.js", owner: "3A", why: "reply file discovery, byte-offset reading, folding, the conflict rule" },
@@ -215,7 +225,11 @@ var NON_BUNDLE_FILES = [
   { path: "src/cli/commands/serve.js", owner: "1A", why: "serve" },
   { path: "src/cli/commands/add.js", owner: "3B", why: "add" },
   { path: "src/cli/commands/status.js", owner: "3A", why: "status: the read path beside wait's blocking one" },
-  { path: "src/cli/commands/wait.js", owner: "3A", why: "wait" }
+  {
+    path: "src/cli/commands/wait.js",
+    owner: "3A",
+    why: "the RETIRED blocking wait. Nothing loads it: the dispatcher does not wire it and its route is off the wire. On the cleanup batch"
+  }
 ];
 
 var BUNDLE_OUTPUT = "dist/lahe-layer.js";

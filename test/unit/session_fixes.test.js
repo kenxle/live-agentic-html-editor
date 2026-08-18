@@ -1,6 +1,6 @@
-// The five review-session fixes, at the level each one is decidable without a
-// browser: `wait` surviving a helper bounce, the origin-versus-unreachable
-// decision, the pointer-outside commit rule, and the PATH-stable installer.
+// The review-session fixes, at the level each one is decidable without a
+// browser: the origin-versus-unreachable decision, the pointer-outside commit
+// rule, and the PATH-stable installer.
 //
 // The other halves live where they belong: `add` not restarting a held review
 // and the helper serving the library are in test/unit/add_command.test.js
@@ -19,101 +19,17 @@ const path = require("node:path");
 
 const gestures = require("../../src/shared/gestures.js");
 const syncModule = require("../../src/layer/sync.js");
-const waitCommand = require("../../src/cli/commands/wait.js");
 const installCli = require("../../scripts/install-cli.js");
 
-// ---------------------------------------------------------------------------
-// `lahe wait` survives the helper going away mid-wait
-// ---------------------------------------------------------------------------
-
-test("a dropped connection is retried from the SAME --since, not reported as unreachable", async () => {
-  const seen = [];
-  let calls = 0;
-  const fetchImpl = async (url) => {
-    seen.push(url);
-    calls += 1;
-    // The first two are the helper bouncing: the socket dies mid-long-poll.
-    if (calls <= 2) throw new Error("fetch failed");
-    return { ok: true, status: 200, json: async () => ({ events: [], seq: 12 }) };
-  };
-  const notes = [];
-
-  const response = await waitCommand.blockingRequest(
-    fetchImpl,
-    { origin: "http://127.0.0.1:7817", token: "t", reviewOrigin: "null" },
-    { review: "rev1", since: 7, timeout: 300 },
-    (text) => notes.push(text)
-  );
-
-  assert.equal(response.ok, true);
-  assert.equal(calls, 3, "it kept asking rather than giving up on the first drop");
-  seen.forEach((url) => {
-    assert.match(url, /since=7/, "every retry carries the same watermark, so nothing is skipped");
-  });
-  assert.equal(notes.length, 2, "one line when the connection went, one when it came back");
-  assert.match(notes[0], /lost the connection/);
-  assert.match(notes[1], /reconnected/);
-});
-
-test("a drop LATE in a long wait still gets its retries", async () => {
-  // The flaw this covers: the grace was measured from the start of the long
-  // poll, so a helper bounce more than thirty seconds into a wait had no window
-  // left and the wait died on the first drop. The clock now starts when the
-  // connection dropped. Date.now is stubbed so the test does not have to spend
-  // a real minute proving it.
-  const realNow = Date.now;
-  let virtual = realNow();
-  Date.now = () => virtual;
-  try {
-    let calls = 0;
-    const fetchImpl = async () => {
-      calls += 1;
-      if (calls === 1) {
-        // Five minutes of an ordinary long poll, then the helper goes away.
-        virtual += 5 * 60 * 1000;
-        throw new Error("fetch failed");
-      }
-      if (calls === 2) throw new Error("fetch failed");
-      return { ok: true, status: 200, json: async () => ({ events: [], seq: 3 }) };
-    };
-    const notes = [];
-    const response = await waitCommand.blockingRequest(
-      fetchImpl,
-      { origin: "http://127.0.0.1:7817", token: "t", reviewOrigin: "null" },
-      { review: "rev1", since: 4, timeout: 600 },
-      (text) => notes.push(text)
-    );
-    assert.equal(response.ok, true);
-    assert.equal(calls, 3, "the drop at t+5min was retried, not reported");
-    assert.match(notes[0], /lost the connection/);
-    assert.match(notes[1], /reconnected/);
-  } finally {
-    Date.now = realNow;
-  }
-});
-
-test("the grace window is bounded: a helper that never comes back still fails", async () => {
-  const fetchImpl = async () => {
-    throw new Error("fetch failed");
-  };
-  // --timeout 0 leaves nothing of the caller's own deadline to retry inside, so
-  // the first failure is the answer. Outliving the caller's deadline would be a
-  // different bug.
-  await assert.rejects(
-    waitCommand.blockingRequest(
-      fetchImpl,
-      { origin: "http://127.0.0.1:7817", token: "t", reviewOrigin: null },
-      { review: "rev1", since: 0, timeout: 0 },
-      () => {}
-    ),
-    /fetch failed/
-  );
-});
-
-test("the reconnect window never outlives the caller's own timeout", () => {
-  assert.equal(waitCommand.RECONNECT_GRACE_MS, 30 * 1000);
-  assert.ok(waitCommand.RECONNECT_BACKOFF_MS.length > 0);
-});
+// `lahe wait` IS RETIRED, and the four tests that lived here went with it.
+//
+// They covered the command's reconnect behaviour: retry from the same --since,
+// a grace window measured from the drop rather than from the start of the poll,
+// and a bounded window so a helper that never returns still fails. All of it
+// worked. The command was retired anyway, because it blocked: agents ran it in
+// the foreground and stopped working while the reviewer typed. The keep-up loop
+// is `lahe status --json --seen-file <path>`, which blocks on nothing and covers
+// every review at once. What holds the retirement is test/unit/cli_wait.test.js.
 
 // ---------------------------------------------------------------------------
 // The origin trap, told apart from a helper that is down

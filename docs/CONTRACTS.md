@@ -11,8 +11,8 @@ Two halves, with two owners:
 - **0A-kernel** owns the shapes in the browser and in the store: the module wrapper, the record, the
   lifecycle, the merge rule, the comparison modes, the gestures, and the ownership map.
 - **0A-wire** owns the bytes that leave this repo: the `events.jsonl` line schema, the reply line
-  schema, `review.json`'s contract field, the script tag's attributes, the wire checks, and
-  `lahe wait`. Those sections are marked and are 0A-wire's to write.
+  schema, `review.json`'s contract field, the script tag's attributes, and the wire checks. Those
+  sections are marked and are 0A-wire's to write.
 
 Everything here is frozen at CP0. A change goes through the orchestrator.
 
@@ -306,7 +306,7 @@ never history.
 ```
 
 The client mints `event_id` and `ts`. **The helper assigns `seq`**, monotonic per review, and that
-`seq` is the cursor every reader uses: the library's reply poll, and `lahe wait`. Never a timestamp,
+`seq` is the cursor every reader uses, starting with the library's reply poll. Never a timestamp,
 because two events in one millisecond are ordinary and a clock that steps backwards silently skips
 work.
 
@@ -427,8 +427,8 @@ copy in `test/unit/review_format.test.js`:
   "status is one of: handled, you made the change; not_handled, you did not, and reason says why in words the reviewer will read; question, you need an answer, and text asks for it.",
   "rev must be the rev carried with the item. If the reviewer reworded the item after you read it, your line is refused and the item stays open. Re-read the item and answer its new rev.",
   "To see what is open right now, run: lahe status --review <id> (add --json for machine-readable lines). It prints the unanswered ready items and whether the reviewer's page is connected.",
-  "To keep up, re-read this file between work items, or run: lahe wait --review <id> --since <cursor>. It blocks until something new is ready, prints the new items as JSON lines, and prints the cursor to pass next time. Waiting consumes nothing and acknowledges nothing.",
-  "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, re-run lahe add on the built page (it re-attaches to the same review), and only then reply. The page reloads itself when the file changes.",
+  "To keep up, re-read this file between work items, or run this on a timer: lahe status --json --seen-file <path>. It prints only the items you have not been shown before, so any item line is new work. It blocks on nothing, covers every review, consumes nothing and acknowledges nothing.",
+  "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and a running helper puts the script line back when the rebuild strips it out.",
   "The only way to say you handled an item is to append a reply line."
 ]
 ```
@@ -498,7 +498,9 @@ Loopback is not a boundary, so the page proves itself on every request. The help
 | `replies.poll` | GET | `/lahe/v1/replies?review=&since=<seq>` | per-review token |
 | `window.claim` | POST | `/lahe/v1/window` | per-review token |
 | `review.end` | POST | `/lahe/v1/end` | per-review token |
-| `wait` | GET | `/lahe/v1/wait?review=&since=&timeout=` | per-review token |
+
+There is no `wait` route. It existed only for the retired `lahe wait` command and was removed with it;
+nothing in the library ever called it.
 
 `library.get` is the built library, served as `application/javascript`, read from `dist/` once at serve
 start (a missing build is a loud startup failure, never a 404 a reviewer meets). It needs no credential
@@ -508,8 +510,8 @@ branch around the check block.
 
 `review.write` body is `{review, origins: [origin...], target_path?, source_path?, source_hint?, page_path?}`.
 It exists so `add` never has to stop a running helper: writes to a review the helper HOLDS go through
-the helper, which is the single writer of that review's log. Stopping the helper drops every blocked
-`lahe wait` long-poll, which is an agent losing the review it was watching mid-session. `add` writes to
+the helper, which is the single writer of that review's log. Stopping the helper drops every open
+long-poll a page is holding, which is a reviewer's session hiccuping for no reason. `add` writes to
 disk itself only when no helper is appending to that review. Everything on the route is idempotent.
 
 **Its origins are narrower than `add`'s on disk.** Only the literal `"null"` and http/https origins on a
@@ -519,10 +521,21 @@ BODY on this route, so without the filter a script on a page the review already 
 token off the script tag and widen the allowlist to any origin, which leaves the token as the only
 factor. `add` writing meta.json itself stays wider, because that path is a person typing `--origin`.
 
-`review.read`'s response carries two fields beyond the projection: `page_last_seen_at`, the last time
-the LIBRARY (never the CLI) made an authenticated request for this review, and `draft_count`. Both are
-what `lahe status` reports as liveness; `page_last_seen_at` is in memory only, because a number that
-survived a restart would be a stale claim that a page is connected.
+`review.read`'s response carries three fields beyond the projection: `page_last_seen_at`, the last time
+the LIBRARY (never the CLI) made an authenticated request for this review; `draft_count`; and
+`last_heal_at`, when the helper last put a stripped script line back into this review's page. All three
+are what `lahe status` reports, and all three are in memory only, because a number that survived a
+restart would be a stale claim about a session nobody is in any more.
+
+**Healing a rebuilt page** (`src/service/heal.js`). `replies.poll` already stats each recorded target
+file for `target_mtime`, and that stat is where the repair happens: when the file changed and no longer
+carries this review's script line, the helper writes the line back (`protocol.scriptTag`, placed by
+`src/shared/script_line.js`, the same module `lahe add` writes with) and refreshes the sibling
+`lahe-layer.js` fallback copy. The rules: a new mtime is examined only after it has stood still for one
+poll interval (a build writes in pieces), the write is a temp file renamed in the same directory, a file
+carrying a DIFFERENT review's line is logged and left alone, and the post-write mtime becomes the new
+baseline so the helper never re-examines its own write. That single mtime bump is what the page reloads
+on, so the rail comes back with no command run by anyone.
 
 `window.claim` body is `{review, window_id, session_secret?, takeover?}` (D5's one-session-per-review).
 A grant returns `{granted:true, since, heartbeat_seconds, took_over, session_secret}`; the
@@ -569,16 +582,17 @@ it happens, whenever a static file registers `"null"` alone.
 lahe status [--review <id>] [--json] [--state-dir <path>]
 ```
 
-The read path beside `wait`'s blocking one. `wait` blocks, and it was the only read, so every agent
-hand-rolled a walk of `review.json` with its own idea of what counted.
+The one read path, and the one keep-up loop. Before it, every agent hand-rolled a walk of
+`review.json` with its own idea of what counted.
 
 - **What it lists:** the UNANSWERED READY items, meaning state `ready` with no reply on them. That is
-  the projection's own vocabulary, and it is the same watermark `wait` wakes on. Items in `not_handled`
+  the projection's own vocabulary. Items in `not_handled`
   or carrying a `question` are in front of the REVIEWER, so they are counted and not listed. Drafts are
   counted separately and never listed, matching `protocol.countsAsNew`.
 - **Liveness:** `page last seen <n> ago` (from `review.read`'s `page_last_seen_at`), `no page has
   connected yet`, or `unknown` when no helper is running. Plus when the last comment arrived. This is
-  the answer to "are you getting my edits?", which neither side could give before.
+  the answer to "are you getting my edits?", which neither side could give before. Plus one line,
+  `script line re-injected after a rebuild, <n> ago`, when the helper healed the page (`last_heal_at`).
 - **Where it reads from:** `review.read` when a helper is up, and the projector off disk when not. A
   projection is a pure function of the log, so both paths agree.
 - **Fencing, the same as `review.json` (D12):** the human list prints the reviewer's `note`/`change`
@@ -587,33 +601,20 @@ hand-rolled a walk of `review.json` with its own idea of what counted.
   `intent_fields`, straight from `src/shared/review_format.js`), then the item lines, then the summary.
   Item fields keep the names they have in `review.json`, so the classification an agent already learned
   there applies unchanged.
-- **Exit codes:** `wait`'s, reused: `0` it printed (even zero items), `2` nothing readable, `3` unknown
-  review, `4` bad usage.
+- **The keep-up loop:** `--seen-file <path>` with `--json` prints only items (by `id` and `rev`) the
+  file has not recorded, then records them. Run it on a timer and any item line is new work: no cursor,
+  no parser, no dedupe of the caller's own, every review at once, and a restarted loop misses nothing
+  because the file is the state. A reworded item is new work again, which is why `rev` is in the key.
+- **Exit codes:** `0` it printed (even zero items), `2` nothing readable, `3` unknown review, `4` bad
+  usage. The table lives in `protocol.WAIT.EXIT`, which keeps its name from the retired command.
 
+### `lahe wait` is retired
 
-### `lahe wait`
-
-```
-lahe wait --review <id> [--since <cursor>] [--timeout <seconds>, default 300]
-```
-
-- **The watermark:** `--since` is a `seq` from the log. `wait` returns events with a higher `seq` and
-  prints the highest `seq` it printed, which is the caller's next cursor.
-- **It stores nothing and consumes nothing.** It is a read, never an acknowledgment. A killed wait, a
-  repeated wait, and two agents waiting at once are all harmless.
-- **What counts as new:** an item newly ready, an item reworded to a higher revision, an item flagged
-  as lost, and a reply from another agent (`protocol.countsAsNew`). **Drafts never count.**
-- **Output:** new ready items print as **JSON lines**, one line per item, each carrying the same
-  fields the item carries in `review.json`, with page text in the same data-named fields.
-- **Exit codes:** `0` new work printed, `1` timeout with nothing new, `2` helper not reachable,
-  `3` unknown review id, `4` bad usage (`protocol.WAIT.EXIT`).
-- **Concurrency:** two waiters on one review both wake. There is no queue and no claim.
-- **A helper that goes away mid-wait is retried, not reported.** A dropped connection is re-asked from
-  the SAME `--since` (a read consumes nothing, so nothing is skipped or double-counted) for up to
-  thirty seconds or the rest of `--timeout`, whichever is smaller, with one stderr line on reconnect.
-  Only then is it `HELPER_UNREACHABLE`. **The thirty seconds run from the moment the connection
-  dropped, not from the start of the wait**, so a bounce five minutes into a long poll gets the same
-  window as one in the first second.
+It blocked, so agents ran it in the foreground and stopped working while the reviewer typed, and it
+watched one review behind a cursor the caller had to carry. `lahe status --json --seen-file <path>`
+answers the same question without blocking, for every review, and survives a restart by construction.
+The command is unwired from the dispatcher and its route is off the wire; `src/cli/commands/wait.js`
+and its tests are on the cleanup batch.
 
 ### The failure table
 

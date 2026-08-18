@@ -202,13 +202,23 @@ once, and after that a plain sentence works:
 | `lahe add ... --review <id>` | Re-attach this page to a review that already exists, by id |
 | `lahe status [--review <id>] [--json]` | What is open right now: per review, the pages, the counts, the items waiting on you, and whether the reviewer's page is still connected. Blocks on nothing. `--json` prints the contract and field classes on line one, before any page text |
 | `lahe serve [--port N]` | Run the helper by hand (`add` starts it for you, so this is rarely needed) |
-| `lahe wait --review <id> [--since <cursor>] [--timeout <seconds>] [--state-dir <path>]` | Block until new items are ready; prints them as JSON lines plus the next cursor. Exit codes: 0 new work, 1 timeout, 2 helper unreachable, 3 unknown review, 4 bad usage. Reading acknowledges nothing |
 
-**If the page is build output**, an agent should rebuild and re-run `lahe add` on
-the built page before it reports an item handled: `handled` is supposed to mean
-your page shows the change. Re-running `add` on a rebuilt page is one idempotent
-command and keeps the same review, because the review remembers the path it was
-added at. You do not have to reload: the page updates itself. The helper watches
+`lahe status --json --seen-file <path>` is the keep-up loop: run it on a timer,
+and any item line in the output is new work. The seen file records what was
+printed, so nothing is shown twice and a restarted loop misses nothing. There is
+no blocking watch command; `lahe wait` was retired in favour of this one, which
+covers every review at once and needs no cursor.
+
+**If the page is build output**, an agent should rebuild before it reports an
+item handled: `handled` is supposed to mean your page shows the change. It does
+not have to re-run `lahe add` afterwards. A rebuild strips the script line out
+of the built page, and a running helper puts it back: it is already watching
+that file, so when the file returns without the line, the helper writes the same
+line back (same review, same token) and refreshes the fallback copy beside the
+page. `lahe status` says `script line re-injected after a rebuild` when that
+happened. Re-run `add` when no helper is up, when the page is served from a new
+origin, or to record a `--source` path. You do not have to reload: the page
+updates itself. The helper watches
 the file the review was added at, and when a rebuild lands, your page reloads
 onto the new version and re-applies your outstanding comments and edits (R36).
 It waits while you are mid-work, so a page never swaps under an open edit or a

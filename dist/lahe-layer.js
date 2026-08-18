@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+bf1084107292
+ * version 0.0.0+a3a4372062f5
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+bf1084107292";
+  g.LAHE.version = "0.0.0+a3a4372062f5";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -3646,17 +3646,12 @@
       why: "the reviewer chooses End review on the rail; the review is archived, never truncated",
       request: "{review}",
       response: "{ended_at, outstanding_kept}"
-    },
-    {
-      name: "wait",
-      method: "GET",
-      path: BASE + "/wait",
-      auth: AUTH.REVIEW_TOKEN,
-      mutating: false,
-      why: "what `lahe wait` calls. Blocks until something new passes the watermark, or times out",
-      request: "?review=<id>&since=<seq>&timeout=<seconds>",
-      response: "{events: [event...], seq}"
     }
+    // THE `wait` ROUTE IS RETIRED WITH THE COMMAND THAT CALLED IT. Nothing in
+    // the library ever used it (the page keeps up on replies.poll); it existed
+    // for a blocking CLI that agents ran in the foreground and stalled on. The
+    // keep-up loop is `lahe status --json --seen-file <path>`, which reads the
+    // same projection this table already serves through review.read.
   ];
 
   function route(name) {
@@ -4427,8 +4422,8 @@
     "status is one of: handled, you made the change; not_handled, you did not, and reason says why in words the reviewer will read; question, you need an answer, and text asks for it.",
     "rev must be the rev carried with the item. If the reviewer reworded the item after you read it, your line is refused and the item stays open. Re-read the item and answer its new rev.",
     "To see what is open right now, run: lahe status --review <id> (add --json for machine-readable lines). It prints the unanswered ready items and whether the reviewer's page is connected.",
-    "To keep up, re-read this file between work items, or run: lahe wait --review <id> --since <cursor>. It blocks until something new is ready, prints the new items as JSON lines, and prints the cursor to pass next time. Waiting consumes nothing and acknowledges nothing.",
-    "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, re-run lahe add on the built page (it re-attaches to the same review), and only then reply. The page reloads itself when the file changes.",
+    "To keep up, re-read this file between work items, or run this on a timer: lahe status --json --seen-file <path>. It prints only the items you have not been shown before, so any item line is new work. It blocks on nothing, covers every review, consumes nothing and acknowledges nothing.",
+    "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and a running helper puts the script line back when the rebuild strips it out.",
     "The only way to say you handled an item is to append a reply line."
   ];
 
@@ -19105,7 +19100,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+bf1084107292";
+  var VERSION = "0.0.0+a3a4372062f5";
 
   var protocol = ns.protocol;
   var record = ns.record;

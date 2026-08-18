@@ -262,6 +262,12 @@ var HANDLERS = {
       body: Object.assign({}, projected, {
         seq: deps.log.currentSeq(request.review),
         page_last_seen_at: deps.reviews.lastSeenAt(request.review),
+        // When the helper last put a stripped script line back into this
+        // review's page. `lahe status` says it out loud, because a heal means a
+        // rebuild landed without the line and somebody may want to know their
+        // build strips it.
+        last_heal_at:
+          typeof deps.reviews.lastHealAt === "function" ? deps.reviews.lastHealAt(request.review) : null,
         draft_count: draftCount
       })
     };
@@ -318,40 +324,15 @@ var HANDLERS = {
     return { status: 200, body: { ended_at: ended.ended_at, outstanding_kept: outstanding } };
   },
 
-  // What `lahe wait` calls. It BLOCKS until something new passes the watermark,
-  // or times out. It stores nothing and consumes nothing: a killed wait, a
-  // repeated wait, and two agents waiting at once are all harmless, and two
-  // waiters on one review both wake.
-  wait: async function (request, deps) {
-    var since = numberOr(request.query.since, 0);
-    var timeoutSeconds = numberOr(request.query.timeout, protocol.WAIT.DEFAULT_TIMEOUT_SECONDS);
-    var deadline = Date.now() + timeoutSeconds * 1000;
-
-    for (;;) {
-      var fresh = deps.log.since(request.review, since).filter(protocol.countsAsNew);
-      if (fresh.length > 0) {
-        return {
-          status: 200,
-          body: { events: fresh, seq: deps.log.currentSeq(request.review) }
-        };
-      }
-      if (Date.now() >= deadline) {
-        return { status: 200, body: { events: [], seq: deps.log.currentSeq(request.review) } };
-      }
-      await sleep(Math.min(protocol.REPLY_POLL.INTERVAL_MS, Math.max(0, deadline - Date.now())));
-    }
-  }
+  // THE `wait` HANDLER IS GONE WITH ITS ROUTE. `lahe wait` is retired: it
+  // blocked, so agents stalled in the foreground on it, and it answered for one
+  // review behind a cursor. `lahe status --json --seen-file <path>` reads the
+  // same log through review.read, for every review, without blocking anything.
 };
 
 function numberOr(value, fallback) {
   var parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function sleep(ms) {
-  return new Promise(function (resolve) {
-    setTimeout(resolve, ms);
-  });
 }
 
 // Every route on the wire has a handler, checked at LOAD rather than at request

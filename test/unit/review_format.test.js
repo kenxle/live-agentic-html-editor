@@ -40,8 +40,8 @@ const CONTRACT_VERBATIM = [
   "status is one of: handled, you made the change; not_handled, you did not, and reason says why in words the reviewer will read; question, you need an answer, and text asks for it.",
   "rev must be the rev carried with the item. If the reviewer reworded the item after you read it, your line is refused and the item stays open. Re-read the item and answer its new rev.",
   "To see what is open right now, run: lahe status --review <id> (add --json for machine-readable lines). It prints the unanswered ready items and whether the reviewer's page is connected.",
-  "To keep up, re-read this file between work items, or run: lahe wait --review <id> --since <cursor>. It blocks until something new is ready, prints the new items as JSON lines, and prints the cursor to pass next time. Waiting consumes nothing and acknowledges nothing.",
-  "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, re-run lahe add on the built page (it re-attaches to the same review), and only then reply. The page reloads itself when the file changes.",
+  "To keep up, re-read this file between work items, or run this on a timer: lahe status --json --seen-file <path>. It prints only the items you have not been shown before, so any item line is new work. It blocks on nothing, covers every review, consumes nothing and acknowledges nothing.",
+  "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and a running helper puts the script line back when the rebuild strips it out.",
   "The only way to say you handled an item is to append a reply line."
 ];
 
@@ -105,9 +105,9 @@ test("review.json names no acknowledge command, because there is none", () => {
   assert.equal(/lahe ack/i.test(text), false);
   assert.equal(/lahe next/i.test(text), false);
   assert.equal(/acknowledge (each|the) item/i.test(text), false, "the reply line is the only way to say you handled something");
-  // The one place the word may appear is the wait command's promise that it
+  // The one place the word may appear is the keep-up loop's promise that it
   // acknowledges nothing.
-  assert.equal(text.includes("Waiting consumes nothing and acknowledges nothing."), true);
+  assert.equal(text.includes("consumes nothing and acknowledges nothing."), true);
 });
 
 test("the contract is exported as the module's own constant and is frozen text", () => {

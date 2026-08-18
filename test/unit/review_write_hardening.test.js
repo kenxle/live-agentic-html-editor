@@ -163,7 +163,10 @@ test("the --source template never becomes a reload target", () => {
   const f = fixture("review-1");
   const built = path.join(f.dir, "page.html");
   const template = path.join(f.dir, "page.template.html");
-  fs.writeFileSync(built, "<h1>built</h1>");
+  // The built page carries this review's script line already, so the helper's
+  // heal (src/service/heal.js) has nothing to put back and the only thing that
+  // could move this file's mtime is a real rebuild.
+  fs.writeFileSync(built, '<h1>built</h1>\n<script src="/x" data-lahe-review="review-1"></script>\n');
   fs.writeFileSync(template, "<h1>{{ title }}</h1>");
   write(f, "review-1", { origins: [], target_path: built, source_path: template });
 

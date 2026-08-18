@@ -108,15 +108,17 @@ test("the contract field is in the real projection byte for byte, and names no a
   );
 
   // The file tells an agent to append a line, and never to run a command that
-  // no longer exists. `lahe wait` is named; nothing acknowledges.
+  // no longer exists. `lahe status` is the one keep-up command named; `lahe
+  // wait` is retired and must not survive here either.
   const wholeFile = fs.readFileSync(written, "utf8");
-  assert.ok(/lahe wait/.test(wholeFile), "the file names the one command an agent may run");
+  assert.ok(/lahe status --json --seen-file/.test(wholeFile), "the file names the one keep-up command an agent may run");
+  assert.equal(/lahe wait/.test(wholeFile), false, "the retired blocking command is named nowhere");
   assert.equal(/lahe ack|lahe next|lahe send/.test(wholeFile), false, "review.json names no acknowledge command");
-  // The only place the word appears at all is the sentence saying that waiting
-  // acknowledges NOTHING, which is the opposite of naming a command.
+  // The only place the word appears at all is the sentence saying the keep-up
+  // loop acknowledges NOTHING, which is the opposite of naming a command.
   const acknowledgeMentions = onDisk.contract.filter((line) => /acknowledg/i.test(line));
   assert.deepEqual(acknowledgeMentions, [
-    "To keep up, re-read this file between work items, or run: lahe wait --review <id> --since <cursor>. It blocks until something new is ready, prints the new items as JSON lines, and prints the cursor to pass next time. Waiting consumes nothing and acknowledges nothing."
+    "To keep up, re-read this file between work items, or run this on a timer: lahe status --json --seen-file <path>. It prints only the items you have not been shown before, so any item line is new work. It blocks on nothing, covers every review, consumes nothing and acknowledges nothing."
   ]);
   assert.equal(
     onDisk.contract[onDisk.contract.length - 1],

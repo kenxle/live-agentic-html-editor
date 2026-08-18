@@ -200,6 +200,20 @@ function livenessLine(liveness, nowMs) {
   return "page last seen " + ago(liveness.page_last_seen_at, nowMs);
 }
 
+/**
+ * The heal sentence, printed only when the helper actually put a line back.
+ *
+ * A heal means a rebuild landed without the lahe script line and the helper
+ * repaired it, which is a thing to know rather than a thing to hide: the review
+ * kept working, and the build strips the line every time.
+ */
+function healLine(liveness, nowMs) {
+  if (!liveness || !liveness.last_heal_at) return null;
+  var when = ago(liveness.last_heal_at, nowMs);
+  if (!when) return null;
+  return "script line re-injected after a rebuild, " + when;
+}
+
 // The label that goes in front of page-derived text (D12). `note` and `change`
 // are the reviewer's own words; `quote` is text copied off the reviewed page,
 // which review_format classes as data and the contract field calls "never an
@@ -387,6 +401,7 @@ async function run(argv, options) {
     var held = ready && ready.reviews ? ready.reviews[id] : null;
     var projection = null;
     var pageLastSeen = null;
+    var lastHeal = null;
     var draftCount = 0;
     var helperUp = false;
 
@@ -401,6 +416,7 @@ async function run(argv, options) {
         if (answer.ok) {
           projection = answer.projection;
           pageLastSeen = projection && projection.page_last_seen_at ? projection.page_last_seen_at : null;
+          lastHeal = projection && projection.last_heal_at ? projection.last_heal_at : null;
           draftCount = projection && typeof projection.draft_count === "number" ? projection.draft_count : 0;
           helperUp = true;
         }
@@ -438,6 +454,7 @@ async function run(argv, options) {
     var liveness = {
       helper_up: helperUp,
       page_last_seen_at: pageLastSeen,
+      last_heal_at: lastHeal,
       last_item_at: lastItemAt(items),
       drafts: draftCount
     };
@@ -475,6 +492,8 @@ async function run(argv, options) {
       "            " +
         (liveness.last_item_at ? "last comment " + ago(liveness.last_item_at, nowMs) : "no comments yet")
     );
+    var healed = healLine(liveness, nowMs);
+    if (healed) lines.push("            " + healed);
     if (open.length === 0) {
       lines.push("  nothing is waiting on you.");
     } else {
@@ -582,6 +601,7 @@ module.exports = {
   lastItemAt: lastItemAt,
   ago: ago,
   livenessLine: livenessLine,
+  healLine: healLine,
   excerpt: excerpt,
   PAGE_TEXT_LABEL: PAGE_TEXT_LABEL,
   contractLine: contractLine,
