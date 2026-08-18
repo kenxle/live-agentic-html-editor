@@ -130,3 +130,23 @@ test("closing the final session succeeds when its recorded helper is already dow
   assert.equal(closed.stdout.includes("helper stopped"), false);
   assert.ok(agentSessions.createStore({ dir: state }).read(sessionId).closed_at);
 });
+
+test("takeover is explicit, advances the handoff fence, and prints safe catch-up commands", async (t) => {
+  const root = tempDir("lahe-takeover-session-command-");
+  const state = path.join(root, "state");
+  const port = await freePort();
+  const sessionId = agentSessions.createStore({ dir: state }).create({ id: "s_takeover" }).id;
+  t.after(async () => {
+    await capture(() => sessionCommand.run(["close", sessionId, "--state-dir", state, "--port", String(port)]));
+  });
+
+  const result = await capture(() => sessionCommand.run([
+    "takeover", sessionId, "--state-dir", state, "--port", String(port)
+  ]));
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stdout, /taken over explicitly/);
+  assert.match(result.stdout, new RegExp("catch-up\\s+lahe status --session " + sessionId + " --json"));
+  assert.match(result.stdout, new RegExp("monitor\\s+lahe monitor --session " + sessionId + " --seen-file <new-path>"));
+  assert.match(result.stdout, /do not reuse the previous agent's ledger/);
+  assert.equal(agentSessions.createStore({ dir: state }).read(sessionId).handoff_rev, 1);
+});

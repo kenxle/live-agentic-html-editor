@@ -9,6 +9,8 @@
 "use strict";
 
 var protocol = require("../../shared/protocol.js");
+var agentSessions = require("../../service/agent_sessions.js");
+var stateDir = require("../../service/state_dir.js");
 var status = require("./status.js");
 
 var DEFAULT_INTERVAL_SECONDS = 15;
@@ -85,6 +87,10 @@ async function run(argv, options) {
   var err = opts.stderr || function (text) { process.stderr.write(text); };
   var statusRun = opts.statusRun || status.run;
   var wait = opts.wait || waitMs;
+  var readSession = opts.readSession || function (id, stateDirOption) {
+    var dir = stateDirOption ? stateDir.stateDir({ dir: stateDirOption }) : stateDir.stateDir();
+    return agentSessions.createStore({ dir: dir }).read(id);
+  };
   var args = parseArgs(argv);
 
   if (args.help) {
@@ -93,6 +99,29 @@ async function run(argv, options) {
   }
   if (args.error) {
     err("lahe monitor: " + args.error + "\n\n" + USAGE + "\n");
+    return protocol.CLI_EXIT.BAD_USAGE;
+  }
+
+  var startingSession;
+  try {
+    startingSession = readSession(args.session, args.stateDir);
+  } catch (readError) {
+    err("lahe monitor: " + readError.message + "\n");
+    return protocol.CLI_EXIT.BAD_USAGE;
+  }
+  if (!startingSession) {
+    err("lahe monitor: unknown agent session " + JSON.stringify(args.session) + "\n");
+    return protocol.CLI_EXIT.BAD_USAGE;
+  }
+  var handoffRev = agentSessions.handoffRev(startingSession);
+
+  function stillOwnsSession() {
+    var current = readSession(args.session, args.stateDir);
+    return current && agentSessions.handoffRev(current) === handoffRev;
+  }
+
+  function handoffExit() {
+    err("lahe monitor: agent session " + args.session + " was taken over; this older monitor has ended\n");
     return protocol.CLI_EXIT.BAD_USAGE;
   }
 
@@ -105,6 +134,12 @@ async function run(argv, options) {
   if (args.stateDir) statusArgs.push("--state-dir", args.stateDir);
 
   while (true) {
+    try {
+      if (!stillOwnsSession()) return handoffExit();
+    } catch (readError) {
+      err("lahe monitor: " + readError.message + "\n");
+      return protocol.CLI_EXIT.BAD_USAGE;
+    }
     var stdout = [];
     var stderr = [];
     var code = await statusRun(statusArgs, {
@@ -113,6 +148,13 @@ async function run(argv, options) {
     });
     var printed = stdout.join("");
     var errors = stderr.join("");
+
+    try {
+      if (!stillOwnsSession()) return handoffExit();
+    } catch (readError) {
+      err("lahe monitor: " + readError.message + "\n");
+      return protocol.CLI_EXIT.BAD_USAGE;
+    }
 
     if (printed) out(printed);
     if (errors) err(errors);

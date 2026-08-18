@@ -206,6 +206,29 @@ Never monitor globally. A review has one immutable agent-session owner, and the
 CLI refuses to attach a page owned by another session. Plain `lahe add` remains
 an advanced legacy command; use `lahe review` for normal work.
 
+### Hand a workstream to a different agent
+
+The immutable owner is the agent session, not the Claude, Codex, Gemini, or
+Antigravity process that created it. When the human explicitly says the prior
+agent is finished and asks a new agent to continue the same browser reviews,
+take over the whole existing session:
+
+```sh
+lahe session takeover <session-id>
+```
+
+This preserves every review, page, token, comment, reply, and static-server
+address. It advances a durable handoff fence so any older `lahe monitor`
+process exits before delivering more work. It also reopens the session and its
+servers if they had been closed.
+
+Run the printed `catch-up` command first. It deliberately has no seen-file, so
+the new agent sees every unanswered item, including work the previous agent may
+have seen but not completed. Then launch the printed monitor with a fresh
+seen-file. Do not reuse the prior agent's ledger. Takeover is allowed only when
+the human explicitly requests the handoff; never infer it from an apparently
+idle app, process, or session.
+
 ## Step 3: read the review and act on it
 
 `review` prints the agent session, review id, and review folder, on labelled lines.

@@ -53,6 +53,9 @@
   helper only after the final open session closes; reopen starts it again.
 - Resolved blocker: independent live agent sessions can no longer receive one
   another's reviews through the documented or accepted monitor command.
+- Complete: explicit `lahe session takeover` transfers a whole workstream to a
+  replacement agent, fences older monitors with `handoff_rev`, and prints an
+  unfiltered catch-up command plus a fresh-ledger monitor command.
 - Complete: the public static front door now owns an event-driven, read-only
   Node server per session and directory. It chooses and registers the origin,
   prints the exact URL, reuses the process on re-entry, stops it on session

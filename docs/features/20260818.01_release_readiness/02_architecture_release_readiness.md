@@ -66,8 +66,13 @@ is enforced when a review is created, reattached, or matched by path, because
 reply folding intentionally accepts a later same-revision reply. Filtering only
 the display would still permit double work.
 
-An explicit handoff command or option may move a review between sessions. A
-silent reassignment is forbidden.
+`lahe session takeover <id>` explicitly transfers stewardship of a whole
+session to a new top-level agent without moving its reviews. It increments the
+session's durable `handoff_rev`; older monitor processes compare their captured
+revision before emitting work and exit when it changes. The new agent first
+runs un-seen-filtered session status to catch every unanswered item, then starts
+a monitor with a fresh seen-file. This command requires an explicit human
+handoff. Silent reuse or reassignment remains forbidden.
 
 ### Process and energy lifecycle
 

@@ -29,7 +29,11 @@ and review the built HTML with `--source <build-entrypoint>` as `AGENTS.md`
 describes.
 
 Pass the printed `--session <id>` when this same top-level agent opens another
-document. A different top-level agent gets a different session.
+document. A different top-level agent normally gets a different session. If the
+human explicitly says the prior agent is finished and asks this agent to take
+over its existing workstream, run `lahe session takeover <id>` instead. Run the
+printed catch-up command before monitoring, and use the printed fresh seen-file
+guidance. Never infer or silently perform a takeover.
 
 ## Work
 
@@ -102,5 +106,8 @@ reports that the session is closed.
 - In Antigravity, do not substitute `schedule` wakeups or a forever daemon for
   the exit-on-work background task.
 - Do not leave a monitor running after its agent session closes.
+- Do not refuse an explicit human-requested handoff merely because another
+  agent created the session. Use `lahe session takeover <id>`; never silently
+  reuse the old session or its seen-file.
 - Do not hand-convert one Markdown file with Pandoc. Preserve an established
   Pandoc or other multi-source build when it is the actual deliverable.

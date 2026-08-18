@@ -277,6 +277,7 @@ once, and after that a plain sentence works:
 | `lahe monitor --session <id> --seen-file <path>` | Poll locally without model wakeups, print new session work, and exit |
 | `lahe session close <id>` | Close an agent workstream, stop its static servers, and keep all review history. The final close also stops the shared helper |
 | `lahe session reopen <id>` | Reopen the workstream and restart its helper and static servers |
+| `lahe session takeover <id>` | Explicitly hand an existing workstream to a new agent, fence its older monitors, and print catch-up commands |
 | `lahe serve [--port N]` | Run the helper by hand (`add` starts it for you, so this is rarely needed) |
 
 Launch `lahe monitor --session <id> --seen-file <path>` as a background terminal

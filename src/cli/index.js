@@ -28,7 +28,7 @@ var USAGE = [
   "",
   "  serve   run the local helper on 127.0.0.1:" + protocol.DEFAULT_PORT + " (configurable with --port)",
   "  review  start or continue a document review in an isolated agent session",
-  "  session close or reopen an agent session and its helper lease",
+  "  session close, reopen, or explicitly take over an agent session",
   "  add     add the library to a page and mint that review's token",
   "  status  print what is open right now, and whether the page is still connected",
   "  monitor watch locally for session work, print it, and exit (zero-token no-ops)",

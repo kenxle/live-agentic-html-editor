@@ -252,6 +252,9 @@ test("the canonical skill rejects the retired and cross-session workflows", () =
   assert.match(skill, /handle every printed item/);
   assert.match(skill, /run one\s+immediate `lahe status --session <id> --json --seen-file <same-path> --quiet`/);
   assert.match(skill, /Launch the background monitor only after that\s+immediate check is empty/);
+  assert.match(skill, /lahe session takeover <id>/);
+  assert.match(skill, /Never infer or silently perform a takeover/);
+  assert.match(skill, /never silently\s+reuse the old session or its seen-file/i);
   assert.match(skill, /run\s+the same `lahe monitor` command in the foreground/);
   assert.match(skill, /Stop or delete this session's\s+background monitor/);
   assert.doesNotMatch(skill, /moderate timer/);

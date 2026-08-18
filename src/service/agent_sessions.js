@@ -1,6 +1,7 @@
 // Durable routing ownership for independent top-level agent workstreams.
 // One machine may have many sessions and one shared helper, but one review has
-// exactly one immutable agent-session owner.
+// exactly one immutable agent-session owner. Stewardship of that whole session
+// may move explicitly between top-level agents through a handoff revision.
 
 "use strict";
 
@@ -15,6 +16,12 @@ var LEGACY_ID = "legacy";
 
 function mintId() {
   return "s_" + crypto.randomBytes(8).toString("hex");
+}
+
+function handoffRev(session) {
+  return session && Number.isInteger(session.handoff_rev) && session.handoff_rev >= 0
+    ? session.handoff_rev
+    : 0;
 }
 
 function createStore(options) {
@@ -52,7 +59,7 @@ function createStore(options) {
     if (id === LEGACY_ID || !protocol.isSafeId(id)) throw new Error("invalid agent session id " + JSON.stringify(id));
     var existing = read(id);
     if (existing) return existing;
-    return write({ schema: SCHEMA, id: id, created_at: now(), closed_at: null });
+    return write({ schema: SCHEMA, id: id, created_at: now(), closed_at: null, handoff_rev: 0 });
   }
 
   function list() {
@@ -91,11 +98,36 @@ function createStore(options) {
     return session;
   }
 
+  function takeover(id) {
+    var session = read(id);
+    if (!session || session.synthetic) throw new Error("unknown agent session " + JSON.stringify(id));
+    session.closed_at = null;
+    session.handoff_rev = handoffRev(session) + 1;
+    session.taken_over_at = now();
+    return write(session);
+  }
+
   function openSessions() {
     return list().filter(function (session) { return !session.closed_at; });
   }
 
-  return { create: create, read: read, list: list, requireOpen: requireOpen, close: close, reopen: reopen, openSessions: openSessions };
+  return {
+    create: create,
+    read: read,
+    list: list,
+    requireOpen: requireOpen,
+    close: close,
+    reopen: reopen,
+    takeover: takeover,
+    handoffRev: handoffRev,
+    openSessions: openSessions
+  };
 }
 
-module.exports = { SCHEMA: SCHEMA, LEGACY_ID: LEGACY_ID, mintId: mintId, createStore: createStore };
+module.exports = {
+  SCHEMA: SCHEMA,
+  LEGACY_ID: LEGACY_ID,
+  mintId: mintId,
+  handoffRev: handoffRev,
+  createStore: createStore
+};

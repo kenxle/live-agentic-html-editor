@@ -33,6 +33,24 @@ test("agent sessions are durable, closeable, and reopenable", () => {
   assert.equal(sessions.createStore({ dir }).read(made.id).id, made.id);
 });
 
+test("an explicit takeover advances stewardship without moving owned reviews", () => {
+  let n = 0;
+  const dir = tempDir();
+  const store = sessions.createStore({ dir, now: () => "time-" + (++n) });
+  const made = store.create({ id: "s_handoff" });
+  assert.equal(sessions.handoffRev(made), 0);
+
+  store.close(made.id);
+  const handedOff = store.takeover(made.id);
+  assert.equal(handedOff.closed_at, null);
+  assert.equal(handedOff.handoff_rev, 1);
+  assert.equal(handedOff.taken_over_at, "time-3");
+
+  const again = store.takeover(made.id);
+  assert.equal(again.handoff_rev, 2);
+  assert.equal(store.requireOpen(made.id).id, made.id);
+});
+
 test("legacy is synthetic and cannot be opened or mutated", () => {
   const store = sessions.createStore({ dir: tempDir() });
   assert.equal(store.read(sessions.LEGACY_ID).synthetic, true);

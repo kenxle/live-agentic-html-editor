@@ -14,7 +14,7 @@ var service = require("../../service/index.js");
 var staticServers = require("../../service/static_servers.js");
 
 var BIN = path.join(__dirname, "..", "..", "..", "bin", "lahe.js");
-var USAGE = "usage: lahe session <close|reopen> <session-id> [--port <n>] [--state-dir <path>]";
+var USAGE = "usage: lahe session <close|reopen|takeover> <session-id> [--port <n>] [--state-dir <path>]";
 
 function delay(ms) {
   return new Promise(function (resolve) { setTimeout(resolve, ms); });
@@ -37,7 +37,9 @@ function parse(argv) {
     else if (list[i] === "--state-dir" && list[i + 1] !== undefined) out.stateDir = list[(i += 1)];
     else return { error: "unknown or incomplete option " + JSON.stringify(list[i]) };
   }
-  if (out.action !== "close" && out.action !== "reopen") return { error: "expected close or reopen" };
+  if (out.action !== "close" && out.action !== "reopen" && out.action !== "takeover") {
+    return { error: "expected close, reopen, or takeover" };
+  }
   if (!protocol.isSafeId(out.id)) return { error: "session id must match " + String(protocol.SAFE_ID) };
   if (out.port !== null && (!Number.isInteger(out.port) || out.port < 1 || out.port > 65535)) return { error: "--port takes a port number" };
   return out;
@@ -65,7 +67,19 @@ async function stopVerifiedHelper(dir) {
 
 async function startHelper(dir, port) {
   var live = await service.probeHealth(protocol.DEFAULT_HOST, port);
-  if (live) return false;
+  if (live) {
+    var liveContract = Number.isInteger(live.service_contract) ? live.service_contract : 0;
+    if (liveContract > protocol.SERVICE_CONTRACT) {
+      throw new Error(
+        "the running helper uses newer service contract " + liveContract +
+        "; update this clone before changing the session"
+      );
+    }
+    if (liveContract === protocol.SERVICE_CONTRACT) return false;
+    if (!(await stopVerifiedHelper(dir))) {
+      throw new Error("refusing to replace an older helper whose process identity cannot be verified");
+    }
+  }
   var child = childProcess.spawn(process.execPath, [BIN, "serve", "--port", String(port), "--state-dir", dir], {
     detached: true,
     stdio: "ignore"
@@ -102,16 +116,26 @@ async function run(argv) {
           (stopped ? "; shared helper stopped" : "") + "\n"
       );
     } else {
-      store.reopen(args.id);
+      var handedOff = args.action === "takeover";
+      var session = handedOff ? store.takeover(args.id) : store.reopen(args.id);
       var prior = readReady(dir);
       var port = args.port || (prior && prior.port) || protocol.DEFAULT_PORT;
       var started = await startHelper(dir, port);
       var staticStarted = await staticServers.restartAll(dir, args.id);
-      process.stdout.write(
-        "agent session " + args.id + " reopened" +
+      var message =
+        "agent session " + args.id + (handedOff ? " taken over explicitly" : " reopened") +
           (started ? "; shared helper started" : "; shared helper already running") +
-          (staticStarted ? "; static review server" + (staticStarted === 1 ? "" : "s") + " restarted" : "") + "\n"
-      );
+          (staticStarted ? "; static review server" + (staticStarted === 1 ? "" : "s") + " restarted" : "") + "\n";
+      if (handedOff) {
+        message +=
+          "  handoff   " + session.handoff_rev + "  (older lahe monitor processes will exit)\n" +
+          "  catch-up  lahe status --session " + args.id + " --json\n" +
+          "            handle every unanswered item before monitoring\n" +
+          "  monitor   lahe monitor --session " + args.id + " --seen-file <new-path>\n" +
+          "            use a fresh seen-file; do not reuse the previous agent's ledger\n" +
+          "  close     lahe session close " + args.id + "\n";
+      }
+      process.stdout.write(message);
     }
     return protocol.CLI_EXIT.OK;
   } catch (err) {

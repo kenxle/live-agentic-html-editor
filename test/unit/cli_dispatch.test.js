@@ -52,8 +52,8 @@ test("missing and unknown commands use the shared CLI bad-usage exit", async () 
   assert.match(unknown.stderr, /unknown command/);
 });
 
-test("add, serve, and monitor help use stdout and the successful help exit", async () => {
-  for (const command of ["add", "serve", "monitor"]) {
+test("add, serve, session, and monitor help use stdout and the successful help exit", async () => {
+  for (const command of ["add", "serve", "session", "monitor"]) {
     const help = await captureMain([command, "--help"]);
     assert.equal(help.code, protocol.CLI_EXIT.OK, command + " --help exits successfully");
     assert.match(help.stdout, new RegExp("usage: lahe " + command));
