@@ -15,6 +15,11 @@ tool is broken.**
 
 ## Board
 
+- [ ] LAHE-change-highlight-fade @anyone -- (Ken, 2026-08-18) after a source
+  rebuild removes an addressed highlight, briefly highlight the changed text
+  and fade it out so the reviewer can see what landed without losing their
+  reading position. Treat this as a separate enhancement after reload position
+  and rail-state continuity are reliable.
 - [ ] LAHE-rail-remembers-collapsed @anyone -- (Ken, 2026-08-18) the rail
   overlays the text he is reading, so he collapses it; every reload (incl.
   the new auto-reload, which makes this constant) pops it OPEN again and he
