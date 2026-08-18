@@ -104,3 +104,34 @@ is unwired from the dispatcher, its route is off the wire, and the contract
 field, AGENTS.md and the README teach the one loop. `protocol.WAIT.EXIT` keeps
 its name because `status` borrows the table. `src/cli/commands/wait.js` is
 still on disk, unreferenced, on the cleanup batch.
+
+## Morning close-out, 2026-08-18
+
+The final stretch after Ken set the release bar (public, students,
+out-of-box, no agent workarounds):
+
+- Error states verified by hand in a real browser: the origin chip's full
+  arc (copy-for-agent button, self-heal with no reload), one chip at a
+  time, honest statuses. Found and fixed live: the always-open page-note
+  box held R36's auto-reload off forever (busyBoxes); a page opened during
+  a helper outage loaded nothing at all (the sibling-fallback restored
+  R10's offline half).
+- `status --seen-file`: the watcher's dedupe moved into the tool after a
+  hand-rolled monitor parser broke silently.
+- The still-bound rule matured in three steps, each caught by the AC
+  walks: (1) a still-connected binding cannot be lost; (2) the binding
+  replaces the RESOLVE, never the rest of the pass, so collisions still
+  surface (AC3 now asserts REPLAY_NEITHER_MATCHES, the truthful code, and
+  counts it on the conflict counter); (3) creation is a binding, seeded
+  from comments through boot into replay, covering element picks the text
+  matcher can never re-find (AC1's Copy/Export divergence, closed for
+  good); plus: a standing conflict counts once.
+- Reviewer-facing polish: kind-aware reply fallback, one surface per
+  second-window fact, the separate-storage note only while actual.
+- The repo got its own BULLETIN.md carrying the release bar and all open
+  work: `lahe review` (one-command serve, the out-of-box front door), the
+  cold-start proving run, the doc pass, the chip registry, rail-remembers-
+  collapsed, the cleanup batch.
+
+Final gate at close: 467 unit / 206 browser / 0 failed / 3 documented
+skips. Branch `fix/review-session-flaws`, unpushed, awaiting Ken.
