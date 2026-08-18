@@ -236,6 +236,14 @@ test("skill installation refuses an unrelated file at a target path", () => {
 
 test("the canonical skill rejects the retired and cross-session workflows", () => {
   const skill = fs.readFileSync(installSkills.SOURCE, "utf8");
+  // The model report: name the running model once, and steer routine editing
+  // to a cheap model instead of whatever heavyweight happens to be loaded.
+  assert.match(skill, /Report the model before starting/);
+  assert.match(skill, /exact model name exposed by the host/);
+  assert.match(skill, /prefer Luna for straightforward edits/);
+  assert.match(skill, /Terra when the document needs more judgment/);
+  assert.match(skill, /Do not recommend a heavyweight model\s+such as Sol or Fable for ordinary copy changes/);
+  assert.match(skill, /once per LAHE session, not on\s+every monitor wakeup/);
   assert.match(skill, /lahe review <target>/);
   assert.match(skill, /session-scoped/);
   assert.match(skill, /Direct `\.md` and `\.markdown` targets/);

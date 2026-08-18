@@ -7,6 +7,22 @@ description: Open HTML, Markdown, generated documents, or a locally running page
 
 # LAHE live review
 
+## Report the model before starting
+
+At the start of the first LAHE turn, tell the human which model is running,
+using the exact model name exposed by the host. If the host does not expose it,
+say that plainly rather than guessing. Report this once per LAHE session, not on
+every monitor wakeup.
+
+Also recommend a fast, lower-cost model for routine document editing and comment
+handling. For current OpenAI models, prefer Luna for straightforward edits and
+Terra when the document needs more judgment; reserve Sol for genuinely difficult
+architecture, implementation, or reasoning work. On another provider, recommend
+its analogous lightweight editing model. Do not recommend a heavyweight model
+such as Sol or Fable for ordinary copy changes merely because it is available.
+This is advice, not an automatic model switch: continue unless the human asks to
+change models.
+
 Use the repository playbook as the operating contract. Read `AGENTS.md` from
 the same clone that installed the `lahe` command before taking action. The
 wrapper at `~/.local/bin/lahe` contains the absolute path to that clone. If the

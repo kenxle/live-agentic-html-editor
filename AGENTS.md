@@ -14,6 +14,15 @@ answer by appending one JSON line to a reply file. Your answers appear on the
 page while they keep reviewing. There is no send button and no chat relay: the
 files are the whole interface.
 
+When the LAHE skill is first invoked, the agent reports the exact model name its
+host exposes, or says the name is unavailable instead of guessing. It also
+recommends a fast, lower-cost model for routine document editing. In the current
+OpenAI family that means Luna for straightforward edits and Terra when more
+judgment is needed; Sol is reserved for difficult architecture, implementation,
+or reasoning work. Other providers should recommend the analogous lightweight
+model. The report happens once per LAHE session, not on every monitor wakeup,
+and does not switch models without the human's request.
+
 ## Step 1: install (once per machine)
 
 Requires Node 18+ (`node --version`). The documented `install-cli` wrapper is
