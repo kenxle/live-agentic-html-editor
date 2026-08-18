@@ -369,7 +369,12 @@ lahe monitor --session <session-id> --seen-file ~/.lahe-seen-<session-id>
 Launch that exact command as a background terminal task. It polls the
 session-scoped status locally every 15 seconds, prints nothing while the page is
 unchanged, and exits as soon as new work appears. The host can then wake the
-agent with the completed task and its item output. After handling that batch,
+agent with the completed task and its item output. The command prints `LAHE
+ACTION REQUIRED` before the batch. That completion is an interrupt, not a
+successful end state: continue the same turn, handle every printed item, rebuild
+and verify the visible result, append replies, and drain new work. Never stop at
+"I received it" or "it is ready for me to apply," and never wait for the human
+to ask a second time. After handling that batch,
 check once for feedback that arrived while you worked:
 
 ```sh
@@ -395,7 +400,13 @@ a Codex Timer. Wait on that exec session through the tool runtime. Idle polling
 stays local; when the process prints items and exits, handle them, drain
 immediate checks until empty, and then launch a fresh background monitor. Retain
 the exec session id for interruption and never start two monitors for one agent
-session.
+session. Do not end the turn when the exec session returns item output. The
+return starts the work phase; the turn is not complete until each item has a
+durable reply or a genuine question/blocker.
+
+Do not replace the printed command with `lahe status --session <id> --json
+--quiet`. That command is invalid without a seen-file, and a single status call
+does not wait for later work.
 
 #### Antigravity / AGY agent frameworks
 

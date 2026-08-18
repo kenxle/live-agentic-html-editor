@@ -47,8 +47,11 @@ agent from inheriting the old agent's blind spots.
 Launch the exact `lahe monitor` command printed by `lahe review` as a background
 terminal task. The monitor polls session-scoped status locally every 15 seconds,
 prints nothing while idle, and exits as soon as new work appears. Empty polls do
-not invoke the model or use model tokens. When the background task completes,
-handle every printed item. Before launching another background monitor, run one
+not invoke the model or use model tokens. When the background task completes
+with `LAHE ACTION REQUIRED`, that is an interrupt, not a finished monitoring
+task and not something to summarize as work that is merely "ready." Keep the
+current turn active and handle every printed item immediately. Do not wait for
+the human to ask whether you received it. Before launching another background monitor, run one
 immediate `lahe status --session <id> --json --seen-file <same-path> --quiet`
 check. If it prints items that arrived while you worked, handle them and check
 again. Launch the background monitor only after that immediate check is empty.
@@ -66,7 +69,10 @@ real work or the session closes.
 Run the printed `lahe monitor` command in a background exec session. Do not use
 a Codex Timer. Wait on that same exec session through the tool runtime; it stays
 silent during no-ops and returns only when item output exists or the LAHE session
-closes. After handling item output, drain immediate status checks until one is
+closes. A returned item batch means the same turn must continue through source
+edit, rebuild, visible-output verification, reply append, and the immediate
+drain. Never end the turn after saying the item was received or is ready to
+apply. After handling item output, drain immediate status checks until one is
 empty, then start a fresh background monitor with the same session and seen-file.
 
 ### Antigravity / AGY
@@ -110,6 +116,11 @@ reports that the session is closed.
   silent until status prints an item.
 - Do not use native model timers for routine monitoring. Run the printed
   exit-on-work `lahe monitor` command as a background task.
+- Do not substitute `lahe status --session <id> --json --quiet` for the printed
+  monitor command. It is invalid without `--seen-file`, and one status call is
+  not a watcher.
+- Do not treat a completed monitor as completed work. `LAHE ACTION REQUIRED`
+  means process the items now; receiving or describing them is not handling them.
 - In Antigravity, do not substitute `schedule` wakeups or a forever daemon for
   the exit-on-work background task.
 - Do not leave a monitor running after its agent session closes.

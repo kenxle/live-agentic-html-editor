@@ -289,8 +289,11 @@ explicitly requests the handoff.
 
 Launch `lahe monitor --session <id> --seen-file <path>` as a background terminal
 task. It polls locally every 15 seconds, stays silent while idle, and exits when
-new work arrives. Task completion wakes the agent. After handling the printed
-batch, the agent runs an immediate session-scoped status check with the same
+new work arrives. Task completion wakes the agent and prints `LAHE ACTION
+REQUIRED`. This is not a successful stopping point: the agent must continue the
+same turn through editing, rebuilding, verification, replies, and the immediate
+drain. Merely reporting that an item arrived is a workflow failure. After
+handling the printed batch, the agent runs an immediate session-scoped status check with the same
 seen-file and repeats until it is empty, then relaunches the monitor. Draining
 first catches feedback left while the agent worked and avoids an extra
 wake-and-exit cycle. This avoids token burn on no-ops: native Claude

@@ -110,6 +110,15 @@ implementation without an extra background wake-and-exit cycle. A client
 without completion-triggered wakeups may run the same command in the foreground
 with an explicit warning that the chat is occupied.
 
+The monitor emits a loud `LAHE ACTION REQUIRED` control line before item output.
+A completed watcher is not completed review work. It is an interrupt that keeps
+the agent's current turn active through source editing, rebuild, visible-result
+verification, replies, and the drain. This protects the observed failure where
+a Codex agent received the batch, told the human it was ready to apply, and then
+waited for another human message before acting. The control line lives in the
+CLI output as well as the skill because task-completion transcripts may be the
+only context a resumed agent attends to.
+
 This boundary exists to prevent token burn on no-ops. Claude Tasks,
 Antigravity schedules, Codex Timers, and equivalent facilities invoke a model
 even when no document state changed. Leaving those active overnight can spend a

@@ -22,6 +22,7 @@ test("monitor requires session ownership and a durable seen file", async () => {
 
 test("idle polls stay local until work appears, then monitor prints once and exits", async () => {
   const stdout = [];
+  const stderr = [];
   const calls = [];
   const waits = [];
   let count = 0;
@@ -32,6 +33,7 @@ test("idle polls stay local until work appears, then monitor prints once and exi
     "--interval", "7"
   ], {
     stdout: (text) => stdout.push(text),
+    stderr: (text) => stderr.push(text),
     readSession: () => ({ id: "s_owner", handoff_rev: 0 }),
     statusRun: async (args, io) => {
       calls.push(args);
@@ -46,6 +48,13 @@ test("idle polls stay local until work appears, then monitor prints once and exi
   assert.equal(calls.length, 3);
   assert.deepEqual(waits, [7000, 7000]);
   assert.equal(stdout.join(""), '{"review":"r_one","id":"c_one","rev":1}\n');
+  assert.equal(stderr.join(""), monitor.ACTION_REQUIRED);
+  assert.match(stderr.join(""), /do not end this turn/i);
+  assert.match(stderr.join(""), /Handle every item below now/);
+  assert.match(stderr.join(""), /rebuild and verify visible output/);
+  assert.match(stderr.join(""), /append replies/);
+  assert.match(stderr.join(""), /drain status until empty/);
+  assert.match(stderr.join(""), /relaunch lahe monitor/);
   calls.forEach((args) => {
     assert.deepEqual(args, [
       "--session", "s_owner",

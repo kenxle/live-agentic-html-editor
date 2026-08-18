@@ -56,6 +56,10 @@
 - Complete: explicit `lahe session takeover` transfers a whole workstream to a
   replacement agent, fences older monitors with `handoff_rev`, and prints an
   unfiltered catch-up command plus a fresh-ledger monitor command.
+- Complete: monitor work output now begins with `LAHE ACTION REQUIRED`, and the
+  operating contract defines task completion as the start of the processing
+  turn. This follows an observed Codex failure that received a new item but only
+  described it until the human asked again.
 - Observed acceptance case: Antigravity exhausted its Gemini allowance after
   seeing an item, the app was fully closed, and Codex took over the session.
   Catch-up recovered the unfinished item while leaving completed items alone.

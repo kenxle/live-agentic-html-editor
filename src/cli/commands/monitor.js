@@ -15,6 +15,7 @@ var status = require("./status.js");
 
 var DEFAULT_INTERVAL_SECONDS = 15;
 var MAX_INTERVAL_SECONDS = 3600;
+var ACTION_REQUIRED = "LAHE ACTION REQUIRED: do not end this turn or report that work is ready. Handle every item below now, rebuild and verify visible output, append replies, drain status until empty, then relaunch lahe monitor.\n";
 
 var USAGE = [
   "usage: lahe monitor --session <id> --seen-file <path> [--interval <seconds>] [--state-dir <path>]",
@@ -156,7 +157,10 @@ async function run(argv, options) {
       return protocol.CLI_EXIT.BAD_USAGE;
     }
 
-    if (printed) out(printed);
+    if (printed) {
+      err(ACTION_REQUIRED);
+      out(printed);
+    }
     if (errors) err(errors);
     if (code !== protocol.CLI_EXIT.OK) return code;
     if (printed) return protocol.CLI_EXIT.OK;
@@ -168,6 +172,7 @@ async function run(argv, options) {
 module.exports = {
   DEFAULT_INTERVAL_SECONDS: DEFAULT_INTERVAL_SECONDS,
   MAX_INTERVAL_SECONDS: MAX_INTERVAL_SECONDS,
+  ACTION_REQUIRED: ACTION_REQUIRED,
   USAGE: USAGE,
   parseArgs: parseArgs,
   run: run

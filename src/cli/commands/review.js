@@ -161,6 +161,7 @@ async function run(argv) {
     process.stdout.write(
       (staticServer ? "" : "\n") + "  monitor   lahe monitor --session " + sessionId +
         " --seen-file <path>\n" +
+        "            ACTION REQUIRED output starts the work; do not end the turn after receiving it\n" +
         "  drain     lahe status --session " + sessionId +
         " --json --seen-file <same-path> --quiet\n" +
         "            after work, repeat drain until empty; then relaunch the background monitor\n" +
