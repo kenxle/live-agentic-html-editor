@@ -18,22 +18,39 @@ Browser-window ownership already exists. Agent-session routing does not.
 
 ## Recommended agent-session model
 
-Add an opaque, non-secret session ID managed by the CLI.
+Keep one helper and add an opaque, non-secret agent-session ID managed by the
+CLI. Session scope is an ownership rule, not an optional display filter.
 
 1. The ordinary `lahe review <page>` command starts a new agent session when no
    session is named and prints its ID with the review ID and URL.
-2. Later `review` or `add` calls may name that session and enroll the new review
-   in it.
-3. `lahe status --session <id> --json --seen-file <path>` dynamically lists
-   only reviews enrolled in that session.
-4. Plain machine-wide `status` remains a human diagnostic. Agent instructions
-   never use it as a work feed.
-5. Seen keys are `session + review + item + rev`, not only `item + rev`.
+2. Later `review` or advanced `add` calls name that session and enroll each new
+   review in it. Re-entry on the same target infers and reuses the existing
+   ownership.
+3. Each review has exactly one immutable `agent_session_id`. A carried review
+   or path match owned by another session is refused, never silently moved.
+4. `lahe status --session <id> --json --seen-file <path>` dynamically lists
+   only reviews owned by that session, including reviews added after monitoring
+   began.
+5. Any monitoring command with `--seen-file` requires `--session`. It never
+   falls back to all reviews. Plain machine-wide `status` remains a human
+   diagnostic and agent instructions never use it as a work feed.
+6. Seen keys are `session + review + item + rev`, not only `item + rev`.
+7. `lahe session close <id>` closes routing without deleting review history or
+   stopping the shared helper. Explicit reopen is required before more reviews
+   can be added.
+
+Session metadata lives in an owner-only
+`<state-dir>/agent-sessions/<session-id>/session.json` file containing its
+schema, ID, creation time, and optional close time. Review `meta.json`, the
+`review.created` recovery event, and `review.json` carry the immutable
+`agent_session_id`. Existing unowned reviews are visible only through a
+synthetic `legacy` session; they are not adopted silently.
 
 The session ID is routing metadata, not an authentication claim. The trust
-boundary remains the local user account. No item leases or security theater are
-required for v1. The helper should still fail loud if a review is enrolled in
-two active independent sessions because that condition predicts double work.
+boundary remains the local user account. No item leases are required. Ownership
+is enforced when a review is created, reattached, or matched by path, because
+reply folding intentionally accepts a later same-revision reply. Filtering only
+the display would still permit double work.
 
 An explicit handoff command or option may move a review between sessions. A
 silent reassignment is forbidden.
@@ -45,9 +62,11 @@ Fixed `--review` lists are rejected because they miss reviews created later.
 Machine-global monitoring is rejected because it has already crossed two live
 top-level sessions.
 
-A helper, port, and state directory per agent session is valid emergency
-isolation but is rejected as the primary product model. It exposes port and
-process coordination to every agent and duplicates long-lived helpers.
+A helper, port, and state directory per agent session remains valid emergency
+isolation but is rejected as the primary product model. It introduces port
+recovery, stale-process cleanup, dev-server CSP changes, and one polling process
+per agent session. The current shared helper already supports many reviews; it
+needs a routing boundary, not a replacement transport.
 
 Per-item security leases are rejected for the trusted local v1. Session routing
 and loud duplicate enrollment solve the observed correctness failure with much
