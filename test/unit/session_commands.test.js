@@ -149,8 +149,14 @@ test("takeover is explicit, advances the handoff fence, and prints safe catch-up
   // The new owner gets the same four commands `lahe review` printed, wake line
   // first, so a handoff does not send anyone back to a doc for the exact paths.
   assert.match(result.stdout, new RegExp("wake\\s+tail -n 0 -f \\S+/agent-sessions/" + sessionId + "/wake\\.log"));
-  assert.match(result.stdout, new RegExp("monitor\\s+lahe monitor --session " + sessionId + "$", "m"));
-  assert.match(result.stdout, new RegExp("drain\\s+lahe status --session " + sessionId + " --json --quiet"));
+  // And they carry --state-dir, because this session is not in the default
+  // state directory: a handoff hands over commands that have to work as typed.
+  const stateFlag = " --state-dir " + path.resolve(state);
+  assert.match(result.stdout, new RegExp("monitor\\s+lahe monitor --session " + sessionId + stateFlag + "$", "m"));
+  assert.match(
+    result.stdout,
+    new RegExp("drain\\s+lahe status --session " + sessionId + " --json --quiet" + stateFlag + "$", "m")
+  );
   assert.match(result.stdout, /older lahe monitor processes exit with 6/);
   assert.equal(agentSessions.createStore({ dir: state }).read(sessionId).handoff_rev, 1);
 });

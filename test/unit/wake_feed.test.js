@@ -47,7 +47,10 @@ test("one line per ready transition, deduped by item and rev", () => {
     assert.equal(line.kind, protocol.WAKE.KIND.WORK);
     assert.equal(line.review, "r_one");
     assert.equal(line.item, "c_1");
-    assert.equal(line.drain, "lahe status --session s_feed --json --quiet");
+    // The drain command names this state directory. A tail is read by a shell
+    // elsewhere on the machine, and a drain that resolved the default directory
+    // would report no work for a session it cannot see.
+    assert.equal(line.drain, "lahe status --session s_feed --json --quiet --state-dir " + path.resolve(dir));
     assert.ok(line.at);
   });
 });
@@ -160,6 +163,53 @@ test("events.append wakes on ready transitions only, and never on typing", () =>
   assert.equal(lines.length, 1);
   assert.equal(lines[0].item, "c_1");
   assert.equal(lines[0].review, "r_route");
+});
+
+test("reopening an item wakes the agent too: it is a ready transition like any other", () => {
+  const h = harness();
+  const append = routes.handlerFor("events.append");
+
+  append({ review: "r_route", body: { events: [readyEvent("ev_first", "c_reopen", 1)] } }, h.deps);
+  // The reviewer says "this is not done" about an item the agent answered. The
+  // projector treats it as ready again, so a host waiting on the feed has to
+  // hear about it; before this it waited forever and the item surfaced only in
+  // the next drain.
+  append({
+    review: "r_route",
+    body: {
+      events: [
+        protocol.newEvent({
+          event: protocol.EVENT.ITEM_REOPENED,
+          event_id: "ev_reopen",
+          review: "r_route",
+          item: "c_reopen",
+          rev: 2
+        })
+      ]
+    }
+  }, h.deps);
+
+  const lines = h.store.wake.read("s_route");
+  assert.equal(lines.length, 2);
+  assert.deepEqual(lines.map((line) => line.rev), [1, 2]);
+  assert.deepEqual(lines.map((line) => line.item), ["c_reopen", "c_reopen"]);
+
+  // Same (review, item, rev) again is the same transition: one line, not two.
+  append({
+    review: "r_route",
+    body: {
+      events: [
+        protocol.newEvent({
+          event: protocol.EVENT.ITEM_REOPENED,
+          event_id: "ev_reopen_again",
+          review: "r_route",
+          item: "c_reopen",
+          rev: 2
+        })
+      ]
+    }
+  }, h.deps);
+  assert.equal(h.store.wake.read("s_route").length, 2);
 });
 
 test("a replayed ready event appends nothing, because the log already stored it", () => {

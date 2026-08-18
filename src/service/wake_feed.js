@@ -45,6 +45,11 @@ function createWakeFeed(options) {
   if (!opts.dir) throw new Error("wake_feed.createWakeFeed: dir is required");
   var dir = opts.dir;
   var now = typeof opts.now === "function" ? opts.now : function () { return new Date().toISOString(); };
+  // The state directory a wake line's drain command has to name, or null when
+  // the default resolves here anyway. A tail is read by a shell somewhere else
+  // in the machine, so a drain command that leaves this out reads the DEFAULT
+  // state directory and reports no work for a session it cannot see.
+  var flagDir = stateDir.flagFor(dir);
 
   // One set per session, loaded from the file the first time this process is
   // asked about that session. Two helpers on one state directory is already
@@ -135,7 +140,7 @@ function createWakeFeed(options) {
     line[protocol.WAKE.FIELD.REVIEW] = s.review;
     line[protocol.WAKE.FIELD.ITEM] = s.item;
     line[protocol.WAKE.FIELD.REV] = typeof s.rev === "number" ? s.rev : null;
-    line[protocol.WAKE.FIELD.DRAIN] = protocol.drainCommand(s.session);
+    line[protocol.WAKE.FIELD.DRAIN] = protocol.drainCommand(s.session, flagDir);
     write(s.session, line);
     set[key] = true;
     return line;
@@ -154,7 +159,7 @@ function createWakeFeed(options) {
     var line = {};
     line[protocol.WAKE.FIELD.AT] = now();
     line[protocol.WAKE.FIELD.KIND] = kind;
-    line[protocol.WAKE.FIELD.DRAIN] = protocol.drainCommand(sessionId);
+    line[protocol.WAKE.FIELD.DRAIN] = protocol.drainCommand(sessionId, flagDir);
     return write(sessionId, line);
   }
 

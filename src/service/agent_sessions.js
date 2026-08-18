@@ -116,21 +116,27 @@ function withinMs(iso, nowMs, windowMs) {
  * waits. The monitor line is the fallback for a host with no persistent file
  * watcher of its own.
  *
+ * THE COMMANDS CARRY --state-dir WHEN THIS SESSION IS NOT IN THE DEFAULT
+ * DIRECTORY. They are printed to be copied, and a copied command resolves the
+ * state directory itself: without the flag it reads the default one and reports
+ * no work while items sit unanswered here.
+ *
  * @param {{dir: string, session: string}} input
  */
 function commandBlock(input) {
   var spec = input || {};
   if (!spec.dir || !spec.session) throw new Error("agent_sessions.commandBlock: dir and session are required");
   var wake = stateDir.wakeLogPath(spec.dir, spec.session);
+  var flagDir = stateDir.flagFor(spec.dir);
   return (
     "  wake      tail -n 0 -f " + wake + "\n" +
     "            Claude Code: arm this once as a persistent Monitor. Each new line means run drain.\n" +
-    "  monitor   " + protocol.monitorCommand(spec.session) + "\n" +
+    "  monitor   " + protocol.monitorCommand(spec.session, flagDir) + "\n" +
     "            Codex: run as a foreground pending exec and keep waiting on it. Antigravity: a\n" +
     "            background terminal task, never the native schedule timer. It prints work and exits.\n" +
-    "  drain     " + protocol.drainCommand(spec.session) + "\n" +
+    "  drain     " + protocol.drainCommand(spec.session, flagDir) + "\n" +
     "            handle every item it prints, append replies, repeat until it prints nothing\n" +
-    "  close     lahe session close " + spec.session + "\n" +
+    "  close     lahe session close " + spec.session + protocol.stateDirFlag(flagDir) + "\n" +
     "  exits     monitor: 0 work printed, " + protocol.CLI_EXIT.SESSION_CLOSED + " session closed, " +
       protocol.CLI_EXIT.SESSION_TAKEN_OVER + " taken over. " + protocol.CLI_EXIT.SESSION_CLOSED + " and " +
       protocol.CLI_EXIT.SESSION_TAKEN_OVER + " mean stop relaunching.\n"
@@ -278,6 +284,36 @@ function createStore(options) {
     return record;
   }
 
+  /**
+   * Stop claiming to be watching: remove this monitor's own heartbeat.
+   *
+   * Every deliberate monitor exit calls it, and the reason is the relaunch every
+   * doc tells an agent to do immediately. A heartbeat left behind stays fresh
+   * for 45 seconds, and a pid that has exited but not been reaped still answers
+   * signal 0, so the relaunch met "a live monitor already runs" and the session
+   * sat unwatched while the agent believed one was up.
+   *
+   * ONLY ITS OWN. The pid guard is what keeps this from deleting the heartbeat
+   * of the monitor that replaced it. A crash still leaves a heartbeat behind,
+   * which is what the freshness window and the pid check are for.
+   *
+   * @param {string} id
+   * @param {{pid?: number}} [spec] the pid that must own the heartbeat
+   * @returns {boolean} true when a heartbeat was removed
+   */
+  function clearMonitor(id, spec) {
+    var s = spec || {};
+    var current = readMonitor(id);
+    if (!current) return false;
+    if (Number.isInteger(s.pid) && current[protocol.MONITOR.HEARTBEAT_FIELD.PID] !== s.pid) return false;
+    try {
+      fs.rmSync(stateDir.monitorPath(dir, id), { force: true });
+    } catch (err) {
+      return false;
+    }
+    return true;
+  }
+
   /** When this session last ran a lahe command, or null. */
   function readActivity(id) {
     return readJson(stateDir.activityPath(dir, id));
@@ -339,6 +375,7 @@ function createStore(options) {
     wake: feed,
     readMonitor: readMonitor,
     writeMonitor: writeMonitor,
+    clearMonitor: clearMonitor,
     readActivity: readActivity,
     touchActivity: touchActivity,
     liveness: liveness

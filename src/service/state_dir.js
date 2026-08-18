@@ -110,6 +110,37 @@ function stateDir(options) {
   return dir;
 }
 
+/**
+ * The `--state-dir <path>` a printed command needs, or null when it needs none.
+ *
+ * Every command this tool prints is meant to be copied and run somewhere else,
+ * and a command copied out of a review whose state lives in a custom directory
+ * used to resolve the DEFAULT directory when it ran: it reported no work while
+ * items sat unanswered a few paths away.
+ *
+ * The flag is only printed when it CHANGES the answer. With LAHE_STATE_DIR or
+ * XDG_STATE_HOME already pointing at the directory in use, the copied command
+ * resolves the same place on its own, and spelling the path out again would put
+ * a long flag on every command an agent runs for no gain.
+ *
+ * @param {string|null} dir the directory in use, resolved or not
+ * @returns {string|null} the path to print, or null for "the default is right"
+ */
+function flagFor(dir) {
+  if (typeof dir !== "string" || !dir) return null;
+  var resolved = path.resolve(dir);
+  var byDefault;
+  try {
+    // allowInsideCheckout, because this is a comparison rather than a use: an
+    // env var pointing somewhere refused must not make this throw where the
+    // caller only wanted to know whether to print a flag.
+    byDefault = stateDir({ allowInsideCheckout: true });
+  } catch (err) {
+    return resolved;
+  }
+  return resolved === byDefault ? null : resolved;
+}
+
 /** Create a directory owner-only, and make sure it really is owner-only. */
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true, mode: DIR_MODE });
@@ -345,6 +376,7 @@ module.exports = {
   STATIC_SERVERS_DIR: STATIC_SERVERS_DIR,
   REVIEW_ARTIFACTS_DIR: REVIEW_ARTIFACTS_DIR,
   stateDir: stateDir,
+  flagFor: flagFor,
   checkoutAbove: checkoutAbove,
   ensureDir: ensureDir,
   ensureReviewDir: ensureReviewDir,

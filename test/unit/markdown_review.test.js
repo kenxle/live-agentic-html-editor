@@ -74,8 +74,16 @@ test("lahe review renders Markdown without touching it, serves assets, and reuse
   // there yet is a race, and losing it is a session that never wakes.
   assert.ok(fs.existsSync(wakePath[1]), "the wake feed is on disk before the agent is told to tail it");
   assert.equal(fs.readFileSync(wakePath[1], "utf8"), "", "and it starts empty");
-  assert.match(first.stdout, new RegExp("monitor\\s+lahe monitor --session " + sessionId + "$", "m"));
-  assert.match(first.stdout, new RegExp("drain\\s+lahe status --session " + sessionId + " --json --quiet"));
+  // Every printed command names THIS state directory, because it is not the
+  // default one. A command copied out of here and run in another shell would
+  // otherwise resolve the default directory and report no work at all.
+  const stateFlag = " --state-dir " + path.resolve(state);
+  assert.match(first.stdout, new RegExp("monitor\\s+lahe monitor --session " + sessionId + stateFlag + "$", "m"));
+  assert.match(
+    first.stdout,
+    new RegExp("drain\\s+lahe status --session " + sessionId + " --json --quiet" + stateFlag + "$", "m")
+  );
+  assert.match(first.stdout, new RegExp("close\\s+lahe session close " + sessionId + stateFlag + "$", "m"));
   assert.match(first.stdout, /exits\s+monitor: 0 work printed, 5 session closed, 6 taken over/);
   t.after(async () => {
     await capture(() => sessionCommand.run(["close", sessionId, "--state-dir", state, "--port", String(port)]));

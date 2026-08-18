@@ -900,9 +900,23 @@
     }
   };
 
-  var WAKE_KINDS = Object.keys(WAKE.KIND).map(function (k) {
-    return WAKE.KIND[k];
-  });
+  /**
+   * A path as a shell word: quoted only when it needs to be.
+   *
+   * The state directory is a path a person chose, so it can hold a space. An
+   * unquoted one turns the printed command into two arguments and the agent
+   * that copies it gets a usage error.
+   */
+  function shellWord(value) {
+    var text = String(value);
+    if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(text)) return text;
+    return "'" + text.replace(/'/g, "'\\''") + "'";
+  }
+
+  function stateDirFlag(stateDirPath) {
+    if (typeof stateDirPath !== "string" || !stateDirPath) return "";
+    return " --state-dir " + shellWord(stateDirPath);
+  }
 
   /**
    * The one spelling of the drain command.
@@ -910,14 +924,24 @@
    * It is printed by `lahe review`, by `lahe session takeover`, by the monitor's
    * own output, and it rides every wake line. Four spellings of one command is
    * how an agent ends up running a fifth.
+   *
+   * PASS THE STATE DIRECTORY WHEN IT IS NOT THE DEFAULT ONE. A command copied
+   * out of a review that lives in a custom state directory resolves the DEFAULT
+   * directory when it is run, so it reports no work while items sit unanswered
+   * a few paths away. Callers decide with state_dir.flagFor, which returns null
+   * when the default already resolves to the same place: printing the flag then
+   * would be noise on every command every agent runs.
+   *
+   * @param {string} sessionId
+   * @param {string|null} [stateDirPath] omit or pass null for the default
    */
-  function drainCommand(sessionId) {
-    return "lahe status --session " + String(sessionId) + " --json --quiet";
+  function drainCommand(sessionId, stateDirPath) {
+    return "lahe status --session " + String(sessionId) + " --json --quiet" + stateDirFlag(stateDirPath);
   }
 
-  /** The one spelling of the monitor command. */
-  function monitorCommand(sessionId) {
-    return "lahe monitor --session " + String(sessionId);
+  /** The one spelling of the monitor command. Same state-directory rule. */
+  function monitorCommand(sessionId, stateDirPath) {
+    return "lahe monitor --session " + String(sessionId) + stateDirFlag(stateDirPath);
   }
 
   // ---------------------------------------------------------------------------
@@ -970,10 +994,6 @@
       OLDEST_UNANSWERED_AT: "oldest_unanswered_at"
     }
   };
-
-  var AGENT_LIVENESS_STATES = Object.keys(AGENT_LIVENESS.STATE).map(function (k) {
-    return AGENT_LIVENESS.STATE[k];
-  });
 
   return {
     API_VERSION: API_VERSION,
@@ -1042,12 +1062,11 @@
     CLI_EXIT: CLI_EXIT,
 
     WAKE: WAKE,
-    WAKE_KINDS: WAKE_KINDS,
+    stateDirFlag: stateDirFlag,
     drainCommand: drainCommand,
     monitorCommand: monitorCommand,
 
     MONITOR: MONITOR,
-    AGENT_LIVENESS: AGENT_LIVENESS,
-    AGENT_LIVENESS_STATES: AGENT_LIVENESS_STATES
+    AGENT_LIVENESS: AGENT_LIVENESS
   };
 });

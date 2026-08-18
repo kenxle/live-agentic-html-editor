@@ -542,6 +542,24 @@
     return item[FIELD.STATE] === STATE.READY;
   }
 
+  /**
+   * THE ONE DEFINITION OF WORK AN AGENT SHOULD ACT ON.
+   *
+   * Ready and carrying no reply. `ready` is the state the review.json contract
+   * names as the one an agent may act on (drafts are the reviewer mid-sentence
+   * and never reach the projection), and the reply is what the item carries once
+   * an agent has answered this revision. A reworded item drops its reply in the
+   * projection, so it comes back here on its own.
+   *
+   * It lives here rather than in `lahe status` because the helper answers the
+   * same question on the wire: the rail's "no agent watching, 3 waiting" and the
+   * drain command's item list have to be counting the same items, and they
+   * stopped agreeing the moment the route spelled the rule out a second time.
+   */
+  function isUnansweredReady(item) {
+    return !!item && item[FIELD.STATE] === STATE.READY && !item[FIELD.REPLY];
+  }
+
   // Outstanding for the reviewer: still in front of them. A handled item is
   // kept and reopenable (R38), not outstanding.
   function isOutstanding(item) {
@@ -852,6 +870,7 @@
     validateItem: validateItem,
     isDraft: isDraft,
     isReady: isReady,
+    isUnansweredReady: isUnansweredReady,
     isOutstanding: isOutstanding,
     comparisonMode: comparisonMode,
     normalizedBefore: normalizedBefore,

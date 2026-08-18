@@ -113,6 +113,36 @@ test("the state directory refuses to sit inside a checkout", () => {
   }
 });
 
+test("a printed command names the state directory only when the default would miss it", () => {
+  const dir = tempDir();
+  const custom = path.join(dir, "elsewhere");
+
+  const saved = process.env.LAHE_STATE_DIR;
+  const savedXdg = process.env.XDG_STATE_HOME;
+  try {
+    process.env.LAHE_STATE_DIR = path.join(dir, "state");
+    delete process.env.XDG_STATE_HOME;
+
+    // A directory the default resolution would not reach: the flag is the only
+    // thing that makes the copied command read the right reviews.
+    assert.equal(stateDir.flagFor(custom), custom);
+
+    // The env already points here, so a copied command resolves the same place
+    // on its own and the flag would be noise on every command an agent runs.
+    assert.equal(stateDir.flagFor(path.join(dir, "state")), null);
+    assert.equal(stateDir.flagFor(null), null);
+
+    // Relative paths are resolved before they are compared, so "." next to the
+    // state directory is not mistaken for a different one.
+    assert.equal(stateDir.flagFor(path.join(dir, "state", ".")), null);
+  } finally {
+    if (saved === undefined) delete process.env.LAHE_STATE_DIR;
+    else process.env.LAHE_STATE_DIR = saved;
+    if (savedXdg === undefined) delete process.env.XDG_STATE_HOME;
+    else process.env.XDG_STATE_HOME = savedXdg;
+  }
+});
+
 test("the data directory and its files are owner-only", () => {
   const dir = tempDir();
   const log = logModule.createEventLog({ dir: dir });

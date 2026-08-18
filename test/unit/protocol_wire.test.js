@@ -391,3 +391,29 @@ test("telling a CSP refusal from a helper that is down is two codes, not one", (
   assert.notEqual(failures.describe("CSP_REFUSED").message, failures.describe("HELPER_UNREACHABLE").message);
   assert.match(failures.describe("CSP_REFUSED").message, /not the helper being down/);
 });
+
+test("the drain and monitor commands carry a state directory, quoted when the path needs it", () => {
+  // No directory: the copied command resolves the default, which is what the
+  // helper that printed it used.
+  assert.equal(protocol.drainCommand("s_1"), "lahe status --session s_1 --json --quiet");
+  assert.equal(protocol.monitorCommand("s_1"), "lahe monitor --session s_1");
+
+  // A custom directory rides both commands, because an agent copies them into a
+  // shell that would otherwise read the default state directory and report no
+  // work at all.
+  assert.equal(
+    protocol.drainCommand("s_1", "/tmp/lahe-state"),
+    "lahe status --session s_1 --json --quiet --state-dir /tmp/lahe-state"
+  );
+  assert.equal(
+    protocol.monitorCommand("s_1", "/tmp/lahe-state"),
+    "lahe monitor --session s_1 --state-dir /tmp/lahe-state"
+  );
+
+  // A path a person chose can hold a space. Unquoted it becomes two arguments,
+  // and the agent that copies the line gets a usage error.
+  assert.equal(
+    protocol.monitorCommand("s_1", "/Users/a b/Library/Application Support/lahe"),
+    "lahe monitor --session s_1 --state-dir '/Users/a b/Library/Application Support/lahe'"
+  );
+});
