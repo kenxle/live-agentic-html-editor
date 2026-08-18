@@ -79,6 +79,39 @@ review, rebuilds the generated page, and lets the reviewer's page reload onto
 the result. A reply is not handled until the changed Markdown has been rendered
 and is visible there.
 
+### Choose the source workflow before opening the review
+
+Use direct Markdown review only when that one file is the document the person
+means to review. This includes a normal `SKILL.md`, spec, plan, or draft whose
+structure is ordinary Markdown.
+
+Review built HTML instead when the visible document is assembled from several
+Markdown files, includes, templates, generated sections, citations, custom
+filters, or a site/document build. The build is part of the deliverable, so do
+not bypass it with LAHE's single-file renderer:
+
+```sh
+# use the project's real, repeatable build command
+npm run build-docs
+
+# review the build output and name its entrypoint
+lahe review path/to/build/report.html --source path/to/build-entrypoint
+```
+
+`--source` is a navigation hint, not a claim that every visible sentence lives
+in one file. For a multi-source build, point it at the build entrypoint: the
+top-level Markdown file, manifest, build script, or template that reveals the
+input set. When an item arrives, use its page text to locate the correct source
+fragment, edit that fragment, run the canonical build, verify the output, and
+only then reply `handled`. Never edit generated HTML as the durable fix.
+
+Pandoc is appropriate when the project already uses it, or when the intended
+deliverable genuinely needs a repeatable multi-file document build. Keep its
+command, template/header, styles, filters, and Mermaid support in the project so
+another agent can reproduce the same output. Do not introduce Pandoc merely to
+open one Markdown file for review, and do not hand-convert Markdown into an HTML
+file that becomes a second source to maintain.
+
 `file://path/to/page.html` is the FALLBACK, for the rare case where you cannot
 run a server. `add` always registers the `null` origin a page opened from disk
 sends, so the fallback keeps working.
@@ -195,14 +228,16 @@ it, your line is refused and the item stays open, which is correct.
 
 ### If the page is build output, REBUILD BEFORE YOU REPLY
 
-This is a hard rule, not a preference. For a page generated from a source file
-(the item's `source_hint` names it), `handled` means **the reviewer's page now
-shows the change**. Editing the source and replying `handled` without rebuilding
-tells them it is done while their page still says the old thing, and the first
-they learn of it is having to come and ask you why nothing changed.
+This is a hard rule, not a preference. For a generated page, the item's
+`source_hint` names either the source or a multi-source build entrypoint.
+`handled` means **the reviewer's page now shows the change**. Editing a source
+fragment and replying `handled` without rebuilding tells them it is done while
+their page still says the old thing, and the first they learn of it is having to
+come and ask you why nothing changed.
 
-Per item, or per small batch (for Markdown, the rebuild command is the same
-`lahe review path/to/file.md` command that opened it):
+Per item, or per small batch (for direct Markdown, the rebuild command is the
+same `lahe review path/to/file.md` command that opened it; for compiled
+documents, it is the project's canonical build command):
 
 ```sh
 # 1. edit the source file the item points at
@@ -323,5 +358,7 @@ do that only when your human asks: `Removing it` in the README has the detail.
 - The page keeps changing while you work: the reviewer is live on it. The
   library re-applies their outstanding work over your landed changes and flags
   real collisions to them, so land your changes in the source and let it.
-- If a change lands in build output, check the item's `source_hint`: it names
-  the template or source file to edit so the next build does not erase you.
+- If a change lands in build output, check the item's `source_hint`. It names
+  the source for a simple build or the entrypoint for a multi-source build. Use
+  the captured page text to locate the actual fragment, then edit source so the
+  next build does not erase the fix.

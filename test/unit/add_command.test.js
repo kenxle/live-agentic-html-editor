@@ -894,6 +894,11 @@ test("the README states the tested platform and browser requirements", () => {
   assert.doesNotMatch(agents, /python3 -m http\.server/);
   assert.match(readme, /comment is not a guard/);
   assert.match(agents, /comment is not a guard/);
+  assert.match(agents, /Choose the source workflow before opening the review/);
+  assert.match(agents, /Do not introduce Pandoc merely to\s+open one Markdown file/);
+  assert.match(agents, /point it at the build entrypoint/);
+  assert.match(readme, /If\s+the deliverable is assembled from chapters, includes, templates/);
+  assert.match(readme, /Do not add Pandoc just to review one `\.md` file/);
 
   // The in-page hints, so a new user can work the tool out without this file.
   assert.match(readme, /Cmd-Shift-C/);

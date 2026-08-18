@@ -113,6 +113,28 @@ conversion or start their own review server. After editing the Markdown source,
 rerun the same command to rebuild the review page before reporting the change
 handled.
 
+That direct path is for a single Markdown file that is itself the document. If
+the deliverable is assembled from chapters, includes, templates, citations,
+generated sections, or several source files, review the project's real HTML
+build instead:
+
+```sh
+npm run build-docs
+lahe review path/to/build/report.html --source path/to/build-entrypoint
+```
+
+The source argument should identify the entrypoint that explains the build's
+inputs, such as the top-level Markdown file, manifest, build script, or
+template. Individual comments may belong in other fragments. The agent locates
+the right fragment from the captured page text, edits source, runs the canonical
+build, verifies the HTML, and then replies.
+
+Pandoc remains a good choice when it is already the document build or the
+deliverable intentionally needs a reproducible multi-file compiler. Keep that
+configuration in the project, including its styles, filters, and Mermaid
+runtime. Do not add Pandoc just to review one `.md` file, and do not maintain a
+hand-generated HTML twin of that file.
+
 That server belongs to the agent session. `session close` stops it, and
 `session reopen` restores it. Passing `--origin` means you supplied an external
 server instead, so LAHE neither starts nor stops that process.

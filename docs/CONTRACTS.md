@@ -636,6 +636,13 @@ source is never modified. Re-running the command atomically rebuilds the same
 artifact and reuses the same review; agents must do that before replying
 `handled` after a Markdown source edit.
 
+That renderer has single-source semantics. A document assembled from several
+inputs remains build output and must travel through its canonical build. Review
+the resulting HTML and use `--source` for the build entrypoint that exposes the
+input graph, not as a false assertion that every item belongs to one fragment.
+Pandoc is supported as a project-owned compiler, not as an agent-improvised
+bridge for a single Markdown review.
+
 `lahe session close <id>` stops every static server owned by that session. It
 stops the shared helper only after the final open agent session closes. Review
 history remains on disk. `session reopen` restores the helper and remembered

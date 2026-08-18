@@ -68,6 +68,11 @@
   relative assets remain reachable, and fenced Mermaid flowcharts render from
   a pinned local dependency-free browser bundle. Agents no longer hand-convert
   Markdown, invent a server, or omit the diagram runtime.
+- Complete: public guidance now distinguishes one-file Markdown review from a
+  compiled multi-source document. Existing Pandoc and other canonical builds
+  remain authoritative; `--source` names their entrypoint, agents locate the
+  actual fragment from page context, and generated HTML is never the durable
+  edit surface.
 - Confirmed known gaps: cold-start proof, final documentation pass, multi-page
   offline path reuse, and acceptance evidence.
 - In progress: remaining cold-start cleanup and end-to-end walkthroughs.
