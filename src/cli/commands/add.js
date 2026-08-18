@@ -44,15 +44,28 @@
 //  4. Only then is the script line written, so a page loaded the instant after
 //     `add` prints has a helper that will accept it.
 //
-// THE SCRIPT LINE POINTS AT THE HELPER'S OWN URL, which SUPERSEDES D1's "the
-// library works alone". D1 wanted the src to be a file on disk so a page still
-// loaded the library with no helper running. In practice the relative path (or
-// the copy into an assets directory) 404s the moment the page is served out of
-// a folder the built file is not in, and the reviewer sees a page that silently
-// does nothing. A review with no helper cannot record anything anyway, so what
-// D1 was protecting was never usable. One absolute URL resolves from any folder,
-// any origin and any depth, and the helper serves those bytes unauthenticated
-// (they are public code, no review data, no token).
+// THE SCRIPT LINE CARRIES BOTH HALVES, and it needs both.
+//
+// The PRIMARY src is the helper's own URL. One absolute URL resolves from any
+// folder, any origin and any depth, which a bare relative path could not: it
+// resolves against wherever the page is SERVED from, so the first time that is
+// another folder the library 404s. The helper serves those bytes
+// unauthenticated (public code, no review data, no token).
+//
+// The FALLBACK is a copy of the built library written BESIDE the page, named
+// relatively on the line, and injected by an inline onerror when the primary
+// src does not load. It restores what D1 asked for and an earlier pass cut: a
+// page opened while the helper is down. Without it that page loaded no library
+// at all: no rail, no honest "the helper is unreachable" chip, no local
+// capture, no export. The note that justified cutting it ("a review with no
+// helper cannot record anything anyway") was wrong. The library alone records
+// into browser storage, says the helper is unreachable, and posts what it held
+// the moment the helper is back. That is R10.
+//
+// The copy is REFRESHED ON EVERY add run, so it tracks dist closely (the
+// rebuild loop re-runs add per rebuild). The helper URL stays the primary and
+// is always current, so a stale copy can only ever be what a reviewer gets
+// while the helper is down, which beats nothing at all.
 //
 // Node-only.
 
@@ -331,21 +344,42 @@ function reviewAlreadyInFile(html) {
 // ---------------------------------------------------------------------------
 
 /**
- * The `src` every script line carries: the helper's own URL.
+ * The `src` every script line carries: the helper's own URL. One URL for a
+ * static file and for a dev server alike, because it resolves from any folder,
+ * origin and depth, which a relative path does not.
  *
- * One URL for a static file and for a dev server alike, because the failure it
- * replaces was the same in both: a relative path or a copied asset resolves
- * against wherever the page is being served from, and the first time that is a
- * different folder the library 404s and the page quietly does nothing. See the
- * D1 note in this file's header for the tradeoff.
+ * @param {string} helperOrigin
+ * @returns {string}
  */
 function libraryUrl(helperOrigin) {
-  return {
-    src: helperOrigin + protocol.route("library.get").path,
-    note: "The helper serves the library at that URL, so the line works from any folder this page is served out of",
-    copiedTo: null
-  };
+  return helperOrigin + protocol.route("library.get").path;
 }
+
+/**
+ * The offline half: a copy of the built library beside the page, refreshed on
+ * every run so it tracks dist.
+ *
+ * Beside the page, not in an assets directory it went hunting for. Anything
+ * serving the page's own folder serves this file too, at the same relative
+ * name, and a page opened straight from disk resolves it as a sibling file. It
+ * is only ever reached when the primary src fails, which is the helper being
+ * down.
+ *
+ * @param {string} pagePath the .html file the line is being written into
+ * @returns {{path: string, src: string}} where the copy went, and the relative
+ *          src the script line names it by
+ */
+function copyLibraryBeside(pagePath) {
+  var copied = path.join(path.dirname(pagePath), BUNDLE_BASENAME);
+  fs.copyFileSync(BUNDLE, copied);
+  return { path: copied, src: BUNDLE_BASENAME };
+}
+
+// What a dev server's fallback names. `add` never writes into an application's
+// own directories (the same rule that keeps it from editing a layout), so this
+// is a CONVENTION printed for a human to confirm, not a fact this command
+// checked: most servers publish public/ or static/ at the root.
+var DEV_FALLBACK_SRC = "/" + BUNDLE_BASENAME;
 
 function toUrlPath(value) {
   return value.split(path.sep).join("/");
@@ -364,11 +398,13 @@ function assetDirBeside(dir) {
 }
 
 /**
- * CLEANUP NEEDED: libraryForServer and libraryFor below are no longer called.
- * They copied the built bundle into a page's assets directory and wrote a
- * relative src, which is the failure libraryUrl replaces. They are left in
- * place (not deleted) pending a cleanup pass; nothing in the repo depends on
- * the copy behavior.
+ * CLEANUP NEEDED: assetDirBeside above, and libraryForServer and libraryFor
+ * below, are no longer called. They went hunting for an assets directory to
+ * copy the bundle into and wrote the src relative to whatever they found, which
+ * is the resolution failure the helper URL replaces. The offline half is back,
+ * but it is the plain sibling copy (copyLibraryBeside) rather than this
+ * hunting, so these three stay dead. They are left in place (not deleted)
+ * pending a cleanup pass, together with ASSET_DIR_NAMES, which only they read.
  *
  * The `src` to print for a dev server, when the target is a project directory.
  *
@@ -809,6 +845,8 @@ async function run(argv) {
         "lahe add --remove: " + target,
         "",
         "  Took out the script line for review " + stripped.review + ", and nothing else.",
+        "  " + BUNDLE_BASENAME + " may still sit beside the page as the fallback copy. Nothing loads it now;",
+        "  delete it whenever you like.",
         "  That review's history is still in " + (reviewsRootOrPhrase(options.stateDir) + "."),
         "  Stop the helper and delete that directory to forget it. See `Removing it` in the README.",
         ""
@@ -1090,12 +1128,18 @@ async function run(argv) {
   }
 
   // --- the line --------------------------------------------------------------
-  var library = libraryUrl(helperOrigin);
+  //
+  // The copy beside the page is written BEFORE the line that names it, so a
+  // page loaded the instant after `add` prints has both halves.
+  var librarySrc = libraryUrl(helperOrigin);
+  var beside = kind === "static" ? copyLibraryBeside(target) : null;
+  var fallbackSrc = beside ? beside.src : DEV_FALLBACK_SRC;
   var tag = protocol.scriptTag({
-    src: library.src,
+    src: librarySrc,
     review: review.id,
     token: review.token,
-    helper: helperOrigin
+    helper: helperOrigin,
+    fallback: fallbackSrc
   });
 
   say("lahe add: " + target);
@@ -1106,7 +1150,8 @@ async function run(argv) {
   // review.json: the state directory is derived from environment this command
   // resolved and the agent did not.
   say("  folder    " + stateDirModule.reviewDir(dir, review.id));
-  say("  library   " + library.src);
+  say("  library   " + librarySrc);
+  say("  fallback  " + fallbackSrc + (beside ? "  (copied beside the page, refreshed every run)" : "  (your app serves this)"));
   say(
     "  helper    " +
       helperOrigin +
@@ -1130,7 +1175,9 @@ async function run(argv) {
     fs.writeFileSync(target, placed.html);
 
     say("  The script line is in " + path.basename(target) + ", " + placed.where + ".");
-    say("  " + library.note + ".");
+    say("  The helper serves the library at that URL, so the line works from any folder this page is served out of.");
+    say("  " + BUNDLE_BASENAME + " sits beside the page as the fallback, so the page still opens with the helper down:");
+    say("  you get the rail, an honest unreachable status, and your work kept in this browser until it is back.");
     say();
     say(tokenWarning(path.basename(target)));
     say();
@@ -1170,9 +1217,15 @@ async function run(argv) {
         .join("\n")
     );
     say();
-    say("  " + library.note + ".");
-    say("  Your app serves nothing extra: the src is the helper's own URL, so there is no file to copy");
-    say("  and no static path to get right.");
+    say("  The helper serves the library at that src, so your app serves nothing extra to review with it running.");
+    say();
+    say("  The onerror line is the fallback, and it only runs when the helper is down. For it to load,");
+    say("  copy the built library to whatever your server publishes at " + fallbackSrc + ":");
+    say("    cp " + BUNDLE + " <your public directory>/" + BUNDLE_BASENAME);
+    say("  Point it somewhere else by editing " + protocol.SCRIPT_ATTR.FALLBACK + " on the line. Skip it and you");
+    say("  lose only the helper-is-down case: the page then loads nothing at all while the helper is off.");
+    say("  A strict development CSP can refuse an inline onerror (script-src without 'unsafe-inline').");
+    say("  The primary src still loads there, so the fallback is what you lose, not the review.");
     say();
     say(tokenWarning("the line above, and it goes into a file in your repository"));
     say();

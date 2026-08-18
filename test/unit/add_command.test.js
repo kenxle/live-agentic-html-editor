@@ -201,7 +201,8 @@ test("the line add writes is protocol.scriptTag's, byte for byte", async () => {
       src: /src="([^"]+)"/.exec(html)[1],
       review: reviewIdIn(html),
       token: tokenIn(html),
-      helper: "http://127.0.0.1:" + work.port
+      helper: "http://127.0.0.1:" + work.port,
+      fallback: "lahe-layer.js"
     });
 
     // The pinned form is multi-line and indented. What is in the file is that
@@ -225,6 +226,11 @@ test("the line add writes is protocol.scriptTag's, byte for byte", async () => {
       html.indexOf('src="http://127.0.0.1:' + work.port + '/lahe-layer.js"') !== -1,
       "src is the helper's own library URL, so the line works from any folder the page is served out of"
     );
+    assert.ok(
+      html.indexOf('data-lahe-fallback="lahe-layer.js"') !== -1,
+      "and the line names the sibling copy, which is what loads when the helper is down (R10)"
+    );
+    assert.ok(html.indexOf("onerror=") !== -1, "with the inline onerror that injects it");
   } finally {
     await work.stop();
   }
@@ -276,10 +282,44 @@ test("src is the helper's URL, wherever the page sits and whatever is beside it"
     assert.equal(
       fs.existsSync(path.join(withAssets, "assets", "lahe-layer.js")),
       false,
-      "nothing is copied into the page's assets any more"
+      "nothing goes hunting for an assets directory any more"
+    );
+    assert.equal(
+      fs.existsSync(path.join(withAssets, "lahe-layer.js")),
+      true,
+      "the fallback copy goes beside the page, wherever the page sits"
     );
   } finally {
     await stopHelper(assetsState);
+  }
+});
+
+// R10's install half: a page opened with the helper down still loads the
+// library, and that only works if the copy is really there and really current.
+test("add copies the library beside the page, and refreshes it every run", async () => {
+  const work = await aWorkspace();
+  const sibling = path.join(work.dir, "lahe-layer.js");
+  try {
+    const first = work.add();
+    assert.equal(first.code, 0, first.stdout + first.stderr);
+
+    const bundle = fs.readFileSync(path.join(REPO_ROOT, "dist", "lahe-layer.js"), "utf8");
+    assert.equal(fs.existsSync(sibling), true, "the copy is beside the page");
+    assert.equal(fs.readFileSync(sibling, "utf8"), bundle, "and it is the built bundle, byte for byte");
+    assert.match(first.stdout, /fallback/, "and add says the fallback is there");
+
+    // A stale copy is the whole risk of copying anything, so every run rewrites
+    // it: the rebuild loop re-runs add, and that is what keeps it current.
+    fs.writeFileSync(sibling, "// stale bytes from an older build\n");
+    const second = work.add();
+    assert.equal(second.code, 0, second.stdout + second.stderr);
+    assert.equal(
+      fs.readFileSync(sibling, "utf8"),
+      bundle,
+      "the second add refreshed the copy rather than leaving the stale one"
+    );
+  } finally {
+    await work.stop();
   }
 });
 
@@ -691,6 +731,38 @@ test("--remove takes the script line out and leaves everything else in the page 
   } finally {
     await work.stop();
   }
+});
+
+// The fallback form put an onerror attribute on the line, and EXISTING_TAG is
+// what finds the line again. It is one regex behind place, replace and remove,
+// so all three are walked here on the real pinned form.
+test("the fallback form still places, replaces and removes as one line", () => {
+  const add = require("../../src/cli/commands/add.js");
+  const page = "<html>\n  <body>\n    <p>x</p>\n  </body>\n</html>\n";
+  const tag = protocol.scriptTag({
+    src: "http://127.0.0.1:7817/lahe-layer.js",
+    review: "rev_one",
+    token: "tok_one",
+    fallback: "lahe-layer.js"
+  });
+
+  const placed = add.placeScriptLine(page, tag);
+  assert.equal(placed.where, "just before </body>");
+  assert.equal(add.reviewAlreadyInFile(placed.html), "rev_one", "the line is findable by its review attribute");
+
+  const second = protocol.scriptTag({
+    src: "http://127.0.0.1:7817/lahe-layer.js",
+    review: "rev_two",
+    token: "tok_two",
+    fallback: "lahe-layer.js"
+  });
+  const replaced = add.replaceScriptLine(placed.html, second);
+  assert.equal(add.reviewAlreadyInFile(replaced.html), "rev_two", "and replaceable in the place it had");
+  assert.equal((replaced.html.match(/data-lahe-review=/g) || []).length, 1, "one line, not two");
+
+  const removed = add.removeScriptLine(replaced.html);
+  assert.equal(removed.review, "rev_two");
+  assert.equal(removed.html, page, "and removable back to the byte the page started at");
 });
 
 test("--remove removes the lahe tag and no other script on the page", () => {

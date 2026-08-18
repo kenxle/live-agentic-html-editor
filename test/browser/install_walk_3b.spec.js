@@ -161,7 +161,8 @@ test.describe("AC6: the install is one documented command path", () => {
       src: /src="([^"]+)"/.exec(html)[1],
       review: world.review,
       token: /data-lahe-token="([^"]+)"/.exec(html)[1],
-      helper: "http://127.0.0.1:" + world.port
+      helper: "http://127.0.0.1:" + world.port,
+      fallback: "lahe-layer.js"
     });
     const indented = expected
       .split("\n")

@@ -9,9 +9,11 @@ Two pieces, and that is the whole design:
 
 - **The library.** One built JavaScript file, added to the page with one
   `<script>` line whose `src` is the helper's own URL
-  (`http://127.0.0.1:7817/lahe-layer.js`). Your work is kept in browser storage
-  every keystroke, so a helper that goes away costs nothing: everything posts
-  when it comes back.
+  (`http://127.0.0.1:7817/lahe-layer.js`), with a copy of the same file beside
+  the page as a fallback for when the helper is not running. Your work is kept
+  in browser storage every keystroke, so a helper that goes away costs nothing:
+  the page still opens, the rail still says the helper is away, and everything
+  posts when it comes back.
 - **The helper.** One Node process beside the page (`lahe serve`), listening on
   `127.0.0.1:7817`. It keeps an append-only log of the review and writes the
   file your agent reads.
@@ -82,9 +84,10 @@ Then, for any page you want to review:
 lahe add path/to/page.html
 ```
 
-`add` does the whole install: it writes the one script line into the page,
-mints that review's token, registers the page's origin, and **starts the helper
-if it is not already running**. It prints what it did and what to open.
+`add` does the whole install: it writes the one script line into the page, drops
+a `lahe-layer.js` copy beside the page as the offline fallback (refreshed every
+run), mints that review's token, registers the page's origin, and **starts the
+helper if it is not already running**. It prints what it did and what to open.
 
 **Review a static file over a local server**, which is the ordinary way. Serve
 the page's own folder and register that origin:
@@ -143,10 +146,11 @@ lahe add path/to/page.html --remove
 
 That deletes the one script line `add` wrote and changes nothing else in the
 file. For a dev server, delete the line you pasted into your layout yourself:
-it is the one carrying `data-lahe-review`. Nothing is copied into your project:
-the script `src` is the helper's own URL, so there is no stray `lahe-layer.js` to
-find. (Older reviews, added before that change, may have left one in your assets
-or `public/` directory.)
+it is the one carrying `data-lahe-review`. One file is left behind on a static
+page: the `lahe-layer.js` copy beside it, which is the fallback the line loaded
+when the helper was down. Nothing loads it once the line is gone, so delete it
+whenever you like. (Older reviews may also have left one in an `assets/` or
+`public/` directory.)
 
 **Stop the helper.** Ctrl-C in the window running `lahe serve`, or, when `add`
 started it for you, kill the pid in `service.json` in the state directory.

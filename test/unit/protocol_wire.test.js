@@ -312,6 +312,37 @@ test("the script tag has the pinned attributes and the fixed default port", () =
   assert.equal(tag.includes('data-lahe-helper="http://127.0.0.1:7817"'), true);
   assert.equal(/\sdefer>/.test(tag), true);
   assert.equal(protocol.SCRIPT_SELECTOR, "script[data-lahe-review]");
+  // No fallback asked for, no fallback written: a caller serving the bundle
+  // itself gets the plain line.
+  assert.equal(tag.includes("onerror"), false);
+  assert.equal(tag.includes(protocol.SCRIPT_ATTR.FALLBACK), false);
+});
+
+// R10: the offline half. The fallback is what makes a page opened with the
+// helper down load the library at all, so the form it takes is pinned here.
+test("the script tag carries the offline fallback when one is named", () => {
+  const tag = protocol.scriptTag({
+    src: "http://127.0.0.1:7817/lahe-layer.js",
+    review: "rev_a",
+    token: "tok_abc",
+    fallback: "lahe-layer.js"
+  });
+  assert.equal(
+    tag,
+    '<script src="http://127.0.0.1:7817/lahe-layer.js"\n' +
+      '        data-lahe-review="rev_a"\n' +
+      '        data-lahe-token="tok_abc"\n' +
+      '        data-lahe-helper="http://127.0.0.1:7817"\n' +
+      '        data-lahe-fallback="lahe-layer.js"\n' +
+      "        onerror=\"var s=document.createElement('script');s.src=this.getAttribute('data-lahe-fallback');document.head.appendChild(s)\"\n" +
+      "        defer></script>"
+  );
+  assert.equal(tag.includes(protocol.SCRIPT_FALLBACK_ONERROR), true);
+
+  // Two properties the onerror has to keep, because add.js's EXISTING_TAG scans
+  // to the first ">" inside double quotes: no ">" in it, and no double quote.
+  assert.equal(protocol.SCRIPT_FALLBACK_ONERROR.indexOf(">"), -1);
+  assert.equal(protocol.SCRIPT_FALLBACK_ONERROR.indexOf('"'), -1);
 });
 
 test("the script tag refuses to be written without a token or with an unsafe review id", () => {

@@ -764,20 +764,51 @@
   //
   // Public API, because this is the one line a person or an agent types by hand.
   //
-  // THE src IS THE HELPER'S OWN URL (http://127.0.0.1:<port>/lahe-layer.js).
-  // D1 originally said the line points at a file on disk so "the library works
-  // alone", and that read well until a page was served from a folder the built
-  // file is not in: the src 404s and the review is dead in a way that looks like
-  // a broken page. A review with no helper cannot record anything anyway, so
-  // "works alone" was never a state a reviewer could use. One URL that resolves
-  // from any folder, any origin, and any depth is worth more than a promise the
-  // rest of the tool cannot keep. The tradeoff is written up in add.js's header.
+  // THE LINE CARRIES BOTH HALVES, and needs both.
+  //
+  // The PRIMARY src is the helper's own URL
+  // (http://127.0.0.1:<port>/lahe-layer.js). One URL resolves from any folder,
+  // any origin and any depth, which is what a bare relative path could not do:
+  // a relative path resolves against wherever the page is SERVED from, so the
+  // first time that is another folder the library 404s.
+  //
+  // The FALLBACK is a copy of the built library beside the page, named by a
+  // RELATIVE path in data-lahe-fallback and injected by an inline onerror when
+  // the primary src fails to load. It restores D1's offline half, which the
+  // helper-URL-only form cut: a page opened while the helper is down loaded no
+  // library at all, so there was no rail, no honest "helper is unreachable"
+  // chip, no local capture and no export. That is R10 (there is always a way to
+  // take the work elsewhere, with nothing running), and the claim that "a
+  // review with no helper cannot record anything anyway" was simply false: the
+  // library alone records into browser storage, says out loud that the helper
+  // is unreachable, and posts everything it held when the helper comes back.
+  //
+  // The injected fallback script carries no data attributes on purpose. Its
+  // document.currentScript has none, so boot falls through to SCRIPT_SELECTOR
+  // and reads the config off the original tag, which is still in the document.
+  //
+  // The one place the fallback cannot run is under a strict CSP that refuses
+  // inline event handlers. The primary src still loads there, which is the
+  // ordinary dev-server case; `lahe add` prints that caveat with the snippet.
 
   var SCRIPT_ATTR = {
     REVIEW: "data-lahe-review",
     TOKEN: "data-lahe-token",
-    HELPER: "data-lahe-helper"
+    HELPER: "data-lahe-helper",
+    FALLBACK: "data-lahe-fallback"
   };
+
+  // The inline onerror, kept to one statement-per-clause line so the attribute
+  // stays readable in a page's source. Single quotes only: the attribute is
+  // written inside double quotes. No ">" anywhere in it either, so add.js's
+  // EXISTING_TAG (which scans a negated character class up to the first ">")
+  // still matches, replaces and removes the whole line.
+  var SCRIPT_FALLBACK_ONERROR =
+    "var s=document.createElement('script');" +
+    "s.src=this.getAttribute('" +
+    SCRIPT_ATTR.FALLBACK +
+    "');" +
+    "document.head.appendChild(s)";
 
   // Read via document.currentScript, falling back to this selector for the
   // deferred and re-executed cases.
@@ -788,11 +819,18 @@
     if (!o.src) throw new Error("scriptTag: src is required (the path to the built library)");
     if (!isSafeId(o.review)) throw new Error("scriptTag: review must be a safe id");
     if (!o.token) throw new Error("scriptTag: token is required; absent configuration fails closed");
+    // The fallback half is optional so a caller with nothing beside the page
+    // (a test harness serving the bundle itself) writes the plain line.
+    var fallback = o.fallback
+      ? '        ' + SCRIPT_ATTR.FALLBACK + '="' + o.fallback + '"\n' +
+        '        onerror="' + SCRIPT_FALLBACK_ONERROR + '"\n'
+      : "";
     return (
       '<script src="' + o.src + '"\n' +
       '        ' + SCRIPT_ATTR.REVIEW + '="' + o.review + '"\n' +
       '        ' + SCRIPT_ATTR.TOKEN + '="' + o.token + '"\n' +
       '        ' + SCRIPT_ATTR.HELPER + '="' + (o.helper || DEFAULT_HELPER_ORIGIN) + '"\n' +
+      fallback +
       '        defer><\/script>'
     );
   }
@@ -905,6 +943,7 @@
 
     SCRIPT_ATTR: SCRIPT_ATTR,
     SCRIPT_SELECTOR: SCRIPT_SELECTOR,
+    SCRIPT_FALLBACK_ONERROR: SCRIPT_FALLBACK_ONERROR,
     scriptTag: scriptTag,
 
     WAIT: WAIT,

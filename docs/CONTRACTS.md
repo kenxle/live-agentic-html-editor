@@ -447,17 +447,36 @@ Public API, because D1 makes this the one line a person or an agent types by han
         data-lahe-review="<review-id>"
         data-lahe-token="<per-review token>"
         data-lahe-helper="http://127.0.0.1:7817"
+        data-lahe-fallback="lahe-layer.js"
+        onerror="var s=document.createElement('script');s.src=this.getAttribute('data-lahe-fallback');document.head.appendChild(s)"
         defer></script>
 ```
 
-**The `src` is the helper's own URL, and that supersedes D1's "the library works
-alone" for this one field.** D1 wanted a path on disk so a page still loaded the
-library with no helper up. In practice a relative path (or a copy into the page's
-assets directory) resolves against wherever the page is SERVED from, so the first
-time that is another folder the library 404s and the page silently does nothing;
-and a review with no helper records nothing anyway, so the state D1 protected was
-never usable. One absolute URL resolves from any folder, origin and depth. The
-helper serves those bytes on the unauthenticated `library.get` route.
+**The line carries both halves, and needs both.** The primary `src` is the helper's
+own URL: one absolute URL resolves from any folder, origin and depth, which a bare
+relative path does not (it resolves against wherever the page is SERVED from, so the
+first time that is another folder the library 404s). The helper serves those bytes
+on the unauthenticated `library.get` route.
+
+**The fallback is D1's offline half, and it is not optional.** `data-lahe-fallback`
+names a copy of the built library sitting beside the page, by a relative path, and
+the inline `onerror` injects it when the primary `src` does not load. Without it a
+page opened while the helper is down loads no library at all: no rail, no honest
+unreachable status, no local capture, no export. That is R10 (there is always a way
+to take the work elsewhere, with nothing running), and the earlier claim that "a
+review with no helper records nothing anyway" was wrong: the library alone records
+into browser storage, says the helper is unreachable, and posts everything it held
+when the helper returns.
+
+`lahe add` writes the copy beside a static page and refreshes it on every run, so it
+tracks `dist/`. For a dev server the fallback path is a printed convention (`/lahe-layer.js`)
+the application has to serve. Under a strict development CSP the inline `onerror` can be
+refused; the primary `src` still loads there, so what is lost is the fallback, not the review.
+
+The fallback half is omitted when `protocol.scriptTag` is called without `fallback`,
+which is what a harness serving the bundle itself does. The injected script carries no
+data attributes on purpose: its `document.currentScript` has none, so boot falls through
+to `SCRIPT_SELECTOR` and reads the config off the original tag, still in the document.
 
 Read via `document.currentScript`, falling back to `document.querySelector('script[data-lahe-review]')`
 (`protocol.SCRIPT_SELECTOR`) for the deferred and re-executed cases. **7817 is the fixed default

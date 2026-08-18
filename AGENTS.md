@@ -52,8 +52,11 @@ lahe add path/to/page.html --origin http://127.0.0.1:8000
 
 Start the server yourself, pick a free port, pass that origin to `add`, and hand
 your human the http URL. Serving just the page's own folder is enough: the script
-line loads the library from the helper, not from your folder, so nothing else has
-to be reachable.
+line loads the library from the helper, and `add` also drops a `lahe-layer.js`
+copy in that same folder as the fallback, so a page opened while the helper is
+down still gets the rail, an honest unreachable status, and everything kept in
+the browser until the helper is back. Serve the folder, not the single file, so
+that fallback is reachable.
 
 `file://path/to/page.html` is the FALLBACK, for the rare case where you cannot
 run a server. `add` always registers the `null` origin a page opened from disk
@@ -77,7 +80,11 @@ lahe add path/to/project --origin http://localhost:3000
 
 This edits nothing in the app. It prints one script line for the layout, inside
 a development-only guard. Paste it where the layout's scripts go (or show it to
-your human), restart nothing, reload the page.
+your human), restart nothing, reload the page. The line's `onerror` names a
+fallback path (`/lahe-layer.js`) for the helper-is-down case; copy the built
+library to whatever your app publishes there if you want that half, or edit
+`data-lahe-fallback` to a path it does serve. A strict development CSP can refuse
+the inline `onerror`, which costs you the fallback and nothing else.
 
 Running `add` twice on the same target reuses the existing review, and so does
 running it on a page a rebuild stripped the script line out of: the review
