@@ -532,6 +532,46 @@ test("re-adding a review the helper HOLDS never restarts it, and an open wait su
   }
 });
 
+test("a brand-new --origin on a held review goes through review.write, not a restart", async () => {
+  // The flaw this covers: the write request presented origins[0] as computed by
+  // THIS run. On a dev-server target that is the origin being ADDED, which the
+  // review has not registered yet, so the helper answered 403 and `add` fell
+  // back to bouncing the helper, dropping every blocked wait. The request now
+  // presents an origin the helper already holds.
+  const project = tempDir();
+  fs.mkdirSync(path.join(project, "public"), { recursive: true });
+  const stateDir = path.join(tempDir(), "state");
+  const port = await freePort();
+  try {
+    const first = runAdd([project, "--port", String(port), "--state-dir", stateDir, "--origin", "http://localhost:4321"]);
+    assert.equal(first.code, 0, first.stdout + first.stderr);
+    const review = /data-lahe-review="([^"]+)"/.exec(first.stdout)[1];
+    const before = JSON.parse(fs.readFileSync(path.join(stateDir, "service.json"), "utf8"));
+
+    const again = runAdd([
+      project,
+      "--port",
+      String(port),
+      "--state-dir",
+      stateDir,
+      "--origin",
+      "http://localhost:5555"
+    ]);
+    assert.equal(again.code, 0, again.stdout + again.stderr);
+    assert.doesNotMatch(again.stdout, /restarted/i, "the helper was not bounced for an origin it can register");
+
+    const after = JSON.parse(fs.readFileSync(path.join(stateDir, "service.json"), "utf8"));
+    assert.equal(after.pid, before.pid, "the SAME helper process");
+    assert.equal(after.started_at, before.started_at, "and the same run of it");
+    assert.ok(
+      after.reviews[review].origins.indexOf("http://localhost:5555") !== -1,
+      "and the helper registered the new origin from the body"
+    );
+  } finally {
+    await stopHelper(stateDir);
+  }
+});
+
 test("a rebuilt page with no script line is matched back to its review by path", async () => {
   const work = await aWorkspace();
   try {

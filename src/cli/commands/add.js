@@ -508,17 +508,25 @@ function reviewMatchingPath(dir, target) {
  * would drop every blocked `lahe wait`, which is an agent losing the review it
  * was watching mid-session.
  *
+ * The origin presented here is one the review has ALREADY REGISTERED, read from
+ * service.json, not one this run wants to add. The helper checks the header
+ * against the review's allowlist, so presenting a brand-new `--origin` (or the
+ * two defaults a bare re-run falls back to) got a 403 and forced exactly the
+ * restart this route exists to avoid, dropping every open `wait`. The new
+ * origins still travel in the body, which is what registers them.
+ *
+ * @param {string[]} registeredOrigins the origins the helper already holds for
+ *        this review
  * @returns {Promise<boolean>} true when the helper applied the writes
  */
-async function helperAppliedWrites(host, port, review, origins, writes) {
+async function helperAppliedWrites(host, port, review, registeredOrigins, writes) {
   var target = "http://" + host + ":" + port + protocol.route("review.write").path;
   var headers = {};
   headers[protocol.HEADER.CLIENT] = protocol.CLIENT_CLI;
   headers[protocol.HEADER.TOKEN] = review.token;
   headers[protocol.HEADER.CONTENT_TYPE] = protocol.JSON_CONTENT_TYPE;
-  // A command-line process has no origin of its own, so it presents one this
-  // review has registered, exactly as `wait` and the read below do.
-  if (origins.length > 0) headers[protocol.HEADER.ORIGIN] = origins[0];
+  var registered = Array.isArray(registeredOrigins) ? registeredOrigins : [];
+  if (registered.length > 0) headers[protocol.HEADER.ORIGIN] = registered[0];
   var body = Object.assign({ review: review.id }, writes);
   try {
     var res = await fetch(target, { method: "POST", headers: headers, body: JSON.stringify(body) });
@@ -981,7 +989,10 @@ async function run(argv) {
     // log, so it applies the writes and `add` never stops it. Stopping it here
     // is what used to kill an agent's open `lahe wait`.
     review = { id: reuseId, token: heldToken };
-    handedToHelper = await helperAppliedWrites(host, port, review, origins, {
+    // What the helper already has registered for this review, straight off its
+    // own service.json, is what the request may present as its origin.
+    var heldOrigins = (ready.reviews[reuseId] && ready.reviews[reuseId].origins) || [];
+    handedToHelper = await helperAppliedWrites(host, port, review, heldOrigins, {
       origins: origins,
       target_path: pathWrites.target_path,
       source_path: pathWrites.source_path,
