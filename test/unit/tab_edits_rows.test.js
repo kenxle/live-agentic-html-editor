@@ -20,6 +20,15 @@ test("the Edits tab holds hand edits and nothing else", () => {
   assert.equal(tabEdits.isHandEdit(fixtures.formatOnly()), true);
   assert.equal(tabEdits.isHandEdit(fixtures.comment()), false);
   assert.equal(tabEdits.isHandEdit(fixtures.note()), false);
+
+  // ONE definition of the list, in record.js. The Done tab reads the same
+  // predicate to know that this tab's row is already showing the change, so
+  // two surfaces drifting apart here is two surfaces printing it twice.
+  [fixtures.edit(), fixtures.deletion(), fixtures.formatOnly(), fixtures.comment(), fixtures.note()].forEach(
+    function (item) {
+      assert.equal(tabEdits.isHandEdit(item), record.isHandEdit(item));
+    }
+  );
 });
 
 test("an edit row is a before and an after", () => {

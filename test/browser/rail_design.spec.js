@@ -18,6 +18,10 @@
 //   F5     a handled card said the reviewer's note, the agent's sentence and the
 //          file list twice each. The assertion counts occurrences in the card's
 //          own text
+//   F5b    a handled HAND EDIT was the same defect one layer down: the Edits row
+//          and the Done row both printed the change summary, around a diff that
+//          was already saying it, and Reopen and Undo sat at opposite ends of
+//          the card. Occurrences again, plus the two buttons' shared parent
 //
 // Real page, real gestures, real helper, real rail in its closed shadow root.
 
@@ -451,6 +455,119 @@ test.describe("the rail as a shipping surface", () => {
       expect(card.noteVisible, "but rewording makes no sense on a handled item, so it is not drawn").toBe(false);
       expect(card.deleteVisible, "and neither does Delete").toBe(false);
       expect(card.reopenVisible, "Done keeps Reopen").toBe(true);
+    } finally {
+      await helper.stop().catch(() => {});
+      await app.close();
+    }
+  });
+
+  // --- F5b: the same defect on a handled HAND EDIT ---------------------------
+  //
+  // A handled edit card carries TWO rows, the Edits tab's and the Done tab's,
+  // and both used to print the change summary: once at the top of the card,
+  // once under the before-and-after, with the diff itself saying it a third
+  // time in between. The two things the reviewer can do about it were at
+  // opposite ends, Reopen at the top and Undo at the bottom.
+
+  /** Make a real hand edit on the page, the way a reviewer makes one. */
+  async function handEditOn(page, selector, tail) {
+    await page.evaluate((sel) => {
+      const el = document.querySelector(sel);
+      const range = document.createRange();
+      range.setStart(el.firstChild, 0);
+      range.collapse(true);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }, selector);
+    await page.keyboard.press("ControlOrMeta+Shift+KeyE");
+    await pollPage(page, () => window.__lahe.isEditing(), undefined, { message: "edit state" });
+    await page.evaluate((sel) => {
+      const el = document.querySelector(sel);
+      const node = el.lastChild;
+      const range = document.createRange();
+      range.setStart(node, node.textContent.length);
+      range.collapse(true);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }, selector);
+    await page.keyboard.type(tail);
+    await page.keyboard.press("Escape");
+    await pollPage(page, () => window.__lahe.isEditing() === false, undefined, {
+      message: "the edit to commit"
+    });
+    return page.evaluate((sel) => window.__lahe.itemForElement(sel), selector);
+  }
+
+  test("a handled hand edit says the change once and keeps Reopen and Undo together", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      const SAID = "Rewrote the paragraph to name the number once.";
+      const item = await handEditOn(page, REGION.rest, " Say that out loud in the app.");
+      expect(item, "the hand edit reached the store").toBeTruthy();
+
+      await fold(page, item, { status: "handled", agent: "claude", reason: SAID, files: [] }, "handled");
+      await pollPage(page, (id) => window.__lahe.rail.getCard(id).pane === "done", item.id, {
+        message: "the card to move to the Done pane"
+      });
+      await page.evaluate(() => window.__lahe.rail.selectTab("done"));
+
+      const card = await page.evaluate((id) => {
+        const node = window.__lahe.rail.cardNode(id);
+        const visible = (el) => !!el && el.getClientRects().length > 0;
+        const visibleText = (root) => {
+          let out = "";
+          const walk = (el) => {
+            if (el.tagName === "STYLE" || el.tagName === "SCRIPT") return;
+            if (window.getComputedStyle(el).display === "none") return;
+            el.childNodes.forEach((child) => {
+              if (child.nodeType === 3) out += child.nodeValue;
+              else if (child.nodeType === 1) walk(child);
+            });
+          };
+          walk(node);
+          return out;
+        };
+        const reopen = Array.from(node.querySelectorAll(".cardact")).filter(
+          (b) => b.textContent === "Reopen"
+        )[0];
+        const undo = node.querySelector('[data-lahe-act="undo"]');
+        return {
+          text: visibleText(node),
+          summary: node.querySelector(".lahe-edits__said")
+            ? node.querySelector(".lahe-edits__said").textContent
+            : "",
+          // The Done row is still ATTACHED, the rail's own law, and it draws
+          // nothing on a hand-edit card because it has nothing left to say.
+          doneSaidVisible: visible(node.querySelector(".lahe-done-said")),
+          reopenVisible: visible(reopen),
+          undoVisible: visible(undo),
+          // The one thing this test is really about: one footer, both buttons.
+          sameFooter: !!reopen && !!undo && reopen.parentNode === undo.parentNode,
+          // Reopen reads first: keeping the change is the ordinary answer.
+          reopenFirst: !!reopen && reopen.parentNode.firstElementChild === reopen,
+          // The summary heads the diff rather than trailing it.
+          summaryBeforePair: (() => {
+            const said = node.querySelector(".lahe-edits__said");
+            const pair = node.querySelector(".lahe-edits__pair");
+            if (!said || !pair) return false;
+            return !!(said.compareDocumentPosition(pair) & Node.DOCUMENT_POSITION_FOLLOWING);
+          })()
+        };
+      }, item.id);
+
+      const times = (haystack, needle) => haystack.split(needle).length - 1;
+      expect(card.summary, "the card carries a change summary").not.toBe("");
+      expect(times(card.text, card.summary), "the change summary, once").toBe(1);
+      expect(times(card.text, SAID), "what the agent said, once").toBe(1);
+      expect(card.doneSaidVisible, "and the Done row does not say it a second time").toBe(false);
+      expect(card.summaryBeforePair, "the summary heads the before-and-after").toBe(true);
+      expect(card.reopenVisible, "Reopen is on the card").toBe(true);
+      expect(card.undoVisible, "so is Undo").toBe(true);
+      expect(card.sameFooter, "and they are one button group, not two ends of a card").toBe(true);
+      expect(card.reopenFirst, "Reopen reads first").toBe(true);
     } finally {
       await helper.stop().catch(() => {});
       await app.close();

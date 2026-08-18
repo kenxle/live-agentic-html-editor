@@ -94,6 +94,11 @@
     "white-space:pre-wrap;overflow-wrap:anywhere}",
     // Reopen wears the rail's own card-action register (`.cardact`), so every
     // control that sits on a card has one voice rather than one per file.
+    // On a hand-edit card this row draws nothing at all: the reviewer's words
+    // are empty and Reopen has moved into the Edits row's own footer, so both
+    // slots are hidden rather than left as two blank gaps in the card.
+    "." + ROW_CLASS + " .lahe-done-said:empty{display:none}",
+    "." + ROW_CLASS + " .cardacts:empty{display:none}",
 
     // The question. Full bleed to the card's padding, so the rule runs the
     // whole height of the block rather than sitting in a box inside a box.
@@ -144,6 +149,10 @@
     // own law, applied to this file's nodes.
     var rows = Object.create(null);
     var asks = Object.create(null);
+    // id -> the Reopen button. Held separately from its row because on a
+    // hand-edit card the button does not live in that row: it moves next to
+    // Undo. Whoever removes the row still has to remove the button.
+    var reopens = Object.create(null);
     var counters = { folded: 0, refused: 0, rejected: 0, reopened: 0, questions: 0 };
 
     function el(tag, className, text) {
@@ -208,12 +217,23 @@
 
       Object.keys(rows).forEach(function (id) {
         if (seen[id]) return;
-        var row = rows[id];
-        if (row && row.parentNode) row.parentNode.removeChild(row);
-        delete rows[id];
+        dropRow(id);
       });
 
       return api;
+    }
+
+    // The row and its Reopen button go together, even when they are not in the
+    // same place: on a hand-edit card the button was moved into the Edits row's
+    // footer, so removing the row alone would leave a Reopen next to Undo on an
+    // item that is no longer handled.
+    function dropRow(id) {
+      var row = rows[id];
+      if (row && row.parentNode) row.parentNode.removeChild(row);
+      var reopen = reopens[id];
+      if (reopen && reopen.parentNode) reopen.parentNode.removeChild(reopen);
+      delete reopens[id];
+      delete rows[id];
     }
 
     // ONE CARRIER PER FACT. A handled card used to say the reviewer's note
@@ -224,6 +244,13 @@
     // and Reopen; and the Active row is not drawn on a card in the Done pane
     // (the rail hides it by the card's state). Six blocks for three facts
     // becomes three.
+    //
+    // A handled HAND EDIT was the same defect one layer down: the Edits row is
+    // also on this card, and both rows printed the change summary, once above
+    // the before-and-after and once below it. This row no longer says it (see
+    // saidBy), and its Reopen moves next to that row's Undo (see homeReopen),
+    // so a handled edit reads as one summary, the exact wording, and the two
+    // things the reviewer can do about it.
     function buildRow(item) {
       var row = el("div", ROW_CLASS);
       row.setAttribute("data-lahe-item", item[record.FIELD.ID]);
@@ -236,20 +263,57 @@
         reopenItem(item[record.FIELD.ID]);
       });
       foot.appendChild(reopen);
+      reopens[item[record.FIELD.ID]] = reopen;
       row.appendChild(foot);
       return row;
     }
 
-    /** What the reviewer asked for, in their own words. */
+    /**
+     * What the reviewer asked for, in their own words.
+     *
+     * A hand edit's change summary is NOT said here. The Edits row on the same
+     * card heads its before-and-after with that one sentence, so printing
+     * `change` again put the same words above the diff and below it, with the
+     * diff in between saying it a third time. One carrier per fact: the Edits
+     * row owns the change, this row owns the reviewer's own note, and a hand
+     * edit usually carries none. The Active tab's row already reads only the
+     * note, so this is also the two panes finally agreeing.
+     */
     function saidBy(item) {
       var note = item[record.FIELD.NOTE];
+      if (record.isHandEdit(item)) return note || "";
       var change = item[record.FIELD.CHANGE];
       if (note && change && note !== change) return note + "\n" + change;
       return note || change || item[record.FIELD.AFTER] || "";
     }
 
+    /**
+     * Put Reopen where the reviewer's other decision about this item already is.
+     *
+     * Reopen and Undo are one decision surface: keep the agent's change, or take
+     * it back. On a hand-edit card they were at opposite ends, Reopen at the top
+     * in this row and Undo at the bottom in the Edits row. Reopen moves into the
+     * Edits row's own footer, first, so the pair reads as one group at the foot
+     * of the card. Run on every paint because it is idempotent and it puts the
+     * button back after a remount rebuilt either row.
+     *
+     * Absent an Edits row (a comment card), Reopen stays in this row's own
+     * footer, which is where it has always been.
+     */
+    function homeReopen(row, item) {
+      var reopen = reopens[item[record.FIELD.ID]];
+      if (!reopen) return null;
+      var body = row.parentNode;
+      var edits = body ? body.querySelector("[data-lahe-edit-row] .cardacts") : null;
+      var home = edits || row.querySelector(".cardacts");
+      if (!home) return null;
+      if (reopen.parentNode !== home) home.insertBefore(reopen, home.firstChild);
+      return home;
+    }
+
     function updateRow(row, item) {
       row.querySelector(".lahe-done-said").textContent = saidBy(item);
+      homeReopen(row, item);
     }
 
     /**
@@ -539,13 +603,11 @@
     }
 
     function unmount() {
-      Object.keys(rows).forEach(function (id) {
-        var row = rows[id];
-        if (row && row.parentNode) row.parentNode.removeChild(row);
-      });
+      Object.keys(rows).forEach(dropRow);
       Object.keys(asks).forEach(clearQuestion);
       rows = Object.create(null);
       asks = Object.create(null);
+      reopens = Object.create(null);
       styleAttached = false;
       mounted = false;
       return true;

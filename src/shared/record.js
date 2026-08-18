@@ -107,6 +107,21 @@
     return KIND[k];
   });
 
+  /**
+   * Did the reviewer make this change with their hands, on the page itself?
+   *
+   * The three kinds that carry a before-and-after. It lives here rather than in
+   * a tab file because more than one surface has to agree on the answer: the
+   * Edits tab lists exactly these, and the Done tab has to know that the Edits
+   * row on the same card is already drawing the change summary, so it does not
+   * print the same sentence a second time.
+   */
+  function isHandEdit(item) {
+    if (!item) return false;
+    var kind = item[FIELD.KIND];
+    return kind === KIND.EDIT || kind === KIND.DELETE || kind === KIND.FORMAT_ONLY;
+  }
+
   // ---------------------------------------------------------------------------
   // States
   // ---------------------------------------------------------------------------
@@ -606,6 +621,7 @@
     FIELD: FIELD,
     KIND: KIND,
     KINDS: KINDS,
+    isHandEdit: isHandEdit,
     STATE: STATE,
     STATES: STATES,
     REPLY_STATUS: REPLY_STATUS,
