@@ -161,7 +161,9 @@ async function run(argv) {
     process.stdout.write(
       (staticServer ? "" : "\n") + "  monitor   lahe monitor --session " + sessionId +
         " --seen-file <path>\n" +
-        "            launch as a background task; after it exits on work, handle the batch and relaunch\n" +
+        "  drain     lahe status --session " + sessionId +
+        " --json --seen-file <same-path> --quiet\n" +
+        "            after work, repeat drain until empty; then relaunch the background monitor\n" +
         "  close     lahe session close " + sessionId + "\n"
     );
   }

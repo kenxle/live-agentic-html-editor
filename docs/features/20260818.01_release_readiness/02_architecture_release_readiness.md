@@ -86,9 +86,11 @@ Agent monitoring is session-scoped and exit-on-work. `lahe monitor` owns one
 local 15-second polling loop over `status --session --json --seen-file --quiet`.
 It emits nothing while idle, prints new item lines, and exits. Agents launch it
 as a background terminal task, handle the batch when completion wakes them, and
-then launch it again. A client without completion-triggered wakeups may run the
-same command in the foreground with an explicit warning that the chat is
-occupied.
+then drain immediate status checks with the same seen-file until one is empty
+before launching it again. The drain catches feedback submitted during
+implementation without an extra background wake-and-exit cycle. A client
+without completion-triggered wakeups may run the same command in the foreground
+with an explicit warning that the chat is occupied.
 
 This boundary exists to prevent token burn on no-ops. Claude Tasks,
 Antigravity schedules, Codex Timers, and equivalent facilities invoke a model

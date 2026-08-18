@@ -281,8 +281,11 @@ once, and after that a plain sentence works:
 
 Launch `lahe monitor --session <id> --seen-file <path>` as a background terminal
 task. It polls locally every 15 seconds, stays silent while idle, and exits when
-new work arrives. Task completion wakes the agent; after handling the printed
-batch, the agent relaunches it. This avoids token burn on no-ops: native Claude
+new work arrives. Task completion wakes the agent. After handling the printed
+batch, the agent runs an immediate session-scoped status check with the same
+seen-file and repeats until it is empty, then relaunches the monitor. Draining
+first catches feedback left while the agent worked and avoids an extra
+wake-and-exit cycle. This avoids token burn on no-ops: native Claude
 timers, Antigravity schedules, and similar wakeups invoke a model even when
 nothing changed, while the monitor's empty checks never invoke a model. A
 forever daemon is also unsuitable because some hosts only wake the agent when a

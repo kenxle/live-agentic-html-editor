@@ -43,7 +43,7 @@
   // a freshly rebuilt browser bundle from disk, so API_VERSION alone cannot
   // prevent a new rail from talking to yesterday's backend. Bump this integer
   // whenever an old helper cannot safely back a newly built CLI/layer.
-  var SERVICE_CONTRACT = 6;
+  var SERVICE_CONTRACT = 7;
   var BASE = "/lahe/" + API_VERSION;
 
   // ---------------------------------------------------------------------------

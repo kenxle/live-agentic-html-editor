@@ -327,7 +327,15 @@ Launch that exact command as a background terminal task. It polls the
 session-scoped status locally every 15 seconds, prints nothing while the page is
 unchanged, and exits as soon as new work appears. The host can then wake the
 agent with the completed task and its item output. After handling that batch,
-launch the same command again with the same seen-file.
+check once for feedback that arrived while you worked:
+
+```sh
+lahe status --session <session-id> --json --seen-file ~/.lahe-seen-<session-id> --quiet
+```
+
+If it prints items, handle that batch and check again. Only when the immediate
+check is empty should you launch the background `lahe monitor` again. This
+drains rapid feedback without creating an avoidable task-completion wakeup.
 
 The reason for this design is model allowance. Native Claude Tasks/Timers,
 Antigravity schedules, and similar wakeups invoke the model on every check, even
@@ -341,9 +349,10 @@ exits on work so task completion can wake the agent.
 
 Run the printed `lahe monitor` command in a background exec session. Do not use
 a Codex Timer. Wait on that exec session through the tool runtime. Idle polling
-stays local; when the process prints items and exits, handle them and launch a
-fresh background monitor. Retain the exec session id for interruption and never
-start two monitors for one agent session.
+stays local; when the process prints items and exits, handle them, drain
+immediate checks until empty, and then launch a fresh background monitor. Retain
+the exec session id for interruption and never start two monitors for one agent
+session.
 
 #### Antigravity / AGY agent frameworks
 
@@ -351,8 +360,8 @@ Run the printed `lahe monitor` command as a background terminal task. Do not use
 Antigravity's native `schedule` loop for routine monitoring: every scheduled
 wakeup invokes Gemini and spends allowance on no-ops. This background task is
 different from a forever daemon. It exits when new work appears, so completion
-wakes the agent. Handle the printed batch, launch the same command again, and
-end the turn so chat remains available.
+wakes the agent. Handle the printed batch, drain immediate checks until empty,
+launch the same command again, and end the turn so chat remains available.
 
 If a client cannot wake an agent when a background terminal task completes, run
 the same `lahe monitor` command in the foreground. Tell the human before

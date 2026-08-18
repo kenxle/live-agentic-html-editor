@@ -37,8 +37,12 @@ Launch the exact `lahe monitor` command printed by `lahe review` as a background
 terminal task. The monitor polls session-scoped status locally every 15 seconds,
 prints nothing while idle, and exits as soon as new work appears. Empty polls do
 not invoke the model or use model tokens. When the background task completes,
-handle every printed item, then launch the same command again for the next
-batch. Keep one monitor per agent session and one stable seen-file.
+handle every printed item. Before launching another background monitor, run one
+immediate `lahe status --session <id> --json --seen-file <same-path> --quiet`
+check. If it prints items that arrived while you worked, handle them and check
+again. Launch the background monitor only after that immediate check is empty.
+This drains a burst of feedback without an avoidable wake-and-exit cycle. Keep
+one monitor per agent session and one stable seen-file.
 
 This exit-on-work behavior matters. A forever background daemon may remain
 invisible to an agent host because it never completes. A native Timer or
@@ -51,8 +55,8 @@ real work or the session closes.
 Run the printed `lahe monitor` command in a background exec session. Do not use
 a Codex Timer. Wait on that same exec session through the tool runtime; it stays
 silent during no-ops and returns only when item output exists or the LAHE session
-closes. After handling item output, start a fresh background monitor with the
-same session and seen-file.
+closes. After handling item output, drain immediate status checks until one is
+empty, then start a fresh background monitor with the same session and seen-file.
 
 ### Antigravity / AGY
 
@@ -60,8 +64,9 @@ Run the printed `lahe monitor` command as a background terminal task. Unlike a
 forever daemon, this task exits when it prints new work, and Antigravity can use
 that task completion to wake the agent. Unlike `schedule`, idle polling stays in
 the local process and does not spend Gemini allowance. Handle the printed batch,
-then launch the same background task again. Do not use a recurring schedule or
-a chain of one-shot model timers for routine monitoring.
+drain immediate status checks until one is empty, then launch the same
+background task again. Do not use a recurring schedule or a chain of one-shot
+model timers for routine monitoring.
 
 If a client cannot wake an agent when a background terminal task completes, run
 the same `lahe monitor` command in the foreground. Tell the human that it owns
