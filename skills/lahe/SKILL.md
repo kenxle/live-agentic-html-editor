@@ -67,9 +67,11 @@ real work or the session closes.
 ### Codex
 
 Run the printed `lahe monitor` command in a background exec session. Do not use
-a Codex Timer. Wait on that same exec session through the tool runtime; it stays
-silent during no-ops and returns only when item output exists or the LAHE session
-closes. A returned item batch means the same turn must continue through source
+a Codex Timer. Keep the agent turn open by waiting on that same exec session
+through the tool runtime. Do not send a final response that says the monitor was
+started: a detached terminal task does not guarantee a new Codex turn after the
+current turn ends. The wait stays silent during no-ops and returns only when item
+output exists, the session closes, or the human steers the active turn. A returned item batch means the same turn must continue through source
 edit, rebuild, visible-output verification, reply append, and the immediate
 drain. Never end the turn after saying the item was received or is ready to
 apply. After handling item output, drain immediate status checks until one is
@@ -121,6 +123,8 @@ reports that the session is closed.
   not a watcher.
 - Do not treat a completed monitor as completed work. `LAHE ACTION REQUIRED`
   means process the items now; receiving or describing them is not handling them.
+- In Codex, do not detach the monitor and then end the agent turn. Keep the turn
+  pending on the monitor's exec session so its completion can continue that turn.
 - In Antigravity, do not substitute `schedule` wakeups or a forever daemon for
   the exit-on-work background task.
 - Do not leave a monitor running after its agent session closes.

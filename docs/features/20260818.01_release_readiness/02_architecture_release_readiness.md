@@ -119,6 +119,13 @@ waited for another human message before acting. The control line lives in the
 CLI output as well as the skill because task-completion transcripts may be the
 only context a resumed agent attends to.
 
+Codex has an additional host-lifecycle requirement: its agent turn remains
+pending on the monitor's exec session. Detaching the terminal process and ending
+the agent turn is not a wakeup mechanism; process completion may otherwise sit
+unobserved until the human sends another message. The pending wait uses the
+local process for idle polling, permits human steering, and continues the same
+turn only when work exists.
+
 This boundary exists to prevent token burn on no-ops. Claude Tasks,
 Antigravity schedules, Codex Timers, and equivalent facilities invoke a model
 even when no document state changed. Leaving those active overnight can spend a

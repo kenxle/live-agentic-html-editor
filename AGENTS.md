@@ -396,8 +396,11 @@ exits on work so task completion can wake the agent.
 #### Codex
 
 Run the printed `lahe monitor` command in a background exec session. Do not use
-a Codex Timer. Wait on that exec session through the tool runtime. Idle polling
-stays local; when the process prints items and exits, handle them, drain
+a Codex Timer. Keep the agent turn open by waiting on that exec session through
+the tool runtime. Do not send a final response announcing that the monitor was
+started: after the agent turn ends, a detached terminal task does not guarantee
+that Codex will create another turn merely because the process exited. Idle polling
+stays local; a human message can still steer the active turn, and when the process prints items and exits, handle them, drain
 immediate checks until empty, and then launch a fresh background monitor. Retain
 the exec session id for interruption and never start two monitors for one agent
 session. Do not end the turn when the exec session returns item output. The

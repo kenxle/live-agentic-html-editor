@@ -305,6 +305,12 @@ and stop relaunching when the session closes. If a host cannot wake on task
 completion, run the same command in the foreground after telling the user how
 to interrupt it.
 
+Codex must keep its current turn pending on the monitor's exec session. It must
+not detach the process, announce that monitoring started, and end the turn;
+detached task completion alone does not guarantee a new Codex turn. Waiting on
+the exec session preserves zero-token local polling and lets item output
+continue the already-active turn.
+
 **If the page is build output**, an agent should rebuild before it reports an
 item handled: `handled` is supposed to mean your page shows the change. It does
 not have to re-run `lahe add` afterwards. A rebuild strips the script line out
