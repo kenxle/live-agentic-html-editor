@@ -20,8 +20,8 @@
 //  2. A HANDLED ITEM IS KEPT AND REOPENABLE (R38). It loses its highlight and
 //     moves to the Done tab; it is never deleted. Reopening is a lifecycle
 //     transition the REVIEWER makes (handled -> ready, lifecycle.js's actor
-//     column), and it posts its own event so the helper's projection agrees
-//     with the rail rather than restoring `handled` on the next re-post.
+//     column). It archives the completed exchange and posts the new revision
+//     through the ordinary ready-item path.
 //
 //  3. AGENT TEXT IS ITS OWN TRUST CLASS. Plain text, bounded by
 //     review_format's own bound with the marker visible, labelled with the name
@@ -99,6 +99,15 @@
     // slots are hidden rather than left as two blank gaps in the card.
     "." + ROW_CLASS + " .lahe-done-said:empty{display:none}",
     "." + ROW_CLASS + " .cardacts:empty{display:none}",
+    ".lahe-thread{display:flex;flex-direction:column;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}",
+    ".lahe-thread-round{display:flex;flex-direction:column;gap:5px}",
+    ".lahe-thread-turn{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12.5px;line-height:1.45}",
+    ".lahe-thread-turn strong{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint);margin-right:5px}",
+    ".lahe-followup{display:flex;flex-direction:column;gap:7px;padding-top:8px}",
+    ".lahe-followup-label{font-size:10px;font-weight:650;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-faint)}",
+    ".lahe-followup textarea{box-sizing:border-box;width:100%;min-height:72px;resize:vertical;border:1px solid var(--line);border-radius:7px;padding:8px 9px;background:var(--paper);color:var(--ink);font:inherit;line-height:1.4}",
+    ".lahe-followup textarea:focus{outline:2px solid var(--accent);outline-offset:1px}",
+    ".lahe-followup .cardacts{justify-content:flex-end}",
 
     // The question. Full bleed to the card's padding, so the rule runs the
     // whole height of the block rather than sitting in a box inside a box.
@@ -134,6 +143,8 @@
     var reviewId = opts.reviewId || null;
     var comments = opts.comments || null;
     var sync = opts.sync || null;
+    var onContinued = typeof opts.onContinued === "function" ? opts.onContinued : function () {};
+    var isReadOnly = typeof opts.isReadOnly === "function" ? opts.isReadOnly : function () { return false; };
     var doc = Object.prototype.hasOwnProperty.call(opts, "document")
       ? opts.document
       : typeof document !== "undefined"
@@ -149,6 +160,9 @@
     // own law, applied to this file's nodes.
     var rows = Object.create(null);
     var asks = Object.create(null);
+    var threads = Object.create(null);
+    var composers = Object.create(null);
+    var follows = Object.create(null);
     // id -> the Reopen button. Held separately from its row because on a
     // hand-edit card the button does not live in that row: it moves next to
     // Undo. Whoever removes the row still has to remove the button.
@@ -196,6 +210,26 @@
       var seen = Object.create(null);
 
       itemsNow().forEach(function (item) {
+        // Historical rounds and a current response can exist in either pane.
+        // Ensure the card exists before attaching their nodes on a cold load.
+        if (record.threadOf(item).length || item[record.FIELD.REPLY]) {
+          rail.upsertCard(item);
+          rail.setCardState(item[record.FIELD.ID], item[record.FIELD.STATE]);
+        }
+        if (record.threadOf(item).length) drawThread(item);
+        else clearThread(item[record.FIELD.ID]);
+        if (item[record.FIELD.REPLY]) {
+          drawComposer(item);
+          if (item[record.FIELD.REPLY].status === record.REPLY_STATUS.QUESTION) {
+            rail.setAgentMessage(item[record.FIELD.ID], null);
+            drawQuestion(item);
+          } else {
+            rail.setAgentMessage(item[record.FIELD.ID], agentMessageFor(item));
+          }
+        } else {
+          clearComposer(item[record.FIELD.ID]);
+          clearQuestion(item[record.FIELD.ID]);
+        }
         if (item[record.FIELD.STATE] !== record.STATE.HANDLED) return;
         var id = item[record.FIELD.ID];
         seen[id] = true;
@@ -233,6 +267,7 @@
       var reopen = reopens[id];
       if (reopen && reopen.parentNode) reopen.parentNode.removeChild(reopen);
       delete reopens[id];
+      delete follows[id];
       delete rows[id];
     }
 
@@ -257,13 +292,22 @@
       row.appendChild(el("div", "lahe-done-said", ""));
 
       var foot = el("div", "cardacts");
-      var reopen = el("button", "cardact", "Reopen");
+      var follow = el("button", "cardact", "Follow up");
+      follow.setAttribute("type", "button");
+      follow.addEventListener("click", function () {
+        focusComposer(item[record.FIELD.ID]);
+      });
+      follows[item[record.FIELD.ID]] = follow;
+      foot.appendChild(follow);
+
+      var reopen = el("button", "cardact cardact--quiet", "Reopen issue");
       reopen.setAttribute("type", "button");
       reopen.addEventListener("click", function () {
         reopenItem(item[record.FIELD.ID]);
       });
       foot.appendChild(reopen);
       reopens[item[record.FIELD.ID]] = reopen;
+      updateReopenAvailability(item[record.FIELD.ID]);
       row.appendChild(foot);
       return row;
     }
@@ -367,6 +411,159 @@
       return (reply && reply.agent) || "agent";
     }
 
+    function drawThread(item) {
+      var id = item[record.FIELD.ID];
+      if (!doc) return null;
+      if (!threads[id]) {
+        threads[id] = el("section", "lahe-thread");
+        threads[id].setAttribute("aria-label", "Earlier exchanges");
+        rail.prependCardNode(id, threads[id]);
+      }
+      var node = threads[id];
+      while (node.firstChild) node.removeChild(node.firstChild);
+      ensureStyle(node);
+      record.threadOf(item).forEach(function (round) {
+        var pair = el("div", "lahe-thread-round");
+        var reviewer = round.reviewer || {};
+        if (reviewer.note) appendTurn(pair, "Reviewer note", reviewer.note);
+        if (reviewer.change) appendTurn(pair, "Reviewer change", reviewer.change);
+        var agent = round.agent || {};
+        if (agent.text) appendTurn(pair, agent.agent || "Agent", agent.text);
+        if (agent.reason) appendTurn(pair, (agent.agent || "Agent") + " reason", agent.reason);
+        if (!agent.text && !agent.reason) appendTurn(pair, agent.agent || "Agent", agent.status || "");
+        node.appendChild(pair);
+      });
+      return node;
+    }
+
+    function appendTurn(host, who, text) {
+      var line = el("p", "lahe-thread-turn");
+      line.appendChild(el("strong", null, who));
+      line.appendChild(doc.createTextNode(String(text || "")));
+      host.appendChild(line);
+    }
+
+    function clearThread(id) {
+      var node = threads[id];
+      if (node) rail.detachCardNode(id, node);
+      delete threads[id];
+    }
+
+    function drawComposer(item) {
+      var id = item[record.FIELD.ID];
+      if (!doc) return null;
+      if (!composers[id]) {
+        var node = el("section", "lahe-followup");
+        node.setAttribute("data-lahe-followup", id);
+        var label = el("label", "lahe-followup-label", "Follow up");
+        node.appendChild(label);
+        var input = el("textarea", "lahe-followup-input");
+        input.id = "lahe-followup-" + id;
+        label.setAttribute("for", input.id);
+        input.setAttribute("rows", "3");
+        input.setAttribute("placeholder", "Add a new message without changing the earlier exchange");
+        input.value = store.readFollowupDraft(reviewId, id);
+        input.disabled = isReadOnly();
+        input.addEventListener("input", function () {
+          if (isReadOnly()) return;
+          store.writeFollowupDraft(reviewId, id, input.value);
+          updateReopenAvailability(id);
+        });
+        input.addEventListener("keydown", function (event) {
+          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+            event.preventDefault();
+            submitFollowup(id, input.value);
+          }
+        });
+        node.appendChild(input);
+        var actions = el("div", "cardacts");
+        var send = el("button", "cardact", "Follow up");
+        send.setAttribute("type", "button");
+        send.disabled = isReadOnly();
+        send.addEventListener("click", function () {
+          submitFollowup(id, input.value);
+        });
+        actions.appendChild(send);
+        node.appendChild(actions);
+        composers[id] = node;
+        ensureStyle(node);
+        rail.attachCardContinuation(id, node);
+      } else {
+        var saved = store.readFollowupDraft(reviewId, id);
+        var field = composers[id].querySelector("textarea");
+        if (field && field !== field.getRootNode().activeElement && field.value !== saved) field.value = saved;
+      }
+      updateReopenAvailability(id);
+      return composers[id];
+    }
+
+    function updateReopenAvailability(id) {
+      var node = composers[id];
+      var input = node && node.querySelector("textarea");
+      var hasDraft = !!(input && input.value.trim());
+      if (reopens[id]) {
+        reopens[id].disabled = isReadOnly() || hasDraft;
+        reopens[id].title = hasDraft ? "Send or clear the follow-up draft before reopening this issue" : "";
+      }
+      if (follows[id]) follows[id].disabled = isReadOnly();
+      if (asks[id]) {
+        var answer = asks[id].querySelector("button");
+        if (answer) answer.disabled = isReadOnly();
+      }
+    }
+
+    function focusComposer(id) {
+      if (isReadOnly()) return null;
+      var item = itemById(id);
+      var node = composers[id] || (item && item[record.FIELD.REPLY] ? drawComposer(item) : null);
+      var input = node && node.querySelector("textarea");
+      if (input && typeof input.focus === "function") input.focus();
+      return input || null;
+    }
+
+    function clearComposer(id) {
+      var node = composers[id];
+      if (node) rail.detachCardNode(id, node);
+      delete composers[id];
+    }
+
+    function continueItem(item, next, notice) {
+      if (isReadOnly() || !next || next === item) return item;
+      // The full-record event is durable before any record, draft, or UI
+      // mutation. A storage refusal therefore leaves the answer and draft
+      // intact; a later record failure remains recoverable from the outbox.
+      var event = postReady(next);
+      if (!event) return item;
+      store.write(reviewId, next);
+      try {
+        store.clearFollowupDraft(reviewId, item[record.FIELD.ID]);
+      } catch (err) {
+        if (err && err.failure) rail.failures.add(err.failure);
+      }
+      rail.upsertCard(next);
+      rail.setCardState(next[record.FIELD.ID], record.STATE.READY);
+      rail.setAgentMessage(next[record.FIELD.ID], null);
+      rail.setCardNotice(next[record.FIELD.ID], notice || null);
+      clearQuestion(next[record.FIELD.ID]);
+      clearComposer(next[record.FIELD.ID]);
+      repaintReopened(next[record.FIELD.ID]);
+      onContinued(next);
+      refresh();
+      rail.selectTab(rail.TAB.ACTIVE);
+      var card = rail.cardNode(next[record.FIELD.ID]);
+      if (card && typeof card.focus === "function") {
+        card.tabIndex = -1;
+        card.focus();
+      }
+      return next;
+    }
+
+    function submitFollowup(id, text) {
+      var item = itemById(id);
+      if (!item || !item[record.FIELD.REPLY] || !String(text || "").trim()) return item;
+      return continueItem(item, record.followUp(item, String(text)), "Follow-up sent. It is back in front of the agent.");
+    }
+
     /** Agent text, bounded by review_format's own bound, marker visible. */
     function boundedText(text) {
       return reviewFormat.boundData(text, reviewFormat.BEFORE_MAX);
@@ -386,47 +583,36 @@
     function reopenItem(id) {
       var item = itemById(id);
       if (!item) return null;
+      if (isReadOnly()) return item;
+      var draft = store.readFollowupDraft(reviewId, id);
+      if (draft && draft.trim()) return item;
       lifecycle.assertTransition(item[record.FIELD.STATE], record.STATE.READY, lifecycle.ACTOR.REVIEWER);
 
-      // Reopen BUMPS THE REV, the way a reword does (NEW-1). Two things depend on
+      // Reopen issue archives the answered round and bumps the rev once. Two things depend on
       // it: a stale or duplicate reply.folded still naming the old rev now fails
       // the revision rule and cannot send the just-reopened item back to Done;
       // and an offline reopen arrives at a rev the store has never seen, so
       // merge's BROWSER_NEWER_REV protects it instead of it being discarded at
-      // equal rev (STATE/REPLY are not content fields). bumpRev adds no history
-      // entry here because the `after` text is unchanged.
-      var reopened = record.bumpRev(item, {});
-      reopened[record.FIELD.STATE] = record.STATE.READY;
-      reopened[record.FIELD.REPLY] = null;
-      store.write(reviewId, reopened);
-
-      rail.upsertCard(reopened);
-      rail.setCardState(id, record.STATE.READY);
-      rail.setAgentMessage(id, null);
-      rail.setCardNotice(id, "Reopened. It is back in front of the agent.");
-      // Back in front of the agent, and back on the page: an open item is
-      // painted, which is the other half of R37.
-      repaintReopened(id);
-      postReopened(reopened);
+      // equal rev (STATE/REPLY are not content fields).
+      var reopened = record.reopenIssue(item);
       counters.reopened += 1;
-      refresh();
-      return reopened;
+      return continueItem(item, reopened, "Issue reopened. The unchanged request is back in front of the agent.");
     }
 
     /**
-     * The reopening as an event.
+     * Queue the new ready revision through the ordinary item path.
      *
-     * It has to be its own event rather than a re-post of the record: the
-     * helper's projection holds the agent's answer for the revision it named,
-     * so a record arriving at the same revision would be merged UNDER that
-     * answer and the item would go straight back to handled. The event is
-     * queued through the store's outbox, which is what makes it survive a
-     * helper that is down.
+     * The revision already moved, so the helper's usual projection rule drops
+     * the old current reply while retaining it inside the carried thread.
      */
-    function postReopened(item) {
+    function postReady(item) {
+      var client = typeof sync === "function" ? sync() : sync;
+      if (client && typeof client.recordItem === "function") {
+        return client.recordItem(item, { immediate: "ready" });
+      }
       if (!store || typeof store.queueEvent !== "function") return null;
       var event = protocol.newEvent({
-        event: protocol.EVENT.ITEM_REOPENED,
+        event: protocol.EVENT.ITEM_READY,
         event_id: record.randomId("evt"),
         review: reviewId,
         item: item[record.FIELD.ID],
@@ -437,9 +623,6 @@
         payload: { record: item }
       });
       store.queueEvent(reviewId, event);
-      // The sync client may be handed in directly, or as a function, because
-      // boot wires the tabs before it builds the client they post through.
-      var client = typeof sync === "function" ? sync() : sync;
       if (client && typeof client.flush === "function") client.flush();
       return event;
     }
@@ -562,6 +745,7 @@
       var node = asks[id];
       node.querySelector(".lahe-ask-name").textContent = agentName(reply) + " is asking";
       node.querySelector(".lahe-ask-text").textContent = boundedText(reply.text || "");
+      updateReopenAvailability(id);
       markCard(id, true);
       return node;
     }
@@ -583,8 +767,7 @@
         var answer = el("button", "lahe-ask-answer", "Answer");
         answer.setAttribute("type", "button");
         answer.addEventListener("click", function () {
-          var box = comments.reopen(id, { host: rail.cardBody(id), placement: "inline" });
-          if (box && typeof box.focus === "function") box.focus();
+          focusComposer(id);
         });
         node.appendChild(answer);
       }
@@ -611,8 +794,13 @@
     function unmount() {
       Object.keys(rows).forEach(dropRow);
       Object.keys(asks).forEach(clearQuestion);
+      Object.keys(threads).forEach(clearThread);
+      Object.keys(composers).forEach(clearComposer);
       rows = Object.create(null);
       asks = Object.create(null);
+      threads = Object.create(null);
+      composers = Object.create(null);
+      follows = Object.create(null);
       reopens = Object.create(null);
       styleAttached = false;
       mounted = false;
@@ -629,6 +817,25 @@
       refresh: refresh,
       applyReplies: applyReplies,
       reopen: reopenItem,
+      followUp: submitFollowup,
+      focusFollowup: focusComposer,
+      setReadOnly: function () {
+        Object.keys(composers).forEach(function (id) {
+          var input = composers[id].querySelector("textarea");
+          var send = composers[id].querySelector("button");
+          if (input) input.disabled = isReadOnly();
+          if (send) send.disabled = isReadOnly();
+          updateReopenAvailability(id);
+        });
+        Object.keys(reopens).forEach(updateReopenAvailability);
+        Object.keys(asks).forEach(updateReopenAvailability);
+      },
+      followup: function (id) {
+        return composers[id] || null;
+      },
+      thread: function (id) {
+        return threads[id] || null;
+      },
       question: function (id) {
         return asks[id] || null;
       },

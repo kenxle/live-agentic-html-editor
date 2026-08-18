@@ -634,14 +634,45 @@ test.describe("3A: an agent answers by appending one line", () => {
       expect(drawn.hasAnswer).toBe(true);
       expect(drawn.timesSaid, "the question appears once on the card").toBe(1);
 
-      // Answering it opens the box on this card, so the reviewer replies where
-      // the question is rather than hunting for the item.
+      // Answering opens the blank continuation composer, not the original-note
+      // rewording box.
       await page.evaluate((id) => {
         window.__lahe.handle.doneTab().question(id).querySelector(".lahe-ask-answer").click();
       }, item.id);
-      await pollPage(page, () => !!window.__lahe.focusedBoxQuote(), undefined, {
-        message: "the answer box to open on the card"
+      await pollPage(page, (id) => {
+        const composer = window.__lahe.handle.doneTab().followup(id);
+        const input = composer && composer.querySelector("textarea");
+        return !!input && input.getRootNode().activeElement === input && input.value === "";
+      }, item.id, {
+        message: "the blank follow-up composer to open on the card"
       });
+
+      await page.evaluate((id) => {
+        const input = window.__lahe.handle.doneTab().followup(id).querySelector("textarea");
+        input.value = "Keep the focus-section heading.";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }));
+      }, item.id);
+
+      const continued = await page.evaluate((id) => window.__lahe.itemById(id), item.id);
+      expect(continued.rev).toBe(2);
+      expect(continued.state).toBe("ready");
+      expect(continued.note).toBe("Keep the focus-section heading.");
+      expect(continued.change).toBeNull();
+      expect(continued.reply).toBeNull();
+      expect(continued.thread).toHaveLength(1);
+      expect(continued.thread[0].reviewer.note).toBe("shorten this");
+      expect(continued.thread[0].agent.text).toContain("page</b> heading");
+
+      const historyText = await page.evaluate((id) => window.__lahe.handle.doneTab().thread(id).textContent, item.id);
+      expect(historyText).toContain("shorten this");
+      expect(historyText).toContain("Do you mean the <b>page</b> heading");
+      const chronological = await page.evaluate((id) => {
+        const thread = window.__lahe.handle.doneTab().thread(id);
+        const current = window.__lahe.rail.cardNode(id).querySelector("[data-lahe-active-row]");
+        return !!thread && !!current && !!(thread.compareDocumentPosition(current) & Node.DOCUMENT_POSITION_FOLLOWING);
+      }, item.id);
+      expect(chronological, "completed rounds render before the current reviewer turn").toBe(true);
     } finally {
       await helper.kill9();
       await app.close();
@@ -666,11 +697,63 @@ test.describe("3A: an agent answers by appending one line", () => {
       });
       expect((await doneTabState(page)).rows).toBe(1);
 
+      const composer = await page.evaluate((id) => {
+        const node = window.__lahe.handle.doneTab().followup(id);
+        const input = node && node.querySelector("textarea");
+        const label = node && node.querySelector("label");
+        return {
+          exists: !!node,
+          value: input && input.value,
+          associated: !!input && !!label && label.getAttribute("for") === input.id
+        };
+      }, item.id);
+      expect(composer).toEqual({ exists: true, value: "", associated: true });
+
+      // Draft continuation text is private browser state: durable across a
+      // reload, absent from the agent-facing projection until submitted.
+      const privateDraft = "I need to add one more detail before sending";
+      await page.evaluate(({ id, text }) => {
+        const input = window.__lahe.handle.doneTab().followup(id).querySelector("textarea");
+        input.value = text;
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      }, { id: item.id, text: privateDraft });
+      expect(JSON.stringify(reviewJson(helper))).not.toContain(privateDraft);
+
+      await page.reload();
+      await pollPage(page, (id) => {
+        const done = window.__lahe && window.__lahe.handle && window.__lahe.handle.doneTab();
+        const node = done && done.followup(id);
+        return node && node.querySelector("textarea").value;
+      }, item.id, { message: "the private follow-up draft to return after reload" });
+      expect(
+        await page.evaluate((id) => window.__lahe.handle.doneTab().followup(id).querySelector("textarea").value, item.id)
+      ).toBe(privateDraft);
+      expect(JSON.stringify(reviewJson(helper))).not.toContain(privateDraft);
+
+      const blockedByDraft = await page.evaluate((id) => {
+        const done = window.__lahe.handle.doneTab();
+        const before = window.__lahe.itemById(id);
+        const after = done.reopen(id);
+        const button = Array.from(window.__lahe.rail.cardNode(id).querySelectorAll("button")).find(
+          (candidate) => candidate.textContent === "Reopen issue"
+        );
+        return { beforeRev: before.rev, afterRev: after.rev, disabled: button && button.disabled };
+      }, item.id);
+      expect(blockedByDraft).toEqual({ beforeRev: item.rev, afterRev: item.rev, disabled: true });
+
+      await page.evaluate((id) => {
+        const input = window.__lahe.handle.doneTab().followup(id).querySelector("textarea");
+        input.value = "";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      }, item.id);
       await page.evaluate((id) => window.__lahe.handle.doneTab().reopen(id), item.id);
 
       const reopened = await page.evaluate((id) => window.__lahe.itemById(id), item.id);
       expect(reopened.state).toBe("ready");
       expect(reopened.reply).toBeNull();
+      expect(reopened.thread).toHaveLength(1);
+      expect(reopened.thread[0].reviewer.note).toBe("shorten this");
+      expect(reopened.thread[0].agent.status).toBe("handled");
       expect((await cardOf(page, item.id)).pane).toBe("active");
       expect((await doneTabState(page)).rows).toBe(0);
 

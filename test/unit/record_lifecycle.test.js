@@ -58,12 +58,80 @@ test("every field architecture D4 names is present on a new item", () => {
     "page_seq",
     "source_hint",
     "reply",
+    "thread",
     "created_at",
     "updated_at"
   ];
   for (const field of expected) {
     assert.equal(Object.prototype.hasOwnProperty.call(item, field), true, `missing field ${field}`);
   }
+});
+
+test("legacy records read as an empty thread", () => {
+  const legacy = anItem();
+  delete legacy.thread;
+  assert.deepEqual(record.threadOf(legacy), []);
+  assert.doesNotThrow(() => record.validateItem(legacy));
+});
+
+test("follow-up archives the exact completed exchange and advances once", () => {
+  const answered = anItem({
+    kind: record.KIND.COMMENT,
+    note: "Shorten this paragraph.",
+    change: null,
+    reply: {
+      status: record.REPLY_STATUS.QUESTION,
+      agent: "codex",
+      reason: null,
+      text: "Which ending should remain?",
+      files: [],
+      at: "2026-08-18T12:01:00.000Z"
+    }
+  });
+  const next = record.followUp(answered, "Keep the second ending.");
+
+  assert.equal(next.rev, answered.rev + 1);
+  assert.equal(next.state, record.STATE.READY);
+  assert.equal(next.note, "Keep the second ending.");
+  assert.equal(next.change, null);
+  assert.equal(next.reply, null);
+  assert.equal(next.thread.length, 1);
+  assert.equal(next.thread[0].rev, answered.rev);
+  assert.equal(next.thread[0].reviewer.note, "Shorten this paragraph.");
+  assert.equal(next.thread[0].agent.text, "Which ending should remain?");
+  assert.equal(answered.thread.length, 0, "history is append-only without mutating the prior record");
+});
+
+test("empty follow-up is a no-op and reopen issue resubmits unchanged", () => {
+  const answered = anItem({
+    note: "Keep this exact request.",
+    reply: { status: record.REPLY_STATUS.HANDLED, agent: "codex", text: "Done.", files: [] }
+  });
+  assert.equal(record.followUp(answered, "   "), answered);
+
+  const reopened = record.reopenIssue(answered);
+  assert.equal(reopened.rev, answered.rev + 1);
+  assert.equal(reopened.note, answered.note);
+  assert.equal(reopened.change, answered.change);
+  assert.equal(reopened.reply, null);
+  assert.equal(reopened.thread[0].agent.text, "Done.");
+});
+
+test("a second follow-up appends a second completed round in chronological order", () => {
+  const first = anItem({
+    kind: record.KIND.COMMENT,
+    note: "First request",
+    change: null,
+    reply: { status: "question", agent: "codex", text: "First answer", files: [] }
+  });
+  const secondTurn = record.followUp(first, "Second request");
+  secondTurn.reply = { status: "handled", agent: "codex", text: "Second answer", files: [] };
+  secondTurn.state = record.STATE.HANDLED;
+  const thirdTurn = record.followUp(secondTurn, "Third request");
+
+  assert.deepEqual(thirdTurn.thread.map((round) => round.reviewer.note), ["First request", "Second request"]);
+  assert.deepEqual(thirdTurn.thread.map((round) => round.agent.text), ["First answer", "Second answer"]);
+  assert.equal(thirdTurn.note, "Third request");
 });
 
 test("the dead send model's fields are gone", () => {

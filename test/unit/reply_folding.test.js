@@ -186,6 +186,33 @@ test("two reply files answering one item at one revision fold deterministically,
   assert.equal(itemsNow(log)[0].reply.agent, "zulu");
 });
 
+test("a continuation archives the helper's same-revision winning reply", () => {
+  const { dir, log, folder } = setup();
+  const item = readyItem();
+  postItem(log, item, protocol.EVENT.ITEM_READY);
+
+  writeReplyFile(dir, "replies-alpha.jsonl", [
+    replyLine({ item: item.id, rev: 1, status: "handled", agent: "alpha" })
+  ]);
+  folder.fold(REVIEW);
+  const browserCopy = itemsNow(log)[0];
+
+  writeReplyFile(dir, "replies-zulu.jsonl", [
+    replyLine({ item: item.id, rev: 1, status: "not_handled", agent: "zulu", reason: "newer answer" })
+  ]);
+  folder.fold(REVIEW);
+  assert.equal(itemsNow(log)[0].reply.agent, "zulu");
+
+  const continued = record.followUp(browserCopy, "That answers it. Please continue.");
+  postItem(log, continued, protocol.EVENT.ITEM_READY);
+
+  const after = itemsNow(log)[0];
+  assert.equal(after.rev, 2);
+  assert.equal(after.thread.length, 1);
+  assert.equal(after.thread[0].agent.agent, "zulu");
+  assert.equal(after.thread[0].agent.reason, "newer answer");
+});
+
 test("a higher revision beats a later arrival", () => {
   const { dir, log, folder } = setup();
   const item = readyItem();

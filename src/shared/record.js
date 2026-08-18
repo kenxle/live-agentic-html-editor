@@ -82,6 +82,10 @@
     // What the agent said, folded from its reply line.
     REPLY: "reply",
 
+    // Completed reviewer/agent exchanges, oldest first. The current exchange
+    // stays in NOTE/CHANGE + REPLY until the reviewer continues it.
+    THREAD: "thread",
+
     CREATED_AT: "created_at",
     UPDATED_AT: "updated_at"
   };
@@ -192,7 +196,13 @@
     page_title: CLASS_DATA,
     page_path: CLASS_DATA,
     "reply.reason": CLASS_DATA,
-    "reply.text": CLASS_DATA
+    "reply.text": CLASS_DATA,
+    // Earlier reviewer turns are historical context, not instructions to run
+    // again. Only the current top-level note/change are the intent channel.
+    "thread[].reviewer.note": CLASS_DATA,
+    "thread[].reviewer.change": CLASS_DATA,
+    "thread[].agent.reason": CLASS_DATA,
+    "thread[].agent.text": CLASS_DATA
   };
 
   function fieldClass(path) {
@@ -512,6 +522,7 @@
     item[FIELD.PAGE_SEQ] = typeof src.page_seq === "number" ? src.page_seq : typeof page.seq === "number" ? page.seq : null;
     item[FIELD.SOURCE_HINT] = src.source_hint || page.source_hint || null;
     item[FIELD.REPLY] = src.reply || null;
+    item[FIELD.THREAD] = Array.isArray(src.thread) ? src.thread.slice() : [];
     item[FIELD.CREATED_AT] = at;
     item[FIELD.UPDATED_AT] = src.updated_at || at;
 
@@ -574,6 +585,69 @@
     }
     next[FIELD.AFTER_HISTORY] = history;
     return next;
+  }
+
+  function threadOf(item) {
+    return item && Array.isArray(item[FIELD.THREAD]) ? item[FIELD.THREAD] : [];
+  }
+
+  function copyReply(reply) {
+    if (!reply) return null;
+    return {
+      status: reply.status || null,
+      agent: reply.agent || null,
+      reason: reply.reason || null,
+      text: reply.text || null,
+      files: Array.isArray(reply.files) ? reply.files.slice() : [],
+      at: reply.at || null
+    };
+  }
+
+  /** The completed current exchange, ready to become immutable history. */
+  function completedRound(item) {
+    if (!item || !item[FIELD.REPLY]) {
+      throw new Error("completedRound: an item needs an agent reply before it can be archived");
+    }
+    return {
+      rev: item[FIELD.REV],
+      reviewer: {
+        note: typeof item[FIELD.NOTE] === "string" ? item[FIELD.NOTE] : null,
+        change: typeof item[FIELD.CHANGE] === "string" ? item[FIELD.CHANGE] : null,
+        at: item[FIELD.UPDATED_AT] || item[FIELD.CREATED_AT] || null
+      },
+      agent: copyReply(item[FIELD.REPLY])
+    };
+  }
+
+  /**
+   * Archive the answered current revision and create the next actionable turn.
+   * One helper owns this operation so Follow up and Reopen issue cannot drift.
+   */
+  function continueThread(item, nextTurn) {
+    var turn = nextTurn || {};
+    var history = threadOf(item).slice();
+    history.push(completedRound(item));
+    var next = bumpRev(item, {
+      note: typeof turn.note === "string" ? turn.note : null,
+      change: typeof turn.change === "string" ? turn.change : null,
+      thread: history
+    });
+    next[FIELD.STATE] = STATE.READY;
+    next[FIELD.REPLY] = null;
+    return next;
+  }
+
+  function followUp(item, text) {
+    var note = typeof text === "string" ? text : "";
+    if (!note.trim()) return item;
+    return continueThread(item, { note: note, change: null });
+  }
+
+  function reopenIssue(item) {
+    return continueThread(item, {
+      note: typeof item[FIELD.NOTE] === "string" ? item[FIELD.NOTE] : null,
+      change: typeof item[FIELD.CHANGE] === "string" ? item[FIELD.CHANGE] : null
+    });
   }
 
   // The `after` values this record has had that are NOT its current one. This
@@ -680,6 +754,23 @@
     if (!Array.isArray(item[FIELD.AFTER_HISTORY])) {
       problems.push("after_history must be an array; replay's branch three reads it");
     }
+    // Missing is accepted for legacy records. Every newly minted record carries
+    // an empty array, and threadOf presents old records the same way.
+    if (item[FIELD.THREAD] !== undefined && !Array.isArray(item[FIELD.THREAD])) {
+      problems.push("thread must be an array of completed exchanges");
+    }
+    threadOf(item).forEach(function (round, index) {
+      if (!round || typeof round !== "object") {
+        problems.push("thread[" + index + "] must be an object");
+        return;
+      }
+      if (typeof round.rev !== "number" || round.rev < 1) problems.push("thread[" + index + "].rev must be >= 1");
+      if (!round.reviewer || typeof round.reviewer !== "object") problems.push("thread[" + index + "].reviewer is required");
+      if (!round.agent || typeof round.agent !== "object") problems.push("thread[" + index + "].agent is required");
+      if (round.agent && REPLY_STATUSES.indexOf(round.agent.status) === -1) {
+        problems.push("thread[" + index + "].agent.status must be one of " + REPLY_STATUSES.join(", "));
+      }
+    });
     if (item[FIELD.STATE] !== STATE.DRAFT) {
       if ((item[FIELD.KIND] === KIND.COMMENT || item[FIELD.KIND] === KIND.NOTE) && !item[FIELD.NOTE]) {
         problems.push("a ready " + item[FIELD.KIND] + " must carry the reviewer's note");
@@ -745,6 +836,11 @@
     shortPath: shortPath,
     newItem: newItem,
     bumpRev: bumpRev,
+    threadOf: threadOf,
+    completedRound: completedRound,
+    continueThread: continueThread,
+    followUp: followUp,
+    reopenIssue: reopenIssue,
     historyEntry: historyEntry,
     priorAfters: priorAfters,
     ACCEPTED_PAGE_TEXTS_MAX: ACCEPTED_PAGE_TEXTS_MAX,

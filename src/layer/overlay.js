@@ -286,6 +286,7 @@
     ".card__body{font-size:13.5px;line-height:1.5;color:var(--ink);display:flex;",
     "flex-direction:column;gap:8px}",
     ".card__body:empty{display:none}",
+    ".card__continuation:empty{display:none}",
     // A text box a tab owner hosts in a card reads as part of the card rather
     // than as a form control dropped into one. 1D owns the box; the rail owns
     // how anything inside its own surface looks, and specificity this low is
@@ -831,6 +832,8 @@
           agentMessage: null,
           notice: null,
           attached: [],
+          attachedBefore: [],
+          attachedContinuation: [],
           created: true
         };
         buildCardNode(cards[id]);
@@ -871,16 +874,27 @@
       node.appendChild(badges);
       var agent = el("div", "agent");
       node.appendChild(agent);
+      var continuation = el("div", "card__continuation");
+      node.appendChild(continuation);
       var notice = el("div", "card__notice");
+      notice.setAttribute("role", "status");
+      notice.setAttribute("aria-live", "polite");
       node.appendChild(notice);
 
       card.node = node;
       card.bodyNode = body;
-      card.parts = { kind: kind, state: state, quote: quote, badges: badges, agent: agent, notice: notice };
+      card.continuationNode = continuation;
+      card.parts = { kind: kind, state: state, quote: quote, badges: badges, agent: agent, continuation: continuation, notice: notice };
       // A remount rebuilds the card's node, so anything a tab owner attached
       // goes back into the new body rather than being silently dropped.
+      (card.attachedBefore || []).forEach(function (attachedNode) {
+        body.appendChild(attachedNode);
+      });
       (card.attached || []).forEach(function (attachedNode) {
         body.appendChild(attachedNode);
+      });
+      (card.attachedContinuation || []).forEach(function (attachedNode) {
+        continuation.appendChild(attachedNode);
       });
       return node;
     }
@@ -999,6 +1013,40 @@
       if (holdsFocus(id)) return null;
       body.appendChild(node);
       return handleFor(id);
+    }
+
+    // Earlier completed rounds belong before the current tab-owned turn.
+    function prependCardNode(id, node) {
+      if (!cards[id] || !node) return null;
+      var card = cards[id];
+      card.attachedBefore = card.attachedBefore || [];
+      if (card.attachedBefore.indexOf(node) === -1) card.attachedBefore.push(node);
+      if (!card.bodyNode) return handleFor(id);
+      if (node.parentNode === card.bodyNode && node === card.bodyNode.firstChild) return handleFor(id);
+      card.bodyNode.insertBefore(node, card.bodyNode.firstChild);
+      return handleFor(id);
+    }
+
+    // A continuation composer reads after the current agent response, whose
+    // carrier sits outside card__body.
+    function attachCardContinuation(id, node) {
+      if (!cards[id] || !node) return null;
+      var card = cards[id];
+      card.attachedContinuation = card.attachedContinuation || [];
+      if (card.attachedContinuation.indexOf(node) === -1) card.attachedContinuation.push(node);
+      if (card.continuationNode && node.parentNode !== card.continuationNode) card.continuationNode.appendChild(node);
+      return handleFor(id);
+    }
+
+    function detachCardNode(id, node) {
+      if (!cards[id] || !node) return false;
+      ["attached", "attachedBefore", "attachedContinuation"].forEach(function (field) {
+        cards[id][field] = (cards[id][field] || []).filter(function (each) {
+          return each !== node;
+        });
+      });
+      if (node.parentNode) node.parentNode.removeChild(node);
+      return true;
     }
 
     // The element a tab owner fills with that tab's contents.
@@ -1780,6 +1828,9 @@
       cardNode: cardNode,
       cardBody: cardBody,
       attachCardNode: attachCardNode,
+      prependCardNode: prependCardNode,
+      attachCardContinuation: attachCardContinuation,
+      detachCardNode: detachCardNode,
       removeCard: removeCard,
       setCardState: setCardState,
       setCardBadge: setCardBadge,

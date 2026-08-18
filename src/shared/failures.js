@@ -113,31 +113,31 @@
       SEVERITY.WARNING,
       true,
       SURFACE.CARD,
-      "This edit could not be placed on this version of the page. Your text is kept exactly as you typed it.",
+      "This feedback could not be safely matched to this version of the page. Nothing was moved or changed, and your feedback is kept.",
       null
     ),
     ANCHOR_AMBIGUOUS: def(
       SEVERITY.WARNING,
       true,
       SURFACE.CARD,
-      "More than one place on this page matches this edit, so nothing was written. Your text is kept.",
+      "More than one place on this page matches this feedback, so nothing was moved or changed. Your feedback is kept.",
       null
     ),
     ANCHOR_STRUCTURE_ONLY: def(
       SEVERITY.WARNING,
       true,
       SURFACE.CARD,
-      "Only the page structure matched, not the text, so nothing was written. Your text is kept.",
+      "A structurally similar place is still present, but its text does not match this feedback. Nothing was moved or changed, and your feedback is kept.",
       null
     ),
-    // The lost anchor: the subject this item is about is not on the page any
-    // more. The item is kept, the card says so, and the projection tells the
-    // agent rather than sending it looking blind.
+    // Backward-compatible code for records written before the uniqueness
+    // verdicts received distinct codes. A failed safe match is not proof that
+    // visible content was deleted, so even the legacy copy stays neutral.
     ANCHOR_LOST: def(
       SEVERITY.WARNING,
       true,
       SURFACE.CARD,
-      "The passage this comment points at is gone from the page. Your comment is kept, and the agent still sees it.",
+      "This feedback could not be safely matched to this version of the page. Nothing was moved or changed, and your feedback is kept.",
       null
     ),
     REPLAY_CONTENT_CHANGED: def(

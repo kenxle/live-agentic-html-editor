@@ -355,7 +355,17 @@ test("the script tag refuses to be written without a token or with an unsafe rev
 // ---------------------------------------------------------------------------
 
 test("the new failure codes exist and the pruned ones are gone", () => {
-  ["HELPER_UNREACHABLE", "CSP_REFUSED", "SECOND_WINDOW_REFUSED", "ANCHOR_LOST", "REPLAY_NEITHER_MATCHES", "REPLY_LINE_MALFORMED"].forEach(
+  [
+    "HELPER_UNREACHABLE",
+    "CSP_REFUSED",
+    "SECOND_WINDOW_REFUSED",
+    "ANCHOR_NO_TEXT_MATCH",
+    "ANCHOR_AMBIGUOUS",
+    "ANCHOR_STRUCTURE_ONLY",
+    "ANCHOR_LOST",
+    "REPLAY_NEITHER_MATCHES",
+    "REPLY_LINE_MALFORMED"
+  ].forEach(
     (code) => assert.equal(typeof failures.describe(code).message, "string", code)
   );
   ["VERIFY_NOT_FOUND", "VERIFY_NOT_VERIFIABLE", "PROTO_NOT_DELIVERED", "PROTO_TARGET_MISMATCH"].forEach((code) =>

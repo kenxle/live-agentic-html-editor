@@ -286,6 +286,12 @@
         host: rail.tabBody(ns.overlay.TAB.DONE),
         sync: function () {
           return sync;
+        },
+        onContinued: function () {
+          tab.refresh();
+        },
+        isReadOnly: function () {
+          return readOnlyActive;
         }
       });
       made.mount();
@@ -322,6 +328,7 @@
       // window still could not comment (first-real-use bug two, 2026-08-14).
       comments.unbind();
       editing.teardown();
+      done.setReadOnly();
       rail.showRefusal(info);
     }
 
@@ -330,6 +337,7 @@
       readOnlyActive = false;
       comments.bind({ page: page });
       editing.bind({ page: page });
+      done.setReadOnly();
       rail.hideRefusal();
       // The condition ended, so its chip goes too (clear, not dismiss: dismiss
       // would suppress every future refusal's chip).

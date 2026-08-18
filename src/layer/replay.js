@@ -1011,9 +1011,28 @@
       );
     }
     if (verdict.reason === uniqueness.REASON.STRUCTURE_ONLY) {
-      return "only the page structure matched, not the text, so nothing was written or moved";
+      return "a structurally similar place is still present, but its text does not match, so nothing was written or moved";
     }
-    return "the passage this item is about is not on this page any more";
+    return "this feedback could not be safely matched to the current page, so nothing was written or moved";
+  }
+
+  var ANCHOR_FAILURE_CODES = [
+    "ANCHOR_NO_TEXT_MATCH",
+    "ANCHOR_AMBIGUOUS",
+    "ANCHOR_STRUCTURE_ONLY",
+    // Kept for records and cards written by older builds.
+    "ANCHOR_LOST"
+  ];
+
+  function anchorFailureCode(verdict) {
+    if (verdict && typeof verdict.failureCode === "string" && verdict.failureCode) return verdict.failureCode;
+    return uniqueness.REASON_FAILURE_CODE[verdict && verdict.reason] || "ANCHOR_NO_TEXT_MATCH";
+  }
+
+  function clearAnchorBadges(ctx, itemId) {
+    ANCHOR_FAILURE_CODES.forEach(function (code) {
+      callCard(ctx, "clearCardBadge", itemId, code);
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -1104,12 +1123,13 @@
     counters.regionsLost += 1;
     var region = item[record.FIELD.REGION] || record.emptyRegion();
     var reason = lostReason(verdict);
+    var code = anchorFailureCode(verdict);
 
     // A record that is still lost for the same reason is not re-stamped. Every
     // pass would otherwise give it a new timestamp, which turns "this record
     // was untouched" into a diff on every pass and makes the byte-identical
     // assertions in ranked test 2 unstateable.
-    if (region.lost && region.lost.code === "ANCHOR_LOST" && region.lost.reason === reason) {
+    if (region.lost && region.lost.code === code && region.lost.reason === reason) {
       return { wrote: false, branch: null, lost: true, reason: verdict.reason, item: item, element: null };
     }
 
@@ -1119,7 +1139,7 @@
     });
     // The record's own lost state, which is what 3A projects into review.json.
     // review_format is not touched from here: the projection reads the record.
-    next.lost = { code: "ANCHOR_LOST", reason: reason, at: new Date().toISOString() };
+    next.lost = { code: code, reason: reason, at: new Date().toISOString() };
     item[record.FIELD.REGION] = next;
     // Written down for the same reason the clear is: `items` is a cache a
     // remount replaces from the store, so a stamp nobody persisted is gone at
@@ -1127,11 +1147,12 @@
     persistItem(ctx, item);
 
     if (failures) {
+      clearAnchorBadges(ctx, item[record.FIELD.ID]);
       callCard(
         ctx,
         "setCardBadge",
         item[record.FIELD.ID],
-        failures.failure("ANCHOR_LOST", {
+        failures.failure(code, {
           verdict: verdict.reason,
           candidates: verdict.considered,
           survivors: verdict.survivors
@@ -1163,7 +1184,7 @@
     // The badge is cleared even when the record carries no stamp: the two are
     // written by the same act and a card left holding a stale one is exactly
     // what this is here to end.
-    callCard(ctx, "clearCardBadge", item[record.FIELD.ID], "ANCHOR_LOST");
+    clearAnchorBadges(ctx, item[record.FIELD.ID]);
     if (!region || !region.lost) return false;
     var next = {};
     Object.keys(region).forEach(function (key) {

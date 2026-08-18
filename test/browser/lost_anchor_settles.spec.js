@@ -15,9 +15,9 @@
 // what the auto-reload work (R36) now does routinely, which is why this started
 // being seen this week.
 //
-// The control is the other half of the promise. A passage that really is gone
-// gets the lost card, and it KEEPS it: this must not become a fix that softens
-// real loss detection into silence (R20).
+// The control is the other half of the promise. When replay cannot safely find
+// the reviewed place, it keeps that truthful warning until the place can be
+// matched again (R20).
 
 "use strict";
 
@@ -82,11 +82,17 @@ function lostState(page, id) {
   return page.evaluate(function (itemId) {
     const item = window.__lahe.itemById(itemId);
     const badges = window.__lahe.rail.cardBadges(itemId) || [];
+    const anchorBadge = badges.find(function (b) {
+      return /^(ANCHOR_NO_TEXT_MATCH|ANCHOR_AMBIGUOUS|ANCHOR_STRUCTURE_ONLY|ANCHOR_LOST)$/.test(
+        b.canonical_code
+      );
+    });
     return {
       stamped: !!(item && item.region && item.region.lost),
-      badged: badges.some(function (b) {
-        return b.canonical_code === "ANCHOR_LOST";
-      }),
+      stampCode: item && item.region && item.region.lost ? item.region.lost.code : null,
+      badged: !!anchorBadge,
+      badgeCode: anchorBadge ? anchorBadge.canonical_code : null,
+      badgeMessage: anchorBadge ? anchorBadge.message : null,
       painted: window.__lahe.handle.comments.highlights.paintedIds().indexOf(itemId) !== -1
     };
   }, id);
@@ -179,7 +185,7 @@ test.describe("a page that is still drawing itself is not called lost", () => {
     );
   });
 
-  test("a passage that really is gone gets the lost card, and keeps it", async ({ page }) => {
+  test("a deleted passage gets a matching-failed card that clears when it reappears", async ({ page }) => {
     const config = { review: REVIEW + "-gone", token: TOKEN, helper: "http://127.0.0.1:1" };
     // The passage is drawn on the first load and not on the second, which is an
     // agent deleting it between rebuilds.
@@ -214,18 +220,35 @@ test.describe("a page that is still drawing itself is not called lost", () => {
     await afterTheWindowCloses(page);
 
     const state = await lostState(page, id);
-    expect(state.badged, "a real loss is still told to the reviewer").toBe(true);
+    expect(state.badged, "a failed match is still told to the reviewer").toBe(true);
     expect(state.stamped, "and it is on the record, which is what the agent reads").toBe(true);
+    expect(state.badgeCode).toBe("ANCHOR_NO_TEXT_MATCH");
+    expect(state.stampCode).toBe("ANCHOR_NO_TEXT_MATCH");
+    expect(state.badgeMessage).toContain("could not be safely matched");
+    expect(state.badgeMessage).not.toMatch(/gone|does not exist|not on this page/i);
     expect(
       await page.evaluate(() => !!document.querySelector("#passage")),
       "the passage really is off the page, which is what makes this a real loss"
     ).toBe(false);
 
-    // And it stays. A later pass over the same page must not talk the reviewer
-    // out of a warning that is true.
+    // It stays while matching still fails.
     await page.evaluate(() => window.__lahe.replayNow());
     const later = await lostState(page, id);
-    expect(later.badged, "the lost card is still there a pass later").toBe(true);
+    expect(later.badged, "the matching warning is still there a pass later").toBe(true);
     expect(later.stamped).toBe(true);
+
+    // Once the exact reviewed place is present again, replay reattaches it and
+    // clears every form of anchor warning rather than leaving a stale badge.
+    mode = "same";
+    await page.reload();
+    await pollPage(page, () => !!(window.__lahe && window.__lahe.booted), undefined, {
+      message: "the layer to boot after the passage reappears"
+    });
+    await rendered(page);
+    await afterTheWindowCloses(page);
+
+    const reattached = await lostState(page, id);
+    expect(reattached.badged, "the matching warning clears after reattachment").toBe(false);
+    expect(reattached.stamped, "the record's matching warning clears too").toBe(false);
   });
 });

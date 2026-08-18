@@ -566,6 +566,7 @@
       // kept current even mid-sentence: without it the label would sit beside
       // the first letter the reviewer types.
       note.setAttribute("data-empty", text ? "false" : "true");
+      comments.setNoteEditorEnabled(item[record.FIELD.ID], !item[record.FIELD.REPLY]);
 
       var state = row.querySelector(".lahe-rail-state");
       if (state) state.textContent = stateLabel(item);

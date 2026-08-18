@@ -531,7 +531,7 @@ test.describe("the rail as a shipping surface", () => {
           return out;
         };
         const reopen = Array.from(node.querySelectorAll(".cardact")).filter(
-          (b) => b.textContent === "Reopen"
+          (b) => b.textContent === "Reopen issue"
         )[0];
         const undo = node.querySelector('[data-lahe-act="undo"]');
         return {
@@ -607,7 +607,7 @@ test.describe("the rail as a shipping surface", () => {
       const card = await page.evaluate((id) => {
         const node = window.__lahe.rail.cardNode(id);
         const visible = (el) => !!el && el.getClientRects().length > 0;
-        const reopen = Array.from(node.querySelectorAll(".cardact")).filter((b) => b.textContent === "Reopen")[0];
+        const reopen = Array.from(node.querySelectorAll(".cardact")).filter((b) => b.textContent === "Reopen issue")[0];
         const undo = node.querySelector('[data-lahe-act="undo"]');
         return {
           reopenVisible: visible(reopen),

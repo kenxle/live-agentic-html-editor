@@ -271,12 +271,12 @@ test.describe("replay: the four branches", () => {
 
     // On the record, which is what the projection reads, and on the card.
     const item = await page.evaluate(() => window.__laheReplay.itemFor("#region-outside"));
-    expect(item.region.lost.code).toBe("ANCHOR_LOST");
-    expect(item.region.lost.reason).toContain("not on this page");
+    expect(item.region.lost.code).toBe("ANCHOR_NO_TEXT_MATCH");
+    expect(item.region.lost.reason).toContain("could not be safely matched");
     expect(item.after).toBe("This block is outside every repaint target and stays that way.");
 
     const card = await page.evaluate(() => window.__laheReplay.card("#region-outside"));
-    expect(card.badges).toContain("ANCHOR_LOST");
+    expect(card.badges).toContain("ANCHOR_NO_TEXT_MATCH");
   });
 
   test("an anchor that matches two places is surfaced as lost, and moves nothing", async ({ page }) => {
@@ -305,10 +305,10 @@ test.describe("replay: the four branches", () => {
     expect(twins[1]).toBe("Two clients have not accepted the invite yet.");
 
     const item = await page.evaluate(() => window.__laheReplay.itemFor("#region-twin-1"));
-    expect(item.region.lost.code).toBe("ANCHOR_LOST");
+    expect(item.region.lost.code).toBe("ANCHOR_AMBIGUOUS");
     expect(item.region.lost.reason).toContain("more than one place");
 
     const card = await page.evaluate(() => window.__laheReplay.card("#region-twin-1"));
-    expect(card.badges).toContain("ANCHOR_LOST");
+    expect(card.badges).toContain("ANCHOR_AMBIGUOUS");
   });
 });

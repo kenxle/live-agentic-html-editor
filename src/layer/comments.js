@@ -1539,6 +1539,10 @@
       node.setAttribute("spellcheck", "false");
       entry.off.push(
         listenOn(node, "focus", function () {
+          var current = store.readItem(requireReview(), id);
+          // Once an agent has answered, these words are an immutable completed
+          // turn. Continuation happens in the blank follow-up composer.
+          if (current && current[record.FIELD.REPLY]) return;
           editInPlace(id, node);
         })
       );
@@ -1547,6 +1551,12 @@
       // to this review, so the words are readable and nothing more.
       setNoteEditable(entry, gesturesBound);
       return entry;
+    }
+
+    function setNoteEditorEnabled(id, enabled) {
+      var entry = noteEditors[id];
+      if (!entry) return null;
+      return setNoteEditable(entry, !!enabled && gesturesBound);
     }
 
     function detachNoteEditor(id) {
@@ -1876,6 +1886,7 @@
       reopen: reopen,
       attachNoteEditor: attachNoteEditor,
       detachNoteEditor: detachNoteEditor,
+      setNoteEditorEnabled: setNoteEditorEnabled,
       editInPlace: editInPlace,
       noteEditor: noteEditor,
       remove: remove,

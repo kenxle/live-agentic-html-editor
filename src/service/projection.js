@@ -97,6 +97,23 @@ function itemsFrom(events, options) {
       }
       var prev = byId[next[F.ID]];
       if (!prev) order.push(next[F.ID]);
+      // A continuation is composed against the reply the browser last saw.
+      // Another same-revision reply may have become the helper's deterministic
+      // winner before this event arrived. Keep that winner in the archived
+      // round rather than letting the carried browser snapshot erase it.
+      if (
+        prev &&
+        prev[F.REPLY] &&
+        next[F.REV] === prev[F.REV] + 1 &&
+        Array.isArray(next[F.THREAD]) &&
+        next[F.THREAD].length === record.threadOf(prev).length + 1
+      ) {
+        var rounds = next[F.THREAD].slice();
+        var lastRound = Object.assign({}, rounds[rounds.length - 1]);
+        lastRound.agent = Object.assign({}, prev[F.REPLY]);
+        rounds[rounds.length - 1] = lastRound;
+        next[F.THREAD] = rounds;
+      }
       if (prev && prev[F.REPLY] && replyRev[next[F.ID]] === next[F.REV]) {
         // Same revision: the helper's lifecycle stands, the browser's content
         // is taken. This is D5's merge rule, on the helper's side of the wire.

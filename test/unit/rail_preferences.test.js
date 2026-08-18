@@ -77,3 +77,18 @@ test("denied and malformed preference storage degrades to an open, usable rail",
     false
   );
 });
+
+test("follow-up drafts are versioned, review-scoped, synchronous, and private", () => {
+  const backing = memoryBacking();
+  const first = storeModule.createStore({ backing: backing });
+  first.writeFollowupDraft("review-a", "item-1", "A half-written follow-up");
+
+  assert.equal(
+    backing.getItem(storeModule.FOLLOWUP_PREFIX + "review-a"),
+    JSON.stringify({ "item-1": "A half-written follow-up" })
+  );
+  assert.equal(storeModule.createStore({ backing: backing }).readFollowupDraft("review-a", "item-1"), "A half-written follow-up");
+  assert.equal(first.readFollowupDraft("review-b", "item-1"), "", "another review cannot see it");
+  assert.equal(first.clearFollowupDraft("review-a", "item-1"), true);
+  assert.equal(first.readFollowupDraft("review-a", "item-1"), "");
+});

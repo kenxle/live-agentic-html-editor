@@ -21,6 +21,17 @@
   its former wait design as superseded history.
 - Complete: post-fix Node 20 release gate, 475 unit and 629 browser tests
   passed across Chromium, Firefox, and WebKit, with 7 documented skips.
+- Complete: answered comments now retain chronological reviewer/agent history
+  and expose a private, reload-safe follow-up composer. Submission queues the
+  full new revision before local cleanup, revision fencing remains intact,
+  refused windows cannot mutate the thread, and reopening cannot discard a
+  nonempty draft.
+- Complete: replay keeps its actual anchor verdict. A visible but ambiguous or
+  structurally changed wireframe element is no longer described as deleted,
+  and successful reattachment clears both current and legacy badges.
+- Complete: post-integration lint and bundle checks passed; 490 unit tests and
+  the 26 focused Chromium follow-up, rail, replay, and settling regressions
+  passed.
 - Confirmed blocker: global monitoring crosses independent live agent sessions.
 - Confirmed known gaps: one-command static front door, cold-start proof,
   documentation pass, multi-page offline path reuse, and

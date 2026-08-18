@@ -60,6 +60,9 @@
   var HOLDER_PREFIX = "lahe.holder.v1:";
   var LOCK_PREFIX = "lahe.window.v1:";
   var UI_PREFIX = "lahe.ui.v1:";
+  // Private reviewer text. Versioned and review-scoped, but deliberately not a
+  // record field: an unfinished follow-up must never enter review.json.
+  var FOLLOWUP_PREFIX = "lahe.followups.v1:";
   // The window IDENTITY and the helper SESSION SECRET live in sessionStorage,
   // not localStorage: sessionStorage survives a same-tab navigation (page 1 to
   // /clients of one review is the same reviewer, not a second window) but a
@@ -464,6 +467,37 @@
       return next;
     }
 
+    function followupKey(reviewId) {
+      keyFor(reviewId);
+      return FOLLOWUP_PREFIX + reviewId;
+    }
+
+    function readFollowupDrafts(reviewId) {
+      var got = readJson(followupKey(reviewId), {});
+      return got && typeof got === "object" && !Array.isArray(got) ? got : {};
+    }
+
+    function readFollowupDraft(reviewId, itemId) {
+      var drafts = readFollowupDrafts(reviewId);
+      return typeof drafts[itemId] === "string" ? drafts[itemId] : "";
+    }
+
+    // Synchronous, like every other reviewer-authored draft write.
+    function writeFollowupDraft(reviewId, itemId, text) {
+      var drafts = readFollowupDrafts(reviewId);
+      drafts[itemId] = String(text || "");
+      writeJson(followupKey(reviewId), drafts);
+      return drafts[itemId];
+    }
+
+    function clearFollowupDraft(reviewId, itemId) {
+      var drafts = readFollowupDrafts(reviewId);
+      if (!Object.prototype.hasOwnProperty.call(drafts, itemId)) return false;
+      delete drafts[itemId];
+      writeJson(followupKey(reviewId), drafts);
+      return true;
+    }
+
     // -------------------------------------------------------------------------
     // The second window, client side (D5)
     // -------------------------------------------------------------------------
@@ -701,6 +735,9 @@
       writeChips: writeChips,
       readUiPreferences: readUiPreferences,
       writeUiPreferences: writeUiPreferences,
+      readFollowupDraft: readFollowupDraft,
+      writeFollowupDraft: writeFollowupDraft,
+      clearFollowupDraft: clearFollowupDraft,
       readHolder: readHolder,
       describeHolder: describeHolder,
       claimWindow: claimWindow,
@@ -720,6 +757,7 @@
     HOLDER_PREFIX: HOLDER_PREFIX,
     LOCK_PREFIX: LOCK_PREFIX,
     UI_PREFIX: UI_PREFIX,
+    FOLLOWUP_PREFIX: FOLLOWUP_PREFIX,
     keyFor: keyFor,
     createStore: createStore,
     shared: shared

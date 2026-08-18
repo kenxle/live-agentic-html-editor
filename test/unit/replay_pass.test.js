@@ -350,21 +350,24 @@ test("a delete is idempotent by absence: the block gone is applied, the block ba
 // Ranked test 14: a lost anchor, both shapes
 // ---------------------------------------------------------------------------
 
-test("zero matches and two matches are both surfaced as lost, and neither writes", () => {
+test("a deleted target and duplicate matches get truthful distinct failures, and neither writes", () => {
   const item = fixtures.edit();
 
-  // Zero: the passage is gone from the page entirely.
+  // Zero: this fixture genuinely removes the original node. Even here replay
+  // can prove only that matching failed, not that no similar visible element
+  // exists elsewhere in a real page.
   const gonePage = pageOf(["Before it.", item.before, "After it."]);
   const goneItem = anchored(item, gonePage.blocks[1], gonePage.root);
-  gonePage.blocks[1].textContent = "Nothing here resembles the region any more.";
+  gonePage.blocks[1].remove();
   const gone = runOne(goneItem, gonePage.root);
 
   assert.equal(gone.result.lost, true);
   assert.equal(replay.counters.regionsLost, 1);
   assert.equal(replay.counters.regionsWritten, 0);
   assert.equal(replay.counters.passes, 1, "the pass still ran and still counted");
-  assert.equal(gone.result.item.region.lost.code, "ANCHOR_LOST", "on the record, which is what 3A projects");
-  assert.equal(gone.cards.badges[item.id][0].canonical_code, "ANCHOR_LOST");
+  assert.equal(gone.result.item.region.lost.code, "ANCHOR_NO_TEXT_MATCH", "the record carries the predicate's reason");
+  assert.equal(gone.cards.badges[item.id][0].canonical_code, "ANCHOR_NO_TEXT_MATCH");
+  assert.doesNotMatch(gone.cards.badges[item.id][0].message, /gone|does not exist|not on this page/i);
 
   // Two: the page grew a duplicate of the region, with the same context on both
   // sides, so context cannot break the tie either.
@@ -383,6 +386,48 @@ test("zero matches and two matches are both surfaced as lost, and neither writes
   assert.equal(twinPage.blocks[1].textContent, item.before, "nothing moved");
   assert.equal(twinPage.root.children[4].textContent, item.before, "and the twin was not written either");
   assert.match(twin.result.item.region.lost.reason, /more than one place/);
+  assert.equal(twin.result.item.region.lost.code, "ANCHOR_AMBIGUOUS");
+  assert.equal(twin.cards.badges[item.id][0].canonical_code, "ANCHOR_AMBIGUOUS");
+  assert.match(twin.cards.badges[item.id][0].message, /more than one place/i);
+  assert.doesNotMatch(twin.cards.badges[item.id][0].message, /gone|does not exist|not on this page/i);
+});
+
+test("a visible structurally similar wireframe element is not described as deleted, and reattachment clears it", () => {
+  const item = fixtures.edit();
+  const page = pageOf([
+    "Before it.",
+    { text: item.before, attrs: { "data-review-region": "wireframe-card" } },
+    "After it."
+  ]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+  const cards = fakeCards();
+  const persisted = [];
+  const context = {
+    root: page.root,
+    items: [anchoredItem],
+    cards: cards,
+    persist: function (record_) {
+      persisted.push(record_);
+    }
+  };
+
+  const original = page.blocks[1].textContent;
+  page.blocks[1].textContent = "The same wireframe card with revised button copy.";
+  replay.resetCounters();
+  replay.runPass(replay.REASON.MUTATION, context);
+
+  assert.equal(anchoredItem.region.lost.code, "ANCHOR_STRUCTURE_ONLY");
+  assert.equal(cards.badges[item.id][0].canonical_code, "ANCHOR_STRUCTURE_ONLY");
+  assert.match(cards.badges[item.id][0].message, /structurally similar place is still present/i);
+  assert.doesNotMatch(cards.badges[item.id][0].message, /gone|does not exist|not on this page/i);
+
+  page.blocks[1].textContent = original;
+  replay.runPass(replay.REASON.MUTATION, context);
+
+  assert.equal(anchoredItem.region.lost, null, "the record clears when the safe match returns");
+  assert.deepEqual(cards.badges[item.id], [], "every anchor badge code clears on reattachment");
+  assert.equal(replay.counters.regionsLostCleared, 1);
+  assert.equal(persisted.length, 2, "both the classified failure and its clear are durable");
 });
 
 // ---------------------------------------------------------------------------
@@ -499,8 +544,8 @@ test("every DOM write happens inside the write epoch, so replay does not retrigg
 // The lost state ENDS: reported live on 2026-08-17
 // ---------------------------------------------------------------------------
 //
-// A comment card said "The passage this comment points at is gone from the
-// page" over a passage the reviewer could see. The record was clean (review.json
+// A comment card confidently said its target was gone over content the reviewer
+// could see. The record was clean (review.json
 // carried no lost flag), so the loss had already ended; only the card had not
 // heard. These two tests are the two halves of that: a verdict reached while
 // the page is still drawing itself is not surfaced at all, and a verdict that
@@ -530,8 +575,8 @@ test("a lost card and a lost stamp both end when a later pass finds the passage 
   replay.runPass(replay.REASON.MUTATION, context);
 
   assert.equal(replay.counters.regionsLost, 1);
-  assert.equal(anchoredItem.region.lost.code, "ANCHOR_LOST", "the record says so");
-  assert.equal(cards.badges[item.id][0].canonical_code, "ANCHOR_LOST", "and so does the card");
+  assert.equal(anchoredItem.region.lost.code, "ANCHOR_NO_TEXT_MATCH", "the record says why matching failed");
+  assert.equal(cards.badges[item.id][0].canonical_code, "ANCHOR_NO_TEXT_MATCH", "and so does the card");
   assert.equal(written.length, 1, "a lost stamp is written down, not left on the cache");
 
   // The page put it back, which is what a re-render of a section does.
@@ -539,7 +584,7 @@ test("a lost card and a lost stamp both end when a later pass finds the passage 
   replay.runPass(replay.REASON.MUTATION, context);
 
   assert.equal(anchoredItem.region.lost, null, "the stamp is gone from the record");
-  assert.deepEqual(cards.badges[item.id], [], "and the card no longer says the passage is gone");
+  assert.deepEqual(cards.badges[item.id], [], "and the stale matching notice is gone");
   assert.equal(replay.counters.regionsLostCleared, 1);
   assert.equal(written.length, 2, "the clear is written down too, so a remount does not restore it");
 });
@@ -570,8 +615,8 @@ test("a lost verdict while the page is still drawing itself is deferred, and sta
   replay.noteSettling(0);
   const lost = replay.runPass(replay.REASON.MUTATION, context).results[0];
   assert.equal(lost.lost, true);
-  assert.equal(anchoredItem.region.lost.code, "ANCHOR_LOST");
-  assert.equal(cards.badges[item.id][0].canonical_code, "ANCHOR_LOST");
+  assert.equal(anchoredItem.region.lost.code, "ANCHOR_NO_TEXT_MATCH");
+  assert.equal(cards.badges[item.id][0].canonical_code, "ANCHOR_NO_TEXT_MATCH");
 });
 
 test("a load opens the settling window, so the pass a reload schedules does not flag anything", () => {

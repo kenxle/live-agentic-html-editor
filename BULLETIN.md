@@ -15,11 +15,19 @@ tool is broken.**
 
 ## Board
 
-- [>] @codex 2026-08-18 LAHE-thread-follow-up -- (Ken, 2026-08-18) after an
+- [x] @codex 2026-08-18 LAHE-thread-follow-up -- (Ken, 2026-08-18) after an
   agent answers, the reviewer needs a visible continuation box that sends a new
   message in the same thread. Preserve the original reviewer turn and agent
   answer; do not make `Reopen` silently erase or reword the first turn. Define
   separate, clear behavior for following up versus reopening an unlanded issue.
+  Done: completed exchanges remain chronological history, follow-up drafts stay
+  private until submitted, submission is outbox-first, refused windows cannot
+  mutate them, and `Reopen issue` cannot discard a nonempty draft.
+- [x] @codex 2026-08-18 LAHE-anchor-copy-truthful -- replay now preserves the
+  actual no-match, ambiguous-match, or structure-only verdict instead of
+  collapsing all three into a claim that the element no longer exists. The
+  rail uses neutral, element-agnostic copy and clears the badge when the target
+  can be attached again.
 - [x] @codex 2026-08-18 LAHE-reload-viewport-continuity -- LAHE's own
   hashless auto-reload now performs one instant, exact viewport restore and
   keeps native restoration manual through `pageshow`, preventing the visible
