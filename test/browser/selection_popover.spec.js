@@ -522,12 +522,63 @@ test.describe("the pill in a refused window", () => {
 
       // And it still WORKS, not just appears: a real click, a real comment, in
       // the helper's log.
-      const state = await pillIn(winB);
-      const button = state.buttons.filter((b) => b.action === "comment")[0];
-      await winB.mouse.click(button.rect.x + button.rect.width / 2, button.rect.y + button.rect.height / 2);
-      await pollPage(winB, () => window.__lahe.focusedBoxQuote() !== null, undefined, {
-        message: "the comment box to open from the pill after the takeover"
-      });
+      //
+      // THE WHOLE GESTURE IS THE UNIT OF RETRY, selection included, and that is
+      // the point rather than a workaround. This page renders itself on a timer,
+      // and the pill is an offer about a selection: when a repaint lands between
+      // the selection and the press, the range the pill was offering is gone,
+      // commentOnSelection finds a collapsed selection and opens nothing, and
+      // the pill hides itself on the way out. Clicking again there presses a
+      // pill that is no longer on screen. A reviewer whose click did nothing
+      // selects the passage again and presses again, so that is what this does:
+      // select, wait for the pill it earns, aim at geometry just read, press
+      // once, and give the box a moment to open before starting over.
+      await pollUntil(
+        async () => {
+          // Every wait inside one attempt is short, and its failure only ends
+          // THAT attempt: the whole gesture is the unit of retry, and the outer
+          // timeout below is the one that decides the test.
+          try {
+            // Cleared, and the clearing WAITED FOR, before selecting again. The
+            // pill is drawn off selectionchange, and a selection replaced with
+            // the same one in the same task can settle back to where it started
+            // without the page ever firing the event, which leaves the retry
+            // waiting for a pill that has no reason to appear.
+            await winB.evaluate(() => window.getSelection().removeAllRanges());
+            await pollPage(
+              winB,
+              () => window.__lahe.handle.comments.selectionPopover().visible === false,
+              undefined,
+              { timeoutMs: 5000, message: "the pill to go before the passage is selected again" }
+            );
+            await selectParagraph(winB);
+            const button = await pollUntil(
+              async () => {
+                const state = await pillIn(winB);
+                if (!state || state.visible !== true || !Array.isArray(state.buttons)) return null;
+                const candidate = state.buttons.filter((b) => b.action === "comment")[0];
+                if (!candidate || !candidate.rect || !candidate.rect.width) return null;
+                return candidate;
+              },
+              { timeoutMs: 5000, message: "the pill's Comment button to be on screen" }
+            );
+            await winB.mouse.click(button.rect.x + button.rect.width / 2, button.rect.y + button.rect.height / 2);
+            await pollPage(winB, () => window.__lahe.focusedBoxQuote() !== null, undefined, {
+              timeoutMs: 2000,
+              message: "the comment box to open from this press"
+            });
+            return true;
+          } catch (err) {
+            // A repaint took the selection out from under the offer. Go again.
+            return null;
+          }
+        },
+        {
+          intervalMs: 100,
+          timeoutMs: 30000,
+          message: "the pill's Comment button to open the comment box after the takeover"
+        }
+      );
       await winB.keyboard.type("From the pill, after a takeover", { delay: 5 });
       await winB.keyboard.press("Meta+Enter");
       await pollUntil(

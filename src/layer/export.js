@@ -462,7 +462,17 @@
       return gather()
         .then(function (got) {
           scope = got.scope;
-          text = renderReviewText({ records: got.records, scope: got.scope, review: requireReview() });
+          // The title goes in here too. Copy and Export are one review rendered
+          // twice, and the promise the suite holds them to is that they are the
+          // same bytes; when the header learned the page title, this call site
+          // was the one that did not learn it, so the clipboard said "Review
+          // r25cd..." while the downloaded file said "Review of ...".
+          text = renderReviewText({
+            records: got.records,
+            scope: got.scope,
+            review: requireReview(),
+            title: pageTitle()
+          });
           return writeClipboard(text);
         })
         .then(function () {
