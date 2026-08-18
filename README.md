@@ -64,7 +64,7 @@ path done by hand.
 git clone https://github.com/kenxle/live-agentic-html-editor
 cd live-agentic-html-editor
 npm install
-npm run install-cli    # puts a `lahe` wrapper in ~/.local/bin
+npm run install-cli    # installs the CLI wrapper and agent skill
 lahe --help || echo "not on PATH"
 ```
 
@@ -76,6 +76,13 @@ PATH only while that version is selected, so the install reports success and the
 `lahe` is not found in an ordinary shell. The wrapper does not care what Node is
 on PATH or what nvm is doing. If `~/.local/bin` is not on your PATH, the command
 says so and prints the line to add.
+
+The same setup command copies the repository-owned `skills/lahe/SKILL.md` into
+the shared agent skill directory and Claude's skill directory. Those installed
+files are projections, not separate sources: update the repository skill first,
+then rerun `npm run install-cli` (or the narrower `npm run install-skills`). A
+pre-existing hand-maintained LAHE skill is preserved once under
+`~/.local/state/lahe/skill-backups/` before migration.
 
 `npm link` still works as an alternative if you prefer it, and so does running
 from the clone with no install at all (below).

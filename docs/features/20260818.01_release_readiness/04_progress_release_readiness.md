@@ -73,6 +73,11 @@
   remain authoritative; `--source` names their entrypoint, agents locate the
   actual fragment from page context, and generated HTML is never the durable
   edit surface.
+- Complete: the repository now owns the canonical LAHE skill. The setup command
+  installs managed copies for shared agent discovery and Claude, preserving one
+  migration backup of a prior hand-maintained skill. Product changes update the
+  repository first and rerun setup; installed copies are no longer independent
+  documentation branches.
 - Confirmed known gaps: cold-start proof, final documentation pass, multi-page
   offline path reuse, and acceptance evidence.
 - In progress: remaining cold-start cleanup and end-to-end walkthroughs.

@@ -20,6 +20,7 @@ const path = require("node:path");
 const gestures = require("../../src/shared/gestures.js");
 const syncModule = require("../../src/layer/sync.js");
 const installCli = require("../../scripts/install-cli.js");
+const installSkills = require("../../scripts/install-skills.js");
 
 // ---------------------------------------------------------------------------
 // The origin trap, told apart from a helper that is down
@@ -141,6 +142,17 @@ test("it writes ~/.local/bin/lahe, and replaces only its own wrapper", () => {
   const target = path.join(home, ".local", "bin", "lahe");
   assert.equal(fs.existsSync(target), true);
   assert.equal((fs.statSync(target).mode & 0o111) !== 0, true, "and it is executable");
+  const canonicalSkill = fs.readFileSync(installSkills.SOURCE, "utf8");
+  assert.equal(
+    fs.readFileSync(path.join(home, ".agents", "skills", "lahe", "SKILL.md"), "utf8"),
+    canonicalSkill,
+    "the shared agent skill is installed from the repository"
+  );
+  assert.equal(
+    fs.readFileSync(path.join(home, ".claude", "skills", "lahe", "SKILL.md"), "utf8"),
+    canonicalSkill,
+    "Claude gets the same repository-owned skill"
+  );
   // ~/.local/bin was not on the PATH it was given, so it says so and prints the
   // line to add rather than claiming success.
   assert.match(out.join(""), /not on your PATH/);
@@ -172,6 +184,51 @@ test("it refuses, with the reason, rather than overwriting something else", () =
   assert.equal(code, 1);
   assert.match(err.join(""), /leaving .* alone/);
   assert.equal(fs.readFileSync(target, "utf8"), "#!/bin/sh\necho somebody else's lahe\n", "untouched");
+});
+
+test("skill installation preserves one hand-maintained LAHE copy before migration", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-skill-home-"));
+  const target = path.join(home, ".claude", "skills", "lahe", "SKILL.md");
+  const prior = "---\nname: lahe\ndescription: old local workflow\n---\n\nUse lahe add.\n";
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, prior);
+
+  const output = [];
+  assert.equal(installSkills.install({ home: home, stdout: (text) => output.push(text), stderr: () => {} }), 0);
+  assert.equal(fs.readFileSync(target, "utf8"), fs.readFileSync(installSkills.SOURCE, "utf8"));
+  assert.equal(fs.readFileSync(installSkills.backupPath(home, "claude"), "utf8"), prior);
+  assert.match(output.join(""), /preserved previous skill/);
+
+  assert.equal(installSkills.install({ home: home, stdout: () => {}, stderr: () => {} }), 0);
+  assert.equal(fs.readFileSync(installSkills.backupPath(home, "claude"), "utf8"), prior, "refresh does not rewrite the migration backup");
+});
+
+test("skill installation refuses an unrelated file at a target path", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-skill-home-"));
+  const target = path.join(home, ".agents", "skills", "lahe", "SKILL.md");
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, "not a skill\n");
+  const errors = [];
+  const code = installSkills.install({
+    home: home,
+    targets: [{ agent: "shared", file: target }],
+    stdout: () => {},
+    stderr: (text) => errors.push(text)
+  });
+  assert.equal(code, 1);
+  assert.equal(fs.readFileSync(target, "utf8"), "not a skill\n");
+  assert.match(errors.join(""), /existing file is not a LAHE skill/);
+});
+
+test("the canonical skill rejects the retired and cross-session workflows", () => {
+  const skill = fs.readFileSync(installSkills.SOURCE, "utf8");
+  assert.match(skill, /lahe review <target>/);
+  assert.match(skill, /session-scoped/);
+  assert.match(skill, /Direct `\.md` and `\.markdown` targets/);
+  assert.match(skill, /Do not use `lahe wait`/);
+  assert.match(skill, /Do not monitor globally/);
+  assert.match(skill, /Do not start `python3 -m http\.server`/);
+  assert.doesNotMatch(skill, /lahe status --json --seen-file/, "the skill must not teach an unscoped monitor command");
 });
 
 // ---------------------------------------------------------------------------

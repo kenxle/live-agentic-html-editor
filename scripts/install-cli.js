@@ -7,7 +7,8 @@
 // in every ordinary shell, which is a confusing failure for something whose
 // whole promise is "clone it and it works".
 //
-// WHAT THIS WRITES. One executable shell wrapper at ~/.local/bin/lahe:
+// WHAT THIS WRITES. One executable shell wrapper at ~/.local/bin/lahe and the
+// repository-owned LAHE skill in the shared and Claude skill directories:
 //
 //   #!/bin/sh
 //   # lahe wrapper written by scripts/install-cli.js
@@ -30,6 +31,7 @@
 var fs = require("node:fs");
 var os = require("node:os");
 var path = require("node:path");
+var installSkills = require("./install-skills.js");
 
 var MARKER = "# lahe wrapper written by scripts/install-cli.js";
 var REPO_ROOT = path.join(__dirname, "..");
@@ -153,7 +155,7 @@ function install(options) {
     out(["  Check it: lahe --help || echo \"not on PATH\"", ""].join("\n"));
   }
 
-  return 0;
+  return installSkills.install({ home: home, stdout: out, stderr: err });
 }
 
 if (require.main === module) {

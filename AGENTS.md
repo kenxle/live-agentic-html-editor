@@ -36,6 +36,11 @@ is selected, so the install looks like it worked and then `lahe` is not found.
 The verification line above is worth running; if `~/.local/bin` is not on PATH,
 `install-cli` prints the `export` line to add.
 
+The same command installs this repository's canonical `skills/lahe/SKILL.md`
+into the shared agent skill directory and Claude's skill directory. Never edit
+those installed copies as the source of truth. Update the repository skill,
+then rerun `npm run install-cli` or `npm run install-skills` to refresh them.
+
 `npm link` is an alternative, and `node bin/lahe.js ...` from the clone always
 works with nothing installed at all.
 

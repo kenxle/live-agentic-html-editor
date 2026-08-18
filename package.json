@@ -13,6 +13,7 @@
   "scripts": {
     "lint": "node scripts/lint.js",
     "install-cli": "node scripts/install-cli.js",
+    "install-skills": "node scripts/install-skills.js",
     "build:layer": "node scripts/build-layer.js",
     "check:layer": "node scripts/build-layer.js --check",
     "test:unit": "node --test test/unit/",
