@@ -1363,7 +1363,12 @@
    * @param {string} theirs what the page says, or tried to say
    */
   function flagConflict(ctx, item, id, element, theirs, displaced) {
-    counters.regionsConflicted += 1;
+    // The counter counts collisions ARISING, not passes re-detecting one that
+    // is already standing: the still-bound rule re-runs the content
+    // comparison every pass now, and a standing conflict re-counted itself
+    // once per pass. The record below still refreshes (`theirs` can move
+    // under a live page), only the count is once per conflict.
+    if (!conflicts[id]) counters.regionsConflicted += 1;
     var yours = ours(item);
     conflicts[id] = {
       id: id,

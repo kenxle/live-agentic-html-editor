@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+0c25a99a27a4
+ * version 0.0.0+c3fbb81371e1
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+0c25a99a27a4";
+  g.LAHE.version = "0.0.0+c3fbb81371e1";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -18571,7 +18571,12 @@
    * @param {string} theirs what the page says, or tried to say
    */
   function flagConflict(ctx, item, id, element, theirs, displaced) {
-    counters.regionsConflicted += 1;
+    // The counter counts collisions ARISING, not passes re-detecting one that
+    // is already standing: the still-bound rule re-runs the content
+    // comparison every pass now, and a standing conflict re-counted itself
+    // once per pass. The record below still refreshes (`theirs` can move
+    // under a live page), only the count is once per conflict.
+    if (!conflicts[id]) counters.regionsConflicted += 1;
     var yours = ours(item);
     conflicts[id] = {
       id: id,
@@ -19126,7 +19131,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+0c25a99a27a4";
+  var VERSION = "0.0.0+c3fbb81371e1";
 
   var protocol = ns.protocol;
   var record = ns.record;
