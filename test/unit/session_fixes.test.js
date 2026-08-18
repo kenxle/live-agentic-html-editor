@@ -242,6 +242,10 @@ test("the canonical skill rejects the retired and cross-session workflows", () =
   assert.match(skill, /Do not use `lahe wait`/);
   assert.match(skill, /Do not monitor globally/);
   assert.match(skill, /Do not start `python3 -m http\.server`/);
+  assert.match(skill, /Never put it inside `while true`/);
+  assert.match(skill, /If nothing is ready,\s+return control to the user/);
+  assert.match(skill, /Do not create a timer, scheduled task, recurring task/);
+  assert.doesNotMatch(skill, /moderate timer/);
   assert.doesNotMatch(skill, /lahe status --json --seen-file/, "the skill must not teach an unscoped monitor command");
 });
 

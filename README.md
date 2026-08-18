@@ -114,6 +114,11 @@ a `lahe-layer.js` copy beside the page as the offline fallback (refreshed every
 run), mints that review's token, registers the page's origin, and **starts the
 helper if it is not already running**. It prints what it did and what to open.
 
+A helper can outlive a repository update when reviews remain open. Every
+`review` therefore checks the running backend's service contract. A verified
+older helper is restarted onto the installed code without losing review history
+or browser-queued work. An older clone refuses to replace a newer helper.
+
 For a static file, that one command also starts or reuses a read-only Node
 server rooted at the page's folder and registers its exact origin. Open the URL
 on the printed `open` line:
@@ -273,11 +278,15 @@ once, and after that a plain sentence works:
 | `lahe session reopen <id>` | Reopen the workstream and restart its helper and static servers |
 | `lahe serve [--port N]` | Run the helper by hand (`add` starts it for you, so this is rarely needed) |
 
-`lahe status --session <id> --json --seen-file <path> --quiet` is the keep-up
-loop: run it on a moderate timer. It prints nothing while idle, and any item line
-when it does print is new work owned by that agent session. The seen key includes
-the session, review, item, and revision. Do not monitor globally or wrap status
-in a parser pipeline. There is no blocking watch command.
+`lahe status --session <id> --json --seen-file <path> --quiet` is a one-shot
+keep-up check. Run it when work begins or resumes and after a completed batch.
+It prints nothing while idle, and any item line when it does print is new work
+owned by that agent session. The seen key includes the session, review, item,
+and revision. Do not monitor globally, wrap status in a parser pipeline, or put
+it in `while true`, `watch`, a sleep loop, a background daemon, or a host-level
+timer, scheduled task, or recurring task. An idle agent must return control to
+chat and must not emit repeated “standing by” messages. There is no blocking
+watch command.
 
 **If the page is build output**, an agent should rebuild before it reports an
 item handled: `handled` is supposed to mean your page shows the change. It does

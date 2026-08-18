@@ -730,6 +730,7 @@ function createReviews(options) {
       pid: process.pid,
       started_at: lastReadyDetails.started_at,
       api: protocol.API_VERSION,
+      service_contract: protocol.SERVICE_CONTRACT,
       reviews: {}
     };
     Object.keys(reviews).forEach(function (id) {

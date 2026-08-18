@@ -47,6 +47,7 @@ var HANDLERS = {
         ok: true,
         version: deps.version,
         api: protocol.API_VERSION,
+        service_contract: protocol.SERVICE_CONTRACT,
         started_at: deps.startedAt
       }
     };

@@ -37,6 +37,13 @@
   "use strict";
 
   var API_VERSION = "v1";
+  // The URL API can remain v1 while the long-running helper gains projection,
+  // session, or persistence behavior that a newly built rail depends on. A
+  // helper process keeps its required modules in memory even though it serves
+  // a freshly rebuilt browser bundle from disk, so API_VERSION alone cannot
+  // prevent a new rail from talking to yesterday's backend. Bump this integer
+  // whenever an old helper cannot safely back a newly built CLI/layer.
+  var SERVICE_CONTRACT = 3;
   var BASE = "/lahe/" + API_VERSION;
 
   // ---------------------------------------------------------------------------
@@ -163,7 +170,7 @@
       auth: AUTH.NONE,
       mutating: false,
       why: "liveness and version only, so `add` can tell a helper that is up from one that is not",
-      response: "{ok, version, api, started_at}"
+      response: "{ok, version, api, service_contract, started_at}"
     },
     {
       name: "events.append",
@@ -838,6 +845,7 @@
 
   return {
     API_VERSION: API_VERSION,
+    SERVICE_CONTRACT: SERVICE_CONTRACT,
     BASE: BASE,
     DEFAULT_PORT: DEFAULT_PORT,
     DEFAULT_HOST: DEFAULT_HOST,

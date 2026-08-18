@@ -916,6 +916,47 @@ async function run(argv) {
   var handedToHelper = false;
   var restartReason = null;
 
+  // A helper is intentionally shared across agent types, projects, and agent
+  // sessions, which also means a maintainer can keep one alive across a code
+  // update. The helper re-reads the browser bundle from disk, but Node keeps
+  // its service and projection modules in memory. Without this fence that
+  // creates a split product: today's rail talking to yesterday's backend.
+  //
+  // An absent contract is the pre-fence helper and is safely older. A greater
+  // contract means this CLI came from an older clone; never bounce a newer
+  // shared helper backward, because another live session may depend on it.
+  if (alive) {
+    var liveContract = Number.isInteger(alive.service_contract) ? alive.service_contract : 0;
+    if (liveContract > protocol.SERVICE_CONTRACT) {
+      process.stderr.write(
+        "lahe add: the running helper uses service contract " + liveContract +
+          ", but this clone supports " + protocol.SERVICE_CONTRACT +
+          ". Update this clone instead of replacing a newer shared helper.\n"
+      );
+      return EXIT.FAILED;
+    }
+    if (liveContract < protocol.SERVICE_CONTRACT) {
+      restartReason =
+        "the verified helper uses older service contract " + liveContract +
+        "; this clone requires " + protocol.SERVICE_CONTRACT;
+      try {
+        await stopHelper(Object.assign({ dir: dir }, ready || {}), host, port, alive);
+        restarted = true;
+        await startHelper(host, port, dir);
+        alive = await confirmOurHelper(
+          host,
+          port,
+          dir,
+          "the compatible helper on " + host + ":" + port + " to identify itself"
+        );
+        ready = readReadyFile(dir);
+      } catch (err) {
+        process.stderr.write("lahe add: " + err.message + "\n");
+        return EXIT.FAILED;
+      }
+    }
+  }
+
   // The paths that make this review findable again after a rebuild strips the
   // script line out of the page.
   var pathWrites = {

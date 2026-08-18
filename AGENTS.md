@@ -159,6 +159,12 @@ remembers the path it was added at. `lahe review <page> --new-session` deliberat
 starts an independent workstream. Advanced `lahe add <page> --review <id>`
 re-attaches a page to a review by id inside its owning session.
 
+The helper may have been running since before this clone was updated. `review`
+checks an explicit service contract every time. It safely restarts a verified
+older helper before opening the page, preserving disk-backed review history and
+browser queues. It refuses to replace a newer helper with an older clone. This
+prevents a freshly rebuilt rail from talking to stale in-memory backend code.
+
 **A different document gets its own review.** `--review <id>` is for putting a
 page back on the review it already belonged to, usually after a rebuild. Do not
 use it to file a second, unrelated document under an existing review to keep
@@ -311,19 +317,29 @@ link or an origin this review does not know about, and `lahe add <page> --origin
 <their origin>` is the fix. Items still in `draft` are counted separately and are
 not yours: the reviewer is still writing them.
 
-### The keep-up loop: one command, on a timer
+### Keep up without occupying the chat
 
 ```sh
 lahe status --session <session-id> --json --seen-file ~/.lahe-seen-<session-id> --quiet
 ```
 
-That is the whole monitor. Run it every 20 or 30 seconds. It emits nothing when
+That is the whole monitor, and every invocation is one-shot. Run it when you
+begin or resume work and after each batch you handle. It emits nothing when
 idle; when it prints, any item line is new work from this session. No cursor, no
 parser, and no dedupe of your own. It covers reviews added later to this session
 and never another agent's reviews. It acknowledges nothing: only a reply line
 marks an item handled.
 
-Restarting the loop, or the machine, changes nothing: the seen file is the
+**Never wait for comments in a shell loop.** Do not wrap the command in `while
+true`, `watch`, repeated `sleep`, a background daemon, a host timer, a scheduled
+or recurring task, or a long-running tool call. Those patterns can make an agent
+unavailable in chat, flood the thread with idle messages, and leave orphaned
+pollers burning battery after its session ends. Never announce repeated
+“standing by” updates. If a one-shot check prints nothing, return control to the
+user. Check again at the next natural work boundary or when the user asks you to
+continue.
+
+Restarting the agent, or the machine, changes nothing: the seen file is the
 state, so nothing is re-shown and nothing is skipped.
 
 Older historical plans may mention `lahe wait`. It was retired and removed

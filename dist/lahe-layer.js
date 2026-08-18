@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+b338d854fe57
+ * version 0.0.0+3e3e42850ddc
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+b338d854fe57";
+  g.LAHE.version = "0.0.0+3e3e42850ddc";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -3537,6 +3537,13 @@
   "use strict";
 
   var API_VERSION = "v1";
+  // The URL API can remain v1 while the long-running helper gains projection,
+  // session, or persistence behavior that a newly built rail depends on. A
+  // helper process keeps its required modules in memory even though it serves
+  // a freshly rebuilt browser bundle from disk, so API_VERSION alone cannot
+  // prevent a new rail from talking to yesterday's backend. Bump this integer
+  // whenever an old helper cannot safely back a newly built CLI/layer.
+  var SERVICE_CONTRACT = 3;
   var BASE = "/lahe/" + API_VERSION;
 
   // ---------------------------------------------------------------------------
@@ -3663,7 +3670,7 @@
       auth: AUTH.NONE,
       mutating: false,
       why: "liveness and version only, so `add` can tell a helper that is up from one that is not",
-      response: "{ok, version, api, started_at}"
+      response: "{ok, version, api, service_contract, started_at}"
     },
     {
       name: "events.append",
@@ -4338,6 +4345,7 @@
 
   return {
     API_VERSION: API_VERSION,
+    SERVICE_CONTRACT: SERVICE_CONTRACT,
     BASE: BASE,
     DEFAULT_PORT: DEFAULT_PORT,
     DEFAULT_HOST: DEFAULT_HOST,
@@ -4479,7 +4487,7 @@
     "status is one of: handled, you made the change; not_handled, you did not, and reason says why in words the reviewer will read; question, you need an answer, and text asks for it.",
     "rev must be the rev carried with the item. If the reviewer reworded the item after you read it, your line is refused and the item stays open. Re-read the item and answer its new rev.",
     "To see what is open right now, run: lahe status --review <id> (add --json for machine-readable lines). It prints the unanswered ready items and whether the reviewer's page is connected.",
-    "To keep up, use the review.agent_session_id above and run this on a moderate timer: lahe status --session <agent-session-id> --json --seen-file <path> --quiet. It prints nothing when idle and otherwise prints only new work from this agent session. Never monitor globally or build a parser pipeline around status.",
+    "To keep up, run this one-shot command when you begin or resume work and after each completed batch: lahe status --session <agent-session-id> --json --seen-file <path> --quiet. Use the review.agent_session_id above. Each invocation returns immediately and prints only new work from this agent session. Never monitor globally, build a parser pipeline, start a polling loop, or create a timer, scheduled task, recurring task, or background monitor. If nothing is ready, return control to the user so the chat remains available.",
     "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and a running helper puts the script line back when the rebuild strips it out.",
     "The only way to say you handled an item is to append a reply line."
   ];
@@ -19867,7 +19875,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+b338d854fe57";
+  var VERSION = "0.0.0+3e3e42850ddc";
 
   var protocol = ns.protocol;
   var record = ns.record;

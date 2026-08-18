@@ -147,6 +147,12 @@ test("the library's reply cursor is a seq, not a timestamp", () => {
   assert.equal(protocol.route("replies.poll").request.includes("since=<seq>"), true);
 });
 
+test("health carries the service contract that fences a rebuilt rail from a stale helper", () => {
+  assert.equal(Number.isInteger(protocol.SERVICE_CONTRACT), true);
+  assert.equal(protocol.SERVICE_CONTRACT >= 1, true);
+  assert.match(protocol.route("health").response, /service_contract/);
+});
+
 // ---------------------------------------------------------------------------
 // The request checks (D11)
 // ---------------------------------------------------------------------------

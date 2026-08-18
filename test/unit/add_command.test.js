@@ -398,6 +398,7 @@ test("add starts the helper when none is running, which is what makes the instal
 
     const after = await service.probeHealth("127.0.0.1", work.port);
     assert.ok(after && after.ok, "a helper is answering after add, without a second command");
+    assert.equal(after.service_contract, protocol.SERVICE_CONTRACT, "the helper identifies its in-memory backend contract");
     assert.match(run.stdout, /started just now/, "and add says it started one");
   } finally {
     await work.stop();
