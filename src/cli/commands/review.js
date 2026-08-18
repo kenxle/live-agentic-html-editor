@@ -160,8 +160,8 @@ async function run(argv) {
     }
     process.stdout.write(
       (staticServer ? "" : "\n") + "  monitor   lahe status --session " + sessionId +
-        " --json --seen-file <path> --quiet\n" +
-        "            run every 20-30s in a background monitor; foreground loop only as fallback\n" +
+        " --json --seen-file <path>\n" +
+        "            Antigravity: one-shot schedule wakeups; other background monitors may add --quiet\n" +
         "  close     lahe session close " + sessionId + "\n"
     );
   }

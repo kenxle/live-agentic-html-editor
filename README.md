@@ -278,17 +278,19 @@ once, and after that a plain sentence works:
 | `lahe session reopen <id>` | Reopen the workstream and restart its helper and static servers |
 | `lahe serve [--port N]` | Run the helper by hand (`add` starts it for you, so this is rarely needed) |
 
-`lahe status --session <id> --json --seen-file <path> --quiet` is the monitor's
-one-shot check. Run it every 20 to 30 seconds using the agent client's native
-background monitor or scheduled-task facility whenever one is available. The
-primary chat must remain usable, and an idle check must emit no “standing by”
-message. Claude should use its background Task/Timer facility. Antigravity
-should use `/schedule` or an Agent Manager Scheduled Task separate from the
-active conversation. If the client has no background facility, it may run an
-interruptible foreground loop; the user must be told that they can interrupt it
-to regain the chat. Do not monitor globally or wrap status in a parser pipeline.
-The seen key includes the session, review, item, and revision. Stop or delete
-the monitor when the agent session closes.
+`lahe status --session <id> --json --seen-file <path>` is the monitor's one-shot
+check. Run it every 20 to 30 seconds using the agent client's native background
+monitor or wakeup facility whenever one is available. Claude should use its
+background Task/Timer facility and add `--quiet`. Antigravity must instead chain
+one-shot `schedule(DurationSeconds=20, ...)` wakeups: each wakeup runs status
+without `--quiet`, processes any item lines, schedules exactly one successor,
+and ends its turn. It must not use a quiet terminal daemon or foreground loop,
+because neither correctly wakes the Antigravity agent while leaving chat free.
+Other clients without a background facility may use an interruptible foreground
+loop after telling the user how to regain the chat. Idle monitors post no
+“standing by” messages. Do not monitor globally or wrap status in a parser
+pipeline. The seen key includes the session, review, item, and revision. Stop or
+delete the monitor when the agent session closes.
 
 **If the page is build output**, an agent should rebuild before it reports an
 item handled: `handled` is supposed to mean your page shows the change. It does

@@ -83,11 +83,15 @@ disappears, including interrupted test runs. This prevents old worktrees and
 aborted browser suites from leaving polling processes adopted by PID 1.
 
 Agent monitoring remains a session-scoped status command on a 20-to-30-second
-cadence. The agent client's native background monitor is preferred so its
-primary chat remains available; an interruptible foreground loop is the
-fallback when no background facility exists. Both forms use `--seen-file`
-directly, launch no parser pipeline, print nothing when there is no new work,
-and end with the agent session. A hidden review page may reduce nonessential
+cadence. The client-specific wakeup mechanism is part of the contract. Claude
+uses a quiet background Task/Timer. Antigravity chains one-shot native
+`schedule(DurationSeconds=20, ...)` wakeups, runs status without `--quiet`,
+schedules exactly one successor, and yields after every wakeup; a terminal
+daemon cannot wake that agent and a foreground loop blocks its active turn.
+Other clients prefer a native background monitor and fall back to an
+interruptible foreground loop only when necessary. Every form uses
+`--seen-file` directly, launches no parser pipeline, posts no idle message, and
+ends with the agent session. A hidden review page may reduce nonessential
 reply/mtime polling while retaining its low-frequency ownership heartbeat; a
 visible page keeps the interactive cadence.
 

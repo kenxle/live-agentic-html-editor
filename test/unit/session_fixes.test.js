@@ -242,10 +242,12 @@ test("the canonical skill rejects the retired and cross-session workflows", () =
   assert.match(skill, /Do not use `lahe wait`/);
   assert.match(skill, /Do not monitor globally/);
   assert.match(skill, /Do not start `python3 -m http\.server`/);
-  assert.match(skill, /native background monitor or\s+scheduled-task facility/);
-  assert.match(skill, /In Antigravity,\s+use `\/schedule` or an Agent\s+Manager Scheduled Task/);
+  assert.match(skill, /native background monitor or\s+wakeup facility/);
+  assert.match(skill, /schedule\(DurationSeconds=20, Prompt="Check LAHE status for session <id>"\)/);
+  assert.match(skill, /run the printed status command without\s+`--quiet`/);
+  assert.match(skill, /Never attach a repeating timer to the active conversation/);
   assert.match(skill, /interruptible foreground\s+loop/);
-  assert.match(skill, /silent when the command prints\s+nothing/);
+  assert.match(skill, /If there was no\s+work, do this silently/);
   assert.match(skill, /Stop or delete this session's\s+background monitor/);
   assert.doesNotMatch(skill, /moderate timer/);
   assert.doesNotMatch(skill, /lahe status --json --seen-file/, "the skill must not teach an unscoped monitor command");

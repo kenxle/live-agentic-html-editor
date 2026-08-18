@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+c6521dc4c875
+ * version 0.0.0+4841a8d4804a
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+c6521dc4c875";
+  g.LAHE.version = "0.0.0+4841a8d4804a";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -3543,7 +3543,7 @@
   // a freshly rebuilt browser bundle from disk, so API_VERSION alone cannot
   // prevent a new rail from talking to yesterday's backend. Bump this integer
   // whenever an old helper cannot safely back a newly built CLI/layer.
-  var SERVICE_CONTRACT = 4;
+  var SERVICE_CONTRACT = 5;
   var BASE = "/lahe/" + API_VERSION;
 
   // ---------------------------------------------------------------------------
@@ -4487,7 +4487,7 @@
     "status is one of: handled, you made the change; not_handled, you did not, and reason says why in words the reviewer will read; question, you need an answer, and text asks for it.",
     "rev must be the rev carried with the item. If the reviewer reworded the item after you read it, your line is refused and the item stays open. Re-read the item and answer its new rev.",
     "To see what is open right now, run: lahe status --review <id> (add --json for machine-readable lines). It prints the unanswered ready items and whether the reviewer's page is connected.",
-    "To keep up, run this command every 20 to 30 seconds: lahe status --session <agent-session-id> --json --seen-file <path> --quiet. Use the review.agent_session_id above. Prefer the agent client's native background monitor or scheduled-task facility so the primary chat remains available; it must be silent when the command prints nothing. If no background facility exists, use an interruptible foreground loop and tell the human they can interrupt it to speak directly. Never monitor globally or build a parser pipeline. Stop or delete the monitor when the agent session closes.",
+    "To keep up, run this command every 20 to 30 seconds: lahe status --session <agent-session-id> --json --seen-file <path>. Use the review.agent_session_id above. Prefer the client\u2019s native background monitor or wakeup facility. Claude may add --quiet. Antigravity must chain one-shot schedule(DurationSeconds=20, ...) wakeups, run status without --quiet on each wakeup, schedule exactly one successor, and yield silently when idle; do not use a quiet terminal daemon or foreground loop there. Other clients without background wakeups may use an interruptible foreground loop after warning the human. Never monitor globally or build a parser pipeline. Stop the monitor when the agent session closes.",
     "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and a running helper puts the script line back when the rebuild strips it out.",
     "The only way to say you handled an item is to append a reply line."
   ];
@@ -19875,7 +19875,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+c6521dc4c875";
+  var VERSION = "0.0.0+4841a8d4804a";
 
   var protocol = ns.protocol;
   var record = ns.record;

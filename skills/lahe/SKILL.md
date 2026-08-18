@@ -35,12 +35,30 @@ document. A different top-level agent gets a different session.
 
 Keep the printed session-scoped status command running every 20 to 30 seconds
 while the human reviews. Prefer the agent client's native background monitor or
-scheduled-task facility so the primary chat stays available. In Claude, use its
-background Task/Timer facility. In Antigravity, use `/schedule` or an Agent
-Manager Scheduled Task; do not attach the timer to the active conversation. In
+wakeup facility so the primary chat stays available. In Claude, use its
+background Task/Timer facility and add `--quiet` to suppress idle output. In
 other clients, use their native background-task facility when available. The
-background monitor must be silent when the command prints nothing and must
-deliver item lines back to this agent as new work.
+background monitor must deliver item lines back to this agent as new work and
+must not post idle “standing by” messages.
+
+### Antigravity / AGY
+
+Do not use a background terminal daemon with `--quiet`, because its output
+cannot wake the agent. Do not use a foreground shell loop. Chain one-shot native
+wakeup timers instead:
+
+1. Call `schedule(DurationSeconds=20, Prompt="Check LAHE status for session <id>")`.
+2. End the turn immediately so the primary chat remains available.
+3. When the timer wakes the agent, run the printed status command without
+   `--quiet` and inspect its JSON lines.
+4. If item lines exist, edit durable source, rebuild, verify, and append replies.
+5. Schedule exactly one new 20-second wakeup and end the turn. If there was no
+   work, do this silently. If the session is closed, do not reschedule.
+
+Use one stable seen-file path for every wakeup in the session. A wakeup is a new
+agent turn, so it works even when the status command itself prints nothing
+useful. Never attach a repeating timer to the active conversation and never
+allow two pending LAHE wakeups for the same session.
 
 If the client truly has no background monitor, run an interruptible foreground
 loop instead. Tell the human that the loop owns the chat while it waits and that
@@ -71,6 +89,8 @@ reports that the session is closed.
   session-scoped command printed by `lahe review`.
 - Do not post repeated idle or “standing by” messages. A background monitor is
   silent until status prints an item.
+- In Antigravity, do not substitute a terminal daemon, foreground loop, or
+  repeating active-turn timer for the one-shot `schedule` wakeup chain.
 - Do not leave a monitor running after its agent session closes.
 - Do not hand-convert one Markdown file with Pandoc. Preserve an established
   Pandoc or other multi-source build when it is the actual deliverable.
