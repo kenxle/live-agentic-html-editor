@@ -604,6 +604,21 @@
     // was reloaded, so it runs on boot and not only on a later repaint.
     ns.replay.schedule(ns.replay.REASON.BOOT);
 
+    // The reviewer's marks get the same second chance replay's lost verdicts
+    // get. A page that finishes drawing itself after load (mermaid rendering a
+    // diagram over a section, a chart library swapping a figure in) throws away
+    // the nodes the highlights were painted on, and the paint above already
+    // ran, so those passages come back bare. Replay defers a lost verdict
+    // across that window (replay.SETTLE_MS); this paints again once it closes,
+    // which is the moment the anchors resolve against the finished page.
+    if (typeof win.setTimeout === "function") {
+      win.setTimeout(function () {
+        // A torn-down library paints nothing: teardown drops `current`.
+        if (!handle || current !== handle) return;
+        repaintHighlights(refreshItems());
+      }, ns.replay.SETTLE_MS + 100);
+    }
+
     var handle = {
       booted: true,
       version: VERSION,

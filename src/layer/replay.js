@@ -108,7 +108,8 @@
     COMMIT: "commit", // an edit committed and protection lifted
     UNDO: "undo", // the reviewer undid one record
     MANUAL: "manual", // the reviewer asked for a refresh
-    BOOT: "boot" // first pass after the library loads
+    BOOT: "boot", // first pass after the library loads
+    SETTLE: "settle" // the recheck that closes the settling window after a load
   };
   var REASONS = Object.keys(REASON).map(function (k) {
     return REASON[k];
@@ -132,7 +133,9 @@
     regionsSkippedEqual: 0, // branch one: the idempotence path
     regionsEarlierRevision: 0, // branch three
     regionsConflicted: 0, // branch four: flagged, nothing written
-    regionsLost: 0 // the anchor bound to zero matches, or to more than one
+    regionsLost: 0, // the anchor bound to zero matches, or to more than one
+    regionsLostDeferred: 0, // a lost verdict held back while the page was still settling
+    regionsLostCleared: 0 // a later pass found the anchor, so the lost state ended
   };
 
   function resetCounters() {
@@ -143,6 +146,64 @@
 
   var scheduled = null;
   var lastReason = null;
+
+  // ---------------------------------------------------------------------------
+  // The settling window: a page that is still rendering itself
+  // ---------------------------------------------------------------------------
+  //
+  // A reviewed page routinely finishes drawing itself well after load. Mermaid
+  // replaces whole sections with rendered diagrams, a chart library swaps a
+  // placeholder for a figure, a framework hydrates. An anchor resolved in that
+  // gap binds to nothing through no fault of the record, and the reviewer gets
+  // told their passage is gone while they are looking straight at it (reported
+  // live on 2026-08-17, after the auto-reload work made a reload routine).
+  //
+  // So for a short window after a load or a remount, a lost verdict is DEFERRED
+  // rather than surfaced: nothing is stamped on the record and nothing is put on
+  // the card, and one recheck pass is armed for the end of the window. A passage
+  // that is genuinely gone is still flagged, about a second later than before.
+  // The window is not a silence: the outcome says `deferred`, and the summary
+  // counts it, so "why did this pass not flag anything" has an answer.
+  var SETTLE_MS = 2000;
+
+  // The recheck is a little past the end of the window, so the pass it runs is
+  // the first one the window no longer defers.
+  var SETTLE_RECHECK_SLACK_MS = 50;
+
+  var settleUntil = 0;
+  var settleTimer = null;
+
+  /** A load or a remount: the page may be about to rewrite itself. */
+  function noteSettling(ms) {
+    var span = typeof ms === "number" ? ms : SETTLE_MS;
+    // Zero (or less) closes the window rather than extending it, which is how a
+    // test says "the page has finished" without waiting out the clock.
+    if (span <= 0) {
+      settleUntil = 0;
+      return settleUntil;
+    }
+    var until = Date.now() + span;
+    if (until > settleUntil) settleUntil = until;
+    return settleUntil;
+  }
+
+  function isSettling() {
+    return Date.now() < settleUntil;
+  }
+
+  // One timer, however many records deferred inside the window.
+  function armSettleRecheck() {
+    if (settleTimer !== null) return;
+    if (typeof setTimeout !== "function") return;
+    var wait = settleUntil - Date.now() + SETTLE_RECHECK_SLACK_MS;
+    settleTimer = setTimeout(function () {
+      settleTimer = null;
+      schedule(REASON.SETTLE, { immediate: true });
+    }, wait > 0 ? wait : 0);
+    // Node only, and only so a unit test's pending recheck does not hold the
+    // process open. Browsers have no unref and do not need one.
+    if (settleTimer && typeof settleTimer.unref === "function") settleTimer.unref();
+  }
 
   // ---------------------------------------------------------------------------
   // The context: what a pass runs against
@@ -259,6 +320,9 @@
       epoch.shared.noteExternalMutation();
       return false;
     }
+    // A load and a remount are the two moments the page starts drawing itself
+    // again, so they open the settling window. See SETTLE_MS.
+    if (reason === REASON.BOOT || reason === REASON.REMOUNT) noteSettling();
     lastReason = reason;
     var opts = options || {};
     var override = opts.commit ? { commit: opts.commit } : null;
@@ -809,7 +873,7 @@
     // conflict-flagged would otherwise keep a stale region.lost stamp (which 3A
     // projects into review.json) after the reviewer resolved in its favour, and
     // the element memory would point at a node that is no longer the truth.
-    clearLost(item);
+    clearLost(ctx, item);
     persistItem(ctx, item);
     lastElement[id] = element;
     delete conflicts[id];
@@ -1021,6 +1085,22 @@
   }
 
   function markLost(item, verdict, ctx) {
+    // The page is still drawing itself, so this verdict is about a document
+    // that is not finished. Say nothing yet, and come back when it is.
+    if (isSettling()) {
+      counters.regionsLostDeferred += 1;
+      armSettleRecheck();
+      return {
+        wrote: false,
+        branch: null,
+        lost: false,
+        deferred: true,
+        reason: "the page is still settling, so this is rechecked before anything is said",
+        item: item,
+        element: null
+      };
+    }
+
     counters.regionsLost += 1;
     var region = item[record.FIELD.REGION] || record.emptyRegion();
     var reason = lostReason(verdict);
@@ -1041,6 +1121,10 @@
     // review_format is not touched from here: the projection reads the record.
     next.lost = { code: "ANCHOR_LOST", reason: reason, at: new Date().toISOString() };
     item[record.FIELD.REGION] = next;
+    // Written down for the same reason the clear is: `items` is a cache a
+    // remount replaces from the store, so a stamp nobody persisted is gone at
+    // the next morph and the reviewer's card outlives the state behind it.
+    persistItem(ctx, item);
 
     if (failures) {
       callCard(
@@ -1057,15 +1141,39 @@
     return { wrote: false, branch: null, lost: true, reason: verdict.reason, item: item, element: null };
   }
 
-  function clearLost(item) {
+  /**
+   * The anchor bound again, so the lost state ends: on the record, on the card,
+   * and in storage.
+   *
+   * The card is the half that was missing, and it is the whole of the bug
+   * reported on 2026-08-17: a passage that went briefly unfindable while the
+   * page was still rendering got a lost stamp and a lost badge, the very next
+   * pass found it and cleared the stamp, and the badge stayed on the card
+   * forever. The reviewer read "this passage is gone from the page" over a
+   * passage sitting in front of them, and review.json, which projects the
+   * record, disagreed with the card. Same shape as the standing origin chip
+   * (f55094b): the condition ended, so the notice ends.
+   *
+   * Storage is the other half: the stamp lives on the cached record, and a
+   * remount replaces that cache from the store, so a clear nobody wrote down
+   * comes back on the next morph.
+   */
+  function clearLost(ctx, item) {
     var region = item[record.FIELD.REGION];
-    if (!region || !region.lost) return;
+    // The badge is cleared even when the record carries no stamp: the two are
+    // written by the same act and a card left holding a stale one is exactly
+    // what this is here to end.
+    callCard(ctx, "clearCardBadge", item[record.FIELD.ID], "ANCHOR_LOST");
+    if (!region || !region.lost) return false;
     var next = {};
     Object.keys(region).forEach(function (key) {
       next[key] = region[key];
     });
     next.lost = null;
     item[record.FIELD.REGION] = next;
+    counters.regionsLostCleared += 1;
+    persistItem(ctx, item);
+    return true;
   }
 
   /**
@@ -1131,7 +1239,7 @@
       // flag every successful deletion.
       if (kind === record.KIND.DELETE && verdict && verdict.reason === uniqueness.REASON.NO_TEXT_MATCH) {
         counters.regionsSkippedEqual += 1;
-        clearLost(item);
+        clearLost(ctx, item);
         clearConflict(ctx, id);
         return {
           wrote: false,
@@ -1159,7 +1267,7 @@
       };
     }
 
-    clearLost(item);
+    clearLost(ctx, item);
 
     // A comment or a note has nothing to write. It resolved, so it is not lost,
     // and that is the whole of its replay.
@@ -1309,6 +1417,9 @@
     EARLIER_REVISION_MESSAGE: EARLIER_REVISION_MESSAGE,
     counters: counters,
     resetCounters: resetCounters,
+    SETTLE_MS: SETTLE_MS,
+    noteSettling: noteSettling,
+    isSettling: isSettling,
     schedule: schedule,
     runPass: runPass,
     compare: compare,
