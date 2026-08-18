@@ -303,6 +303,12 @@
         return;
       }
       readOnlyActive = true;
+      // The panel carries the whole message (what happened, the takeover
+      // button), so the chip saying the same two sentences beside it is
+      // clutter, not information: one surface per fact (Ken, 2026-08-18).
+      // exitReadOnly's clear stays for the panel-less paths; this clear covers
+      // entering read-only with the chip already standing.
+      rail.failures.clear("SECOND_WINDOW_REFUSED");
       comments.closeAll();
       // unbind, NEVER comments.teardown(): teardown also tears down the SHARED
       // highlight surface the rail lives in, and the next gesture after a

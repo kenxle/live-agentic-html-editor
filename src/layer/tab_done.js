@@ -337,7 +337,13 @@
         // card's model loses what the agent actually said in which field. Only
         // `text` is what gets DRAWN, which is what makes it one carrier.
         reason: reviewFormat.boundData(reply.reason, reviewFormat.CONTEXT_MAX),
-        text: said ? boundedText(said) : agentName(reply) + " made this change.",
+        // The wordless fallback is kind-aware: "made this change" was written
+        // for hand edits and read strangely under a handled COMMENT, where the
+        // agent made a change the card never shows (Ken, 2026-08-18).
+        text: said
+          ? boundedText(said)
+          : agentName(reply) +
+            (record.isHandEdit(item) ? " carried this change into the source." : " handled this."),
         files: Array.isArray(reply.files) ? reply.files : [],
         at: reply.at || null
       };

@@ -916,9 +916,14 @@
           return claimWithHelper();
         })
         .then(function (result) {
-          // Whichever way it went, the case nothing can refuse is said out
-          // loud rather than quietly claimed as covered.
-          onLimit(overlay.LIMIT_SEPARATE_STORAGE_NO_HELPER);
+          // The uncovered case is said out loud only while it is ACTUAL: with
+          // no helper granting claims, separate-storage windows are invisible
+          // and the note earns its line. A helper that answered covers that
+          // case, and a standing disclaimer under a working session is noise
+          // the reviewer learns to ignore (Ken, 2026-08-18). The heartbeat
+          // path keeps this current: it re-runs the claim, so the note comes
+          // and goes with the helper.
+          onLimit(lock.helperGranted ? null : overlay.LIMIT_SEPARATE_STORAGE_NO_HELPER);
           finalizeClaim();
           return result;
         });
@@ -1101,6 +1106,9 @@
         if (parsed.granted) {
           lock.helperGranted = true;
           if (parsed.sessionSecret) rememberSecret(parsed.sessionSecret, parsed.seq);
+          // The helper is covering separate-storage windows again, so the
+          // named limit stops being actual and its note comes down.
+          onLimit(null);
           return;
         }
         if (parsed.refused) {
@@ -1112,8 +1120,12 @@
           raise(failures.failure("SECOND_WINDOW_REFUSED", lock.reason));
           recomputeStatus();
           enterReadOnly();
+          return;
         }
-        // Unreachable: keep the heartbeat running and try again next tick.
+        // Unreachable: keep the heartbeat running and try again next tick. The
+        // uncovered case is actual for as long as this lasts, so the note is up.
+        lock.helperGranted = false;
+        onLimit(overlay.LIMIT_SEPARATE_STORAGE_NO_HELPER);
       });
     }
 

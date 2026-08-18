@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+11c598b7225f
+ * version 0.0.0+fbc1a3df1bd7
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+11c598b7225f";
+  g.LAHE.version = "0.0.0+fbc1a3df1bd7";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -10819,7 +10819,13 @@
         // card's model loses what the agent actually said in which field. Only
         // `text` is what gets DRAWN, which is what makes it one carrier.
         reason: reviewFormat.boundData(reply.reason, reviewFormat.CONTEXT_MAX),
-        text: said ? boundedText(said) : agentName(reply) + " made this change.",
+        // The wordless fallback is kind-aware: "made this change" was written
+        // for hand edits and read strangely under a handled COMMENT, where the
+        // agent made a change the card never shows (Ken, 2026-08-18).
+        text: said
+          ? boundedText(said)
+          : agentName(reply) +
+            (record.isHandEdit(item) ? " carried this change into the source." : " handled this."),
         files: Array.isArray(reply.files) ? reply.files : [],
         at: reply.at || null
       };
@@ -13387,9 +13393,14 @@
           return claimWithHelper();
         })
         .then(function (result) {
-          // Whichever way it went, the case nothing can refuse is said out
-          // loud rather than quietly claimed as covered.
-          onLimit(overlay.LIMIT_SEPARATE_STORAGE_NO_HELPER);
+          // The uncovered case is said out loud only while it is ACTUAL: with
+          // no helper granting claims, separate-storage windows are invisible
+          // and the note earns its line. A helper that answered covers that
+          // case, and a standing disclaimer under a working session is noise
+          // the reviewer learns to ignore (Ken, 2026-08-18). The heartbeat
+          // path keeps this current: it re-runs the claim, so the note comes
+          // and goes with the helper.
+          onLimit(lock.helperGranted ? null : overlay.LIMIT_SEPARATE_STORAGE_NO_HELPER);
           finalizeClaim();
           return result;
         });
@@ -13572,6 +13583,9 @@
         if (parsed.granted) {
           lock.helperGranted = true;
           if (parsed.sessionSecret) rememberSecret(parsed.sessionSecret, parsed.seq);
+          // The helper is covering separate-storage windows again, so the
+          // named limit stops being actual and its note comes down.
+          onLimit(null);
           return;
         }
         if (parsed.refused) {
@@ -13583,8 +13597,12 @@
           raise(failures.failure("SECOND_WINDOW_REFUSED", lock.reason));
           recomputeStatus();
           enterReadOnly();
+          return;
         }
-        // Unreachable: keep the heartbeat running and try again next tick.
+        // Unreachable: keep the heartbeat running and try again next tick. The
+        // uncovered case is actual for as long as this lasts, so the note is up.
+        lock.helperGranted = false;
+        onLimit(overlay.LIMIT_SEPARATE_STORAGE_NO_HELPER);
       });
     }
 
@@ -19029,7 +19047,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+11c598b7225f";
+  var VERSION = "0.0.0+fbc1a3df1bd7";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -19258,6 +19276,12 @@
         return;
       }
       readOnlyActive = true;
+      // The panel carries the whole message (what happened, the takeover
+      // button), so the chip saying the same two sentences beside it is
+      // clutter, not information: one surface per fact (Ken, 2026-08-18).
+      // exitReadOnly's clear stays for the panel-less paths; this clear covers
+      // entering read-only with the chip already standing.
+      rail.failures.clear("SECOND_WINDOW_REFUSED");
       comments.closeAll();
       // unbind, NEVER comments.teardown(): teardown also tears down the SHARED
       // highlight surface the rail lives in, and the next gesture after a
