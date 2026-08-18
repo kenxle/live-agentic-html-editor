@@ -377,8 +377,12 @@ test.describe("AC3: a human and an agent at the same time", () => {
         countersAfter.regionsWritten - countersBeforeCommit.regionsWritten,
         "nothing was written over the application's new wording"
       ).toBe(0);
+      // regionsBlockedChanged is the conflict counter (regionsConflicted under
+      // its fixture-era name); regionsLost was the old accounting from when a
+      // failed re-resolve short-circuited into markLost before the content
+      // comparison could run. Same reasoning as the badge assertion above.
       expect(
-        countersAfter.regionsLost - countersBeforeCommit.regionsLost,
+        countersAfter.regionsBlockedChanged - countersBeforeCommit.regionsBlockedChanged,
         "and the collision was surfaced rather than swallowed"
       ).toBeGreaterThanOrEqual(1);
 
