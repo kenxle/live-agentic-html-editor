@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+c573623e3c10
+ * version 0.0.0+4cfe66f995b6
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+c573623e3c10";
+  g.LAHE.version = "0.0.0+4cfe66f995b6";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -3187,6 +3187,48 @@
   var ALLOWED_HOST_NAMES = ["127.0.0.1", "localhost", "[::1]", "::1"];
 
   // ---------------------------------------------------------------------------
+  // What may be added to a review's origin allowlist OVER THE WIRE
+  // ---------------------------------------------------------------------------
+  //
+  // The security model is two factors: the per-review token AND the origin
+  // allowlist. `review.write` takes origins in its BODY, so without this a
+  // script running on an already-allowed page could read the token off the
+  // script tag and add any origin it liked, which leaves the token as the only
+  // factor. So the route accepts only what `add` legitimately sends: the literal
+  // "null" (a page opened from a file), and http/https on a loopback host. `add`
+  // writing to disk is deliberately wider, because that path is a person at a
+  // terminal typing --origin, not a page.
+  var LOOPBACK_ORIGIN_HOSTS = ["localhost", "127.0.0.1", "[::1]"];
+
+  // Enough for the ordinary spread (127.0.0.1 and localhost, a couple of ports,
+  // http and https) with room to spare, and low enough that a caller quietly
+  // accumulating origins is refused rather than growing the list forever.
+  var ORIGIN_LIMIT = 16;
+
+  /**
+   * May this origin be registered through `review.write`?
+   *
+   * @param {*} origin
+   * @returns {boolean}
+   */
+  function isRegisterableOrigin(origin) {
+    if (typeof origin !== "string" || !origin) return false;
+    if (origin === "null") return true;
+    var parsed;
+    try {
+      parsed = new URL(origin);
+    } catch (err) {
+      return false;
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+    // An origin carries scheme, host and port and nothing else. A value with a
+    // path, a query, credentials or a fragment is not one, whatever it parses to.
+    if (parsed.pathname !== "/" || parsed.search || parsed.hash || parsed.username || parsed.password) return false;
+    if (origin !== parsed.origin) return false;
+    return LOOPBACK_ORIGIN_HOSTS.indexOf(parsed.hostname) !== -1;
+  }
+
+  // ---------------------------------------------------------------------------
   // Headers
   // ---------------------------------------------------------------------------
 
@@ -3283,7 +3325,11 @@
       mutating: true,
       why:
         "what `add` calls for a review the helper already holds: the helper applies the writes itself, so `add` " +
-        "never has to stop a helper that is holding somebody's live review (and never drops an open `lahe wait`)",
+        "never has to stop a helper that is holding somebody's live review (and never drops an open `lahe wait`). " +
+        "Its origins are DELIBERATELY NARROWER than what `add` may write to disk: only \"null\" and loopback " +
+        "http/https pass (isRegisterableOrigin), capped at ORIGIN_LIMIT per review. A body-supplied origin is the " +
+        "one way a script on an allowed page could widen the allowlist with a token it read off the script tag, " +
+        "which would leave the token as the only factor guarding the review",
       request: "{review, origins: [origin...], target_path?, source_path?, source_hint?, page_path?}",
       response: "{origins, recorded_source, recorded_paths, seq}"
     },
@@ -3935,6 +3981,9 @@
     DEFAULT_HOST: DEFAULT_HOST,
     DEFAULT_HELPER_ORIGIN: DEFAULT_HELPER_ORIGIN,
     ALLOWED_HOST_NAMES: ALLOWED_HOST_NAMES,
+    LOOPBACK_ORIGIN_HOSTS: LOOPBACK_ORIGIN_HOSTS,
+    ORIGIN_LIMIT: ORIGIN_LIMIT,
+    isRegisterableOrigin: isRegisterableOrigin,
 
     HEADER: HEADER,
     CLIENT_LAYER: CLIENT_LAYER,
@@ -16457,7 +16506,8 @@
     COMMIT: "commit", // an edit committed and protection lifted
     UNDO: "undo", // the reviewer undid one record
     MANUAL: "manual", // the reviewer asked for a refresh
-    BOOT: "boot" // first pass after the library loads
+    BOOT: "boot", // first pass after the library loads
+    SETTLE: "settle" // the recheck that closes the settling window after a load
   };
   var REASONS = Object.keys(REASON).map(function (k) {
     return REASON[k];
@@ -16481,7 +16531,9 @@
     regionsSkippedEqual: 0, // branch one: the idempotence path
     regionsEarlierRevision: 0, // branch three
     regionsConflicted: 0, // branch four: flagged, nothing written
-    regionsLost: 0 // the anchor bound to zero matches, or to more than one
+    regionsLost: 0, // the anchor bound to zero matches, or to more than one
+    regionsLostDeferred: 0, // a lost verdict held back while the page was still settling
+    regionsLostCleared: 0 // a later pass found the anchor, so the lost state ended
   };
 
   function resetCounters() {
@@ -16492,6 +16544,64 @@
 
   var scheduled = null;
   var lastReason = null;
+
+  // ---------------------------------------------------------------------------
+  // The settling window: a page that is still rendering itself
+  // ---------------------------------------------------------------------------
+  //
+  // A reviewed page routinely finishes drawing itself well after load. Mermaid
+  // replaces whole sections with rendered diagrams, a chart library swaps a
+  // placeholder for a figure, a framework hydrates. An anchor resolved in that
+  // gap binds to nothing through no fault of the record, and the reviewer gets
+  // told their passage is gone while they are looking straight at it (reported
+  // live on 2026-08-17, after the auto-reload work made a reload routine).
+  //
+  // So for a short window after a load or a remount, a lost verdict is DEFERRED
+  // rather than surfaced: nothing is stamped on the record and nothing is put on
+  // the card, and one recheck pass is armed for the end of the window. A passage
+  // that is genuinely gone is still flagged, about a second later than before.
+  // The window is not a silence: the outcome says `deferred`, and the summary
+  // counts it, so "why did this pass not flag anything" has an answer.
+  var SETTLE_MS = 2000;
+
+  // The recheck is a little past the end of the window, so the pass it runs is
+  // the first one the window no longer defers.
+  var SETTLE_RECHECK_SLACK_MS = 50;
+
+  var settleUntil = 0;
+  var settleTimer = null;
+
+  /** A load or a remount: the page may be about to rewrite itself. */
+  function noteSettling(ms) {
+    var span = typeof ms === "number" ? ms : SETTLE_MS;
+    // Zero (or less) closes the window rather than extending it, which is how a
+    // test says "the page has finished" without waiting out the clock.
+    if (span <= 0) {
+      settleUntil = 0;
+      return settleUntil;
+    }
+    var until = Date.now() + span;
+    if (until > settleUntil) settleUntil = until;
+    return settleUntil;
+  }
+
+  function isSettling() {
+    return Date.now() < settleUntil;
+  }
+
+  // One timer, however many records deferred inside the window.
+  function armSettleRecheck() {
+    if (settleTimer !== null) return;
+    if (typeof setTimeout !== "function") return;
+    var wait = settleUntil - Date.now() + SETTLE_RECHECK_SLACK_MS;
+    settleTimer = setTimeout(function () {
+      settleTimer = null;
+      schedule(REASON.SETTLE, { immediate: true });
+    }, wait > 0 ? wait : 0);
+    // Node only, and only so a unit test's pending recheck does not hold the
+    // process open. Browsers have no unref and do not need one.
+    if (settleTimer && typeof settleTimer.unref === "function") settleTimer.unref();
+  }
 
   // ---------------------------------------------------------------------------
   // The context: what a pass runs against
@@ -16608,6 +16718,9 @@
       epoch.shared.noteExternalMutation();
       return false;
     }
+    // A load and a remount are the two moments the page starts drawing itself
+    // again, so they open the settling window. See SETTLE_MS.
+    if (reason === REASON.BOOT || reason === REASON.REMOUNT) noteSettling();
     lastReason = reason;
     var opts = options || {};
     var override = opts.commit ? { commit: opts.commit } : null;
@@ -17158,7 +17271,7 @@
     // conflict-flagged would otherwise keep a stale region.lost stamp (which 3A
     // projects into review.json) after the reviewer resolved in its favour, and
     // the element memory would point at a node that is no longer the truth.
-    clearLost(item);
+    clearLost(ctx, item);
     persistItem(ctx, item);
     lastElement[id] = element;
     delete conflicts[id];
@@ -17370,6 +17483,22 @@
   }
 
   function markLost(item, verdict, ctx) {
+    // The page is still drawing itself, so this verdict is about a document
+    // that is not finished. Say nothing yet, and come back when it is.
+    if (isSettling()) {
+      counters.regionsLostDeferred += 1;
+      armSettleRecheck();
+      return {
+        wrote: false,
+        branch: null,
+        lost: false,
+        deferred: true,
+        reason: "the page is still settling, so this is rechecked before anything is said",
+        item: item,
+        element: null
+      };
+    }
+
     counters.regionsLost += 1;
     var region = item[record.FIELD.REGION] || record.emptyRegion();
     var reason = lostReason(verdict);
@@ -17390,6 +17519,10 @@
     // review_format is not touched from here: the projection reads the record.
     next.lost = { code: "ANCHOR_LOST", reason: reason, at: new Date().toISOString() };
     item[record.FIELD.REGION] = next;
+    // Written down for the same reason the clear is: `items` is a cache a
+    // remount replaces from the store, so a stamp nobody persisted is gone at
+    // the next morph and the reviewer's card outlives the state behind it.
+    persistItem(ctx, item);
 
     if (failures) {
       callCard(
@@ -17406,15 +17539,39 @@
     return { wrote: false, branch: null, lost: true, reason: verdict.reason, item: item, element: null };
   }
 
-  function clearLost(item) {
+  /**
+   * The anchor bound again, so the lost state ends: on the record, on the card,
+   * and in storage.
+   *
+   * The card is the half that was missing, and it is the whole of the bug
+   * reported on 2026-08-17: a passage that went briefly unfindable while the
+   * page was still rendering got a lost stamp and a lost badge, the very next
+   * pass found it and cleared the stamp, and the badge stayed on the card
+   * forever. The reviewer read "this passage is gone from the page" over a
+   * passage sitting in front of them, and review.json, which projects the
+   * record, disagreed with the card. Same shape as the standing origin chip
+   * (f55094b): the condition ended, so the notice ends.
+   *
+   * Storage is the other half: the stamp lives on the cached record, and a
+   * remount replaces that cache from the store, so a clear nobody wrote down
+   * comes back on the next morph.
+   */
+  function clearLost(ctx, item) {
     var region = item[record.FIELD.REGION];
-    if (!region || !region.lost) return;
+    // The badge is cleared even when the record carries no stamp: the two are
+    // written by the same act and a card left holding a stale one is exactly
+    // what this is here to end.
+    callCard(ctx, "clearCardBadge", item[record.FIELD.ID], "ANCHOR_LOST");
+    if (!region || !region.lost) return false;
     var next = {};
     Object.keys(region).forEach(function (key) {
       next[key] = region[key];
     });
     next.lost = null;
     item[record.FIELD.REGION] = next;
+    counters.regionsLostCleared += 1;
+    persistItem(ctx, item);
+    return true;
   }
 
   /**
@@ -17480,7 +17637,7 @@
       // flag every successful deletion.
       if (kind === record.KIND.DELETE && verdict && verdict.reason === uniqueness.REASON.NO_TEXT_MATCH) {
         counters.regionsSkippedEqual += 1;
-        clearLost(item);
+        clearLost(ctx, item);
         clearConflict(ctx, id);
         return {
           wrote: false,
@@ -17508,7 +17665,7 @@
       };
     }
 
-    clearLost(item);
+    clearLost(ctx, item);
 
     // A comment or a note has nothing to write. It resolved, so it is not lost,
     // and that is the whole of its replay.
@@ -17658,6 +17815,9 @@
     EARLIER_REVISION_MESSAGE: EARLIER_REVISION_MESSAGE,
     counters: counters,
     resetCounters: resetCounters,
+    SETTLE_MS: SETTLE_MS,
+    noteSettling: noteSettling,
+    isSettling: isSettling,
     schedule: schedule,
     runPass: runPass,
     compare: compare,
@@ -18129,7 +18289,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+c573623e3c10";
+  var VERSION = "0.0.0+4cfe66f995b6";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -18658,6 +18818,21 @@
     // The first pass. Replay is what puts committed edits back on a page that
     // was reloaded, so it runs on boot and not only on a later repaint.
     ns.replay.schedule(ns.replay.REASON.BOOT);
+
+    // The reviewer's marks get the same second chance replay's lost verdicts
+    // get. A page that finishes drawing itself after load (mermaid rendering a
+    // diagram over a section, a chart library swapping a figure in) throws away
+    // the nodes the highlights were painted on, and the paint above already
+    // ran, so those passages come back bare. Replay defers a lost verdict
+    // across that window (replay.SETTLE_MS); this paints again once it closes,
+    // which is the moment the anchors resolve against the finished page.
+    if (typeof win.setTimeout === "function") {
+      win.setTimeout(function () {
+        // A torn-down library paints nothing: teardown drops `current`.
+        if (!handle || current !== handle) return;
+        repaintHighlights(refreshItems());
+      }, ns.replay.SETTLE_MS + 100);
+    }
 
     var handle = {
       booted: true,
