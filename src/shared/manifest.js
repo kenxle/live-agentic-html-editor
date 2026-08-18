@@ -213,6 +213,7 @@ var NON_BUNDLE_FILES = [
   { path: "src/service/state_dir.js", owner: "1A", why: "reviews/<id>/ layout, owner-only, the safe-id rule" },
   { path: "src/service/agent_sessions.js", owner: "1A", why: "durable top-level agent-session routing and lifecycle" },
   { path: "src/service/static_servers.js", owner: "1A", why: "session-owned static HTTP server lifecycle" },
+  { path: "src/service/markdown.js", owner: "1A", why: "deterministic Markdown review artifacts" },
   { path: "src/service/reviews.js", owner: "1A", why: "review creation, per-review token minting, origin registration, the second-window session" },
   {
     path: "src/service/heal.js",

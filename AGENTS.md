@@ -58,6 +58,27 @@ same folder as the fallback, so a page opened while the helper is down still
 gets the rail, an honest unreachable status, and everything kept in the browser
 until the helper is back.
 
+For Markdown, pass the source file directly. Do not run Pandoc, hand-write an
+HTML wrapper, start a separate Python server, or translate the blocks yourself:
+
+```sh
+lahe review path/to/SKILL.md
+# open the exact URL printed on the `open` line
+```
+
+`review` renders CommonMark/GFM deterministically, keeps list and paragraph
+boundaries intact, applies a neutral reading layout, serves relative images and
+links from the source folder, and renders fenced `mermaid` flowcharts as local
+SVG diagrams. It never writes the Markdown source. The generated HTML, local
+Mermaid runtime, server, review, and helper all belong to the printed agent
+session.
+
+When feedback changes a reviewed Markdown source, rerun the same `lahe review
+path/to/SKILL.md` command before replying `handled`. It reuses the session and
+review, rebuilds the generated page, and lets the reviewer's page reload onto
+the result. A reply is not handled until the changed Markdown has been rendered
+and is visible there.
+
 `file://path/to/page.html` is the FALLBACK, for the rare case where you cannot
 run a server. `add` always registers the `null` origin a page opened from disk
 sends, so the fallback keeps working.
@@ -180,7 +201,8 @@ shows the change**. Editing the source and replying `handled` without rebuilding
 tells them it is done while their page still says the old thing, and the first
 they learn of it is having to come and ask you why nothing changed.
 
-Per item, or per small batch:
+Per item, or per small batch (for Markdown, the rebuild command is the same
+`lahe review path/to/file.md` command that opened it):
 
 ```sh
 # 1. edit the source file the item points at

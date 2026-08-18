@@ -52,6 +52,9 @@ last session leaves no helper or monitor process behind.
 ## Phase 4: one-command front door
 
 - Implement `lahe review <page.html>` with an owned local static server.
+- Accept Markdown at the same entrypoint; deterministically render GFM, neutral
+  reading styles, relative assets, and local Mermaid diagrams without modifying
+  the source.
 - Make re-entry idempotent and cleanup observable.
 - Keep `add` for dev servers and advanced reattachment.
 - Add a black-box relative-path test using only public commands.

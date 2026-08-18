@@ -107,6 +107,24 @@ function writeMeta(dir, sessionId, meta) {
   return meta;
 }
 
+async function registerMount(dir, sessionId, meta, prefix, rootInput) {
+  if (!/^\/\.lahe-source\/[a-f0-9]+\/$/.test(prefix)) throw new Error("invalid static source mount " + JSON.stringify(prefix));
+  if (!(await isExactServer(meta))) throw new Error("refusing to update a static server whose identity is no longer live");
+  var next = Object.assign({}, meta);
+  next.mounts = Object.assign({}, meta.mounts || {});
+  next.mounts[prefix] = fs.realpathSync(path.resolve(rootInput));
+  writeMeta(dir, sessionId, next);
+  try { process.kill(meta.pid, "SIGHUP"); }
+  catch (err) { throw new Error("could not notify the static server about its source mount: " + err.message); }
+  var loaded = await waitFor(async function () {
+    var health = await requestHealth(next);
+    return health && Array.isArray(health.mounts) && health.mounts.indexOf(prefix) !== -1;
+  }, 2000);
+  if (!loaded) throw new Error("the static server did not load source mount " + prefix);
+  Object.assign(meta, next);
+  return meta;
+}
+
 async function start(options) {
   var dir = options.dir;
   var sessionId = options.sessionId;
@@ -185,18 +203,38 @@ function send(res, status, body, type) {
 
 function runServer(file, sessionId, id, instance, rootInput) {
   var root = fs.realpathSync(rootInput);
+  var prior = readJson(file);
+  var mounts = prior && prior.root === root && prior.mounts && typeof prior.mounts === "object" ? prior.mounts : {};
+  function reloadMounts() {
+    var current = readJson(file);
+    if (!current || current.root !== root || !current.mounts || typeof current.mounts !== "object") return;
+    mounts = current.mounts;
+  }
   var startedAt = new Date().toISOString();
   var server = http.createServer(function (req, res) {
     var pathname;
     try { pathname = decodeURIComponent(new URL(req.url, "http://localhost").pathname); }
     catch (err) { return send(res, 400, "bad request\n"); }
     if (pathname === HEALTH_PREFIX + id + "/" + instance) {
-      return send(res, 200, JSON.stringify({ id: id, instance: instance, started_at: startedAt, pid: process.pid }), "application/json; charset=utf-8");
+      return send(res, 200, JSON.stringify({
+        id: id,
+        instance: instance,
+        started_at: startedAt,
+        pid: process.pid,
+        mounts: Object.keys(mounts)
+      }), "application/json; charset=utf-8");
     }
     if (req.method !== "GET" && req.method !== "HEAD") return send(res, 405, "method not allowed\n");
+    var servingRoot = root;
     var relative = pathname.replace(/^\/+/, "");
-    var candidate = path.resolve(root, relative || "index.html");
-    if (candidate !== root && candidate.indexOf(root + path.sep) !== 0) return send(res, 403, "forbidden\n");
+    Object.keys(mounts).some(function (prefix) {
+      if (pathname.indexOf(prefix) !== 0) return false;
+      servingRoot = mounts[prefix];
+      relative = pathname.slice(prefix.length);
+      return true;
+    });
+    var candidate = path.resolve(servingRoot, relative || "index.html");
+    if (candidate !== servingRoot && candidate.indexOf(servingRoot + path.sep) !== 0) return send(res, 403, "forbidden\n");
     var stat;
     try {
       stat = fs.statSync(candidate);
@@ -205,7 +243,7 @@ function runServer(file, sessionId, id, instance, rootInput) {
         stat = fs.statSync(candidate);
       }
       var real = fs.realpathSync(candidate);
-      if (real !== root && real.indexOf(root + path.sep) !== 0) return send(res, 403, "forbidden\n");
+      if (real !== servingRoot && real.indexOf(servingRoot + path.sep) !== 0) return send(res, 403, "forbidden\n");
       if (!stat.isFile()) return send(res, 404, "not found\n");
     } catch (err) {
       return send(res, 404, "not found\n");
@@ -230,11 +268,13 @@ function runServer(file, sessionId, id, instance, rootInput) {
       port: server.address().port,
       pid: process.pid,
       started_at: startedAt,
-      stopped_at: null
+      stopped_at: null,
+      mounts: mounts
     };
     stateDir.writeAtomic(file, JSON.stringify(meta, null, 2) + "\n");
   });
   function stop() { server.close(function () { process.exit(0); }); }
+  process.on("SIGHUP", reloadMounts);
   process.on("SIGTERM", stop);
   process.on("SIGINT", stop);
 }
@@ -250,6 +290,7 @@ module.exports = {
   isExactServer: isExactServer,
   list: list,
   start: start,
+  registerMount: registerMount,
   stopOne: stopOne,
   stopAll: stopAll,
   restartAll: restartAll,

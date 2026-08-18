@@ -9,12 +9,14 @@ var protocol = require("../../shared/protocol.js");
 var stateDir = require("../../service/state_dir.js");
 var sessions = require("../../service/agent_sessions.js");
 var staticServers = require("../../service/static_servers.js");
+var markdown = require("../../service/markdown.js");
 var add = require("./add.js");
 
 var USAGE = [
   "usage: lahe review <file-or-directory> [--session <id>] [--new-session] [add options]",
   "",
   "Starts a new agent session for a new target, or infers the existing target's session.",
+  "Markdown is rendered with a neutral reading style and local Mermaid diagrams.",
   "Use the printed session id for later documents and for the status monitor.",
   "--new-session deliberately starts a separate session and review."
 ].join("\n");
@@ -65,6 +67,12 @@ async function run(argv) {
     return protocol.CLI_EXIT.BAD_USAGE;
   }
   var opts = parsed.options;
+  var originalTarget = path.resolve(opts.target);
+  var markdownTarget = fs.existsSync(originalTarget) && markdown.isMarkdown(originalTarget);
+  if (markdownTarget && (opts.origins.length > 0 || opts.remove || opts.source)) {
+    process.stderr.write("lahe review: Markdown owns its generated page and local server; do not combine it with --origin, --remove, or --source.\n");
+    return protocol.CLI_EXIT.BAD_USAGE;
+  }
   if (newSession && opts.session) {
     process.stderr.write("lahe review: --new-session and --session are alternatives; pick one.\n");
     return protocol.CLI_EXIT.BAD_USAGE;
@@ -94,10 +102,28 @@ async function run(argv) {
   if (newSession && list.indexOf("--new") === -1) list.push("--new");
   if (!opts.session) list.push("--session", sessionId);
   var staticServer = null;
-  var target = path.resolve(opts.target);
+  var rendered = null;
+  var target = originalTarget;
   try {
+    if (markdownTarget) {
+      rendered = markdown.writeArtifact(dir, sessionId, originalTarget);
+      var targetIndex = list.indexOf(opts.target);
+      if (targetIndex === -1) throw new Error("could not identify the Markdown target argument");
+      list[targetIndex] = rendered.target;
+      list.push("--source", originalTarget);
+      target = rendered.target;
+    }
     if (!opts.remove && opts.origins.length === 0 && fs.existsSync(target) && add.classify(target) === "static") {
       staticServer = await staticServers.start({ dir: dir, sessionId: sessionId, root: path.dirname(target) });
+      if (rendered) {
+        await staticServers.registerMount(
+          dir,
+          sessionId,
+          staticServer.meta,
+          rendered.assetPrefix,
+          rendered.assetRoot
+        );
+      }
       list.push("--origin", "http://" + staticServer.meta.host + ":" + staticServer.meta.port);
     }
   } catch (err) {
@@ -124,6 +150,12 @@ async function run(argv) {
           (staticServer.started ? "  (started for this agent session)" : "  (reused for this agent session)") +
           "\n  open      http://" + staticServer.meta.host + ":" + staticServer.meta.port +
           "/" + encodeURIComponent(path.basename(target)) + "\n"
+      );
+    }
+    if (rendered) {
+      process.stdout.write(
+        "  source    " + originalTarget + "  (Markdown rendered deterministically)\n" +
+        "  rebuild   rerun this same review command after editing the Markdown, before replying handled\n"
       );
     }
     process.stdout.write(

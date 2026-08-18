@@ -54,6 +54,7 @@ var FILES = {
 var REVIEWS_DIR = "reviews";
 var AGENT_SESSIONS_DIR = "agent-sessions";
 var STATIC_SERVERS_DIR = "static-servers";
+var REVIEW_ARTIFACTS_DIR = "review-artifacts";
 
 /**
  * The nearest git checkout at or above a directory, or null.
@@ -236,6 +237,15 @@ function ensureStaticServersRoot(dir, sessionId) {
   return ensureDir(staticServersRoot(dir, sessionId));
 }
 
+function reviewArtifactsRoot(dir, sessionId) {
+  return resolveWithin(dir, [AGENT_SESSIONS_DIR, assertSafeReviewId(sessionId), REVIEW_ARTIFACTS_DIR]);
+}
+
+function ensureReviewArtifactsRoot(dir, sessionId) {
+  ensureAgentSessionDir(dir, sessionId);
+  return ensureDir(reviewArtifactsRoot(dir, sessionId));
+}
+
 function reviewDir(dir, reviewId) {
   assertSafeReviewId(reviewId);
   return resolveWithin(dir, [REVIEWS_DIR, reviewId]);
@@ -307,6 +317,7 @@ module.exports = {
   REVIEWS_DIR: REVIEWS_DIR,
   AGENT_SESSIONS_DIR: AGENT_SESSIONS_DIR,
   STATIC_SERVERS_DIR: STATIC_SERVERS_DIR,
+  REVIEW_ARTIFACTS_DIR: REVIEW_ARTIFACTS_DIR,
   stateDir: stateDir,
   checkoutAbove: checkoutAbove,
   ensureDir: ensureDir,
@@ -324,6 +335,8 @@ module.exports = {
   staticServersRoot: staticServersRoot,
   staticServerPath: staticServerPath,
   ensureStaticServersRoot: ensureStaticServersRoot,
+  reviewArtifactsRoot: reviewArtifactsRoot,
+  ensureReviewArtifactsRoot: ensureReviewArtifactsRoot,
   reviewDir: reviewDir,
   eventsPath: eventsPath,
   reviewJsonPath: reviewJsonPath,

@@ -24,11 +24,12 @@ implemented and tested against real browsers (Chromium, Firefox, WebKit). See
 
 ## What you need
 
-**Node 18 or later.** The helper is plain Node with no runtime dependencies: it
-uses `node:`-prefixed core modules and the global `fetch`, both of which are
-stable from Node 18 on. Nothing else is installed to run the tool. (The
-Playwright browser suite in `test/browser/` needs Node 20; running the tool does
-not.)
+**Node 18 or later.** The helper uses Node's stable core APIs plus two pinned
+local packages for deterministic Markdown review: Marked for CommonMark/GFM and
+Mermaid's dependency-free browser bundle for diagrams. `npm install` installs
+them from the clone; there is no separate global package or npm-published LAHE
+release to keep in sync. (The Playwright browser suite in `test/browser/` needs
+Node 20; running the tool does not.)
 
 **A current Chrome, Edge, Safari, or Firefox.** The floor is the
 [Custom Highlight API](https://developer.mozilla.org/en-US/docs/Web/API/CSS_Custom_Highlight_API),
@@ -97,6 +98,20 @@ on the printed `open` line:
 ```sh
 lahe review path/to/page.html
 ```
+
+Markdown is also a first-class input:
+
+```sh
+lahe review path/to/SKILL.md
+```
+
+LAHE renders the Markdown itself, gives generated documents a simple readable
+style, preserves proper block and list structure, resolves relative assets, and
+turns fenced `mermaid` flowcharts into diagrams using a local browser asset. It
+does not modify the `.md` file. Agents should never improvise a Markdown-to-HTML
+conversion or start their own review server. After editing the Markdown source,
+rerun the same command to rebuild the review page before reporting the change
+handled.
 
 That server belongs to the agent session. `session close` stops it, and
 `session reopen` restores it. Passing `--origin` means you supplied an external

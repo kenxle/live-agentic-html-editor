@@ -63,6 +63,11 @@
 - Complete: the collapsed review pill now counts incomplete lifecycle records,
   including ready hand edits that remain organized under the Edits tab. A
   handled reply, not tab placement, is what burns the count down.
+- Complete: `lahe review` now accepts Markdown directly. A pinned GFM renderer
+  owns block structure, generated documents receive a neutral reading style,
+  relative assets remain reachable, and fenced Mermaid flowcharts render from
+  a pinned local dependency-free browser bundle. Agents no longer hand-convert
+  Markdown, invent a server, or omit the diagram runtime.
 - Confirmed known gaps: cold-start proof, final documentation pass, multi-page
   offline path reuse, and acceptance evidence.
 - In progress: remaining cold-start cleanup and end-to-end walkthroughs.

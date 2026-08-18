@@ -129,6 +129,14 @@ Dev-server applications continue to use `add`, because the application owns
 its server. The CLI output must describe its snippet as unguarded and require a
 real framework development conditional.
 
+Markdown takes the same owned static route. `review` renders `.md` and
+`.markdown` into an agent-session artifact with a neutral reading stylesheet,
+maps the review back to the untouched Markdown source, and mounts the source
+directory for relative assets. GFM block parsing and Mermaid rendering are
+pinned local dependencies, so a cold-start agent never chooses its own
+converter, flattens block structure, requires a CDN, or forgets the diagram
+runtime.
+
 ## Per-page target mapping
 
 Every reviewed page maps to its own target path. Review metadata may retain a

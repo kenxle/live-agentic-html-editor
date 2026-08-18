@@ -628,6 +628,14 @@ URL. Re-entry reuses the same live process. Owner-only static-server metadata
 records the root, PID, port, and random start identity; shutdown checks the
 health response against all of them before sending a signal.
 
+`lahe review <document.md>` owns Markdown conversion too. It writes a generated
+HTML artifact under the owner-only agent-session directory, records the `.md`
+file as `source_path`, serves relative source assets through a contained mount,
+and uses pinned local renderers for GFM and supported Mermaid diagrams. The
+source is never modified. Re-running the command atomically rebuilds the same
+artifact and reuses the same review; agents must do that before replying
+`handled` after a Markdown source edit.
+
 `lahe session close <id>` stops every static server owned by that session. It
 stops the shared helper only after the final open agent session closes. Review
 history remains on disk. `session reopen` restores the helper and remembered
