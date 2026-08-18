@@ -388,6 +388,15 @@
       return noteHandle;
     }
 
+    // A refused window closes every composer before it becomes read-only. When
+    // an explicit takeover makes that window writable again, restore the
+    // always-available page-note composer instead of leaving a subtly reduced
+    // rail that can select comments but cannot write an untethered note.
+    function ensureNoteBox() {
+      if (noteHandle && comments.boxFor(noteHandle.id)) return noteHandle;
+      return openNoteBox();
+    }
+
     /** The hosted stylesheet, once, inside the rail's own closed root. */
     function ensureHostedStyle(node) {
       if (!hosted || hostedStyleAttached || !doc || !node) return;
@@ -715,6 +724,7 @@
       hintText: hintText,
       focusNote: focusNote,
       noteBox: noteBox,
+      ensureNoteBox: ensureNoteBox,
       collapse: collapse,
       isCollapsed: isCollapsed,
       bounds: bounds

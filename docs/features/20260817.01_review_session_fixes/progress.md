@@ -63,7 +63,9 @@ living truth is AGENTS.md + the `contract` field in review.json, and the two
 travel together (rule pinned in CLAUDE.md). The `/lahe` skill in Ken's
 global skills is the session-side counterpart, including the handshake
 ritual (serve-first, verify liveness, monitor before "go") and the
-multi-document rules (global `status` watcher; one deliverable, one review).
+multi-document rules as they existed then. The former global `status` watcher
+is superseded by the current session-scoped `lahe monitor`; this paragraph is
+historical, not operating guidance.
 
 ## Open at time of writing
 

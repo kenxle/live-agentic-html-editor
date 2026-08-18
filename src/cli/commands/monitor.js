@@ -15,17 +15,17 @@ var status = require("./status.js");
 
 var DEFAULT_INTERVAL_SECONDS = 15;
 var MAX_INTERVAL_SECONDS = 3600;
-var ACTION_REQUIRED = "LAHE ACTION REQUIRED: do not end this turn or report that work is ready. Handle every item below now, rebuild and verify visible output, append replies, drain status until empty, then relaunch lahe monitor.\n";
+var ACTION_REQUIRED = "LAHE ACTION REQUIRED: do not end this turn or report that work is ready. Handle every item below now, rebuild and verify visible output, append replies, drain status until empty, then relaunch lahe monitor. Unanswered work is redelivered until a durable reply exists.\n";
 
 var USAGE = [
-  "usage: lahe monitor --session <id> --seen-file <path> [--interval <seconds>] [--state-dir <path>]",
+  "usage: lahe monitor --session <id> [--interval <seconds>] [--state-dir <path>]",
   "",
-  "Polls session-scoped status locally, prints only new work, then exits.",
+  "Polls session-scoped status locally, prints unanswered work, then exits.",
   "Launch it as a background task and relaunch it after handling each batch.",
   "Idle polls invoke no model and print nothing.",
+  "Unanswered work is redelivered on relaunch; only a reply acknowledges it.",
   "",
   "  --session <id>       required agent-session owner",
-  "  --seen-file <path>   required durable session/review/item/revision ledger",
   "  --interval <seconds> local polling interval; default " + DEFAULT_INTERVAL_SECONDS,
   "  --state-dir <path>   same state root used by review and status",
   "",
@@ -72,7 +72,6 @@ function parseArgs(argv) {
   if (out.help || out.error) return out;
   if (!out.session) out.error = "--session is required";
   else if (!protocol.isSafeId(out.session)) out.error = "--session must be a safe id: " + String(protocol.SAFE_ID);
-  else if (!out.seenFile) out.error = "--seen-file is required";
   return out;
 }
 
@@ -129,7 +128,6 @@ async function run(argv, options) {
   var statusArgs = [
     "--session", args.session,
     "--json",
-    "--seen-file", args.seenFile,
     "--quiet"
   ];
   if (args.stateDir) statusArgs.push("--state-dir", args.stateDir);

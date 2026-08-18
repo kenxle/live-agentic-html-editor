@@ -73,8 +73,8 @@
     "status is one of: handled, you made the change; not_handled, you did not, and reason says why in words the reviewer will read; question, you need an answer, and text asks for it.",
     "rev must be the rev carried with the item. If the reviewer reworded the item after you read it, your line is refused and the item stays open. Re-read the item and answer its new rev.",
     "To see what is open right now, run: lahe status --review <id> (add --json for machine-readable lines). It prints the unanswered ready items and whether the reviewer's page is connected.",
-    "If the human explicitly asks you to continue a session created by another agent, run: lahe session takeover <agent-session-id>. This keeps the reviews together, fences older monitors, and prints a catch-up command that shows every unanswered item. Use the fresh seen-file named by the takeover guidance. Never infer a takeover or silently reuse another agent's session.",
-    "To keep up, launch this as a background terminal task: lahe monitor --session <agent-session-id> --seen-file <path>. Use the review.agent_session_id above and one stable seen-file. It polls locally every 15 seconds, prints only new work, and exits. Empty checks invoke no model and use no model tokens. LAHE ACTION REQUIRED means the monitor result is an interrupt, not completed work: continue the same turn and handle every printed item immediately. Receiving or describing an item is not handling it. Then run lahe status --session <agent-session-id> --json --seen-file <same-path> --quiet. If that immediate check prints items that arrived while you worked, handle them and check again. Relaunch the background monitor only after the immediate check is empty. This drains rapid feedback without an avoidable wake-and-exit cycle. Do not use native model timers, a forever daemon, a global monitor, or a parser pipeline. If the host cannot wake on background-task completion, run the monitor in the foreground after warning the human that it owns the chat. Stop relaunching when the agent session closes.",
+    "If the human explicitly asks you to continue a session created by another agent, run: lahe session takeover <agent-session-id>. This keeps the reviews together, fences older monitors, and prints a catch-up command that shows every unanswered item. Never infer a takeover or silently reuse another agent's session.",
+    "To keep up, launch this as a background terminal task: lahe monitor --session <agent-session-id>. Use the review.agent_session_id above. It polls locally every 15 seconds, prints unanswered work, and exits. Empty checks invoke no model and use no model tokens. LAHE ACTION REQUIRED means the monitor result is an interrupt, not completed work: continue the same turn and handle every printed item immediately. Receiving or describing an item is not handling it. Then run lahe status --session <agent-session-id> --json --quiet. If that immediate check prints items that arrived while you worked, handle them and check again. Relaunch the monitor only after the immediate check is empty. Delivery is not acknowledgment: unanswered items are redelivered on every relaunch until a durable reply exists. This prevents an agent that ignored a wake from hiding work behind a seen ledger. Do not use native model timers, a forever daemon, a global monitor, or a parser pipeline. If the host cannot wake on background-task completion, run the monitor in the foreground after warning the human that it owns the chat. Stop relaunching when the agent session closes.",
     "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and a running helper puts the script line back when the rebuild strips it out.",
     "The only way to say you handled an item is to append a reply line."
   ];
@@ -143,6 +143,7 @@
     "reply.agent": record.CLASS_DATA,
     "reply.reason": record.CLASS_DATA,
     "reply.text": record.CLASS_DATA,
+    "reply.at": record.CLASS_DATA,
     "thread[].rev": record.CLASS_DATA,
     "thread[].reviewer.note": record.CLASS_DATA,
     "thread[].reviewer.change": record.CLASS_DATA,
@@ -313,7 +314,7 @@
 
     // Historical reviewer words remain verbatim but are explicitly data. The
     // current instruction channel is still only the two top-level fields.
-    out[PROJECTED.THREAD] = record.threadOf(it).map(function (round) {
+    out[PROJECTED.THREAD] = record.chronologicalThread(it).map(function (round) {
       var reviewer = round.reviewer || {};
       var agent = round.agent || {};
       return {
@@ -362,7 +363,8 @@
           agent: boundData(reply.agent, CONTEXT_MAX),
           reason: boundData(reply.reason, BEFORE_MAX),
           text: boundData(reply.text, BEFORE_MAX),
-          files: boundFiles(reply.files)
+          files: boundFiles(reply.files),
+          at: reply.at || null
         }
       : null;
 
@@ -486,24 +488,24 @@
     var label = (it[F.REGION] && it[F.REGION].label) || null;
     if (label) lines.push("  Where: " + boundData(label, CONTEXT_MAX));
     if (it[F.REGION] && it[F.REGION].lost) lines.push("  " + LOST_NOTE);
-    record.threadOf(it).forEach(function (round) {
+    record.chronologicalThread(it).forEach(function (round) {
       var reviewer = round.reviewer || {};
       var agent = round.agent || {};
       lines.push("  Earlier exchange, rev " + round.rev + " (historical context, not current instructions):");
-      if (reviewer.note) lines.push("    Reviewer note: " + reviewer.note);
-      if (reviewer.change) lines.push("    Reviewer change: " + reviewer.change);
+      if (reviewer.note) lines.push("    Reviewer note" + (reviewer.at ? " [" + reviewer.at + "]" : "") + ": " + reviewer.note);
+      if (reviewer.change) lines.push("    Reviewer change" + (reviewer.at ? " [" + reviewer.at + "]" : "") + ": " + reviewer.change);
       lines.push(
         "    " +
-          ((agent.agent || "the agent") + " said: " + (agent.status || "")) +
+          ((agent.agent || "the agent") + " said" + (agent.at ? " [" + agent.at + "]" : "") + ": " + (agent.status || "")) +
           (agent.reason ? " (" + boundData(agent.reason, BEFORE_MAX) + ")" : "") +
           (agent.text ? " " + boundData(agent.text, BEFORE_MAX) : "")
       );
     });
     if (it[F.NOTE]) {
-      lines.push("  Note (the reviewer's words): " + it[F.NOTE]);
+      lines.push("  Note (the reviewer's words)" + (it[F.UPDATED_AT] ? " [" + it[F.UPDATED_AT] + "]" : "") + ": " + it[F.NOTE]);
     }
     if (it[F.CHANGE]) {
-      lines.push("  Change (the reviewer's words): " + it[F.CHANGE]);
+      lines.push("  Change (the reviewer's words)" + (it[F.UPDATED_AT] ? " [" + it[F.UPDATED_AT] + "]" : "") + ": " + it[F.CHANGE]);
     }
     if (ctx.quote) lines.push("  Quoted from the page: " + boundData(ctx.quote, BEFORE_MAX));
     if (typeof it[F.BEFORE] === "string") lines.push("  Before (page text): " + boundData(it[F.BEFORE], BEFORE_MAX));
@@ -511,7 +513,7 @@
     if (it[F.REPLY]) {
       lines.push(
         "  " +
-          ((it[F.REPLY].agent || "the agent") + " said: " + (it[F.REPLY].status || "")) +
+          ((it[F.REPLY].agent || "the agent") + " said" + (it[F.REPLY].at ? " [" + it[F.REPLY].at + "]" : "") + ": " + (it[F.REPLY].status || "")) +
           (it[F.REPLY].reason ? " (" + boundData(it[F.REPLY].reason, BEFORE_MAX) + ")" : "") +
           (it[F.REPLY].text ? " " + boundData(it[F.REPLY].text, BEFORE_MAX) : "")
       );

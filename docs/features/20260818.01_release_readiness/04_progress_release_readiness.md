@@ -17,8 +17,8 @@
   browser-owned.
 - Complete: the retired blocking `lahe wait` implementation, wait-only protocol
   constants, and false-positive tests are removed. Living docs teach only the
-  global `status --json --seen-file` timer loop; the original feature plan marks
-  its former wait design as superseded history.
+  session-scoped `lahe monitor` command; the original feature plan marks its
+  former wait design as superseded history.
 - Complete: post-fix Node 20 release gate, 475 unit and 629 browser tests
   passed across Chromium, Firefox, and WebKit, with 7 documented skips.
 - Complete: answered comments now retain chronological reviewer/agent history
@@ -55,11 +55,34 @@
   another's reviews through the documented or accepted monitor command.
 - Complete: explicit `lahe session takeover` transfers a whole workstream to a
   replacement agent, fences older monitors with `handoff_rev`, and prints an
-  unfiltered catch-up command plus a fresh-ledger monitor command.
+  unfiltered catch-up command plus a fresh session-scoped monitor command.
 - Complete: monitor work output now begins with `LAHE ACTION REQUIRED`, and the
   operating contract defines task completion as the start of the processing
   turn. This follows an observed Codex failure that received a new item but only
   described it until the human asked again.
+- Complete: Codex monitoring is now explicitly a foreground pending exec call,
+  not a detached task. This follows a second observed failure where an agent
+  claimed monitoring remained active after its final response, but the watcher
+  was no longer present and seven items waited until the human checked again.
+- Complete: service contract 9 gates the timestamp-capable projection. The live
+  browser walkthrough found an older helper that served the new rail while
+  still omitting `reply.at`; `lahe review` now restarts that helper before the
+  page connects.
+- Complete: every reviewer turn and agent turn carries and renders its own
+  timestamp. Historical rounds use stable chronological ordering, and JSON and
+  text exports retain the same times.
+- Complete: monitor delivery is no longer treated as acknowledgment. The public
+  `lahe monitor --session <id>` command redelivers every unanswered item after
+  relaunch until a durable reply exists; its local idle polls still use no model
+  turns. Session-scoped `status --json --quiet` drains feedback submitted while
+  the agent works.
+- Browser acceptance: one open browser completed three consecutive
+  comment-to-source-to-reply cycles. After the session drained empty, a rearmed
+  monitor also discovered and completed a comment in a newly added second
+  review. A fifth browser item was deliberately left unanswered after its first
+  monitor delivery; relaunch emitted the same item again, and the normal source
+  change and reply then completed it. All browser results showed the changed
+  source and folded reply.
 - Observed acceptance case: Antigravity exhausted its Gemini allowance after
   seeing an item, the app was fully closed, and Codex took over the session.
   Catch-up recovered the unfinished item while leaving completed items alone.
@@ -88,11 +111,13 @@
   migration backup of a prior hand-maintained skill. Product changes update the
   repository first and rerun setup; installed copies are no longer independent
   documentation branches.
-- Confirmed known gaps: cold-start proof, final documentation pass, multi-page
-  offline path reuse, and acceptance evidence.
-- In progress: remaining cold-start cleanup and end-to-end walkthroughs.
-- Pending: human review of this hardening packet before the session-routing
-  architecture is implemented.
+- Complete: an explicit browser-window takeover now restores the page-note
+  composer that read-only mode closed, as well as the existing selection and
+  direct-edit gestures.
+- Complete: the final release gate passed 522 unit tests and 638 browser tests
+  across Chromium, Firefox, and WebKit, with 7 documented capability skips.
+  The canonical skill was then installed from the repository into the shared
+  agent and Claude discovery locations, and both installed files match it.
 
 ## Changes from the original plan
 

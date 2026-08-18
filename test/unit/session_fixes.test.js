@@ -236,6 +236,12 @@ test("skill installation refuses an unrelated file at a target path", () => {
 
 test("the canonical skill rejects the retired and cross-session workflows", () => {
   const skill = fs.readFileSync(installSkills.SOURCE, "utf8");
+  assert.match(skill, /Report the model before starting/);
+  assert.match(skill, /exact model name exposed by the host/);
+  assert.match(skill, /prefer Luna for straightforward edits/);
+  assert.match(skill, /Terra when the document needs more judgment/);
+  assert.match(skill, /Do not recommend a heavyweight model\s+such as Sol or Fable for ordinary copy changes/);
+  assert.match(skill, /once per LAHE session, not on\s+every monitor wakeup/);
   assert.match(skill, /lahe review <target>/);
   assert.match(skill, /session-scoped/);
   assert.match(skill, /Direct `\.md` and `\.markdown` targets/);
@@ -247,20 +253,22 @@ test("the canonical skill rejects the retired and cross-session workflows", () =
   assert.match(skill, /polls session-scoped status locally every 15 seconds/);
   assert.match(skill, /Empty polls do\s+not invoke the model or use model tokens/);
   assert.match(skill, /forever background daemon may remain\s+invisible/);
-  assert.match(skill, /Do not use\s+a Codex Timer/);
+  assert.match(skill, /do not use a Codex Timer/i);
   assert.match(skill, /Do not use a recurring schedule/);
   assert.match(skill, /handle every printed item/);
   assert.match(skill, /LAHE ACTION REQUIRED/);
   assert.match(skill, /Do not treat a completed monitor as completed work/);
   assert.match(skill, /Do not substitute `lahe status --session <id> --json --quiet`/);
-  assert.match(skill, /Do not send a final response that says the monitor was\s+started/);
-  assert.match(skill, /detached terminal task does not guarantee a new Codex turn/);
-  assert.match(skill, /Keep the turn\s+pending on the monitor's exec session/);
-  assert.match(skill, /run one\s+immediate `lahe status --session <id> --json --seen-file <same-path> --quiet`/);
+  assert.match(skill, /foreground, pending exec call/);
+  assert.match(skill, /immediately use that tool's wait operation on the same id/);
+  assert.match(skill, /Do not send a final response that says the\s+monitor is active/);
+  assert.match(skill, /Never tell a Codex user that the monitor remains active after a final response/);
+  assert.match(skill, /immediate `lahe status --session <id> --json --quiet`/);
   assert.match(skill, /Launch the background monitor only after that\s+immediate check is empty/);
   assert.match(skill, /lahe session takeover <id>/);
-  assert.match(skill, /Never infer or silently perform a takeover/);
-  assert.match(skill, /never silently\s+reuse the old session or its seen-file/i);
+  assert.match(skill, /Never infer or silently perform a\s+takeover/);
+  assert.match(skill, /never silently\s+reuse the old session/i);
+  assert.match(skill, /unanswered work is redelivered every time the monitor is relaunched/i);
   assert.match(skill, /run\s+the same `lahe monitor` command in the foreground/);
   assert.match(skill, /Stop or delete this session's\s+background monitor/);
   assert.doesNotMatch(skill, /moderate timer/);

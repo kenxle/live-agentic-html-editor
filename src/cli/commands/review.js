@@ -160,11 +160,11 @@ async function run(argv) {
     }
     process.stdout.write(
       (staticServer ? "" : "\n") + "  monitor   lahe monitor --session " + sessionId +
-        " --seen-file <path>\n" +
+        "\n" +
         "            keep the agent turn pending on this task; do not detach it and finish\n" +
-        "            ACTION REQUIRED output starts the work; do not end the turn after receiving it\n" +
+        "            ACTION REQUIRED output starts the work; unanswered items are redelivered\n" +
         "  drain     lahe status --session " + sessionId +
-        " --json --seen-file <same-path> --quiet\n" +
+        " --json --quiet\n" +
         "            after work, repeat drain until empty; then relaunch the background monitor\n" +
         "  close     lahe session close " + sessionId + "\n"
     );

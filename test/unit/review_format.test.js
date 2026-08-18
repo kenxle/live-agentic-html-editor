@@ -41,8 +41,8 @@ const CONTRACT_VERBATIM = [
   "status is one of: handled, you made the change; not_handled, you did not, and reason says why in words the reviewer will read; question, you need an answer, and text asks for it.",
   "rev must be the rev carried with the item. If the reviewer reworded the item after you read it, your line is refused and the item stays open. Re-read the item and answer its new rev.",
   "To see what is open right now, run: lahe status --review <id> (add --json for machine-readable lines). It prints the unanswered ready items and whether the reviewer's page is connected.",
-  "If the human explicitly asks you to continue a session created by another agent, run: lahe session takeover <agent-session-id>. This keeps the reviews together, fences older monitors, and prints a catch-up command that shows every unanswered item. Use the fresh seen-file named by the takeover guidance. Never infer a takeover or silently reuse another agent's session.",
-  "To keep up, launch this as a background terminal task: lahe monitor --session <agent-session-id> --seen-file <path>. Use the review.agent_session_id above and one stable seen-file. It polls locally every 15 seconds, prints only new work, and exits. Empty checks invoke no model and use no model tokens. LAHE ACTION REQUIRED means the monitor result is an interrupt, not completed work: continue the same turn and handle every printed item immediately. Receiving or describing an item is not handling it. Then run lahe status --session <agent-session-id> --json --seen-file <same-path> --quiet. If that immediate check prints items that arrived while you worked, handle them and check again. Relaunch the background monitor only after the immediate check is empty. This drains rapid feedback without an avoidable wake-and-exit cycle. Do not use native model timers, a forever daemon, a global monitor, or a parser pipeline. If the host cannot wake on background-task completion, run the monitor in the foreground after warning the human that it owns the chat. Stop relaunching when the agent session closes.",
+  "If the human explicitly asks you to continue a session created by another agent, run: lahe session takeover <agent-session-id>. This keeps the reviews together, fences older monitors, and prints a catch-up command that shows every unanswered item. Never infer a takeover or silently reuse another agent's session.",
+  "To keep up, launch this as a background terminal task: lahe monitor --session <agent-session-id>. Use the review.agent_session_id above. It polls locally every 15 seconds, prints unanswered work, and exits. Empty checks invoke no model and use no model tokens. LAHE ACTION REQUIRED means the monitor result is an interrupt, not completed work: continue the same turn and handle every printed item immediately. Receiving or describing an item is not handling it. Then run lahe status --session <agent-session-id> --json --quiet. If that immediate check prints items that arrived while you worked, handle them and check again. Relaunch the monitor only after the immediate check is empty. Delivery is not acknowledgment: unanswered items are redelivered on every relaunch until a durable reply exists. This prevents an agent that ignored a wake from hiding work behind a seen ledger. Do not use native model timers, a forever daemon, a global monitor, or a parser pipeline. If the host cannot wake on background-task completion, run the monitor in the foreground after warning the human that it owns the chat. Stop relaunching when the agent session closes.",
   "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and a running helper puts the script line back when the rebuild strips it out.",
   "The only way to say you handled an item is to append a reply line."
 ];
@@ -107,7 +107,6 @@ test("review.json names no acknowledge command, because there is none", () => {
   assert.equal(/lahe ack/i.test(text), false);
   assert.equal(/lahe next/i.test(text), false);
   assert.equal(/acknowledge (each|the) item/i.test(text), false, "the reply line is the only way to say you handled something");
-  assert.equal(/acknowledg/i.test(text), false);
 });
 
 test("the contract is exported as the module's own constant and is frozen text", () => {
@@ -144,13 +143,26 @@ test("completed thread rounds project and export in order as historical data", (
   assert.equal(json.schema, "lahe.review/4");
   assert.equal(projected.thread[0].reviewer.note, "Original reviewer request, kept in full.");
   assert.equal(projected.thread[0].agent.text, "Which ending?");
+  assert.equal(projected.thread[0].agent.at, "2026-08-18T12:01:00.000Z");
   assert.equal(projected.note, "Use the second ending.");
   assert.equal(json.field_classes["thread[].reviewer.note"], record.CLASS_DATA);
   assert.deepEqual(json.intent_fields, ["note", "change"]);
 
   const text = rf.renderText(reviewWith([continued], null));
   assert.ok(text.indexOf("Original reviewer request") < text.indexOf("Use the second ending"));
+  assert.match(text, /Reviewer note \[.*Z\]/);
+  assert.match(text, /codex said \[2026-08-18T12:01:00\.000Z\]/);
   assert.match(text, /historical context, not current instructions/);
+});
+
+test("the current agent reply keeps its timestamp in JSON and text export", () => {
+  const at = "2026-08-18T13:14:15.000Z";
+  const item = anEdit({
+    reply: { status: "handled", agent: "codex", reason: null, text: "Applied.", files: [], at }
+  });
+  const projected = rf.projectReview(reviewWith([item], null)).pages[0].items[0];
+  assert.equal(projected.reply.at, at);
+  assert.match(rf.renderText(reviewWith([item], null)), /codex said \[2026-08-18T13:14:15\.000Z\]/);
 });
 
 test("the projected item spells the page's text into data-named fields", () => {

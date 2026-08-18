@@ -59,9 +59,8 @@ var USAGE = [
   "  --session <id>       only reviews owned by this agent session",
   "  --json               one JSON line per unanswered ready item, then one summary line",
   "  --seen-file <path>   with --json: print only items (session, review, id, rev) not recorded,",
-  "                       then record them in it. `lahe monitor` wraps this as a silent local",
-  "                       exit-on-work background process.",
-  "  --quiet              with --seen-file: print nothing when there is no new work.",
+  "                       then record them in it. This is an advanced diagnostic ledger.",
+  "  --quiet              with session-scoped --json: print nothing when no work is unanswered.",
   "  --state-dir <path>   where the helper keeps its data, the same flag every command takes.",
   "                       Default $LAHE_STATE_DIR, then $XDG_STATE_HOME/lahe, then ~/.local/state/lahe.",
   "",
@@ -130,7 +129,9 @@ function parseArgs(argv) {
   if (!out.error && out.seenFile !== null && out.session === null) {
     out.error = "--seen-file needs --session so one agent cannot receive another session's reviews";
   }
-  if (out.quiet && out.seenFile === null) out.error = "--quiet needs --seen-file";
+  if (out.quiet && (!out.json || out.session === null)) {
+    out.error = "--quiet needs --json and --session";
+  }
   return out;
 }
 

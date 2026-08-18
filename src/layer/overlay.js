@@ -146,6 +146,22 @@
     note: "Note"
   };
 
+  function timestampLabel(value) {
+    if (!value) return "";
+    var date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return "";
+    try {
+      return new Intl.DateTimeFormat(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit"
+      }).format(date);
+    } catch (err) {
+      return date.toLocaleString();
+    }
+  }
+
   // The named limit from D5, said on the status line rather than claimed as
   // covered: two windows in separate storage with no helper running cannot be
   // refused by anything, so the rail says so out loud.
@@ -275,6 +291,7 @@
     ".card__kind{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;",
     "color:var(--ink-faint)}",
     ".card__top .spacer{flex:1}",
+    ".card__time,.agent__time{font-size:10px;color:var(--ink-faint);font-variant-numeric:tabular-nums;white-space:nowrap}",
     ".card__state{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;",
     "padding:2px 7px;border-radius:999px;background:var(--surface);color:var(--ink-soft)}",
     ".card__state[data-state='ready']{background:var(--accent-wash);color:var(--accent-ink)}",
@@ -327,8 +344,9 @@
     // own rule, its own weight. Not a tinted label (D10).
     ".agent{border-radius:8px;padding:8px 10px;background:var(--surface);font-size:12.5px}",
     ".agent:empty{display:none}",
+    ".agent__head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:3px}",
     ".agent__who{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;",
-    "color:var(--ink-faint);display:block;margin-bottom:3px}",
+    "color:var(--ink-faint);display:block}",
     ".agent.is-loud{background:var(--accent-wash);border-left:3px solid var(--accent);",
     "color:var(--ink);font-size:13.5px;line-height:1.5}",
     ".agent.is-loud .agent__who{color:var(--accent-ink)}",
@@ -440,6 +458,7 @@
     var highlights = opts.highlights || highlightModule.shared;
 
     var cards = Object.create(null);
+    var cardSequence = 0;
     var chips = [];
     var dismissed = Object.create(null);
     var status = null;
@@ -834,6 +853,7 @@
           attached: [],
           attachedBefore: [],
           attachedContinuation: [],
+          sequence: (cardSequence += 1),
           created: true
         };
         buildCardNode(cards[id]);
@@ -859,6 +879,8 @@
       var kind = el("span", "card__kind");
       top.appendChild(kind);
       top.appendChild(el("span", "spacer"));
+      var time = el("time", "card__time");
+      top.appendChild(time);
       var state = el("span", "card__state");
       top.appendChild(state);
       node.appendChild(top);
@@ -884,7 +906,7 @@
       card.node = node;
       card.bodyNode = body;
       card.continuationNode = continuation;
-      card.parts = { kind: kind, state: state, quote: quote, badges: badges, agent: agent, continuation: continuation, notice: notice };
+      card.parts = { kind: kind, time: time, state: state, quote: quote, badges: badges, agent: agent, continuation: continuation, notice: notice };
       // A remount rebuilds the card's node, so anything a tab owner attached
       // goes back into the new body rather than being silently dropped.
       (card.attachedBefore || []).forEach(function (attachedNode) {
@@ -905,13 +927,31 @@
     function placeCard(card) {
       if (!dom || !card.node) return;
       var pane = dom.panes[card.pane];
-      if (card.node.parentNode === pane) return;
       if (holdsFocus(card.id)) {
         pendingPlacement[card.id] = true;
         return;
       }
-      pane.appendChild(card.node);
+      var before = null;
+      var at = activityAt(card.item);
+      Array.prototype.some.call(pane.children, function (node) {
+        var other = cards[node.getAttribute && node.getAttribute("data-card-id")];
+        if (!other || other === card) return false;
+        var otherAt = activityAt(other.item);
+        if (at > otherAt || (at === otherAt && card.sequence > other.sequence)) {
+          before = node;
+          return true;
+        }
+        return false;
+      });
+      if (before !== card.node) pane.insertBefore(card.node, before);
       delete pendingPlacement[card.id];
+    }
+
+    function activityAt(item) {
+      if (!item) return -Infinity;
+      var reply = item[record.FIELD.REPLY] || {};
+      var parsed = Date.parse(reply.at || item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || "");
+      return Number.isFinite(parsed) ? parsed : -Infinity;
     }
 
     function flushPendingPlacements() {
@@ -934,6 +974,15 @@
       var item = card.item;
       var p = card.parts;
       p.kind.textContent = KIND_LABEL[item[record.FIELD.KIND]] || item[record.FIELD.KIND];
+      var reviewerAt = item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || null;
+      p.time.textContent = timestampLabel(reviewerAt);
+      if (reviewerAt) {
+        p.time.setAttribute("datetime", reviewerAt);
+        p.time.setAttribute("title", new Date(reviewerAt).toLocaleString());
+      } else {
+        p.time.removeAttribute("datetime");
+        p.time.removeAttribute("title");
+      }
       p.state.textContent = STATE_LABEL[card.state] || card.state;
       p.state.setAttribute("data-state", card.state);
       // On the card itself too, so anything a tab owner attached can be shown or
@@ -957,7 +1006,15 @@
           card.agentMessage.status === record.REPLY_STATUS.QUESTION
             ? "Question from " + who
             : who;
-        p.agent.appendChild(el("span", "agent__who", label));
+        var agentHead = el("div", "agent__head");
+        agentHead.appendChild(el("span", "agent__who", label));
+        if (card.agentMessage.at) {
+          var agentTime = el("time", "agent__time", timestampLabel(card.agentMessage.at));
+          agentTime.setAttribute("datetime", card.agentMessage.at);
+          agentTime.setAttribute("title", new Date(card.agentMessage.at).toLocaleString());
+          agentHead.appendChild(agentTime);
+        }
+        p.agent.appendChild(agentHead);
         p.agent.appendChild(
           el("span", null, card.agentMessage.text || card.agentMessage.reason || "")
         );
@@ -1883,6 +1940,7 @@
     STATUS_TEXT: STATUS_TEXT,
     STATUS_SHORT: STATUS_SHORT,
     LIMIT_SEPARATE_STORAGE_NO_HELPER: LIMIT_SEPARATE_STORAGE_NO_HELPER,
+    timestampLabel: timestampLabel,
     createRail: createRail,
     shared: shared,
     OVERLAY_ROOT_ID: markers.OVERLAY_ROOT_ID,

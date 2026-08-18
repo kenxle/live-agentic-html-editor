@@ -134,6 +134,30 @@ test("a second follow-up appends a second completed round in chronological order
   assert.equal(thirdTurn.note, "Third request");
 });
 
+test("historical exchanges are presented by timestamp with stable legacy ties", () => {
+  const item = anItem({
+    thread: [
+      { rev: 3, reviewer: { note: "third", at: null }, agent: { status: "handled", at: null } },
+      { rev: 2, reviewer: { note: "second", at: "2026-08-18T12:02:00.000Z" }, agent: { status: "handled", at: "2026-08-18T12:03:00.000Z" } },
+      { rev: 1, reviewer: { note: "first", at: "2026-08-18T12:00:00.000Z" }, agent: { status: "handled", at: "2026-08-18T12:01:00.000Z" } },
+      { rev: 4, reviewer: { note: "fourth legacy", at: null }, agent: { status: "handled", at: null } }
+    ]
+  });
+
+  assert.deepEqual(record.chronologicalThread(item).map((round) => round.reviewer.note), [
+    "first",
+    "second",
+    "third",
+    "fourth legacy"
+  ]);
+  assert.deepEqual(item.thread.map((round) => round.reviewer.note), [
+    "third",
+    "second",
+    "first",
+    "fourth legacy"
+  ], "presentation sorting does not mutate durable history");
+});
+
 test("the dead send model's fields are gone", () => {
   const item = anItem();
   for (const field of ["moved", "resized", "delivered", "ack", "verification", "feedback"]) {

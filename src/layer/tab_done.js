@@ -102,7 +102,11 @@
     ".lahe-thread{display:flex;flex-direction:column;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}",
     ".lahe-thread-round{display:flex;flex-direction:column;gap:5px}",
     ".lahe-thread-turn{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12.5px;line-height:1.45}",
-    ".lahe-thread-turn strong{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint);margin-right:5px}",
+    ".lahe-thread-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}",
+    ".lahe-thread-turn strong{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint)}",
+    ".lahe-thread-time,.lahe-ask-time{font-size:10px;color:var(--ink-faint);font-variant-numeric:tabular-nums;white-space:nowrap}",
+    ".lahe-ask-time{margin-left:auto;font-weight:400;letter-spacing:0;text-transform:none}",
+    ".lahe-thread-text{display:block}",
     ".lahe-followup{display:flex;flex-direction:column;gap:7px;padding-top:8px}",
     ".lahe-followup-label{font-size:10px;font-weight:650;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-faint)}",
     ".lahe-followup textarea{box-sizing:border-box;width:100%;min-height:72px;resize:vertical;border:1px solid var(--line);border-radius:7px;padding:8px 9px;background:var(--paper);color:var(--ink);font:inherit;line-height:1.4}",
@@ -422,24 +426,32 @@
       var node = threads[id];
       while (node.firstChild) node.removeChild(node.firstChild);
       ensureStyle(node);
-      record.threadOf(item).forEach(function (round) {
+      record.chronologicalThread(item).forEach(function (round) {
         var pair = el("div", "lahe-thread-round");
         var reviewer = round.reviewer || {};
-        if (reviewer.note) appendTurn(pair, "Reviewer note", reviewer.note);
-        if (reviewer.change) appendTurn(pair, "Reviewer change", reviewer.change);
+        if (reviewer.note) appendTurn(pair, "Reviewer note", reviewer.note, reviewer.at);
+        if (reviewer.change) appendTurn(pair, "Reviewer change", reviewer.change, reviewer.at);
         var agent = round.agent || {};
-        if (agent.text) appendTurn(pair, agent.agent || "Agent", agent.text);
-        if (agent.reason) appendTurn(pair, (agent.agent || "Agent") + " reason", agent.reason);
-        if (!agent.text && !agent.reason) appendTurn(pair, agent.agent || "Agent", agent.status || "");
+        if (agent.text) appendTurn(pair, agent.agent || "Agent", agent.text, agent.at);
+        if (agent.reason) appendTurn(pair, (agent.agent || "Agent") + " reason", agent.reason, agent.at);
+        if (!agent.text && !agent.reason) appendTurn(pair, agent.agent || "Agent", agent.status || "", agent.at);
         node.appendChild(pair);
       });
       return node;
     }
 
-    function appendTurn(host, who, text) {
+    function appendTurn(host, who, text, at) {
       var line = el("p", "lahe-thread-turn");
-      line.appendChild(el("strong", null, who));
-      line.appendChild(doc.createTextNode(String(text || "")));
+      var head = el("span", "lahe-thread-head");
+      head.appendChild(el("strong", null, who));
+      if (at) {
+        var time = el("time", "lahe-thread-time", overlayModule.timestampLabel(at));
+        time.setAttribute("datetime", at);
+        time.setAttribute("title", new Date(at).toLocaleString());
+        head.appendChild(time);
+      }
+      line.appendChild(head);
+      line.appendChild(el("span", "lahe-thread-text", String(text || "")));
       host.appendChild(line);
     }
 
@@ -744,6 +756,16 @@
       }
       var node = asks[id];
       node.querySelector(".lahe-ask-name").textContent = agentName(reply) + " is asking";
+      var time = node.querySelector(".lahe-ask-time");
+      if (reply.at) {
+        time.textContent = overlayModule.timestampLabel(reply.at);
+        time.setAttribute("datetime", reply.at);
+        time.setAttribute("title", new Date(reply.at).toLocaleString());
+      } else {
+        time.textContent = "";
+        time.removeAttribute("datetime");
+        time.removeAttribute("title");
+      }
       node.querySelector(".lahe-ask-text").textContent = boundedText(reply.text || "");
       updateReopenAvailability(id);
       markCard(id, true);
@@ -758,6 +780,7 @@
       var who = el("div", "lahe-ask-who");
       who.appendChild(el("span", "lahe-ask-dot"));
       who.appendChild(el("span", "lahe-ask-name", ""));
+      who.appendChild(el("time", "lahe-ask-time", ""));
       node.appendChild(who);
 
       node.appendChild(el("p", "lahe-ask-text", ""));

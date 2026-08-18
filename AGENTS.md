@@ -14,6 +14,15 @@ answer by appending one JSON line to a reply file. Your answers appear on the
 page while they keep reviewing. There is no send button and no chat relay: the
 files are the whole interface.
 
+When the LAHE skill is first invoked, the agent reports the exact model name its
+host exposes, or says the name is unavailable instead of guessing. It also
+recommends a fast, lower-cost model for routine document editing. In the current
+OpenAI family that means Luna for straightforward edits and Terra when more
+judgment is needed; Sol is reserved for difficult architecture, implementation,
+or reasoning work. Other providers should recommend the analogous lightweight
+model. The report happens once per LAHE session, not on every monitor wakeup,
+and does not switch models without the human's request.
+
 ## Step 1: install (once per machine)
 
 Requires Node 18+ (`node --version`). The documented `install-cli` wrapper is
@@ -199,7 +208,7 @@ agent opens another document:
 
 ```sh
 lahe review path/to/another.html --session <session-id>
-lahe monitor --session <session-id> --seen-file ~/.lahe-seen-<session-id>
+lahe monitor --session <session-id>
 ```
 
 Never monitor globally. A review has one immutable agent-session owner, and the
@@ -222,18 +231,17 @@ address. It advances a durable handoff fence so any older `lahe monitor`
 process exits before delivering more work. It also reopens the session and its
 servers if they had been closed.
 
-Run the printed `catch-up` command first. It deliberately has no seen-file, so
-the new agent sees every unanswered item, including work the previous agent may
-have seen but not completed. Then launch the printed monitor with a fresh
-seen-file. Do not reuse the prior agent's ledger. Takeover is allowed only when
+Run the printed `catch-up` command first so the new agent sees every unanswered
+item, including work the previous agent may have received but not completed.
+Then launch the printed monitor. Takeover is allowed only when
 the human explicitly requests the handoff; never infer it from an apparently
 idle app, process, or session.
 
 These handoff cases are product invariants:
 
-- **The prior agent runs out of tokens after seeing work.** Its seen-file may
-  contain items it never implemented. Catch-up has no seen-file, so every still
-  unanswered item reaches the replacement agent.
+- **The prior agent runs out of tokens after seeing work.** Every still
+  unanswered item reaches the replacement agent because delivery never counts
+  as acknowledgment.
 - **The prior app is closed or crashes without closing LAHE.** The durable
   session and reviews remain. Explicit takeover reopens infrastructure if
   needed and does not require the old app to cooperate.
@@ -363,7 +371,7 @@ not yours: the reviewer is still writing them.
 ### Keep up with a session-scoped monitor
 
 ```sh
-lahe monitor --session <session-id> --seen-file ~/.lahe-seen-<session-id>
+lahe monitor --session <session-id>
 ```
 
 Launch that exact command as a background terminal task. It polls the
@@ -378,12 +386,15 @@ to ask a second time. After handling that batch,
 check once for feedback that arrived while you worked:
 
 ```sh
-lahe status --session <session-id> --json --seen-file ~/.lahe-seen-<session-id> --quiet
+lahe status --session <session-id> --json --quiet
 ```
 
 If it prints items, handle that batch and check again. Only when the immediate
 check is empty should you launch the background `lahe monitor` again. This
 drains rapid feedback without creating an avoidable task-completion wakeup.
+Monitor output is deliberately not remembered as completion. If an agent
+receives an item and relaunches without replying, the same unanswered item is
+delivered again. Only a durable reply acknowledges work.
 
 The reason for this design is model allowance. Native Claude Tasks/Timers,
 Antigravity schedules, and similar wakeups invoke the model on every check, even
@@ -395,21 +406,21 @@ exits on work so task completion can wake the agent.
 
 #### Codex
 
-Run the printed `lahe monitor` command in a background exec session. Do not use
-a Codex Timer. Keep the agent turn open by waiting on that exec session through
-the tool runtime. Do not send a final response announcing that the monitor was
-started: after the agent turn ends, a detached terminal task does not guarantee
-that Codex will create another turn merely because the process exited. Idle polling
-stays local; a human message can still steer the active turn, and when the process prints items and exits, handle them, drain
+Run the printed `lahe monitor` command as a foreground, pending exec call. Do not
+detach it and do not use a Codex Timer. When the exec tool yields a running
+session or cell id, immediately call its wait operation on that same id and keep
+waiting rather than ending the agent turn. Do not send a final response claiming
+the monitor is active. A terminal task left behind after a final response may be
+terminated with the turn or complete without creating another Codex turn, so it
+is not a wakeup mechanism. Idle polling stays local; a human message can still steer the active turn, and when the process prints items and exits, handle them, drain
 immediate checks until empty, and then launch a fresh background monitor. Retain
 the exec session id for interruption and never start two monitors for one agent
 session. Do not end the turn when the exec session returns item output. The
 return starts the work phase; the turn is not complete until each item has a
 durable reply or a genuine question/blocker.
 
-Do not replace the printed command with `lahe status --session <id> --json
---quiet`. That command is invalid without a seen-file, and a single status call
-does not wait for later work.
+Do not replace the printed command with a single `lahe status` call. Status does
+not wait for later work.
 
 #### Antigravity / AGY agent frameworks
 
@@ -427,18 +438,17 @@ when they want to speak directly. Do not build a parser or custom dedupe around
 the command. Never announce repeated “standing by” updates.
 
 The session scope covers reviews added later to this session and never another
-agent's reviews. The seen file supplies the cursor and dedupe. The monitor
-acknowledges nothing: only a reply line marks an item handled. Stop or delete
+agent's reviews. The monitor acknowledges nothing and suppresses nothing that
+is still unanswered: only a reply line marks an item handled. Stop or delete
 the monitor when you run `lahe session close <id>`. The foreground form exits
 when status reports that the session has closed.
 
-Restarting the agent, or the machine, changes nothing: the seen file is the
-state, so nothing is re-shown and nothing is skipped.
+Restarting the agent or machine changes nothing: unanswered state is durable on
+disk and is redelivered after restart.
 
 Older historical plans may mention `lahe wait`. It was retired and removed
-because it watched only one review behind a cursor and did not use the durable
-seen ledger. It is not a command to run; use only the session-scoped `lahe
-monitor` command above.
+because it watched only one review behind a cursor. It is not a command to run;
+use only the session-scoped `lahe monitor` command above.
 
 ### More than one document
 

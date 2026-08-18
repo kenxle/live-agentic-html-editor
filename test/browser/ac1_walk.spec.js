@@ -200,7 +200,7 @@ async function exportThroughTheButton(page) {
 function reviewerStringsIn(text) {
   const out = [];
   text.split("\n").forEach(function (line) {
-    const note = /^ {2}Note \(the reviewer's words\): (.*)$/.exec(line);
+    const note = /^ {2}Note \(the reviewer's words\)(?: \[[^\]]+\])?: (.*)$/.exec(line);
     if (note) {
       out.push(note[1]);
       return;

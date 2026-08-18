@@ -591,6 +591,33 @@
     return item && Array.isArray(item[FIELD.THREAD]) ? item[FIELD.THREAD] : [];
   }
 
+  // Historical exchanges are read chronologically everywhere they leave the
+  // record. The stored array is normally append-only already, but sorting at
+  // the boundary also gives imported and legacy records one deterministic
+  // presentation. Equal or missing timestamps retain their original order.
+  function chronologicalThread(item) {
+    return threadOf(item)
+      .map(function (round, index) {
+        return { round: round, index: index };
+      })
+      .sort(function (a, b) {
+        var ar = a.round || {};
+        var br = b.round || {};
+        var aa = (ar.reviewer && ar.reviewer.at) || (ar.agent && ar.agent.at) || null;
+        var ba = (br.reviewer && br.reviewer.at) || (br.agent && br.agent.at) || null;
+        var ams = Date.parse(aa || "");
+        var bms = Date.parse(ba || "");
+        var aValid = Number.isFinite(ams);
+        var bValid = Number.isFinite(bms);
+        if (aValid && bValid && ams !== bms) return ams - bms;
+        if (aValid !== bValid) return aValid ? -1 : 1;
+        return a.index - b.index;
+      })
+      .map(function (entry) {
+        return entry.round;
+      });
+  }
+
   function copyReply(reply) {
     if (!reply) return null;
     return {
@@ -625,7 +652,7 @@
    */
   function continueThread(item, nextTurn) {
     var turn = nextTurn || {};
-    var history = threadOf(item).slice();
+    var history = chronologicalThread(item);
     history.push(completedRound(item));
     var next = bumpRev(item, {
       note: typeof turn.note === "string" ? turn.note : null,
@@ -837,6 +864,7 @@
     newItem: newItem,
     bumpRev: bumpRev,
     threadOf: threadOf,
+    chronologicalThread: chronologicalThread,
     completedRound: completedRound,
     continueThread: continueThread,
     followUp: followUp,

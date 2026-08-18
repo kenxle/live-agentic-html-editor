@@ -111,12 +111,13 @@ test("the contract field is in the real projection byte for byte, and names no a
   // no longer exists. `lahe monitor` is the one keep-up command named; `lahe
   // wait` is retired and must not survive here either.
   const wholeFile = fs.readFileSync(written, "utf8");
-  assert.ok(/lahe monitor --session <agent-session-id> --seen-file/.test(wholeFile), "the file names the scoped keep-up command an agent may run");
+  assert.ok(/lahe monitor --session <agent-session-id>/.test(wholeFile), "the file names the scoped keep-up command an agent may run");
   assert.equal(/lahe wait/.test(wholeFile), false, "the retired blocking command is named nowhere");
   assert.equal(/lahe ack|lahe next|lahe send/.test(wholeFile), false, "review.json names no acknowledge command");
-  // The retired acknowledgement vocabulary is gone entirely.
-  const acknowledgeMentions = onDisk.contract.filter((line) => /acknowledg/i.test(line));
-  assert.deepEqual(acknowledgeMentions, []);
+  // Delivery may be contrasted with acknowledgment, but no acknowledgment
+  // command or item-acknowledge instruction exists.
+  const acknowledgeCommands = onDisk.contract.filter((line) => /lahe ack|acknowledge (each|the) item/i.test(line));
+  assert.deepEqual(acknowledgeCommands, []);
   assert.equal(
     onDisk.contract[onDisk.contract.length - 1],
     "The only way to say you handled an item is to append a reply line."

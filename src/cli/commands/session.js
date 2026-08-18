@@ -131,8 +131,8 @@ async function run(argv) {
           "  handoff   " + session.handoff_rev + "  (older lahe monitor processes will exit)\n" +
           "  catch-up  lahe status --session " + args.id + " --json\n" +
           "            handle every unanswered item before monitoring\n" +
-          "  monitor   lahe monitor --session " + args.id + " --seen-file <new-path>\n" +
-          "            use a fresh seen-file; do not reuse the previous agent's ledger\n" +
+          "  monitor   lahe monitor --session " + args.id + "\n" +
+          "            unanswered items are redelivered until a durable reply exists\n" +
           "  close     lahe session close " + args.id + "\n";
       }
       process.stdout.write(message);

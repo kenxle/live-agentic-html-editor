@@ -105,6 +105,12 @@ async function booted(page) {
 
 /** The reviewer's gesture: select the passage, Cmd-Shift-C, type, Cmd-Enter. */
 async function commentOnBody(page, text) {
+  if (await page.evaluate(() => window.__lahe.handle.sync.status().readOnly)) {
+    await page.evaluate(() => window.__lahe.handle.sync.takeover());
+    await pollPage(page, () => window.__lahe.handle.sync.lockState().acquired === true, undefined, {
+      message: "this test window to take over the retained review"
+    });
+  }
   await page.evaluate(() => {
     const el = document.querySelector("#body");
     const range = document.createRange();
@@ -331,6 +337,17 @@ test.describe("the page updates itself as the agent lands changes (R36)", () => 
     await pollPage(page, () => !!window.__lahe.handle.sync.status().targetMtime, undefined, {
       message: "the first poll to establish the baseline mtime"
     });
+
+    // Earlier cases in this file deliberately leave a real helper claim behind.
+    // A new Playwright page is a genuinely different browser window, so take the
+    // review over explicitly instead of relying on the old holder's 30-second
+    // expiry or on suite timing.
+    if (await page.evaluate(() => window.__lahe.handle.sync.status().readOnly)) {
+      await page.evaluate(() => window.__lahe.handle.sync.takeover());
+      await pollPage(page, () => window.__lahe.handle.sync.lockState().acquired === true, undefined, {
+        message: "this test window to take over the retained review"
+      });
+    }
 
     // The reviewer opens an edit on the paragraph and starts typing.
     await page.click("#body");

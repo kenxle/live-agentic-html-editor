@@ -6,7 +6,7 @@ const assert = require("node:assert/strict");
 const monitor = require("../../src/cli/commands/monitor.js");
 const protocol = require("../../src/shared/protocol.js");
 
-test("monitor requires session ownership and a durable seen file", async () => {
+test("monitor requires session ownership and validates its local interval", async () => {
   const stderr = [];
   const missing = await monitor.run([], { stderr: (text) => stderr.push(text) });
   assert.equal(missing, protocol.CLI_EXIT.BAD_USAGE);
@@ -14,7 +14,6 @@ test("monitor requires session ownership and a durable seen file", async () => {
 
   const badInterval = monitor.parseArgs([
     "--session", "s_owner",
-    "--seen-file", "/tmp/seen",
     "--interval", "0"
   ]);
   assert.match(badInterval.error, /--interval must be an integer/);
@@ -29,7 +28,6 @@ test("idle polls stay local until work appears, then monitor prints once and exi
 
   const code = await monitor.run([
     "--session", "s_owner",
-    "--seen-file", "/tmp/seen",
     "--interval", "7"
   ], {
     stdout: (text) => stdout.push(text),
@@ -55,22 +53,41 @@ test("idle polls stay local until work appears, then monitor prints once and exi
   assert.match(stderr.join(""), /append replies/);
   assert.match(stderr.join(""), /drain status until empty/);
   assert.match(stderr.join(""), /relaunch lahe monitor/);
+  assert.match(stderr.join(""), /redelivered until a durable reply exists/);
   calls.forEach((args) => {
     assert.deepEqual(args, [
       "--session", "s_owner",
       "--json",
-      "--seen-file", "/tmp/seen",
       "--quiet"
     ]);
   });
+});
+
+test("relaunch redelivers unanswered work because monitor delivery is not acknowledgment", async () => {
+  const deliveries = [];
+  const options = {
+    stdout: (text) => deliveries.push(text),
+    stderr: () => {},
+    readSession: () => ({ id: "s_owner", handoff_rev: 0 }),
+    statusRun: async (_args, io) => {
+      io.stdout('{"review":"r_one","id":"c_unanswered","rev":1}\n');
+      return protocol.CLI_EXIT.OK;
+    }
+  };
+
+  assert.equal(await monitor.run(["--session", "s_owner"], options), protocol.CLI_EXIT.OK);
+  assert.equal(await monitor.run(["--session", "s_owner"], options), protocol.CLI_EXIT.OK);
+  assert.deepEqual(deliveries, [
+    '{"review":"r_one","id":"c_unanswered","rev":1}\n',
+    '{"review":"r_one","id":"c_unanswered","rev":1}\n'
+  ]);
 });
 
 test("closed or invalid sessions stop the local monitor instead of polling forever", async () => {
   const stderr = [];
   let waited = false;
   const code = await monitor.run([
-    "--session", "s_owner",
-    "--seen-file", "/tmp/seen"
+    "--session", "s_owner"
   ], {
     stderr: (text) => stderr.push(text),
     readSession: () => ({ id: "s_owner", handoff_rev: 0 }),
@@ -91,8 +108,7 @@ test("takeover fences the old monitor before it can deliver another agent's work
   const stderr = [];
   let reads = 0;
   const code = await monitor.run([
-    "--session", "s_owner",
-    "--seen-file", "/tmp/seen"
+    "--session", "s_owner"
   ], {
     stdout: (text) => stdout.push(text),
     stderr: (text) => stderr.push(text),

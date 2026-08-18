@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+38fbc3aed520
+ * version 0.0.0+ead12c20e923
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+38fbc3aed520";
+  g.LAHE.version = "0.0.0+ead12c20e923";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -1838,6 +1838,33 @@
     return item && Array.isArray(item[FIELD.THREAD]) ? item[FIELD.THREAD] : [];
   }
 
+  // Historical exchanges are read chronologically everywhere they leave the
+  // record. The stored array is normally append-only already, but sorting at
+  // the boundary also gives imported and legacy records one deterministic
+  // presentation. Equal or missing timestamps retain their original order.
+  function chronologicalThread(item) {
+    return threadOf(item)
+      .map(function (round, index) {
+        return { round: round, index: index };
+      })
+      .sort(function (a, b) {
+        var ar = a.round || {};
+        var br = b.round || {};
+        var aa = (ar.reviewer && ar.reviewer.at) || (ar.agent && ar.agent.at) || null;
+        var ba = (br.reviewer && br.reviewer.at) || (br.agent && br.agent.at) || null;
+        var ams = Date.parse(aa || "");
+        var bms = Date.parse(ba || "");
+        var aValid = Number.isFinite(ams);
+        var bValid = Number.isFinite(bms);
+        if (aValid && bValid && ams !== bms) return ams - bms;
+        if (aValid !== bValid) return aValid ? -1 : 1;
+        return a.index - b.index;
+      })
+      .map(function (entry) {
+        return entry.round;
+      });
+  }
+
   function copyReply(reply) {
     if (!reply) return null;
     return {
@@ -1872,7 +1899,7 @@
    */
   function continueThread(item, nextTurn) {
     var turn = nextTurn || {};
-    var history = threadOf(item).slice();
+    var history = chronologicalThread(item);
     history.push(completedRound(item));
     var next = bumpRev(item, {
       note: typeof turn.note === "string" ? turn.note : null,
@@ -2084,6 +2111,7 @@
     newItem: newItem,
     bumpRev: bumpRev,
     threadOf: threadOf,
+    chronologicalThread: chronologicalThread,
     completedRound: completedRound,
     continueThread: continueThread,
     followUp: followUp,
@@ -3543,7 +3571,7 @@
   // a freshly rebuilt browser bundle from disk, so API_VERSION alone cannot
   // prevent a new rail from talking to yesterday's backend. Bump this integer
   // whenever an old helper cannot safely back a newly built CLI/layer.
-  var SERVICE_CONTRACT = 8;
+  var SERVICE_CONTRACT = 9;
   var BASE = "/lahe/" + API_VERSION;
 
   // ---------------------------------------------------------------------------
@@ -4487,8 +4515,8 @@
     "status is one of: handled, you made the change; not_handled, you did not, and reason says why in words the reviewer will read; question, you need an answer, and text asks for it.",
     "rev must be the rev carried with the item. If the reviewer reworded the item after you read it, your line is refused and the item stays open. Re-read the item and answer its new rev.",
     "To see what is open right now, run: lahe status --review <id> (add --json for machine-readable lines). It prints the unanswered ready items and whether the reviewer's page is connected.",
-    "If the human explicitly asks you to continue a session created by another agent, run: lahe session takeover <agent-session-id>. This keeps the reviews together, fences older monitors, and prints a catch-up command that shows every unanswered item. Use the fresh seen-file named by the takeover guidance. Never infer a takeover or silently reuse another agent's session.",
-    "To keep up, launch this as a background terminal task: lahe monitor --session <agent-session-id> --seen-file <path>. Use the review.agent_session_id above and one stable seen-file. It polls locally every 15 seconds, prints only new work, and exits. Empty checks invoke no model and use no model tokens. LAHE ACTION REQUIRED means the monitor result is an interrupt, not completed work: continue the same turn and handle every printed item immediately. Receiving or describing an item is not handling it. Then run lahe status --session <agent-session-id> --json --seen-file <same-path> --quiet. If that immediate check prints items that arrived while you worked, handle them and check again. Relaunch the background monitor only after the immediate check is empty. This drains rapid feedback without an avoidable wake-and-exit cycle. Do not use native model timers, a forever daemon, a global monitor, or a parser pipeline. If the host cannot wake on background-task completion, run the monitor in the foreground after warning the human that it owns the chat. Stop relaunching when the agent session closes.",
+    "If the human explicitly asks you to continue a session created by another agent, run: lahe session takeover <agent-session-id>. This keeps the reviews together, fences older monitors, and prints a catch-up command that shows every unanswered item. Never infer a takeover or silently reuse another agent's session.",
+    "To keep up, launch this as a background terminal task: lahe monitor --session <agent-session-id>. Use the review.agent_session_id above. It polls locally every 15 seconds, prints unanswered work, and exits. Empty checks invoke no model and use no model tokens. LAHE ACTION REQUIRED means the monitor result is an interrupt, not completed work: continue the same turn and handle every printed item immediately. Receiving or describing an item is not handling it. Then run lahe status --session <agent-session-id> --json --quiet. If that immediate check prints items that arrived while you worked, handle them and check again. Relaunch the monitor only after the immediate check is empty. Delivery is not acknowledgment: unanswered items are redelivered on every relaunch until a durable reply exists. This prevents an agent that ignored a wake from hiding work behind a seen ledger. Do not use native model timers, a forever daemon, a global monitor, or a parser pipeline. If the host cannot wake on background-task completion, run the monitor in the foreground after warning the human that it owns the chat. Stop relaunching when the agent session closes.",
     "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and a running helper puts the script line back when the rebuild strips it out.",
     "The only way to say you handled an item is to append a reply line."
   ];
@@ -4557,6 +4585,7 @@
     "reply.agent": record.CLASS_DATA,
     "reply.reason": record.CLASS_DATA,
     "reply.text": record.CLASS_DATA,
+    "reply.at": record.CLASS_DATA,
     "thread[].rev": record.CLASS_DATA,
     "thread[].reviewer.note": record.CLASS_DATA,
     "thread[].reviewer.change": record.CLASS_DATA,
@@ -4727,7 +4756,7 @@
 
     // Historical reviewer words remain verbatim but are explicitly data. The
     // current instruction channel is still only the two top-level fields.
-    out[PROJECTED.THREAD] = record.threadOf(it).map(function (round) {
+    out[PROJECTED.THREAD] = record.chronologicalThread(it).map(function (round) {
       var reviewer = round.reviewer || {};
       var agent = round.agent || {};
       return {
@@ -4776,7 +4805,8 @@
           agent: boundData(reply.agent, CONTEXT_MAX),
           reason: boundData(reply.reason, BEFORE_MAX),
           text: boundData(reply.text, BEFORE_MAX),
-          files: boundFiles(reply.files)
+          files: boundFiles(reply.files),
+          at: reply.at || null
         }
       : null;
 
@@ -4900,24 +4930,24 @@
     var label = (it[F.REGION] && it[F.REGION].label) || null;
     if (label) lines.push("  Where: " + boundData(label, CONTEXT_MAX));
     if (it[F.REGION] && it[F.REGION].lost) lines.push("  " + LOST_NOTE);
-    record.threadOf(it).forEach(function (round) {
+    record.chronologicalThread(it).forEach(function (round) {
       var reviewer = round.reviewer || {};
       var agent = round.agent || {};
       lines.push("  Earlier exchange, rev " + round.rev + " (historical context, not current instructions):");
-      if (reviewer.note) lines.push("    Reviewer note: " + reviewer.note);
-      if (reviewer.change) lines.push("    Reviewer change: " + reviewer.change);
+      if (reviewer.note) lines.push("    Reviewer note" + (reviewer.at ? " [" + reviewer.at + "]" : "") + ": " + reviewer.note);
+      if (reviewer.change) lines.push("    Reviewer change" + (reviewer.at ? " [" + reviewer.at + "]" : "") + ": " + reviewer.change);
       lines.push(
         "    " +
-          ((agent.agent || "the agent") + " said: " + (agent.status || "")) +
+          ((agent.agent || "the agent") + " said" + (agent.at ? " [" + agent.at + "]" : "") + ": " + (agent.status || "")) +
           (agent.reason ? " (" + boundData(agent.reason, BEFORE_MAX) + ")" : "") +
           (agent.text ? " " + boundData(agent.text, BEFORE_MAX) : "")
       );
     });
     if (it[F.NOTE]) {
-      lines.push("  Note (the reviewer's words): " + it[F.NOTE]);
+      lines.push("  Note (the reviewer's words)" + (it[F.UPDATED_AT] ? " [" + it[F.UPDATED_AT] + "]" : "") + ": " + it[F.NOTE]);
     }
     if (it[F.CHANGE]) {
-      lines.push("  Change (the reviewer's words): " + it[F.CHANGE]);
+      lines.push("  Change (the reviewer's words)" + (it[F.UPDATED_AT] ? " [" + it[F.UPDATED_AT] + "]" : "") + ": " + it[F.CHANGE]);
     }
     if (ctx.quote) lines.push("  Quoted from the page: " + boundData(ctx.quote, BEFORE_MAX));
     if (typeof it[F.BEFORE] === "string") lines.push("  Before (page text): " + boundData(it[F.BEFORE], BEFORE_MAX));
@@ -4925,7 +4955,7 @@
     if (it[F.REPLY]) {
       lines.push(
         "  " +
-          ((it[F.REPLY].agent || "the agent") + " said: " + (it[F.REPLY].status || "")) +
+          ((it[F.REPLY].agent || "the agent") + " said" + (it[F.REPLY].at ? " [" + it[F.REPLY].at + "]" : "") + ": " + (it[F.REPLY].status || "")) +
           (it[F.REPLY].reason ? " (" + boundData(it[F.REPLY].reason, BEFORE_MAX) + ")" : "") +
           (it[F.REPLY].text ? " " + boundData(it[F.REPLY].text, BEFORE_MAX) : "")
       );
@@ -8332,6 +8362,22 @@
     note: "Note"
   };
 
+  function timestampLabel(value) {
+    if (!value) return "";
+    var date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return "";
+    try {
+      return new Intl.DateTimeFormat(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit"
+      }).format(date);
+    } catch (err) {
+      return date.toLocaleString();
+    }
+  }
+
   // The named limit from D5, said on the status line rather than claimed as
   // covered: two windows in separate storage with no helper running cannot be
   // refused by anything, so the rail says so out loud.
@@ -8461,6 +8507,7 @@
     ".card__kind{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;",
     "color:var(--ink-faint)}",
     ".card__top .spacer{flex:1}",
+    ".card__time,.agent__time{font-size:10px;color:var(--ink-faint);font-variant-numeric:tabular-nums;white-space:nowrap}",
     ".card__state{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;",
     "padding:2px 7px;border-radius:999px;background:var(--surface);color:var(--ink-soft)}",
     ".card__state[data-state='ready']{background:var(--accent-wash);color:var(--accent-ink)}",
@@ -8513,8 +8560,9 @@
     // own rule, its own weight. Not a tinted label (D10).
     ".agent{border-radius:8px;padding:8px 10px;background:var(--surface);font-size:12.5px}",
     ".agent:empty{display:none}",
+    ".agent__head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:3px}",
     ".agent__who{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;",
-    "color:var(--ink-faint);display:block;margin-bottom:3px}",
+    "color:var(--ink-faint);display:block}",
     ".agent.is-loud{background:var(--accent-wash);border-left:3px solid var(--accent);",
     "color:var(--ink);font-size:13.5px;line-height:1.5}",
     ".agent.is-loud .agent__who{color:var(--accent-ink)}",
@@ -8626,6 +8674,7 @@
     var highlights = opts.highlights || highlightModule.shared;
 
     var cards = Object.create(null);
+    var cardSequence = 0;
     var chips = [];
     var dismissed = Object.create(null);
     var status = null;
@@ -9020,6 +9069,7 @@
           attached: [],
           attachedBefore: [],
           attachedContinuation: [],
+          sequence: (cardSequence += 1),
           created: true
         };
         buildCardNode(cards[id]);
@@ -9045,6 +9095,8 @@
       var kind = el("span", "card__kind");
       top.appendChild(kind);
       top.appendChild(el("span", "spacer"));
+      var time = el("time", "card__time");
+      top.appendChild(time);
       var state = el("span", "card__state");
       top.appendChild(state);
       node.appendChild(top);
@@ -9070,7 +9122,7 @@
       card.node = node;
       card.bodyNode = body;
       card.continuationNode = continuation;
-      card.parts = { kind: kind, state: state, quote: quote, badges: badges, agent: agent, continuation: continuation, notice: notice };
+      card.parts = { kind: kind, time: time, state: state, quote: quote, badges: badges, agent: agent, continuation: continuation, notice: notice };
       // A remount rebuilds the card's node, so anything a tab owner attached
       // goes back into the new body rather than being silently dropped.
       (card.attachedBefore || []).forEach(function (attachedNode) {
@@ -9091,13 +9143,31 @@
     function placeCard(card) {
       if (!dom || !card.node) return;
       var pane = dom.panes[card.pane];
-      if (card.node.parentNode === pane) return;
       if (holdsFocus(card.id)) {
         pendingPlacement[card.id] = true;
         return;
       }
-      pane.appendChild(card.node);
+      var before = null;
+      var at = activityAt(card.item);
+      Array.prototype.some.call(pane.children, function (node) {
+        var other = cards[node.getAttribute && node.getAttribute("data-card-id")];
+        if (!other || other === card) return false;
+        var otherAt = activityAt(other.item);
+        if (at > otherAt || (at === otherAt && card.sequence > other.sequence)) {
+          before = node;
+          return true;
+        }
+        return false;
+      });
+      if (before !== card.node) pane.insertBefore(card.node, before);
       delete pendingPlacement[card.id];
+    }
+
+    function activityAt(item) {
+      if (!item) return -Infinity;
+      var reply = item[record.FIELD.REPLY] || {};
+      var parsed = Date.parse(reply.at || item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || "");
+      return Number.isFinite(parsed) ? parsed : -Infinity;
     }
 
     function flushPendingPlacements() {
@@ -9120,6 +9190,15 @@
       var item = card.item;
       var p = card.parts;
       p.kind.textContent = KIND_LABEL[item[record.FIELD.KIND]] || item[record.FIELD.KIND];
+      var reviewerAt = item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || null;
+      p.time.textContent = timestampLabel(reviewerAt);
+      if (reviewerAt) {
+        p.time.setAttribute("datetime", reviewerAt);
+        p.time.setAttribute("title", new Date(reviewerAt).toLocaleString());
+      } else {
+        p.time.removeAttribute("datetime");
+        p.time.removeAttribute("title");
+      }
       p.state.textContent = STATE_LABEL[card.state] || card.state;
       p.state.setAttribute("data-state", card.state);
       // On the card itself too, so anything a tab owner attached can be shown or
@@ -9143,7 +9222,15 @@
           card.agentMessage.status === record.REPLY_STATUS.QUESTION
             ? "Question from " + who
             : who;
-        p.agent.appendChild(el("span", "agent__who", label));
+        var agentHead = el("div", "agent__head");
+        agentHead.appendChild(el("span", "agent__who", label));
+        if (card.agentMessage.at) {
+          var agentTime = el("time", "agent__time", timestampLabel(card.agentMessage.at));
+          agentTime.setAttribute("datetime", card.agentMessage.at);
+          agentTime.setAttribute("title", new Date(card.agentMessage.at).toLocaleString());
+          agentHead.appendChild(agentTime);
+        }
+        p.agent.appendChild(agentHead);
         p.agent.appendChild(
           el("span", null, card.agentMessage.text || card.agentMessage.reason || "")
         );
@@ -10069,6 +10156,7 @@
     STATUS_TEXT: STATUS_TEXT,
     STATUS_SHORT: STATUS_SHORT,
     LIMIT_SEPARATE_STORAGE_NO_HELPER: LIMIT_SEPARATE_STORAGE_NO_HELPER,
+    timestampLabel: timestampLabel,
     createRail: createRail,
     shared: shared,
     OVERLAY_ROOT_ID: markers.OVERLAY_ROOT_ID,
@@ -10467,6 +10555,15 @@
       return noteHandle;
     }
 
+    // A refused window closes every composer before it becomes read-only. When
+    // an explicit takeover makes that window writable again, restore the
+    // always-available page-note composer instead of leaving a subtly reduced
+    // rail that can select comments but cannot write an untethered note.
+    function ensureNoteBox() {
+      if (noteHandle && comments.boxFor(noteHandle.id)) return noteHandle;
+      return openNoteBox();
+    }
+
     /** The hosted stylesheet, once, inside the rail's own closed root. */
     function ensureHostedStyle(node) {
       if (!hosted || hostedStyleAttached || !doc || !node) return;
@@ -10794,6 +10891,7 @@
       hintText: hintText,
       focusNote: focusNote,
       noteBox: noteBox,
+      ensureNoteBox: ensureNoteBox,
       collapse: collapse,
       isCollapsed: isCollapsed,
       bounds: bounds
@@ -10917,7 +11015,11 @@
     ".lahe-thread{display:flex;flex-direction:column;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}",
     ".lahe-thread-round{display:flex;flex-direction:column;gap:5px}",
     ".lahe-thread-turn{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12.5px;line-height:1.45}",
-    ".lahe-thread-turn strong{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint);margin-right:5px}",
+    ".lahe-thread-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}",
+    ".lahe-thread-turn strong{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint)}",
+    ".lahe-thread-time,.lahe-ask-time{font-size:10px;color:var(--ink-faint);font-variant-numeric:tabular-nums;white-space:nowrap}",
+    ".lahe-ask-time{margin-left:auto;font-weight:400;letter-spacing:0;text-transform:none}",
+    ".lahe-thread-text{display:block}",
     ".lahe-followup{display:flex;flex-direction:column;gap:7px;padding-top:8px}",
     ".lahe-followup-label{font-size:10px;font-weight:650;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-faint)}",
     ".lahe-followup textarea{box-sizing:border-box;width:100%;min-height:72px;resize:vertical;border:1px solid var(--line);border-radius:7px;padding:8px 9px;background:var(--paper);color:var(--ink);font:inherit;line-height:1.4}",
@@ -11237,24 +11339,32 @@
       var node = threads[id];
       while (node.firstChild) node.removeChild(node.firstChild);
       ensureStyle(node);
-      record.threadOf(item).forEach(function (round) {
+      record.chronologicalThread(item).forEach(function (round) {
         var pair = el("div", "lahe-thread-round");
         var reviewer = round.reviewer || {};
-        if (reviewer.note) appendTurn(pair, "Reviewer note", reviewer.note);
-        if (reviewer.change) appendTurn(pair, "Reviewer change", reviewer.change);
+        if (reviewer.note) appendTurn(pair, "Reviewer note", reviewer.note, reviewer.at);
+        if (reviewer.change) appendTurn(pair, "Reviewer change", reviewer.change, reviewer.at);
         var agent = round.agent || {};
-        if (agent.text) appendTurn(pair, agent.agent || "Agent", agent.text);
-        if (agent.reason) appendTurn(pair, (agent.agent || "Agent") + " reason", agent.reason);
-        if (!agent.text && !agent.reason) appendTurn(pair, agent.agent || "Agent", agent.status || "");
+        if (agent.text) appendTurn(pair, agent.agent || "Agent", agent.text, agent.at);
+        if (agent.reason) appendTurn(pair, (agent.agent || "Agent") + " reason", agent.reason, agent.at);
+        if (!agent.text && !agent.reason) appendTurn(pair, agent.agent || "Agent", agent.status || "", agent.at);
         node.appendChild(pair);
       });
       return node;
     }
 
-    function appendTurn(host, who, text) {
+    function appendTurn(host, who, text, at) {
       var line = el("p", "lahe-thread-turn");
-      line.appendChild(el("strong", null, who));
-      line.appendChild(doc.createTextNode(String(text || "")));
+      var head = el("span", "lahe-thread-head");
+      head.appendChild(el("strong", null, who));
+      if (at) {
+        var time = el("time", "lahe-thread-time", overlayModule.timestampLabel(at));
+        time.setAttribute("datetime", at);
+        time.setAttribute("title", new Date(at).toLocaleString());
+        head.appendChild(time);
+      }
+      line.appendChild(head);
+      line.appendChild(el("span", "lahe-thread-text", String(text || "")));
       host.appendChild(line);
     }
 
@@ -11559,6 +11669,16 @@
       }
       var node = asks[id];
       node.querySelector(".lahe-ask-name").textContent = agentName(reply) + " is asking";
+      var time = node.querySelector(".lahe-ask-time");
+      if (reply.at) {
+        time.textContent = overlayModule.timestampLabel(reply.at);
+        time.setAttribute("datetime", reply.at);
+        time.setAttribute("title", new Date(reply.at).toLocaleString());
+      } else {
+        time.textContent = "";
+        time.removeAttribute("datetime");
+        time.removeAttribute("title");
+      }
       node.querySelector(".lahe-ask-text").textContent = boundedText(reply.text || "");
       updateReopenAvailability(id);
       markCard(id, true);
@@ -11573,6 +11693,7 @@
       var who = el("div", "lahe-ask-who");
       who.appendChild(el("span", "lahe-ask-dot"));
       who.appendChild(el("span", "lahe-ask-name", ""));
+      who.appendChild(el("time", "lahe-ask-time", ""));
       node.appendChild(who);
 
       node.appendChild(el("p", "lahe-ask-text", ""));
@@ -16151,7 +16272,9 @@
       });
       list.reverse();
       return list.sort(function (a, b) {
-        return String(b[record.FIELD.CREATED_AT]).localeCompare(String(a[record.FIELD.CREATED_AT]));
+        var at = a[record.FIELD.UPDATED_AT] || a[record.FIELD.CREATED_AT] || "";
+        var bt = b[record.FIELD.UPDATED_AT] || b[record.FIELD.CREATED_AT] || "";
+        return String(bt).localeCompare(String(at));
       });
     }
 
@@ -19876,7 +19999,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+38fbc3aed520";
+  var VERSION = "0.0.0+ead12c20e923";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -20139,6 +20262,7 @@
       readOnlyActive = false;
       comments.bind({ page: page });
       editing.bind({ page: page });
+      if (tab && typeof tab.ensureNoteBox === "function") tab.ensureNoteBox();
       done.setReadOnly();
       rail.hideRefusal();
       // The condition ended, so its chip goes too (clear, not dismiss: dismiss

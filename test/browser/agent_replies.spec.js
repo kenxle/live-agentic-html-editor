@@ -614,6 +614,10 @@ test.describe("3A: an agent answers by appending one line", () => {
           marked: cardNode.getAttribute("data-lahe-asking"),
           hasAnswer: !!ask.querySelector(".lahe-ask-answer"),
           bodyFontSize: parseFloat(getComputedStyle(said).fontSize),
+          reviewerDatetime: cardNode.querySelector(".card__time").getAttribute("datetime"),
+          agentDatetime: ask.querySelector(".lahe-ask-time").getAttribute("datetime"),
+          recordReviewerAt: window.__lahe.itemById(id).updated_at || window.__lahe.itemById(id).created_at,
+          recordAgentAt: window.__lahe.itemById(id).reply.at,
           // The whole card, so a second copy of the question anywhere on it
           // fails here rather than being noticed in a screenshot months later.
           timesSaid: (cardNode.textContent.match(/Do you mean the/g) || []).length
@@ -633,6 +637,8 @@ test.describe("3A: an agent answers by appending one line", () => {
       expect(drawn.marked).toBe("true");
       expect(drawn.hasAnswer).toBe(true);
       expect(drawn.timesSaid, "the question appears once on the card").toBe(1);
+      expect(drawn.reviewerDatetime).toBe(drawn.recordReviewerAt);
+      expect(drawn.agentDatetime).toBe(drawn.recordAgentAt);
 
       // Answering opens the blank continuation composer, not the original-note
       // rewording box.
@@ -663,6 +669,16 @@ test.describe("3A: an agent answers by appending one line", () => {
       expect(continued.thread).toHaveLength(1);
       expect(continued.thread[0].reviewer.note).toBe("shorten this");
       expect(continued.thread[0].agent.text).toContain("page</b> heading");
+
+      const historyTimes = await page.evaluate((id) => {
+        const item = window.__lahe.itemById(id);
+        return {
+          rendered: Array.from(window.__lahe.handle.doneTab().thread(id).querySelectorAll(".lahe-thread-time"))
+            .map((node) => node.getAttribute("datetime")),
+          expected: [item.thread[0].reviewer.at, item.thread[0].agent.at]
+        };
+      }, item.id);
+      expect(historyTimes.rendered).toEqual(historyTimes.expected);
 
       const historyText = await page.evaluate((id) => window.__lahe.handle.doneTab().thread(id).textContent, item.id);
       expect(historyText).toContain("shorten this");
