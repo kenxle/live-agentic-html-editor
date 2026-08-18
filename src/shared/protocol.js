@@ -833,15 +833,143 @@
     );
   }
 
-  // Shared process exits for the command dispatcher and status. Status uses all
-  // four; the other commands share BAD_USAGE rather than inventing a different
-  // number for the same caller error.
+  // Shared process exits for the command dispatcher and status.
+  //
+  // The first four are the caller-error set every command shares: status uses
+  // all four, and the others reach for BAD_USAGE rather than inventing a
+  // different number for the same caller error.
+  //
+  // The last two exist because a HOST reads a monitor's exit code and decides
+  // whether to relaunch it. "Your session was closed, stop relaunching" and
+  // "another agent took this session over" are different instructions, and both
+  // are different from "you typed the command wrong". Collapsing them into
+  // BAD_USAGE is what let a closed session poll forever: nothing in the number
+  // told the host to stop.
   var CLI_EXIT = {
     OK: 0,
     HELPER_UNREACHABLE: 2,
     UNKNOWN_REVIEW: 3,
-    BAD_USAGE: 4
+    BAD_USAGE: 4,
+    // The agent session is closed. Monitoring has ended; do not relaunch.
+    SESSION_CLOSED: 5,
+    // Another agent ran `lahe session takeover`. This monitor is fenced and the
+    // work it was about to print belongs to the new owner.
+    SESSION_TAKEN_OVER: 6
   };
+
+  // ---------------------------------------------------------------------------
+  // The wake feed
+  // ---------------------------------------------------------------------------
+  //
+  // One append-only JSONL file per agent session, at
+  // <state>/agent-sessions/<id>/wake.log. It exists so a host with no push
+  // channel of its own can get one: `tail -n 0 -f wake.log` wakes on a line and
+  // costs nothing while it is quiet.
+  //
+  // APPEND-ONLY, NEVER REWRITTEN AND NEVER ROTATED. `tail -f` follows an inode.
+  // An atomic replace (which is how review.json is written) leaves a tail
+  // watching a deleted file forever, silently. That is the bug this file was
+  // designed around, so the file is only ever appended to.
+  //
+  // THE LINES ARE POINTERS, NOT PAYLOADS. A line says "there is work; run the
+  // drain command". It never carries a note, a change, or page text. Intent
+  // reaches an agent through review.json alone, which is where the trust classes
+  // and the fencing live (D12). A wake line that carried reviewer text would be
+  // a second, unfenced instruction channel.
+  var WAKE = {
+    FILE: "wake.log",
+    KIND: {
+      // A ready item landed for a review this session owns.
+      WORK: "work",
+      // Another agent ran `lahe session takeover` on this session.
+      TAKEOVER: "takeover",
+      // The session was closed. Nothing more will be appended.
+      CLOSED: "closed"
+    },
+    FIELD: {
+      AT: "at",
+      KIND: "kind",
+      REVIEW: "review",
+      ITEM: "item",
+      REV: "rev",
+      DRAIN: "drain"
+    }
+  };
+
+  var WAKE_KINDS = Object.keys(WAKE.KIND).map(function (k) {
+    return WAKE.KIND[k];
+  });
+
+  /**
+   * The one spelling of the drain command.
+   *
+   * It is printed by `lahe review`, by `lahe session takeover`, by the monitor's
+   * own output, and it rides every wake line. Four spellings of one command is
+   * how an agent ends up running a fifth.
+   */
+  function drainCommand(sessionId) {
+    return "lahe status --session " + String(sessionId) + " --json --quiet";
+  }
+
+  /** The one spelling of the monitor command. */
+  function monitorCommand(sessionId) {
+    return "lahe monitor --session " + String(sessionId);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Monitor liveness: what the rail is allowed to claim about an agent
+  // ---------------------------------------------------------------------------
+  //
+  // The rail used to show what the AGENT said about itself, which is how a chat
+  // claiming "monitoring is active" sat over seven unanswered items. These
+  // fields come from files the helper and the monitor write, never from a claim.
+  var MONITOR = {
+    // The heartbeat and the activity stamp are separate files on purpose:
+    // session.json is rewritten by takeover, and a heartbeat sharing that file
+    // would race it.
+    HEARTBEAT_FILE: "monitor.json",
+    ACTIVITY_FILE: "activity.json",
+    // The monitor's default local poll interval, in seconds. The heartbeat is
+    // written once per loop, so a heartbeat older than a few intervals means the
+    // process is gone rather than slow.
+    INTERVAL_SECONDS: 15,
+    // How many intervals a heartbeat may be behind and still count as watching.
+    FRESH_INTERVALS: 3,
+    HEARTBEAT_FIELD: { PID: "pid", HANDOFF_REV: "handoff_rev", AT: "at" },
+    ACTIVITY_FIELD: { AT: "at" }
+  };
+
+  // 45 seconds: three of the monitor's 15-second loops.
+  MONITOR.HEARTBEAT_FRESH_MS = MONITOR.INTERVAL_SECONDS * MONITOR.FRESH_INTERVALS * 1000;
+  // Three minutes. An agent mid-batch is editing files and rebuilding, not
+  // running lahe commands, so the working window is much wider than the
+  // heartbeat window.
+  MONITOR.ACTIVITY_FRESH_MS = 180000;
+
+  var AGENT_LIVENESS = {
+    STATE: {
+      // A monitor heartbeat is fresh for the current handoff rev.
+      WATCHING: "watching",
+      // No fresh heartbeat, but there is unanswered work and the session ran a
+      // lahe command recently: an agent is mid-batch.
+      WORKING: "working",
+      // Unanswered work and neither of the above. Nobody is listening.
+      UNATTENDED: "unattended",
+      // Nothing is waiting and nobody is watching. Not a problem, so not loud.
+      NONE: "none"
+    },
+    FIELD: {
+      STATE: "state",
+      MONITOR_AT: "monitor_at",
+      ACTIVITY_AT: "activity_at",
+      UNANSWERED: "unanswered",
+      OLDEST_UNANSWERED_AT: "oldest_unanswered_at"
+    }
+  };
+
+  var AGENT_LIVENESS_STATES = Object.keys(AGENT_LIVENESS.STATE).map(function (k) {
+    return AGENT_LIVENESS.STATE[k];
+  });
 
   return {
     API_VERSION: API_VERSION,
@@ -907,6 +1035,15 @@
     SCRIPT_FALLBACK_ONERROR: SCRIPT_FALLBACK_ONERROR,
     scriptTag: scriptTag,
 
-    CLI_EXIT: CLI_EXIT
+    CLI_EXIT: CLI_EXIT,
+
+    WAKE: WAKE,
+    WAKE_KINDS: WAKE_KINDS,
+    drainCommand: drainCommand,
+    monitorCommand: monitorCommand,
+
+    MONITOR: MONITOR,
+    AGENT_LIVENESS: AGENT_LIVENESS,
+    AGENT_LIVENESS_STATES: AGENT_LIVENESS_STATES
   };
 });

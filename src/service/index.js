@@ -44,6 +44,7 @@ var reviewsModule = require("./reviews.js");
 var authModule = require("./auth.js");
 var routes = require("./routes.js");
 var projection = require("./projection.js");
+var agentSessionsModule = require("./agent_sessions.js");
 
 var VERSION = "0.0.0";
 
@@ -196,6 +197,10 @@ async function serve(options) {
     log: log,
     reviews: reviews,
     projection: projection,
+    // The session store, so a route can answer two questions server-side: which
+    // agent session owns this review, and is that session's monitor alive. Both
+    // used to be things the reviewer could only get by asking the agent.
+    agentSessions: agentSessionsModule.createStore({ dir: dir }),
     library: loadLibrary(),
     version: VERSION,
     startedAt: startedAt

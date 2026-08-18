@@ -128,12 +128,11 @@ async function run(argv) {
           (staticStarted ? "; static review server" + (staticStarted === 1 ? "" : "s") + " restarted" : "") + "\n";
       if (handedOff) {
         message +=
-          "  handoff   " + session.handoff_rev + "  (older lahe monitor processes will exit)\n" +
+          "  handoff   " + session.handoff_rev + "  (older lahe monitor processes exit with " +
+            protocol.CLI_EXIT.SESSION_TAKEN_OVER + ")\n" +
           "  catch-up  lahe status --session " + args.id + " --json\n" +
-          "            handle every unanswered item before monitoring\n" +
-          "  monitor   lahe monitor --session " + args.id + " --seen-file <new-path>\n" +
-          "            use a fresh seen-file; do not reuse the previous agent's ledger\n" +
-          "  close     lahe session close " + args.id + "\n";
+          "            handle every unanswered item before you start watching\n" +
+          sessions.commandBlock({ dir: dir, session: args.id });
       }
       process.stdout.write(message);
     }

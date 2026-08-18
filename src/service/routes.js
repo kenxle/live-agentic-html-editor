@@ -69,6 +69,7 @@ var HANDLERS = {
     if (deps.projection && typeof deps.projection.tickReview === "function") {
       deps.projection.tickReview(deps, request.review);
     }
+    appendWakeLines(request, deps, events, result);
     if (result.rejected.length > 0) {
       deps.log.helperLog(
         "review " +
@@ -284,7 +285,10 @@ var HANDLERS = {
   // that steps backwards would silently skip work.
   "replies.poll": function (request, deps) {
     if (deps.projection && typeof deps.projection.tickReview === "function") {
-      deps.projection.tickReview(deps, request.review);
+      // A fold that accepted a line means the owning agent just appended a
+      // reply. That is session activity, the same way running the drain command
+      // is, and it is what keeps the rail from calling a mid-batch agent absent.
+      noteReplyActivity(request, deps, deps.projection.tickReview(deps, request.review));
     }
     var since = numberOr(request.query.since, 0);
     var events = deps.log.since(request.review, since).filter(function (event) {
@@ -300,7 +304,12 @@ var HANDLERS = {
       body: {
         events: events,
         seq: deps.log.currentSeq(request.review),
-        target_mtime: deps.reviews.targetMtime(request.review, request.query.page_path || null)
+        target_mtime: deps.reviews.targetMtime(request.review, request.query.page_path || null),
+        // GROUND TRUTH ABOUT THE AGENT, not the agent's claim about itself. The
+        // rail used to show what a chat said it was doing, which is how "the
+        // monitor is running" sat over seven unanswered items. Every field here
+        // comes from a file the monitor or a lahe command wrote.
+        agent_liveness: agentLiveness(request, deps)
       }
     };
   },
@@ -341,6 +350,121 @@ var HANDLERS = {
 function numberOr(value, fallback) {
   var parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+// ---------------------------------------------------------------------------
+// The wake feed and the liveness answer
+// ---------------------------------------------------------------------------
+
+/** Which agent session owns this review, or null when nothing can say. */
+function ownerSessionOf(request, deps) {
+  if (!deps.reviews || typeof deps.reviews.get !== "function") return null;
+  var held = deps.reviews.get(request.review);
+  var owner = held && typeof held.agent_session_id === "string" ? held.agent_session_id : null;
+  // "legacy" is the synthetic id for reviews made before sessions existed. It
+  // has no directory and therefore no feed and no heartbeat.
+  if (!owner || owner === "legacy" || !protocol.isSafeId(owner)) return null;
+  return owner;
+}
+
+/**
+ * One wake line per READY TRANSITION, appended where the events land.
+ *
+ * TRANSITION-BASED IS THE WHOLE POINT. A reviewer typing sends a stream of
+ * item.content events and none of them is a wake: only item.ready is. So a
+ * burst of typing appends nothing and costs no agent a turn.
+ *
+ * IDEMPOTENT ON REPLAY. The library re-posts anything it has not seen
+ * acknowledged, so the same item.ready arrives again after a reconnect. Only
+ * events in `result.accepted` are ones the log had not already stored, so a
+ * replay walks straight past this. The feed's own (review, item, rev) dedupe is
+ * the second belt.
+ */
+function appendWakeLines(request, deps, events, result) {
+  if (!deps.agentSessions || typeof deps.agentSessions.wake !== "object" || !deps.agentSessions.wake) return 0;
+  var stored = {};
+  (result.accepted || []).forEach(function (id) { stored[id] = true; });
+  var owner = ownerSessionOf(request, deps);
+  if (!owner) return 0;
+  var appended = 0;
+  events.forEach(function (event) {
+    if (!event || typeof event !== "object") return;
+    if (event[protocol.EVENT_FIELD.EVENT] !== protocol.EVENT.ITEM_READY) return;
+    if (!stored[event[protocol.EVENT_FIELD.EVENT_ID]]) return;
+    var item = event[protocol.EVENT_FIELD.ITEM];
+    if (!item) return;
+    try {
+      var line = deps.agentSessions.wake.appendWork({
+        session: owner,
+        review: request.review,
+        item: item,
+        rev: event[protocol.EVENT_FIELD.REV]
+      });
+      if (line) appended += 1;
+    } catch (err) {
+      // A feed that cannot be written must not fail the reviewer's post. The
+      // work is already durable in events.jsonl; the wake is the convenience.
+      if (deps.log && typeof deps.log.helperLog === "function") {
+        deps.log.helperLog("review " + request.review + ": could not append to the wake feed: " + err.message);
+      }
+    }
+  });
+  return appended;
+}
+
+/** A reply the agent appended is session activity; record it as such. */
+function noteReplyActivity(request, deps, tick) {
+  if (!tick || !tick.summary || !Array.isArray(tick.summary.accepted) || tick.summary.accepted.length === 0) return false;
+  if (!deps.agentSessions || typeof deps.agentSessions.touchActivity !== "function") return false;
+  var owner = ownerSessionOf(request, deps);
+  if (!owner) return false;
+  deps.agentSessions.touchActivity(owner);
+  return true;
+}
+
+/** How many ready items nobody has answered, and the oldest one's timestamp. */
+function unansweredWork(request, deps) {
+  var out = { unanswered: 0, oldest: null };
+  if (!deps.projection || typeof deps.projection.project !== "function") return out;
+  var projected;
+  try {
+    projected = deps.projection.project(request.review, deps.log.read(request.review));
+  } catch (err) {
+    return out;
+  }
+  ((projected && projected.pages) || []).forEach(function (page) {
+    (page.items || []).forEach(function (item) {
+      if (!item || item.state !== "ready" || item.reply) return;
+      out.unanswered += 1;
+      var at = item.created_at || item.updated_at || null;
+      if (typeof at === "string" && at && (!out.oldest || at < out.oldest)) out.oldest = at;
+    });
+  });
+  return out;
+}
+
+function agentLiveness(request, deps) {
+  if (!deps.agentSessions || typeof deps.agentSessions.liveness !== "function") return null;
+  var owner = ownerSessionOf(request, deps);
+  var work = unansweredWork(request, deps);
+  // A review with no agent session (the "legacy" id, from before sessions
+  // existed) is reached some other way, so there is no monitor to be missing.
+  // Saying "no agent watching" there would be a false alarm about nobody.
+  if (!owner) return livenessNone(work);
+  return deps.agentSessions.liveness(owner, {
+    unanswered: work.unanswered,
+    oldestUnansweredAt: work.oldest
+  });
+}
+
+function livenessNone(work) {
+  var out = {};
+  out[protocol.AGENT_LIVENESS.FIELD.STATE] = protocol.AGENT_LIVENESS.STATE.NONE;
+  out[protocol.AGENT_LIVENESS.FIELD.MONITOR_AT] = null;
+  out[protocol.AGENT_LIVENESS.FIELD.ACTIVITY_AT] = null;
+  out[protocol.AGENT_LIVENESS.FIELD.UNANSWERED] = work.unanswered;
+  out[protocol.AGENT_LIVENESS.FIELD.OLDEST_UNANSWERED_AT] = work.oldest;
+  return out;
 }
 
 // Every route on the wire has a handler, checked at LOAD rather than at request

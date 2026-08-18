@@ -213,6 +213,32 @@ function agentSessionPath(dir, sessionId) {
   return resolveWithin(dir, [AGENT_SESSIONS_DIR, assertSafeReviewId(sessionId), "session.json"]);
 }
 
+/**
+ * The session's wake feed: append-only JSONL a host may `tail -f`.
+ *
+ * Not written through writeAtomic, and that is the point. An atomic replace
+ * makes a new inode, and a `tail -f` follows the old one into oblivion without
+ * saying so. This file is only ever appended to.
+ */
+function wakeLogPath(dir, sessionId) {
+  return resolveWithin(dir, [AGENT_SESSIONS_DIR, assertSafeReviewId(sessionId), protocol.WAKE.FILE]);
+}
+
+/** The running monitor's heartbeat: pid, handoff_rev, and when it last looped. */
+function monitorPath(dir, sessionId) {
+  return resolveWithin(dir, [AGENT_SESSIONS_DIR, assertSafeReviewId(sessionId), protocol.MONITOR.HEARTBEAT_FILE]);
+}
+
+/**
+ * When this session last ran a lahe command.
+ *
+ * Its own file, not a field on session.json: takeover rewrites session.json, and
+ * a drain landing in the same instant would race that write.
+ */
+function activityPath(dir, sessionId) {
+  return resolveWithin(dir, [AGENT_SESSIONS_DIR, assertSafeReviewId(sessionId), protocol.MONITOR.ACTIVITY_FILE]);
+}
+
 function ensureAgentSessionDir(dir, sessionId) {
   ensureDir(dir);
   ensureDir(agentSessionsRoot(dir));
@@ -331,6 +357,9 @@ module.exports = {
   agentSessionsRoot: agentSessionsRoot,
   agentSessionDir: agentSessionDir,
   agentSessionPath: agentSessionPath,
+  wakeLogPath: wakeLogPath,
+  monitorPath: monitorPath,
+  activityPath: activityPath,
   ensureAgentSessionDir: ensureAgentSessionDir,
   staticServersRoot: staticServersRoot,
   staticServerPath: staticServerPath,

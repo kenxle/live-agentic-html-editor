@@ -59,16 +59,17 @@ var USAGE = [
   "  --session <id>       only reviews owned by this agent session",
   "  --json               one JSON line per unanswered ready item, then one summary line",
   "  --seen-file <path>   with --json: print only items (session, review, id, rev) not recorded,",
-  "                       then record them in it. `lahe monitor` wraps this as a silent local",
-  "                       exit-on-work background process.",
-  "  --quiet              with --seen-file: print nothing when there is no new work.",
+  "                       then record them in it. Optional, and no longer needed: work stays",
+  "                       listed until a reply lands, so redelivery is the dedupe.",
+  "  --quiet              print nothing when nothing is waiting on you.",
   "  --state-dir <path>   where the helper keeps its data, the same flag every command takes.",
   "                       Default $LAHE_STATE_DIR, then $XDG_STATE_HOME/lahe, then ~/.local/state/lahe.",
   "",
   "It lists the items an agent should act on: state ready, with no reply yet.",
   "It consumes nothing and acknowledges nothing.",
   "",
-  "Exit codes: " + EXIT.OK + " completed, " + EXIT.HELPER_UNREACHABLE + " no helper and nothing on disk, " + EXIT.UNKNOWN_REVIEW + " unknown review, " + EXIT.BAD_USAGE + " bad usage."
+  "Exit codes: " + EXIT.OK + " completed, " + EXIT.HELPER_UNREACHABLE + " no helper and nothing on disk, " + EXIT.UNKNOWN_REVIEW + " unknown review, " + EXIT.BAD_USAGE + " bad usage or a closed session.",
+  "`lahe monitor` adds " + EXIT.SESSION_CLOSED + " (session closed) and " + EXIT.SESSION_TAKEN_OVER + " (session taken over); both mean stop relaunching."
 ].join("\n");
 
 function parseArgs(argv) {
@@ -130,7 +131,11 @@ function parseArgs(argv) {
   if (!out.error && out.seenFile !== null && out.session === null) {
     out.error = "--seen-file needs --session so one agent cannot receive another session's reviews";
   }
-  if (out.quiet && out.seenFile === null) out.error = "--quiet needs --seen-file";
+  // --quiet used to require --seen-file, back when "new" meant "not in the
+  // ledger". It means "nothing is waiting on you" now, which is a question this
+  // command can answer on its own, and the monitor's drain command depends on
+  // being able to ask it without carrying a ledger path around.
+  if (out.quiet && !out.json) out.error = "--quiet needs --json";
   return out;
 }
 
@@ -391,11 +396,19 @@ async function run(argv, options) {
 
   if (args.session) {
     try {
-      var routed = agentSessionsModule.createStore({ dir: dir }).read(args.session);
+      var sessionStore = agentSessionsModule.createStore({ dir: dir });
+      var routed = sessionStore.read(args.session);
       if (!routed) throw new Error("unknown agent session " + JSON.stringify(args.session));
-      if (args.seenFile && routed.closed_at) {
+      // Not gated on any flag. A closed session is closed whoever is asking, and
+      // gating this on --seen-file is what let a monitor that stopped passing
+      // that flag poll a closed session forever.
+      if (routed.closed_at) {
         throw new Error("agent session " + args.session + " is closed; monitoring has ended");
       }
+      // This session just ran a lahe command. That is what separates "the agent
+      // is mid-batch" from "nobody is home" on the reviewer's rail, and it is a
+      // fact rather than a claim.
+      sessionStore.touchActivity(args.session);
     } catch (error) {
       err("lahe status: " + error.message + "\n");
       return EXIT.BAD_USAGE;
