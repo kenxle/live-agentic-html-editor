@@ -140,20 +140,14 @@ function parseArgs(argv) {
 }
 
 // ---------------------------------------------------------------------------
-// The one definition of what an agent should act on
+// What an agent should act on
 // ---------------------------------------------------------------------------
-
-/**
- * Is this item ready and unanswered?
- *
- * Ready is record.STATE.READY, the state the review.json contract names as the
- * one an agent may act on. No reply means no agent has answered this revision;
- * a reworded item drops its reply in the projection, so it comes back here on
- * its own.
- */
-function isUnansweredReady(item) {
-  return !!item && item.state === record.STATE.READY && !item.reply;
-}
+//
+// The definition itself is record.isUnansweredReady, in the module that owns
+// the record shape. It used to be spelled here and again in the helper's
+// replies.poll route, and two spellings of one rule is how the rail's count and
+// this command's list stop agreeing.
+var isUnansweredReady = record.isUnansweredReady;
 
 /** Every item in a projection, each carrying the page it came from. */
 function itemsOf(projection) {
@@ -349,7 +343,11 @@ function readFromDisk(dir, reviewId) {
 
 /**
  * @param {string[]} argv everything after `status`
- * @param {{stateDir?: string, fetch?: function, stdout?: function, stderr?: function, now?: number}} [options]
+ * @param {{stateDir?: string, fetch?: function, stdout?: function, stderr?: function,
+ *   now?: number, suppressActivityTouch?: boolean}} [options]
+ *   `suppressActivityTouch` is internal, for `lahe monitor`: its idle polls run
+ *   this command without the agent being anywhere near, so they must not stamp
+ *   the session as active. Nothing on the command line sets it.
  * @returns {Promise<number>} the exit code, from protocol.CLI_EXIT
  */
 async function run(argv, options) {
@@ -408,10 +406,24 @@ async function run(argv, options) {
       if ((args.quiet || args.seenFile) && routed.closed_at) {
         throw new Error("agent session " + args.session + " is closed; monitoring has ended");
       }
-      // This session just ran a lahe command. That is what separates "the agent
-      // is mid-batch" from "nobody is home" on the reviewer's rail, and it is a
+      // THE AGENT ITSELF JUST DRAINED. That is what separates "the agent is
+      // mid-batch" from "nobody is home" on the reviewer's rail, and it is a
       // fact rather than a claim.
-      sessionStore.touchActivity(args.session);
+      //
+      // Two reads deliberately do NOT stamp it:
+      //
+      //   - the monitor's own idle polls (opts.suppressActivityTouch). They are
+      //     one Node process reading a file every few seconds; the agent that
+      //     launched it may be asleep or gone. Stamping there kept the rail
+      //     saying "agent working" for as long as the monitor ran and delayed
+      //     the unattended alarm indefinitely.
+      //   - a plain read with no --quiet. That is a person or an agent LOOKING,
+      //     an audit rather than a drain, and it must not make the rail claim
+      //     work is being handled.
+      //
+      // What is left is the drain itself, plus the reply fold on the service
+      // side, and both of those are the agent actually doing the work.
+      if (!opts.suppressActivityTouch && args.quiet) sessionStore.touchActivity(args.session);
     } catch (error) {
       err("lahe status: " + error.message + "\n");
       return EXIT.BAD_USAGE;

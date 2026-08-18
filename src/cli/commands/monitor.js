@@ -109,6 +109,14 @@ function waitMs(ms) {
  * three facts together: a heartbeat fresh enough to be a running loop, the SAME
  * handoff rev (an older rev is a fenced pre-takeover monitor, which is not a
  * duplicate), and a pid that still exists.
+ *
+ * WHAT IT STILL CANNOT SEE, said plainly. The guard reads a file, so two
+ * monitors that start at the same instant can both read "no heartbeat" before
+ * either writes one. The window is now the milliseconds between this check and
+ * the first heartbeat write, which happens before the first poll rather than
+ * inside the loop. That is small enough to be an accident nobody hits and large
+ * enough to be worth saying: the file is the only lock here, and a file is not
+ * an atomic one.
  */
 function liveDuplicate(heartbeat, handoffRev, nowMs, ownPid) {
   if (!heartbeat) return null;
@@ -187,7 +195,44 @@ async function run(argv, options) {
     }
   }
 
+  // The heartbeat, written HERE rather than at the top of the first loop. The
+  // duplicate guard above reads a file, so until this line runs there is nothing
+  // on disk for a second monitor to find: writing it before the first poll (and
+  // a poll can take a while) shrinks that window from an interval to
+  // milliseconds.
+  beat();
+
+  function beat() {
+    if (typeof store.writeMonitor !== "function") return false;
+    try {
+      store.writeMonitor(args.session, { pid: pid, handoff_rev: handoffRev });
+      return true;
+    } catch (writeError) {
+      // A heartbeat that cannot be written costs the rail a chip, not the agent
+      // its work. Keep going.
+      return false;
+    }
+  }
+
+  /**
+   * Take the heartbeat down on the way out.
+   *
+   * Every deliberate exit runs it, because every deliberate exit is followed by
+   * a relaunch or by nothing at all, and a heartbeat left behind refuses that
+   * relaunch for the next 45 seconds. The store only removes a heartbeat still
+   * carrying this pid, so a monitor that started in the meantime keeps its own.
+   */
+  function stopBeating() {
+    if (typeof store.clearMonitor !== "function") return false;
+    try {
+      return store.clearMonitor(args.session, { pid: pid });
+    } catch (clearError) {
+      return false;
+    }
+  }
+
   function closedExit() {
+    stopBeating();
     err(
       "lahe monitor: agent session " + args.session +
         " is closed; monitoring has ended; do not relaunch this monitor\n"
@@ -196,6 +241,7 @@ async function run(argv, options) {
   }
 
   function handoffExit() {
+    stopBeating();
     err(
       "lahe monitor: agent session " + args.session +
         " was taken over; this older monitor has ended; do not relaunch it\n"
@@ -220,14 +266,18 @@ async function run(argv, options) {
   function exitFor(state) {
     if (state === "closed") return closedExit();
     if (state === "taken_over") return handoffExit();
+    stopBeating();
     err("lahe monitor: agent session " + args.session + " is gone from the state directory\n");
     return protocol.CLI_EXIT.SESSION_CLOSED;
   }
 
   // The drain command, in exactly the spelling every doc and every wake line
-  // uses. One spelling, in protocol.js.
-  var drain = protocol.drainCommand(args.session);
-  var relaunch = protocol.monitorCommand(args.session);
+  // uses. One spelling, in protocol.js. It carries --state-dir when this monitor
+  // is not on the default directory, because the agent copies these two lines
+  // into a different shell and a resolved-by-default drain would report no work.
+  var flagDir = stateDir.flagFor(args.stateDir);
+  var drain = protocol.drainCommand(args.session, flagDir);
+  var relaunch = protocol.monitorCommand(args.session, flagDir);
 
   var statusArgs = ["--session", args.session, "--json", "--quiet"];
   if (args.stateDir) statusArgs.push("--state-dir", args.stateDir);
@@ -237,27 +287,29 @@ async function run(argv, options) {
     try {
       before = ownership();
     } catch (readError) {
+      stopBeating();
       err("lahe monitor: " + readError.message + "\n");
       return protocol.CLI_EXIT.BAD_USAGE;
     }
     if (before !== "owned") return exitFor(before);
 
-    // The heartbeat, once per loop. It is what the rail reads to say "an agent
-    // is watching" without taking the agent's word for it.
-    if (typeof store.writeMonitor === "function") {
-      try {
-        store.writeMonitor(args.session, { pid: pid, handoff_rev: handoffRev });
-      } catch (writeError) {
-        // A heartbeat that cannot be written costs the rail a chip, not the
-        // agent its work. Keep polling.
-      }
-    }
+    // Once per loop after the first, which was written before the loop. It is
+    // what the rail reads to say "an agent is watching" without taking the
+    // agent's word for it.
+    beat();
 
     var stdout = [];
     var stderr = [];
     var code = await statusRun(statusArgs, {
       stdout: function (text) { stdout.push(String(text)); },
-      stderr: function (text) { stderr.push(String(text)); }
+      stderr: function (text) { stderr.push(String(text)); },
+      // THIS POLL IS NOT THE AGENT WORKING. It is this Node process looking at
+      // a file every few seconds while the agent may be asleep or gone. Letting
+      // it stamp activity.json made the rail say "agent working" for as long as
+      // the monitor ran and pushed the unattended alarm out of reach, which is
+      // exactly the false comfort the liveness line exists to remove. The
+      // heartbeat above is the honest signal for "a monitor is up".
+      suppressActivityTouch: true
     });
     var printed = stdout.join("");
     var errors = stderr.join("");
@@ -266,6 +318,7 @@ async function run(argv, options) {
     try {
       after = ownership();
     } catch (readError) {
+      stopBeating();
       err("lahe monitor: " + readError.message + "\n");
       return protocol.CLI_EXIT.BAD_USAGE;
     }
@@ -290,8 +343,17 @@ async function run(argv, options) {
       );
     }
     if (errors) err(errors);
-    if (code !== protocol.CLI_EXIT.OK) return code;
-    if (printed) return protocol.CLI_EXIT.OK;
+    // Both of these are the end of this monitor. The heartbeat comes down with
+    // it so the relaunch the agent is being told to run is not refused by the
+    // corpse of the process telling it to.
+    if (code !== protocol.CLI_EXIT.OK) {
+      stopBeating();
+      return code;
+    }
+    if (printed) {
+      stopBeating();
+      return protocol.CLI_EXIT.OK;
+    }
 
     await wait(args.intervalSeconds * 1000);
   }

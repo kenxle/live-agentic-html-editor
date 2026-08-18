@@ -143,12 +143,13 @@ test("takeover fences the old monitor before it can deliver another agent's work
   assert.match(stderr.join(""), /do not relaunch/);
 });
 
-test("every loop writes a heartbeat carrying the pid and the handoff rev", async () => {
+test("the heartbeat is on disk before the first poll ever finishes", async () => {
   const dir = tempDir();
   const store = agentSessions.createStore({ dir: dir });
   store.create({ id: "s_beat" });
 
   let polls = 0;
+  const seenDuringPoll = [];
   const code = await monitor.run(["--session", "s_beat"], {
     stdout: () => {},
     stderr: () => {},
@@ -156,6 +157,10 @@ test("every loop writes a heartbeat carrying the pid and the handoff rev", async
     pid: 4242,
     statusRun: async (_args, io) => {
       polls += 1;
+      // Read from INSIDE the poll: the duplicate guard is a file, so the window
+      // in which a second monitor sees nothing has to close before the first
+      // poll, not after it.
+      seenDuringPoll.push(store.readMonitor("s_beat"));
       if (polls === 2) io.stdout('{"review":"r","id":"c","rev":1}\n');
       return protocol.CLI_EXIT.OK;
     },
@@ -164,10 +169,157 @@ test("every loop writes a heartbeat carrying the pid and the handoff rev", async
 
   assert.equal(code, protocol.CLI_EXIT.OK);
   assert.equal(polls, 2);
-  const beat = JSON.parse(fs.readFileSync(stateDir.monitorPath(dir, "s_beat"), "utf8"));
+  const beat = seenDuringPoll[0];
+  assert.ok(beat, "the first poll already has a heartbeat behind it");
   assert.equal(beat.pid, 4242);
   assert.equal(beat.handoff_rev, 0);
   assert.ok(beat.at, "the heartbeat carries when the loop last ran");
+});
+
+test("a work exit takes the heartbeat down, so the relaunch it just asked for is not refused", async () => {
+  const dir = tempDir();
+  const store = agentSessions.createStore({ dir: dir });
+  store.create({ id: "s_relaunch" });
+
+  const first = await monitor.run(["--session", "s_relaunch"], {
+    stdout: () => {},
+    stderr: () => {},
+    store: () => store,
+    // This process's own pid, which is alive by definition and, on a real exit,
+    // may sit unreaped for a while: exactly the case that refused the relaunch.
+    pid: process.pid,
+    statusRun: async (_args, io) => {
+      io.stdout('{"review":"r","id":"c","rev":1}\n');
+      return protocol.CLI_EXIT.OK;
+    },
+    wait: async () => {}
+  });
+  assert.equal(first, protocol.CLI_EXIT.OK);
+  assert.equal(fs.existsSync(stateDir.monitorPath(dir, "s_relaunch")), false, "no heartbeat is left claiming to watch");
+
+  // The relaunch every doc tells the agent to run, immediately, inside the
+  // 45-second freshness window.
+  let polled = false;
+  const second = await monitor.run(["--session", "s_relaunch"], {
+    stdout: () => {},
+    stderr: () => {},
+    store: () => store,
+    pid: process.pid + 1,
+    statusRun: async (_args, io) => {
+      polled = true;
+      io.stdout('{"review":"r","id":"c","rev":2}\n');
+      return protocol.CLI_EXIT.OK;
+    },
+    wait: async () => {}
+  });
+  assert.equal(second, protocol.CLI_EXIT.OK);
+  assert.equal(polled, true, "the relaunch runs rather than meeting a duplicate refusal");
+});
+
+test("a closed session exit clears the heartbeat, and a newer monitor's heartbeat is left alone", async () => {
+  const dir = tempDir();
+  const store = agentSessions.createStore({ dir: dir });
+  store.create({ id: "s_gone" });
+
+  await monitor.run(["--session", "s_gone"], {
+    stdout: () => {},
+    stderr: () => {},
+    store: () => store,
+    pid: 4242,
+    statusRun: async () => {
+      store.close("s_gone");
+      return protocol.CLI_EXIT.OK;
+    },
+    wait: async () => {}
+  });
+  assert.equal(fs.existsSync(stateDir.monitorPath(dir, "s_gone")), false);
+
+  // A monitor that exits while a REPLACEMENT is already beating must not take
+  // the replacement's heartbeat with it. The pid is the guard.
+  store.create({ id: "s_shared" });
+  store.writeMonitor("s_shared", { pid: 9999, handoff_rev: 0 });
+  await monitor.run(["--session", "s_shared"], {
+    stdout: () => {},
+    stderr: () => {},
+    // A store whose guard sees nothing and whose heartbeat write is a no-op, so
+    // the only thing this monitor does to monitor.json is try to clear it.
+    store: () => ({
+      read: (id) => store.read(id),
+      readMonitor: () => null,
+      writeMonitor: () => {},
+      clearMonitor: (id, spec) => store.clearMonitor(id, spec)
+    }),
+    pid: 4242,
+    statusRun: async (_args, io) => {
+      io.stdout('{"review":"r","id":"c","rev":1}\n');
+      return protocol.CLI_EXIT.OK;
+    },
+    wait: async () => {}
+  });
+  const kept = store.readMonitor("s_shared");
+  assert.ok(kept, "the other monitor's heartbeat survives");
+  assert.equal(kept.pid, 9999);
+});
+
+test("idle polls do not stamp the session as active: a monitor is not an agent working", async () => {
+  const dir = tempDir();
+  const store = agentSessions.createStore({ dir: dir });
+  store.create({ id: "s_idle" });
+
+  const suppressed = [];
+  let polls = 0;
+  await monitor.run(["--session", "s_idle"], {
+    stdout: () => {},
+    stderr: () => {},
+    store: () => store,
+    statusRun: async (_args, options) => {
+      polls += 1;
+      suppressed.push(options.suppressActivityTouch === true);
+      if (polls === 2) options.stdout('{"review":"r","id":"c","rev":1}\n');
+      return protocol.CLI_EXIT.OK;
+    },
+    wait: async () => {}
+  });
+
+  assert.deepEqual(suppressed, [true, true], "every poll tells status not to touch the activity stamp");
+  assert.equal(store.readActivity("s_idle"), null, "nothing claimed the agent was working");
+});
+
+test("the printed drain and relaunch carry --state-dir only when it is not the default", async () => {
+  const dir = tempDir();
+  const store = agentSessions.createStore({ dir: dir });
+  store.create({ id: "s_flags" });
+
+  const stdout = [];
+  await monitor.run(["--session", "s_flags", "--state-dir", dir], {
+    stdout: (text) => stdout.push(text),
+    stderr: () => {},
+    store: () => store,
+    statusRun: async (_args, io) => {
+      io.stdout('{"review":"r","id":"c","rev":1}\n');
+      return protocol.CLI_EXIT.OK;
+    },
+    wait: async () => {}
+  });
+  const printed = stdout.join("");
+  assert.match(printed, new RegExp("drain\\s+lahe status --session s_flags --json --quiet --state-dir " + path.resolve(dir)));
+  assert.match(printed, new RegExp("relaunch\\s+lahe monitor --session s_flags --state-dir " + path.resolve(dir)));
+
+  // No --state-dir given: the copied command resolves the same default this one
+  // did, so printing the path would be noise on every command.
+  const plain = [];
+  await monitor.run(["--session", "s_plain"], {
+    stdout: (text) => plain.push(text),
+    stderr: () => {},
+    readSession: () => ({ id: "s_plain", handoff_rev: 0, closed_at: null }),
+    statusRun: async (_args, io) => {
+      io.stdout('{"review":"r","id":"c","rev":1}\n');
+      return protocol.CLI_EXIT.OK;
+    },
+    wait: async () => {}
+  });
+  assert.match(plain.join(""), /drain\s+lahe status --session s_plain --json --quiet\n/);
+  assert.doesNotMatch(plain.join(""), /--state-dir/);
 });
 
 test("a second monitor refuses to start while a live one holds the same rev", async () => {

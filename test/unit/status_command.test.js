@@ -91,6 +91,12 @@ test("unanswered ready is the one definition: ready, with no reply on it", () =>
   assert.equal(status.isUnansweredReady(answered), false, "an answered item is not waiting on the agent");
   assert.equal(status.isUnansweredReady(draft), false, "a draft is the reviewer still writing");
   assert.equal(status.isUnansweredReady(handled), false);
+  assert.equal(status.isUnansweredReady(null), false);
+
+  // ONE definition, in record.js, for this command and for the helper's own
+  // replies.poll route. The route used to spell the rule out again in raw
+  // strings, which is how a rail count and a drain list stop agreeing.
+  assert.equal(status.isUnansweredReady, record.isUnansweredReady);
 });
 
 test("status prints a per-review summary and the items that are waiting", async () => {
@@ -404,6 +410,25 @@ test("a drain records that the session ran a command, so the rail can tell worki
   reviews.create({ id: "r_touch", agent_session_id: "s_touch" });
 
   assert.equal(sessions.readActivity("s_touch"), null);
+
+  // A plain read is an AUDIT: a person or an agent looking at the session. It
+  // must not make the rail claim the work is being handled.
+  await runStatus(["--session", "s_touch"], dir);
+  assert.equal(sessions.readActivity("s_touch"), null, "looking is not working");
+
+  // The monitor's own idle polls run this command while the agent may be asleep
+  // or gone. They used to keep the rail saying "agent working" for as long as
+  // the monitor ran, which pushed the unattended alarm out of reach.
+  const quiet = [];
+  await status.run(["--session", "s_touch", "--json", "--quiet"], {
+    stateDir: dir,
+    stdout: (text) => quiet.push(text),
+    stderr: () => {},
+    suppressActivityTouch: true
+  });
+  assert.equal(sessions.readActivity("s_touch"), null, "a monitor poll is not the agent working");
+
+  // The drain the agent itself runs is the one thing that stamps it.
   await runStatus(["--session", "s_touch", "--json", "--quiet"], dir);
   const activity = sessions.readActivity("s_touch");
   assert.ok(activity && activity.at, "the drain left a timestamp behind");
