@@ -125,12 +125,65 @@ var HANDLERS = {
   // Everything here is idempotent: registering an origin twice is a no-op, and
   // a repeated source hint is one more page.visited event, which the projector
   // folds onto the same page group.
+  //
+  // THE ORIGINS ARE VALIDATED, and this route is deliberately narrower than
+  // `add` writing meta.json on disk. Origins arrive in the BODY here, so a
+  // script running on a page the review already allows could read the token off
+  // the script tag and post any origin it liked, collapsing the token-plus-
+  // origin pair into the token alone. Only what `add` legitimately sends passes:
+  // the literal "null", and http/https on a loopback host
+  // (protocol.isRegisterableOrigin). `add` on disk stays wider because that path
+  // is a person typing --origin at a terminal, not a page.
   "review.write": function (request, deps) {
     var body = request.body || {};
     var origins = Array.isArray(body.origins) ? body.origins : [];
+    var refused = origins.filter(function (origin) {
+      return !protocol.isRegisterableOrigin(origin);
+    });
+    if (refused.length > 0) {
+      return {
+        status: 400,
+        error: {
+          code: "PROTO_BAD_REQUEST",
+          detail:
+            "refused origin " +
+            JSON.stringify(String(refused[0])) +
+            ": this route registers only \"null\" and http/https origins on " +
+            protocol.LOOPBACK_ORIGIN_HOSTS.join(", ")
+        }
+      };
+    }
+
+    // The cap is the second half: without it a caller may add one legal origin
+    // at a time forever, and an allowlist nobody can read at a glance is not an
+    // allowlist. Counted against what the review already holds, so a repeat of
+    // an origin already registered never trips it.
+    var held = deps.reviews.get(request.review);
+    var heldOrigins = held && Array.isArray(held.origins) ? held.origins : [];
+    var wouldHold = heldOrigins.slice();
+    origins.forEach(function (origin) {
+      if (wouldHold.indexOf(origin) === -1) wouldHold.push(origin);
+    });
+    if (wouldHold.length > protocol.ORIGIN_LIMIT) {
+      return {
+        status: 400,
+        error: {
+          code: "PROTO_BAD_REQUEST",
+          detail:
+            "refused origin " +
+            JSON.stringify(String(origins[origins.length - 1])) +
+            ": review " +
+            request.review +
+            " already holds " +
+            heldOrigins.length +
+            " origins and the limit is " +
+            protocol.ORIGIN_LIMIT
+        }
+      };
+    }
+
     var applied = [];
     origins.forEach(function (origin) {
-      if (typeof origin !== "string" || !origin) return;
       deps.reviews.registerOrigin(request.review, origin);
       applied.push(origin);
     });

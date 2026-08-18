@@ -58,6 +58,48 @@
   var ALLOWED_HOST_NAMES = ["127.0.0.1", "localhost", "[::1]", "::1"];
 
   // ---------------------------------------------------------------------------
+  // What may be added to a review's origin allowlist OVER THE WIRE
+  // ---------------------------------------------------------------------------
+  //
+  // The security model is two factors: the per-review token AND the origin
+  // allowlist. `review.write` takes origins in its BODY, so without this a
+  // script running on an already-allowed page could read the token off the
+  // script tag and add any origin it liked, which leaves the token as the only
+  // factor. So the route accepts only what `add` legitimately sends: the literal
+  // "null" (a page opened from a file), and http/https on a loopback host. `add`
+  // writing to disk is deliberately wider, because that path is a person at a
+  // terminal typing --origin, not a page.
+  var LOOPBACK_ORIGIN_HOSTS = ["localhost", "127.0.0.1", "[::1]"];
+
+  // Enough for the ordinary spread (127.0.0.1 and localhost, a couple of ports,
+  // http and https) with room to spare, and low enough that a caller quietly
+  // accumulating origins is refused rather than growing the list forever.
+  var ORIGIN_LIMIT = 16;
+
+  /**
+   * May this origin be registered through `review.write`?
+   *
+   * @param {*} origin
+   * @returns {boolean}
+   */
+  function isRegisterableOrigin(origin) {
+    if (typeof origin !== "string" || !origin) return false;
+    if (origin === "null") return true;
+    var parsed;
+    try {
+      parsed = new URL(origin);
+    } catch (err) {
+      return false;
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+    // An origin carries scheme, host and port and nothing else. A value with a
+    // path, a query, credentials or a fragment is not one, whatever it parses to.
+    if (parsed.pathname !== "/" || parsed.search || parsed.hash || parsed.username || parsed.password) return false;
+    if (origin !== parsed.origin) return false;
+    return LOOPBACK_ORIGIN_HOSTS.indexOf(parsed.hostname) !== -1;
+  }
+
+  // ---------------------------------------------------------------------------
   // Headers
   // ---------------------------------------------------------------------------
 
@@ -154,7 +196,11 @@
       mutating: true,
       why:
         "what `add` calls for a review the helper already holds: the helper applies the writes itself, so `add` " +
-        "never has to stop a helper that is holding somebody's live review (and never drops an open `lahe wait`)",
+        "never has to stop a helper that is holding somebody's live review (and never drops an open `lahe wait`). " +
+        "Its origins are DELIBERATELY NARROWER than what `add` may write to disk: only \"null\" and loopback " +
+        "http/https pass (isRegisterableOrigin), capped at ORIGIN_LIMIT per review. A body-supplied origin is the " +
+        "one way a script on an allowed page could widen the allowlist with a token it read off the script tag, " +
+        "which would leave the token as the only factor guarding the review",
       request: "{review, origins: [origin...], target_path?, source_path?, source_hint?, page_path?}",
       response: "{origins, recorded_source, recorded_paths, seq}"
     },
@@ -806,6 +852,9 @@
     DEFAULT_HOST: DEFAULT_HOST,
     DEFAULT_HELPER_ORIGIN: DEFAULT_HELPER_ORIGIN,
     ALLOWED_HOST_NAMES: ALLOWED_HOST_NAMES,
+    LOOPBACK_ORIGIN_HOSTS: LOOPBACK_ORIGIN_HOSTS,
+    ORIGIN_LIMIT: ORIGIN_LIMIT,
+    isRegisterableOrigin: isRegisterableOrigin,
 
     HEADER: HEADER,
     CLIENT_LAYER: CLIENT_LAYER,
