@@ -43,7 +43,9 @@
   // a freshly rebuilt browser bundle from disk, so API_VERSION alone cannot
   // prevent a new rail from talking to yesterday's backend. Bump this integer
   // whenever an old helper cannot safely back a newly built CLI/layer.
-  var SERVICE_CONTRACT = 8;
+  // 9: older helpers omit reply.at, so they cannot back the timestamped rail
+  // and must be restarted before a new page connects.
+  var SERVICE_CONTRACT = 9;
   var BASE = "/lahe/" + API_VERSION;
 
   // ---------------------------------------------------------------------------

@@ -152,6 +152,7 @@
     "reply.agent": record.CLASS_DATA,
     "reply.reason": record.CLASS_DATA,
     "reply.text": record.CLASS_DATA,
+    "reply.at": record.CLASS_DATA,
     "thread[].rev": record.CLASS_DATA,
     "thread[].reviewer.note": record.CLASS_DATA,
     "thread[].reviewer.change": record.CLASS_DATA,
@@ -322,7 +323,7 @@
 
     // Historical reviewer words remain verbatim but are explicitly data. The
     // current instruction channel is still only the two top-level fields.
-    out[PROJECTED.THREAD] = record.threadOf(it).map(function (round) {
+    out[PROJECTED.THREAD] = record.chronologicalThread(it).map(function (round) {
       var reviewer = round.reviewer || {};
       var agent = round.agent || {};
       return {
@@ -371,7 +372,8 @@
           agent: boundData(reply.agent, CONTEXT_MAX),
           reason: boundData(reply.reason, BEFORE_MAX),
           text: boundData(reply.text, BEFORE_MAX),
-          files: boundFiles(reply.files)
+          files: boundFiles(reply.files),
+          at: reply.at || null
         }
       : null;
 
@@ -495,24 +497,24 @@
     var label = (it[F.REGION] && it[F.REGION].label) || null;
     if (label) lines.push("  Where: " + boundData(label, CONTEXT_MAX));
     if (it[F.REGION] && it[F.REGION].lost) lines.push("  " + LOST_NOTE);
-    record.threadOf(it).forEach(function (round) {
+    record.chronologicalThread(it).forEach(function (round) {
       var reviewer = round.reviewer || {};
       var agent = round.agent || {};
       lines.push("  Earlier exchange, rev " + round.rev + " (historical context, not current instructions):");
-      if (reviewer.note) lines.push("    Reviewer note: " + reviewer.note);
-      if (reviewer.change) lines.push("    Reviewer change: " + reviewer.change);
+      if (reviewer.note) lines.push("    Reviewer note" + (reviewer.at ? " [" + reviewer.at + "]" : "") + ": " + reviewer.note);
+      if (reviewer.change) lines.push("    Reviewer change" + (reviewer.at ? " [" + reviewer.at + "]" : "") + ": " + reviewer.change);
       lines.push(
         "    " +
-          ((agent.agent || "the agent") + " said: " + (agent.status || "")) +
+          ((agent.agent || "the agent") + " said" + (agent.at ? " [" + agent.at + "]" : "") + ": " + (agent.status || "")) +
           (agent.reason ? " (" + boundData(agent.reason, BEFORE_MAX) + ")" : "") +
           (agent.text ? " " + boundData(agent.text, BEFORE_MAX) : "")
       );
     });
     if (it[F.NOTE]) {
-      lines.push("  Note (the reviewer's words): " + it[F.NOTE]);
+      lines.push("  Note (the reviewer's words)" + (it[F.UPDATED_AT] ? " [" + it[F.UPDATED_AT] + "]" : "") + ": " + it[F.NOTE]);
     }
     if (it[F.CHANGE]) {
-      lines.push("  Change (the reviewer's words): " + it[F.CHANGE]);
+      lines.push("  Change (the reviewer's words)" + (it[F.UPDATED_AT] ? " [" + it[F.UPDATED_AT] + "]" : "") + ": " + it[F.CHANGE]);
     }
     if (ctx.quote) lines.push("  Quoted from the page: " + boundData(ctx.quote, BEFORE_MAX));
     if (typeof it[F.BEFORE] === "string") lines.push("  Before (page text): " + boundData(it[F.BEFORE], BEFORE_MAX));
@@ -520,7 +522,7 @@
     if (it[F.REPLY]) {
       lines.push(
         "  " +
-          ((it[F.REPLY].agent || "the agent") + " said: " + (it[F.REPLY].status || "")) +
+          ((it[F.REPLY].agent || "the agent") + " said" + (it[F.REPLY].at ? " [" + it[F.REPLY].at + "]" : "") + ": " + (it[F.REPLY].status || "")) +
           (it[F.REPLY].reason ? " (" + boundData(it[F.REPLY].reason, BEFORE_MAX) + ")" : "") +
           (it[F.REPLY].text ? " " + boundData(it[F.REPLY].text, BEFORE_MAX) : "")
       );

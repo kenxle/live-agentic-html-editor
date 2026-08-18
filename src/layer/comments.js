@@ -1683,7 +1683,9 @@
       });
       list.reverse();
       return list.sort(function (a, b) {
-        return String(b[record.FIELD.CREATED_AT]).localeCompare(String(a[record.FIELD.CREATED_AT]));
+        var at = a[record.FIELD.UPDATED_AT] || a[record.FIELD.CREATED_AT] || "";
+        var bt = b[record.FIELD.UPDATED_AT] || b[record.FIELD.CREATED_AT] || "";
+        return String(bt).localeCompare(String(at));
       });
     }
 
