@@ -292,7 +292,10 @@ The **drain command** is `lahe status --session <id> --json --quiet`. It prints
 every ready item nobody has answered, and nothing at all when there is none. An
 agent runs it, handles what it prints, replies, and runs it again until it prints
 nothing. Work stays listed until a reply lands, so a missed wake costs nothing:
-the next drain shows the item again.
+the next drain shows the item again. When the reviews are not in the default
+state directory, every command the tool prints carries `--state-dir <path>`
+already: copy them as printed, because the same command without it reads the
+default directory and reports no work.
 
 The **wake channel** is per host, because hosts differ in what they can do
 without spending model tokens:
@@ -301,7 +304,8 @@ without spending model tokens:
   `tail -n 0 -f <state-dir>/agent-sessions/<id>/wake.log`. The wake feed is one
   append-only file per agent session, created empty when the session is, so the
   tail can be armed before any work exists. It gets a line when a ready item
-  lands, when the session is taken over, and when it closes. Nothing to relaunch,
+  lands, when the reviewer reopens an item, when the session is taken over, and
+  when it closes. Nothing to relaunch,
   and no model turns at all while it is quiet.
 - **Codex** runs `lahe monitor --session <id>` as a foreground pending exec call
   and keeps waiting on it. It must not detach the process, announce that

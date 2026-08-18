@@ -54,6 +54,10 @@ prints, rebuild, verify the visible output, append your replies, then run it
 again. Repeat until it prints nothing. Work stays listed until your reply lands,
 so a wake you miss costs you nothing: the next drain shows the item again.
 
+Run the line as it was printed. Reviews outside the default state directory get
+`--state-dir <path>` on every printed command, and the same command retyped
+without it reads the default directory and honestly reports no work.
+
 **The wake channel** depends on your host. Use the one for yours, and only that
 one.
 

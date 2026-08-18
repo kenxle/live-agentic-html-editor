@@ -379,6 +379,13 @@ Work stays listed until your reply lands. That is deliberate: it means a wake yo
 miss costs you nothing, because the next drain shows the item again. There is no
 ledger to carry and nothing to keep in sync.
 
+**Copy the printed commands exactly.** When the reviews live somewhere other than
+the default state directory, every command this tool prints (the drain, the
+monitor, the close, and the `drain` field on each wake line) already carries
+`--state-dir <path>`. Retyping the command from this doc without it reads the
+DEFAULT state directory instead, where it will honestly report no work while
+items sit unanswered.
+
 **The wake channel** is per host. Use the one for yours and only that one.
 
 #### Claude Code
@@ -390,8 +397,9 @@ tail -n 0 -f <state-dir>/agent-sessions/<session-id>/wake.log
 ```
 
 The wake feed is one append-only file per agent session. It gets one line when a
-ready item lands for a review this session owns, one line on takeover, and one
-line on close. Each new line means run the drain command. The Monitor stays armed
+ready item lands for a review this session owns, one line when the reviewer
+reopens an item you already answered, one line on takeover, and one line on
+close. Each new line means run the drain command. The Monitor stays armed
 for the whole session, so there is nothing to relaunch and nothing to remember,
 and an idle session costs no model turns at all.
 

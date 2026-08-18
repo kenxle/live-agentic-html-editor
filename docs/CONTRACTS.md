@@ -628,13 +628,25 @@ The one read path, and the one keep-up loop. Before it, every agent hand-rolled 
   stays listed until a reply lands, so REDELIVERY is the dedupe. A missed wake, a crashed monitor, and
   a restarted machine all cost nothing, because the next drain shows the item again. `--seen-file` is
   still accepted (identity: session + review + item + revision) but no surface teaches it.
+- **The printed spelling carries `--state-dir` when it has to.** `protocol.drainCommand` and
+  `protocol.monitorCommand` take the directory as a second argument, and `stateDir.flagFor` decides:
+  it returns the path only when the default resolution (`LAHE_STATE_DIR`, then `XDG_STATE_HOME`, then
+  `~/.local/state/lahe`) lands somewhere else. Every printed surface passes it: the `lahe review` and
+  `lahe session takeover` command blocks, the monitor's NEXT block, and each wake line's `drain`
+  field. A path with a space is quoted. Without this, a command copied out of a custom state
+  directory resolved the default one and reported no work while items sat unanswered.
 - **The closed-session guard:** a MONITORING read of a closed session (`--quiet` or `--seen-file`) is
   refused with `4`. A plain read still works, because the history is the point of keeping it. This used
   to be gated on `--seen-file` alone, so a monitor that stopped passing that flag polled a closed
   session forever.
-- **Activity:** a `--session` read touches `<state>/agent-sessions/<id>/activity.json`. That is what
-  lets the rail tell an agent mid-batch from an agent that is gone. Its own file, not a field on
-  `session.json`, so it can never race a takeover's write.
+- **Activity:** a `--session` DRAIN (`--quiet`) touches `<state>/agent-sessions/<id>/activity.json`.
+  That is what lets the rail tell an agent mid-batch from an agent that is gone. Its own file, not a
+  field on `session.json`, so it can never race a takeover's write. Two reads deliberately do not
+  stamp it: the monitor's own idle polls (an internal `suppressActivityTouch` option it passes) and a
+  plain read with no `--quiet`, which is an audit rather than a drain. Both used to, which kept the
+  rail saying "agent working" while nobody was home and delayed the unattended alarm indefinitely.
+  The service side still stamps it when a reply fold accepts a line, because an appended reply is the
+  agent working by definition.
 - **Exit codes:** `0` completed (even with zero items), `2` nothing readable, `3` unknown review, `4` bad
   usage or a monitoring read of a closed session. `lahe monitor` adds `5` (session closed) and `6`
   (session taken over). The shared table is `protocol.CLI_EXIT`.
@@ -655,8 +667,10 @@ exists. The helper appends one line per READY TRANSITION on a review this sessio
 
 - **Append-only, never rewritten, never rotated.** `tail -f` follows an inode, and an atomic replace
   leaves every armed tail silently deaf. That is exactly why tailing `review.json` failed.
-- **Transition-based.** A burst of typing is `item.content` events and appends nothing. Only
-  `item.ready` wakes anyone.
+- **Transition-based.** A burst of typing is `item.content` events and appends nothing. The two ready
+  transitions wake: `item.ready`, and `item.reopened`, which is the reviewer saying "this is not
+  done" about an item an agent already answered. The projector treats both as ready, so the feed
+  does too; a reopen used to be silent, and a host waiting on the tail waited forever.
 - **Idempotent.** Only events the log newly stored are considered, so a reconnect replay walks past.
   The feed's own `(review, item, rev)` key is the second belt; a re-ready after rework carries a new
   rev and legitimately appends again.
@@ -672,10 +686,18 @@ so a host that wakes an agent on task completion pays no model tokens for a quie
   stream used to get the instruction without the work, or the work without the instruction.
 - It ends by printing the exact drain and relaunch commands, so the next step is in the agent's face
   rather than in a doc.
-- Each loop writes `<state>/agent-sessions/<id>/monitor.json` (`pid`, `handoff_rev`, `at`) through
-  `stateDir.writeAtomic`. On startup, a heartbeat younger than three intervals carrying the same
-  `handoff_rev` and a different LIVE pid refuses the launch with `4`: two monitors deliver one batch
-  twice. Stale heartbeats and dead pids are overwritten.
+- It writes `<state>/agent-sessions/<id>/monitor.json` (`pid`, `handoff_rev`, `at`) through
+  `stateDir.writeAtomic`: once immediately after the startup guard passes, then once per loop. On
+  startup, a heartbeat younger than three intervals carrying the same `handoff_rev` and a different
+  LIVE pid refuses the launch with `4`: two monitors deliver one batch twice. Stale heartbeats and
+  dead pids are overwritten. The guard reads a file, so two monitors launched in the same
+  millisecond can still both pass; writing the first heartbeat before the first poll is what keeps
+  that window at milliseconds rather than a whole interval.
+- **Every deliberate exit removes its own heartbeat** (`store.clearMonitor`, which refuses to remove
+  one carrying another pid). Otherwise the relaunch every surface prescribes met a heartbeat that
+  was still fresh for 45 seconds, over a pid that answers signal 0 until it is reaped, and was
+  refused with `4` while the session sat unwatched. A crash still leaves one behind, which is what
+  the freshness window and the pid check are for.
 
 ### Agent liveness on the rail
 
@@ -692,6 +714,16 @@ server-side from the review to its owning agent session. Fields: `state`, `monit
 
 A heartbeat whose `handoff_rev` differs from the session's current one is IGNORED for the state: a
 pre-takeover monitor that has not exited yet must never make the rail claim the new agent is watching.
+
+`unanswered` and `oldest_unanswered_at` come from `record.isUnansweredReady`, the same predicate
+`lahe status` lists items with, computed once per log position (a projection is a pure function of
+the log, so its `seq` is a complete cache key) rather than by re-reading the log on every poll. The
+age is `updated_at` first and `created_at` only as a fallback: an item reopened a minute ago is a
+minute of unanswered work, not the four hours since the reviewer first wrote it.
+
+On the rail, the liveness reaches the overlay whenever any of those five fields changes, not only
+when `state` does, and the unattended line recomputes its age on every paint plus a 30-second tick of
+its own. Both exist because "oldest item 1m" used to sit there saying 1m an hour later.
 
 Every field comes from a file the helper, the monitor, or a `lahe` command wrote. None of it is
 anything an agent said about itself, which is the whole point: a chat claiming "monitoring is active"
