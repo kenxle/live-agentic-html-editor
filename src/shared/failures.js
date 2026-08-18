@@ -137,7 +137,7 @@
       SEVERITY.WARNING,
       true,
       SURFACE.CARD,
-      "The passage this item is about is no longer on the page. The item is kept and the agent is told.",
+      "The passage this comment points at is gone from the page. Your comment is kept, and the agent still sees it.",
       null
     ),
     REPLAY_CONTENT_CHANGED: def(

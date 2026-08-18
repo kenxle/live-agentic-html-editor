@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+cab6e8eaa48b
+ * version 0.0.0+d7fc3e751d5d
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+cab6e8eaa48b";
+  g.LAHE.version = "0.0.0+d7fc3e751d5d";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -963,7 +963,7 @@
       SEVERITY.WARNING,
       true,
       SURFACE.CARD,
-      "The passage this item is about is no longer on the page. The item is kept and the agent is told.",
+      "The passage this comment points at is gone from the page. Your comment is kept, and the agent still sees it.",
       null
     ),
     REPLAY_CONTENT_CHANGED: def(
@@ -17931,7 +17931,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+cab6e8eaa48b";
+  var VERSION = "0.0.0+d7fc3e751d5d";
 
   var protocol = ns.protocol;
   var record = ns.record;
