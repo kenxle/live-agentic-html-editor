@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+4cfe66f995b6
+ * version 0.0.0+0386b274d7f4
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+4cfe66f995b6";
+  g.LAHE.version = "0.0.0+0386b274d7f4";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -2901,8 +2901,29 @@
     // session, 2026-08-16). Pointerdown is the honest moment the reviewer left
     // the block, it fires before focus moves, and the event still passes
     // through untouched so the rail and the page both get their click.
+    //
+    // TWO PRESSES THIS RULE MUST NOT READ AS LEAVING THE BLOCK:
+    //
+    //  1. A SCROLLBAR DRAG. Dragging the root or an inner scrollbar fires
+    //     pointerdown on the element with no click after it, so the reviewer
+    //     scrolling to see the rest of their edit had contenteditable stripped
+    //     out from under their pointer mid-drag. `onScrollbar` is the caller's
+    //     answer: the press landed past the target's content box.
+    //  2. A SECONDARY BUTTON. Right-click opens a context menu; the reviewer is
+    //     still on the page and still editing. Only button 0 is leaving.
+    //
+    // Both were regressions of the widening from click to pointerdown (review,
+    // 2026-08-17). Window blur is the other way of leaving and is unaffected.
     if (e.type === "pointerdown" || e.type === "mousedown") {
       if (e.editing === true && e.inEditedBlock !== true) {
+        if (e.onScrollbar === true) {
+          return decide(GESTURE.PAGE_DEFAULT, true, false, "the press was on a scrollbar, which is scrolling rather than leaving the block");
+        }
+        // Undefined means a caller that cannot tell, and every keyboard-driven
+        // and synthetic press in that shape is a primary one.
+        if (e.button !== undefined && e.button !== null && e.button !== 0) {
+          return decide(GESTURE.PAGE_DEFAULT, true, false, "only a primary-button press is the reviewer leaving the block");
+        }
         return decide(GESTURE.COMMIT_EDIT, true, false, "the pointer went down outside the edited block, so the edit commits");
       }
       return decide(GESTURE.PAGE_DEFAULT, true, false, "a pointer going down with no edit open is the page's");
@@ -2926,6 +2947,29 @@
     }
 
     return decide(GESTURE.PAGE_DEFAULT, true, false, "browse is the page untouched (D3, R13)");
+  }
+
+  /**
+   * Did a press land on a scrollbar rather than on content?
+   *
+   * The geometry, not the DOM: the caller measures, this decides, so the rule is
+   * unit-testable with no browser the way every other rule in this file is. One
+   * shape covers both scrollbars a page has. An element's `clientWidth` stops at
+   * its content box while its border box includes the scrollbar gutter, and the
+   * root's scrollbar sits outside the document element with the viewport as the
+   * outer edge; either way the press is past the content and inside the box.
+   *
+   * @param {{x: number, y: number, contentWidth: number, contentHeight: number,
+   *          boxWidth: number, boxHeight: number}} geometry
+   *   `x` and `y` are the press relative to the content box's top-left corner.
+   * @returns {boolean}
+   */
+  function isScrollbarPress(geometry) {
+    var g = geometry || {};
+    if (typeof g.x !== "number" || typeof g.y !== "number") return false;
+    if (g.contentWidth > 0 && g.x >= g.contentWidth && g.x <= g.boxWidth) return true;
+    if (g.contentHeight > 0 && g.y >= g.contentHeight && g.y <= g.boxHeight) return true;
+    return false;
   }
 
   // KeyboardEvent.key is lowercase unless Shift is held, and it is the layout's
@@ -2963,6 +3007,7 @@
     GESTURE: GESTURE,
     TABLE: TABLE,
     gestureFor: gestureFor,
+    isScrollbarPress: isScrollbarPress,
     hintFor: hintFor,
     hintLines: hintLines,
     isPrimaryModifier: isPrimaryModifier
@@ -8813,14 +8858,23 @@
       // With no code, every chip goes. It used to be TWO clear functions in this
       // one object literal, so the no-argument one silently won and clearing one
       // standing chip wiped the whole list.
+      //
+      // CLEARING NOTHING CHANGES NOTHING. A save is a browser-storage write and
+      // a render tears the whole chip list down and rebuilds it, so a caller
+      // that clears a code with no chip on it (the sync client does, on every
+      // successful poll) was destroying and recreating the OTHER chips' buttons
+      // once a second: the "Copy for your agent" button lost its "Copied"
+      // confirmation, and a click straddling a rebuild landed on a detached
+      // node (review, 2026-08-17).
       clear: function (code) {
         var n = chips.length;
         chips = chips.filter(function (f) {
           return code === undefined || code === null ? false : f.code !== code;
         });
+        if (chips.length === n) return false;
         saveChips();
         renderChips();
-        return chips.length !== n;
+        return true;
       },
       isDismissed: function (code) {
         return dismissed[code] === true;
@@ -12154,7 +12208,19 @@
 
     function raise(failure) {
       lastFailure = failure;
-      if (failures.canonical(failure.code) === "HELPER_UNREACHABLE") helperReachable = false;
+      var code = failures.canonical(failure.code);
+      if (code === "HELPER_UNREACHABLE") helperReachable = false;
+      if (code === "SYNC_ORIGIN_NOT_ALLOWED" || code === "SYNC_UNAUTHORIZED") {
+        // The helper ANSWERED and refused us, so it is not unreachable. Clear
+        // that chip here rather than at one call site, or the page wears both
+        // and the wrong one last (review, 2026-08-17).
+        onRecovered("HELPER_UNREACHABLE");
+        // These two are standing conditions, not occurrences. Re-raising the
+        // one already standing would grow a ×N counter that counts our own
+        // retries, so a repeat is dropped and the chip stays as it is.
+        if (accessRefused === code) return failure;
+        accessRefused = code;
+      }
       onFailure(failure);
       return failure;
     }
@@ -12176,8 +12242,18 @@
       // over the moment this runs, and their standing chips end here too.
       // Without this, registering the origin fixed the review while the chip
       // kept saying it was broken (Ken, live, 2026-08-17).
-      onRecovered("SYNC_ORIGIN_NOT_ALLOWED");
-      onRecovered("SYNC_UNAUTHORIZED");
+      //
+      // Only on the STATE CHANGE, though. A healthy page polls every second,
+      // and clearing a chip that was never raised still wrote browser storage
+      // and rebuilt the whole chip list, which destroyed and recreated any
+      // other standing chip's buttons once a second: the "Copy for your agent"
+      // button lost its "Copied" confirmation, and a click that straddled a
+      // rebuild landed on a detached node (review, 2026-08-17).
+      if (accessRefused) {
+        accessRefused = null;
+        onRecovered("SYNC_ORIGIN_NOT_ALLOWED");
+        onRecovered("SYNC_UNAUTHORIZED");
+      }
       originDiagnosed = false;
       recomputeStatus();
       return helperReachable;
@@ -12469,7 +12545,14 @@
             // A poll the navigation cancelled says nothing about the helper.
             if (abortedByTeardown(result)) return { events: [] };
             raise(classify(result.error, { status: result.status, detail: describe(result) }));
-            if (result.status === undefined) diagnoseUnreachable();
+            if (result.status === undefined) {
+              // Returned rather than fired and forgotten, so one awaited poll
+              // is one settled diagnosis and a test can assert the chips.
+              return diagnoseUnreachable().then(function () {
+                recomputeStatus();
+                return { events: [] };
+              });
+            }
             recomputeStatus();
             return { events: [] };
           }
@@ -12577,7 +12660,13 @@
 
     function classify(error, hints) {
       var h = hints || {};
-      var code = decideFailureCode({ cspRefused: cspRefused, status: h.status, healthAnswered: h.healthAnswered });
+      // A diagnosis already made still holds. classify has no memory of the
+      // health probe, so without this every later failing poll re-raised
+      // HELPER_UNREACHABLE on a page whose real problem was its origin, and the
+      // reviewer wore both chips with the wrong one last (review, 2026-08-17).
+      var answered = h.healthAnswered;
+      if (answered === undefined && originDiagnosed) answered = true;
+      var code = decideFailureCode({ cspRefused: cspRefused, status: h.status, healthAnswered: answered });
       if (code === "SYNC_ORIGIN_NOT_ALLOWED") return failures.failure(code, originRemedy());
       return failures.failure(code, h.detail || (error && error.message) || null);
     }
@@ -12600,6 +12689,10 @@
     // is unauthenticated, needs no custom header, and therefore no preflight. If
     // health answers, the helper is up and the origin is the problem.
     var originDiagnosed = false;
+    // The access refusal currently STANDING, as a canonical code, or null.
+    // It is what tells a re-raise from a first raise and a real recovery from a
+    // healthy page's every-second poll.
+    var accessRefused = null;
 
     function pageOrigin() {
       if (win && win.location && win.location.origin) return String(win.location.origin);
@@ -12648,15 +12741,29 @@
     /**
      * After a network-level failure, work out whether this is really the helper
      * being down or this page's origin being unregistered, and say so once.
+     *
+     * The probe RE-RUNS on every failing poll rather than stopping at the first
+     * diagnosis. A diagnosis is a claim about right now, and a helper that dies
+     * an hour after the origin was refused has to surface as unreachable rather
+     * than leave the page insisting on an origin problem forever. Re-running
+     * costs one unauthenticated local request per failing poll, and a page whose
+     * polls are all succeeding never gets here at all.
      */
     function diagnoseUnreachable() {
-      if (originDiagnosed || cspRefused) return Promise.resolve(null);
+      if (cspRefused) return Promise.resolve(null);
       return probeHealth().then(function (healthAnswered) {
-        if (healthAnswered !== true) return null;
+        if (healthAnswered !== true) {
+          if (!originDiagnosed) return null;
+          // Health stopped answering. The origin diagnosis is over, and this is
+          // now a helper that is genuinely down.
+          originDiagnosed = false;
+          accessRefused = null;
+          onRecovered("SYNC_ORIGIN_NOT_ALLOWED");
+          return raise(failures.failure("HELPER_UNREACHABLE", "health stopped answering after an origin refusal"));
+        }
         originDiagnosed = true;
-        // The helper answers, so it is not unreachable. Clear that chip before
-        // raising the real one, or the page wears both and the wrong one first.
-        onRecovered("HELPER_UNREACHABLE");
+        // The helper answers, so it is not unreachable. raise clears that chip
+        // before this one lands, and it drops the repeat while it stands.
         return raise(failures.failure("SYNC_ORIGIN_NOT_ALLOWED", originRemedy()));
       });
     }
@@ -16212,9 +16319,62 @@
       listenerHandles = [];
     }
 
+    /**
+     * Did this press land on a scrollbar rather than on content?
+     *
+     * A scrollbar drag fires pointerdown and no click, so the commit-outside
+     * rule read the reviewer scrolling as the reviewer leaving and stripped
+     * contenteditable out from under their pointer (review, 2026-08-17).
+     *
+     * This function only MEASURES. gestures.isScrollbarPress decides, so the
+     * rule is unit-testable with no browser, the way every other gesture rule
+     * is. Two measurements, because a page has two kinds of scrollbar: the
+     * root's, which sits outside the document element with the viewport as its
+     * outer edge, and an element's own, which sits in the gutter between its
+     * content box and its border box.
+     *
+     * @param {Object} event a pointerdown or mousedown
+     * @returns {boolean}
+     */
+    function pressedOnScrollbar(event) {
+      var node = event.target;
+      if (!node || node.nodeType !== 1) return false;
+      if (typeof event.clientX !== "number" || typeof event.clientY !== "number") return false;
+
+      var docEl = doc && doc.documentElement ? doc.documentElement : null;
+      if (docEl && win && (node === docEl || node === doc.body)) {
+        var onRootBar = gestures.isScrollbarPress({
+          x: event.clientX,
+          y: event.clientY,
+          contentWidth: docEl.clientWidth,
+          contentHeight: docEl.clientHeight,
+          boxWidth: win.innerWidth || docEl.clientWidth,
+          boxHeight: win.innerHeight || docEl.clientHeight
+        });
+        if (onRootBar) return true;
+      }
+
+      if (typeof node.getBoundingClientRect !== "function") return false;
+      var rect = node.getBoundingClientRect();
+      return gestures.isScrollbarPress({
+        x: event.clientX - rect.left - (node.clientLeft || 0),
+        y: event.clientY - rect.top - (node.clientTop || 0),
+        contentWidth: node.clientWidth,
+        contentHeight: node.clientHeight,
+        boxWidth: rect.width,
+        boxHeight: rect.height
+      });
+    }
+
     function describe(event) {
       return {
         type: event.type,
+        // Which mouse button, and whether the press was on a scrollbar. Both
+        // exist for the commit-outside rule: only a primary press on content is
+        // the reviewer leaving the block.
+        button: typeof event.button === "number" ? event.button : undefined,
+        onScrollbar:
+          event.type === "pointerdown" || event.type === "mousedown" ? pressedOnScrollbar(event) : false,
         key: event.key,
         metaKey: event.metaKey === true,
         ctrlKey: event.ctrlKey === true,
@@ -18289,7 +18449,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+4cfe66f995b6";
+  var VERSION = "0.0.0+0386b274d7f4";
 
   var protocol = ns.protocol;
   var record = ns.record;
