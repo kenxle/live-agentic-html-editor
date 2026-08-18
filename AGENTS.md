@@ -87,6 +87,21 @@ remembers the path it was added at. `lahe add --new` mints a fresh one, and
 Re-running `add` never restarts a helper that is up, so a `lahe wait` you have
 blocked on somewhere else keeps waiting.
 
+### One review MAY span pages, and each page shows only its own items
+
+A review can hold several pages of one thing: the records carry the page they
+were made on, and `review.json` groups by page. On the page itself the reviewer
+sees only what was said THERE, so a second page never shows the first page's
+comments and never re-anchors them. `lahe status` and `review.json` show every
+page's items together, which is where you look for the whole review.
+
+Because of that, a DISTINCT deliverable usually reads better as its own review:
+a one-pager and a full report are two things a reviewer thinks about separately.
+`lahe add <newpage>` with no `--review` mints a new review unless the path is one
+this helper already has a review for, so the default is already the right one.
+Reach for `--review <id>` when the new page really is another page of the same
+thing.
+
 ### Running isolated
 
 `add` and `serve` both take `--port <n>` and `--state-dir <path>`, and both
@@ -228,6 +243,24 @@ A helper that goes away mid-wait is not the end of the wait: it retries from the
 same cursor for up to thirty seconds after the connection drops, however long
 the wait had already been open, and prints one line on stderr when it
 reconnects.
+
+### More than one document
+
+Twice in one session a second document got its own review mid-session, the wait
+loop stayed pointed at the first one, and the reviewer's comments on the new page
+landed unseen while the agent said it was listening. Two rules stop that:
+
+1. **Watch globally.** A watcher runs `lahe status --json` with NO `--review`, so
+   a review created mid-session is covered the moment it exists. `lahe wait` is
+   per review, so every live review gets its own backgrounded wait; the global
+   status watch is the safety net under them.
+2. **After every `lahe add`, say which review the page landed on.** The output
+   says whether it minted a new review, reused one, or matched an existing one by
+   path. Tell your human before they start commenting, so a page attached to the
+   wrong review is caught while it costs nothing.
+
+A distinct deliverable is its own review, and pages that really do share a review
+each show only their own items (see "One review MAY span pages" above).
 
 ## Step 5: take it back out when they are done
 

@@ -181,7 +181,52 @@
       { seq: 1 }
     );
 
-    var comments = opts.comments || ns.comments.createComments({ store: store, reviewId: reviewId, page: page });
+    // -------------------------------------------------------------------------
+    // THIS PAGE'S RECORDS, AND NOBODY ELSE'S
+    // -------------------------------------------------------------------------
+    //
+    // A review MAY span pages: the records carry page_origin and page_path,
+    // review.json groups by page, and `lahe add` re-attaches a second page to an
+    // existing review on purpose. But browser storage is keyed by REVIEW ID (it
+    // has to be, so one page's rail is one review), so store.read hands back
+    // every record the review holds, whichever page made it.
+    //
+    // The layer can only act on the ONE document it is loaded into, so anything
+    // from another page is filtered out HERE, at the single read boundary, and
+    // every surface below is handed the scoped store: replay and anchoring, the
+    // rail's Active/Done/Edits lists, the count pill, and the highlights. A
+    // second page attached to a live review otherwise inherited all 78 of the
+    // first page's items, tried to re-anchor them here, and listed them in the
+    // rail (Ken, live, 2026-08-17).
+    //
+    // FILTERED, NEVER DELETED. A foreign record is another page's outstanding
+    // work: it is not removed, not acknowledged, not re-posted, and not touched
+    // in any way. It is simply not this page's business. `lahe status` and
+    // review.json still show the whole review, which is where an agent looks.
+    //
+    // record.samePage carries the rule, including what file:// does to it.
+    // Export keeps the UNSCOPED store deliberately: Copy and Export are the
+    // reviewer handing over the review, not this page's slice of it.
+    var scopedStore = pageScoped(store, page);
+
+    function pageScoped(inner, forPage) {
+      var wrapper = Object.create(null);
+      Object.keys(inner).forEach(function (name) {
+        wrapper[name] = inner[name];
+      });
+      wrapper.read = function (id) {
+        return inner.read(id).filter(function (item) {
+          return record.samePage(item, forPage);
+        });
+      };
+      wrapper.readItem = function (id, itemId) {
+        var got = inner.readItem(id, itemId);
+        return got && record.samePage(got, forPage) ? got : null;
+      };
+      return wrapper;
+    }
+
+    var comments = opts.comments || ns.comments.createComments({ store: scopedStore, reviewId: reviewId, page: page });
     comments.bind({ page: page });
 
     // The Active tab's contents live INSIDE the rail's own Active pane, so
@@ -204,7 +249,7 @@
 
     function createDoneTab() {
       var made = ns.tabDone.createDoneTab({
-        store: store,
+        store: scopedStore,
         reviewId: reviewId,
         comments: comments,
         overlay: rail,
@@ -341,7 +386,7 @@
     // comment surface is: through the listener registry, under its own group, so
     // a remount clears exactly what it re-registers.
     var editing = opts.editing || ns.editing.createEditing({
-      store: store,
+      store: scopedStore,
       reviewId: reviewId,
       page: page,
       sync: sync
@@ -356,7 +401,7 @@
 
     function makeEditsTab() {
       var made = ns.tabEdits.createEditsTab({
-        store: store,
+        store: scopedStore,
         reviewId: reviewId,
         overlay: rail,
         host: rail.tabBody(ns.overlay.TAB.EDITS),
@@ -371,10 +416,10 @@
     // it was handed, and a fresh copy every pass would throw that stamp away and
     // re-stamp it, which turns "this record was untouched" into a diff on every
     // pass. Every write refreshes the cache.
-    var items = store.read(reviewId);
+    var items = scopedStore.read(reviewId);
 
     function refreshItems() {
-      items = store.read(reviewId);
+      items = scopedStore.read(reviewId);
       return items;
     }
 
@@ -625,7 +670,12 @@
       review: reviewId,
       config: config,
       page: page,
-      store: store,
+      // The PAGE-SCOPED store: everything the layer draws, replays and counts is
+      // this page's records. The unscoped one is on the handle as `allStore` for
+      // the two callers that legitimately want the whole review (export, and a
+      // test asserting another page's items were left alone).
+      store: scopedStore,
+      allStore: store,
       rail: rail,
       comments: comments,
       tab: function () {
@@ -755,6 +805,12 @@
       },
       itemById: function (id) {
         return handle.store.readItem(handle.review, id);
+      },
+      // Every record the review holds in this browser, this page's and every
+      // other page's. The one read that is deliberately NOT page-scoped, so a
+      // test can prove the foreign items are still there, untouched.
+      allItems: function () {
+        return handle.allStore.read(handle.review);
       },
       merge: handle.merge,
 

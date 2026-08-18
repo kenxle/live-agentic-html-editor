@@ -348,10 +348,18 @@
     ".chips:empty{display:none}",
     ".chip{display:flex;align-items:flex-start;gap:8px;font-size:12px;line-height:1.4;",
     "background:var(--warn-wash);color:var(--ink);border-radius:8px;padding:7px 8px 7px 10px}",
-    ".chip__text{flex:1}",
-    ".chip__remedy{display:block;color:var(--ink-soft);font-size:11.5px;margin-top:2px}",
+    // min-width:0 and the wrap rules are load bearing: a chip is a flex item, a
+    // flex item will not shrink below its content, and one long unbroken path in
+    // the detail line pushed the whole chip wider than the rail so the first
+    // sentence was clipped off the side, unreadable (Ken, live, 2026-08-18).
+    ".chip__text{flex:1;min-width:0;overflow-wrap:anywhere;word-break:break-word}",
+    ".chip__remedy{display:block;color:var(--ink-soft);font-size:11.5px;margin-top:2px;",
+    "overflow-wrap:anywhere;word-break:break-word}",
     ".chip__copy{margin-top:4px;padding:2px 8px;border-radius:6px;font-size:11.5px;",
     "background:var(--ink);color:var(--paper,#fff);cursor:pointer}",
+    ".chip__action{margin-top:6px;padding:3px 10px;border-radius:7px;font-size:11.5px;font-weight:600;",
+    "background:var(--accent);color:var(--paper,#fff);cursor:pointer}",
+    ".chip__action[disabled]{opacity:.6;cursor:default}",
     ".chip__x{width:20px;height:20px;border-radius:5px;color:var(--ink-soft);flex:none;",
     "display:flex;align-items:center;justify-content:center;font-size:13px}",
     ".chip__x:hover{background:rgba(0,0,0,.06);color:var(--ink)}",
@@ -1137,6 +1145,26 @@
       store.writeChips(reviewId, { chips: chips, dismissed: Object.keys(dismissed) });
     }
 
+    // -------------------------------------------------------------------------
+    // What a chip is allowed to offer
+    // -------------------------------------------------------------------------
+    //
+    // Two closed lists, both opt in by failure code, because the generic version
+    // (any chip with a detail gets a Copy button) put the wrong control on the
+    // wrong failure.
+    //
+    // CHIP_ACTIONS: the failure has a fix the reviewer performs right here. The
+    // click runs through the same runAction seam the footer's buttons use, so
+    // boot still owns what the button DOES.
+    var CHIP_ACTIONS = {
+      SECOND_WINDOW_REFUSED: { label: "Review here", action: "takeover" }
+    };
+
+    // COPYABLE_CODES: the failure is fixed somewhere the reviewer is not, so the
+    // detail line is written as a sentence to hand to their agent verbatim. Both
+    // of these carry one: sync.js's originRemedy, and the refused connect-src.
+    var COPYABLE_CODES = ["SYNC_ORIGIN_NOT_ALLOWED", "CSP_REFUSED"];
+
     function renderChips() {
       if (!dom) return;
       dom.chipList.textContent = "";
@@ -1146,12 +1174,29 @@
         text.appendChild(el("span", null, chip.message || chip.code));
         if (chip.remedy) text.appendChild(el("span", "chip__remedy", chip.remedy));
         // The detail is the specific fact (this page's actual origin, the exact
-        // command) and it is the part worth handing to an agent verbatim, so it
-        // gets its own line and a copy button. Without this the interpolated
-        // line was stored and never shown, and the reviewer only ever saw the
-        // generic remedy.
-        if (chip.detail) {
-          text.appendChild(el("span", "chip__remedy", chip.detail));
+        // command) and it is worth showing, so it gets its own line. Without
+        // this the interpolated line was stored and never shown, and the
+        // reviewer only ever saw the generic remedy.
+        if (chip.detail) text.appendChild(el("span", "chip__remedy", chip.detail));
+        // The chip's OWN action, for the failures the reviewer fixes here rather
+        // than by asking an agent. A second window is the one that matters: the
+        // fix is one button, so the chip carries it.
+        var action = CHIP_ACTIONS[chip.code];
+        if (action) {
+          var actionBtn = el("button", "chip__action", action.label);
+          actionBtn.setAttribute("type", "button");
+          actionBtn.addEventListener("click", function () {
+            runAction(action.action);
+          });
+          text.appendChild(actionBtn);
+        }
+        // Copy-for-your-agent is OPT IN, per failure code, and never on a chip
+        // that has its own action. It went on every chip with a detail, which
+        // put it on the second-window chip and displaced the one button that
+        // actually fixes that failure (Ken, live, 2026-08-18). A copy button
+        // earns its place only where handing the line to an agent IS the
+        // remedy, which is what COPYABLE_CODES lists.
+        if (chip.detail && !action && COPYABLE_CODES.indexOf(chip.code) !== -1) {
           var copy = el("button", "chip__copy", "Copy for your agent");
           copy.addEventListener("click", function () {
             var nav = typeof navigator !== "undefined" ? navigator : null;
@@ -1181,6 +1226,32 @@
         row.appendChild(x);
         dom.chipList.appendChild(row);
       });
+    }
+
+    /**
+     * What each chip is OFFERING the reviewer right now: its code, and the label
+     * on every button it drew (its own action, the copy button, or neither).
+     *
+     * The chips live in a closed shadow root, so a spec cannot reach them with a
+     * selector, and "the second-window chip has a Review here button and no Copy
+     * button" is exactly the claim that broke live. This is how it is asserted.
+     *
+     * @returns {Array<{code: string, buttons: Array<string>}>}
+     */
+    function chipControls() {
+      if (!dom) return [];
+      var out = [];
+      var rows = dom.chipList.children;
+      for (var i = 0; i < rows.length; i += 1) {
+        var buttons = [];
+        var found = rows[i].querySelectorAll("button");
+        for (var b = 0; b < found.length; b += 1) {
+          // The dismiss × is chrome on every chip, never an offer.
+          if (found[b].className !== "chip__x") buttons.push(found[b].textContent);
+        }
+        out.push({ code: chips[i] ? chips[i].code : null, buttons: buttons });
+      }
+      return out;
     }
 
     var failuresApi = {
@@ -1661,6 +1732,7 @@
       activeElementInfo: activeElementInfo,
       cardIds: cardIds,
       countFor: countFor,
+      chipControls: chipControls,
       failures: failuresApi,
       onAction: onAction,
       menuInfo: menuInfo,

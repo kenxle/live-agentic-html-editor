@@ -216,8 +216,14 @@ test.describe("Copy and Export: the same review, with the helper and without it"
       });
       await commentOnSelection(page, "h1", SAID.clients);
 
-      const ids = await page.evaluate(() => window.__lahe.items().map((item) => item.id));
+      // allItems, not items: the rail on this page shows only THIS page's work
+      // (record.samePage), and what export is about is the whole review.
+      const ids = await page.evaluate(() => window.__lahe.allItems().map((item) => item.id));
       expect(ids, "three records: two comments and an edit, across two pages").toHaveLength(3);
+      expect(
+        await page.evaluate(() => window.__lahe.items().length),
+        "and this page shows only its own one of them"
+      ).toBe(1);
 
       // The helper really is up and really has been talked to. Without this,
       // "the full export" could be the no-helper path passing under a name.

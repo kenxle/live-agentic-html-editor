@@ -87,6 +87,11 @@ var LAYER_FILES = [
     why: "the write-epoch rule that stops replay retriggering replay. Depends on nothing"
   },
   {
+    path: "src/shared/elapsed.js",
+    owner: "0A-kernel",
+    why: "the one wording for how long something has been going on. Helper and rail both say it. Depends on nothing"
+  },
+  {
     path: "src/shared/protocol.js",
     owner: "0A-wire",
     why: "routes, headers, the per-review token, error shapes. Needs failures"

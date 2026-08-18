@@ -49,6 +49,7 @@ var crypto = require("node:crypto");
 var fs = require("node:fs");
 
 var protocol = require("../shared/protocol.js");
+var elapsed = require("../shared/elapsed.js");
 var stateDir = require("./state_dir.js");
 
 var TOKEN_BYTES = 32;
@@ -670,21 +671,14 @@ function createReviews(options) {
    *
    * The refusal text is shown on the rail, and a raw ISO timestamp ("holding it
    * since 2026-08-18T02:48:36.137Z") is machine output in a sentence meant for a
-   * person. Recent times read as an elapsed span; anything older falls back to a
-   * local date and time, without milliseconds and without the Z. The `since`
+   * person. The wording itself lives in src/shared/elapsed.js, because the RAIL
+   * says the same thing about the same holder and two spellings of one fact is
+   * how the helper and the page ended up disagreeing on screen. The `since`
    * field of the refusal is untouched: that one IS for machines.
    */
   function heldForPhrase(holder) {
-    var since = new Date(holder.since);
-    if (isNaN(since.getTime())) return "since " + String(holder.since);
-    var startedAt = typeof holder.since_ms === "number" ? holder.since_ms : since.getTime();
-    var seconds = Math.max(0, Math.round((clock() - startedAt) / 1000));
-    if (seconds < 60) return "for less than a minute";
-    if (seconds < 90 * 60) {
-      var minutes = Math.round(seconds / 60);
-      return "for the last " + minutes + (minutes === 1 ? " minute" : " minutes");
-    }
-    return "since " + since.toLocaleString();
+    var startedAt = typeof holder.since_ms === "number" ? holder.since_ms : holder.since;
+    return elapsed.elapsedPhrase(startedAt, { now: clock() });
   }
 
   function holderIsStale(holder) {

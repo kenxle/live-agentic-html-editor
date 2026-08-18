@@ -892,6 +892,11 @@
             raise(got.failure);
             return lock;
           }
+          // The client lock is held, so any second-window chip left in storage
+          // from an earlier session is stale. Cleared here as well as in
+          // parseClaim, because this half works with the helper down and it is
+          // the only half a helperless page ever runs.
+          onRecovered("SECOND_WINDOW_REFUSED");
           // The two shapes fail differently (D5): the lock above catches two
           // tabs sharing one storage bucket, and only the helper can see two
           // windows that cannot see each other's storage.
@@ -920,6 +925,15 @@
         // A granted claim or heartbeat is an acknowledged exchange, so it is
         // proof of reachability just like a reply poll is.
         markReachable();
+        // AND this window holds the review, so a second-window refusal is over.
+        // A chip is restored from browser storage on every load and was trusted
+        // as it stood, so a refusal from an earlier session (or from the moment
+        // a reload raced its own outgoing page) stayed on the rail while the
+        // reviewer was typing happily into the review it claimed was locked
+        // (Ken, live, 2026-08-18). Every successful claim re-validates it. The
+        // clear is a no-op when no such chip stands, so the heartbeat every ten
+        // seconds costs nothing.
+        onRecovered("SECOND_WINDOW_REFUSED");
         var b = result.body || {};
         return {
           granted: true,

@@ -39,15 +39,16 @@
   var browser = typeof window !== "undefined" && !!window.document;
   if (browser) {
     root.LAHE = root.LAHE || {};
-    root.LAHE.store = factory(root.LAHE.record, root.LAHE.merge, root.LAHE.failures);
+    root.LAHE.store = factory(root.LAHE.record, root.LAHE.merge, root.LAHE.failures, root.LAHE.elapsed);
   } else {
     module.exports = factory(
       require("../shared/record.js"),
       require("../shared/merge.js"),
-      require("../shared/failures.js")
+      require("../shared/failures.js"),
+      require("../shared/elapsed.js")
     );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (record, merge, failures) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (record, merge, failures, elapsed) {
   "use strict";
 
   var KEY_PREFIX = "lahe.items.v1:";
@@ -441,10 +442,17 @@
       return readJson(holderKey(reviewId), null);
     }
 
+    // The sentence a refusal shows the REVIEWER, so it holds no machine output.
+    // It used to read "the window on /a/very/long/path/to/doc.html, open since
+    // 2026-08-18T04:35:45.006Z": a raw ISO timestamp in a sentence written for a
+    // person, and a path long enough to burst the chip (Ken, live, 2026-08-18).
+    // The basename is the part a person recognizes, and the elapsed phrase is
+    // shared with the helper's own refusal so the two never disagree.
     function describeHolder(holder) {
       if (!holder) return "another window";
-      var where = holder.path ? " on " + holder.path : "";
-      var when = holder.since ? ", open since " + holder.since : "";
+      var name = holder.path ? record.basenameOf(holder.path) : null;
+      var where = name ? " on " + name : "";
+      var when = holder.since ? ", open " + elapsed.elapsedPhrase(holder.since) : "";
       return "the window" + where + when;
     }
 
@@ -487,6 +495,27 @@
       locks.request(LOCK_PREFIX + reviewId, { ifAvailable: true }, function (lock) {
         if (!lock) {
           var holder = readHolder(reviewId);
+          // THE HOLDER IS THIS SAME TAB. A reload (R36's auto-reload, or the
+          // reviewer's own) starts the new document BEFORE the old one is torn
+          // down, so for a moment the outgoing page still holds the Web Lock and
+          // the incoming one is refused. It is the same tab either way: the
+          // window id lives in sessionStorage, which survives a same-tab reload
+          // and is fresh in a genuinely new tab. So a page reloading itself used
+          // to trip its own second-window guard and go read-only with only one
+          // window open (Ken, live, 2026-08-18).
+          //
+          // Granted, and the lock is then asked for WITHOUT ifAvailable, so this
+          // document really holds it the moment the old context dies.
+          if (holder && holder.window_id === windowId) {
+            writeJson(holderKey(reviewId), self);
+            settle({ acquired: true, holder: self, windowId: windowId, failure: null, reason: null, reclaimed: true });
+            locks.request(LOCK_PREFIX + reviewId, function () {
+              return new Promise(function (resolve) {
+                releaseHeldLock = resolve;
+              });
+            });
+            return null;
+          }
           settle({
             acquired: false,
             holder: holder,

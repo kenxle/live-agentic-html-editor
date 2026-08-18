@@ -103,7 +103,12 @@ async function untetheredNote(page, text) {
 /** The three measures, over the five prepared records only, by id. */
 function measure(page, ids) {
   return page.evaluate(function (wanted) {
-    var found = window.__lahe.items().filter(function (item) {
+    // allItems: nothing being taken back is a claim about the REVIEW, and one of
+    // the stressors is a navigation to another page, where the rail correctly
+    // shows none of these (record.samePage). Scoping the measure to the page
+    // would score the navigation stressor against a filter rather than against
+    // durability.
+    var found = window.__lahe.allItems().filter(function (item) {
       return wanted.indexOf(item.id) !== -1;
     });
     return {

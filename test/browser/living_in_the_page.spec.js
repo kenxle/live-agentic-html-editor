@@ -121,9 +121,16 @@ test.describe("ranked test 4: the page's own controls keep working", () => {
 
     // The reviewer's work is still theirs after the navigation: browser storage
     // is the durable half, and the record survived the page it was made on.
-    const afterNav = await page.evaluate(() => window.__lahe.items().map((i) => i.id));
+    // allItems, because the durability claim is about the REVIEW. The rail on
+    // this new page shows none of them: they were made on the other page, and a
+    // review may span pages (record.samePage).
+    const afterNav = await page.evaluate(() => window.__lahe.allItems().map((i) => i.id));
     expect(afterNav).toContain(edit.id);
     expect(afterNav.length).toBe(2);
+    expect(
+      await page.evaluate(() => window.__lahe.items().length),
+      "and this page lists none of the other page's items"
+    ).toBe(0);
 
     // The form submits, round trip and all.
     await page.locator("#note-client").selectOption({ index: 0 });

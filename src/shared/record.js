@@ -258,6 +258,70 @@
     return String(item[FIELD.PAGE_ORIGIN]) + "|" + String(item[FIELD.PAGE_PATH]);
   }
 
+  // The same key, from a page object (record.pageFrom's shape) rather than from
+  // an item. One spelling of "origin plus path" serves both sides, so the
+  // browser layer can ask "is this record mine?" without hand-building an item.
+  function pageKeyFor(page) {
+    if (!page || typeof page !== "object") throw new TypeError("pageKeyFor expects a page");
+    return String(page.origin) + "|" + String(page.path);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Does this record belong to the page in front of us?
+  // ---------------------------------------------------------------------------
+  //
+  // A review MAY span pages, and the browser layer only ever gets to act on the
+  // ONE document it is loaded into. Without this, a second page attached to an
+  // existing review inherited every record the first page made: the layer tried
+  // to re-anchor them here, the rail listed them, and the count pill counted
+  // them (Ken, live, 2026-08-17, 78 foreign items on a one-pager).
+  //
+  // THE RULE, and it is two rules because file:// is not a normal origin:
+  //
+  //  1. ORIGIN PLUS PATH, exactly pageKey. Two dev servers both serving
+  //     /dashboard are two different pages, so they never see each other's
+  //     items.
+  //  2. WHEN EITHER SIDE IS THE FILE ORIGIN, compare BASENAMES instead. The
+  //     same document is legitimately visited both ways in one review: opened
+  //     from disk it carries origin "file" and its basename as the path
+  //     (pageFrom above), and served over http it carries the server's origin
+  //     and a full pathname. Those two keys can never be equal, so a strict
+  //     match would hide each visit's comments from the other, on one document.
+  //     Basenames keep them together, and two DIFFERENT documents still have
+  //     different basenames, so they stay apart.
+  //
+  // The residual case rule 2 accepts on purpose: /a/index.html visited over http
+  // and a DIFFERENT index.html opened from disk would match. It is accepted
+  // because a file:// record only ever stored a basename in the first place, so
+  // there is nothing finer to compare, and the alternative (hiding the
+  // reviewer's own items on the document they are looking at) is the worse
+  // failure of the two.
+  function basenameOf(path) {
+    var parts = String(path === null || path === undefined ? "" : path)
+      .split("?")[0]
+      .split("#")[0]
+      .split("/")
+      .filter(Boolean);
+    return parts.length ? parts[parts.length - 1] : "";
+  }
+
+  /**
+   * @param {Object} item a record
+   * @param {Object} page the current page, from record.pageFrom
+   * @returns {boolean} true when the record was made on this page
+   */
+  function samePage(item, page) {
+    if (!item || typeof item !== "object") throw new TypeError("samePage expects an item");
+    if (!page || typeof page !== "object") throw new TypeError("samePage expects a page");
+    if (pageKey(item) === pageKeyFor(page)) return true;
+    var itemOrigin = String(item[FIELD.PAGE_ORIGIN]);
+    var pageOrigin = String(page.origin);
+    if (itemOrigin !== FILE_ORIGIN && pageOrigin !== FILE_ORIGIN) return false;
+    var a = basenameOf(item[FIELD.PAGE_PATH]);
+    var b = basenameOf(page.path);
+    return !!a && a === b;
+  }
+
   // Builds the page fields from a location-like object. Pure, so it is
   // unit-testable with no browser: the library passes window.location, the
   // helper passes a parsed URL, a test passes a plain object.
@@ -639,6 +703,9 @@
     emptyPage: emptyPage,
     pageFrom: pageFrom,
     pageKey: pageKey,
+    pageKeyFor: pageKeyFor,
+    samePage: samePage,
+    basenameOf: basenameOf,
     newItem: newItem,
     bumpRev: bumpRev,
     historyEntry: historyEntry,
