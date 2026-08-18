@@ -14,8 +14,12 @@ var SOURCE = path.join(REPO_ROOT, "skills", "lahe", "SKILL.md");
 var MARKER = "<!-- lahe canonical skill: managed by the live-agentic-html-editor repository -->";
 
 function defaultTargets(home) {
+  // Codex and Gemini CLI both discover the Agent Skills standard user path.
+  // Installing additional .codex or .gemini copies would expose the same
+  // named skill more than once in clients that scan both locations. Claude
+  // Code does not discover the shared path, so it needs one identical copy.
   return [
-    { agent: "shared", file: path.join(home, ".agents", "skills", "lahe", "SKILL.md") },
+    { agent: "codex-gemini", file: path.join(home, ".agents", "skills", "lahe", "SKILL.md") },
     { agent: "claude", file: path.join(home, ".claude", "skills", "lahe", "SKILL.md") }
   ];
 }

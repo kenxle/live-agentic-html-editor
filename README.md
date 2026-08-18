@@ -47,16 +47,14 @@ that installer. Windows is not yet part of the tested public CLI workflow.
 
 ## The fastest start: tell your agent
 
-This tool is usually driven through a coding agent, and the repo carries an
-agent-readable playbook. Paste this to your agent, filling in the page:
+This tool is usually driven through a coding agent. After the one-time install
+below, a fresh Claude, Codex, or Gemini agent should need only this:
 
-> Read https://raw.githubusercontent.com/kenxle/live-agentic-html-editor/main/AGENTS.md
-> and follow it to set up a live review of `path/to/page.html`, then act on my
-> feedback as it arrives.
+> Find the LAHE skill and use it to review `path/to/page.html`.
 
-The agent installs the tool, starts the review, tells you what to open, and
-works your comments and edits as you leave them. Everything below is the same
-path done by hand.
+The skill starts the review, tells you what to open, and works your comments and
+edits as you leave them. If the machine has not been set up yet, give the agent
+this repository URL and ask it to follow the install section first.
 
 ## Install
 
@@ -77,12 +75,30 @@ PATH only while that version is selected, so the install reports success and the
 on PATH or what nvm is doing. If `~/.local/bin` is not on your PATH, the command
 says so and prints the line to add.
 
-The same setup command copies the repository-owned `skills/lahe/SKILL.md` into
-the shared agent skill directory and Claude's skill directory. Those installed
+The same setup command copies the repository-owned `skills/lahe/SKILL.md` to
+exactly two locations:
+
+- `~/.agents/skills/lahe/SKILL.md` for Codex and Gemini CLI
+- `~/.claude/skills/lahe/SKILL.md` for Claude Code
+
+Both Codex and Gemini discover the shared Agent Skills location, so LAHE does
+not install redundant `.codex` or `.gemini` copies. Claude Code uses its own
+personal skill directory and needs the second identical copy. These installed
 files are projections, not separate sources: update the repository skill first,
 then rerun `npm run install-cli` (or the narrower `npm run install-skills`). A
 pre-existing hand-maintained LAHE skill is preserved once under
 `~/.local/state/lahe/skill-backups/` before migration.
+
+The repository keeps the responsibilities separate to limit drift:
+
+- `skills/lahe/SKILL.md` is the short discovery and cold-start workflow.
+- `AGENTS.md` is the detailed operational contract agents follow after the
+  skill activates.
+- `README.md` is the human-facing installation and product guide.
+
+Do not maintain agent-specific variants of the skill. If an agent needs a new
+instruction, change the canonical skill or the shared playbook according to
+that split, test it, and run the installer again.
 
 `npm link` still works as an alternative if you prefer it, and so does running
 from the clone with no install at all (below).

@@ -203,6 +203,20 @@ test("skill installation preserves one hand-maintained LAHE copy before migratio
   assert.equal(fs.readFileSync(installSkills.backupPath(home, "claude"), "utf8"), prior, "refresh does not rewrite the migration backup");
 });
 
+test("skill installation uses one shared Codex and Gemini copy plus Claude's required copy", () => {
+  const home = path.join(os.tmpdir(), "lahe-agent-home");
+  assert.deepEqual(installSkills.defaultTargets(home), [
+    {
+      agent: "codex-gemini",
+      file: path.join(home, ".agents", "skills", "lahe", "SKILL.md")
+    },
+    {
+      agent: "claude",
+      file: path.join(home, ".claude", "skills", "lahe", "SKILL.md")
+    }
+  ]);
+});
+
 test("skill installation refuses an unrelated file at a target path", () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-skill-home-"));
   const target = path.join(home, ".agents", "skills", "lahe", "SKILL.md");
