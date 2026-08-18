@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+5ffb7620dc1d
+ * version 0.0.0+bf1084107292
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+5ffb7620dc1d";
+  g.LAHE.version = "0.0.0+bf1084107292";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -18445,6 +18445,25 @@
           element: null
         };
       }
+      // The record's last binding outranks a failed re-resolve: an element
+      // this pass bound earlier that is STILL IN THE DOCUMENT cannot be lost,
+      // whatever the matcher says about its text. An element-picked comment
+      // (a chart, an image, a block with no unique words) has nothing for the
+      // text matcher to re-find, and the settle recheck was marking it lost
+      // while the reviewer was looking straight at it — which is how AC1's
+      // Copy and Export came to disagree by one lost-anchor note (2026-08-18).
+      var bound = lastElement[id];
+      if (bound && bound.isConnected) {
+        clearLost(ctx, item);
+        return {
+          wrote: false,
+          branch: null,
+          lost: false,
+          reason: "still bound to a connected element",
+          item: item,
+          element: bound
+        };
+      }
       return markLost(item, verdict, ctx);
     }
 
@@ -19086,7 +19105,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+5ffb7620dc1d";
+  var VERSION = "0.0.0+bf1084107292";
 
   var protocol = ns.protocol;
   var record = ns.record;

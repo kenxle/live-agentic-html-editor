@@ -61,6 +61,7 @@ async function booted(page) {
 function claimState(page) {
   return page.evaluate(() => ({
     chips: window.__lahe.failures().map((f) => f.code),
+    refusalShown: window.__lahe.handle.rail.refusalShown(),
     readOnly: window.__lahe.handle.sync.status().readOnly,
     acquired: window.__lahe.handle.sync.lockState().acquired,
     refusedBy: window.__lahe.handle.sync.lockState().refusedBy
@@ -130,7 +131,12 @@ test.describe("a duplicated tab does not inherit the review", () => {
       // copy presented the holder's own session secret, because a duplicated tab
       // has it.
       expect(state.refusedBy, "refused by the lock, not by the helper").toBe("lock");
-      expect(state.chips, "so the copy is told what it is").toContain("SECOND_WINDOW_REFUSED");
+      // The refusal PANEL is what tells the copy what it is: a read-only
+      // window shows the panel with its takeover button, and the chip saying
+      // the same two sentences beside it was deduplicated away (one surface
+      // per fact, 2026-08-18). The chip appears only on the panel-less paths.
+      expect(state.refusalShown, "so the copy is told what it is, by the panel").toBe(true);
+      expect(state.chips, "and not by a duplicate chip beside it").not.toContain("SECOND_WINDOW_REFUSED");
       expect(state.readOnly, "and it writes nothing to the shared bucket").toBe(true);
 
       // The first tab is untouched by any of it.

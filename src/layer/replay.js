@@ -1250,6 +1250,25 @@
           element: null
         };
       }
+      // The record's last binding outranks a failed re-resolve: an element
+      // this pass bound earlier that is STILL IN THE DOCUMENT cannot be lost,
+      // whatever the matcher says about its text. An element-picked comment
+      // (a chart, an image, a block with no unique words) has nothing for the
+      // text matcher to re-find, and the settle recheck was marking it lost
+      // while the reviewer was looking straight at it — which is how AC1's
+      // Copy and Export came to disagree by one lost-anchor note (2026-08-18).
+      var bound = lastElement[id];
+      if (bound && bound.isConnected) {
+        clearLost(ctx, item);
+        return {
+          wrote: false,
+          branch: null,
+          lost: false,
+          reason: "still bound to a connected element",
+          item: item,
+          element: bound
+        };
+      }
       return markLost(item, verdict, ctx);
     }
 
