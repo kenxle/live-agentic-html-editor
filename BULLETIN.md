@@ -21,8 +21,8 @@ tool is broken.**
   closes it over and over. Persist the open/collapsed state per review in
   browser storage and restore it on load; the count pill already carries the
   numbers while collapsed.
-- [ ] LAHE-push-and-pr @anyone -- push `fix/review-session-flaws` and open the
-  PR. Blocked only on Ken's word. The branch is twice code-reviewed, gate
+- [x] @claude-fable 2026-08-18 LAHE-push-and-pr -- push `fix/review-session-flaws` and open the
+  PR. Blocked only on Ken's word. Done: pushed, PR #1 open: https://github.com/kenxle/live-agentic-html-editor/pull/1 (44 commits, gate 467/206/0). The branch is twice code-reviewed, gate
   green (471 unit / 204 browser at last full run), and hand-verified in a
   real browser including error states.
 - [ ] LAHE-review-command @anyone -- **the out-of-box front door: `lahe review
