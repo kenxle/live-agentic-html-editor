@@ -55,6 +55,43 @@ test("a dropped connection is retried from the SAME --since, not reported as unr
   assert.match(notes[1], /reconnected/);
 });
 
+test("a drop LATE in a long wait still gets its retries", async () => {
+  // The flaw this covers: the grace was measured from the start of the long
+  // poll, so a helper bounce more than thirty seconds into a wait had no window
+  // left and the wait died on the first drop. The clock now starts when the
+  // connection dropped. Date.now is stubbed so the test does not have to spend
+  // a real minute proving it.
+  const realNow = Date.now;
+  let virtual = realNow();
+  Date.now = () => virtual;
+  try {
+    let calls = 0;
+    const fetchImpl = async () => {
+      calls += 1;
+      if (calls === 1) {
+        // Five minutes of an ordinary long poll, then the helper goes away.
+        virtual += 5 * 60 * 1000;
+        throw new Error("fetch failed");
+      }
+      if (calls === 2) throw new Error("fetch failed");
+      return { ok: true, status: 200, json: async () => ({ events: [], seq: 3 }) };
+    };
+    const notes = [];
+    const response = await waitCommand.blockingRequest(
+      fetchImpl,
+      { origin: "http://127.0.0.1:7817", token: "t", reviewOrigin: "null" },
+      { review: "rev1", since: 4, timeout: 600 },
+      (text) => notes.push(text)
+    );
+    assert.equal(response.ok, true);
+    assert.equal(calls, 3, "the drop at t+5min was retried, not reported");
+    assert.match(notes[0], /lost the connection/);
+    assert.match(notes[1], /reconnected/);
+  } finally {
+    Date.now = realNow;
+  }
+});
+
 test("the grace window is bounded: a helper that never comes back still fails", async () => {
   const fetchImpl = async () => {
     throw new Error("fetch failed");

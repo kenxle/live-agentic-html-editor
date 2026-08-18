@@ -213,9 +213,15 @@ function headers(helper) {
 // So a dropped connection is retried rather than reported. THE SAME `--since`
 // GOES BACK OUT, which is what makes this safe: `wait` consumes nothing and the
 // cursor is a seq, so re-asking from the same watermark skips nothing and
-// double-counts nothing. The grace window is the smaller of thirty seconds and
-// whatever is left of --timeout, because outliving the caller's own deadline
-// would be a different bug.
+// double-counts nothing.
+//
+// THE GRACE CLOCK STARTS AT THE FIRST FAILURE, not at the start of the wait. A
+// long poll can sit open for minutes, so measuring the window from the start
+// gave a helper bounce five minutes in zero retries: the whole grace was spent
+// before anything went wrong, which is the exact case this exists for. It is
+// still capped by whatever is left of --timeout, because outliving the caller's
+// own deadline would be a different bug, and a reconnect resets it so a second
+// bounce later in the same wait gets its own window.
 
 var RECONNECT_GRACE_MS = 30 * 1000;
 var RECONNECT_BACKOFF_MS = [250, 500, 1000, 2000];
@@ -238,6 +244,10 @@ async function blockingRequest(fetchImpl, helper, args, err) {
   var timeoutDeadline = startedAt + Math.max(0, args.timeout) * 1000;
   var attempt = 0;
   var announced = false;
+  // When the connection actually dropped, set on the first failure. Null means
+  // nothing has dropped yet. A request that gets through returns, so the next
+  // long poll starts this over with a fresh window.
+  var droppedAt = null;
   for (;;) {
     try {
       var response = await fetchImpl(url(helper.origin, args), { method: "GET", headers: headers(helper) });
@@ -247,7 +257,8 @@ async function blockingRequest(fetchImpl, helper, args, err) {
       return response;
     } catch (error) {
       var now = Date.now();
-      var graceLeft = startedAt + RECONNECT_GRACE_MS - now;
+      if (droppedAt === null) droppedAt = now;
+      var graceLeft = droppedAt + RECONNECT_GRACE_MS - now;
       var timeoutLeft = timeoutDeadline - now;
       if (graceLeft <= 0 || timeoutLeft <= 0) throw error;
       if (!announced) {
