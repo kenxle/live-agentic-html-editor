@@ -1682,6 +1682,24 @@
       })[0] || null;
     }
 
+    /**
+     * The boxes that make a page reload unsafe: focused, or holding typed
+     * text. NOT every open box: the rail's page-note box is on screen the
+     * whole session, so counting mere openness held R36's auto-reload off
+     * forever on every page (found live 2026-08-18: reloadChecks 90,
+     * reloadsFired 0, openBoxes 1, with nobody typing anything). An empty,
+     * unfocused box is furniture, not work in progress.
+     */
+    function busyBoxes() {
+      return openBoxes().filter(function (handle) {
+        if (!handle.node || !handle.input) return false;
+        if (isFocused(handle.input)) return true;
+        var text =
+          typeof handle.input.value === "string" ? handle.input.value : handle.input.textContent || "";
+        return text.trim().length > 0;
+      });
+    }
+
     function isFocused(el) {
       var rootNode = el.getRootNode ? el.getRootNode() : doc;
       return rootNode && rootNode.activeElement === el;
@@ -1849,6 +1867,7 @@
       outstanding: outstanding,
       boxFor: boxFor,
       openBoxes: openBoxes,
+      busyBoxes: busyBoxes,
       closeAll: closeAll,
       focusedBox: focusedBox,
       commentOnSelection: commentOnSelection,

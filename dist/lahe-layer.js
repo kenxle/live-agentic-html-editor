@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+637ebf6cc7d3
+ * version 0.0.0+11c598b7225f
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+637ebf6cc7d3";
+  g.LAHE.version = "0.0.0+11c598b7225f";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -15386,6 +15386,24 @@
       })[0] || null;
     }
 
+    /**
+     * The boxes that make a page reload unsafe: focused, or holding typed
+     * text. NOT every open box: the rail's page-note box is on screen the
+     * whole session, so counting mere openness held R36's auto-reload off
+     * forever on every page (found live 2026-08-18: reloadChecks 90,
+     * reloadsFired 0, openBoxes 1, with nobody typing anything). An empty,
+     * unfocused box is furniture, not work in progress.
+     */
+    function busyBoxes() {
+      return openBoxes().filter(function (handle) {
+        if (!handle.node || !handle.input) return false;
+        if (isFocused(handle.input)) return true;
+        var text =
+          typeof handle.input.value === "string" ? handle.input.value : handle.input.textContent || "";
+        return text.trim().length > 0;
+      });
+    }
+
     function isFocused(el) {
       var rootNode = el.getRootNode ? el.getRootNode() : doc;
       return rootNode && rootNode.activeElement === el;
@@ -15553,6 +15571,7 @@
       outstanding: outstanding,
       boxFor: boxFor,
       openBoxes: openBoxes,
+      busyBoxes: busyBoxes,
       closeAll: closeAll,
       focusedBox: focusedBox,
       commentOnSelection: commentOnSelection,
@@ -19010,7 +19029,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+637ebf6cc7d3";
+  var VERSION = "0.0.0+11c598b7225f";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -19297,7 +19316,9 @@
       // page that swaps under a half-typed sentence is worse than a late reload.
       isBusy: function () {
         if (editing && typeof editing.isEditing === "function" && editing.isEditing()) return true;
-        if (comments && typeof comments.openBoxes === "function" && comments.openBoxes().length > 0) return true;
+        // busyBoxes, not openBoxes: the rail's page-note box is open for the
+        // whole session, and counting it deferred the reload forever.
+        if (comments && typeof comments.busyBoxes === "function" && comments.busyBoxes().length > 0) return true;
         return false;
       },
       // Said before the document goes away, so the reload is announced rather

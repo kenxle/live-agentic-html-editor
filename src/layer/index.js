@@ -361,7 +361,9 @@
       // page that swaps under a half-typed sentence is worse than a late reload.
       isBusy: function () {
         if (editing && typeof editing.isEditing === "function" && editing.isEditing()) return true;
-        if (comments && typeof comments.openBoxes === "function" && comments.openBoxes().length > 0) return true;
+        // busyBoxes, not openBoxes: the rail's page-note box is open for the
+        // whole session, and counting it deferred the reload forever.
+        if (comments && typeof comments.busyBoxes === "function" && comments.busyBoxes().length > 0) return true;
         return false;
       },
       // Said before the document goes away, so the reload is announced rather
