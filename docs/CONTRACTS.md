@@ -107,7 +107,8 @@ not stage it. The orchestrator rebuilds and commits it once at each checkpoint.
 | `page_title` | data | The page's title at first visit |
 | `page_seq` | — | First-visit order, which is how `review.json` orders its groups |
 | `source_hint` | — | The template the page came from, when the add step was given one |
-| `reply` | data | The folded agent reply, or null |
+| `reply` | data | The folded agent reply, or null. Its `at` is the durable agent-turn timestamp |
+| `thread` | data | Completed reviewer/agent rounds, presented in stable timestamp order |
 | `created_at`, `updated_at` | — | ISO 8601 |
 
 **The page fields are not optional.** Without them `review.json` cannot be grouped by page. The

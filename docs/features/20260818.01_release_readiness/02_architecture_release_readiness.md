@@ -28,13 +28,14 @@ CLI. Session scope is an ownership rule, not an optional display filter.
    ownership.
 3. Each review has exactly one immutable `agent_session_id`. A carried review
    or path match owned by another session is refused, never silently moved.
-4. `lahe status --session <id> --json --seen-file <path>` dynamically lists
-   only reviews owned by that session, including reviews added after monitoring
+4. `lahe monitor --session <id>` dynamically lists only unanswered work in
+   reviews owned by that session, including reviews added after monitoring
    began.
-5. Any monitoring command with `--seen-file` requires `--session`. It never
-   falls back to all reviews. Plain machine-wide `status` remains a human
-   diagnostic and agent instructions never use it as a work feed.
-6. Seen keys are `session + review + item + rev`, not only `item + rev`.
+5. Every monitoring command requires `--session`. It never falls back to all
+   reviews. Plain machine-wide `status` remains a human diagnostic and agent
+   instructions never use it as a work feed.
+6. Monitor delivery is not acknowledgment. An unanswered item is redelivered
+   after every relaunch until its durable reply folds.
 7. `lahe session close <id>` closes routing without deleting review history.
    Explicit reopen is required before more reviews can be added. Closing the
    last open agent session also stops the shared helper after verifying its
@@ -70,20 +71,19 @@ the display would still permit double work.
 session to a new top-level agent without moving its reviews. It increments the
 session's durable `handoff_rev`; older monitor processes compare their captured
 revision before emitting work and exit when it changes. The new agent first
-runs un-seen-filtered session status to catch every unanswered item, then starts
-a monitor with a fresh seen-file. This command requires an explicit human
-handoff. Silent reuse or reassignment remains forbidden.
+runs session status to catch every unanswered item, then starts a fresh
+session-scoped monitor. This command requires an explicit human handoff. Silent reuse or reassignment remains forbidden.
 
 #### Handoff use cases and required outcomes
 
 | Case | Required outcome |
 | --- | --- |
-| Prior agent exhausts its model allowance after status marked an item seen but before replying | Unfiltered catch-up shows the unanswered item to the replacement agent |
+| Prior agent exhausts its model allowance after receiving an item but before replying | Catch-up shows the unanswered item to the replacement agent |
 | Prior client crashes or is fully closed without running `session close` | Explicit takeover succeeds from durable state without cooperation from the old client |
 | Prior agent handled some items before stopping | Catch-up omits handled items and retains them as history |
 | One agent session owns several documents and reviews | Takeover transfers the session as one workstream; review ownership does not change |
 | An old exit-on-work monitor remains alive | Changed `handoff_rev` makes it discard buffered output and exit |
-| Feedback lands during takeover or catch-up | Unfiltered catch-up plus a fresh seen-file exposes it exactly once |
+| Feedback lands during takeover or catch-up | Catch-up plus the fresh monitor exposes it until a durable reply exists |
 | A different agent discovers the session without an explicit human handoff | Existing foreign-session refusal remains in force |
 | The session was already closed | Takeover reopens its helper and owned static servers while preserving history |
 
@@ -100,15 +100,53 @@ IPC channel to the process that started them and exit when that owner
 disappears, including interrupted test runs. This prevents old worktrees and
 aborted browser suites from leaving polling processes adopted by PID 1.
 
-Agent monitoring is session-scoped and exit-on-work. `lahe monitor` owns one
-local 15-second polling loop over `status --session --json --seen-file --quiet`.
-It emits nothing while idle, prints new item lines, and exits. Agents launch it
-as a background terminal task, handle the batch when completion wakes them, and
-then drain immediate status checks with the same seen-file until one is empty
-before launching it again. The drain catches feedback submitted during
-implementation without an extra background wake-and-exit cycle. A client
-without completion-triggered wakeups may run the same command in the foreground
-with an explicit warning that the chat is occupied.
+Agent monitoring has two shapes because agent hosts wake in two ways. Some hosts
+can hold a long-lived watcher on a file; others only wake the agent when a task
+completes. One design cannot serve both, so the architecture provides a push
+channel and a pull command over the same durable state.
+
+The push channel is a wake feed: one append-only file per agent session at
+`<state-dir>/agent-sessions/<session-id>/wake.log`. The helper appends one line
+when a ready item lands in a review the session owns, and one line when the
+session is taken over or closed. A host that can hold `tail -n 0 -f` arms one
+watcher at setup and never relaunches anything for the rest of the session. The
+file is appended to, never rewritten, so a tail keeps its inode, and it is
+created before the agent is told to tail it, so a watcher armed at setup cannot
+lose the race against the first item. A wake line is a pointer and never an
+instruction: it names the item and the drain command and carries no reviewer
+text at all, which keeps the injection fence from D6 intact on a second channel.
+
+The pull command is `lahe monitor --session <id>`, which owns one local
+15-second polling loop over `status --session --json --quiet`. It emits nothing
+while idle, prints unanswered item lines, and exits. Agents launch it as a
+background terminal task, handle the batch when completion wakes them, and then
+drain immediate status checks until one is empty before launching it again. The
+drain catches feedback submitted during implementation without an extra
+background wake-and-exit cycle. A client without completion-triggered wakeups
+may run the same command in the foreground with an explicit warning that the
+chat is occupied.
+
+The monitor's exit code says why it stopped, because "handle this work" and
+"stop relaunching, the session is over" must not share one number. `0` means
+work is printed above. `5` means the agent session is closed. `6` means another
+agent took the session over. On `5` or `6` the host stops instead of restarting
+a watcher against state that will never produce work again.
+
+There is no seen ledger behind either shape. Work stays listed until a durable
+reply lands, so delivery is not acknowledgment: an ignored wake redelivers on
+the next drain, and a monitor relaunched after a crash re-emits rather than
+skipping. This removes a whole class of failure where an agent received an item,
+died, and left the item hidden behind a ledger entry that claimed it had been
+seen. `--seen-file` is still parsed and ignored, because failing an older agent
+on a flag whose absence changes nothing is the worse answer.
+
+The reviewer can see whether any of this is running. `lahe monitor` writes a
+heartbeat while it polls, and the helper records when the session last ran a
+`lahe` command. The rail turns those two signals into one line: watching when a
+monitor checked in recently, working when no monitor is checked in but the
+session is still running commands, and unattended when neither is true. The
+line is calm in the first two states and loud only in the third, so "nobody is
+listening to your comments" is visible instead of inferred from silence.
 
 The monitor emits a loud `LAHE ACTION REQUIRED` control line before item output.
 A completed watcher is not completed review work. It is an interrupt that keeps
@@ -119,12 +157,14 @@ waited for another human message before acting. The control line lives in the
 CLI output as well as the skill because task-completion transcripts may be the
 only context a resumed agent attends to.
 
-Codex has an additional host-lifecycle requirement: its agent turn remains
-pending on the monitor's exec session. Detaching the terminal process and ending
-the agent turn is not a wakeup mechanism; process completion may otherwise sit
+Codex has an additional host-lifecycle requirement: it runs the monitor as a
+foreground pending exec call and keeps waiting on the returned session or cell
+id. Detaching the terminal process and ending the agent turn is not a wakeup
+mechanism; the process may be terminated with the turn or its completion may sit
 unobserved until the human sends another message. The pending wait uses the
 local process for idle polling, permits human steering, and continues the same
-turn only when work exists.
+turn only when work exists. A Codex agent must never claim that monitoring
+remains active after it has sent a final response.
 
 This boundary exists to prevent token burn on no-ops. Claude Tasks,
 Antigravity schedules, Codex Timers, and equivalent facilities invoke a model
@@ -132,10 +172,12 @@ even when no document state changed. Leaving those active overnight can spend a
 large allowance doing empty reads. A forever quiet daemon avoids those model
 calls but does not complete, so some hosts never wake the agent. The local
 exit-on-work process gives both properties: zero model turns while idle and a
-completion event when work exists. It also retains the session/revision
-semantics of `status --seen-file`, launches no parser pipeline, posts no idle
-message, discovers later reviews in the session, and exits when the agent
-session closes. A hidden review page may reduce nonessential reply/mtime polling
+completion event when work exists. It also retains the session and revision
+semantics of the durable unanswered state, launches no parser pipeline, posts no
+idle message, discovers later reviews in the session, redelivers ignored work,
+and exits when the agent session closes. The wake feed costs even less: a tail
+is not a model turn either, and the file is written only when a ready item
+actually lands. A hidden review page may reduce nonessential reply/mtime polling
 while retaining its low-frequency ownership heartbeat; a visible page keeps the
 interactive cadence.
 
@@ -155,6 +197,23 @@ needs a routing boundary, not a replacement transport.
 Per-item security leases are rejected for the trusted local v1. Session routing
 and loud duplicate enrollment solve the observed correctness failure with much
 less state.
+
+### Reliability baseline from the former comments module
+
+The earlier Steady Thread development comments layer remains a useful baseline
+because its state machine is small: capture one selection or element, keep one
+draft in localStorage, POST one completed comment, and remount idempotently after
+Turbo morphs. It also supports Cmd/Ctrl-Enter through the same `sendComment`
+function as the visible Send button. Its reliability comes from explicit
+boundaries and one write path, not from polling.
+
+LAHE keeps those properties where they scale: drafts remain browser-private,
+keyboard and button submission share one operation, repeated mounts are
+idempotent, and only a durable reply completes agent work. LAHE cannot reuse the
+old module's machine-global history because concurrent agent sessions and
+multiple reviews require routing, revision fences, source rebuilds, and agent
+answers. The release rule is therefore to preserve the old module's small local
+state transitions while keeping LAHE's session and durability boundaries.
 
 ## One-command static review
 
