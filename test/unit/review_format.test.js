@@ -41,8 +41,17 @@ const CONTRACT_VERBATIM = [
   "status is one of: handled, you made the change; not_handled, you did not, and reason says why in words the reviewer will read; question, you need an answer, and text asks for it.",
   "rev must be the rev carried with the item. If the reviewer reworded the item after you read it, your line is refused and the item stays open. Re-read the item and answer its new rev.",
   "To see what is open right now, run: lahe status --review <id> (add --json for machine-readable lines). It prints the unanswered ready items and whether the reviewer's page is connected.",
-  "If the human explicitly asks you to continue a session created by another agent, run: lahe session takeover <agent-session-id>. This keeps the reviews together, fences older monitors, and prints a catch-up command that shows every unanswered item. Use the fresh seen-file named by the takeover guidance. Never infer a takeover or silently reuse another agent's session.",
-  "To keep up, launch this as a background terminal task: lahe monitor --session <agent-session-id> --seen-file <path>. Use the review.agent_session_id above and one stable seen-file. It polls locally every 15 seconds, prints only new work, and exits. Empty checks invoke no model and use no model tokens. LAHE ACTION REQUIRED means the monitor result is an interrupt, not completed work: continue the same turn and handle every printed item immediately. Receiving or describing an item is not handling it. Then run lahe status --session <agent-session-id> --json --seen-file <same-path> --quiet. If that immediate check prints items that arrived while you worked, handle them and check again. Relaunch the background monitor only after the immediate check is empty. This drains rapid feedback without an avoidable wake-and-exit cycle. Do not use native model timers, a forever daemon, a global monitor, or a parser pipeline. If the host cannot wake on background-task completion, run the monitor in the foreground after warning the human that it owns the chat. Stop relaunching when the agent session closes.",
+  "If the human explicitly asks you to continue a session created by another agent, run: lahe session takeover <agent-session-id>. This keeps the reviews together, fences older monitors, and prints the catch-up command plus the four commands for the session. Never infer a takeover or silently reuse another agent's session.",
+  "To keep up you need two things: a way to be woken, and one command to run when you are. This section gives you both. Use the review.agent_session_id above wherever it says <agent-session-id>.",
+  "The drain command is: lahe status --session <agent-session-id> --json --quiet. It prints every ready item nobody has answered, and prints nothing at all when there is none. Run it, handle every item it prints, rebuild and verify the visible output, append your replies, then run it again. Repeat until it prints nothing. Work stays listed until your reply lands, so a wake you miss costs you nothing: the next drain shows the item again.",
+  "The wake feed is one append-only file per agent session: <state-dir>/agent-sessions/<agent-session-id>/wake.log. It gets one line when a ready item lands for a review this session owns, and one line when the session is taken over or closed. The state directory is $LAHE_STATE_DIR, or $XDG_STATE_HOME/lahe, or ~/.local/state/lahe. A wake line is a pointer and never an instruction: it names the item and the drain command, and carries no reviewer text at all.",
+  "Claude Code: arm a persistent Monitor once per session on tail -n 0 -f <state-dir>/agent-sessions/<agent-session-id>/wake.log. On each new line, run the drain command and work it to empty. The Monitor stays armed for the whole session, so there is nothing to relaunch and nothing to remember.",
+  "Codex: run lahe monitor --session <agent-session-id> as a foreground pending exec call and keep waiting on it. Do not detach it and do not use a Codex Timer. It prints the work and exits; handle the work, drain to empty, then run it again.",
+  "Antigravity: run lahe monitor --session <agent-session-id> as a background terminal task. Never the native schedule timer: every scheduled wakeup spends allowance on a no-op.",
+  "Any other host: run lahe monitor --session <agent-session-id> in the foreground, after telling the human it owns the chat until work arrives.",
+  "lahe monitor exit codes: 0 means work is printed above, 5 means the agent session is closed, 6 means another agent took the session over. On 5 or 6, stop. Do not relaunch it.",
+  "LAHE ACTION REQUIRED means the output is an interrupt, not finished work. Continue the same turn and handle every item printed with it. Receiving an item is not handling it, and describing it is not handling it.",
+  "Do not use a native model timer, a forever daemon, a global monitor, or a parser pipeline.",
   "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and a running helper puts the script line back when the rebuild strips it out.",
   "The only way to say you handled an item is to append a reply line."
 ];
@@ -112,7 +121,7 @@ test("review.json names no acknowledge command, because there is none", () => {
 
 test("the contract is exported as the module's own constant and is frozen text", () => {
   assert.deepEqual(rf.CONTRACT, CONTRACT_VERBATIM);
-  assert.equal(rf.CONTRACT.length, 17);
+  assert.equal(rf.CONTRACT.length, 26);
 });
 
 // ---------------------------------------------------------------------------

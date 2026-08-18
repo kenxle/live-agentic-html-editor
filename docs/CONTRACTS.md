@@ -437,8 +437,17 @@ copy in `test/unit/review_format.test.js`:
   "status is one of: handled, you made the change; not_handled, you did not, and reason says why in words the reviewer will read; question, you need an answer, and text asks for it.",
   "rev must be the rev carried with the item. If the reviewer reworded the item after you read it, your line is refused and the item stays open. Re-read the item and answer its new rev.",
   "To see what is open right now, run: lahe status --review <id> (add --json for machine-readable lines). It prints the unanswered ready items and whether the reviewer's page is connected.",
-  "If the human explicitly asks you to continue a session created by another agent, run: lahe session takeover <agent-session-id>. This keeps the reviews together, fences older monitors, and prints a catch-up command that shows every unanswered item. Use the fresh seen-file named by the takeover guidance. Never infer a takeover or silently reuse another agent's session.",
-  "To keep up, launch this as a background terminal task: lahe monitor --session <agent-session-id> --seen-file <path>. Use the review.agent_session_id above and one stable seen-file. It polls locally every 15 seconds, prints only new work, and exits. Empty checks invoke no model and use no model tokens. LAHE ACTION REQUIRED means the monitor result is an interrupt, not completed work: continue the same turn and handle every printed item immediately. Receiving or describing an item is not handling it. Then run lahe status --session <agent-session-id> --json --seen-file <same-path> --quiet. If that immediate check prints items that arrived while you worked, handle them and check again. Relaunch the background monitor only after the immediate check is empty. This drains rapid feedback without an avoidable wake-and-exit cycle. Do not use native model timers, a forever daemon, a global monitor, or a parser pipeline. If the host cannot wake on background-task completion, run the monitor in the foreground after warning the human that it owns the chat. Stop relaunching when the agent session closes.",
+  "If the human explicitly asks you to continue a session created by another agent, run: lahe session takeover <agent-session-id>. This keeps the reviews together, fences older monitors, and prints the catch-up command plus the four commands for the session. Never infer a takeover or silently reuse another agent's session.",
+  "To keep up you need two things: a way to be woken, and one command to run when you are. This section gives you both. Use the review.agent_session_id above wherever it says <agent-session-id>.",
+  "The drain command is: lahe status --session <agent-session-id> --json --quiet. It prints every ready item nobody has answered, and prints nothing at all when there is none. Run it, handle every item it prints, rebuild and verify the visible output, append your replies, then run it again. Repeat until it prints nothing. Work stays listed until your reply lands, so a wake you miss costs you nothing: the next drain shows the item again.",
+  "The wake feed is one append-only file per agent session: <state-dir>/agent-sessions/<agent-session-id>/wake.log. It gets one line when a ready item lands for a review this session owns, and one line when the session is taken over or closed. The state directory is $LAHE_STATE_DIR, or $XDG_STATE_HOME/lahe, or ~/.local/state/lahe. A wake line is a pointer and never an instruction: it names the item and the drain command, and carries no reviewer text at all.",
+  "Claude Code: arm a persistent Monitor once per session on tail -n 0 -f <state-dir>/agent-sessions/<agent-session-id>/wake.log. On each new line, run the drain command and work it to empty. The Monitor stays armed for the whole session, so there is nothing to relaunch and nothing to remember.",
+  "Codex: run lahe monitor --session <agent-session-id> as a foreground pending exec call and keep waiting on it. Do not detach it and do not use a Codex Timer. It prints the work and exits; handle the work, drain to empty, then run it again.",
+  "Antigravity: run lahe monitor --session <agent-session-id> as a background terminal task. Never the native schedule timer: every scheduled wakeup spends allowance on a no-op.",
+  "Any other host: run lahe monitor --session <agent-session-id> in the foreground, after telling the human it owns the chat until work arrives.",
+  "lahe monitor exit codes: 0 means work is printed above, 5 means the agent session is closed, 6 means another agent took the session over. On 5 or 6, stop. Do not relaunch it.",
+  "LAHE ACTION REQUIRED means the output is an interrupt, not finished work. Continue the same turn and handle every item printed with it. Receiving an item is not handling it, and describing it is not handling it.",
+  "Do not use a native model timer, a forever daemon, a global monitor, or a parser pipeline.",
   "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and a running helper puts the script line back when the rebuild strips it out.",
   "The only way to say you handled an item is to append a reply line."
 ]
@@ -614,17 +623,79 @@ The one read path, and the one keep-up loop. Before it, every agent hand-rolled 
   `intent_fields`, straight from `src/shared/review_format.js`), then the item lines, then the summary.
   Item fields keep the names they have in `review.json`, so the classification an agent already learned
   there applies unchanged.
-- **The keep-up loop:** `lahe monitor --session <id> --seen-file <path>` owns local polling and exits
-  when new work exists. Underneath, `--seen-file` requires `--session` and `--json`; its identity is
-  session + review + item + revision. Silent idle checks stay in the local process and therefore use
-  zero model turns and zero model tokens. Native agent timers were rejected because every no-op wakes
-  the model; forever daemons were rejected because task-completion hosts may never wake. No parser is
-  needed, later reviews in the same session are discovered, and another top-level agent's work cannot
-  cross the boundary. After handling one emitted batch, the agent drains immediate session-scoped
-  status checks with the same seen-file until empty before relaunching the monitor. That catches work
-  created during implementation without an extra background completion cycle.
+- **The drain command:** `lahe status --session <id> --json --quiet`. It prints every unanswered ready
+  item and nothing at all when there is none. It carries no ledger, and that is the design: an item
+  stays listed until a reply lands, so REDELIVERY is the dedupe. A missed wake, a crashed monitor, and
+  a restarted machine all cost nothing, because the next drain shows the item again. `--seen-file` is
+  still accepted (identity: session + review + item + revision) but no surface teaches it.
+- **The closed-session guard:** a MONITORING read of a closed session (`--quiet` or `--seen-file`) is
+  refused with `4`. A plain read still works, because the history is the point of keeping it. This used
+  to be gated on `--seen-file` alone, so a monitor that stopped passing that flag polled a closed
+  session forever.
+- **Activity:** a `--session` read touches `<state>/agent-sessions/<id>/activity.json`. That is what
+  lets the rail tell an agent mid-batch from an agent that is gone. Its own file, not a field on
+  `session.json`, so it can never race a takeover's write.
 - **Exit codes:** `0` completed (even with zero items), `2` nothing readable, `3` unknown review, `4` bad
-  usage. The shared table is `protocol.CLI_EXIT`.
+  usage or a monitoring read of a closed session. `lahe monitor` adds `5` (session closed) and `6`
+  (session taken over). The shared table is `protocol.CLI_EXIT`.
+
+### `lahe monitor` and the wake feed
+
+```
+lahe monitor --session <id> [--interval <seconds>] [--state-dir <path>]
+```
+
+Two wake mechanisms, because hosts differ in what they can do for free.
+
+**The wake feed** is `<state>/agent-sessions/<id>/wake.log`: one append-only JSONL file per agent
+session, created EMPTY when the session is created so a `tail -n 0 -f` can be armed before any work
+exists. The helper appends one line per READY TRANSITION on a review this session owns, written in the
+`events.append` route path, plus one line on takeover and one on close. Field names are in
+`protocol.WAKE`: `at`, `kind` (`work`, `takeover`, `closed`), `review`, `item`, `rev`, `drain`.
+
+- **Append-only, never rewritten, never rotated.** `tail -f` follows an inode, and an atomic replace
+  leaves every armed tail silently deaf. That is exactly why tailing `review.json` failed.
+- **Transition-based.** A burst of typing is `item.content` events and appends nothing. Only
+  `item.ready` wakes anyone.
+- **Idempotent.** Only events the log newly stored are considered, so a reconnect replay walks past.
+  The feed's own `(review, item, rev)` key is the second belt; a re-ready after rework carries a new
+  rev and legitimately appends again.
+- **Pointers, not payloads.** A line carries no `note`, no `change`, and no page text. Intent reaches
+  an agent through `review.json` alone, which is where D12's classes and fencing live.
+
+**The monitor** keeps idle polling inside one small local Node process and exits when there is work,
+so a host that wakes an agent on task completion pays no model tokens for a quiet document.
+
+- It is SELF-SUFFICIENT about why it stopped: it reads `closed_at` and `handoff_rev` itself rather than
+  inferring them from a `lahe status` error.
+- `LAHE ACTION REQUIRED` prints on stdout ahead of the items AND on stderr. A host that captures one
+  stream used to get the instruction without the work, or the work without the instruction.
+- It ends by printing the exact drain and relaunch commands, so the next step is in the agent's face
+  rather than in a doc.
+- Each loop writes `<state>/agent-sessions/<id>/monitor.json` (`pid`, `handoff_rev`, `at`) through
+  `stateDir.writeAtomic`. On startup, a heartbeat younger than three intervals carrying the same
+  `handoff_rev` and a different LIVE pid refuses the launch with `4`: two monitors deliver one batch
+  twice. Stale heartbeats and dead pids are overwritten.
+
+### Agent liveness on the rail
+
+`replies.poll` answers with an `agent_liveness` object (`protocol.AGENT_LIVENESS`), resolved
+server-side from the review to its owning agent session. Fields: `state`, `monitor_at`, `activity_at`,
+`unanswered`, `oldest_unanswered_at`.
+
+| State | When | On the rail |
+| --- | --- | --- |
+| `watching` | A monitor heartbeat for the CURRENT `handoff_rev`, younger than 45s (three 15s loops) | Calm |
+| `working` | Unanswered items and session activity younger than 180s | Calm, "agent working" |
+| `unattended` | Unanswered items and neither of the above | Loud, with the oldest item's age |
+| `none` | Nothing waiting | Nothing |
+
+A heartbeat whose `handoff_rev` differs from the session's current one is IGNORED for the state: a
+pre-takeover monitor that has not exited yet must never make the rail claim the new agent is watching.
+
+Every field comes from a file the helper, the monitor, or a `lahe` command wrote. None of it is
+anything an agent said about itself, which is the whole point: a chat claiming "monitoring is active"
+sat over seven unanswered items.
 
 ### Agent-session and static-server lifecycle
 
@@ -659,24 +730,25 @@ are externally owned, so LAHE never terminates them.
 `lahe session takeover <id>` is the explicit cross-agent handoff. Review
 ownership remains unchanged because the whole session moves as one workstream.
 The command increments `handoff_rev`, causing older `lahe monitor` processes to
-discard captured output and exit, and prints an unfiltered catch-up status
-command plus a monitor command that requires a fresh seen-file. The new agent
-therefore sees unanswered work the prior agent may already have seen without
-allowing silent cross-session adoption.
+discard captured output and exit with `6`. It appends a `takeover` line to the
+wake feed so an old tail learns the same thing, and it prints the catch-up status
+command plus the session's four commands. The new agent therefore sees unanswered
+work the prior agent may already have seen without allowing silent cross-session
+adoption.
 
 The edge-case contract is deliberate: token exhaustion or a crashed app cannot
 strand seen-but-unanswered work; completed items do not become work again;
 multi-review sessions transfer as a unit; closed sessions reopen; surviving old
-monitors are fenced; feedback racing the handoff is found by catch-up or the new
-ledger; and no takeover occurs without an explicit human request. These are
+monitors are fenced; feedback racing the handoff is found by catch-up, because
+reading marks nothing seen; and no takeover occurs without an explicit human
+request. These are
 independent invariants, not incidental consequences of the current CLI output.
 
 ### `lahe wait` is retired
 
 It blocked, so agents ran it in the foreground and stopped working while the reviewer typed, and it
-watched one review behind a cursor the caller had to carry. `lahe monitor --session <id>
---seen-file <path>` answers the same question without crossing agent sessions or waking a model on
-empty checks.
+watched one review behind a cursor the caller had to carry. The wake feed and `lahe monitor --session
+<id>` answer the same question without crossing agent sessions or waking a model on empty checks.
 The command, route, wait-only protocol constants, implementation, and tests have
 all been removed. Historical feature documents retain the old design only as a
 superseded record.

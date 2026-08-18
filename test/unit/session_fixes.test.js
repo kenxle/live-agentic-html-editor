@@ -244,27 +244,33 @@ test("the canonical skill rejects the retired and cross-session workflows", () =
   assert.match(skill, /Do not start `python3 -m http\.server`/);
   assert.match(skill, /lahe monitor/);
   assert.match(skill, /background terminal task/);
-  assert.match(skill, /polls session-scoped status locally every 15 seconds/);
-  assert.match(skill, /Empty polls do\s+not invoke the model or use model tokens/);
-  assert.match(skill, /forever background daemon may remain\s+invisible/);
-  assert.match(skill, /Do not use\s+a Codex Timer/);
-  assert.match(skill, /Do not use a recurring schedule/);
-  assert.match(skill, /handle every printed item/);
+  // The Claude profile: a persistent tail on the wake feed, armed once.
+  assert.match(skill, /tail -n 0 -f <state-dir>\/agent-sessions\/<id>\/wake\.log/);
+  assert.match(skill, /persistent Monitor, once per\s+session/);
+  assert.match(skill, /nothing to relaunch and\s+nothing to remember/);
+  // The trap the wake feed exists to avoid, named so nobody re-invents it.
+  assert.match(skill, /Do not `tail -f review\.json`/);
+  assert.match(skill, /follows a deleted inode/);
+  // The drain command, in the one spelling every surface uses.
+  assert.match(skill, /lahe status --session <id> --json --quiet/);
+  assert.match(skill, /Repeat until it prints nothing/);
+  assert.match(skill, /do not use a Codex Timer/);
+  assert.match(skill, /Never use the native `schedule` timer/);
   assert.match(skill, /LAHE ACTION REQUIRED/);
-  assert.match(skill, /Do not treat a completed monitor as completed work/);
-  assert.match(skill, /Do not substitute `lahe status --session <id> --json --quiet`/);
-  assert.match(skill, /Do not send a final response that says the monitor was\s+started/);
+  assert.match(skill, /Do not treat a monitor result or a wake line as completed work/);
   assert.match(skill, /detached terminal task does not guarantee a new Codex turn/);
-  assert.match(skill, /Keep the turn\s+pending on the monitor's exec session/);
-  assert.match(skill, /run one\s+immediate `lahe status --session <id> --json --seen-file <same-path> --quiet`/);
-  assert.match(skill, /Launch the background monitor only after that\s+immediate check is empty/);
+  assert.match(skill, /Keep the turn\s+pending on the monitor's exec call/);
+  // The exit codes a host acts on.
+  assert.match(skill, /`5` the agent session is closed/);
+  assert.match(skill, /`6` another agent took the session over/);
+  assert.match(skill, /Do not relaunch a monitor that exited with 5 or 6/);
   assert.match(skill, /lahe session takeover <id>/);
-  assert.match(skill, /Never infer or silently perform a takeover/);
-  assert.match(skill, /never silently\s+reuse the old session or its seen-file/i);
-  assert.match(skill, /run\s+the same `lahe monitor` command in the foreground/);
-  assert.match(skill, /Stop or delete this session's\s+background monitor/);
+  assert.match(skill, /Never infer or silently\s+perform a takeover/);
+  assert.match(skill, /never silently\s+reuse the old session/i);
+  assert.match(skill, /Run the printed `lahe monitor` command in the foreground/);
+  assert.match(skill, /Stop this session's wake tail or\s+background monitor/);
   assert.doesNotMatch(skill, /moderate timer/);
-  assert.doesNotMatch(skill, /lahe status --json --seen-file/, "the skill must not teach an unscoped monitor command");
+  assert.doesNotMatch(skill, /--seen-file/, "the retired ledger flag is taught nowhere");
 });
 
 // ---------------------------------------------------------------------------

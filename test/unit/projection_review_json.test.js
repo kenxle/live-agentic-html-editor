@@ -108,10 +108,15 @@ test("the contract field is in the real projection byte for byte, and names no a
   );
 
   // The file tells an agent to append a line, and never to run a command that
-  // no longer exists. `lahe monitor` is the one keep-up command named; `lahe
-  // wait` is retired and must not survive here either.
+  // no longer exists. Two keep-up mechanisms are named, the wake feed and the
+  // monitor, and neither carries a seen-file any more: work stays listed until a
+  // reply lands, so redelivery is the dedupe. `lahe wait` is retired and must
+  // not survive here either.
   const wholeFile = fs.readFileSync(written, "utf8");
-  assert.ok(/lahe monitor --session <agent-session-id> --seen-file/.test(wholeFile), "the file names the scoped keep-up command an agent may run");
+  assert.ok(/tail -n 0 -f <state-dir>\/agent-sessions\/<agent-session-id>\/wake.log/.test(wholeFile), "the file names the wake feed a host can tail");
+  assert.ok(/lahe monitor --session <agent-session-id>/.test(wholeFile), "the file names the scoped keep-up command an agent may run");
+  assert.ok(/lahe status --session <agent-session-id> --json --quiet/.test(wholeFile), "the file names the drain command");
+  assert.equal(/--seen-file/.test(wholeFile), false, "the retired ledger flag is taught nowhere");
   assert.equal(/lahe wait/.test(wholeFile), false, "the retired blocking command is named nowhere");
   assert.equal(/lahe ack|lahe next|lahe send/.test(wholeFile), false, "review.json names no acknowledge command");
   // The retired acknowledgement vocabulary is gone entirely.

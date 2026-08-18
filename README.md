@@ -266,7 +266,7 @@ once, and after that a plain sentence works:
 
 | Command | What it does |
 | --- | --- |
-| `lahe review path/to/page.html` | Start a review and isolated agent session: writes the script line, starts or reuses its static server and the shared helper, then prints the URL, monitor, and close commands |
+| `lahe review path/to/page.html` | Start a review and isolated agent session: writes the script line, starts or reuses its static server and the shared helper, then prints the URL plus the wake, monitor, drain, and close commands |
 | `lahe review another.html --session <id>` | Add a later document to the same agent workstream without receiving another agent's comments |
 | `lahe add path/to/project --origin http://localhost:3000` | Dev-server variant: edits nothing, prints a commented snippet that you must wrap in your framework's development-only conditional |
 | `lahe add ... --new` | Mint a fresh review even though the page already carries one |
@@ -274,42 +274,59 @@ once, and after that a plain sentence works:
 | `lahe add ... --source path/to/template` | Record where the source lives, so an agent edits the template rather than build output |
 | `lahe add ... --review <id>` | Re-attach this page to a review that already exists, by id |
 | `lahe status [--session <id>] [--review <id>] [--json]` | What is open right now. Agent monitors must name their session; plain global status is only a human diagnostic |
-| `lahe monitor --session <id> --seen-file <path>` | Poll locally without model wakeups, print new session work, and exit |
+| `lahe monitor --session <id>` | Poll locally without model wakeups, print unanswered session work, and exit |
 | `lahe session close <id>` | Close an agent workstream, stop its static servers, and keep all review history. The final close also stops the shared helper |
 | `lahe session reopen <id>` | Reopen the workstream and restart its helper and static servers |
 | `lahe session takeover <id>` | Explicitly hand an existing workstream to a new agent, fence its older monitors, and print catch-up commands |
 | `lahe serve [--port N]` | Run the helper by hand (`add` starts it for you, so this is rarely needed) |
 
 Takeover is designed for token exhaustion, crashes, and switching agent clients
-mid-review. Its catch-up command intentionally ignores the old agent's
-seen-file, so unfinished items reappear even if that agent had already read
-them. Completed items do not reappear, every review in the session moves
-together, and older monitor processes are fenced. Use it only after the human
-explicitly requests the handoff.
+mid-review. Its catch-up command lists every unanswered item, so work the old
+agent read but never finished reappears. Completed items do not reappear, every
+review in the session moves together, and older monitor processes are fenced.
+Use it only after the human explicitly requests the handoff.
 
-Launch `lahe monitor --session <id> --seen-file <path>` as a background terminal
-task. It polls locally every 15 seconds, stays silent while idle, and exits when
-new work arrives. Task completion wakes the agent and prints `LAHE ACTION
-REQUIRED`. This is not a successful stopping point: the agent must continue the
-same turn through editing, rebuilding, verification, replies, and the immediate
-drain. Merely reporting that an item arrived is a workflow failure. After
-handling the printed batch, the agent runs an immediate session-scoped status check with the same
-seen-file and repeats until it is empty, then relaunches the monitor. Draining
-first catches feedback left while the agent worked and avoids an extra
-wake-and-exit cycle. This avoids token burn on no-ops: native Claude
-timers, Antigravity schedules, and similar wakeups invoke a model even when
-nothing changed, while the monitor's empty checks never invoke a model. A
-forever daemon is also unsuitable because some hosts only wake the agent when a
-background task completes. Use one stable seen-file, never monitor globally,
-and stop relaunching when the session closes. If a host cannot wake on task
-completion, run the same command in the foreground after telling the user how
-to interrupt it.
+**Keeping an agent current** takes two things, and `lahe review` prints both.
 
-Codex must keep its current turn pending on the monitor's exec session. It must
-not detach the process, announce that monitoring started, and end the turn;
-detached task completion alone does not guarantee a new Codex turn. Waiting on
-the exec session preserves zero-token local polling and lets item output
-continue the already-active turn.
+The **drain command** is `lahe status --session <id> --json --quiet`. It prints
+every ready item nobody has answered, and nothing at all when there is none. An
+agent runs it, handles what it prints, replies, and runs it again until it prints
+nothing. Work stays listed until a reply lands, so a missed wake costs nothing:
+the next drain shows the item again.
+
+The **wake channel** is per host, because hosts differ in what they can do
+without spending model tokens:
+
+- **Claude Code** arms one persistent Monitor on
+  `tail -n 0 -f <state-dir>/agent-sessions/<id>/wake.log`. The wake feed is one
+  append-only file per agent session, created empty when the session is, so the
+  tail can be armed before any work exists. It gets a line when a ready item
+  lands, when the session is taken over, and when it closes. Nothing to relaunch,
+  and no model turns at all while it is quiet.
+- **Codex** runs `lahe monitor --session <id>` as a foreground pending exec call
+  and keeps waiting on it. It must not detach the process, announce that
+  monitoring started, and end the turn: detached task completion alone does not
+  guarantee a new Codex turn.
+- **Antigravity** runs the same command as a background terminal task, never the
+  native `schedule` timer, which invokes Gemini on every no-op.
+- **Any other host** runs it in the foreground after telling the user how to
+  interrupt it.
+
+The monitor keeps its idle polling in one small local Node process, so no host
+pays model tokens for a quiet document. It prints `LAHE ACTION REQUIRED` ahead of
+the work, on both stdout and stderr. That is an interrupt, not a stopping point:
+the agent continues the same turn through editing, rebuilding, verification, and
+replies. Merely reporting that an item arrived is a workflow failure.
+
+Monitor exit codes tell a host what to do next: `0` work is printed, `4` bad
+usage or a live monitor already holds the session, `5` the session is closed, and
+`6` another agent took it over. On `5` or `6`, stop relaunching.
+
+**The rail says whether an agent is actually listening**, from files rather than
+from anything the agent claims. It reads *watching* when a monitor heartbeat is
+fresh, *agent working* when there are unanswered items and this session ran a
+`lahe` command in the last few minutes, and *no agent watching* with the oldest
+item's age when neither is true.
 
 **If the page is build output**, an agent should rebuild before it reports an
 item handled: `handled` is supposed to mean your page shows the change. It does
