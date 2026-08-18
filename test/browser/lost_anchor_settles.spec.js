@@ -6,14 +6,14 @@
 // review's own review.json flagged nothing lost. Both halves were true at once:
 // the passage went briefly unfindable while the page was still rendering (the
 // reviewed report draws its mermaid diagrams a few hundred milliseconds after
-// load, replacing whole sections), replay stamped the record and badged the
-// card, the next pass found the passage and cleared the stamp, and nothing ever
-// took the badge back off.
+// load, and while one is being drawn its words are on the page twice, so the
+// anchor matches two places and binds to neither), replay stamped the record
+// and badged the card, the next pass found the passage again and cleared the
+// stamp, and nothing ever took the badge back off.
 //
-// The page here is that pattern, in miniature: a script replaces a section's
-// DOM half a second after load with the same words in new nodes. The reload is
+// test/fixtures/settling-render.js is that renderer in miniature. The reload is
 // what the auto-reload work (R36) now does routinely, which is why this started
-// being seen.
+// being seen this week.
 //
 // The control is the other half of the promise. A passage that really is gone
 // gets the lost card, and it KEEPS it: this must not become a fix that softens
@@ -31,33 +31,8 @@ const DOC_PATH = "/settling-doc.html";
 const PASSAGE = "The third week is where a comeback stops being about willpower.";
 const SAID = "Name the week, not the feeling.";
 
-// The two beats of the render: the drawn copy goes in beside the source, and
-// the source comes out. Both are well inside replay's settling window, and the
-// first is late enough that the boot pass has certainly already run against
-// the served HTML.
-const CLEAR_MS = 300;
-const DRAW_MS = 700;
-
-// The window in which the reviewer's passage is on none of the page: this is
-// where the false lost verdict was reached.
-const SETTLED_MS = 2600;
-
-/**
- * A document whose diagram section is rendered after load, in the two beats a
- * renderer actually takes: it draws its own copy alongside the source it was
- * given, and then takes the source away. In between, the reviewer's passage is
- * on the page TWICE, which is a lost anchor exactly like being on it zero
- * times: nothing can be written or moved when two places match.
- *
- * `mode` is what the finished render leaves behind:
- *   "same"   the passage, in the drawn section: a re-render, nothing is lost
- *   "gone"   a diagram and no passage: a genuine loss
- */
+/** The document, with the fixture renderer wired to `mode`. See the fixture. */
 function docHtml(config, mode) {
-  var drawnBody =
-    mode === "gone"
-      ? '"<p id=\\"diagram\\">A diagram stands here now.</p>"'
-      : '\'<p id="passage">\' + ' + JSON.stringify(PASSAGE) + ' + "</p>"';
   return (
     '<!doctype html>\n<html lang="en">\n<head><meta charset="utf-8" />' +
     "<title>Settling</title></head>\n<body>\n<main>\n" +
@@ -67,24 +42,11 @@ function docHtml(config, mode) {
     "</p>\n</section>\n" +
     '<p id="tail">Everything else on this page holds still.</p>\n' +
     "</main>\n" +
-    "<script>\n" +
-    'var source = document.getElementById("source");\n' +
-    "setTimeout(function () {\n" +
-    '  var drawn = document.createElement("section");\n' +
-    '  drawn.id = "drawn";\n' +
-    "  drawn.innerHTML = " +
-    drawnBody +
-    ";\n" +
-    "  source.parentNode.insertBefore(drawn, source);\n" +
-    "}, " +
-    CLEAR_MS +
-    ");\n" +
-    "setTimeout(function () {\n" +
-    "  source.remove();\n" +
-    "}, " +
-    DRAW_MS +
-    ");\n" +
-    "</script>\n" +
+    '<script src="/settling-render.js" data-mode="' +
+    mode +
+    '" data-passage="' +
+    PASSAGE +
+    '"></script>\n' +
     scriptTagFor(config) +
     "\n</body>\n</html>\n"
   );
@@ -130,12 +92,25 @@ function lostState(page, id) {
   }, id);
 }
 
-// The settling window plus the recheck plus room for the pass it schedules. A
-// verdict that is going to be reached at all is reached inside this. The number
-// is written out here rather than read off the library, so this spec measures
-// the same interval against a build that has no settling window at all.
+/** The page has finished drawing: the drawn section is in and the source is out. */
+async function rendered(page) {
+  await pollPage(page, () => !!document.getElementById("drawn") && !document.getElementById("source"), undefined, {
+    message: "the fixture renderer to finish both of its beats"
+  });
+}
+
+/**
+ * The settling window is over AND a pass has run since it closed.
+ *
+ * Not a sleep: the window's end is a condition the library states, and the pass
+ * after it is asked for rather than waited on. Anything replay is going to say
+ * about this page it has said by the time this returns.
+ */
 async function afterTheWindowCloses(page) {
-  await page.waitForTimeout(SETTLED_MS);
+  await pollPage(page, () => window.LAHE.replay.isSettling() === false, undefined, {
+    message: "replay's settling window to close"
+  });
+  await page.evaluate(() => window.__lahe.replayNow());
 }
 
 test.describe("a page that is still drawing itself is not called lost", () => {
@@ -149,7 +124,7 @@ test.describe("a page that is still drawing itself is not called lost", () => {
     await pages.close();
   });
 
-  test("a section re-rendered after load never leaves a lost card behind", async ({ page }) => {
+  test("a section rendered after load never leaves a lost card behind", async ({ page }) => {
     const config = { review: REVIEW, token: TOKEN, helper: "http://127.0.0.1:1" };
     await withLayer(page, config);
     await page.route("**" + DOC_PATH, function (route) {
@@ -164,9 +139,9 @@ test.describe("a page that is still drawing itself is not called lost", () => {
     await pollPage(page, () => !!(window.__lahe && window.__lahe.booted), undefined, {
       message: "the layer to boot from its script tag"
     });
-    // Comment AFTER the first re-render, so the record is minted against the
-    // rendered page and the reload is the only thing under test.
-    await page.waitForTimeout(DRAW_MS + 300);
+    // Comment on the RENDERED page, so the record is minted against what the
+    // renderer built and the reload is the only thing under test.
+    await rendered(page);
     await commentOnSelection(page, "#passage", SAID);
 
     const id = await page.evaluate((said) => {
@@ -175,11 +150,12 @@ test.describe("a page that is still drawing itself is not called lost", () => {
     }, SAID);
     expect(id, "the comment exists").toBeTruthy();
 
-    // The reload. This is what a rebuild does to the reviewer's page now.
+    // The reload. This is what a rebuild does to the reviewer's page now (R36).
     await page.reload();
     await pollPage(page, () => !!(window.__lahe && window.__lahe.booted), undefined, {
       message: "the layer to boot again after the reload"
     });
+    await rendered(page);
     await afterTheWindowCloses(page);
 
     const state = await lostState(page, id);
@@ -190,25 +166,23 @@ test.describe("a page that is still drawing itself is not called lost", () => {
       "the passage really is on the page, which is the whole point"
     ).toBe(true);
 
-    // The comment landed where it belongs: on the passage, in the rendered
-    // section the page built after load.
+    // The comment landed where it belongs: on the passage, in the section the
+    // page drew after load.
+    // The condition is the TEXT under the tint, not the id in the registry. A
+    // registry entry whose range died with the nodes it was painted on is
+    // exactly the stale answer this poll must not accept.
     await pollPage(
       page,
-      (itemId) => window.__lahe.handle.comments.highlights.paintedIds().indexOf(itemId) !== -1,
-      id,
-      { message: "the passage to be tinted again on the re-rendered section" }
+      (said) => String(window.__lahe.handle.comments.highlights.rangeFor(said.id) || "") === said.passage,
+      { id: id, passage: PASSAGE },
+      { message: "the passage to be tinted again on the rendered section" }
     );
-    const range = await page.evaluate(
-      (itemId) => String(window.__lahe.handle.comments.highlights.rangeFor(itemId) || ""),
-      id
-    );
-    expect(range, "and the tint covers that passage, not some other run of text").toBe(PASSAGE);
   });
 
   test("a passage that really is gone gets the lost card, and keeps it", async ({ page }) => {
     const config = { review: REVIEW + "-gone", token: TOKEN, helper: "http://127.0.0.1:1" };
-    // The passage is there on the first load and removed by the re-render on
-    // the second, which is an agent deleting it between rebuilds.
+    // The passage is drawn on the first load and not on the second, which is an
+    // agent deleting it between rebuilds.
     let mode = "same";
     await withLayer(page, config);
     await page.route("**" + DOC_PATH, function (route) {
@@ -223,7 +197,7 @@ test.describe("a page that is still drawing itself is not called lost", () => {
     await pollPage(page, () => !!(window.__lahe && window.__lahe.booted), undefined, {
       message: "the layer to boot from its script tag"
     });
-    await page.waitForTimeout(DRAW_MS + 300);
+    await rendered(page);
     await commentOnSelection(page, "#passage", SAID);
     const id = await page.evaluate((said) => {
       const found = window.__lahe.items().filter((item) => item.note === said)[0];
@@ -236,6 +210,7 @@ test.describe("a page that is still drawing itself is not called lost", () => {
     await pollPage(page, () => !!(window.__lahe && window.__lahe.booted), undefined, {
       message: "the layer to boot again after the reload"
     });
+    await rendered(page);
     await afterTheWindowCloses(page);
 
     const state = await lostState(page, id);
@@ -249,7 +224,6 @@ test.describe("a page that is still drawing itself is not called lost", () => {
     // And it stays. A later pass over the same page must not talk the reviewer
     // out of a warning that is true.
     await page.evaluate(() => window.__lahe.replayNow());
-    await page.waitForTimeout(300);
     const later = await lostState(page, id);
     expect(later.badged, "the lost card is still there a pass later").toBe(true);
     expect(later.stamped).toBe(true);
