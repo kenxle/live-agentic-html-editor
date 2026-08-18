@@ -301,3 +301,97 @@ test("twins are not duplicated, ports are respected, and other hosts pass throug
   ]);
   assert.deepEqual(addCommand.withLoopbackTwins([]), []);
 });
+
+// ---------------------------------------------------------------------------
+// A duplicated tab cannot inherit the review by inheriting the window id
+// ---------------------------------------------------------------------------
+//
+// The window id lives in sessionStorage, and a browser COPIES sessionStorage
+// into a duplicated or restored tab. The same-tab reclaim trusted that id, so a
+// second LIVE tab presented the first tab's id, was handed acquired:true with no
+// Web Lock, and the two wrote one storage bucket with nothing to stop them. The
+// lock, not the id, is what decides now: the reclaim asks for it without
+// ifAvailable and takes acquisition as the proof.
+//
+// The browser half of this is test/browser/duplicate_tab.spec.js, which drives a
+// real second tab with a copied sessionStorage.
+
+const storeModule = require("../../src/layer/store.js");
+
+// A Web Locks stand-in. `ifAvailable` is refused in both cases, which is the
+// state that sends the claim down the reclaim path; `frees` is the difference
+// between the two cases the reclaim has to tell apart: an outgoing document
+// finishing its teardown (the lock comes free) and a live second window (it
+// never does).
+function locksWhere(frees) {
+  return {
+    request: function (name, optionsOrCallback, maybeCallback) {
+      const ifAvailable = typeof optionsOrCallback === "object" && optionsOrCallback.ifAvailable === true;
+      const callback = typeof optionsOrCallback === "function" ? optionsOrCallback : maybeCallback;
+      if (ifAvailable) return Promise.resolve(callback(null));
+      if (!frees) return new Promise(function () {});
+      return Promise.resolve(callback({ name: name }));
+    }
+  };
+}
+
+function storeWith(locks, seeded) {
+  const backing = { map: Object.create(null) };
+  const api = {
+    getItem: (k) => (Object.prototype.hasOwnProperty.call(backing.map, k) ? backing.map[k] : null),
+    setItem: (k, v) => {
+      backing.map[k] = String(v);
+    },
+    removeItem: (k) => {
+      delete backing.map[k];
+    },
+    key: (i) => (Object.keys(backing.map)[i] === undefined ? null : Object.keys(backing.map)[i]),
+    get length() {
+      return Object.keys(backing.map).length;
+    }
+  };
+  Object.keys(seeded || {}).forEach((k) => api.setItem(k, JSON.stringify(seeded[k])));
+  return storeModule.createStore({ backing: api, windowId: "win-copied", locks: locks, reclaimMs: 25 });
+}
+
+test("a second LIVE tab holding a copied window id is refused, not handed the review", async () => {
+  const seeded = { "lahe.holder.v1:rev-dupe": { window_id: "win-copied", since: new Date().toISOString(), path: "/deck.html" } };
+  const got = await storeWith(locksWhere(false), seeded).claimWindow("rev-dupe", { path: "/deck.html" });
+  assert.equal(got.acquired, false, "the lock is held by a live window, so the id match proves nothing");
+  assert.equal(got.failure.code, "SECOND_WINDOW_REFUSED");
+});
+
+test("and the same id mid-reload still reclaims, because the lock is free", async () => {
+  const seeded = { "lahe.holder.v1:rev-reload": { window_id: "win-copied", since: new Date().toISOString(), path: "/deck.html" } };
+  const got = await storeWith(locksWhere(true), seeded).claimWindow("rev-reload", { path: "/deck.html" });
+  assert.equal(got.acquired, true);
+  assert.equal(got.reclaimed, true);
+});
+
+// ---------------------------------------------------------------------------
+// What a chip is allowed to offer, beside the codes it answers for
+// ---------------------------------------------------------------------------
+
+const failuresModule = require("../../src/shared/failures.js");
+
+test("the codes whose remedy IS an agent handoff can hand the line over", () => {
+  assert.equal(failuresModule.isCopyable("REPLY_LINE_MALFORMED"), true);
+  assert.equal(failuresModule.isCopyable("SYNC_UNAUTHORIZED"), true);
+  assert.equal(failuresModule.isCopyable("SYNC_ORIGIN_NOT_ALLOWED"), true);
+  assert.equal(failuresModule.isCopyable("CSP_REFUSED"), true);
+});
+
+test("a chip with its own button never also gets a Copy button", () => {
+  assert.equal(failuresModule.chipAction("SECOND_WINDOW_REFUSED").action, "takeover");
+  assert.equal(failuresModule.isCopyable("SECOND_WINDOW_REFUSED"), false);
+  assert.equal(failuresModule.chipAction("HELPER_UNREACHABLE"), null);
+  assert.equal(failuresModule.isCopyable("HELPER_UNREACHABLE"), false);
+});
+
+test("every code a table names is a code that exists", () => {
+  Object.keys(failuresModule.CHIP_ACTIONS)
+    .concat(Object.keys(failuresModule.COPYABLE))
+    .forEach((code) => {
+      assert.ok(failuresModule.describe(code), code + " is defined in failures.js");
+    });
+});

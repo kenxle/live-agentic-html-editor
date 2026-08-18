@@ -86,8 +86,68 @@ test("a file item and a differently named served document stay apart", () => {
 test("pageFrom builds a file page the rule can match", () => {
   const page = record.pageFrom({ origin: "null", pathname: "/Users/ken/docs/report.html", href: "file:///Users/ken/docs/report.html" });
   assert.equal(page.origin, record.FILE_ORIGIN);
-  assert.equal(page.path, "report.html");
+  assert.equal(page.path, "docs/report.html");
   assert.equal(record.samePage(itemOn("http://127.0.0.1:8080", "/report.html"), page), true);
+});
+
+// ---------------------------------------------------------------------------
+// Two documents with the same name, off disk
+// ---------------------------------------------------------------------------
+//
+// The bug the basename rule recreated: two DIFFERENT index.html files attached
+// to one review both keyed as "file|index.html", so rule 1 matched before any
+// disambiguation could run and page B inherited every one of page A's records.
+// The file page keeps its parent folder, so the tail comparison tells them
+// apart.
+
+test("two index.html files in two folders are two pages, both off disk", () => {
+  const a = record.pageFrom({ origin: "null", pathname: "/Users/ken/notes/index.html", href: "file:///Users/ken/notes/index.html" });
+  const b = record.pageFrom({ origin: "null", pathname: "/Users/ken/deck/index.html", href: "file:///Users/ken/deck/index.html" });
+  assert.notEqual(record.pageKeyFor(a), record.pageKeyFor(b), "the two keys are not the same key");
+  assert.equal(record.samePage(itemOn(a.origin, a.path), b), false);
+  assert.equal(record.samePage(itemOn(b.origin, b.path), a), false);
+});
+
+test("one index.html visited twice off disk is one page", () => {
+  const a = record.pageFrom({ origin: "null", pathname: "/Users/ken/notes/index.html", href: "file:///Users/ken/notes/index.html" });
+  assert.equal(record.samePage(itemOn(a.origin, a.path), a), true);
+});
+
+test("the mixed case: one document off disk and served, folder and all", () => {
+  const fromDisk = record.pageFrom({ origin: "null", pathname: "/Users/ken/notes/index.html", href: "file:///Users/ken/notes/index.html" });
+  assert.equal(record.samePage(itemOn(fromDisk.origin, fromDisk.path), pageOn("http://127.0.0.1:8080", "/notes/index.html")), true);
+  // And a DIFFERENT folder's index.html served over http is not that document.
+  assert.equal(record.samePage(itemOn(fromDisk.origin, fromDisk.path), pageOn("http://127.0.0.1:8080", "/deck/index.html")), false);
+});
+
+test("a record written before the folder rule still matches on its name alone", () => {
+  const older = itemOn(record.FILE_ORIGIN, "report.html");
+  assert.equal(record.samePage(older, pageOn("http://127.0.0.1:8080", "/docs/report.html")), true);
+});
+
+// ---------------------------------------------------------------------------
+// A directory URL is the index document
+// ---------------------------------------------------------------------------
+//
+// A page served at the origin root has the pathname "/", which has no basename
+// at all, so the file-versus-http rule could never match it and the reviewer's
+// own items vanished on the revisit.
+
+test("a document served at the origin root is the index document, both directions", () => {
+  const fromDisk = itemOn(record.FILE_ORIGIN, "index.html");
+  assert.equal(record.samePage(fromDisk, pageOn("http://127.0.0.1:8080", "/")), true);
+  const served = itemOn("http://127.0.0.1:8080", "/");
+  assert.equal(record.samePage(served, pageOn(record.FILE_ORIGIN, "index.html")), true);
+});
+
+test("a directory path deeper in is that directory's index document", () => {
+  const fromDisk = record.pageFrom({ origin: "null", pathname: "/Users/ken/docs/index.html", href: "file:///Users/ken/docs/index.html" });
+  assert.equal(record.samePage(itemOn(fromDisk.origin, fromDisk.path), pageOn("http://127.0.0.1:8080", "/docs/")), true);
+});
+
+test("the root is not every document: a named page there stays its own page", () => {
+  const served = itemOn("http://127.0.0.1:8080", "/");
+  assert.equal(record.samePage(served, pageOn(record.FILE_ORIGIN, "report.html")), false);
 });
 
 test("samePage refuses to guess at a missing item or page", () => {
@@ -118,5 +178,15 @@ test("the helper's refusal and the rail's chip say the same words", () => {
   const store = require("../../src/layer/store.js");
   const since = new Date(Date.now() - 4 * 60 * 1000).toISOString();
   const described = store.createStore().describeHolder({ path: "/docs/report.html", since: since });
-  assert.equal(described, "the window on report.html, open for the last 4 minutes");
+  assert.equal(described, "the window on docs/report.html, open for the last 4 minutes");
+});
+
+// A holder named by a name nobody can read is a refusal that points nowhere.
+test("the refusal still names the window when the holder is served at the root", () => {
+  const store = require("../../src/layer/store.js");
+  const made = store.createStore();
+  assert.match(made.describeHolder({ path: "/" }), /the window on \//);
+  // Two folders' index.html are two windows, and the sentence says which.
+  assert.match(made.describeHolder({ path: "/notes/index.html" }), /notes\/index\.html/);
+  assert.match(made.describeHolder({ path: "/deck/index.html" }), /deck\/index\.html/);
 });

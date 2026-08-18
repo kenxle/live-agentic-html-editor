@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+c2ebd54b2d54
+ * version 0.0.0+637ebf6cc7d3
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+c2ebd54b2d54";
+  g.LAHE.version = "0.0.0+637ebf6cc7d3";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -1159,6 +1159,46 @@
     HELPER_UNREACHABLE: true
   };
 
+  // ---------------------------------------------------------------------------
+  // What a chip of this code may OFFER
+  // ---------------------------------------------------------------------------
+  //
+  // Beside the definitions on purpose. These two tables used to live in the
+  // rail, three files away from the codes they answer for, so a new failure
+  // could be added and silently get neither control. Adding a code here is the
+  // same edit as defining it.
+  //
+  // CHIP_ACTIONS: the reviewer fixes this one right here, with a button. The
+  // click runs through the rail's runAction seam, so boot still owns what the
+  // button DOES.
+  var CHIP_ACTIONS = {
+    SECOND_WINDOW_REFUSED: { label: "Review here", action: "takeover" }
+  };
+
+  // COPYABLE: the failure is fixed somewhere the reviewer is not, and the chip's
+  // detail line is written as a sentence to hand to their agent verbatim. Never
+  // on a chip that has its own action: the copy button displaced the one button
+  // that actually fixed the failure (Ken, live, 2026-08-18).
+  var COPYABLE = {
+    SYNC_ORIGIN_NOT_ALLOWED: true,
+    CSP_REFUSED: true,
+    // Both of these ARE agent work: an agent wrote the reply line this tool
+    // could not read, and an agent re-runs the add step that mints the token.
+    // The allowlist dropped them, so the codes whose remedy is literally "hand
+    // this line to your agent" were the two with no way to hand it over.
+    REPLY_LINE_MALFORMED: true,
+    SYNC_UNAUTHORIZED: true
+  };
+
+  function chipAction(code) {
+    var name = canonical(code);
+    return Object.prototype.hasOwnProperty.call(CHIP_ACTIONS, name) ? CHIP_ACTIONS[name] : null;
+  }
+
+  function isCopyable(code) {
+    return COPYABLE[canonical(code)] === true && !chipAction(code);
+  }
+
   function failure(code, detail) {
     var d = describe(code);
     return {
@@ -1186,7 +1226,11 @@
     CODE_NAMES: CODE_NAMES,
     ALIASES: ALIASES,
     ALIAS_NAMES: ALIAS_NAMES,
+    CHIP_ACTIONS: CHIP_ACTIONS,
+    COPYABLE: COPYABLE,
     canonical: canonical,
+    chipAction: chipAction,
+    isCopyable: isCopyable,
     describe: describe,
     failure: failure,
     isPersistent: isPersistent
@@ -1479,33 +1523,65 @@
   // to re-anchor them here, the rail listed them, and the count pill counted
   // them (Ken, live, 2026-08-17, 78 foreign items on a one-pager).
   //
-  // THE RULE, and it is two rules because file:// is not a normal origin:
+  // THE RULE, and it is three rules because file:// is not a normal origin and
+  // a directory URL is not a document name:
   //
   //  1. ORIGIN PLUS PATH, exactly pageKey. Two dev servers both serving
   //     /dashboard are two different pages, so they never see each other's
   //     items.
-  //  2. WHEN EITHER SIDE IS THE FILE ORIGIN, compare BASENAMES instead. The
+  //  2. A PATH THAT NAMES A DIRECTORY IS THE INDEX DOCUMENT. "/" and "/docs/"
+  //     are the server handing back index.html, and that is the document the
+  //     reviewer is looking at. Without this a page served at the origin root
+  //     had the empty string for a name, so nothing could ever match it and the
+  //     reviewer's own items disappeared on the next visit.
+  //  3. WHEN EITHER SIDE IS THE FILE ORIGIN, compare the DOCUMENT TAIL: the
+  //     last N path segments, N being however many the shorter side has. The
   //     same document is legitimately visited both ways in one review: opened
-  //     from disk it carries origin "file" and its basename as the path
-  //     (pageFrom above), and served over http it carries the server's origin
-  //     and a full pathname. Those two keys can never be equal, so a strict
-  //     match would hide each visit's comments from the other, on one document.
-  //     Basenames keep them together, and two DIFFERENT documents still have
-  //     different basenames, so they stay apart.
+  //     from disk it carries origin "file" and the tail pageFrom kept, served
+  //     over http it carries the server's origin and a full pathname. Those two
+  //     keys can never be equal, so a strict match would hide each visit's
+  //     comments from the other, on one document.
   //
-  // The residual case rule 2 accepts on purpose: /a/index.html visited over http
-  // and a DIFFERENT index.html opened from disk would match. It is accepted
-  // because a file:// record only ever stored a basename in the first place, so
-  // there is nothing finer to compare, and the alternative (hiding the
-  // reviewer's own items on the document they are looking at) is the worse
-  // failure of the two.
-  function basenameOf(path) {
-    var parts = String(path === null || path === undefined ? "" : path)
+  // Rule 3 is why pageFrom keeps the parent directory for a file page rather
+  // than the basename alone. Two different documents both named index.html,
+  // both opened off disk, matched on basename and page B inherited page A's
+  // records; with "notes/index.html" against "deck/index.html" they stay apart,
+  // while "docs/report.html" off disk still matches "/docs/report.html" served,
+  // and a one-segment record ("report.html", written before this rule existed)
+  // still matches on its basename alone.
+  //
+  // The residual case rule 3 still accepts on purpose: two documents whose LAST
+  // TWO segments agree (/a/docs/index.html and /b/docs/index.html, both off
+  // disk) match. Deeper tails would trade that away for leaking more of the
+  // reviewer's disk into a group heading, and hiding the reviewer's items on the
+  // document in front of them is the worse failure of the two.
+
+  // The one tail parser. Query and fragment dropped, empty segments dropped, a
+  // directory path answered with the index document it serves.
+  var INDEX_DOCUMENT = "index.html";
+
+  function segmentsOf(path) {
+    var raw = String(path === null || path === undefined ? "" : path)
       .split("?")[0]
-      .split("#")[0]
-      .split("/")
-      .filter(Boolean);
-    return parts.length ? parts[parts.length - 1] : "";
+      .split("#")[0];
+    var parts = raw.split("/").filter(Boolean);
+    if (!parts.length || /\/$/.test(raw)) parts.push(INDEX_DOCUMENT);
+    return parts;
+  }
+
+  function basenameOf(path) {
+    var parts = segmentsOf(path);
+    return parts[parts.length - 1];
+  }
+
+  // The path as a PERSON should read it: enough to tell two documents apart,
+  // short enough to sit in a chip. The last two segments, or the raw path when
+  // it has none to give.
+  function shortPath(path) {
+    var raw = String(path === null || path === undefined ? "" : path);
+    var parts = raw.split("?")[0].split("#")[0].split("/").filter(Boolean);
+    if (!parts.length) return raw || "";
+    return parts.slice(Math.max(0, parts.length - 2)).join("/");
   }
 
   /**
@@ -1520,9 +1596,13 @@
     var itemOrigin = String(item[FIELD.PAGE_ORIGIN]);
     var pageOrigin = String(page.origin);
     if (itemOrigin !== FILE_ORIGIN && pageOrigin !== FILE_ORIGIN) return false;
-    var a = basenameOf(item[FIELD.PAGE_PATH]);
-    var b = basenameOf(page.path);
-    return !!a && a === b;
+    var a = segmentsOf(item[FIELD.PAGE_PATH]);
+    var b = segmentsOf(page.path);
+    var depth = Math.min(a.length, b.length);
+    for (var i = 1; i <= depth; i += 1) {
+      if (a[a.length - i] !== b[b.length - i]) return false;
+    }
+    return depth > 0;
   }
 
   // Builds the page fields from a location-like object. Pure, so it is
@@ -1538,13 +1618,13 @@
     var path = l.pathname || null;
 
     if (!origin || origin === "null" || /^file:/i.test(String(l.href || ""))) {
-      // A page opened from disk. The basename is the only part a person would
-      // recognize, and the full path is not the reviewer's to leak into a group
-      // heading.
+      // A page opened from disk. The document and its parent directory: enough
+      // identity that two index.html files in two folders are two pages
+      // (samePage's rule 3), and still not the reviewer's whole disk leaking
+      // into a group heading.
       origin = FILE_ORIGIN;
       var href = String(l.href || l.pathname || "");
-      var tail = href.split("?")[0].split("#")[0].split("/").filter(Boolean).pop();
-      path = tail || "document";
+      path = shortPath(href) || "document";
     }
 
     return {
@@ -1909,6 +1989,7 @@
     pageKeyFor: pageKeyFor,
     samePage: samePage,
     basenameOf: basenameOf,
+    shortPath: shortPath,
     newItem: newItem,
     bumpRev: bumpRev,
     historyEntry: historyEntry,
@@ -5401,6 +5482,7 @@
   // That is exactly the line the helper session needs: a navigated reload proves
   // it is the holder with the secret it kept, and a second tab has neither.
   var WINDOW_ID_KEY = "lahe.window.id.v1";
+  var RECLAIM_DEADLINE_MS = 1500;
   var SESSION_SECRET_PREFIX = "lahe.session.v1:";
 
   // The storage key for a review. Review id, never a filename, never a page.
@@ -5488,6 +5570,11 @@
     // second one. A new tab has a fresh sessionStorage and mints a new id.
     var windowId = opts.windowId || stableWindowId(sessionBacking);
     var locks = opts.locks || (typeof navigator !== "undefined" && navigator ? navigator.locks : null);
+    // How long a same-id claim waits for the lock the recorded holder would be
+    // holding (see reclaimThroughLock). Long enough for an outgoing document to
+    // finish dying, short enough that a duplicated tab learns it is read-only
+    // before the reviewer has typed into it.
+    var reclaimMs = typeof opts.reclaimMs === "number" ? opts.reclaimMs : RECLAIM_DEADLINE_MS;
     var releaseHeldLock = null;
 
     function readJson(key, fallback) {
@@ -5783,11 +5870,18 @@
     // It used to read "the window on /a/very/long/path/to/doc.html, open since
     // 2026-08-18T04:35:45.006Z": a raw ISO timestamp in a sentence written for a
     // person, and a path long enough to burst the chip (Ken, live, 2026-08-18).
-    // The basename is the part a person recognizes, and the elapsed phrase is
+    // The tail is the part a person recognizes, and the elapsed phrase is
     // shared with the helper's own refusal so the two never disagree.
+    //
+    // The TAIL, not the basename: a document served at the origin root has no
+    // basename at all, so the clause vanished and the refusal named "the
+    // window" with no window in it, and two folders' index.html both collapsed
+    // to one name, which is the one case the reviewer needs told apart.
+    // record.shortPath keeps the parent directory, which is short enough for a
+    // chip and specific enough to point at a window.
     function describeHolder(holder) {
       if (!holder) return "another window";
-      var name = holder.path ? record.basenameOf(holder.path) : null;
+      var name = holder.path ? record.shortPath(holder.path) : null;
       var where = name ? " on " + name : "";
       var when = holder.since ? ", open " + elapsed.elapsedPhrase(holder.since) : "";
       return "the window" + where + when;
@@ -5801,6 +5895,54 @@
      *   Resolved, never thrown: a window that cannot claim the review is a
      *   read-only window, not a crash.
      */
+    function refusedBy(holder) {
+      return {
+        acquired: false,
+        holder: holder,
+        windowId: windowId,
+        failure: failures.failure("SECOND_WINDOW_REFUSED", describeHolder(holder)),
+        reason: "This review is already open in " + describeHolder(holder) + "."
+      };
+    }
+
+    /**
+     * Ask for the lock the recorded holder would be holding, and let the answer
+     * decide. See claimWindow's comment for why an id match is a question and
+     * not a verdict.
+     *
+     * The deadline is what keeps this from hanging forever behind a live window:
+     * a session-held lock is never released, so the request would simply sit
+     * there and the page would never learn it is read-only.
+     */
+    function reclaimThroughLock(reviewId, self, holder, settle) {
+      var decided = false;
+      // harness-allow-timer: the deadline on a lock a live holder will never
+      // release. Not a sleep: the fast path settles the moment the lock is
+      // granted, and this only fires when it never is.
+      var deadline = setTimeout(function () {
+        if (decided) return;
+        decided = true;
+        settle(refusedBy(holder));
+      }, reclaimMs);
+
+      locks.request(LOCK_PREFIX + reviewId, function () {
+        if (decided) {
+          // Granted after the deadline: this window has already been told it is
+          // read-only, so the lock is released at once rather than held by a
+          // window that is not acting as the holder.
+          return Promise.resolve();
+        }
+        decided = true;
+        clearTimeout(deadline);
+        writeJson(holderKey(reviewId), self);
+        settle({ acquired: true, holder: self, windowId: windowId, failure: null, reason: null, reclaimed: true });
+        return new Promise(function (resolve) {
+          releaseHeldLock = resolve;
+        });
+      });
+      return null;
+    }
+
     function claimWindow(reviewId, meta) {
       var self = {
         window_id: windowId,
@@ -5832,34 +5974,34 @@
       locks.request(LOCK_PREFIX + reviewId, { ifAvailable: true }, function (lock) {
         if (!lock) {
           var holder = readHolder(reviewId);
-          // THE HOLDER IS THIS SAME TAB. A reload (R36's auto-reload, or the
-          // reviewer's own) starts the new document BEFORE the old one is torn
-          // down, so for a moment the outgoing page still holds the Web Lock and
-          // the incoming one is refused. It is the same tab either way: the
-          // window id lives in sessionStorage, which survives a same-tab reload
-          // and is fresh in a genuinely new tab. So a page reloading itself used
-          // to trip its own second-window guard and go read-only with only one
-          // window open (Ken, live, 2026-08-18).
+          // THE RECORDED HOLDER CARRIES THIS WINDOW'S ID. A reload (R36's
+          // auto-reload, or the reviewer's own) starts the new document BEFORE
+          // the old one is torn down, so for a moment the outgoing page still
+          // holds the Web Lock and the incoming one is refused. It is the same
+          // tab, so refusing it would send a page reloading itself into its own
+          // second-window guard, read-only with one window open (Ken, live,
+          // 2026-08-18).
           //
-          // Granted, and the lock is then asked for WITHOUT ifAvailable, so this
-          // document really holds it the moment the old context dies.
+          // BUT THE ID ALONE PROVES NOTHING. The window id lives in
+          // sessionStorage, and a browser COPIES sessionStorage into a
+          // duplicated or session-restored tab, so a genuine second live tab
+          // presents the first tab's id and would be handed the review while
+          // the first tab kept writing the same bucket: two live windows, one
+          // storage, no guard, last write wins and the reviewer never hears
+          // about it.
+          //
+          // So the id only decides WHICH QUESTION to ask, and the Web Lock
+          // answers it. The lock is requested WITHOUT ifAvailable and the
+          // answer is whatever acquisition says: mid-reload the outgoing
+          // context is dying, so the lock frees within milliseconds and this
+          // document really holds it; a duplicated tab is asking for a lock a
+          // LIVE window holds for its whole session, never gets it, and is
+          // refused when the deadline passes.
           if (holder && holder.window_id === windowId) {
-            writeJson(holderKey(reviewId), self);
-            settle({ acquired: true, holder: self, windowId: windowId, failure: null, reason: null, reclaimed: true });
-            locks.request(LOCK_PREFIX + reviewId, function () {
-              return new Promise(function (resolve) {
-                releaseHeldLock = resolve;
-              });
-            });
+            reclaimThroughLock(reviewId, self, holder, settle);
             return null;
           }
-          settle({
-            acquired: false,
-            holder: holder,
-            windowId: windowId,
-            failure: failures.failure("SECOND_WINDOW_REFUSED", describeHolder(holder)),
-            reason: "This review is already open in " + describeHolder(holder) + "."
-          });
+          settle(refusedBy(holder));
           return null;
         }
         writeJson(holderKey(reviewId), self);
@@ -8194,7 +8336,11 @@
     ".refusal{display:none;flex-direction:column;gap:8px;padding:11px 12px;border-radius:var(--radius-sm);",
     "background:var(--warn-wash);border:1px solid rgba(180,120,30,.28);margin-bottom:2px}",
     ".refusal[data-shown='true']{display:flex}",
-    ".refusal__title{font-size:12px;font-weight:700;color:var(--warn);letter-spacing:.02em}",
+    ".refusal__title{font-size:12px;font-weight:700;color:var(--warn);letter-spacing:.02em;",
+    "display:flex;align-items:center;justify-content:space-between;gap:8px}",
+    ".refusal__x{border:0;background:transparent;color:var(--ink-soft);font-size:14px;line-height:1;",
+    "cursor:pointer;padding:0 2px}",
+    ".refusal__x:hover{color:var(--ink)}",
     ".refusal__reason{font-size:11.5px;color:var(--ink-soft);line-height:1.45;",
     "overflow-wrap:anywhere;white-space:pre-wrap}",
     ".refusal__btn{align-self:flex-start;font-size:12px;font-weight:600;padding:6px 12px;border-radius:8px;",
@@ -8435,6 +8581,17 @@
       refusalBtn.addEventListener("click", function () {
         runAction("takeover");
       });
+      // A WAY OUT. hideRefusal used to be reachable only from the way out of
+      // read-only, so a panel painted on a window that was NOT read-only stood
+      // there forever over a page the reviewer could still edit. The reviewer
+      // gets to close it; a real refusal paints it again on the next claim.
+      var refusalDismiss = el("button", "refusal__x", "×");
+      refusalDismiss.setAttribute("type", "button");
+      refusalDismiss.setAttribute("aria-label", "Dismiss");
+      refusalDismiss.addEventListener("click", function () {
+        hideRefusal();
+      });
+      refusalTitle.appendChild(refusalDismiss);
       refusal.appendChild(refusalTitle);
       refusal.appendChild(refusalReason);
       refusal.appendChild(refusalBtn);
@@ -8965,19 +9122,9 @@
     //
     // Two closed lists, both opt in by failure code, because the generic version
     // (any chip with a detail gets a Copy button) put the wrong control on the
-    // wrong failure.
-    //
-    // CHIP_ACTIONS: the failure has a fix the reviewer performs right here. The
-    // click runs through the same runAction seam the footer's buttons use, so
-    // boot still owns what the button DOES.
-    var CHIP_ACTIONS = {
-      SECOND_WINDOW_REFUSED: { label: "Review here", action: "takeover" }
-    };
-
-    // COPYABLE_CODES: the failure is fixed somewhere the reviewer is not, so the
-    // detail line is written as a sentence to hand to their agent verbatim. Both
-    // of these carry one: sync.js's originRemedy, and the refused connect-src.
-    var COPYABLE_CODES = ["SYNC_ORIGIN_NOT_ALLOWED", "CSP_REFUSED"];
+    // wrong failure. They live in src/shared/failures.js, next to the code
+    // definitions, so a new code cannot be added without being asked what its
+    // chip may offer: failuresModule.chipAction and failuresModule.isCopyable.
 
     function renderChips() {
       if (!dom) return;
@@ -8995,12 +9142,28 @@
         // The chip's OWN action, for the failures the reviewer fixes here rather
         // than by asking an agent. A second window is the one that matters: the
         // fix is one button, so the chip carries it.
-        var action = CHIP_ACTIONS[chip.code];
+        var action = failuresModule.chipAction(chip.code);
         if (action) {
           var actionBtn = el("button", "chip__action", action.label);
           actionBtn.setAttribute("type", "button");
           actionBtn.addEventListener("click", function () {
-            runAction(action.action);
+            // ONE CLAIM AT A TIME. A double-click posted two takeovers, and the
+            // out-of-order answer stored the older session secret, which the
+            // next heartbeat presented and the helper refused: the reviewer's
+            // own window locked out by pressing its own fix twice. The button
+            // says it is working and cannot be pressed again until the claim
+            // it started has answered.
+            if (actionBtn.disabled) return;
+            actionBtn.disabled = true;
+            var label = actionBtn.textContent;
+            actionBtn.textContent = "Working…";
+            var done = function () {
+              actionBtn.disabled = false;
+              actionBtn.textContent = label;
+            };
+            var ran = runAction(action.action);
+            if (ran && typeof ran.then === "function") ran.then(done, done);
+            else done();
           });
           text.appendChild(actionBtn);
         }
@@ -9010,7 +9173,7 @@
         // actually fixes that failure (Ken, live, 2026-08-18). A copy button
         // earns its place only where handing the line to an agent IS the
         // remedy, which is what COPYABLE_CODES lists.
-        if (chip.detail && !action && COPYABLE_CODES.indexOf(chip.code) !== -1) {
+        if (chip.detail && failuresModule.isCopyable(chip.code)) {
           var copy = el("button", "chip__copy", "Copy for your agent");
           copy.addEventListener("click", function () {
             var nav = typeof navigator !== "undefined" ? navigator : null;
@@ -11468,6 +11631,14 @@
     function undoRow(id) {
       var surface = editingSurface();
       var row = rows[id];
+      // The button gives up focus BEFORE the record goes. Undo removes the whole
+      // card, and the rail refuses to remove a card that holds focus (its own
+      // law, so a card the reviewer is typing in never vanishes under them). A
+      // button that was just pressed is not someone typing, and holding focus
+      // there left an empty card behind on every browser that focuses a button
+      // on click.
+      var pressed = row ? row.querySelector("[data-lahe-act='undo']") : null;
+      if (pressed && typeof pressed.blur === "function") pressed.blur();
       if (!surface) {
         sayFailed(row, UNDO_MISSING_TITLE);
         lastUndo = { id: id, reverted: false, kind: null, reason: UNDO_MISSING_TITLE };
@@ -13147,7 +13318,20 @@
       return sessionSecret;
     }
 
-    function rememberSecret(secret) {
+    // The claims are SEQUENCED. Two claims can be in flight at once (a
+    // double-clicked "Review here", a takeover racing the heartbeat), and the
+    // answers can come back in either order. Storing the older answer's secret
+    // means the next heartbeat presents a secret the helper has already
+    // replaced, and the reviewer's own window is refused as a second window.
+    // A secret from a claim older than the one already applied is dropped.
+    var claimSeq = 0;
+    var appliedClaimSeq = 0;
+
+    function rememberSecret(secret, seq) {
+      if (typeof seq === "number") {
+        if (seq < appliedClaimSeq) return sessionSecret;
+        appliedClaimSeq = seq;
+      }
       sessionSecret = secret || null;
       if (store && typeof store.rememberSessionSecret === "function") {
         store.rememberSessionSecret(requireReview(), sessionSecret);
@@ -13217,7 +13401,16 @@
     // takeover carries takeover:true, a first claim or liveness poll carries
     // neither.
     function claimRequest(body) {
-      return request("window.claim", { method: "POST", body: JSON.stringify(body) }).then(parseClaim);
+      claimSeq += 1;
+      var seq = claimSeq;
+      return request("window.claim", { method: "POST", body: JSON.stringify(body) })
+        .then(parseClaim)
+        .then(function (parsed) {
+          // Which claim this answer belongs to, so a late answer cannot overwrite
+          // a newer one's secret (see rememberSecret).
+          parsed.seq = seq;
+          return parsed;
+        });
     }
 
     function parseClaim(result) {
@@ -13275,7 +13468,7 @@
       }).then(function (parsed) {
         if (parsed.granted) {
           lock.helperGranted = true;
-          rememberSecret(parsed.sessionSecret);
+          rememberSecret(parsed.sessionSecret, parsed.seq);
           if (parsed.heartbeatSeconds) heartbeatMs = parsed.heartbeatSeconds * 1000;
           return lock;
         }
@@ -13321,7 +13514,7 @@
     // stale, granted by the liveness poll) or on the reviewer's Review-here.
     function becomeHolder(parsed) {
       readOnly = false;
-      rememberSecret(parsed.sessionSecret);
+      rememberSecret(parsed.sessionSecret, parsed.seq);
       if (parsed.heartbeatSeconds) heartbeatMs = parsed.heartbeatSeconds * 1000;
       lock.acquired = true;
       lock.helperGranted = true;
@@ -13378,7 +13571,7 @@
       }).then(function (parsed) {
         if (parsed.granted) {
           lock.helperGranted = true;
-          if (parsed.sessionSecret) rememberSecret(parsed.sessionSecret);
+          if (parsed.sessionSecret) rememberSecret(parsed.sessionSecret, parsed.seq);
           return;
         }
         if (parsed.refused) {
@@ -18817,11 +19010,12 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+c2ebd54b2d54";
+  var VERSION = "0.0.0+637ebf6cc7d3";
 
   var protocol = ns.protocol;
   var record = ns.record;
   var markers = ns.markers;
+  var failures = ns.failures;
 
   // The global the library publishes about itself. The browser test harness
   // reads counters off it (test/helpers/README.md, "the counter contract"), and
@@ -18919,10 +19113,32 @@
     var rail = opts.rail || ns.overlay.createRail({ store: store, reviewId: reviewId });
     rail.mount();
 
-    var page = record.pageFrom(
-      { origin: win.location.origin, pathname: win.location.pathname, href: win.location.href, title: doc.title },
-      { seq: 1 }
-    );
+    // The page in front of the reviewer RIGHT NOW, re-read rather than pinned at
+    // boot. An SPA or a Turbo app changes the document under one boot: inject.js
+    // remounts on pushState, turbo:load and popstate, and a `page` computed once
+    // kept stamping the OLD path onto records made after the navigation. The
+    // record then belonged to a page the reviewer was no longer on, and the
+    // scope filter hid it on the next real load: their own comment, gone.
+    function pageNow() {
+      return record.pageFrom(
+        { origin: win.location.origin, pathname: win.location.pathname, href: win.location.href, title: doc.title },
+        { seq: 1 }
+      );
+    }
+
+    var page = pageNow();
+
+    // Called on every remount (inject.js's rebind), which is the moment the
+    // document may have become a different page. Everything downstream reads
+    // `page` at call time: the scoped store's filter, comments.bind, and the
+    // handle the tests read.
+    function refreshPage() {
+      var next = pageNow();
+      if (record.pageKeyFor(next) === record.pageKeyFor(page)) return page;
+      page = next;
+      if (handle) handle.page = page;
+      return page;
+    }
 
     // -------------------------------------------------------------------------
     // THIS PAGE'S RECORDS, AND NOBODY ELSE'S
@@ -18950,21 +19166,23 @@
     // record.samePage carries the rule, including what file:// does to it.
     // Export keeps the UNSCOPED store deliberately: Copy and Export are the
     // reviewer handing over the review, not this page's slice of it.
-    var scopedStore = pageScoped(store, page);
+    var scopedStore = pageScoped(store);
 
-    function pageScoped(inner, forPage) {
+    // Reads `page` at call time, never a copy: after a navigation the filter has
+    // to answer for the page the reviewer is on now (see refreshPage).
+    function pageScoped(inner) {
       var wrapper = Object.create(null);
       Object.keys(inner).forEach(function (name) {
         wrapper[name] = inner[name];
       });
       wrapper.read = function (id) {
         return inner.read(id).filter(function (item) {
-          return record.samePage(item, forPage);
+          return record.samePage(item, page);
         });
       };
       wrapper.readItem = function (id, itemId) {
         var got = inner.readItem(id, itemId);
-        return got && record.samePage(got, forPage) ? got : null;
+        return got && record.samePage(got, page) ? got : null;
       };
       return wrapper;
     }
@@ -19094,14 +19312,38 @@
     // same action seam Copy and Export use.
     rail.onAction("takeover", function () {
       rail.markRefusalPending();
-      return sync.takeover().then(function (result) {
-        // On success the sync client's onHeld already hid the panel and re-bound
-        // the handlers. On failure the review is still held elsewhere: say so and
-        // leave the button pressable again.
-        if (!result || !result.ok) {
-          rail.showRefusal({ reason: (result && result.reason) || "The review is still open in another window." });
-        }
-        return result;
+      // BOTH REFUSALS, not just the helper's. The two shapes fail differently
+      // (D5): the helper refuses a window it cannot see the storage of, and the
+      // client Web Lock refuses a second tab in the same browser profile. This
+      // button only ever posted to the helper, so on a helperless local refusal
+      // the one fix offered to the reviewer could never work. The lock claim
+      // runs first and its answer is honest: it succeeds once the other tab is
+      // gone and it says so while the other tab is alive.
+      var reclaimLock =
+        store && typeof store.claimWindow === "function"
+          ? store.claimWindow(reviewId).catch(function () {
+              return null;
+            })
+          : Promise.resolve(null);
+
+      return reclaimLock.then(function (claimed) {
+        return sync.takeover().then(function (result) {
+          if (result && result.ok) return result;
+          // Still refused. On a READ-ONLY window the panel is the right place to
+          // say so and the button goes back to pressable. On a window that is
+          // NOT read-only the panel must not appear at all: it was only ever
+          // reachable from a stale chip, hideRefusal only runs on the way out of
+          // read-only, and the reviewer was left with a permanent panel over a
+          // page they could still edit. The chip says it instead, and it has an
+          // X.
+          var reason =
+            (result && result.reason) ||
+            (claimed && claimed.acquired === false && claimed.reason) ||
+            "The review is still open in another window.";
+          if (readOnlyActive) rail.showRefusal({ reason: reason });
+          else rail.failures.add(failures.failure("SECOND_WINDOW_REFUSED", reason));
+          return result;
+        });
       });
     });
 
@@ -19141,6 +19383,16 @@
     // surface because it subscribes to it: a hand edit becomes a row on the
     // same act that writes the record.
     var editsTab = makeEditsTab();
+
+    // The Done tab mounted BEFORE this one existed, and its Reopen button moves
+    // into the Edits row's footer only if that row is on the card when it paints
+    // (tab_done.homeReopen). On a cold load with a handled hand edit already in
+    // storage, Done painted first, found no Edits row, and left Reopen at the
+    // top of the card: the relocation only ever showed up after a remount, which
+    // is why the tests saw it and the reviewer did not. One refresh once both
+    // rows can exist puts it where it belongs on the first paint the reviewer
+    // sees.
+    done.refresh();
 
     function makeEditsTab() {
       var made = ns.tabEdits.createEditsTab({
@@ -19226,7 +19478,21 @@
       // against the same page for no reason and would hide a regression in the
       // one that matters.
       refreshItems();
-      rail.upsertCard(item);
+      // The record may be GONE: undo reverts the region and removes the record,
+      // and it emits the item it removed. Upserting it put the card back that
+      // the store had just dropped, so an undone hand edit left a ghost card
+      // with no row in any tab. Ask the store what is true rather than trusting
+      // the event's payload.
+      var id = item[record.FIELD.ID];
+      var still = scopedStore.readItem(reviewId, id);
+      if (still) rail.upsertCard(still);
+      else rail.removeCard(id);
+      // And the Done tab has to hear about it. A HANDLED hand edit's Reopen
+      // button lives in the Edits row's footer, so when undo drops that row the
+      // button goes with it and the Done row is left on a card with no controls
+      // at all. Done's own refresh drops the row for a record that is no longer
+      // there, which is the whole repair.
+      done.refresh();
     });
 
     comments.onChange(function (item, event) {
@@ -19361,6 +19627,10 @@
       window: win,
       ensureRoot: ensureRoot,
       rebind: function () {
+        // The document may be a different page now (an SPA navigation is what
+        // brought us here), so the page identity is re-read BEFORE anything is
+        // bound to it: a record made after this stamps the page it was made on.
+        refreshPage();
         // A remount must not resurrect the gestures in a refused window: Ken's
         // read-only tab re-armed Cmd-Shift-C on its first Turbo navigation and
         // opened comment boxes that could do nothing (first-real-use bug,

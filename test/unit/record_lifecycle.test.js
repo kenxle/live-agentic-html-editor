@@ -173,10 +173,12 @@ test("pageFrom collapses the query string and the fragment away", () => {
   assert.equal(page.title, "Dashboard");
 });
 
-test("a file review carries the file's basename as its page path", () => {
+test("a file review carries the file's name and its folder as its page path", () => {
   const page = record.pageFrom({ origin: "null", pathname: "/Users/x/docs/brief.html", href: "file:///Users/x/docs/brief.html" });
   assert.equal(page.origin, record.FILE_ORIGIN);
-  assert.equal(page.path, "brief.html");
+  // The folder rides along because two index.html files in two folders are two
+  // pages; the rest of the reviewer's disk does not.
+  assert.equal(page.path, "docs/brief.html");
 });
 
 test("the first-visit order rides on the record, because the projection groups by it", () => {

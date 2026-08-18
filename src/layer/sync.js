@@ -847,7 +847,20 @@
       return sessionSecret;
     }
 
-    function rememberSecret(secret) {
+    // The claims are SEQUENCED. Two claims can be in flight at once (a
+    // double-clicked "Review here", a takeover racing the heartbeat), and the
+    // answers can come back in either order. Storing the older answer's secret
+    // means the next heartbeat presents a secret the helper has already
+    // replaced, and the reviewer's own window is refused as a second window.
+    // A secret from a claim older than the one already applied is dropped.
+    var claimSeq = 0;
+    var appliedClaimSeq = 0;
+
+    function rememberSecret(secret, seq) {
+      if (typeof seq === "number") {
+        if (seq < appliedClaimSeq) return sessionSecret;
+        appliedClaimSeq = seq;
+      }
       sessionSecret = secret || null;
       if (store && typeof store.rememberSessionSecret === "function") {
         store.rememberSessionSecret(requireReview(), sessionSecret);
@@ -917,7 +930,16 @@
     // takeover carries takeover:true, a first claim or liveness poll carries
     // neither.
     function claimRequest(body) {
-      return request("window.claim", { method: "POST", body: JSON.stringify(body) }).then(parseClaim);
+      claimSeq += 1;
+      var seq = claimSeq;
+      return request("window.claim", { method: "POST", body: JSON.stringify(body) })
+        .then(parseClaim)
+        .then(function (parsed) {
+          // Which claim this answer belongs to, so a late answer cannot overwrite
+          // a newer one's secret (see rememberSecret).
+          parsed.seq = seq;
+          return parsed;
+        });
     }
 
     function parseClaim(result) {
@@ -975,7 +997,7 @@
       }).then(function (parsed) {
         if (parsed.granted) {
           lock.helperGranted = true;
-          rememberSecret(parsed.sessionSecret);
+          rememberSecret(parsed.sessionSecret, parsed.seq);
           if (parsed.heartbeatSeconds) heartbeatMs = parsed.heartbeatSeconds * 1000;
           return lock;
         }
@@ -1021,7 +1043,7 @@
     // stale, granted by the liveness poll) or on the reviewer's Review-here.
     function becomeHolder(parsed) {
       readOnly = false;
-      rememberSecret(parsed.sessionSecret);
+      rememberSecret(parsed.sessionSecret, parsed.seq);
       if (parsed.heartbeatSeconds) heartbeatMs = parsed.heartbeatSeconds * 1000;
       lock.acquired = true;
       lock.helperGranted = true;
@@ -1078,7 +1100,7 @@
       }).then(function (parsed) {
         if (parsed.granted) {
           lock.helperGranted = true;
-          if (parsed.sessionSecret) rememberSecret(parsed.sessionSecret);
+          if (parsed.sessionSecret) rememberSecret(parsed.sessionSecret, parsed.seq);
           return;
         }
         if (parsed.refused) {

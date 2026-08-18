@@ -64,6 +64,7 @@
   // That is exactly the line the helper session needs: a navigated reload proves
   // it is the holder with the secret it kept, and a second tab has neither.
   var WINDOW_ID_KEY = "lahe.window.id.v1";
+  var RECLAIM_DEADLINE_MS = 1500;
   var SESSION_SECRET_PREFIX = "lahe.session.v1:";
 
   // The storage key for a review. Review id, never a filename, never a page.
@@ -151,6 +152,11 @@
     // second one. A new tab has a fresh sessionStorage and mints a new id.
     var windowId = opts.windowId || stableWindowId(sessionBacking);
     var locks = opts.locks || (typeof navigator !== "undefined" && navigator ? navigator.locks : null);
+    // How long a same-id claim waits for the lock the recorded holder would be
+    // holding (see reclaimThroughLock). Long enough for an outgoing document to
+    // finish dying, short enough that a duplicated tab learns it is read-only
+    // before the reviewer has typed into it.
+    var reclaimMs = typeof opts.reclaimMs === "number" ? opts.reclaimMs : RECLAIM_DEADLINE_MS;
     var releaseHeldLock = null;
 
     function readJson(key, fallback) {
@@ -446,11 +452,18 @@
     // It used to read "the window on /a/very/long/path/to/doc.html, open since
     // 2026-08-18T04:35:45.006Z": a raw ISO timestamp in a sentence written for a
     // person, and a path long enough to burst the chip (Ken, live, 2026-08-18).
-    // The basename is the part a person recognizes, and the elapsed phrase is
+    // The tail is the part a person recognizes, and the elapsed phrase is
     // shared with the helper's own refusal so the two never disagree.
+    //
+    // The TAIL, not the basename: a document served at the origin root has no
+    // basename at all, so the clause vanished and the refusal named "the
+    // window" with no window in it, and two folders' index.html both collapsed
+    // to one name, which is the one case the reviewer needs told apart.
+    // record.shortPath keeps the parent directory, which is short enough for a
+    // chip and specific enough to point at a window.
     function describeHolder(holder) {
       if (!holder) return "another window";
-      var name = holder.path ? record.basenameOf(holder.path) : null;
+      var name = holder.path ? record.shortPath(holder.path) : null;
       var where = name ? " on " + name : "";
       var when = holder.since ? ", open " + elapsed.elapsedPhrase(holder.since) : "";
       return "the window" + where + when;
@@ -464,6 +477,54 @@
      *   Resolved, never thrown: a window that cannot claim the review is a
      *   read-only window, not a crash.
      */
+    function refusedBy(holder) {
+      return {
+        acquired: false,
+        holder: holder,
+        windowId: windowId,
+        failure: failures.failure("SECOND_WINDOW_REFUSED", describeHolder(holder)),
+        reason: "This review is already open in " + describeHolder(holder) + "."
+      };
+    }
+
+    /**
+     * Ask for the lock the recorded holder would be holding, and let the answer
+     * decide. See claimWindow's comment for why an id match is a question and
+     * not a verdict.
+     *
+     * The deadline is what keeps this from hanging forever behind a live window:
+     * a session-held lock is never released, so the request would simply sit
+     * there and the page would never learn it is read-only.
+     */
+    function reclaimThroughLock(reviewId, self, holder, settle) {
+      var decided = false;
+      // harness-allow-timer: the deadline on a lock a live holder will never
+      // release. Not a sleep: the fast path settles the moment the lock is
+      // granted, and this only fires when it never is.
+      var deadline = setTimeout(function () {
+        if (decided) return;
+        decided = true;
+        settle(refusedBy(holder));
+      }, reclaimMs);
+
+      locks.request(LOCK_PREFIX + reviewId, function () {
+        if (decided) {
+          // Granted after the deadline: this window has already been told it is
+          // read-only, so the lock is released at once rather than held by a
+          // window that is not acting as the holder.
+          return Promise.resolve();
+        }
+        decided = true;
+        clearTimeout(deadline);
+        writeJson(holderKey(reviewId), self);
+        settle({ acquired: true, holder: self, windowId: windowId, failure: null, reason: null, reclaimed: true });
+        return new Promise(function (resolve) {
+          releaseHeldLock = resolve;
+        });
+      });
+      return null;
+    }
+
     function claimWindow(reviewId, meta) {
       var self = {
         window_id: windowId,
@@ -495,34 +556,34 @@
       locks.request(LOCK_PREFIX + reviewId, { ifAvailable: true }, function (lock) {
         if (!lock) {
           var holder = readHolder(reviewId);
-          // THE HOLDER IS THIS SAME TAB. A reload (R36's auto-reload, or the
-          // reviewer's own) starts the new document BEFORE the old one is torn
-          // down, so for a moment the outgoing page still holds the Web Lock and
-          // the incoming one is refused. It is the same tab either way: the
-          // window id lives in sessionStorage, which survives a same-tab reload
-          // and is fresh in a genuinely new tab. So a page reloading itself used
-          // to trip its own second-window guard and go read-only with only one
-          // window open (Ken, live, 2026-08-18).
+          // THE RECORDED HOLDER CARRIES THIS WINDOW'S ID. A reload (R36's
+          // auto-reload, or the reviewer's own) starts the new document BEFORE
+          // the old one is torn down, so for a moment the outgoing page still
+          // holds the Web Lock and the incoming one is refused. It is the same
+          // tab, so refusing it would send a page reloading itself into its own
+          // second-window guard, read-only with one window open (Ken, live,
+          // 2026-08-18).
           //
-          // Granted, and the lock is then asked for WITHOUT ifAvailable, so this
-          // document really holds it the moment the old context dies.
+          // BUT THE ID ALONE PROVES NOTHING. The window id lives in
+          // sessionStorage, and a browser COPIES sessionStorage into a
+          // duplicated or session-restored tab, so a genuine second live tab
+          // presents the first tab's id and would be handed the review while
+          // the first tab kept writing the same bucket: two live windows, one
+          // storage, no guard, last write wins and the reviewer never hears
+          // about it.
+          //
+          // So the id only decides WHICH QUESTION to ask, and the Web Lock
+          // answers it. The lock is requested WITHOUT ifAvailable and the
+          // answer is whatever acquisition says: mid-reload the outgoing
+          // context is dying, so the lock frees within milliseconds and this
+          // document really holds it; a duplicated tab is asking for a lock a
+          // LIVE window holds for its whole session, never gets it, and is
+          // refused when the deadline passes.
           if (holder && holder.window_id === windowId) {
-            writeJson(holderKey(reviewId), self);
-            settle({ acquired: true, holder: self, windowId: windowId, failure: null, reason: null, reclaimed: true });
-            locks.request(LOCK_PREFIX + reviewId, function () {
-              return new Promise(function (resolve) {
-                releaseHeldLock = resolve;
-              });
-            });
+            reclaimThroughLock(reviewId, self, holder, settle);
             return null;
           }
-          settle({
-            acquired: false,
-            holder: holder,
-            windowId: windowId,
-            failure: failures.failure("SECOND_WINDOW_REFUSED", describeHolder(holder)),
-            reason: "This review is already open in " + describeHolder(holder) + "."
-          });
+          settle(refusedBy(holder));
           return null;
         }
         writeJson(holderKey(reviewId), self);

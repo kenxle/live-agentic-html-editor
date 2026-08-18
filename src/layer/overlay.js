@@ -380,7 +380,11 @@
     ".refusal{display:none;flex-direction:column;gap:8px;padding:11px 12px;border-radius:var(--radius-sm);",
     "background:var(--warn-wash);border:1px solid rgba(180,120,30,.28);margin-bottom:2px}",
     ".refusal[data-shown='true']{display:flex}",
-    ".refusal__title{font-size:12px;font-weight:700;color:var(--warn);letter-spacing:.02em}",
+    ".refusal__title{font-size:12px;font-weight:700;color:var(--warn);letter-spacing:.02em;",
+    "display:flex;align-items:center;justify-content:space-between;gap:8px}",
+    ".refusal__x{border:0;background:transparent;color:var(--ink-soft);font-size:14px;line-height:1;",
+    "cursor:pointer;padding:0 2px}",
+    ".refusal__x:hover{color:var(--ink)}",
     ".refusal__reason{font-size:11.5px;color:var(--ink-soft);line-height:1.45;",
     "overflow-wrap:anywhere;white-space:pre-wrap}",
     ".refusal__btn{align-self:flex-start;font-size:12px;font-weight:600;padding:6px 12px;border-radius:8px;",
@@ -621,6 +625,17 @@
       refusalBtn.addEventListener("click", function () {
         runAction("takeover");
       });
+      // A WAY OUT. hideRefusal used to be reachable only from the way out of
+      // read-only, so a panel painted on a window that was NOT read-only stood
+      // there forever over a page the reviewer could still edit. The reviewer
+      // gets to close it; a real refusal paints it again on the next claim.
+      var refusalDismiss = el("button", "refusal__x", "×");
+      refusalDismiss.setAttribute("type", "button");
+      refusalDismiss.setAttribute("aria-label", "Dismiss");
+      refusalDismiss.addEventListener("click", function () {
+        hideRefusal();
+      });
+      refusalTitle.appendChild(refusalDismiss);
       refusal.appendChild(refusalTitle);
       refusal.appendChild(refusalReason);
       refusal.appendChild(refusalBtn);
@@ -1151,19 +1166,9 @@
     //
     // Two closed lists, both opt in by failure code, because the generic version
     // (any chip with a detail gets a Copy button) put the wrong control on the
-    // wrong failure.
-    //
-    // CHIP_ACTIONS: the failure has a fix the reviewer performs right here. The
-    // click runs through the same runAction seam the footer's buttons use, so
-    // boot still owns what the button DOES.
-    var CHIP_ACTIONS = {
-      SECOND_WINDOW_REFUSED: { label: "Review here", action: "takeover" }
-    };
-
-    // COPYABLE_CODES: the failure is fixed somewhere the reviewer is not, so the
-    // detail line is written as a sentence to hand to their agent verbatim. Both
-    // of these carry one: sync.js's originRemedy, and the refused connect-src.
-    var COPYABLE_CODES = ["SYNC_ORIGIN_NOT_ALLOWED", "CSP_REFUSED"];
+    // wrong failure. They live in src/shared/failures.js, next to the code
+    // definitions, so a new code cannot be added without being asked what its
+    // chip may offer: failuresModule.chipAction and failuresModule.isCopyable.
 
     function renderChips() {
       if (!dom) return;
@@ -1181,12 +1186,28 @@
         // The chip's OWN action, for the failures the reviewer fixes here rather
         // than by asking an agent. A second window is the one that matters: the
         // fix is one button, so the chip carries it.
-        var action = CHIP_ACTIONS[chip.code];
+        var action = failuresModule.chipAction(chip.code);
         if (action) {
           var actionBtn = el("button", "chip__action", action.label);
           actionBtn.setAttribute("type", "button");
           actionBtn.addEventListener("click", function () {
-            runAction(action.action);
+            // ONE CLAIM AT A TIME. A double-click posted two takeovers, and the
+            // out-of-order answer stored the older session secret, which the
+            // next heartbeat presented and the helper refused: the reviewer's
+            // own window locked out by pressing its own fix twice. The button
+            // says it is working and cannot be pressed again until the claim
+            // it started has answered.
+            if (actionBtn.disabled) return;
+            actionBtn.disabled = true;
+            var label = actionBtn.textContent;
+            actionBtn.textContent = "Working…";
+            var done = function () {
+              actionBtn.disabled = false;
+              actionBtn.textContent = label;
+            };
+            var ran = runAction(action.action);
+            if (ran && typeof ran.then === "function") ran.then(done, done);
+            else done();
           });
           text.appendChild(actionBtn);
         }
@@ -1196,7 +1217,7 @@
         // actually fixes that failure (Ken, live, 2026-08-18). A copy button
         // earns its place only where handing the line to an agent IS the
         // remedy, which is what COPYABLE_CODES lists.
-        if (chip.detail && !action && COPYABLE_CODES.indexOf(chip.code) !== -1) {
+        if (chip.detail && failuresModule.isCopyable(chip.code)) {
           var copy = el("button", "chip__copy", "Copy for your agent");
           copy.addEventListener("click", function () {
             var nav = typeof navigator !== "undefined" ? navigator : null;

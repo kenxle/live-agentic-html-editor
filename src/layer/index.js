@@ -79,6 +79,7 @@
   var protocol = ns.protocol;
   var record = ns.record;
   var markers = ns.markers;
+  var failures = ns.failures;
 
   // The global the library publishes about itself. The browser test harness
   // reads counters off it (test/helpers/README.md, "the counter contract"), and
@@ -176,10 +177,32 @@
     var rail = opts.rail || ns.overlay.createRail({ store: store, reviewId: reviewId });
     rail.mount();
 
-    var page = record.pageFrom(
-      { origin: win.location.origin, pathname: win.location.pathname, href: win.location.href, title: doc.title },
-      { seq: 1 }
-    );
+    // The page in front of the reviewer RIGHT NOW, re-read rather than pinned at
+    // boot. An SPA or a Turbo app changes the document under one boot: inject.js
+    // remounts on pushState, turbo:load and popstate, and a `page` computed once
+    // kept stamping the OLD path onto records made after the navigation. The
+    // record then belonged to a page the reviewer was no longer on, and the
+    // scope filter hid it on the next real load: their own comment, gone.
+    function pageNow() {
+      return record.pageFrom(
+        { origin: win.location.origin, pathname: win.location.pathname, href: win.location.href, title: doc.title },
+        { seq: 1 }
+      );
+    }
+
+    var page = pageNow();
+
+    // Called on every remount (inject.js's rebind), which is the moment the
+    // document may have become a different page. Everything downstream reads
+    // `page` at call time: the scoped store's filter, comments.bind, and the
+    // handle the tests read.
+    function refreshPage() {
+      var next = pageNow();
+      if (record.pageKeyFor(next) === record.pageKeyFor(page)) return page;
+      page = next;
+      if (handle) handle.page = page;
+      return page;
+    }
 
     // -------------------------------------------------------------------------
     // THIS PAGE'S RECORDS, AND NOBODY ELSE'S
@@ -207,21 +230,23 @@
     // record.samePage carries the rule, including what file:// does to it.
     // Export keeps the UNSCOPED store deliberately: Copy and Export are the
     // reviewer handing over the review, not this page's slice of it.
-    var scopedStore = pageScoped(store, page);
+    var scopedStore = pageScoped(store);
 
-    function pageScoped(inner, forPage) {
+    // Reads `page` at call time, never a copy: after a navigation the filter has
+    // to answer for the page the reviewer is on now (see refreshPage).
+    function pageScoped(inner) {
       var wrapper = Object.create(null);
       Object.keys(inner).forEach(function (name) {
         wrapper[name] = inner[name];
       });
       wrapper.read = function (id) {
         return inner.read(id).filter(function (item) {
-          return record.samePage(item, forPage);
+          return record.samePage(item, page);
         });
       };
       wrapper.readItem = function (id, itemId) {
         var got = inner.readItem(id, itemId);
-        return got && record.samePage(got, forPage) ? got : null;
+        return got && record.samePage(got, page) ? got : null;
       };
       return wrapper;
     }
@@ -351,14 +376,38 @@
     // same action seam Copy and Export use.
     rail.onAction("takeover", function () {
       rail.markRefusalPending();
-      return sync.takeover().then(function (result) {
-        // On success the sync client's onHeld already hid the panel and re-bound
-        // the handlers. On failure the review is still held elsewhere: say so and
-        // leave the button pressable again.
-        if (!result || !result.ok) {
-          rail.showRefusal({ reason: (result && result.reason) || "The review is still open in another window." });
-        }
-        return result;
+      // BOTH REFUSALS, not just the helper's. The two shapes fail differently
+      // (D5): the helper refuses a window it cannot see the storage of, and the
+      // client Web Lock refuses a second tab in the same browser profile. This
+      // button only ever posted to the helper, so on a helperless local refusal
+      // the one fix offered to the reviewer could never work. The lock claim
+      // runs first and its answer is honest: it succeeds once the other tab is
+      // gone and it says so while the other tab is alive.
+      var reclaimLock =
+        store && typeof store.claimWindow === "function"
+          ? store.claimWindow(reviewId).catch(function () {
+              return null;
+            })
+          : Promise.resolve(null);
+
+      return reclaimLock.then(function (claimed) {
+        return sync.takeover().then(function (result) {
+          if (result && result.ok) return result;
+          // Still refused. On a READ-ONLY window the panel is the right place to
+          // say so and the button goes back to pressable. On a window that is
+          // NOT read-only the panel must not appear at all: it was only ever
+          // reachable from a stale chip, hideRefusal only runs on the way out of
+          // read-only, and the reviewer was left with a permanent panel over a
+          // page they could still edit. The chip says it instead, and it has an
+          // X.
+          var reason =
+            (result && result.reason) ||
+            (claimed && claimed.acquired === false && claimed.reason) ||
+            "The review is still open in another window.";
+          if (readOnlyActive) rail.showRefusal({ reason: reason });
+          else rail.failures.add(failures.failure("SECOND_WINDOW_REFUSED", reason));
+          return result;
+        });
       });
     });
 
@@ -398,6 +447,16 @@
     // surface because it subscribes to it: a hand edit becomes a row on the
     // same act that writes the record.
     var editsTab = makeEditsTab();
+
+    // The Done tab mounted BEFORE this one existed, and its Reopen button moves
+    // into the Edits row's footer only if that row is on the card when it paints
+    // (tab_done.homeReopen). On a cold load with a handled hand edit already in
+    // storage, Done painted first, found no Edits row, and left Reopen at the
+    // top of the card: the relocation only ever showed up after a remount, which
+    // is why the tests saw it and the reviewer did not. One refresh once both
+    // rows can exist puts it where it belongs on the first paint the reviewer
+    // sees.
+    done.refresh();
 
     function makeEditsTab() {
       var made = ns.tabEdits.createEditsTab({
@@ -483,7 +542,21 @@
       // against the same page for no reason and would hide a regression in the
       // one that matters.
       refreshItems();
-      rail.upsertCard(item);
+      // The record may be GONE: undo reverts the region and removes the record,
+      // and it emits the item it removed. Upserting it put the card back that
+      // the store had just dropped, so an undone hand edit left a ghost card
+      // with no row in any tab. Ask the store what is true rather than trusting
+      // the event's payload.
+      var id = item[record.FIELD.ID];
+      var still = scopedStore.readItem(reviewId, id);
+      if (still) rail.upsertCard(still);
+      else rail.removeCard(id);
+      // And the Done tab has to hear about it. A HANDLED hand edit's Reopen
+      // button lives in the Edits row's footer, so when undo drops that row the
+      // button goes with it and the Done row is left on a card with no controls
+      // at all. Done's own refresh drops the row for a record that is no longer
+      // there, which is the whole repair.
+      done.refresh();
     });
 
     comments.onChange(function (item, event) {
@@ -618,6 +691,10 @@
       window: win,
       ensureRoot: ensureRoot,
       rebind: function () {
+        // The document may be a different page now (an SPA navigation is what
+        // brought us here), so the page identity is re-read BEFORE anything is
+        // bound to it: a record made after this stamps the page it was made on.
+        refreshPage();
         // A remount must not resurrect the gestures in a refused window: Ken's
         // read-only tab re-armed Cmd-Shift-C on its first Turbo navigation and
         // opened comment boxes that could do nothing (first-real-use bug,

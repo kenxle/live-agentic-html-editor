@@ -276,33 +276,65 @@
   // to re-anchor them here, the rail listed them, and the count pill counted
   // them (Ken, live, 2026-08-17, 78 foreign items on a one-pager).
   //
-  // THE RULE, and it is two rules because file:// is not a normal origin:
+  // THE RULE, and it is three rules because file:// is not a normal origin and
+  // a directory URL is not a document name:
   //
   //  1. ORIGIN PLUS PATH, exactly pageKey. Two dev servers both serving
   //     /dashboard are two different pages, so they never see each other's
   //     items.
-  //  2. WHEN EITHER SIDE IS THE FILE ORIGIN, compare BASENAMES instead. The
+  //  2. A PATH THAT NAMES A DIRECTORY IS THE INDEX DOCUMENT. "/" and "/docs/"
+  //     are the server handing back index.html, and that is the document the
+  //     reviewer is looking at. Without this a page served at the origin root
+  //     had the empty string for a name, so nothing could ever match it and the
+  //     reviewer's own items disappeared on the next visit.
+  //  3. WHEN EITHER SIDE IS THE FILE ORIGIN, compare the DOCUMENT TAIL: the
+  //     last N path segments, N being however many the shorter side has. The
   //     same document is legitimately visited both ways in one review: opened
-  //     from disk it carries origin "file" and its basename as the path
-  //     (pageFrom above), and served over http it carries the server's origin
-  //     and a full pathname. Those two keys can never be equal, so a strict
-  //     match would hide each visit's comments from the other, on one document.
-  //     Basenames keep them together, and two DIFFERENT documents still have
-  //     different basenames, so they stay apart.
+  //     from disk it carries origin "file" and the tail pageFrom kept, served
+  //     over http it carries the server's origin and a full pathname. Those two
+  //     keys can never be equal, so a strict match would hide each visit's
+  //     comments from the other, on one document.
   //
-  // The residual case rule 2 accepts on purpose: /a/index.html visited over http
-  // and a DIFFERENT index.html opened from disk would match. It is accepted
-  // because a file:// record only ever stored a basename in the first place, so
-  // there is nothing finer to compare, and the alternative (hiding the
-  // reviewer's own items on the document they are looking at) is the worse
-  // failure of the two.
-  function basenameOf(path) {
-    var parts = String(path === null || path === undefined ? "" : path)
+  // Rule 3 is why pageFrom keeps the parent directory for a file page rather
+  // than the basename alone. Two different documents both named index.html,
+  // both opened off disk, matched on basename and page B inherited page A's
+  // records; with "notes/index.html" against "deck/index.html" they stay apart,
+  // while "docs/report.html" off disk still matches "/docs/report.html" served,
+  // and a one-segment record ("report.html", written before this rule existed)
+  // still matches on its basename alone.
+  //
+  // The residual case rule 3 still accepts on purpose: two documents whose LAST
+  // TWO segments agree (/a/docs/index.html and /b/docs/index.html, both off
+  // disk) match. Deeper tails would trade that away for leaking more of the
+  // reviewer's disk into a group heading, and hiding the reviewer's items on the
+  // document in front of them is the worse failure of the two.
+
+  // The one tail parser. Query and fragment dropped, empty segments dropped, a
+  // directory path answered with the index document it serves.
+  var INDEX_DOCUMENT = "index.html";
+
+  function segmentsOf(path) {
+    var raw = String(path === null || path === undefined ? "" : path)
       .split("?")[0]
-      .split("#")[0]
-      .split("/")
-      .filter(Boolean);
-    return parts.length ? parts[parts.length - 1] : "";
+      .split("#")[0];
+    var parts = raw.split("/").filter(Boolean);
+    if (!parts.length || /\/$/.test(raw)) parts.push(INDEX_DOCUMENT);
+    return parts;
+  }
+
+  function basenameOf(path) {
+    var parts = segmentsOf(path);
+    return parts[parts.length - 1];
+  }
+
+  // The path as a PERSON should read it: enough to tell two documents apart,
+  // short enough to sit in a chip. The last two segments, or the raw path when
+  // it has none to give.
+  function shortPath(path) {
+    var raw = String(path === null || path === undefined ? "" : path);
+    var parts = raw.split("?")[0].split("#")[0].split("/").filter(Boolean);
+    if (!parts.length) return raw || "";
+    return parts.slice(Math.max(0, parts.length - 2)).join("/");
   }
 
   /**
@@ -317,9 +349,13 @@
     var itemOrigin = String(item[FIELD.PAGE_ORIGIN]);
     var pageOrigin = String(page.origin);
     if (itemOrigin !== FILE_ORIGIN && pageOrigin !== FILE_ORIGIN) return false;
-    var a = basenameOf(item[FIELD.PAGE_PATH]);
-    var b = basenameOf(page.path);
-    return !!a && a === b;
+    var a = segmentsOf(item[FIELD.PAGE_PATH]);
+    var b = segmentsOf(page.path);
+    var depth = Math.min(a.length, b.length);
+    for (var i = 1; i <= depth; i += 1) {
+      if (a[a.length - i] !== b[b.length - i]) return false;
+    }
+    return depth > 0;
   }
 
   // Builds the page fields from a location-like object. Pure, so it is
@@ -335,13 +371,13 @@
     var path = l.pathname || null;
 
     if (!origin || origin === "null" || /^file:/i.test(String(l.href || ""))) {
-      // A page opened from disk. The basename is the only part a person would
-      // recognize, and the full path is not the reviewer's to leak into a group
-      // heading.
+      // A page opened from disk. The document and its parent directory: enough
+      // identity that two index.html files in two folders are two pages
+      // (samePage's rule 3), and still not the reviewer's whole disk leaking
+      // into a group heading.
       origin = FILE_ORIGIN;
       var href = String(l.href || l.pathname || "");
-      var tail = href.split("?")[0].split("#")[0].split("/").filter(Boolean).pop();
-      path = tail || "document";
+      path = shortPath(href) || "document";
     }
 
     return {
@@ -706,6 +742,7 @@
     pageKeyFor: pageKeyFor,
     samePage: samePage,
     basenameOf: basenameOf,
+    shortPath: shortPath,
     newItem: newItem,
     bumpRev: bumpRev,
     historyEntry: historyEntry,

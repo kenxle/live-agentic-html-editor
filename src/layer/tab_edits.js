@@ -495,6 +495,14 @@
     function undoRow(id) {
       var surface = editingSurface();
       var row = rows[id];
+      // The button gives up focus BEFORE the record goes. Undo removes the whole
+      // card, and the rail refuses to remove a card that holds focus (its own
+      // law, so a card the reviewer is typing in never vanishes under them). A
+      // button that was just pressed is not someone typing, and holding focus
+      // there left an empty card behind on every browser that focuses a button
+      // on click.
+      var pressed = row ? row.querySelector("[data-lahe-act='undo']") : null;
+      if (pressed && typeof pressed.blur === "function") pressed.blur();
       if (!surface) {
         sayFailed(row, UNDO_MISSING_TITLE);
         lastUndo = { id: id, reverted: false, kind: null, reason: UNDO_MISSING_TITLE };
