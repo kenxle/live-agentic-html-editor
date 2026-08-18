@@ -178,6 +178,137 @@ test("replies.poll answers with the owning session's liveness", () => {
   assert.equal(poll({ review: "r_wire", query: { since: 0 } }, deps).body.agent_liveness.state, STATE.WATCHING);
 });
 
+test("a reopened item is as old as its last transition, not as old as the comment", () => {
+  const dir = tempDir();
+  const log = logModule.createEventLog({ dir: dir });
+  const reviews = reviewsModule.createReviews({ dir: dir, log: log });
+  const store = agentSessions.createStore({ dir: dir });
+  store.create({ id: "s_old" });
+  reviews.create({ id: "r_old", agent_session_id: "s_old" });
+
+  const wroteAt = new Date(Date.now() - 4 * 3600 * 1000).toISOString();
+  const reopenedAt = new Date(Date.now() - 60 * 1000).toISOString();
+  const item = record.newItem({
+    kind: record.KIND.COMMENT,
+    state: record.STATE.READY,
+    note: "still not right",
+    page_origin: "http://127.0.0.1:4321",
+    page_path: "/p.html",
+    page_title: "Page",
+    page_seq: 1
+  });
+  item[record.FIELD.CREATED_AT] = wroteAt;
+  item[record.FIELD.UPDATED_AT] = reopenedAt;
+
+  log.append("r_old", [
+    protocol.newEvent({
+      event: protocol.EVENT.ITEM_READY,
+      event_id: "ev_old",
+      review: "r_old",
+      item: item[record.FIELD.ID],
+      rev: item[record.FIELD.REV],
+      page_path: item[record.FIELD.PAGE_PATH],
+      page_title: item[record.FIELD.PAGE_TITLE],
+      page_seq: item[record.FIELD.PAGE_SEQ],
+      payload: { draft: false, record: item }
+    }),
+    protocol.newEvent({
+      event: protocol.EVENT.ITEM_REOPENED,
+      event_id: "ev_reopened",
+      review: "r_old",
+      item: item[record.FIELD.ID],
+      rev: item[record.FIELD.REV]
+    })
+  ]);
+
+  const poll = routes.handlerFor("replies.poll");
+  const liveness = poll(
+    { review: "r_old", query: { since: 0 } },
+    { log: log, reviews: reviews, agentSessions: store, projection: projectionModule }
+  ).body.agent_liveness;
+
+  assert.equal(liveness.unanswered, 1);
+  // The rail says "oldest item 1m", not "oldest item 4h". The comment is four
+  // hours old; the WORK is a minute old, and the age is what tells a reviewer
+  // whether an agent is late.
+  assert.equal(liveness.oldest_unanswered_at, reopenedAt);
+});
+
+test("the unanswered count is computed once per log position, not once per poll", () => {
+  const dir = tempDir();
+  const log = logModule.createEventLog({ dir: dir });
+  const reviews = reviewsModule.createReviews({ dir: dir, log: log });
+  const store = agentSessions.createStore({ dir: dir });
+  store.create({ id: "s_cache" });
+  reviews.create({ id: "r_cache", agent_session_id: "s_cache" });
+
+  const item = record.newItem({
+    kind: record.KIND.COMMENT,
+    state: record.STATE.READY,
+    note: "one thing",
+    page_origin: "http://127.0.0.1:4321",
+    page_path: "/p.html",
+    page_title: "Page",
+    page_seq: 1
+  });
+  const readyEvent = protocol.newEvent({
+    event: protocol.EVENT.ITEM_READY,
+    event_id: "ev_cache",
+    review: "r_cache",
+    item: item[record.FIELD.ID],
+    rev: item[record.FIELD.REV],
+    page_path: item[record.FIELD.PAGE_PATH],
+    page_title: item[record.FIELD.PAGE_TITLE],
+    page_seq: item[record.FIELD.PAGE_SEQ],
+    payload: { draft: false, record: item }
+  });
+  log.append("r_cache", [readyEvent]);
+
+  // The poll runs about once a second per open page. Counting three items used
+  // to mean re-reading the whole event log and re-projecting it every time.
+  let reads = 0;
+  const countingLog = Object.assign({}, log, {
+    read: function (id) {
+      reads += 1;
+      return log.read(id);
+    }
+  });
+  const deps = { log: countingLog, reviews: reviews, agentSessions: store, projection: projectionModule };
+  const poll = routes.handlerFor("replies.poll");
+
+  assert.equal(poll({ review: "r_cache", query: { since: 0 } }, deps).body.agent_liveness.unanswered, 1);
+  const afterFirst = reads;
+  assert.equal(poll({ review: "r_cache", query: { since: 0 } }, deps).body.agent_liveness.unanswered, 1);
+  assert.equal(poll({ review: "r_cache", query: { since: 0 } }, deps).body.agent_liveness.unanswered, 1);
+  assert.equal(reads, afterFirst, "an unchanged log is not re-read to answer the same question");
+
+  // A projection is a pure function of the log, so the log's seq is the whole
+  // cache key: a new event moves it and the answer is computed again.
+  const second = record.newItem({
+    kind: record.KIND.COMMENT,
+    state: record.STATE.READY,
+    note: "another thing",
+    page_origin: "http://127.0.0.1:4321",
+    page_path: "/p.html",
+    page_title: "Page",
+    page_seq: 1
+  });
+  log.append("r_cache", [
+    protocol.newEvent({
+      event: protocol.EVENT.ITEM_READY,
+      event_id: "ev_cache_2",
+      review: "r_cache",
+      item: second[record.FIELD.ID],
+      rev: second[record.FIELD.REV],
+      page_path: second[record.FIELD.PAGE_PATH],
+      page_title: second[record.FIELD.PAGE_TITLE],
+      page_seq: second[record.FIELD.PAGE_SEQ],
+      payload: { draft: false, record: second }
+    })
+  ]);
+  assert.equal(poll({ review: "r_cache", query: { since: 0 } }, deps).body.agent_liveness.unanswered, 2);
+});
+
 test("the layer raises the liveness on a state change and holds it in between", async () => {
   const raised = [];
   let answer = { events: [], seq: 0, target_mtime: null, agent_liveness: null };

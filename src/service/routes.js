@@ -20,6 +20,7 @@
 var crypto = require("node:crypto");
 
 var protocol = require("../shared/protocol.js");
+var record = require("../shared/record.js");
 
 function notImplemented(routeName, owner) {
   var err = new Error("route " + routeName + " is not implemented yet: Task " + owner + " owns it");
@@ -284,11 +285,13 @@ var HANDLERS = {
   // never a byte offset: two events in one millisecond are ordinary, and a clock
   // that steps backwards would silently skip work.
   "replies.poll": function (request, deps) {
+    // Once per request, for both the activity stamp and the liveness answer.
+    var owner = ownerSessionOf(request, deps);
     if (deps.projection && typeof deps.projection.tickReview === "function") {
       // A fold that accepted a line means the owning agent just appended a
       // reply. That is session activity, the same way running the drain command
       // is, and it is what keeps the rail from calling a mid-batch agent absent.
-      noteReplyActivity(request, deps, deps.projection.tickReview(deps, request.review));
+      noteReplyActivity(deps, deps.projection.tickReview(deps, request.review), owner);
     }
     var since = numberOr(request.query.since, 0);
     var events = deps.log.since(request.review, since).filter(function (event) {
@@ -309,7 +312,7 @@ var HANDLERS = {
         // rail used to show what a chat said it was doing, which is how "the
         // monitor is running" sat over seven unanswered items. Every field here
         // comes from a file the monitor or a lahe command wrote.
-        agent_liveness: agentLiveness(request, deps)
+        agent_liveness: agentLiveness(request, deps, owner)
       }
     };
   },
@@ -374,12 +377,22 @@ function ownerSessionOf(request, deps) {
  * item.content events and none of them is a wake: only item.ready is. So a
  * burst of typing appends nothing and costs no agent a turn.
  *
+ * TWO EVENTS ARE READY TRANSITIONS, NOT ONE. item.ready is the first time an
+ * item becomes work. item.reopened is the reviewer saying "this is not done"
+ * about an item an agent already answered, and the projector treats it as ready
+ * exactly like the first one. It used to append no wake line, so reopening an
+ * item was silent: the item showed up in the next drain and nowhere else, and a
+ * host waiting on the feed waited forever.
+ *
  * IDEMPOTENT ON REPLAY. The library re-posts anything it has not seen
  * acknowledged, so the same item.ready arrives again after a reconnect. Only
  * events in `result.accepted` are ones the log had not already stored, so a
  * replay walks straight past this. The feed's own (review, item, rev) dedupe is
- * the second belt.
+ * the second belt, and a reopen carries a new rev, so it is a line of its own
+ * rather than a duplicate of the first ready.
  */
+var WAKE_EVENTS = [protocol.EVENT.ITEM_READY, protocol.EVENT.ITEM_REOPENED];
+
 function appendWakeLines(request, deps, events, result) {
   if (!deps.agentSessions || typeof deps.agentSessions.wake !== "object" || !deps.agentSessions.wake) return 0;
   var stored = {};
@@ -389,7 +402,7 @@ function appendWakeLines(request, deps, events, result) {
   var appended = 0;
   events.forEach(function (event) {
     if (!event || typeof event !== "object") return;
-    if (event[protocol.EVENT_FIELD.EVENT] !== protocol.EVENT.ITEM_READY) return;
+    if (WAKE_EVENTS.indexOf(event[protocol.EVENT_FIELD.EVENT]) === -1) return;
     if (!stored[event[protocol.EVENT_FIELD.EVENT_ID]]) return;
     var item = event[protocol.EVENT_FIELD.ITEM];
     if (!item) return;
@@ -413,19 +426,60 @@ function appendWakeLines(request, deps, events, result) {
 }
 
 /** A reply the agent appended is session activity; record it as such. */
-function noteReplyActivity(request, deps, tick) {
+function noteReplyActivity(deps, tick, owner) {
   if (!tick || !tick.summary || !Array.isArray(tick.summary.accepted) || tick.summary.accepted.length === 0) return false;
   if (!deps.agentSessions || typeof deps.agentSessions.touchActivity !== "function") return false;
-  var owner = ownerSessionOf(request, deps);
   if (!owner) return false;
   deps.agentSessions.touchActivity(owner);
   return true;
 }
 
-/** How many ready items nobody has answered, and the oldest one's timestamp. */
+// One entry per review, per helper. The reply poll runs about once a second per
+// open page, and it used to re-read the whole event log and re-project it every
+// time to count three items. A projection is a pure function of the log, so the
+// log's current seq is a complete cache key: same seq, same answer, and seq is
+// already in memory (the log's own load()).
+//
+// Keyed on the deps object rather than module-level, so two helpers (or two
+// tests) on one review id never read each other's counts, and a helper that
+// goes away takes its cache with it.
+var workCaches = new WeakMap();
+
+function workCacheFor(deps) {
+  var cache = workCaches.get(deps);
+  if (!cache) {
+    cache = Object.create(null);
+    workCaches.set(deps, cache);
+  }
+  return cache;
+}
+
+/**
+ * How many ready items nobody has answered, and the oldest one's timestamp.
+ *
+ * READY AND UNANSWERED IS RECORD.JS'S DEFINITION, not a second one spelled in
+ * raw strings here. The rail's count and `lahe status`'s item list have to be
+ * counting the same items.
+ *
+ * THE AGE IS THE LAST TRANSITION, not the first. An item the reviewer reopened
+ * this minute carries a created_at from hours ago, and reporting that made the
+ * rail say "oldest item 4h" about work that became work four seconds ago.
+ * updated_at is when it last became something an agent has to answer.
+ */
 function unansweredWork(request, deps) {
   var out = { unanswered: 0, oldest: null };
   if (!deps.projection || typeof deps.projection.project !== "function") return out;
+
+  var cache = workCacheFor(deps);
+  var seq = null;
+  try {
+    seq = deps.log.currentSeq(request.review);
+  } catch (err) {
+    seq = null;
+  }
+  var cached = cache[request.review];
+  if (cached && seq !== null && cached.seq === seq) return cached.work;
+
   var projected;
   try {
     projected = deps.projection.project(request.review, deps.log.read(request.review));
@@ -434,18 +488,23 @@ function unansweredWork(request, deps) {
   }
   ((projected && projected.pages) || []).forEach(function (page) {
     (page.items || []).forEach(function (item) {
-      if (!item || item.state !== "ready" || item.reply) return;
+      if (!record.isUnansweredReady(item)) return;
       out.unanswered += 1;
-      var at = item.created_at || item.updated_at || null;
+      var at = item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || null;
       if (typeof at === "string" && at && (!out.oldest || at < out.oldest)) out.oldest = at;
     });
   });
+  if (seq !== null) cache[request.review] = { seq: seq, work: out };
   return out;
 }
 
-function agentLiveness(request, deps) {
+/**
+ * @param {string|null} owner the session id, already resolved by the caller.
+ *   Resolving it once per request is deliberate: it was being read twice on
+ *   every poll, once to stamp activity and once for this.
+ */
+function agentLiveness(request, deps, owner) {
   if (!deps.agentSessions || typeof deps.agentSessions.liveness !== "function") return null;
-  var owner = ownerSessionOf(request, deps);
   var work = unansweredWork(request, deps);
   // A review with no agent session (the "legacy" id, from before sessions
   // existed) is reached some other way, so there is no monitor to be missing.
