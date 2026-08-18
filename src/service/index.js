@@ -59,22 +59,68 @@ var MAX_BODY_BYTES = 8 * 1024 * 1024;
 var BUNDLE_PATH = path.join(__dirname, "..", "..", manifest.BUNDLE_OUTPUT);
 
 /**
- * Read the built library once, at serve start.
+ * The built library, re-read whenever the file on disk changes.
  *
- * FAIL LOUD: a helper with no library to serve would hand every page a 404 that
- * looks like a broken page rather than a missing build, so it refuses to start
- * and says which command builds it.
+ * FAIL LOUD AT START: a helper with no library to serve would hand every page a
+ * 404 that looks like a broken page rather than a missing build, so it refuses
+ * to start and says which command builds it.
+ *
+ * AFTER START IT FOLLOWS THE FILE. The bytes used to be read once, so a rebuilt
+ * bundle was not served until somebody restarted the helper, and the whole point
+ * of the review.write route is that helpers do not restart mid-review. One stat
+ * per request is the same cheap trigger targetMtime uses.
+ *
+ * A file that goes missing later keeps serving the last good bytes rather than
+ * failing a page that is in the middle of a review: the build is momentarily
+ * absent during a rebuild, and a reviewer's page must not die on that window.
  */
-function loadLibrary() {
+function loadLibrary(bundlePath) {
+  // The parameter is for the unit test, which must not rewrite the real dist
+  // file to prove the helper follows it. serve() always passes nothing.
+  var file = bundlePath || BUNDLE_PATH;
   var source;
   try {
-    source = fs.readFileSync(BUNDLE_PATH, "utf8");
+    source = fs.readFileSync(file, "utf8");
   } catch (err) {
     throw new Error(
-      "the built library is missing (" + BUNDLE_PATH + "). Build it once with `npm run build:layer`, then serve again."
+      "the built library is missing (" + file + "). Build it once with `npm run build:layer`, then serve again."
     );
   }
-  return { path: BUNDLE_PATH, source: source, bytes: Buffer.byteLength(source, "utf8") };
+  var signature = bundleSignature();
+
+  function bundleSignature() {
+    try {
+      var stat = fs.statSync(file);
+      return String(stat.mtimeMs) + ":" + String(stat.size);
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function current() {
+    var now = bundleSignature();
+    if (now === null || now === signature) return source;
+    try {
+      source = fs.readFileSync(file, "utf8");
+      signature = now;
+    } catch (err) {
+      // Mid-rewrite, or gone. Keep what we have.
+    }
+    return source;
+  }
+
+  var library = { path: file };
+  Object.defineProperty(library, "source", {
+    enumerable: true,
+    get: current
+  });
+  Object.defineProperty(library, "bytes", {
+    enumerable: true,
+    get: function () {
+      return Buffer.byteLength(current(), "utf8");
+    }
+  });
+  return library;
 }
 
 function readBody(req, limit) {
@@ -383,6 +429,13 @@ async function serve(options) {
         server.close(function () {
           resolve();
         });
+        // server.close() stops accepting and then waits for every open
+        // connection to end on its own. The library polls on keep-alive
+        // connections, so a page left open holds the socket and close() never
+        // calls back: SIGTERM hung, `add`'s restart fallback timed out after ten
+        // seconds, and the unit suite flaked on teardown. Node 18.2+ has the one
+        // API that ends them, which is why engines.node is >=18.2.0.
+        if (typeof server.closeAllConnections === "function") server.closeAllConnections();
       });
     }
   };
@@ -442,6 +495,7 @@ if (require.main === module) {
 
 module.exports = {
   VERSION: VERSION,
+  loadLibrary: loadLibrary,
   MAX_BODY_BYTES: MAX_BODY_BYTES,
   serve: serve,
   probeHealth: probeHealth

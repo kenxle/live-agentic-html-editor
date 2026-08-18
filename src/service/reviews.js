@@ -182,6 +182,9 @@ function createReviews(options) {
           // Absent in every meta.json written before path-matching existed, and
           // null is the right answer there: an old review never matches by path.
           target_path: typeof parsed.target_path === "string" ? parsed.target_path : null,
+          // Every page ever added to this review, so path-matching keeps finding
+          // all of them and the reload watcher does not follow only the last.
+          target_paths: Array.isArray(parsed.target_paths) ? parsed.target_paths.slice() : [],
           source_path: typeof parsed.source_path === "string" ? parsed.source_path : null,
           created_at: parsed.created_at || new Date().toISOString()
         };
@@ -323,6 +326,7 @@ function createReviews(options) {
       token: parsed.token,
       origins: Array.isArray(parsed.origins) ? parsed.origins.slice() : [],
       target_path: typeof parsed.target_path === "string" ? parsed.target_path : null,
+      target_paths: Array.isArray(parsed.target_paths) ? parsed.target_paths.slice() : [],
       source_path: typeof parsed.source_path === "string" ? parsed.source_path : null,
       created_at: parsed.created_at || new Date().toISOString()
     };
@@ -393,6 +397,7 @@ function createReviews(options) {
       // Where this review's page lives, so a rebuild that strips the script
       // line does not splinter one document into three reviews. See recordPaths.
       target_path: typeof spec.target_path === "string" ? spec.target_path : null,
+      target_paths: typeof spec.target_path === "string" && spec.target_path ? [spec.target_path] : [],
       source_path: typeof spec.source_path === "string" ? spec.source_path : null,
       created_at: new Date().toISOString()
     };
@@ -462,6 +467,14 @@ function createReviews(options) {
    * files have neither field and simply never match, which is the intended
    * fallback rather than a migration.
    *
+   * ONE REVIEW IS OFTEN SEVERAL PAGES. A scalar target_path meant every `add`
+   * overwrote the last one: the reload watcher then pointed at whichever page
+   * was added most recently, and path-matching only ever found that one, so a
+   * multi-page review splintered into new reviews as the reviewer moved around.
+   * So target paths accumulate in `target_paths`, newest last and deduped.
+   * `target_path` stays as the most recent one, because `add` reads that field
+   * off meta.json (reviewMatchingPath) and old meta files carry only it.
+   *
    * @param {string} reviewId
    * @param {{target_path?: string|null, source_path?: string|null}} paths
    */
@@ -470,9 +483,16 @@ function createReviews(options) {
     if (!review) return null;
     var p = paths || {};
     var changed = false;
-    if (typeof p.target_path === "string" && p.target_path && review.target_path !== p.target_path) {
-      review.target_path = p.target_path;
-      changed = true;
+    if (typeof p.target_path === "string" && p.target_path) {
+      if (review.target_path !== p.target_path) {
+        review.target_path = p.target_path;
+        changed = true;
+      }
+      if (!Array.isArray(review.target_paths)) review.target_paths = [];
+      if (review.target_paths.indexOf(p.target_path) === -1) {
+        review.target_paths.push(p.target_path);
+        changed = true;
+      }
     }
     if (typeof p.source_path === "string" && p.source_path && review.source_path !== p.source_path) {
       review.source_path = p.source_path;
@@ -480,6 +500,22 @@ function createReviews(options) {
     }
     if (changed) persist(review);
     return review;
+  }
+
+  /**
+   * Every page recorded for this review, newest last.
+   *
+   * The source template is NOT one of them: it is what the page is built FROM,
+   * so watching it fires the reload before the built page has changed.
+   */
+  function targetPathsOf(review) {
+    var out = Array.isArray(review.target_paths) ? review.target_paths.slice() : [];
+    // Reviews created before target_paths existed, and reviews whose meta was
+    // written by `add` on disk, carry the scalar only.
+    if (typeof review.target_path === "string" && review.target_path && out.indexOf(review.target_path) === -1) {
+      out.push(review.target_path);
+    }
+    return out;
   }
 
   // ---------------------------------------------------------------------------
@@ -515,18 +551,41 @@ function createReviews(options) {
    */
   function targetMtime(reviewId) {
     var review = get(reviewId);
-    if (!review || typeof review.target_path !== "string" || !review.target_path) return null;
+    if (!review) return null;
+    var paths = targetPathsOf(review);
+    if (paths.length === 0) return null;
+    var key = paths.join("\n");
     var cached = mtimeCache[reviewId];
     var now = clock();
-    if (cached && cached.path === review.target_path && now - cached.at < MTIME_TTL_MS) return cached.mtime;
-    var mtime = null;
+    if (cached && cached.key === key && now - cached.at < MTIME_TTL_MS) return cached.mtime;
+    // The newest mtime across every page this review holds: any of them being
+    // rebuilt is a reason for the reviewer's page to reload.
+    var newest = null;
+    paths.forEach(function (target) {
+      var at = statFileMtime(target);
+      if (at && (!newest || at > newest)) newest = at;
+    });
+    mtimeCache[reviewId] = { key: key, at: now, mtime: newest };
+    return newest;
+  }
+
+  /**
+   * One path's mtime as an ISO string, or null.
+   *
+   * ONLY A REGULAR FILE ANSWERS. A dev-server review records the project
+   * DIRECTORY as its target, and a directory's mtime moves on every npm install,
+   * git checkout and stray .DS_Store while staying still when the page's own
+   * file is edited. So the reload fired constantly on churn and never on the
+   * change it exists for.
+   */
+  function statFileMtime(target) {
     try {
-      mtime = fs.statSync(review.target_path).mtime.toISOString();
+      var stat = fs.statSync(target);
+      if (!stat.isFile()) return null;
+      return stat.mtime.toISOString();
     } catch (error) {
-      mtime = null;
+      return null;
     }
-    mtimeCache[reviewId] = { path: review.target_path, at: now, mtime: mtime };
-    return mtime;
   }
 
   // ---------------------------------------------------------------------------
@@ -606,6 +665,28 @@ function createReviews(options) {
   // The one session per review
   // ---------------------------------------------------------------------------
 
+  /**
+   * How long the holder has had this review, in words a reviewer reads.
+   *
+   * The refusal text is shown on the rail, and a raw ISO timestamp ("holding it
+   * since 2026-08-18T02:48:36.137Z") is machine output in a sentence meant for a
+   * person. Recent times read as an elapsed span; anything older falls back to a
+   * local date and time, without milliseconds and without the Z. The `since`
+   * field of the refusal is untouched: that one IS for machines.
+   */
+  function heldForPhrase(holder) {
+    var since = new Date(holder.since);
+    if (isNaN(since.getTime())) return "since " + String(holder.since);
+    var startedAt = typeof holder.since_ms === "number" ? holder.since_ms : since.getTime();
+    var seconds = Math.max(0, Math.round((clock() - startedAt) / 1000));
+    if (seconds < 60) return "for less than a minute";
+    if (seconds < 90 * 60) {
+      var minutes = Math.round(seconds / 60);
+      return "for the last " + minutes + (minutes === 1 ? " minute" : " minutes");
+    }
+    return "since " + since.toLocaleString();
+  }
+
   function holderIsStale(holder) {
     return clock() - holder.last_seen > STALE_AFTER_MS;
   }
@@ -650,8 +731,8 @@ function createReviews(options) {
       // holder is alive. Refused, and the refusal names NOTHING about the holder:
       // no window id (which a rival used to replay as a heartbeat) and no secret.
       var reason =
-        "this review is already open in another window, which has been holding it since " +
-        holder.since +
+        "this review is already open in another window, which has been holding it " +
+        heldForPhrase(holder) +
         ". Close that window, or wait " +
         Math.ceil(STALE_AFTER_MS / 1000) +
         " seconds after it stops responding and this one takes over.";
@@ -686,6 +767,9 @@ function createReviews(options) {
       window_id: windowId,
       session_secret: mintSessionSecret(),
       since: new Date().toISOString(),
+      // The same instant on the injectable clock, which is what the refusal
+      // measures elapsed time against. `since` is the wire field and stays ISO.
+      since_ms: at,
       last_seen: at
     };
     return granted(sessions[reviewId], tookOver, null);
