@@ -15,6 +15,11 @@ tool is broken.**
 
 ## Board
 
+- [>] @codex 2026-08-18 LAHE-thread-follow-up -- (Ken, 2026-08-18) after an
+  agent answers, the reviewer needs a visible continuation box that sends a new
+  message in the same thread. Preserve the original reviewer turn and agent
+  answer; do not make `Reopen` silently erase or reword the first turn. Define
+  separate, clear behavior for following up versus reopening an unlanded issue.
 - [x] @codex 2026-08-18 LAHE-reload-viewport-continuity -- LAHE's own
   hashless auto-reload now performs one instant, exact viewport restore and
   keeps native restoration manual through `pageshow`, preventing the visible
