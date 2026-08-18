@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+e1673ba1d191
+ * version 0.0.0+dc3f5c276e87
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+e1673ba1d191";
+  g.LAHE.version = "0.0.0+dc3f5c276e87";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -12059,6 +12059,15 @@
       helperReachable = true;
       lastFailure = null;
       if (was !== true) onRecovered("HELPER_UNREACHABLE");
+      // Every call site of markReachable is an AUTHENTICATED exchange the
+      // helper accepted (an append, a reply poll, a claim); the health probe
+      // never calls it. So an unregistered origin and a refused token are both
+      // over the moment this runs, and their standing chips end here too.
+      // Without this, registering the origin fixed the review while the chip
+      // kept saying it was broken (Ken, live, 2026-08-17).
+      onRecovered("SYNC_ORIGIN_NOT_ALLOWED");
+      onRecovered("SYNC_UNAUTHORIZED");
+      originDiagnosed = false;
       recomputeStatus();
       return helperReachable;
     }
@@ -17976,7 +17985,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+e1673ba1d191";
+  var VERSION = "0.0.0+dc3f5c276e87";
 
   var protocol = ns.protocol;
   var record = ns.record;

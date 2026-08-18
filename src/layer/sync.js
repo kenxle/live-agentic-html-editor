@@ -227,6 +227,15 @@
       helperReachable = true;
       lastFailure = null;
       if (was !== true) onRecovered("HELPER_UNREACHABLE");
+      // Every call site of markReachable is an AUTHENTICATED exchange the
+      // helper accepted (an append, a reply poll, a claim); the health probe
+      // never calls it. So an unregistered origin and a refused token are both
+      // over the moment this runs, and their standing chips end here too.
+      // Without this, registering the origin fixed the review while the chip
+      // kept saying it was broken (Ken, live, 2026-08-17).
+      onRecovered("SYNC_ORIGIN_NOT_ALLOWED");
+      onRecovered("SYNC_UNAUTHORIZED");
+      originDiagnosed = false;
       recomputeStatus();
       return helperReachable;
     }

@@ -169,7 +169,11 @@ test("a successful poll is enough to read stored, with no post and no typing", a
 
   await sync.poll();
   assert.equal(sync.status().status, overlay.STATUS.STORED, "a reachable helper with an empty outbox IS stored");
-  assert.deepEqual(recovered, ["HELPER_UNREACHABLE"], "and the standing unreachable chip is cleared");
+  assert.deepEqual(
+    recovered,
+    ["HELPER_UNREACHABLE", "SYNC_ORIGIN_NOT_ALLOWED", "SYNC_UNAUTHORIZED"],
+    "an authenticated success ends every standing access chip: unreachable, origin, and token"
+  );
 });
 
 test("a post the navigation aborted is not a failure, and raises no chip", async (t) => {
