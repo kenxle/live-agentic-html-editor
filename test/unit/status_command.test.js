@@ -363,4 +363,48 @@ test("closed sessions remain readable for audit but cannot keep monitoring", asy
   ], dir);
   assert.equal(monitor.code, protocol.CLI_EXIT.BAD_USAGE);
   assert.match(monitor.stderr, /monitoring has ended/);
+
+  // The drain command carries no ledger any more, so the refusal cannot depend
+  // on one. Gating it on --seen-file is what let a closed session poll forever.
+  const drain = await runStatus(["--session", "s_closed", "--json", "--quiet"], dir);
+  assert.equal(drain.code, protocol.CLI_EXIT.BAD_USAGE);
+  assert.match(drain.stderr, /monitoring has ended/);
+});
+
+test("--quiet no longer needs a ledger, and prints nothing when nothing is waiting", async () => {
+  const dir = tempState();
+  const sessions = agentSessionsModule.createStore({ dir });
+  sessions.create({ id: "s_quiet" });
+  const log = logModule.createEventLog({ dir });
+  const reviews = reviewsModule.createReviews({ dir, log });
+  reviews.create({ id: "r_quiet", agent_session_id: "s_quiet" });
+
+  const empty = await runStatus(["--session", "s_quiet", "--json", "--quiet"], dir);
+  assert.equal(empty.code, protocol.CLI_EXIT.OK);
+  assert.equal(empty.stdout, "", "an empty drain is silent, which is what makes it cost no tokens");
+
+  const item = anItem("something to do", record.STATE.READY);
+  log.append("r_quiet", [itemEvent("r_quiet", item, protocol.EVENT.ITEM_READY)]);
+  const withWork = await runStatus(["--session", "s_quiet", "--json", "--quiet"], dir);
+  assert.equal(withWork.code, protocol.CLI_EXIT.OK);
+  assert.match(withWork.stdout, /something to do/);
+
+  // --quiet is about output, so it needs --json and nothing else.
+  const badPairing = await runStatus(["--session", "s_quiet", "--quiet"], dir);
+  assert.equal(badPairing.code, protocol.CLI_EXIT.BAD_USAGE);
+  assert.match(badPairing.stderr, /--quiet needs --json/);
+});
+
+test("a drain records that the session ran a command, so the rail can tell working from absent", async () => {
+  const dir = tempState();
+  const sessions = agentSessionsModule.createStore({ dir });
+  sessions.create({ id: "s_touch" });
+  const log = logModule.createEventLog({ dir });
+  const reviews = reviewsModule.createReviews({ dir, log });
+  reviews.create({ id: "r_touch", agent_session_id: "s_touch" });
+
+  assert.equal(sessions.readActivity("s_touch"), null);
+  await runStatus(["--session", "s_touch", "--json", "--quiet"], dir);
+  const activity = sessions.readActivity("s_touch");
+  assert.ok(activity && activity.at, "the drain left a timestamp behind");
 });

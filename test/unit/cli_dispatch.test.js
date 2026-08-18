@@ -75,7 +75,12 @@ test("status owns the active read exits under CLI_EXIT", () => {
     OK: 0,
     HELPER_UNREACHABLE: 2,
     UNKNOWN_REVIEW: 3,
-    BAD_USAGE: 4
+    BAD_USAGE: 4,
+    // The two the monitor adds. A host reads the number to decide whether to
+    // relaunch, and "stop relaunching, the session is over" cannot share a code
+    // with "you typed the command wrong".
+    SESSION_CLOSED: 5,
+    SESSION_TAKEN_OVER: 6
   });
   assert.equal(Object.prototype.hasOwnProperty.call(protocol, "WAIT"), false);
   assert.equal(Object.prototype.hasOwnProperty.call(protocol, "WAIT_EVENT_TYPES"), false);

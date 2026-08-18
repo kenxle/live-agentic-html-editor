@@ -65,8 +65,12 @@ test("lahe review renders Markdown without touching it, serves assets, and reuse
   const reviewId = first.stdout.match(/^\s*review\s+(r[a-f0-9]+)/m)[1];
   const open = first.stdout.match(/^\s*open\s+(http:\/\/\S+)/m)[1];
   assert.match(first.stdout, /rebuild\s+rerun this same review command after editing the Markdown, before replying handled/);
-  assert.match(first.stdout, /keep the agent turn pending on this task; do not detach it and finish/);
-  assert.match(first.stdout, /ACTION REQUIRED output starts the work; do not end the turn after receiving it/);
+  // The wake line comes first and names the real path, so a Claude Code Monitor
+  // can be armed by copying it rather than by assembling it from a doc.
+  assert.match(first.stdout, new RegExp("wake\\s+tail -n 0 -f \\S+/agent-sessions/" + sessionId + "/wake\\.log"));
+  assert.match(first.stdout, new RegExp("monitor\\s+lahe monitor --session " + sessionId + "$", "m"));
+  assert.match(first.stdout, new RegExp("drain\\s+lahe status --session " + sessionId + " --json --quiet"));
+  assert.match(first.stdout, /exits\s+monitor: 0 work printed, 5 session closed, 6 taken over/);
   t.after(async () => {
     await capture(() => sessionCommand.run(["close", sessionId, "--state-dir", state, "--port", String(port)]));
   });

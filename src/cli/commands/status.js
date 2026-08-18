@@ -399,10 +399,13 @@ async function run(argv, options) {
       var sessionStore = agentSessionsModule.createStore({ dir: dir });
       var routed = sessionStore.read(args.session);
       if (!routed) throw new Error("unknown agent session " + JSON.stringify(args.session));
-      // Not gated on any flag. A closed session is closed whoever is asking, and
-      // gating this on --seen-file is what let a monitor that stopped passing
-      // that flag poll a closed session forever.
-      if (routed.closed_at) {
+      // A plain read of a closed session is AUDIT and still works: the history
+      // is the point of keeping it. What is refused is a MONITORING read, and
+      // the tell is --quiet or --seen-file ("wake me only if there is work").
+      // This used to be gated on --seen-file alone, so the moment the monitor
+      // stopped passing that flag it could poll a closed session forever. The
+      // monitor now reads closed_at itself as well; this is the second belt.
+      if ((args.quiet || args.seenFile) && routed.closed_at) {
         throw new Error("agent session " + args.session + " is closed; monitoring has ended");
       }
       // This session just ran a lahe command. That is what separates "the agent

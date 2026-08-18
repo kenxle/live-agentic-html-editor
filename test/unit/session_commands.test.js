@@ -146,7 +146,11 @@ test("takeover is explicit, advances the handoff fence, and prints safe catch-up
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /taken over explicitly/);
   assert.match(result.stdout, new RegExp("catch-up\\s+lahe status --session " + sessionId + " --json"));
-  assert.match(result.stdout, new RegExp("monitor\\s+lahe monitor --session " + sessionId + " --seen-file <new-path>"));
-  assert.match(result.stdout, /do not reuse the previous agent's ledger/);
+  // The new owner gets the same four commands `lahe review` printed, wake line
+  // first, so a handoff does not send anyone back to a doc for the exact paths.
+  assert.match(result.stdout, new RegExp("wake\\s+tail -n 0 -f \\S+/agent-sessions/" + sessionId + "/wake\\.log"));
+  assert.match(result.stdout, new RegExp("monitor\\s+lahe monitor --session " + sessionId + "$", "m"));
+  assert.match(result.stdout, new RegExp("drain\\s+lahe status --session " + sessionId + " --json --quiet"));
+  assert.match(result.stdout, /older lahe monitor processes exit with 6/);
   assert.equal(agentSessions.createStore({ dir: state }).read(sessionId).handoff_rev, 1);
 });
