@@ -192,7 +192,12 @@ async function startService(options = {}) {
 
   const child = spawn(process.execPath, [entry].concat(options.args || []), {
     env: env,
-    stdio: ["ignore", "pipe", "pipe"]
+    // The IPC channel is a lifetime lease, not a test-control protocol. If a
+    // Playwright worker is interrupted or crashes, the channel closes and the
+    // test helper exits instead of becoming a PID-1 orphan that polls forever.
+    // Real `lahe serve` / `lahe add` processes have no IPC channel and are
+    // therefore unaffected.
+    stdio: ["ignore", "pipe", "pipe", "ipc"]
   });
 
   const stdoutChunks = [];

@@ -37,6 +37,12 @@
   four times per second. Active requests now fold their own review immediately,
   while the all-review safety scan runs every five seconds. An isolated helper
   with the same folder count sampled at 0.0 percent idle CPU.
+- Complete: test-launched helpers now hold an IPC ownership lease and exit when
+  an interrupted or crashed test worker disappears. This addresses the six
+  PID-1-orphaned helpers found during the energy audit; existing stale processes
+  require one-time cleanup because they predate the fix.
+- Added release requirement: closing the final open agent session stops the
+  shared helper and its monitor while preserving every review folder.
 - Confirmed blocker: global monitoring crosses independent live agent sessions.
 - Confirmed known gaps: one-command static front door, cold-start proof,
   documentation pass, multi-page offline path reuse, and

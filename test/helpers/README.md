@@ -327,6 +327,11 @@ does not weaken the test: assert on whether the *page's own* script ran
 `kill -9` is the interesting half. A graceful shutdown proves nothing about
 durability, because the service gets to flush. SIGKILL is what AC3 means.
 
+Every `startService()` helper also holds a test-worker IPC lease. If the worker
+is interrupted or crashes before teardown, the closed channel makes the helper
+exit. Product helpers are launched without IPC and do not use this test-only
+lifetime rule.
+
 **Suspend is a different failure from kill, and the library has to tell them
 apart.** A killed helper refuses the connection immediately, so the status line
 can say kept-locally within one poll. A suspended one accepts the socket and

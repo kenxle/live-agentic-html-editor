@@ -369,6 +369,12 @@ test("the flush policy is imported, not restated", () => {
   assert.notEqual(syncModule.POLL_INTERVAL_MS, protocol.REPLY_POLL.INTERVAL_MS);
 });
 
+test("hidden review pages use the background polling cadence", () => {
+  assert.equal(syncModule.pollIntervalFor({ hidden: false }), syncModule.POLL_INTERVAL_MS);
+  assert.equal(syncModule.pollIntervalFor({ hidden: true }), syncModule.HIDDEN_POLL_INTERVAL_MS);
+  assert.ok(syncModule.HIDDEN_POLL_INTERVAL_MS > syncModule.POLL_INTERVAL_MS);
+});
+
 test("a card can carry a loud attachment, which is what an agent question needs", () => {
   const rail = overlay.createRail();
   const item = draft("a comment");

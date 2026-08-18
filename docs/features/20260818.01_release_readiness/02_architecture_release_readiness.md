@@ -35,9 +35,10 @@ CLI. Session scope is an ownership rule, not an optional display filter.
    falls back to all reviews. Plain machine-wide `status` remains a human
    diagnostic and agent instructions never use it as a work feed.
 6. Seen keys are `session + review + item + rev`, not only `item + rev`.
-7. `lahe session close <id>` closes routing without deleting review history or
-   stopping the shared helper. Explicit reopen is required before more reviews
-   can be added.
+7. `lahe session close <id>` closes routing without deleting review history.
+   Explicit reopen is required before more reviews can be added. Closing the
+   last open agent session also stops the shared helper after verifying its
+   identity; reopening or starting a session starts it again.
 
 Session metadata lives in an owner-only
 `<state-dir>/agent-sessions/<session-id>/session.json` file containing its
@@ -54,6 +55,26 @@ the display would still permit double work.
 
 An explicit handoff command or option may move a review between sessions. A
 silent reassignment is forbidden.
+
+### Process and energy lifecycle
+
+The shared helper is leased by open agent sessions. It is not a permanent
+machine daemon. Several open sessions still use one helper process, but once the
+last session closes there is no work feed to serve and the helper exits. Review
+folders remain on disk, and pages keep unsent work in browser storage until a
+session starts the helper again.
+
+Temporary and test-launched helpers have a stricter owner lease. They hold an
+IPC channel to the process that started them and exit when that owner
+disappears, including interrupted test runs. This prevents old worktrees and
+aborted browser suites from leaving polling processes adopted by PID 1.
+
+Agent monitoring remains a non-blocking, session-scoped status command on a
+moderate timer. The documented loop must use `--seen-file` directly, launch no
+parser pipeline, print nothing when there is no new work, and end with its agent
+session. A hidden review page may reduce nonessential reply/mtime polling while
+retaining its low-frequency ownership heartbeat; a visible page keeps the
+interactive cadence.
 
 ### Rejected alternatives
 

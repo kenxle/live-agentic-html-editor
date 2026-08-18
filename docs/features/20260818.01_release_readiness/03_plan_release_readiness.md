@@ -31,9 +31,23 @@ a visible double-scroll.
 - Add session-scoped status with review-aware seen keys.
 - Refuse ambiguous live enrollment and test explicit handoff.
 - Replace global work-feed instructions in every living contract surface.
+- Stop the shared helper when the last session closes and restart it on the
+  next session open without deleting review history.
 
 Done when two concurrent top-level agents on one helper receive only their own
-reviews and each discovers a later document in its own session.
+reviews, each discovers a later document in its own session, and closing the
+last session leaves no helper or monitor process behind.
+
+## Process-lifecycle hardening
+
+- Give test helpers an IPC owner lease so interrupted runners cannot orphan
+  them.
+- Make the seen-file monitor quiet when no item is new and keep parser pipelines
+  out of the public workflow.
+- Reduce hidden-page polling while preserving session ownership and immediate
+  polling on return to the page.
+- Verify CPU at idle with many retained review folders and audit the process
+  list after interrupted tests.
 
 ## Phase 4: one-command front door
 

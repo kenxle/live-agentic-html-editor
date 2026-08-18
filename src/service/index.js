@@ -487,10 +487,25 @@ if (require.main === module) {
     stateDir: process.env.LAHE_STATE_DIR,
     reviews: splitList(process.env.LAHE_REVIEWS),
     origins: splitList(process.env.LAHE_ALLOWED_ORIGINS)
-  }).catch(function (err) {
-    process.stderr.write("lahe serve: " + (err && err.stack ? err.stack : String(err)) + "\n");
-    process.exit(1);
-  });
+  })
+    .then(function (helper) {
+      // Test workers spawn the service with one IPC descriptor. That channel
+      // is the worker's ownership lease: when the worker is interrupted or
+      // crashes, close this test-only helper too. Ordinary product helpers are
+      // launched without IPC, so their lifetime remains controlled by agent
+      // sessions and explicit shutdown.
+      if (typeof process.send === "function") {
+        process.once("disconnect", function () {
+          helper.close().then(function () {
+            process.exit(0);
+          });
+        });
+      }
+    })
+    .catch(function (err) {
+      process.stderr.write("lahe serve: " + (err && err.stack ? err.stack : String(err)) + "\n");
+      process.exit(1);
+    });
 }
 
 module.exports = {

@@ -72,12 +72,16 @@
   // second into a status line the reviewer can read.
   var REQUEST_TIMEOUT_MS = 2000;
 
-  // The library's own poll of the helper. Deliberately NOT protocol.REPLY_POLL
-  // .INTERVAL_MS: that 250ms is the helper watching reply FILES on local disk,
-  // and reusing it here would mean four HTTP requests a second from every open
-  // page for no gain. The cursor is protocol.REPLY_CURSOR_FIELD, a seq, never a
-  // timestamp.
+  // The library's own poll of the helper. A visible review stays responsive;
+  // a hidden document needs only a low-frequency safety check because it polls
+  // immediately when it becomes visible again. The cursor is
+  // protocol.REPLY_CURSOR_FIELD, a seq, never a timestamp.
   var POLL_INTERVAL_MS = 1000;
+  var HIDDEN_POLL_INTERVAL_MS = 10000;
+
+  function pollIntervalFor(doc) {
+    return doc && doc.hidden === true ? HIDDEN_POLL_INTERVAL_MS : POLL_INTERVAL_MS;
+  }
 
   // -------------------------------------------------------------------------
   // R36: the page updates itself as the agent lands changes
@@ -879,12 +883,26 @@
 
     function startPolling() {
       if (pollTimer) return pollTimer;
-      // harness-allow-timer: the reply poll interval, pinned above.
-      pollTimer = setInterval(function () {
+      // harness-allow-timer: adaptive reply polling, with both intervals pinned
+      // above. A timeout reschedules itself so visibility changes can alter the
+      // next cadence without maintaining two timers.
+      pollTimer = setTimeout(function () {
+        pollTimer = null;
         poll();
         if (pendingCount() > 0 && !retryTimer && !flushing) flush();
-      }, POLL_INTERVAL_MS);
+        if (started) startPolling();
+      }, pollIntervalFor(doc));
       return pollTimer;
+    }
+
+    function onVisibilityChange() {
+      if (pollTimer) clearTimeout(pollTimer);
+      pollTimer = null;
+      if (doc && doc.hidden !== true) {
+        poll();
+        if (pendingCount() > 0 && !retryTimer && !flushing) flush();
+      }
+      if (started) startPolling();
     }
 
     // -------------------------------------------------------------------------
@@ -1055,6 +1073,7 @@
 
       if (doc && typeof doc.addEventListener === "function") {
         doc.addEventListener("securitypolicyviolation", onPolicyViolation);
+        doc.addEventListener("visibilitychange", onVisibilityChange);
       }
       if (win && typeof win.addEventListener === "function") {
         // Navigation and unload both commit immediately, with keepalive. R1
@@ -1343,7 +1362,7 @@
     function stop() {
       if (debounceTimer) clearTimeout(debounceTimer);
       if (retryTimer) clearTimeout(retryTimer);
-      if (pollTimer) clearInterval(pollTimer);
+      if (pollTimer) clearTimeout(pollTimer);
       if (reloadTimer) clearTimeout(reloadTimer);
       reloadTimer = null;
       stopHeartbeat();
@@ -1353,6 +1372,7 @@
       pollTimer = null;
       if (doc && typeof doc.removeEventListener === "function") {
         doc.removeEventListener("securitypolicyviolation", onPolicyViolation);
+        doc.removeEventListener("visibilitychange", onVisibilityChange);
       }
       if (win && typeof win.removeEventListener === "function") {
         win.removeEventListener("pagehide", commitOnUnload);
@@ -1386,6 +1406,7 @@
       BACKOFF_MS: BACKOFF_MS,
       REQUEST_TIMEOUT_MS: REQUEST_TIMEOUT_MS,
       POLL_INTERVAL_MS: POLL_INTERVAL_MS,
+      HIDDEN_POLL_INTERVAL_MS: HIDDEN_POLL_INTERVAL_MS,
       start: start,
       stop: stop,
       recordItem: recordItem,
@@ -1414,6 +1435,8 @@
     BACKOFF_MS: BACKOFF_MS,
     REQUEST_TIMEOUT_MS: REQUEST_TIMEOUT_MS,
     POLL_INTERVAL_MS: POLL_INTERVAL_MS,
+    HIDDEN_POLL_INTERVAL_MS: HIDDEN_POLL_INTERVAL_MS,
+    pollIntervalFor: pollIntervalFor,
     RELOAD_DEBOUNCE_MS: RELOAD_DEBOUNCE_MS,
     RELOAD_NOTICE_MS: RELOAD_NOTICE_MS,
     VIEWPORT_MARKER_VERSION: VIEWPORT_MARKER_VERSION,

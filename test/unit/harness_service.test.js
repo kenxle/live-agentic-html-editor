@@ -95,6 +95,21 @@ test("kill9 leaves the process reaped and the port refusing", async () => {
   }, "a request after kill -9 should fail to connect");
 });
 
+test("a test helper exits when its worker ownership channel closes", async () => {
+  for (const entry of [STUB_SERVICE_ENTRY, SERVICE_ENTRY]) {
+    const service = await startService({
+      entry,
+      stateDir: makeStateDir(),
+      args: entry === SERVICE_ENTRY ? ["--port", "0"] : []
+    });
+    assert.equal(service.child.connected, true, "the test helper should hold an IPC ownership lease");
+    service.child.disconnect();
+    await service.waitForExit();
+    assert.equal(processAlive(service.pid), false, "the helper should leave with its test worker");
+    assert.equal(await tcpProbe(service.port, "127.0.0.1", 300), false, "its port should close too");
+  }
+});
+
 test("the ready file carries a token per review, not one for the machine", async () => {
   const stateDir = makeStateDir();
   const service = await startService({

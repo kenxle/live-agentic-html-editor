@@ -201,3 +201,14 @@ server.listen(0, "127.0.0.1", function () {
   fs.renameSync(temp, readyPath);
   process.stdout.write("stub-service listening on 127.0.0.1:" + port + "\n");
 });
+
+// Match the real test helper's owner lease. Product processes never run this
+// fixture, and a fixture started without IPC keeps its ordinary lifetime.
+if (typeof process.send === "function") {
+  process.once("disconnect", function () {
+    server.close(function () {
+      process.exit(0);
+    });
+    if (typeof server.closeAllConnections === "function") server.closeAllConnections();
+  });
+}
