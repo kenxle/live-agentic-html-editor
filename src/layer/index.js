@@ -567,11 +567,15 @@
       done.refresh();
     });
 
-    comments.onChange(function (item, event) {
+    comments.onChange(function (item, event, createdOnElement) {
       // "removed" carries an id and nothing else, and "closed" is not a change
       // to the record: the state it would post was already posted by the
       // keystroke or by ready.
       if (event === "removed" || event === "closed") return;
+      // Creation is a binding: hand replay the node the item was made on, so
+      // the still-bound rule covers element picks the text matcher can never
+      // re-find (comments loads before replay, so the bridge is here).
+      if (createdOnElement) ns.replay.bindElement(item[ns.record.FIELD.ID], createdOnElement);
       rail.upsertCard(item);
       sync.recordItem(item, event === "ready" ? { immediate: "ready" } : undefined);
     });

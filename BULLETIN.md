@@ -15,6 +15,12 @@ tool is broken.**
 
 ## Board
 
+- [ ] LAHE-rail-remembers-collapsed @anyone -- (Ken, 2026-08-18) the rail
+  overlays the text he is reading, so he collapses it; every reload (incl.
+  the new auto-reload, which makes this constant) pops it OPEN again and he
+  closes it over and over. Persist the open/collapsed state per review in
+  browser storage and restore it on load; the count pill already carries the
+  numbers while collapsed.
 - [ ] LAHE-push-and-pr @anyone -- push `fix/review-session-flaws` and open the
   PR. Blocked only on Ken's word. The branch is twice code-reviewed, gate
   green (471 unit / 204 browser at last full run), and hand-verified in a

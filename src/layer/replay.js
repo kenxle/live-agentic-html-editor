@@ -1439,6 +1439,14 @@
     SETTLE_MS: SETTLE_MS,
     noteSettling: noteSettling,
     isSettling: isSettling,
+    // The creation-time seed for the still-bound rule: an item made ON an
+    // element starts bound to it, so a matcher that can never re-find it (an
+    // element pick with no unique text) does not get to call it lost while it
+    // sits connected in the document. Boot calls this from comments' change
+    // events; see the createdOn note in comments.js.
+    bindElement: function (id, element) {
+      if (id && element && element.nodeType === 1) lastElement[id] = element;
+    },
     schedule: schedule,
     runPass: runPass,
     compare: compare,

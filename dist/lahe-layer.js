@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+c09deb62d34a
+ * version 0.0.0+0c25a99a27a4
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+c09deb62d34a";
+  g.LAHE.version = "0.0.0+0c25a99a27a4";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -14232,8 +14232,18 @@
       };
     }
 
+    // The node each item was CREATED on, while this session holds it. Emitted
+    // as the listener's third argument so boot can hand it to replay as the
+    // item's first binding: an element-picked comment (a chart, an image) has
+    // no unique text for the anchor to re-find, and without this seed the
+    // settle recheck marked it lost while it sat on screen (AC1's Copy/Export
+    // divergence, 2026-08-18). comments loads BEFORE replay in the manifest,
+    // so the bridge lives in index.js rather than here.
+    var createdOn = Object.create(null);
+
     function emit(item, event) {
-      for (var i = 0; i < listenersState.length; i += 1) listenersState[i](item, event || "changed");
+      var el = createdOn[item && item[record.FIELD.ID]] || null;
+      for (var i = 0; i < listenersState.length; i += 1) listenersState[i](item, event || "changed", el);
     }
 
     // The one write path. Synchronous to storage before anything else happens.
@@ -14319,6 +14329,14 @@
         region: src.region || record.emptyRegion(),
         context: context
       });
+
+      if (src.element && src.element.nodeType === 1) {
+        createdOn[item[record.FIELD.ID]] = src.element;
+      } else if (src.range) {
+        var creationNode = src.range.commonAncestorContainer;
+        if (creationNode && creationNode.nodeType !== 1) creationNode = creationNode.parentElement;
+        if (creationNode) createdOn[item[record.FIELD.ID]] = creationNode;
+      }
 
       // A draft exists the moment the box does. An empty box the reviewer
       // abandons is a draft they can come back to, which costs nothing; a box
@@ -18629,6 +18647,14 @@
     SETTLE_MS: SETTLE_MS,
     noteSettling: noteSettling,
     isSettling: isSettling,
+    // The creation-time seed for the still-bound rule: an item made ON an
+    // element starts bound to it, so a matcher that can never re-find it (an
+    // element pick with no unique text) does not get to call it lost while it
+    // sits connected in the document. Boot calls this from comments' change
+    // events; see the createdOn note in comments.js.
+    bindElement: function (id, element) {
+      if (id && element && element.nodeType === 1) lastElement[id] = element;
+    },
     schedule: schedule,
     runPass: runPass,
     compare: compare,
@@ -19100,7 +19126,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+c09deb62d34a";
+  var VERSION = "0.0.0+0c25a99a27a4";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -19593,11 +19619,15 @@
       done.refresh();
     });
 
-    comments.onChange(function (item, event) {
+    comments.onChange(function (item, event, createdOnElement) {
       // "removed" carries an id and nothing else, and "closed" is not a change
       // to the record: the state it would post was already posted by the
       // keystroke or by ready.
       if (event === "removed" || event === "closed") return;
+      // Creation is a binding: hand replay the node the item was made on, so
+      // the still-bound rule covers element picks the text matcher can never
+      // re-find (comments loads before replay, so the bridge is here).
+      if (createdOnElement) ns.replay.bindElement(item[ns.record.FIELD.ID], createdOnElement);
       rail.upsertCard(item);
       sync.recordItem(item, event === "ready" ? { immediate: "ready" } : undefined);
     });
