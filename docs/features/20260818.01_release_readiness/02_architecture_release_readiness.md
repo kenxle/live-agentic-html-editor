@@ -82,12 +82,14 @@ IPC channel to the process that started them and exit when that owner
 disappears, including interrupted test runs. This prevents old worktrees and
 aborted browser suites from leaving polling processes adopted by PID 1.
 
-Agent monitoring remains a non-blocking, session-scoped status command on a
-moderate timer. The documented loop must use `--seen-file` directly, launch no
-parser pipeline, print nothing when there is no new work, and end with its agent
-session. A hidden review page may reduce nonessential reply/mtime polling while
-retaining its low-frequency ownership heartbeat; a visible page keeps the
-interactive cadence.
+Agent monitoring remains a session-scoped status command on a 20-to-30-second
+cadence. The agent client's native background monitor is preferred so its
+primary chat remains available; an interruptible foreground loop is the
+fallback when no background facility exists. Both forms use `--seen-file`
+directly, launch no parser pipeline, print nothing when there is no new work,
+and end with the agent session. A hidden review page may reduce nonessential
+reply/mtime polling while retaining its low-frequency ownership heartbeat; a
+visible page keeps the interactive cadence.
 
 ### Rejected alternatives
 

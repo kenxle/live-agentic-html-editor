@@ -278,15 +278,17 @@ once, and after that a plain sentence works:
 | `lahe session reopen <id>` | Reopen the workstream and restart its helper and static servers |
 | `lahe serve [--port N]` | Run the helper by hand (`add` starts it for you, so this is rarely needed) |
 
-`lahe status --session <id> --json --seen-file <path> --quiet` is a one-shot
-keep-up check. Run it when work begins or resumes and after a completed batch.
-It prints nothing while idle, and any item line when it does print is new work
-owned by that agent session. The seen key includes the session, review, item,
-and revision. Do not monitor globally, wrap status in a parser pipeline, or put
-it in `while true`, `watch`, a sleep loop, a background daemon, or a host-level
-timer, scheduled task, or recurring task. An idle agent must return control to
-chat and must not emit repeated “standing by” messages. There is no blocking
-watch command.
+`lahe status --session <id> --json --seen-file <path> --quiet` is the monitor's
+one-shot check. Run it every 20 to 30 seconds using the agent client's native
+background monitor or scheduled-task facility whenever one is available. The
+primary chat must remain usable, and an idle check must emit no “standing by”
+message. Claude should use its background Task/Timer facility. Antigravity
+should use `/schedule` or an Agent Manager Scheduled Task separate from the
+active conversation. If the client has no background facility, it may run an
+interruptible foreground loop; the user must be told that they can interrupt it
+to regain the chat. Do not monitor globally or wrap status in a parser pipeline.
+The seen key includes the session, review, item, and revision. Stop or delete
+the monitor when the agent session closes.
 
 **If the page is build output**, an agent should rebuild before it reports an
 item handled: `handled` is supposed to mean your page shows the change. It does

@@ -317,34 +317,46 @@ link or an origin this review does not know about, and `lahe add <page> --origin
 <their origin>` is the fix. Items still in `draft` are counted separately and are
 not yours: the reviewer is still writing them.
 
-### Keep up without occupying the chat
+### Keep up with a session-scoped monitor
 
 ```sh
 lahe status --session <session-id> --json --seen-file ~/.lahe-seen-<session-id> --quiet
 ```
 
-That is the whole monitor, and every invocation is one-shot. Run it when you
-begin or resume work and after each batch you handle. It emits nothing when
-idle; when it prints, any item line is new work from this session. No cursor, no
-parser, and no dedupe of your own. It covers reviews added later to this session
-and never another agent's reviews. It acknowledges nothing: only a reply line
-marks an item handled.
+That command is one check; the monitor runs it every 20 to 30 seconds. Prefer
+the agent client's native background monitor or scheduled-task facility so the
+primary chat remains available. In Claude, use its background Task/Timer
+facility. In Antigravity, use `/schedule` or an Agent Manager Scheduled Task and
+keep it separate from the active conversation. Other clients should use their
+native background facility when available. A background monitor must emit no
+chat message when the command prints nothing. When it prints an item line,
+deliver that line to the agent as new work.
 
-**Never wait for comments in a shell loop.** Do not wrap the command in `while
-true`, `watch`, repeated `sleep`, a background daemon, a host timer, a scheduled
-or recurring task, or a long-running tool call. Those patterns can make an agent
-unavailable in chat, flood the thread with idle messages, and leave orphaned
-pollers burning battery after its session ends. Never announce repeated
-“standing by” updates. If a one-shot check prints nothing, return control to the
-user. Check again at the next natural work boundary or when the user asks you to
-continue.
+If the client has no background-monitor facility, use an interruptible
+foreground loop:
+
+```sh
+while lahe status --session <session-id> --json --seen-file ~/.lahe-seen-<session-id> --quiet; do sleep 20; done
+```
+
+Tell the human before starting that the loop owns the chat while it waits and
+that they can interrupt it when they want to speak directly. Do not build a
+parser or custom dedupe around the command. Never announce repeated “standing
+by” updates.
+
+The session scope covers reviews added later to this session and never another
+agent's reviews. The seen file supplies the cursor and dedupe. The monitor
+acknowledges nothing: only a reply line marks an item handled. Stop or delete
+the monitor when you run `lahe session close <id>`. The foreground form exits
+when status reports that the session has closed.
 
 Restarting the agent, or the machine, changes nothing: the seen file is the
 state, so nothing is re-shown and nothing is skipped.
 
 Older historical plans may mention `lahe wait`. It was retired and removed
-because it blocked agents in the foreground and watched only one review behind
-a cursor. It is not a command to run; use only the status loop above.
+because it watched only one review behind a cursor and did not use the durable
+seen ledger. It is not a command to run; use only the session-scoped status
+monitor above.
 
 ### More than one document
 

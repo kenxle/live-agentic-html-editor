@@ -17,7 +17,7 @@ var USAGE = [
   "",
   "Starts a new agent session for a new target, or infers the existing target's session.",
   "Markdown is rendered with a neutral reading style and local Mermaid diagrams.",
-  "Use the printed session id for later documents and one-shot status checks.",
+  "Use the printed session id for later documents and the status monitor.",
   "--new-session deliberately starts a separate session and review."
 ].join("\n");
 
@@ -159,9 +159,9 @@ async function run(argv) {
       );
     }
     process.stdout.write(
-      (staticServer ? "" : "\n") + "  check     lahe status --session " + sessionId +
+      (staticServer ? "" : "\n") + "  monitor   lahe status --session " + sessionId +
         " --json --seen-file <path> --quiet\n" +
-        "            run once when beginning/resuming work; do not schedule or loop it\n" +
+        "            run every 20-30s in a background monitor; foreground loop only as fallback\n" +
         "  close     lahe session close " + sessionId + "\n"
     );
   }
