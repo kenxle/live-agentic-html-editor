@@ -11,8 +11,9 @@
 // page has a port baked into its script tag and no way to learn a new one.
 //
 // EVERY REQUEST GOES THROUGH auth.check. There is one call site below and no
-// branch around it. The only route that asks for no credential is health, and
-// that exemption is protocol.js's (AUTH.NONE), not this file's.
+// branch around it. Two routes ask for no credential, health and library.get
+// (the built library, which is public code with no review data in it), and both
+// exemptions are protocol.js's (AUTH.NONE), not this file's.
 //
 // ORDER OF WORK IN A REQUEST:
 //
@@ -32,8 +33,11 @@
 
 var http = require("node:http");
 var crypto = require("node:crypto");
+var fs = require("node:fs");
+var path = require("node:path");
 
 var protocol = require("../shared/protocol.js");
+var manifest = require("../shared/manifest.js");
 var stateDirModule = require("./state_dir.js");
 var logModule = require("./log.js");
 var reviewsModule = require("./reviews.js");
@@ -48,6 +52,30 @@ var VERSION = "0.0.0";
 // (protocol.FLUSH.KEEPALIVE_MAX_BYTES); a megabyte is generous for a re-post
 // backlog and still bounded.
 var MAX_BODY_BYTES = 1024 * 1024;
+
+// The built library, which the helper serves at GET /lahe-layer.js so the
+// script line on a page can be one absolute URL rather than a relative path
+// that 404s the moment the page is served from another folder.
+var BUNDLE_PATH = path.join(__dirname, "..", "..", manifest.BUNDLE_OUTPUT);
+
+/**
+ * Read the built library once, at serve start.
+ *
+ * FAIL LOUD: a helper with no library to serve would hand every page a 404 that
+ * looks like a broken page rather than a missing build, so it refuses to start
+ * and says which command builds it.
+ */
+function loadLibrary() {
+  var source;
+  try {
+    source = fs.readFileSync(BUNDLE_PATH, "utf8");
+  } catch (err) {
+    throw new Error(
+      "the built library is missing (" + BUNDLE_PATH + "). Build it once with `npm run build:layer`, then serve again."
+    );
+  }
+  return { path: BUNDLE_PATH, source: source, bytes: Buffer.byteLength(source, "utf8") };
+}
 
 function readBody(req, limit) {
   return new Promise(function (resolve, reject) {
@@ -122,6 +150,7 @@ async function serve(options) {
     log: log,
     reviews: reviews,
     projection: projection,
+    library: loadLibrary(),
     version: VERSION,
     startedAt: startedAt
   };
@@ -156,6 +185,22 @@ async function serve(options) {
     }
     res.writeHead(status, headers);
     res.end(body === null || body === undefined ? "" : JSON.stringify(body));
+  }
+
+  // A handler that answers with bytes rather than JSON (the library route).
+  // Separate from respond() so the JSON content type stays the one thing every
+  // other route can count on. Any origin may load it: it is a script tag on a
+  // page, it carries no review data, and a browser loading a <script> does not
+  // send an Origin header at all.
+  function respondRaw(res, status, raw, requestId) {
+    var headers = {
+      "Content-Type": raw.contentType,
+      "Cache-Control": "no-store",
+      "Access-Control-Allow-Origin": "*"
+    };
+    if (requestId) headers[protocol.HEADER.REQUEST_ID] = requestId;
+    res.writeHead(status, headers);
+    res.end(raw.text);
   }
 
   /** Every origin any review has registered, for the preflight answer. */
@@ -255,6 +300,12 @@ async function serve(options) {
       return;
     }
 
+    // The page checked in. Any authenticated route from the LIBRARY counts (a
+    // read, an event post, a reply poll), which is what lets `lahe status` tell
+    // an agent truthfully whether the reviewer's page is connected. A CLI
+    // request never counts; see reviews.touch.
+    if (checked.review) reviews.touch(checked.review, req.headers[protocol.HEADER.CLIENT]);
+
     var query = {};
     url.searchParams.forEach(function (value, key) {
       query[key] = value;
@@ -278,6 +329,11 @@ async function serve(options) {
       var status = err.code === "NOT_IMPLEMENTED" ? 501 : 500;
       log.helperLog("route " + route.name + " failed: " + err.message + " [request " + requestId + "]");
       respond(res, status, protocol.errorBody("PROTO_BAD_REQUEST", err.message, requestId, null), checked.origin, requestId);
+      return;
+    }
+
+    if (outcome && outcome.raw) {
+      respondRaw(res, outcome.status || 200, outcome.raw, requestId);
       return;
     }
 

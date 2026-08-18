@@ -6,8 +6,8 @@
 // script line, and registers the page's origin, so the allowlist is built by the
 // same deliberate act that adds the library and the reviewer does nothing extra.
 //
-//   lahe add <file-or-directory> [--new] [--origin <origin>] [--source <path>]
-//            [--port <n>] [--state-dir <path>]
+//   lahe add <file-or-directory> [--new] [--review <id>] [--origin <origin>]
+//            [--source <path>] [--port <n>] [--state-dir <path>]
 //
 // FOUR THINGS HAPPEN, IN THIS ORDER, AND THE ORDER MATTERS.
 //
@@ -16,26 +16,43 @@
 //     is a dev server, and the line is PRINTED for a human to paste into a
 //     layout behind a development-only guard. `add` never edits application
 //     code: a token committed inside a layout is worse than a paste.
-//  2. The review is settled. A static file that already carries a script line
-//     for a review the helper still knows REUSES that review; nothing is minted
-//     and the token on the page keeps working. `--new` mints a second review and
-//     replaces the line.
-//  3. The helper is made to know about it. `serve` is idempotent, so `add`
-//     starts one when none is answering, which is what makes the install one
-//     command (AC6). A helper that IS answering and was started before this
-//     review existed learns about it FROM DISK: there is no create-review route
-//     (on purpose), so `add` writes the review and then asks the helper for it,
-//     and the helper looks on disk once for a review it does not hold. No
-//     restart, because a restart bounces a helper that may be holding somebody
-//     else's live review. If that ask does not come back, the restart is the
-//     fallback, and the reason is printed: the log is append-only, tokens
-//     persist across restarts, and the library re-posts anything unacknowledged.
+//  2. The review is settled, from three things in this order: `--review <id>`
+//     names one outright, the script line already in the page names one, and
+//     failing both, THE RECORDED TARGET PATH matches one. That third rule is
+//     what keeps a rebuilt page (which loses its script line, and with it the
+//     only copy of its identity) on the review it has always had. `--new`
+//     overrides all three and mints a fresh review.
+//  3. The helper is made to know about it, AND NOTHING EVER RESTARTS IT WHILE
+//     IT IS UP. A restart drops every blocked `lahe wait` long-poll, which is
+//     an agent losing the review it was watching. So:
+//       - no helper answering: `add` writes to disk itself and starts one.
+//         `serve` is idempotent, which is what makes the install one command.
+//       - a helper is up and does NOT hold this review: `add` writes the review
+//         to disk (nothing else is touching that events.jsonl) and asks the
+//         helper for it; the helper looks on disk once for a review it does not
+//         hold. There is no create-review route, on purpose.
+//       - a helper is up and DOES hold this review: `add` writes nothing. It
+//         hands the helper what it needs written (more origins, the recorded
+//         paths, the source hint) over the `review.write` route and the helper,
+//         the single writer of that log, applies it. This is the design
+//         constraint stated as code: writes to a held review serialize through
+//         the helper rather than racing its file handles.
+//     A restart is the fallback of last resort, when a running helper will not
+//     take either path, and the reason is printed. Nothing is lost by it: the
+//     log is append-only, tokens persist, and the library re-posts anything
+//     unacknowledged; a blocked `wait` reconnects on its own grace window.
 //  4. Only then is the script line written, so a page loaded the instant after
 //     `add` prints has a helper that will accept it.
 //
-// THE SCRIPT LINE POINTS AT THE BUILT LIBRARY, NEVER AT THE HELPER (D1). If the
-// helper served the library, "the library works alone" would be false the first
-// time the helper was down.
+// THE SCRIPT LINE POINTS AT THE HELPER'S OWN URL, which SUPERSEDES D1's "the
+// library works alone". D1 wanted the src to be a file on disk so a page still
+// loaded the library with no helper running. In practice the relative path (or
+// the copy into an assets directory) 404s the moment the page is served out of
+// a folder the built file is not in, and the reviewer sees a page that silently
+// does nothing. A review with no helper cannot record anything anyway, so what
+// D1 was protecting was never usable. One absolute URL resolves from any folder,
+// any origin and any depth, and the helper serves those bytes unauthenticated
+// (they are public code, no review data, no token).
 //
 // Node-only.
 
@@ -92,6 +109,8 @@ var USAGE = [
   "                       line is printed for you to paste, inside a development-only guard.",
   "",
   "  --new                mint a second review even though the file already carries one.",
+  "  --review <id>        re-attach this page to a review that already exists, by id. Use it when a",
+  "                       rebuild stripped the script line and the page did not match by path.",
   "  --remove             take the script line back out of the page and change nothing else.",
   "                       The review's history stays where it is; see `Removing it` in the README.",
   "  --origin <origin>    an origin to register for this review. Repeatable. A static file needs",
@@ -110,7 +129,7 @@ var USAGE = [
 
 function parseArgs(argv) {
   var list = argv || [];
-  var options = { target: null, isNew: false, remove: false, origins: [], source: null };
+  var options = { target: null, isNew: false, remove: false, origins: [], source: null, review: null };
   var index = 0;
 
   function takeValue(name, inline) {
@@ -139,6 +158,8 @@ function parseArgs(argv) {
         options.remove = true;
       } else if (name === "--origin") {
         options.origins.push(takeValue("--origin", inline));
+      } else if (name === "--review") {
+        options.review = takeValue("--review", inline);
       } else if (name === "--source") {
         options.source = takeValue("--source", inline);
       } else if (name === "--port") {
@@ -166,6 +187,12 @@ function parseArgs(argv) {
 
   if (options.target === null) {
     return { ok: false, message: "add needs something to add the library to.\n\n" + USAGE };
+  }
+  if (options.review !== null && !protocol.isSafeId(options.review)) {
+    return { ok: false, message: "--review must be a review id: " + String(protocol.SAFE_ID) + "\n\n" + USAGE };
+  }
+  if (options.review !== null && options.isNew) {
+    return { ok: false, message: "--review names a review to re-attach to and --new mints a fresh one; pick one.\n\n" + USAGE };
   }
   return { ok: true, options: options };
 }
@@ -280,6 +307,23 @@ function reviewAlreadyInFile(html) {
 // Where the built library is, from the page's point of view
 // ---------------------------------------------------------------------------
 
+/**
+ * The `src` every script line carries: the helper's own URL.
+ *
+ * One URL for a static file and for a dev server alike, because the failure it
+ * replaces was the same in both: a relative path or a copied asset resolves
+ * against wherever the page is being served from, and the first time that is a
+ * different folder the library 404s and the page quietly does nothing. See the
+ * D1 note in this file's header for the tradeoff.
+ */
+function libraryUrl(helperOrigin) {
+  return {
+    src: helperOrigin + protocol.route("library.get").path,
+    note: "The helper serves the library at that URL, so the line works from any folder this page is served out of",
+    copiedTo: null
+  };
+}
+
 function toUrlPath(value) {
   return value.split(path.sep).join("/");
 }
@@ -297,6 +341,12 @@ function assetDirBeside(dir) {
 }
 
 /**
+ * CLEANUP NEEDED: libraryForServer and libraryFor below are no longer called.
+ * They copied the built bundle into a page's assets directory and wrote a
+ * relative src, which is the failure libraryUrl replaces. They are left in
+ * place (not deleted) pending a cleanup pass; nothing in the repo depends on
+ * the copy behavior.
+ *
  * The `src` to print for a dev server, when the target is a project directory.
  *
  * A URL, not a path: the browser resolves it against the server, not against the
@@ -372,6 +422,86 @@ function readReadyFile(dir) {
     return JSON.parse(fs.readFileSync(readyPath, "utf8"));
   } catch (err) {
     return null;
+  }
+}
+
+/** Everything meta.json holds for one review, or null. */
+function readMetaOnDisk(dir, reviewId) {
+  var metaPath;
+  try {
+    metaPath = stateDirModule.metaPath(dir, reviewId);
+  } catch (err) {
+    return null;
+  }
+  if (!fs.existsSync(metaPath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(metaPath, "utf8"));
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
+ * The review this page already belongs to, matched by the path it was added at.
+ *
+ * A REBUILD STRIPS THE SCRIPT LINE, and with it the only copy of the review's
+ * identity, so the next `add` minted a fresh review and one document's history
+ * ended up split across three of them. Every review now records the resolved
+ * absolute target path (and the --source path) in its meta.json, and this looks
+ * through them. Reviews written before that field existed carry neither and
+ * simply never match, which is the intended fallback.
+ *
+ * The newest matching review wins, so a `--new` from last week does not
+ * out-rank the one being worked on today.
+ *
+ * @returns {string|null} the review id
+ */
+function reviewMatchingPath(dir, target) {
+  var root;
+  try {
+    root = stateDirModule.reviewsRoot(dir);
+  } catch (err) {
+    return null;
+  }
+  if (!fs.existsSync(root)) return null;
+  var best = null;
+  fs.readdirSync(root, { withFileTypes: true }).forEach(function (entry) {
+    if (!entry.isDirectory() || !protocol.isSafeId(entry.name)) return;
+    var meta = readMetaOnDisk(dir, entry.name);
+    if (!meta || typeof meta.token !== "string") return;
+    if (meta.target_path !== target && meta.source_path !== target) return;
+    var at = meta.created_at || "";
+    if (!best || at > best.at) best = { id: entry.name, at: at };
+  });
+  return best ? best.id : null;
+}
+
+/**
+ * Hand the running helper the writes for a review IT ALREADY HOLDS.
+ *
+ * This is the whole no-restart-for-a-held-review path. The helper is the single
+ * writer of that review's events.jsonl, so `add` does not touch it: it posts
+ * what needs writing and the helper applies it. Stopping the helper instead
+ * would drop every blocked `lahe wait`, which is an agent losing the review it
+ * was watching mid-session.
+ *
+ * @returns {Promise<boolean>} true when the helper applied the writes
+ */
+async function helperAppliedWrites(host, port, review, origins, writes) {
+  var target = "http://" + host + ":" + port + protocol.route("review.write").path;
+  var headers = {};
+  headers[protocol.HEADER.CLIENT] = protocol.CLIENT_CLI;
+  headers[protocol.HEADER.TOKEN] = review.token;
+  headers[protocol.HEADER.CONTENT_TYPE] = protocol.JSON_CONTENT_TYPE;
+  // A command-line process has no origin of its own, so it presents one this
+  // review has registered, exactly as `wait` and the read below do.
+  if (origins.length > 0) headers[protocol.HEADER.ORIGIN] = origins[0];
+  var body = Object.assign({ review: review.id }, writes);
+  try {
+    var res = await fetch(target, { method: "POST", headers: headers, body: JSON.stringify(body) });
+    return res.status === 200;
+  } catch (err) {
+    return false;
   }
 }
 
@@ -700,20 +830,46 @@ async function run(argv) {
   }
 
   // --- which review ----------------------------------------------------------
+  //
+  // Three ways to land on an existing review, in order: named with --review,
+  // carried in the page's own script line, or matched by the target path this
+  // review was added at. --new skips all three.
   var page = kind === "static" ? fs.readFileSync(target, "utf8") : null;
   var carried = page === null ? null : reviewAlreadyInFile(page);
   var reuseId = null;
-  if (carried && !options.isNew) {
-    // "A live review" means one the helper still has on disk. A script line
+  var reuseWhy = null;
+
+  function liveOnDisk(reviewId) {
+    // "A live review" means one whose state is still on disk. A script line
     // pointing at a review whose state is gone is a dead line, and reusing its
     // id would hand the page a token nothing will accept.
-    var metaPath = null;
-    try {
-      metaPath = stateDirModule.metaPath(dir, carried);
-    } catch (err) {
-      metaPath = null;
+    return !!readMetaOnDisk(dir, reviewId);
+  }
+
+  if (options.review) {
+    if (!liveOnDisk(options.review)) {
+      process.stderr.write(
+        "lahe add: there is no review " +
+          options.review +
+          " in " +
+          reviewsRootOrPhrase(options.stateDir) +
+          ".\nRun `lahe status` to see which reviews exist, or drop --review to start one.\n"
+      );
+      return EXIT.FAILED;
     }
-    if (metaPath && fs.existsSync(metaPath)) reuseId = carried;
+    reuseId = options.review;
+    reuseWhy = "reused, named with --review";
+  } else if (carried && !options.isNew && liveOnDisk(carried)) {
+    reuseId = carried;
+    reuseWhy = "reused, already on this page";
+  } else if (!carried && !options.isNew) {
+    // The rebuild case: this page carries no line, because the build wrote it
+    // out fresh. The recorded target path is the identity that survived.
+    var matched = reviewMatchingPath(dir, target);
+    if (matched) {
+      reuseId = matched;
+      reuseWhy = "reused, matched by path";
+    }
   }
 
   var ready = readReadyFile(dir);
@@ -721,68 +877,41 @@ async function run(argv) {
 
   // --- make the helper hold this review --------------------------------------
   //
-  // Everything that writes to the state directory happens with NO helper
-  // running, so two processes never append to one events.jsonl and hand out the
-  // same seq.
+  // `add` only ever writes to the state directory with NO helper running, so two
+  // processes never append to one events.jsonl and hand out the same seq. When a
+  // helper is up and holds the review, the writes go THROUGH it instead.
 
   var review = null;
   var restarted = false;
   var started = false;
   var learned = false;
+  var handedToHelper = false;
   var restartReason = null;
 
-  // The one case where nothing has to be written and nothing has to be
-  // restarted: the page already carries a live review, the helper is up, and it
-  // already holds that review with every origin this run needs. A source hint is
-  // a write, so it takes the long path with everything else.
-  var nothingToWrite =
-    reuseId &&
-    alive &&
-    !options.source &&
-    helperHolds(ready, reuseId, readTokenOnDisk(dir, reuseId), origins);
+  // The paths that make this review findable again after a rebuild strips the
+  // script line out of the page.
+  var pathWrites = {
+    target_path: target,
+    source_path: options.source ? path.resolve(options.source) : null
+  };
 
-  if (nothingToWrite) {
-    review = { id: reuseId, token: ready.reviews[reuseId].token };
-  } else {
-    if (alive && !ready) {
-      process.stderr.write(
-        "lahe add: something is answering on " +
-          helperOrigin +
-          " but " +
-          stateDirModule.readyPath(dir) +
-          " is not there, so it is not this state directory's helper.\n" +
-          "Free the port, or run add with --port <n> and put that port on the script tag.\n"
-      );
-      return EXIT.FAILED;
-    }
-
-    // CAN THE RUNNING HELPER JUST LEARN THIS REVIEW? It can, when the review
-    // this run writes is one it does not already hold: nothing else is touching
-    // that review's events.jsonl, so writing it beside a running helper cannot
-    // collide on a seq, and the helper finds it on disk the first time it is
-    // asked about it. That is the ordinary case (a second page, or `--new`), and
-    // it is exactly the case that used to bounce a helper which may have been
-    // holding somebody else's live review.
-    //
-    // A review the helper DOES hold is the other case: it is appending to that
-    // review, so the write goes through the old path, with the helper stopped.
-    var helperHoldsTarget = !!(alive && reuseId && ready.reviews && ready.reviews[reuseId]);
-    var tryWithoutRestart = alive && !helperHoldsTarget;
-
-    if (alive && !tryWithoutRestart) {
-      try {
-        await stopHelper(Object.assign({ dir: dir }, ready), host, port, alive);
-      } catch (err) {
-        process.stderr.write("lahe add: " + err.message + "\n");
-        return EXIT.FAILED;
-      }
-      restarted = true;
-    }
-
+  /**
+   * `add` writing the review itself, which it does ONLY when no helper is
+   * appending to that review: either none is running, or the one that is does
+   * not hold this review. Two writers on one events.jsonl is the thing the
+   * helper-side route exists to avoid.
+   */
+  function writeToDisk() {
     var log = logModule.createEventLog({ dir: dir });
     var reviews = reviewsModule.createReviews({ dir: dir, log: log });
     reviews.loadFromDisk();
-    review = reviews.create(reuseId ? { id: reuseId, origins: origins } : { origins: origins });
+    var spec = {
+      origins: origins,
+      target_path: pathWrites.target_path,
+      source_path: pathWrites.source_path
+    };
+    if (reuseId) spec.id = reuseId;
+    review = reviews.create(spec);
 
     // The source hint, recorded rather than only printed. It rides a
     // page.visited event, which is the one event in the closed vocabulary that
@@ -801,6 +930,83 @@ async function run(argv) {
         })
       ]);
     }
+    return review;
+  }
+
+  var heldByHelper = !!(alive && reuseId && ready && ready.reviews && ready.reviews[reuseId]);
+  var heldToken = heldByHelper ? ready.reviews[reuseId].token : null;
+
+  // Nothing to write at all: the helper holds the review with every origin this
+  // run needs, the paths are already recorded, and there is no source hint.
+  var heldMeta = heldByHelper ? readMetaOnDisk(dir, reuseId) : null;
+  var pathsAlreadyRecorded =
+    !!heldMeta &&
+    heldMeta.target_path === pathWrites.target_path &&
+    (!pathWrites.source_path || heldMeta.source_path === pathWrites.source_path);
+  var nothingToWrite =
+    heldByHelper && !options.source && pathsAlreadyRecorded && helperHolds(ready, reuseId, heldToken, origins);
+
+  if (nothingToWrite) {
+    review = { id: reuseId, token: heldToken };
+  } else if (heldByHelper) {
+    // THE HELD-REVIEW WRITE. The helper is the single writer of this review's
+    // log, so it applies the writes and `add` never stops it. Stopping it here
+    // is what used to kill an agent's open `lahe wait`.
+    review = { id: reuseId, token: heldToken };
+    handedToHelper = await helperAppliedWrites(host, port, review, origins, {
+      origins: origins,
+      target_path: pathWrites.target_path,
+      source_path: pathWrites.source_path,
+      source_hint: options.source || null,
+      page_path: kind === "static" ? path.basename(target) : String(options.target)
+    });
+    if (!handedToHelper) {
+      // The helper is up and would not take the writes. Only now is a restart
+      // on the table, and the reason travels to the output rather than a helper
+      // bouncing for no stated cause.
+      restartReason = "the running helper did not accept the writes for this review over " + protocol.route("review.write").path;
+      try {
+        await stopHelper(Object.assign({ dir: dir }, ready), host, port, alive);
+      } catch (err) {
+        process.stderr.write("lahe add: " + err.message + "\n");
+        return EXIT.FAILED;
+      }
+      restarted = true;
+      writeToDisk();
+      try {
+        await startHelper(host, port, dir);
+        await confirmOurHelper(
+          host,
+          port,
+          dir,
+          "the server on " + host + ":" + port + " to identify itself as the helper this run started"
+        );
+      } catch (err) {
+        process.stderr.write("lahe add: " + err.message + "\n");
+        return EXIT.FAILED;
+      }
+    }
+  } else {
+    if (alive && !ready) {
+      process.stderr.write(
+        "lahe add: something is answering on " +
+          helperOrigin +
+          " but " +
+          stateDirModule.readyPath(dir) +
+          " is not there, so it is not this state directory's helper.\n" +
+          "Free the port, or run add with --port <n> and put that port on the script tag.\n"
+      );
+      return EXIT.FAILED;
+    }
+
+    // THE RUNNING HELPER LEARNS THIS REVIEW FROM DISK. Nothing else is touching
+    // this review's events.jsonl (the helper does not hold it), so writing it
+    // beside a running helper cannot collide on a seq, and the helper finds it
+    // on disk the first time it is asked about it. A review the helper DOES hold
+    // never reaches this branch: it went through review.write above.
+    var tryWithoutRestart = !!alive;
+
+    writeToDisk();
 
     if (tryWithoutRestart) {
       learned = await helperLearnedReview(host, port, review, origins);
@@ -845,12 +1051,7 @@ async function run(argv) {
   }
 
   // --- the line --------------------------------------------------------------
-  var library =
-    kind === "static"
-      ? libraryFor(path.dirname(target))
-      : fs.statSync(target).isDirectory()
-        ? libraryForServer(target)
-        : { src: toUrlPath(BUNDLE), copiedTo: null, note: null };
+  var library = libraryUrl(helperOrigin);
   var tag = protocol.scriptTag({
     src: library.src,
     review: review.id,
@@ -860,7 +1061,7 @@ async function run(argv) {
 
   say("lahe add: " + target);
   say();
-  say("  review    " + review.id + (reuseId ? "  (reused, already on this page)" : "  (minted just now)"));
+  say("  review    " + review.id + (reuseId ? "  (" + reuseWhy + ")" : "  (minted just now)"));
   // The review folder, printed rather than described. Both docs promise `add`
   // names it, and an agent that only has this output has no other way to find
   // review.json: the state directory is derived from environment this command
@@ -876,7 +1077,9 @@ async function run(argv) {
           ? "  (restarted, so it knows this review)"
           : learned
             ? "  (already running, and it picked this review up without a restart)"
-            : "  (already running)")
+            : handedToHelper
+              ? "  (already running and holding this review, so it did the writing itself: nothing was restarted)"
+              : "  (already running)")
   );
   say("  origin    " + originNote);
   if (options.source) say("  source    " + options.source);
@@ -892,7 +1095,30 @@ async function run(argv) {
     say();
     say(tokenWarning(path.basename(target)));
     say();
-    say("  Open it:  file://" + target);
+    // HOW TO OPEN IT. Serving the page over a local http server is the ordinary
+    // way to review a static file, so a registered http origin is what gets
+    // printed. The URL is stated as LIKELY on purpose: this command registered
+    // the origin, but whoever started the server chose its root, so `add` cannot
+    // know the path under it.
+    var servedOrigins = origins.filter(function (origin) {
+      return origin !== FILE_ORIGIN;
+    });
+    if (servedOrigins.length > 0) {
+      say("  Open it:  likely " + servedOrigins[0] + "/" + path.basename(target));
+      say("            (whatever your local server publishes this file at)");
+      say("  Fallback: file://" + target + ", which works because " + FILE_ORIGIN + " is registered too.");
+    } else {
+      // THE ORIGIN TRAP, said before it happens. A static file registers "null",
+      // which is what a page opened from disk sends. Open the same page through
+      // a local server and the browser sends that server's origin instead, the
+      // helper refuses every request from it, and the page used to say the
+      // helper was unreachable, which blames the wrong thing entirely.
+      say("  Open it:  file://" + target);
+      say();
+      say("  This review is registered for " + FILE_ORIGIN + " only, which is what a page opened from disk sends.");
+      say("  Reviewing over a local server is the ordinary way, and it needs that server's origin:");
+      say("    lahe add " + options.target + " --origin <origin>   (for example http://127.0.0.1:8000)");
+    }
   } else {
     say("  Nothing was edited. Paste this into your layout, inside a development-only guard:");
     say();
@@ -905,14 +1131,9 @@ async function run(argv) {
         .join("\n")
     );
     say();
-    if (library.copiedTo) {
-      say("  " + library.note + ".");
-    } else {
-      say("  Your app has to serve the built library. It is at:");
-      say("    " + BUNDLE);
-      say("  Copy it into whatever directory your app serves static files from, and change src to");
-      say("  the URL it is served at.");
-    }
+    say("  " + library.note + ".");
+    say("  Your app serves nothing extra: the src is the helper's own URL, so there is no file to copy");
+    say("  and no static path to get right.");
     say();
     say(tokenWarning("the line above, and it goes into a file in your repository"));
     say();

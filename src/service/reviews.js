@@ -179,6 +179,10 @@ function createReviews(options) {
           id: entry.name,
           token: parsed.token,
           origins: Array.isArray(parsed.origins) ? parsed.origins.slice() : [],
+          // Absent in every meta.json written before path-matching existed, and
+          // null is the right answer there: an old review never matches by path.
+          target_path: typeof parsed.target_path === "string" ? parsed.target_path : null,
+          source_path: typeof parsed.source_path === "string" ? parsed.source_path : null,
           created_at: parsed.created_at || new Date().toISOString()
         };
       } else {
@@ -318,6 +322,8 @@ function createReviews(options) {
       id: reviewId,
       token: parsed.token,
       origins: Array.isArray(parsed.origins) ? parsed.origins.slice() : [],
+      target_path: typeof parsed.target_path === "string" ? parsed.target_path : null,
+      source_path: typeof parsed.source_path === "string" ? parsed.source_path : null,
       created_at: parsed.created_at || new Date().toISOString()
     };
     log.helperLog("review " + reviewId + " learned from disk without a restart");
@@ -376,6 +382,7 @@ function createReviews(options) {
       (spec.origins || []).forEach(function (origin) {
         registerOrigin(id, origin);
       });
+      recordPaths(id, spec);
       return existing;
     }
 
@@ -383,6 +390,10 @@ function createReviews(options) {
       id: id,
       token: mintToken(),
       origins: [],
+      // Where this review's page lives, so a rebuild that strips the script
+      // line does not splinter one document into three reviews. See recordPaths.
+      target_path: typeof spec.target_path === "string" ? spec.target_path : null,
+      source_path: typeof spec.source_path === "string" ? spec.source_path : null,
       created_at: new Date().toISOString()
     };
     reviews[id] = review;
@@ -433,6 +444,65 @@ function createReviews(options) {
     ]);
     log.helperLog("review " + reviewId + " registered origin " + value);
     return review;
+  }
+
+  /**
+   * Remember which page this review is of.
+   *
+   * IDENTITY USED TO LIVE ONLY IN THE SCRIPT LINE INSIDE THE PAGE. Rebuild the
+   * page and the line is gone, so the next `add` minted a new review and the
+   * history of one document ended up split across three of them. The resolved
+   * absolute target path (and the --source path, when one was given) is written
+   * into meta.json here, and `add` looks through it before minting. Old meta
+   * files have neither field and simply never match, which is the intended
+   * fallback rather than a migration.
+   *
+   * @param {string} reviewId
+   * @param {{target_path?: string|null, source_path?: string|null}} paths
+   */
+  function recordPaths(reviewId, paths) {
+    var review = get(reviewId);
+    if (!review) return null;
+    var p = paths || {};
+    var changed = false;
+    if (typeof p.target_path === "string" && p.target_path && review.target_path !== p.target_path) {
+      review.target_path = p.target_path;
+      changed = true;
+    }
+    if (typeof p.source_path === "string" && p.source_path && review.source_path !== p.source_path) {
+      review.source_path = p.source_path;
+      changed = true;
+    }
+    if (changed) persist(review);
+    return review;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Liveness: when did this review's PAGE last say anything?
+  // ---------------------------------------------------------------------------
+  //
+  // The question a reviewer kept asking out loud mid-session was "are you
+  // getting my edits?", and neither side could answer it. This is the helper's
+  // half of the answer: the instant of the last authenticated request from the
+  // LIBRARY (x-lahe-client: layer) for each review. Only the layer counts, so a
+  // CLI command asking about a review cannot make the page look connected.
+  //
+  // In memory only, on purpose. It is a fact about right now, and a number
+  // persisted across a restart would be a stale claim that a page is connected.
+  // `lahe status` reads it through review.read, and says "unknown" rather than
+  // guessing when no helper is up.
+  var lastSeen = Object.create(null);
+
+  function touch(reviewId, client) {
+    if (client !== protocol.CLIENT_LAYER) return null;
+    if (!Object.prototype.hasOwnProperty.call(reviews, reviewId)) return null;
+    lastSeen[reviewId] = new Date().toISOString();
+    return lastSeen[reviewId];
+  }
+
+  /** The last time the page checked in, as an ISO string, or null. */
+  function lastSeenAt(reviewId) {
+    return Object.prototype.hasOwnProperty.call(lastSeen, reviewId) ? lastSeen[reviewId] : null;
   }
 
   /**
@@ -622,6 +692,9 @@ function createReviews(options) {
     ensureKnown: ensureKnown,
     list: list,
     registerOrigin: registerOrigin,
+    recordPaths: recordPaths,
+    touch: touch,
+    lastSeenAt: lastSeenAt,
     config: config,
     writeReadyFile: writeReadyFile,
     claimWindow: claimWindow,

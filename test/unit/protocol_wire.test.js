@@ -268,11 +268,19 @@ test("a file page's null origin passes only when the review registered it", () =
   );
 });
 
-test("health needs no credential and every other route does", () => {
+// The two unauthenticated routes, and why each one is allowed to be: health
+// carries liveness only, and library.get serves the tool's own public code (the
+// same bytes as the file in the repo, no review data, no token). Anything else
+// on the wire must ask for the per-review token.
+const OPEN_ROUTES = ["health", "library.get"];
+
+test("only health and the library route need no credential, and every other route does", () => {
   const h = { host: "127.0.0.1:7817" };
-  assert.equal(protocol.checkRequest({ routeName: "health", headers: h }, null).ok, true);
+  OPEN_ROUTES.forEach((name) => {
+    assert.equal(protocol.checkRequest({ routeName: name, headers: h }, null).ok, true, name + " needs no credential");
+  });
   protocol.ROUTES.forEach((r) => {
-    if (r.name === "health") return;
+    if (OPEN_ROUTES.includes(r.name)) return;
     assert.equal(r.auth, protocol.AUTH.REVIEW_TOKEN, r.name + " must require the per-review token");
     const required = protocol.requiredHeaders(r.name).map((x) => x.header);
     assert.equal(required.includes(protocol.HEADER.CLIENT), true);

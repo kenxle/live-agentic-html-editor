@@ -222,17 +222,19 @@ test("the line add writes is protocol.scriptTag's, byte for byte", async () => {
       "the helper attribute names the helper"
     );
     assert.ok(
-      /src="[^"]*lahe-layer\.js"/.test(html),
-      "and src names the built library, never the helper"
+      html.indexOf('src="http://127.0.0.1:' + work.port + '/lahe-layer.js"') !== -1,
+      "src is the helper's own library URL, so the line works from any folder the page is served out of"
     );
-    assert.ok(html.indexOf('src="http') === -1, "src is not a URL at the helper");
   } finally {
     await work.stop();
   }
 });
 
-test("src is a relative path back to the clone, or a copy in the page's own assets", async () => {
-  // A page sitting next to the clone: a short relative path, and no copy.
+test("src is the helper's URL, wherever the page sits and whatever is beside it", async () => {
+  // The failure this replaces: a relative path (or a copy into an assets
+  // directory) resolves against wherever the page is SERVED from, so the first
+  // time that is another folder the library 404s and the page quietly does
+  // nothing. One absolute URL at the helper resolves from anywhere.
   const near = tempDir();
   const nearPage = path.join(near, "report.html");
   fs.writeFileSync(nearPage, PAGE);
@@ -242,17 +244,24 @@ test("src is a relative path back to the clone, or a copy in the page's own asse
     const run = runAdd([nearPage, "--port", String(nearPort), "--state-dir", nearState]);
     assert.equal(run.code, 0, run.stdout + run.stderr);
     const src = /src="([^"]+)"/.exec(fs.readFileSync(nearPage, "utf8"))[1];
-    assert.ok(
-      fs.existsSync(path.resolve(near, src)),
-      "whatever path add wrote, it resolves to a file that is really there: " + src
+    assert.equal(src, "http://127.0.0.1:" + nearPort + "/lahe-layer.js");
+
+    // And the helper really serves it, unauthenticated.
+    const answer = await fetch(src);
+    assert.equal(answer.status, 200);
+    assert.match(answer.headers.get("content-type") || "", /javascript/);
+    const served = await answer.text();
+    assert.equal(
+      served,
+      fs.readFileSync(path.join(REPO_ROOT, "dist", "lahe-layer.js"), "utf8"),
+      "the bytes served are the built bundle"
     );
-    assert.ok(src.endsWith("/lahe-layer.js"), "and that file is the built bundle");
   } finally {
     await stopHelper(nearState);
   }
 
-  // A page with its own assets directory: a copy goes in it, and the src is the
-  // short relative URL, because a page with assets is a thing that gets moved.
+  // A page with its own assets directory: still the helper's URL, and NOTHING
+  // is copied in beside the page.
   const withAssets = tempDir();
   const assetsPage = path.join(withAssets, "report.html");
   fs.writeFileSync(assetsPage, PAGE);
@@ -263,10 +272,11 @@ test("src is a relative path back to the clone, or a copy in the page's own asse
     const run = runAdd([assetsPage, "--port", String(assetsPort), "--state-dir", assetsState]);
     assert.equal(run.code, 0, run.stdout + run.stderr);
     const src = /src="([^"]+)"/.exec(fs.readFileSync(assetsPage, "utf8"))[1];
-    assert.equal(src, "assets/lahe-layer.js");
-    assert.ok(
+    assert.equal(src, "http://127.0.0.1:" + assetsPort + "/lahe-layer.js");
+    assert.equal(
       fs.existsSync(path.join(withAssets, "assets", "lahe-layer.js")),
-      "the built library was copied in beside the page"
+      false,
+      "nothing is copied into the page's assets any more"
     );
   } finally {
     await stopHelper(assetsState);
@@ -402,9 +412,14 @@ test("a dev server target prints a guarded line and edits nothing", async () => 
     assert.equal(visited.length, 1, "one page.visited event");
     assert.equal(visited[0].source_hint, "app/views/layouts/application.html.erb");
 
-    assert.ok(
+    assert.equal(
       fs.existsSync(path.join(project, "public", "lahe-layer.js")),
-      "the built library was copied where the app can serve it"
+      false,
+      "the app serves nothing extra: the src is the helper's own URL"
+    );
+    assert.ok(
+      run.stdout.indexOf('src="http://127.0.0.1:' + port + '/lahe-layer.js"') !== -1,
+      "and the printed snippet carries that URL"
     );
   } finally {
     await stopHelper(stateDir);

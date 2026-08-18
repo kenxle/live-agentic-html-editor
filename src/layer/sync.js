@@ -23,6 +23,12 @@
 //     one is "start the helper", the other is "this page's policy refuses the
 //     connection". The detection is a real SecurityPolicyViolation event on the
 //     document naming connect-src, not a guess from the error text.
+//  6. TELL AN UNREGISTERED ORIGIN FROM A HELPER THAT IS DOWN, for the same
+//     reason: a refused preflight and a dead helper both surface as a plain
+//     network error, and one of them is fixed by `lahe add --origin`. After a
+//     network-level failure the client asks health (unauthenticated, so no
+//     preflight); if health answers, the helper is up and the origin is the
+//     problem, and the chip says so with this page's origin in it.
 //
 // THE SECOND WINDOW, and the case nothing can cover. Shared storage is refused
 // by store.js's Web Lock, which works with the helper down. Separate storage
@@ -72,6 +78,30 @@
   // page for no gain. The cursor is protocol.REPLY_CURSOR_FIELD, a seq, never a
   // timestamp.
   var POLL_INTERVAL_MS = 1000;
+
+  /**
+   * Which failure a refused or failed request really is.
+   *
+   * Pure, and separate from the client, so the decision can be tested without a
+   * browser: it is the difference between a chip that says "start the helper"
+   * and one that says "register this origin", and getting it wrong sends a
+   * reviewer after the wrong fix for the whole session.
+   *
+   * @param {{cspRefused?: boolean, status?: number, healthAnswered?: boolean}} facts
+   *   `healthAnswered` is the second question the client asks after a
+   *   network-level failure: the helper's health route is unauthenticated and
+   *   unpreflighted, so an origin no review registered can still reach it. True
+   *   means the helper is up and the origin is what is being refused.
+   * @returns {string} a failure code from src/shared/failures.js
+   */
+  function decideFailureCode(facts) {
+    var f = facts || {};
+    if (f.cspRefused) return "CSP_REFUSED";
+    if (f.status === 401) return "SYNC_UNAUTHORIZED";
+    if (f.status === 403) return "SYNC_ORIGIN_NOT_ALLOWED";
+    if (f.healthAnswered === true) return "SYNC_ORIGIN_NOT_ALLOWED";
+    return "HELPER_UNREACHABLE";
+  }
 
   function createSync(options) {
     var opts = options || {};
@@ -410,6 +440,9 @@
         counters.postsFailed += 1;
         state = STATE.RETRYING;
         raise(classify(result.error, { status: result.status, detail: describe(result) }));
+        // A failure with no status at all is a network-level one, which is what
+        // a refused preflight looks like. Ask the second question.
+        if (result.status === undefined) diagnoseUnreachable();
         recomputeStatus();
         if (!fo.unload) scheduleRetry();
         return { sent: 0, remaining: pendingCount(), failed: true };
@@ -484,6 +517,7 @@
             // A poll the navigation cancelled says nothing about the helper.
             if (abortedByTeardown(result)) return { events: [] };
             raise(classify(result.error, { status: result.status, detail: describe(result) }));
+            if (result.status === undefined) diagnoseUnreachable();
             recomputeStatus();
             return { events: [] };
           }
@@ -518,10 +552,71 @@
 
     function classify(error, hints) {
       var h = hints || {};
-      if (cspRefused) return failures.failure("CSP_REFUSED", h.detail || null);
-      if (h.status === 401) return failures.failure("SYNC_UNAUTHORIZED", h.detail || null);
-      if (h.status === 403) return failures.failure("SYNC_ORIGIN_NOT_ALLOWED", h.detail || null);
-      return failures.failure("HELPER_UNREACHABLE", h.detail || (error && error.message) || null);
+      var code = decideFailureCode({ cspRefused: cspRefused, status: h.status, healthAnswered: h.healthAnswered });
+      if (code === "SYNC_ORIGIN_NOT_ALLOWED") return failures.failure(code, originRemedy());
+      return failures.failure(code, h.detail || (error && error.message) || null);
+    }
+
+    // -------------------------------------------------------------------------
+    // Telling an unregistered origin from a helper that is down
+    // -------------------------------------------------------------------------
+    //
+    // THE ORIGIN TRAP. A page added as a static file registers the origin "null"
+    // and nothing else. Serve that same page over http and the browser sends the
+    // server's origin, which no review registered, so the helper refuses every
+    // request. The reviewer's page then said "the local helper is not reachable",
+    // which blames the one thing that is working, and the fix it suggests
+    // (start the helper) does nothing.
+    //
+    // The refusal is invisible to fetch: every route carries the custom header
+    // D11 requires, so the browser preflights, and a refused preflight surfaces
+    // as a plain network error rather than a 403 with a code in it. So the page
+    // ASKS A SECOND QUESTION when a request fails at the network level: health
+    // is unauthenticated, needs no custom header, and therefore no preflight. If
+    // health answers, the helper is up and the origin is the problem.
+    var originDiagnosed = false;
+
+    function pageOrigin() {
+      if (win && win.location && win.location.origin) return String(win.location.origin);
+      if (doc && doc.location && doc.location.origin) return String(doc.location.origin);
+      return "this page's origin";
+    }
+
+    function originRemedy() {
+      return "This page is on " + pageOrigin() + ". Register it: lahe add <page> --origin " + pageOrigin();
+    }
+
+    /**
+     * Is the helper actually up, asked in the one way an unregistered origin can
+     * still ask? Answers null when the question could not be put at all.
+     */
+    function probeHealth() {
+      if (!fetchImpl) return Promise.resolve(null);
+      // No custom headers, deliberately: a simple request is not preflighted, so
+      // it reaches the handler even from an origin no review registered.
+      return fetchImpl(helperOrigin + protocol.route("health").path, { method: "GET" })
+        .then(function (response) {
+          return !!(response && response.ok);
+        })
+        .catch(function () {
+          return false;
+        });
+    }
+
+    /**
+     * After a network-level failure, work out whether this is really the helper
+     * being down or this page's origin being unregistered, and say so once.
+     */
+    function diagnoseUnreachable() {
+      if (originDiagnosed || cspRefused) return Promise.resolve(null);
+      return probeHealth().then(function (healthAnswered) {
+        if (healthAnswered !== true) return null;
+        originDiagnosed = true;
+        // The helper answers, so it is not unreachable. Clear that chip before
+        // raising the real one, or the page wears both and the wrong one first.
+        onRecovered("HELPER_UNREACHABLE");
+        return raise(failures.failure("SYNC_ORIGIN_NOT_ALLOWED", originRemedy()));
+      });
     }
 
     function onPolicyViolation(event) {
@@ -882,6 +977,7 @@
     BACKOFF_MS: BACKOFF_MS,
     REQUEST_TIMEOUT_MS: REQUEST_TIMEOUT_MS,
     POLL_INTERVAL_MS: POLL_INTERVAL_MS,
+    decideFailureCode: decideFailureCode,
     createSync: createSync
   };
 });

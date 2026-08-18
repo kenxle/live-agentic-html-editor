@@ -1,4 +1,4 @@
-// The command dispatcher. Three commands: serve, add, wait.
+// The command dispatcher. Four commands: serve, add, status, wait.
 //
 // Owner: 1A, which wires `serve`. `add` is 3B's and `wait` is 3A's, each wired
 // the same way serve is.
@@ -18,6 +18,7 @@ var USAGE = [
   "",
   "  serve   run the local helper on 127.0.0.1:" + protocol.DEFAULT_PORT + " (configurable with --port)",
   "  add     add the library to a page and mint that review's token",
+  "  status  print what is open right now, and whether the page is still connected",
   "  wait    block until a review has new work, then print it as JSON lines",
   "",
   "Run `lahe <command> --help` for a command's own options."
@@ -39,6 +40,7 @@ async function main(argv) {
 
   if (command === "serve") return require("./commands/serve.js").run(rest);
   if (command === "add") return require("./commands/add.js").run(rest);
+  if (command === "status") return require("./commands/status.js").run(rest);
   if (command === "wait") return require("./commands/wait.js").run(rest);
 
   process.stderr.write("lahe: unknown command " + JSON.stringify(command) + "\n\n" + USAGE + "\n");

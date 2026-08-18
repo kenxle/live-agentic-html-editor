@@ -78,8 +78,8 @@
       SEVERITY.BLOCKING,
       true,
       SURFACE.FAILURES_LIST,
-      "This page's origin is not registered with this review, so the helper refuses its events.",
-      "Run the add step from this page's origin."
+      "This page's origin is not registered for this review, so the helper refuses its requests. The helper itself is fine.",
+      "Register this origin: lahe add <page> --origin <this page's origin>, then reload."
     ),
 
     // --- browser storage and windows ---------------------------------------

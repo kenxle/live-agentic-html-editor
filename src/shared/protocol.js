@@ -135,6 +135,30 @@
       response: "{accepted: [event_id...], seq}"
     },
     {
+      name: "library.get",
+      method: "GET",
+      path: "/lahe-layer.js",
+      auth: AUTH.NONE,
+      mutating: false,
+      why:
+        "the helper serves the built library, so the script line can be an absolute URL that works from any folder. " +
+        "Unauthenticated on purpose: these are the tool's own public bytes, the same file that ships in the repo, " +
+        "with no review data and no token in them. It is exempt the same visible way health is, through AUTH.NONE",
+      response: "the built library, as application/javascript"
+    },
+    {
+      name: "review.write",
+      method: "POST",
+      path: BASE + "/review",
+      auth: AUTH.REVIEW_TOKEN,
+      mutating: true,
+      why:
+        "what `add` calls for a review the helper already holds: the helper applies the writes itself, so `add` " +
+        "never has to stop a helper that is holding somebody's live review (and never drops an open `lahe wait`)",
+      request: "{review, origins: [origin...], target_path?, source_path?, source_hint?, page_path?}",
+      response: "{origins, recorded_source, recorded_paths, seq}"
+    },
+    {
       name: "review.read",
       method: "GET",
       path: BASE + "/review",
@@ -690,6 +714,15 @@
   // ---------------------------------------------------------------------------
   //
   // Public API, because this is the one line a person or an agent types by hand.
+  //
+  // THE src IS THE HELPER'S OWN URL (http://127.0.0.1:<port>/lahe-layer.js).
+  // D1 originally said the line points at a file on disk so "the library works
+  // alone", and that read well until a page was served from a folder the built
+  // file is not in: the src 404s and the review is dead in a way that looks like
+  // a broken page. A review with no helper cannot record anything anyway, so
+  // "works alone" was never a state a reviewer could use. One URL that resolves
+  // from any folder, any origin, and any depth is worth more than a promise the
+  // rest of the tool cannot keep. The tradeoff is written up in add.js's header.
 
   var SCRIPT_ATTR = {
     REVIEW: "data-lahe-review",
