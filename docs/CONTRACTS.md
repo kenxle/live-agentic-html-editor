@@ -237,11 +237,17 @@ it would see without the library (R13, which outranks editing convenience).
 | Cmd-Shift-C | nothing selected | Element-pick mode; click an element, Esc cancels |
 | Cmd-Shift-E | cursor or selection in a block | Edit that block, and nothing else |
 | Cmd-Enter | in a comment box | Mark ready for the agent |
+| Cmd-Enter | a block is in edit state | Commit the edit |
 | Esc | a block is in edit state | Commit the edit |
 | the pointer going down anywhere outside the block, INCLUDING on the rail | a block is in edit state | Commit the edit; the event still passes through |
 | the window losing focus | a block is in edit state | Commit the edit |
 | Esc | picking, or in a comment box | Cancel; the draft is kept |
 | everything else | always | The page's |
+
+`Cmd` means the primary platform modifier; Ctrl is accepted on non-macOS
+systems. The collapsed pill's left number counts every record whose lifecycle
+is not handled, regardless of whether it is organized under Active or Edits.
+Its parenthetical number is the total history on that page.
 
 **Every way of leaving the block commits it**, because an edit left in `draft` passes no watermark and
 reaches no agent, while the page looks finished to the reviewer. Clicking the rail used to be the hole:
@@ -612,6 +618,21 @@ The one read path, and the one keep-up loop. Before it, every agent hand-rolled 
   never receive another top-level agent's work.
 - **Exit codes:** `0` completed (even with zero items), `2` nothing readable, `3` unknown review, `4` bad
   usage. The shared table is `protocol.CLI_EXIT`.
+
+### Agent-session and static-server lifecycle
+
+`lahe review <page.html>` owns the ordinary static path. It creates or infers
+the agent session, starts one event-driven read-only HTTP server for that
+session and page directory, registers the exact origin, and prints the exact
+URL. Re-entry reuses the same live process. Owner-only static-server metadata
+records the root, PID, port, and random start identity; shutdown checks the
+health response against all of them before sending a signal.
+
+`lahe session close <id>` stops every static server owned by that session. It
+stops the shared helper only after the final open agent session closes. Review
+history remains on disk. `session reopen` restores the helper and remembered
+static servers. A caller-supplied `--origin` and every application dev server
+are externally owned, so LAHE never terminates them.
 
 ### `lahe wait` is retired
 

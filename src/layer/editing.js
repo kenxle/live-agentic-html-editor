@@ -193,7 +193,7 @@
 
   // Ken's copy, one spelling, used on the frame.
   var LABEL_EDITING = "Editing this block";
-  var HINT_FINISH = "Esc to finish";
+  var HINT_FINISH = "Cmd-Enter or Esc to finish";
 
   // The frame's look. Quiet on purpose: the reviewer is reading their own
   // sentence, not the tool. One accent, the rail's, used for the outline and
@@ -1368,7 +1368,7 @@
         editBlockAtCaret();
       } else if (got.gesture === gestures.GESTURE.COMMIT_EDIT) {
         if (got.preventDefault) event.preventDefault();
-        commit({ reason: "escape" });
+        commit({ reason: event.key === "Escape" ? "escape" : "primary enter" });
       }
     }
 

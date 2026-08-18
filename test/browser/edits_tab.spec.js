@@ -159,6 +159,10 @@ test.describe("3D: the Edits tab", () => {
     expect(await page.evaluate(() => window.__laheEdits.rowsInPane("active")), "no edit row in the Active pane").toEqual([]);
     expect(await page.evaluate(() => window.__laheEdits.countFor("active")), "the Active tab holds the comment and nothing else").toBe(1);
     expect(await page.evaluate(() => window.__laheEdits.countFor("edits")), "the Edits tab holds the six hand edits").toBe(6);
+    expect(
+      await page.evaluate(() => window.__laheEdits.pillCount()),
+      "all six unimplemented direct edits count as incomplete alongside the comment"
+    ).toBe("7 (7)");
 
     const inEditsPane = await page.evaluate(() => window.__laheEdits.rowsInPane("edits"));
     expect(inEditsPane.length, "all six rows are in the Edits pane").toBe(6);

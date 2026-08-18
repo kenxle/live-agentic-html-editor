@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+5d9ba2ce43a8
+ * version 0.0.0+b338d854fe57
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+5d9ba2ce43a8";
+  g.LAHE.version = "0.0.0+b338d854fe57";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -3065,9 +3065,9 @@
     },
     {
       gesture: GESTURE.COMMIT_EDIT,
-      keys: "Esc, or a click outside",
+      keys: "Cmd-Enter, Esc, or a click outside",
       when: "a block is in edit state",
-      hint: "Esc, or click outside, to finish the edit and give the page back.",
+      hint: "Cmd-Enter, Esc, or click outside to finish the edit and give the page back.",
       passThrough: false,
       preventDefault: true,
       requirement: "R24"
@@ -3138,6 +3138,9 @@
       if (e.key === "Enter" && mod) {
         if (e.inCommentBox === true) {
           return decide(GESTURE.MARK_READY, false, true, "Cmd-Enter marks this comment ready for the agent (R7)");
+        }
+        if (e.editing === true) {
+          return decide(GESTURE.COMMIT_EDIT, false, true, "Cmd-Enter commits the open edit and gives the block back to the page");
         }
         return decide(GESTURE.NONE, true, false, "Cmd-Enter outside a comment box is the page's");
       }
@@ -9364,6 +9367,15 @@
       }).length;
     }
 
+    function countIncomplete() {
+      return Object.keys(cards).filter(function (id) {
+        // Pane placement and completion are separate. Direct edits stay in the
+        // Edits pane so they do not bury comments, but they are still work for
+        // the agent until a handled reply lands.
+        return cards[id].state !== record.STATE.HANDLED;
+      }).length;
+    }
+
     // -------------------------------------------------------------------------
     // The dismissible failure chips (R11)
     // -------------------------------------------------------------------------
@@ -9715,7 +9727,10 @@
       //
       // An empty pill still invites on an untouched page: "Review 0/0" prints
       // the one number that is not information.
-      var open = countFor(TAB.ACTIVE);
+      // The left number is lifecycle truth, not the Active tab's layout count.
+      // In particular, a ready direct edit sits in Edits but remains incomplete
+      // until the agent reports it handled.
+      var open = countIncomplete();
       var total = Object.keys(cards).length;
       dom.pillCount.textContent = total ? String(open) + " (" + String(total) + ")" : "";
       dom.pillCount.hidden = total === 0;
@@ -16569,7 +16584,7 @@
 
   // Ken's copy, one spelling, used on the frame.
   var LABEL_EDITING = "Editing this block";
-  var HINT_FINISH = "Esc to finish";
+  var HINT_FINISH = "Cmd-Enter or Esc to finish";
 
   // The frame's look. Quiet on purpose: the reviewer is reading their own
   // sentence, not the tool. One accent, the rail's, used for the outline and
@@ -17744,7 +17759,7 @@
         editBlockAtCaret();
       } else if (got.gesture === gestures.GESTURE.COMMIT_EDIT) {
         if (got.preventDefault) event.preventDefault();
-        commit({ reason: "escape" });
+        commit({ reason: event.key === "Escape" ? "escape" : "primary enter" });
       }
     }
 
@@ -19852,7 +19867,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+5d9ba2ce43a8";
+  var VERSION = "0.0.0+b338d854fe57";
 
   var protocol = ns.protocol;
   var record = ns.record;

@@ -118,9 +118,12 @@ less state.
 5. Enroll the review in the current agent session.
 6. Print one browser URL, the session ID, review ID, and review folder.
 
-The helper records the static server process so status and cleanup can describe
-it honestly. Re-running the command for the same page and session is
-idempotent.
+Owner-only agent-session metadata records the static server root, port, PID,
+start identity, and stop time so cleanup can verify the exact process before
+signalling it. Re-running the command for the same page and session is
+idempotent. Closing a session stops all static servers it owns; reopening the
+session restores them. A caller-supplied origin is externally owned and is
+never stopped by LAHE.
 
 Dev-server applications continue to use `add`, because the application owns
 its server. The CLI output must describe its snippet as unguarded and require a

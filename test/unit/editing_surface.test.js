@@ -117,6 +117,14 @@ test("entry and exit come from the one gesture table, not from this file", () =>
     gestures.gestureFor({ type: "keydown", key: "Escape", editing: true }).gesture,
     gestures.GESTURE.COMMIT_EDIT
   );
+  assert.equal(
+    gestures.gestureFor({ type: "keydown", key: "Enter", editing: true, metaKey: true }).gesture,
+    gestures.GESTURE.COMMIT_EDIT
+  );
+  assert.equal(
+    gestures.gestureFor({ type: "keydown", key: "Enter", editing: true, ctrlKey: true }).gesture,
+    gestures.GESTURE.COMMIT_EDIT
+  );
   assert.notEqual(
     gestures.gestureFor({ type: "keydown", key: "Escape", editing: false }).gesture,
     gestures.GESTURE.COMMIT_EDIT

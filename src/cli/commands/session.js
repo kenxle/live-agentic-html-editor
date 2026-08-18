@@ -11,6 +11,7 @@ var protocol = require("../../shared/protocol.js");
 var stateDir = require("../../service/state_dir.js");
 var sessions = require("../../service/agent_sessions.js");
 var service = require("../../service/index.js");
+var staticServers = require("../../service/static_servers.js");
 
 var BIN = path.join(__dirname, "..", "..", "..", "bin", "lahe.js");
 var USAGE = "usage: lahe session <close|reopen> <session-id> [--port <n>] [--state-dir <path>]";
@@ -91,16 +92,26 @@ async function run(argv) {
   var store = sessions.createStore({ dir: dir });
   try {
     if (args.action === "close") {
+      var staticStopped = await staticServers.stopAll(dir, args.id);
       store.close(args.id);
       var stopped = false;
       if (store.openSessions().length === 0) stopped = await stopVerifiedHelper(dir);
-      process.stdout.write("agent session " + args.id + " closed; review history kept" + (stopped ? "; shared helper stopped" : "") + "\n");
+      process.stdout.write(
+        "agent session " + args.id + " closed; review history kept" +
+          (staticStopped ? "; static review server" + (staticStopped === 1 ? "" : "s") + " stopped" : "") +
+          (stopped ? "; shared helper stopped" : "") + "\n"
+      );
     } else {
       store.reopen(args.id);
       var prior = readReady(dir);
       var port = args.port || (prior && prior.port) || protocol.DEFAULT_PORT;
       var started = await startHelper(dir, port);
-      process.stdout.write("agent session " + args.id + " reopened" + (started ? "; shared helper started" : "; shared helper already running") + "\n");
+      var staticStarted = await staticServers.restartAll(dir, args.id);
+      process.stdout.write(
+        "agent session " + args.id + " reopened" +
+          (started ? "; shared helper started" : "; shared helper already running") +
+          (staticStarted ? "; static review server" + (staticStarted === 1 ? "" : "s") + " restarted" : "") + "\n"
+      );
     }
     return protocol.CLI_EXIT.OK;
   } catch (err) {

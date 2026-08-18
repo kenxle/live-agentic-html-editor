@@ -11,6 +11,7 @@ const reviewCommand = require("../../src/cli/commands/review.js");
 const sessionCommand = require("../../src/cli/commands/session.js");
 const service = require("../../src/service/index.js");
 const agentSessions = require("../../src/service/agent_sessions.js");
+const staticServers = require("../../src/service/static_servers.js");
 
 function tempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -54,6 +55,10 @@ test("review re-entry infers its session, and the final close stops the helper",
   assert.equal(first.code, 0, first.stderr);
   const sessionId = first.stdout.match(/^\s*session\s+(s_[a-f0-9]+)/m)[1];
   const reviewId = first.stdout.match(/^\s*review\s+(r[a-f0-9]+)/m)[1];
+  const firstServer = staticServers.list(state, sessionId)[0];
+  assert.ok(firstServer);
+  assert.match(first.stdout, new RegExp("open\\s+http://127\\.0\\.0\\.1:" + firstServer.port + "/page\\.html"));
+  assert.equal(await staticServers.isExactServer(firstServer), true);
   t.after(async () => {
     await capture(() => sessionCommand.run(["close", sessionId, "--state-dir", state, "--port", String(port)]));
   });
@@ -62,16 +67,23 @@ test("review re-entry infers its session, and the final close stops the helper",
   assert.equal(second.code, 0, second.stderr);
   assert.match(second.stdout, new RegExp("session\\s+" + sessionId));
   assert.match(second.stdout, new RegExp("review\\s+" + reviewId));
+  assert.match(second.stdout, new RegExp("server\\s+http://127\\.0\\.0\\.1:" + firstServer.port + ".*reused"));
 
   const closed = await capture(() => sessionCommand.run(["close", sessionId, "--state-dir", state, "--port", String(port)]));
   assert.equal(closed.code, 0, closed.stderr);
   assert.match(closed.stdout, /shared helper stopped/);
+  assert.match(closed.stdout, /static review server stopped/);
   assert.equal(await service.probeHealth("127.0.0.1", port), null);
+  assert.equal(await staticServers.isExactServer(firstServer), false);
 
   const reopened = await capture(() => sessionCommand.run(["reopen", sessionId, "--state-dir", state, "--port", String(port)]));
   assert.equal(reopened.code, 0, reopened.stderr);
   assert.match(reopened.stdout, /shared helper started/);
+  assert.match(reopened.stdout, /static review server restarted/);
   assert.ok(await service.probeHealth("127.0.0.1", port));
+  const restartedServer = staticServers.list(state, sessionId)[0];
+  assert.notEqual(restartedServer.instance, firstServer.instance);
+  assert.equal(await staticServers.isExactServer(restartedServer), true);
 
   await capture(() => sessionCommand.run(["close", sessionId, "--state-dir", state, "--port", String(port)]));
 });

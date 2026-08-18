@@ -144,6 +144,22 @@ test.describe("2A: before is pinned at first touch (R29)", () => {
     expect(again[0].rev).toBe(1);
   });
 
+  test("Cmd-Enter commits a direct edit while Escape remains available", async ({ page }) => {
+    await page.goto(pages.urlFor(FIXTURE) + "?review=edit-primary-enter");
+
+    await editBlockWithCaret(page, "#beta");
+    await typeAtEnd(page, "#beta", " One more sentence.");
+    await page.keyboard.press("ControlOrMeta+Enter");
+    await pollPage(page, () => window.__laheEdit.isEditing() === false, undefined, {
+      message: "Cmd-Enter to commit the direct edit"
+    });
+
+    const items = await page.evaluate(() => window.__laheEdit.items());
+    expect(items).toHaveLength(1);
+    expect(items[0].state).toBe("ready");
+    expect(items[0].rev).toBe(1);
+  });
+
   test("entering edit state and leaving it unchanged leaves no record behind", async ({ page }) => {
     // A reviewer who opens a block, reads it, and presses Esc has said nothing.
     // A draft record for that is a row in the rail and a line in the agent's

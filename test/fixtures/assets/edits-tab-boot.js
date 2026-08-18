@@ -131,6 +131,10 @@
     countFor: function (name) {
       return rail.countFor(name);
     },
+    pillCount: function () {
+      rail.collapse(true);
+      return rail.geometry().pillCount;
+    },
     // Edit rows found in a pane, by the row's own marker attribute. This is the
     // "none of them appear in the Active thread" measurement.
     rowsInPane: function (name) {

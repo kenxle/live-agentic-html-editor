@@ -53,10 +53,19 @@
   helper only after the final open session closes; reopen starts it again.
 - Resolved blocker: independent live agent sessions can no longer receive one
   another's reviews through the documented or accepted monitor command.
-- Confirmed known gaps: one-command static front door, cold-start proof,
-  documentation pass, multi-page offline path reuse, and
-  acceptance evidence.
-- In progress: one-command static serving and the remaining cold-start cleanup.
+- Complete: the public static front door now owns an event-driven, read-only
+  Node server per session and directory. It chooses and registers the origin,
+  prints the exact URL, reuses the process on re-entry, stops it on session
+  close, and restores it on reopen. Externally supplied dev servers remain
+  outside LAHE's lifecycle.
+- Complete: direct editing now accepts Cmd-Enter or Ctrl-Enter as the same
+  commit action as Escape, and the on-page hint teaches both paths.
+- Complete: the collapsed review pill now counts incomplete lifecycle records,
+  including ready hand edits that remain organized under the Edits tab. A
+  handled reply, not tab placement, is what burns the count down.
+- Confirmed known gaps: cold-start proof, final documentation pass, multi-page
+  offline path reuse, and acceptance evidence.
+- In progress: remaining cold-start cleanup and end-to-end walkthroughs.
 - Pending: human review of this hardening packet before the session-routing
   architecture is implemented.
 

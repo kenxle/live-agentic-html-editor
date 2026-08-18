@@ -90,15 +90,17 @@ a `lahe-layer.js` copy beside the page as the offline fallback (refreshed every
 run), mints that review's token, registers the page's origin, and **starts the
 helper if it is not already running**. It prints what it did and what to open.
 
-**Review a static file over a local server**, which is the ordinary way. Serve
-the page's own folder and register that origin:
+For a static file, that one command also starts or reuses a read-only Node
+server rooted at the page's folder and registers its exact origin. Open the URL
+on the printed `open` line:
 
 ```sh
-cd path/to            # the folder holding page.html
-python3 -m http.server 8000 --bind 127.0.0.1 &
-lahe review page.html --origin http://127.0.0.1:8000
-# then open http://127.0.0.1:8000/page.html
+lahe review path/to/page.html
 ```
+
+That server belongs to the agent session. `session close` stops it, and
+`session reopen` restores it. Passing `--origin` means you supplied an external
+server instead, so LAHE neither starts nor stops that process.
 
 Opening the file directly (`file://`) also works and is the fallback: a page
 opened from disk sends the origin `null`, which `add` always registers. What does
@@ -156,8 +158,9 @@ whenever you like. (Older reviews may also have left one in an `assets/` or
 
 **Close the agent session.** Run the exact `lahe session close <id>` command
 printed by `lahe review`. It stops the shared helper when no other agent session
-is open, while retaining every review and reply. `session reopen` starts it
-again.
+is open and stops this session's static review servers, while retaining every
+review and reply. `session reopen` starts that infrastructure again. Application
+dev servers are never stopped by LAHE.
 
 **Forget the reviews.** Delete the state directory (`$LAHE_STATE_DIR`, or
 `$XDG_STATE_HOME/lahe`, or `~/.local/state/lahe`). It holds every review's
@@ -175,13 +178,13 @@ not need this file open to work them out.
 | Cmd-Shift-C with text selected | Comment on the selection |
 | Cmd-Shift-C with nothing selected | Element-pick mode: hover to outline, click to comment, Esc to cancel |
 | Cmd-Shift-E | Edit the block under the cursor |
-| Esc, or clicking anywhere outside the block (the page, the rail, another window) | Commit the edit and give the block back to the page |
+| Cmd-Enter, Esc, or clicking anywhere outside the block (the page, the rail, another window) | Commit the edit and give the block back to the page |
 | Cmd-Enter in a comment box | This comment is done, and the agent may act on it |
 | The open box at the foot of the rail | A note tied to nothing in particular |
 
 Browsing is the page untouched: links navigate, buttons act, forms submit. Edit
 state is entered deliberately, one block at a time, and the block is visibly
-framed while it is in it.
+framed while it is in it. Ctrl replaces Cmd on non-macOS systems.
 
 ## Every invocation
 
@@ -198,7 +201,7 @@ once, and after that a plain sentence works:
 
 | Command | What it does |
 | --- | --- |
-| `lahe review path/to/page.html` | Start a review and isolated agent session: writes the script line, mints the review and token, starts or reuses the shared helper, and prints the monitor and close commands |
+| `lahe review path/to/page.html` | Start a review and isolated agent session: writes the script line, starts or reuses its static server and the shared helper, then prints the URL, monitor, and close commands |
 | `lahe review another.html --session <id>` | Add a later document to the same agent workstream without receiving another agent's comments |
 | `lahe add path/to/project --origin http://localhost:3000` | Dev-server variant: edits nothing, prints a commented snippet that you must wrap in your framework's development-only conditional |
 | `lahe add ... --new` | Mint a fresh review even though the page already carries one |
@@ -206,8 +209,8 @@ once, and after that a plain sentence works:
 | `lahe add ... --source path/to/template` | Record where the source lives, so an agent edits the template rather than build output |
 | `lahe add ... --review <id>` | Re-attach this page to a review that already exists, by id |
 | `lahe status [--session <id>] [--review <id>] [--json]` | What is open right now. Agent monitors must name their session; plain global status is only a human diagnostic |
-| `lahe session close <id>` | Close an agent workstream. Closing the last open session stops the shared helper and keeps all review history |
-| `lahe session reopen <id>` | Reopen the workstream and start the shared helper again |
+| `lahe session close <id>` | Close an agent workstream, stop its static servers, and keep all review history. The final close also stops the shared helper |
+| `lahe session reopen <id>` | Reopen the workstream and restart its helper and static servers |
 | `lahe serve [--port N]` | Run the helper by hand (`add` starts it for you, so this is rarely needed) |
 
 `lahe status --session <id> --json --seen-file <path> --quiet` is the keep-up

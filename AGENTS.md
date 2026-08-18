@@ -41,24 +41,22 @@ works with nothing installed at all.
 
 ## Step 2: start a review on the page your human wants to look at
 
-For a static HTML file (a built report, a doc, a mockup), SERVE IT OVER HTTP.
-That is the ordinary way to review a static page, and it is what your human
-should be opening:
+For a static HTML file (a built report, a doc, a mockup), use the public review
+command:
 
 ```sh
-cd path/to                                   # the folder holding page.html
-python3 -m http.server 8000 --bind 127.0.0.1 &
-lahe review page.html --origin http://127.0.0.1:8000
-# tell your human to open http://127.0.0.1:8000/page.html
+lahe review path/to/page.html
+# tell your human to open the exact URL printed on the `open` line
 ```
 
-Start the server yourself, pick a free port, pass that origin to `review`, and hand
-your human the http URL. Serving just the page's own folder is enough: the script
-line loads the library from the helper, and `review` also drops a `lahe-layer.js`
-copy in that same folder as the fallback, so a page opened while the helper is
-down still gets the rail, an honest unreachable status, and everything kept in
-the browser until the helper is back. Serve the folder, not the single file, so
-that fallback is reachable.
+`review` starts or reuses a read-only Node server rooted at the page's own
+folder, chooses an available loopback port, registers that exact origin, and
+prints the exact URL. The server belongs to this agent session, so `session
+close` stops it and `session reopen` restores it. The script line loads the
+library from the helper, and `review` also drops a `lahe-layer.js` copy in that
+same folder as the fallback, so a page opened while the helper is down still
+gets the rail, an honest unreachable status, and everything kept in the browser
+until the helper is back.
 
 `file://path/to/page.html` is the FALLBACK, for the rare case where you cannot
 run a server. `add` always registers the `null` origin a page opened from disk
@@ -69,11 +67,10 @@ page, mints the review and token, starts the helper if needed, and prints what t
 open plus the exact monitor and close commands.
 Tell your human to open exactly what you handed them.
 
-**The origin is the trap to avoid.** A review knows only the origins `add`
-registered. Register only `null` and then open the page through a server, and the
-helper refuses every request from it; the page says so and names the command that
-fixes it, but you can simply not walk into it: pass `--origin` for the server you
-started.
+**The origin is the trap to avoid when using advanced `add` or an external
+server.** A review knows only the origins `add` registered. `review` avoids that
+trap for static files by owning and registering the server itself. If you pass
+`--origin`, that server remains yours to start and stop.
 
 For a dev-server app, point at the project and name the origin:
 
@@ -284,10 +281,10 @@ each show only their own items (see "One review MAY span pages" above).
 ## Step 5: take it back out when they are done
 
 `lahe add path/to/page.html --remove` deletes the script line from the page and
-changes nothing else (for a dev server, delete the line you pasted). Stop any
-server you started for the review too. Stop the
-agent session with the printed `lahe session close <id>` command. Closing the
-last open session stops the shared helper automatically. Deleting the state
+changes nothing else (for a dev server, delete the line you pasted). Stop the
+agent session with the printed `lahe session close <id>` command. It stops that
+session's static review servers, and closing the last open session stops the
+shared helper automatically. An application dev server remains yours. Deleting the state
 directory forgets every review and its history, so
 do that only when your human asks: `Removing it` in the README has the detail.
 

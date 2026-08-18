@@ -96,9 +96,9 @@
     },
     {
       gesture: GESTURE.COMMIT_EDIT,
-      keys: "Esc, or a click outside",
+      keys: "Cmd-Enter, Esc, or a click outside",
       when: "a block is in edit state",
-      hint: "Esc, or click outside, to finish the edit and give the page back.",
+      hint: "Cmd-Enter, Esc, or click outside to finish the edit and give the page back.",
       passThrough: false,
       preventDefault: true,
       requirement: "R24"
@@ -169,6 +169,9 @@
       if (e.key === "Enter" && mod) {
         if (e.inCommentBox === true) {
           return decide(GESTURE.MARK_READY, false, true, "Cmd-Enter marks this comment ready for the agent (R7)");
+        }
+        if (e.editing === true) {
+          return decide(GESTURE.COMMIT_EDIT, false, true, "Cmd-Enter commits the open edit and gives the block back to the page");
         }
         return decide(GESTURE.NONE, true, false, "Cmd-Enter outside a comment box is the page's");
       }

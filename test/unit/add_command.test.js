@@ -888,10 +888,10 @@ test("the README states the tested platform and browser requirements", () => {
   assert.match(readme, /node bin\/lahe\.js/, "and the no-install fallback");
   assert.match(readme, /lahe review/, "and the public command that installs the library into a page");
   assert.match(readme, /git clone https:\/\/github\.com\/kenxle\/live-agentic-html-editor/);
-  assert.match(readme, /lahe review page\.html --origin http:\/\/127\.0\.0\.1:8000/);
-  assert.match(agents, /lahe review page\.html --origin http:\/\/127\.0\.0\.1:8000/);
-  assert.doesNotMatch(readme, /lahe review path\/to\/page\.html --origin/);
-  assert.doesNotMatch(agents, /lahe review path\/to\/page\.html --origin/);
+  assert.match(readme, /lahe review path\/to\/page\.html/);
+  assert.match(agents, /lahe review path\/to\/page\.html/);
+  assert.doesNotMatch(readme, /python3 -m http\.server/);
+  assert.doesNotMatch(agents, /python3 -m http\.server/);
   assert.match(readme, /comment is not a guard/);
   assert.match(agents, /comment is not a guard/);
 

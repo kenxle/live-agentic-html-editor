@@ -1190,6 +1190,15 @@
       }).length;
     }
 
+    function countIncomplete() {
+      return Object.keys(cards).filter(function (id) {
+        // Pane placement and completion are separate. Direct edits stay in the
+        // Edits pane so they do not bury comments, but they are still work for
+        // the agent until a handled reply lands.
+        return cards[id].state !== record.STATE.HANDLED;
+      }).length;
+    }
+
     // -------------------------------------------------------------------------
     // The dismissible failure chips (R11)
     // -------------------------------------------------------------------------
@@ -1541,7 +1550,10 @@
       //
       // An empty pill still invites on an untouched page: "Review 0/0" prints
       // the one number that is not information.
-      var open = countFor(TAB.ACTIVE);
+      // The left number is lifecycle truth, not the Active tab's layout count.
+      // In particular, a ready direct edit sits in Edits but remains incomplete
+      // until the agent reports it handled.
+      var open = countIncomplete();
       var total = Object.keys(cards).length;
       dom.pillCount.textContent = total ? String(open) + " (" + String(total) + ")" : "";
       dom.pillCount.hidden = total === 0;
