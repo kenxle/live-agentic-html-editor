@@ -116,3 +116,21 @@ regions and replay, the per-review token model, path-safety rules,
 prompt-injection fencing). Don't re-litigate a decision in code without
 updating the doc first. Files prefixed `archive_` in the feature folder
 are historical drafts, never current design.
+
+## Agent-facing docs: what is truth, and what travels together
+
+The feature folder (brief, architecture, plan) is HISTORY: what we set out
+to build and why. It is not rewritten as the tool evolves. The living
+truth for how the tool works now is:
+
+- **`AGENTS.md`**: the cold-start playbook any agent follows.
+- **The `contract` field in review.json** (authored in
+  `src/shared/review_format.js`): the only instructions an agent is
+  GUARANTEED to see, embedded into every review at setup time.
+
+These two travel together. A workflow change that lands in AGENTS.md must
+also be folded into the contract text (and its restated copy in
+test/unit/review_format.test.js and docs/CONTRACTS.md, plus a dist
+rebuild, since the contract ships in the bundle). An agent instruction
+that exists only in AGENTS.md is invisible to an agent that only ever
+reads review.json.
