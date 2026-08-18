@@ -163,3 +163,35 @@ test("export.js is 3C's, and it is no longer a planned file", () => {
     false
   );
 });
+
+// ---------------------------------------------------------------------------
+// The page title travels with the export (Ken, 2026-08-17): a downloaded file
+// named only by review id forces whoever holds it to go id-matching.
+// ---------------------------------------------------------------------------
+
+test("the filename leads with the page title, slugged and capped, id kept exact", () => {
+  const named = exporter.filenameFor({
+    review: "r25cd2bc5cac4",
+    scope: "full",
+    title: "HeyCatch Growth Teardown: what their funnel gives away, at length beyond forty characters",
+    at: new Date(2026, 7, 17, 23, 59)
+  });
+  assert.match(named, /^lahe-review-HeyCatch-Growth-Teardown/);
+  assert.ok(named.includes("r25cd2bc5cac4"), "the id fingerprint stays in the name");
+  const slug = named.slice("lahe-review-".length, named.indexOf("-r25cd2bc5cac4"));
+  assert.ok(slug.length <= 40, "the title part is capped: " + slug);
+  const untitled = exporter.filenameFor({ review: "r25cd2bc5cac4", scope: "full", at: new Date(2026, 7, 17, 23, 59) });
+  assert.match(untitled, /^lahe-review-r25cd2bc5cac4/, "no title, no leading slug, same shape as before");
+});
+
+test("the text header names the document when the title is known", () => {
+  const withTitle = exporter.renderReviewText({
+    records: [],
+    scope: "full",
+    review: "r25cd2bc5cac4",
+    title: "HeyCatch Growth Teardown"
+  });
+  assert.match(withTitle, /^Review of "HeyCatch Growth Teardown" \(r25cd2bc5cac4\)/);
+  const without = exporter.renderReviewText({ records: [], scope: "full", review: "r25cd2bc5cac4" });
+  assert.match(without, /^Review r25cd2bc5cac4/);
+});

@@ -402,7 +402,15 @@
     requireReview(review);
     var out = [];
     var counts = countItems(review);
-    out.push("Review " + review.id);
+    // The document's own name leads, when the caller knows it. An exported file
+    // gets forwarded to an agent (or found weeks later) with none of the page's
+    // context attached, and "Review r25cd2bc5cac4" alone forces whoever holds
+    // it to go match ids; the title is what a person or an agent can place.
+    if (typeof review.title === "string" && review.title.trim()) {
+      out.push("Review of \"" + review.title.trim() + "\" (" + review.id + ")");
+    } else {
+      out.push("Review " + review.id);
+    }
     out.push(
       counts.total +
         " item" +

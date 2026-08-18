@@ -132,7 +132,7 @@
       throw new TypeError("renderReviewText: a review id is required; the text names the review it came from");
     }
 
-    var body = review_format.renderText({ id: reviewId, items: opts.records });
+    var body = review_format.renderText({ id: reviewId, items: opts.records, title: opts.title });
     if (opts.scope === SCOPE.FULL) return body;
     return SLICE_LABEL + "\n\n" + body;
   }
@@ -163,7 +163,22 @@
     var id = String(opts.review || opts.reviewId || "review").replace(/[^A-Za-z0-9._-]+/g, "-");
     var mark = opts.scope === SCOPE.SLICE ? SLICE_FILE_MARK : "";
     var extra = opts.label ? "-" + String(opts.label).replace(/[^A-Za-z0-9._-]+/g, "-") : "";
-    return FILE_PREFIX + id + extra + "-" + stamp(opts.at) + mark + FILE_SUFFIX;
+    // The page title leads, when known. The review id is a fingerprint, exact
+    // and meaningless; the title is what the person who downloaded three of
+    // these tells apart in a folder, and what a cold agent handed the file can
+    // place without going id-matching. Slugged and capped so a long <title>
+    // does not become the whole filename; the id after it keeps it exact.
+    var title = "";
+    if (typeof opts.title === "string" && opts.title.trim()) {
+      title =
+        String(opts.title)
+          .trim()
+          .replace(/[^A-Za-z0-9._-]+/g, "-")
+          .replace(/^-+|-+$/g, "")
+          .slice(0, 40)
+          .replace(/-+$/g, "") + "-";
+    }
+    return FILE_PREFIX + title + id + extra + "-" + stamp(opts.at) + mark + FILE_SUFFIX;
   }
 
   // ---------------------------------------------------------------------------
@@ -240,6 +255,12 @@
     var sync = opts.sync || null;
     var rail = opts.rail || null;
     var doc = opts.document || (typeof document !== "undefined" ? document : null);
+
+    /** The page's own title, for the filename and the text header, or null. */
+    function pageTitle() {
+      var t = doc && typeof doc.title === "string" ? doc.title.trim() : "";
+      return t || null;
+    }
     var win = opts.window || (typeof window !== "undefined" ? window : null);
     var fetchImpl =
       opts.fetch ||
@@ -472,8 +493,8 @@
       return gather()
         .then(function (got) {
           scope = got.scope;
-          text = renderReviewText({ records: got.records, scope: got.scope, review: requireReview() });
-          filename = filenameFor({ review: requireReview(), scope: got.scope });
+          text = renderReviewText({ records: got.records, scope: got.scope, review: requireReview(), title: pageTitle() });
+          filename = filenameFor({ review: requireReview(), scope: got.scope, title: pageTitle() });
           download(text, filename);
           return remember({ ok: true, action: "export", scope: scope, text: text, filename: filename });
         })
@@ -514,8 +535,9 @@
 
       return scoped
         .then(function (got) {
-          var text = renderReviewText({ records: records, scope: got.scope, review: requireReview() });
-          var filename = o.filename || filenameFor({ review: requireReview(), scope: got.scope, label: o.label });
+          var text = renderReviewText({ records: records, scope: got.scope, review: requireReview(), title: pageTitle() });
+          var filename =
+            o.filename || filenameFor({ review: requireReview(), scope: got.scope, label: o.label, title: pageTitle() });
           if (wantsFile) download(text, filename);
           return remember({
             ok: true,
