@@ -1292,9 +1292,62 @@
       listenerHandles = [];
     }
 
+    /**
+     * Did this press land on a scrollbar rather than on content?
+     *
+     * A scrollbar drag fires pointerdown and no click, so the commit-outside
+     * rule read the reviewer scrolling as the reviewer leaving and stripped
+     * contenteditable out from under their pointer (review, 2026-08-17).
+     *
+     * This function only MEASURES. gestures.isScrollbarPress decides, so the
+     * rule is unit-testable with no browser, the way every other gesture rule
+     * is. Two measurements, because a page has two kinds of scrollbar: the
+     * root's, which sits outside the document element with the viewport as its
+     * outer edge, and an element's own, which sits in the gutter between its
+     * content box and its border box.
+     *
+     * @param {Object} event a pointerdown or mousedown
+     * @returns {boolean}
+     */
+    function pressedOnScrollbar(event) {
+      var node = event.target;
+      if (!node || node.nodeType !== 1) return false;
+      if (typeof event.clientX !== "number" || typeof event.clientY !== "number") return false;
+
+      var docEl = doc && doc.documentElement ? doc.documentElement : null;
+      if (docEl && win && (node === docEl || node === doc.body)) {
+        var onRootBar = gestures.isScrollbarPress({
+          x: event.clientX,
+          y: event.clientY,
+          contentWidth: docEl.clientWidth,
+          contentHeight: docEl.clientHeight,
+          boxWidth: win.innerWidth || docEl.clientWidth,
+          boxHeight: win.innerHeight || docEl.clientHeight
+        });
+        if (onRootBar) return true;
+      }
+
+      if (typeof node.getBoundingClientRect !== "function") return false;
+      var rect = node.getBoundingClientRect();
+      return gestures.isScrollbarPress({
+        x: event.clientX - rect.left - (node.clientLeft || 0),
+        y: event.clientY - rect.top - (node.clientTop || 0),
+        contentWidth: node.clientWidth,
+        contentHeight: node.clientHeight,
+        boxWidth: rect.width,
+        boxHeight: rect.height
+      });
+    }
+
     function describe(event) {
       return {
         type: event.type,
+        // Which mouse button, and whether the press was on a scrollbar. Both
+        // exist for the commit-outside rule: only a primary press on content is
+        // the reviewer leaving the block.
+        button: typeof event.button === "number" ? event.button : undefined,
+        onScrollbar:
+          event.type === "pointerdown" || event.type === "mousedown" ? pressedOnScrollbar(event) : false,
         key: event.key,
         metaKey: event.metaKey === true,
         ctrlKey: event.ctrlKey === true,

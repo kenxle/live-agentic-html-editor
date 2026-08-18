@@ -157,6 +157,54 @@ test("the pointer going down outside the edited block commits it, rail included"
   assert.equal(idle.gesture, gestures.GESTURE.PAGE_DEFAULT);
 });
 
+test("a scrollbar drag and a right-click are not the reviewer leaving the block (review, 2026-08-17)", () => {
+  // A scrollbar drag fires pointerdown on html with no click after it, so the
+  // reviewer scrolling to see the rest of their edit had contenteditable
+  // stripped out from under their pointer mid-drag.
+  const scrollbar = gestures.gestureFor({ type: "pointerdown", editing: true, inEditedBlock: false, onScrollbar: true });
+  assert.notEqual(scrollbar.gesture, gestures.GESTURE.COMMIT_EDIT);
+  assert.equal(scrollbar.passThrough, true, "the page still scrolls");
+
+  // Right-click opens a context menu. The reviewer is still editing.
+  const right = gestures.gestureFor({ type: "pointerdown", editing: true, inEditedBlock: false, button: 2 });
+  assert.notEqual(right.gesture, gestures.GESTURE.COMMIT_EDIT);
+  const middle = gestures.gestureFor({ type: "mousedown", editing: true, inEditedBlock: false, button: 1 });
+  assert.notEqual(middle.gesture, gestures.GESTURE.COMMIT_EDIT);
+
+  // The primary button on content is still leaving, stated and unstated.
+  const primary = gestures.gestureFor({ type: "pointerdown", editing: true, inEditedBlock: false, button: 0 });
+  assert.equal(primary.gesture, gestures.GESTURE.COMMIT_EDIT);
+  const unstated = gestures.gestureFor({ type: "pointerdown", editing: true, inEditedBlock: false });
+  assert.equal(unstated.gesture, gestures.GESTURE.COMMIT_EDIT, "a caller that cannot tell means a primary press");
+});
+
+test("the scrollbar geometry: past the content box and inside the border box", () => {
+  // A 200-wide box with a 15px vertical scrollbar: content stops at 185.
+  const inner = { contentWidth: 185, contentHeight: 100, boxWidth: 200, boxHeight: 100 };
+  assert.equal(gestures.isScrollbarPress(Object.assign({ x: 192, y: 40 }, inner)), true, "in the gutter");
+  assert.equal(gestures.isScrollbarPress(Object.assign({ x: 184, y: 40 }, inner)), false, "one pixel of content");
+  assert.equal(gestures.isScrollbarPress(Object.assign({ x: 260, y: 40 }, inner)), false, "past the box entirely");
+
+  // A horizontal one, and both at once.
+  const horizontal = { contentWidth: 200, contentHeight: 85, boxWidth: 200, boxHeight: 100 };
+  assert.equal(gestures.isScrollbarPress(Object.assign({ x: 40, y: 92 }, horizontal)), true);
+  assert.equal(gestures.isScrollbarPress(Object.assign({ x: 40, y: 40 }, horizontal)), false);
+
+  // The root's scrollbar: outside the document element, inside the viewport.
+  const root = { contentWidth: 1265, contentHeight: 800, boxWidth: 1280, boxHeight: 800 };
+  assert.equal(gestures.isScrollbarPress(Object.assign({ x: 1272, y: 300 }, root)), true);
+  assert.equal(gestures.isScrollbarPress(Object.assign({ x: 600, y: 300 }, root)), false);
+
+  // No gutter at all is an overlay scrollbar, which takes no layout space and
+  // receives no press. Nothing there can be a scrollbar press.
+  const overlay = { contentWidth: 200, contentHeight: 100, boxWidth: 200, boxHeight: 100 };
+  assert.equal(gestures.isScrollbarPress(Object.assign({ x: 199, y: 99 }, overlay)), false);
+
+  // A caller that could not measure gets a no, never a guess.
+  assert.equal(gestures.isScrollbarPress(null), false);
+  assert.equal(gestures.isScrollbarPress({ contentWidth: 185, boxWidth: 200 }), false);
+});
+
 // ---------------------------------------------------------------------------
 // The installer, and the nvm PATH trap
 // ---------------------------------------------------------------------------
