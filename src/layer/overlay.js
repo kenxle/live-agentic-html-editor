@@ -344,6 +344,8 @@
     "background:var(--warn-wash);color:var(--ink);border-radius:8px;padding:7px 8px 7px 10px}",
     ".chip__text{flex:1}",
     ".chip__remedy{display:block;color:var(--ink-soft);font-size:11.5px;margin-top:2px}",
+    ".chip__copy{margin-top:4px;padding:2px 8px;border-radius:6px;font-size:11.5px;",
+    "background:var(--ink);color:var(--paper,#fff);cursor:pointer}",
     ".chip__x{width:20px;height:20px;border-radius:5px;color:var(--ink-soft);flex:none;",
     "display:flex;align-items:center;justify-content:center;font-size:13px}",
     ".chip__x:hover{background:rgba(0,0,0,.06);color:var(--ink)}",
@@ -1137,6 +1139,32 @@
         var text = el("div", "chip__text");
         text.appendChild(el("span", null, chip.message || chip.code));
         if (chip.remedy) text.appendChild(el("span", "chip__remedy", chip.remedy));
+        // The detail is the specific fact (this page's actual origin, the exact
+        // command) and it is the part worth handing to an agent verbatim, so it
+        // gets its own line and a copy button. Without this the interpolated
+        // line was stored and never shown, and the reviewer only ever saw the
+        // generic remedy.
+        if (chip.detail) {
+          text.appendChild(el("span", "chip__remedy", chip.detail));
+          var copy = el("button", "chip__copy", "Copy for your agent");
+          copy.addEventListener("click", function () {
+            var nav = typeof navigator !== "undefined" ? navigator : null;
+            var wrote =
+              nav && nav.clipboard && nav.clipboard.writeText
+                ? nav.clipboard.writeText(chip.detail)
+                : Promise.reject(new Error("no clipboard"));
+            wrote.then(
+              function () {
+                copy.textContent = "Copied";
+              },
+              function () {
+                // No clipboard access: the text is already on screen to select.
+                copy.textContent = "Select the line above";
+              }
+            );
+          });
+          text.appendChild(copy);
+        }
         row.appendChild(text);
         if (chip.count > 1) row.appendChild(el("span", "chip__count", "×" + chip.count));
         var x = el("button", "chip__x", "×");

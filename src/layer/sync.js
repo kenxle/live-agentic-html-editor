@@ -583,7 +583,24 @@
     }
 
     function originRemedy() {
-      return "This page is on " + pageOrigin() + ". Register it: lahe add <the page's html file> --origin " + pageOrigin() + ", then reload.";
+      // A sentence the reviewer can hand to any agent verbatim, so it carries
+      // everything the agent needs: the page URL, the origin to register, and
+      // the review id. The chip renders it with a "Copy for your agent" button.
+      var href =
+        win && win.location && win.location.href
+          ? String(win.location.href)
+          : doc && doc.location && doc.location.href
+            ? String(doc.location.href)
+            : "this page";
+      return (
+        "My lahe review page " +
+        href +
+        " says its address is not registered. Register the origin " +
+        pageOrigin() +
+        " for review " +
+        (review || "(unknown)") +
+        ", then tell me to reload."
+      );
     }
 
     /**
