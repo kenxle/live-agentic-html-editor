@@ -337,6 +337,7 @@
       readOnlyActive = false;
       comments.bind({ page: page });
       editing.bind({ page: page });
+      if (tab && typeof tab.ensureNoteBox === "function") tab.ensureNoteBox();
       done.setReadOnly();
       rail.hideRefusal();
       // The condition ended, so its chip goes too (clear, not dismiss: dismiss

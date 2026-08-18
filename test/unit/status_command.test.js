@@ -263,6 +263,15 @@ test("--seen-file refuses machine-global monitoring, and quiet emits no idle ter
   const idle = await runStatus(["--session", "legacy", "--json", "--seen-file", seenPath, "--quiet"], dir);
   assert.equal(idle.code, protocol.CLI_EXIT.OK);
   assert.equal(idle.stdout, "");
+
+  const unansweredWithoutLedger = await runStatus(["--session", "legacy", "--json", "--quiet"], dir);
+  assert.equal(unansweredWithoutLedger.code, protocol.CLI_EXIT.OK);
+  assert.match(unansweredWithoutLedger.stdout, /"id":"itm_/);
+
+  const emptyDir = tempState();
+  seed(emptyDir, "rquietempty", [anItem("done", record.STATE.HANDLED)]);
+  const noUnansweredWithoutLedger = await runStatus(["--session", "legacy", "--json", "--quiet"], emptyDir);
+  assert.equal(noUnansweredWithoutLedger.stdout, "");
 });
 
 test("takeover recovers seen-but-unfinished work without repeating completed work", async () => {

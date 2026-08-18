@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+38fbc3aed520
+ * version 0.0.0+d92ed50ad86d
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+38fbc3aed520";
+  g.LAHE.version = "0.0.0+d92ed50ad86d";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -1789,6 +1789,24 @@
     return item[FIELD.STATE] === STATE.READY;
   }
 
+  /**
+   * THE ONE DEFINITION OF WORK AN AGENT SHOULD ACT ON.
+   *
+   * Ready and carrying no reply. `ready` is the state the review.json contract
+   * names as the one an agent may act on (drafts are the reviewer mid-sentence
+   * and never reach the projection), and the reply is what the item carries once
+   * an agent has answered this revision. A reworded item drops its reply in the
+   * projection, so it comes back here on its own.
+   *
+   * It lives here rather than in `lahe status` because the helper answers the
+   * same question on the wire: the rail's "no agent watching, 3 waiting" and the
+   * drain command's item list have to be counting the same items, and they
+   * stopped agreeing the moment the route spelled the rule out a second time.
+   */
+  function isUnansweredReady(item) {
+    return !!item && item[FIELD.STATE] === STATE.READY && !item[FIELD.REPLY];
+  }
+
   // Outstanding for the reviewer: still in front of them. A handled item is
   // kept and reopenable (R38), not outstanding.
   function isOutstanding(item) {
@@ -1838,6 +1856,33 @@
     return item && Array.isArray(item[FIELD.THREAD]) ? item[FIELD.THREAD] : [];
   }
 
+  // Historical exchanges are read chronologically everywhere they leave the
+  // record. The stored array is normally append-only already, but sorting at
+  // the boundary also gives imported and legacy records one deterministic
+  // presentation. Equal or missing timestamps retain their original order.
+  function chronologicalThread(item) {
+    return threadOf(item)
+      .map(function (round, index) {
+        return { round: round, index: index };
+      })
+      .sort(function (a, b) {
+        var ar = a.round || {};
+        var br = b.round || {};
+        var aa = (ar.reviewer && ar.reviewer.at) || (ar.agent && ar.agent.at) || null;
+        var ba = (br.reviewer && br.reviewer.at) || (br.agent && br.agent.at) || null;
+        var ams = Date.parse(aa || "");
+        var bms = Date.parse(ba || "");
+        var aValid = Number.isFinite(ams);
+        var bValid = Number.isFinite(bms);
+        if (aValid && bValid && ams !== bms) return ams - bms;
+        if (aValid !== bValid) return aValid ? -1 : 1;
+        return a.index - b.index;
+      })
+      .map(function (entry) {
+        return entry.round;
+      });
+  }
+
   function copyReply(reply) {
     if (!reply) return null;
     return {
@@ -1872,7 +1917,7 @@
    */
   function continueThread(item, nextTurn) {
     var turn = nextTurn || {};
-    var history = threadOf(item).slice();
+    var history = chronologicalThread(item);
     history.push(completedRound(item));
     var next = bumpRev(item, {
       note: typeof turn.note === "string" ? turn.note : null,
@@ -2084,6 +2129,7 @@
     newItem: newItem,
     bumpRev: bumpRev,
     threadOf: threadOf,
+    chronologicalThread: chronologicalThread,
     completedRound: completedRound,
     continueThread: continueThread,
     followUp: followUp,
@@ -2099,6 +2145,7 @@
     validateItem: validateItem,
     isDraft: isDraft,
     isReady: isReady,
+    isUnansweredReady: isUnansweredReady,
     isOutstanding: isOutstanding,
     comparisonMode: comparisonMode,
     normalizedBefore: normalizedBefore,
@@ -3543,7 +3590,9 @@
   // a freshly rebuilt browser bundle from disk, so API_VERSION alone cannot
   // prevent a new rail from talking to yesterday's backend. Bump this integer
   // whenever an old helper cannot safely back a newly built CLI/layer.
-  var SERVICE_CONTRACT = 8;
+  // 9: older helpers omit reply.at, so they cannot back the timestamped rail
+  // and must be restarted before a new page connects.
+  var SERVICE_CONTRACT = 9;
   var BASE = "/lahe/" + API_VERSION;
 
   // ---------------------------------------------------------------------------
@@ -3731,7 +3780,11 @@
         "the reviewed file's mtime, which is R36's refresh trigger for a static page: a changed value means the " +
         "agent rebuilt the page and the library reloads it",
       request: "?review=<id>&since=<seq>&page_path=<location.pathname>",
-      response: "{events: [event...], seq, target_mtime}; target_mtime is the requesting page's ISO mtime, or null when its retained target cannot be identified or the file is missing"
+      response:
+        "{events: [event...], seq, target_mtime, agent_liveness}; target_mtime is the requesting page's ISO mtime, " +
+        "or null when its retained target cannot be identified or the file is missing. agent_liveness is " +
+        "{state, monitor_at, activity_at, unanswered, oldest_unanswered_at}: whether an agent is actually listening, " +
+        "read off the owning session's monitor heartbeat and activity stamp rather than taken from anything the agent said"
     },
     {
       name: "window.claim",
@@ -4333,14 +4386,162 @@
     );
   }
 
-  // Shared process exits for the command dispatcher and status. Status uses all
-  // four; the other commands share BAD_USAGE rather than inventing a different
-  // number for the same caller error.
+  // Shared process exits for the command dispatcher and status.
+  //
+  // The first four are the caller-error set every command shares: status uses
+  // all four, and the others reach for BAD_USAGE rather than inventing a
+  // different number for the same caller error.
+  //
+  // The last two exist because a HOST reads a monitor's exit code and decides
+  // whether to relaunch it. "Your session was closed, stop relaunching" and
+  // "another agent took this session over" are different instructions, and both
+  // are different from "you typed the command wrong". Collapsing them into
+  // BAD_USAGE is what let a closed session poll forever: nothing in the number
+  // told the host to stop.
   var CLI_EXIT = {
     OK: 0,
     HELPER_UNREACHABLE: 2,
     UNKNOWN_REVIEW: 3,
-    BAD_USAGE: 4
+    BAD_USAGE: 4,
+    // The agent session is closed. Monitoring has ended; do not relaunch.
+    SESSION_CLOSED: 5,
+    // Another agent ran `lahe session takeover`. This monitor is fenced and the
+    // work it was about to print belongs to the new owner.
+    SESSION_TAKEN_OVER: 6
+  };
+
+  // ---------------------------------------------------------------------------
+  // The wake feed
+  // ---------------------------------------------------------------------------
+  //
+  // One append-only JSONL file per agent session, at
+  // <state>/agent-sessions/<id>/wake.log. It exists so a host with no push
+  // channel of its own can get one: `tail -n 0 -f wake.log` wakes on a line and
+  // costs nothing while it is quiet.
+  //
+  // APPEND-ONLY, NEVER REWRITTEN AND NEVER ROTATED. `tail -f` follows an inode.
+  // An atomic replace (which is how review.json is written) leaves a tail
+  // watching a deleted file forever, silently. That is the bug this file was
+  // designed around, so the file is only ever appended to.
+  //
+  // THE LINES ARE POINTERS, NOT PAYLOADS. A line says "there is work; run the
+  // drain command". It never carries a note, a change, or page text. Intent
+  // reaches an agent through review.json alone, which is where the trust classes
+  // and the fencing live (D12). A wake line that carried reviewer text would be
+  // a second, unfenced instruction channel.
+  var WAKE = {
+    FILE: "wake.log",
+    KIND: {
+      // A ready item landed for a review this session owns.
+      WORK: "work",
+      // Another agent ran `lahe session takeover` on this session.
+      TAKEOVER: "takeover",
+      // The session was closed. Nothing more will be appended.
+      CLOSED: "closed"
+    },
+    FIELD: {
+      AT: "at",
+      KIND: "kind",
+      REVIEW: "review",
+      ITEM: "item",
+      REV: "rev",
+      DRAIN: "drain"
+    }
+  };
+
+  /**
+   * A path as a shell word: quoted only when it needs to be.
+   *
+   * The state directory is a path a person chose, so it can hold a space. An
+   * unquoted one turns the printed command into two arguments and the agent
+   * that copies it gets a usage error.
+   */
+  function shellWord(value) {
+    var text = String(value);
+    if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(text)) return text;
+    return "'" + text.replace(/'/g, "'\\''") + "'";
+  }
+
+  function stateDirFlag(stateDirPath) {
+    if (typeof stateDirPath !== "string" || !stateDirPath) return "";
+    return " --state-dir " + shellWord(stateDirPath);
+  }
+
+  /**
+   * The one spelling of the drain command.
+   *
+   * It is printed by `lahe review`, by `lahe session takeover`, by the monitor's
+   * own output, and it rides every wake line. Four spellings of one command is
+   * how an agent ends up running a fifth.
+   *
+   * PASS THE STATE DIRECTORY WHEN IT IS NOT THE DEFAULT ONE. A command copied
+   * out of a review that lives in a custom state directory resolves the DEFAULT
+   * directory when it is run, so it reports no work while items sit unanswered
+   * a few paths away. Callers decide with state_dir.flagFor, which returns null
+   * when the default already resolves to the same place: printing the flag then
+   * would be noise on every command every agent runs.
+   *
+   * @param {string} sessionId
+   * @param {string|null} [stateDirPath] omit or pass null for the default
+   */
+  function drainCommand(sessionId, stateDirPath) {
+    return "lahe status --session " + String(sessionId) + " --json --quiet" + stateDirFlag(stateDirPath);
+  }
+
+  /** The one spelling of the monitor command. Same state-directory rule. */
+  function monitorCommand(sessionId, stateDirPath) {
+    return "lahe monitor --session " + String(sessionId) + stateDirFlag(stateDirPath);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Monitor liveness: what the rail is allowed to claim about an agent
+  // ---------------------------------------------------------------------------
+  //
+  // The rail used to show what the AGENT said about itself, which is how a chat
+  // claiming "monitoring is active" sat over seven unanswered items. These
+  // fields come from files the helper and the monitor write, never from a claim.
+  var MONITOR = {
+    // The heartbeat and the activity stamp are separate files on purpose:
+    // session.json is rewritten by takeover, and a heartbeat sharing that file
+    // would race it.
+    HEARTBEAT_FILE: "monitor.json",
+    ACTIVITY_FILE: "activity.json",
+    // The monitor's default local poll interval, in seconds. The heartbeat is
+    // written once per loop, so a heartbeat older than a few intervals means the
+    // process is gone rather than slow.
+    INTERVAL_SECONDS: 15,
+    // How many intervals a heartbeat may be behind and still count as watching.
+    FRESH_INTERVALS: 3,
+    HEARTBEAT_FIELD: { PID: "pid", HANDOFF_REV: "handoff_rev", AT: "at" },
+    ACTIVITY_FIELD: { AT: "at" }
+  };
+
+  // 45 seconds: three of the monitor's 15-second loops.
+  MONITOR.HEARTBEAT_FRESH_MS = MONITOR.INTERVAL_SECONDS * MONITOR.FRESH_INTERVALS * 1000;
+  // Three minutes. An agent mid-batch is editing files and rebuilding, not
+  // running lahe commands, so the working window is much wider than the
+  // heartbeat window.
+  MONITOR.ACTIVITY_FRESH_MS = 180000;
+
+  var AGENT_LIVENESS = {
+    STATE: {
+      // A monitor heartbeat is fresh for the current handoff rev.
+      WATCHING: "watching",
+      // No fresh heartbeat, but there is unanswered work and the session ran a
+      // lahe command recently: an agent is mid-batch.
+      WORKING: "working",
+      // Unanswered work and neither of the above. Nobody is listening.
+      UNATTENDED: "unattended",
+      // Nothing is waiting and nobody is watching. Not a problem, so not loud.
+      NONE: "none"
+    },
+    FIELD: {
+      STATE: "state",
+      MONITOR_AT: "monitor_at",
+      ACTIVITY_AT: "activity_at",
+      UNANSWERED: "unanswered",
+      OLDEST_UNANSWERED_AT: "oldest_unanswered_at"
+    }
   };
 
   return {
@@ -4407,7 +4608,15 @@
     SCRIPT_FALLBACK_ONERROR: SCRIPT_FALLBACK_ONERROR,
     scriptTag: scriptTag,
 
-    CLI_EXIT: CLI_EXIT
+    CLI_EXIT: CLI_EXIT,
+
+    WAKE: WAKE,
+    stateDirFlag: stateDirFlag,
+    drainCommand: drainCommand,
+    monitorCommand: monitorCommand,
+
+    MONITOR: MONITOR,
+    AGENT_LIVENESS: AGENT_LIVENESS
   };
 });
 
@@ -4487,8 +4696,17 @@
     "status is one of: handled, you made the change; not_handled, you did not, and reason says why in words the reviewer will read; question, you need an answer, and text asks for it.",
     "rev must be the rev carried with the item. If the reviewer reworded the item after you read it, your line is refused and the item stays open. Re-read the item and answer its new rev.",
     "To see what is open right now, run: lahe status --review <id> (add --json for machine-readable lines). It prints the unanswered ready items and whether the reviewer's page is connected.",
-    "If the human explicitly asks you to continue a session created by another agent, run: lahe session takeover <agent-session-id>. This keeps the reviews together, fences older monitors, and prints a catch-up command that shows every unanswered item. Use the fresh seen-file named by the takeover guidance. Never infer a takeover or silently reuse another agent's session.",
-    "To keep up, launch this as a background terminal task: lahe monitor --session <agent-session-id> --seen-file <path>. Use the review.agent_session_id above and one stable seen-file. It polls locally every 15 seconds, prints only new work, and exits. Empty checks invoke no model and use no model tokens. LAHE ACTION REQUIRED means the monitor result is an interrupt, not completed work: continue the same turn and handle every printed item immediately. Receiving or describing an item is not handling it. Then run lahe status --session <agent-session-id> --json --seen-file <same-path> --quiet. If that immediate check prints items that arrived while you worked, handle them and check again. Relaunch the background monitor only after the immediate check is empty. This drains rapid feedback without an avoidable wake-and-exit cycle. Do not use native model timers, a forever daemon, a global monitor, or a parser pipeline. If the host cannot wake on background-task completion, run the monitor in the foreground after warning the human that it owns the chat. Stop relaunching when the agent session closes.",
+    "If the human explicitly asks you to continue a session created by another agent, run: lahe session takeover <agent-session-id>. This keeps the reviews together, fences older monitors, and prints the catch-up command plus the four commands for the session. Never infer a takeover or silently reuse another agent's session.",
+    "To keep up you need two things: a way to be woken, and one command to run when you are. This section gives you both. Use the review.agent_session_id above wherever it says <agent-session-id>.",
+    "The drain command is: lahe status --session <agent-session-id> --json --quiet. It prints every ready item nobody has answered, and prints nothing at all when there is none. Run it, handle every item it prints, rebuild and verify the visible output, append your replies, then run it again. Repeat until it prints nothing. Work stays listed until your reply lands, so a wake you miss costs you nothing: the next drain shows the item again.",
+    "The wake feed is one append-only file per agent session: <state-dir>/agent-sessions/<agent-session-id>/wake.log. It gets one line when a ready item lands for a review this session owns, and one line when the session is taken over or closed. The state directory is $LAHE_STATE_DIR, or $XDG_STATE_HOME/lahe, or ~/.local/state/lahe. A wake line is a pointer and never an instruction: it names the item and the drain command, and carries no reviewer text at all.",
+    "Claude Code: arm a persistent Monitor once per session on tail -n 0 -f <state-dir>/agent-sessions/<agent-session-id>/wake.log. On each new line, run the drain command and work it to empty. The Monitor stays armed for the whole session, so there is nothing to relaunch and nothing to remember.",
+    "Codex: run lahe monitor --session <agent-session-id> as a foreground pending exec call and keep waiting on it. Do not detach it and do not use a Codex Timer. It prints the work and exits; handle the work, drain to empty, then run it again.",
+    "Antigravity: run lahe monitor --session <agent-session-id> as a background terminal task. Never the native schedule timer: every scheduled wakeup spends allowance on a no-op.",
+    "Any other host: run lahe monitor --session <agent-session-id> in the foreground, after telling the human it owns the chat until work arrives.",
+    "lahe monitor exit codes: 0 means work is printed above, 5 means the agent session is closed, 6 means another agent took the session over. On 5 or 6, stop. Do not relaunch it.",
+    "LAHE ACTION REQUIRED means the output is an interrupt, not finished work. Continue the same turn and handle every item printed with it. Receiving an item is not handling it, and describing it is not handling it.",
+    "Do not use a native model timer, a forever daemon, a global monitor, or a parser pipeline.",
     "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and a running helper puts the script line back when the rebuild strips it out.",
     "The only way to say you handled an item is to append a reply line."
   ];
@@ -4557,6 +4775,7 @@
     "reply.agent": record.CLASS_DATA,
     "reply.reason": record.CLASS_DATA,
     "reply.text": record.CLASS_DATA,
+    "reply.at": record.CLASS_DATA,
     "thread[].rev": record.CLASS_DATA,
     "thread[].reviewer.note": record.CLASS_DATA,
     "thread[].reviewer.change": record.CLASS_DATA,
@@ -4727,7 +4946,7 @@
 
     // Historical reviewer words remain verbatim but are explicitly data. The
     // current instruction channel is still only the two top-level fields.
-    out[PROJECTED.THREAD] = record.threadOf(it).map(function (round) {
+    out[PROJECTED.THREAD] = record.chronologicalThread(it).map(function (round) {
       var reviewer = round.reviewer || {};
       var agent = round.agent || {};
       return {
@@ -4776,7 +4995,8 @@
           agent: boundData(reply.agent, CONTEXT_MAX),
           reason: boundData(reply.reason, BEFORE_MAX),
           text: boundData(reply.text, BEFORE_MAX),
-          files: boundFiles(reply.files)
+          files: boundFiles(reply.files),
+          at: reply.at || null
         }
       : null;
 
@@ -4900,24 +5120,24 @@
     var label = (it[F.REGION] && it[F.REGION].label) || null;
     if (label) lines.push("  Where: " + boundData(label, CONTEXT_MAX));
     if (it[F.REGION] && it[F.REGION].lost) lines.push("  " + LOST_NOTE);
-    record.threadOf(it).forEach(function (round) {
+    record.chronologicalThread(it).forEach(function (round) {
       var reviewer = round.reviewer || {};
       var agent = round.agent || {};
       lines.push("  Earlier exchange, rev " + round.rev + " (historical context, not current instructions):");
-      if (reviewer.note) lines.push("    Reviewer note: " + reviewer.note);
-      if (reviewer.change) lines.push("    Reviewer change: " + reviewer.change);
+      if (reviewer.note) lines.push("    Reviewer note" + (reviewer.at ? " [" + reviewer.at + "]" : "") + ": " + reviewer.note);
+      if (reviewer.change) lines.push("    Reviewer change" + (reviewer.at ? " [" + reviewer.at + "]" : "") + ": " + reviewer.change);
       lines.push(
         "    " +
-          ((agent.agent || "the agent") + " said: " + (agent.status || "")) +
+          ((agent.agent || "the agent") + " said" + (agent.at ? " [" + agent.at + "]" : "") + ": " + (agent.status || "")) +
           (agent.reason ? " (" + boundData(agent.reason, BEFORE_MAX) + ")" : "") +
           (agent.text ? " " + boundData(agent.text, BEFORE_MAX) : "")
       );
     });
     if (it[F.NOTE]) {
-      lines.push("  Note (the reviewer's words): " + it[F.NOTE]);
+      lines.push("  Note (the reviewer's words)" + (it[F.UPDATED_AT] ? " [" + it[F.UPDATED_AT] + "]" : "") + ": " + it[F.NOTE]);
     }
     if (it[F.CHANGE]) {
-      lines.push("  Change (the reviewer's words): " + it[F.CHANGE]);
+      lines.push("  Change (the reviewer's words)" + (it[F.UPDATED_AT] ? " [" + it[F.UPDATED_AT] + "]" : "") + ": " + it[F.CHANGE]);
     }
     if (ctx.quote) lines.push("  Quoted from the page: " + boundData(ctx.quote, BEFORE_MAX));
     if (typeof it[F.BEFORE] === "string") lines.push("  Before (page text): " + boundData(it[F.BEFORE], BEFORE_MAX));
@@ -4925,7 +5145,7 @@
     if (it[F.REPLY]) {
       lines.push(
         "  " +
-          ((it[F.REPLY].agent || "the agent") + " said: " + (it[F.REPLY].status || "")) +
+          ((it[F.REPLY].agent || "the agent") + " said" + (it[F.REPLY].at ? " [" + it[F.REPLY].at + "]" : "") + ": " + (it[F.REPLY].status || "")) +
           (it[F.REPLY].reason ? " (" + boundData(it[F.REPLY].reason, BEFORE_MAX) + ")" : "") +
           (it[F.REPLY].text ? " " + boundData(it[F.REPLY].text, BEFORE_MAX) : "")
       );
@@ -8263,16 +8483,23 @@
   var browser = typeof window !== "undefined" && !!window.document;
   if (browser) {
     root.LAHE = root.LAHE || {};
-    root.LAHE.overlay = factory(root.LAHE.markers, root.LAHE.failures, root.LAHE.record, root.LAHE.highlight);
+    root.LAHE.overlay = factory(
+      root.LAHE.markers,
+      root.LAHE.failures,
+      root.LAHE.record,
+      root.LAHE.highlight,
+      root.LAHE.protocol
+    );
   } else {
     module.exports = factory(
       require("../shared/markers.js"),
       require("../shared/failures.js"),
       require("../shared/record.js"),
-      require("./highlight.js")
+      require("./highlight.js"),
+      require("../shared/protocol.js")
     );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, failuresModule, record, highlightModule) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, failuresModule, record, highlightModule, protocol) {
   "use strict";
 
   // D10's three tabs. Contents come from the three tab files; the shell is
@@ -8318,6 +8545,42 @@
     page_reloading: "Page updated. Reloading..."
   };
 
+  // Is an agent listening right now? This is GROUND TRUTH from the helper (a
+  // monitor heartbeat, a session activity stamp), never something an agent said
+  // about itself. A reviewer used to be told "monitoring is active" in a chat
+  // while seven items sat unanswered, and nothing on screen could contradict it.
+  //
+  // Four states, and only one of them is loud. Watching and working are the
+  // healthy readings; a rail that shouts in a healthy state is a rail nobody
+  // reads by the third comment. `none` renders nothing at all, because "no
+  // agent is watching and nothing is waiting" is not news.
+  //
+  // The strings come from protocol.js, which is already above this file in the
+  // bundle. They were hand-copied here, which is two spellings of one wire
+  // value: rename a state on the helper and the rail silently stops recognising
+  // it, which looks exactly like a healthy rail with nothing to say.
+  var AGENT_STATE = protocol.AGENT_LIVENESS.STATE;
+  var AGENT_FIELD = protocol.AGENT_LIVENESS.FIELD;
+  // How often the agent line re-reads its own clock. Only the unattended line
+  // carries an age, and it is the one line that goes stale on its own: the
+  // helper can send the same payload for minutes while "oldest item 1m" quietly
+  // becomes a lie. 30 seconds is well inside the units the line prints.
+  var AGENT_AGE_TICK_MS = 30000;
+  // Keyed by the protocol's own strings. `none` is deliberately absent from
+  // both: a state with no text renders nothing, which is what "nothing is
+  // waiting and nobody is watching" deserves.
+  var AGENT_TEXT = {};
+  AGENT_TEXT[AGENT_STATE.WATCHING] = "Agent watching";
+  AGENT_TEXT[AGENT_STATE.WORKING] = "Agent working";
+  AGENT_TEXT[AGENT_STATE.UNATTENDED] = "No agent watching";
+
+  var AGENT_TITLE = {};
+  AGENT_TITLE[AGENT_STATE.WATCHING] = "An agent's monitor checked in within the last minute.";
+  AGENT_TITLE[AGENT_STATE.WORKING] =
+    "No monitor is checked in, but this agent session ran a lahe command in the last few minutes.";
+  AGENT_TITLE[AGENT_STATE.UNATTENDED] =
+    "Nothing is listening: no monitor has checked in and no agent command has run. Your items are waiting.";
+
   var STATE_LABEL = {
     draft: "Draft",
     ready: "Ready",
@@ -8331,6 +8594,22 @@
     format_only: "Formatting",
     note: "Note"
   };
+
+  function timestampLabel(value) {
+    if (!value) return "";
+    var date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return "";
+    try {
+      return new Intl.DateTimeFormat(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit"
+      }).format(date);
+    } catch (err) {
+      return date.toLocaleString();
+    }
+  }
 
   // The named limit from D5, said on the status line rather than claimed as
   // covered: two windows in separate storage with no helper running cannot be
@@ -8461,6 +8740,7 @@
     ".card__kind{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;",
     "color:var(--ink-faint)}",
     ".card__top .spacer{flex:1}",
+    ".card__time,.agent__time{font-size:10px;color:var(--ink-faint);font-variant-numeric:tabular-nums;white-space:nowrap}",
     ".card__state{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;",
     "padding:2px 7px;border-radius:999px;background:var(--surface);color:var(--ink-soft)}",
     ".card__state[data-state='ready']{background:var(--accent-wash);color:var(--accent-ink)}",
@@ -8513,8 +8793,9 @@
     // own rule, its own weight. Not a tinted label (D10).
     ".agent{border-radius:8px;padding:8px 10px;background:var(--surface);font-size:12.5px}",
     ".agent:empty{display:none}",
+    ".agent__head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:3px}",
     ".agent__who{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;",
-    "color:var(--ink-faint);display:block;margin-bottom:3px}",
+    "color:var(--ink-faint);display:block}",
     ".agent.is-loud{background:var(--accent-wash);border-left:3px solid var(--accent);",
     "color:var(--ink);font-size:13.5px;line-height:1.5}",
     ".agent.is-loud .agent__who{color:var(--accent-ink)}",
@@ -8558,6 +8839,28 @@
     ".status[data-status='agent_connected'] .status__dot{background:var(--accent)}",
     ".status[data-status='kept_locally'] .status__dot{background:var(--warn)}",
     ".status__text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+
+    // The agent line: is anybody actually listening? It sits under the status
+    // line because it answers the second half of the same question. Watching and
+    // working are CALM (a dot and quiet text): they are the healthy states and a
+    // rail that shouts in them teaches the reviewer to stop reading it. Only
+    // unattended is loud, because only unattended is a problem the reviewer can
+    // act on.
+    // `watch`, not `agent`: .agent is already the agent-reply block INSIDE a
+    // card, and reusing it here hid every reply on every card behind this
+    // row's display rule.
+    //
+    // Hidden until the helper has said something, and hidden again in the
+    // `none` state. The row always holds its dot and its span, so the hiding
+    // rule is the data attribute rather than :empty.
+    ".watch{display:none;align-items:center;gap:7px;font-size:12px;color:var(--ink-soft)}",
+    ".watch[data-agent='watching'],.watch[data-agent='working'],.watch[data-agent='unattended']{display:flex}",
+    ".watch__dot{width:6px;height:6px;border-radius:50%;background:var(--ink-faint);flex:none}",
+    ".watch[data-agent='watching'] .watch__dot{background:var(--good)}",
+    ".watch[data-agent='working'] .watch__dot{background:var(--accent)}",
+    ".watch[data-agent='unattended']{color:var(--warn-ink,var(--ink));font-weight:600}",
+    ".watch[data-agent='unattended'] .watch__dot{background:var(--warn)}",
+    ".watch__text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
     ".limit{font-size:11.5px;color:var(--ink-faint);line-height:1.4}",
     ".limit:empty{display:none}",
 
@@ -8614,6 +8917,23 @@
     { keys: ["⌘", "⏎"], what: "done with this one" }
   ];
 
+  /**
+   * The page's own setInterval, bound to it, or null when there is no page.
+   *
+   * Bound because a bare `window.setInterval` called as a free function is an
+   * illegal invocation in some engines, and taken from the document's own view
+   * rather than a global so a rail mounted in another document uses that
+   * document's clock.
+   */
+  function timersFrom(doc) {
+    var view = doc && doc.defaultView ? doc.defaultView : null;
+    if (!view || typeof view.setInterval !== "function") return null;
+    return {
+      setInterval: function (fn, ms) { return view.setInterval(fn, ms); },
+      clearInterval: function (handle) { return view.clearInterval(handle); }
+    };
+  }
+
   function createRail(options) {
     var opts = options || {};
     var doc = opts.document || (typeof document !== "undefined" ? document : null);
@@ -8624,8 +8944,14 @@
     // default is the shared instance for the same reason: two instances would
     // be two hosts.
     var highlights = opts.highlights || highlightModule.shared;
+    // The clock and the timer source, as seams. A test drives the agent line's
+    // age without sleeping for a minute, and a page with no document (Node) gets
+    // no timers at all.
+    var now = typeof opts.now === "function" ? opts.now : function () { return Date.now(); };
+    var timers = opts.timers || timersFrom(doc);
 
     var cards = Object.create(null);
+    var cardSequence = 0;
     var chips = [];
     var dismissed = Object.create(null);
     var status = null;
@@ -8637,6 +8963,13 @@
     var collapsed = preferredCollapsed;
     var mounted = false;
     var limitText = null;
+    // The whole agent_liveness object the helper last sent, or null before one
+    // has arrived. Held rather than reduced to a string, because the unattended
+    // line wants the oldest item's age too, and because that age is recomputed
+    // on every paint rather than frozen into the text once.
+    var agentLiveness = null;
+    // The slow repaint for that age, running only while an age is on screen.
+    var agentAgeTimer = null;
     // The refusal is STATE, not a one-shot paint. A Turbo app remounts the rail
     // on its first navigation, and a refusal painted imperatively vanished with
     // the old dom while the (stateful) chip survived: the reviewer read a chip
@@ -8839,6 +9172,14 @@
       statusRow.appendChild(statusText);
       foot.appendChild(statusRow);
 
+      var agentRow = el("div", "watch");
+      agentRow.setAttribute("role", "status");
+      var agentDot = el("span", "watch__dot");
+      var agentText = el("span", "watch__text", "");
+      agentRow.appendChild(agentDot);
+      agentRow.appendChild(agentText);
+      foot.appendChild(agentRow);
+
       var limit = el("div", "limit");
       foot.appendChild(limit);
 
@@ -8886,6 +9227,9 @@
         chipList: chipList,
         statusRow: statusRow,
         statusText: statusText,
+        agentRow: agentRow,
+        agentDot: agentDot,
+        agentText: agentText,
         limit: limit,
         refusal: refusal,
         refusalReason: refusalReason,
@@ -8908,6 +9252,7 @@
       });
       renderChips();
       renderStatus();
+      renderAgent();
       renderTabs();
       renderCollapsed();
       if (mo.hidden) setCollapsed(true, false);
@@ -8936,6 +9281,10 @@
       });
       dom = null;
       mounted = false;
+      // The age tick belongs to a rail that is on screen. A remount arms it
+      // again from renderAgent, so nothing is lost by dropping it here, and a
+      // page that navigates away leaves no interval of ours running.
+      armAgentAgeTick();
     }
 
     function isMounted() {
@@ -9020,6 +9369,7 @@
           attached: [],
           attachedBefore: [],
           attachedContinuation: [],
+          sequence: (cardSequence += 1),
           created: true
         };
         buildCardNode(cards[id]);
@@ -9045,6 +9395,8 @@
       var kind = el("span", "card__kind");
       top.appendChild(kind);
       top.appendChild(el("span", "spacer"));
+      var time = el("time", "card__time");
+      top.appendChild(time);
       var state = el("span", "card__state");
       top.appendChild(state);
       node.appendChild(top);
@@ -9070,7 +9422,7 @@
       card.node = node;
       card.bodyNode = body;
       card.continuationNode = continuation;
-      card.parts = { kind: kind, state: state, quote: quote, badges: badges, agent: agent, continuation: continuation, notice: notice };
+      card.parts = { kind: kind, time: time, state: state, quote: quote, badges: badges, agent: agent, continuation: continuation, notice: notice };
       // A remount rebuilds the card's node, so anything a tab owner attached
       // goes back into the new body rather than being silently dropped.
       (card.attachedBefore || []).forEach(function (attachedNode) {
@@ -9088,16 +9440,38 @@
     // Puts the card in the pane its state says it belongs in. A card holding
     // focus is NEVER re-parented: moving a focused element blurs it in every
     // engine, which would be this file's own law broken by its own tidying.
+    //
+    // There is no early return for a card already in its pane: newest activity
+    // sits on top, and a reply or a reworded note changes a card's place inside
+    // a pane it never left.
     function placeCard(card) {
       if (!dom || !card.node) return;
       var pane = dom.panes[card.pane];
-      if (card.node.parentNode === pane) return;
       if (holdsFocus(card.id)) {
         pendingPlacement[card.id] = true;
         return;
       }
-      pane.appendChild(card.node);
+      var before = null;
+      var at = activityAt(card.item);
+      Array.prototype.some.call(pane.children, function (node) {
+        var other = cards[node.getAttribute && node.getAttribute("data-card-id")];
+        if (!other || other === card) return false;
+        var otherAt = activityAt(other.item);
+        if (at > otherAt || (at === otherAt && card.sequence > other.sequence)) {
+          before = node;
+          return true;
+        }
+        return false;
+      });
+      if (before !== card.node) pane.insertBefore(card.node, before);
       delete pendingPlacement[card.id];
+    }
+
+    function activityAt(item) {
+      if (!item) return -Infinity;
+      var reply = item[record.FIELD.REPLY] || {};
+      var parsed = Date.parse(reply.at || item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || "");
+      return Number.isFinite(parsed) ? parsed : -Infinity;
     }
 
     function flushPendingPlacements() {
@@ -9120,6 +9494,15 @@
       var item = card.item;
       var p = card.parts;
       p.kind.textContent = KIND_LABEL[item[record.FIELD.KIND]] || item[record.FIELD.KIND];
+      var reviewerAt = item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || null;
+      p.time.textContent = timestampLabel(reviewerAt);
+      if (reviewerAt) {
+        p.time.setAttribute("datetime", reviewerAt);
+        p.time.setAttribute("title", new Date(reviewerAt).toLocaleString());
+      } else {
+        p.time.removeAttribute("datetime");
+        p.time.removeAttribute("title");
+      }
       p.state.textContent = STATE_LABEL[card.state] || card.state;
       p.state.setAttribute("data-state", card.state);
       // On the card itself too, so anything a tab owner attached can be shown or
@@ -9143,7 +9526,15 @@
           card.agentMessage.status === record.REPLY_STATUS.QUESTION
             ? "Question from " + who
             : who;
-        p.agent.appendChild(el("span", "agent__who", label));
+        var agentHead = el("div", "agent__head");
+        agentHead.appendChild(el("span", "agent__who", label));
+        if (card.agentMessage.at) {
+          var agentTime = el("time", "agent__time", timestampLabel(card.agentMessage.at));
+          agentTime.setAttribute("datetime", card.agentMessage.at);
+          agentTime.setAttribute("title", new Date(card.agentMessage.at).toLocaleString());
+          agentHead.appendChild(agentTime);
+        }
+        p.agent.appendChild(agentHead);
         p.agent.appendChild(
           el("span", null, card.agentMessage.text || card.agentMessage.reason || "")
         );
@@ -9629,6 +10020,125 @@
       return status ? STATUS_TEXT[status] : null;
     }
 
+    /**
+     * The helper's answer to "is an agent listening?".
+     *
+     * Takes the whole `agent_liveness` object from `replies.poll`, or null to
+     * clear the line. An unknown state clears it too rather than throwing: this
+     * comes off the wire, and a rail that breaks on an unfamiliar string is
+     * worse than a rail that says nothing about a state it does not know.
+     *
+     * EVERY DELIVERY REPAINTS. The sync client no longer calls this only when
+     * the state string changes, and the line is redrawn from the object each
+     * time rather than trusted to be what it already said.
+     */
+    function setAgentLiveness(liveness) {
+      agentLiveness = liveness && typeof liveness === "object" ? liveness : null;
+      renderAgent();
+      return agentLiveness;
+    }
+
+    function getAgentState() {
+      return agentLiveness && typeof agentLiveness[AGENT_FIELD.STATE] === "string"
+        ? agentLiveness[AGENT_FIELD.STATE]
+        : null;
+    }
+
+    /** "12m" for a timestamp, or null. The rail's units, not a clock. */
+    function agentAge(iso, atMs) {
+      if (typeof iso !== "string" || !iso) return null;
+      var then = Date.parse(iso);
+      if (Number.isNaN(then)) return null;
+      var seconds = Math.max(0, Math.round(((typeof atMs === "number" ? atMs : now()) - then) / 1000));
+      if (seconds < 60) return seconds + "s";
+      if (seconds < 3600) return Math.round(seconds / 60) + "m";
+      if (seconds < 86400) return Math.round(seconds / 3600) + "h";
+      return Math.round(seconds / 86400) + "d";
+    }
+
+    function agentLine() {
+      var state = getAgentState();
+      // Two different silences, one behaviour, and the reason is worth saying:
+      // `none` is a state we know and deliberately draw nothing for, and an
+      // unfamiliar string is a helper newer than this page. Guessing at the
+      // second one would put an invented sentence on the rail, so both render
+      // nothing.
+      if (!state || !Object.prototype.hasOwnProperty.call(AGENT_TEXT, state)) return null;
+      var text = AGENT_TEXT[state];
+      // The age is only on the loud state, and only there because it is what
+      // makes the reviewer's next move obvious: five minutes is a busy agent,
+      // forty is a dead one. It is computed HERE, on every paint, so the slow
+      // tick below can keep it honest without the helper saying anything new.
+      if (state === AGENT_STATE.UNATTENDED) {
+        var age = agentAge(agentLiveness[AGENT_FIELD.OLDEST_UNANSWERED_AT]);
+        if (age) text += " · oldest item " + age;
+      }
+      return { state: state, text: text };
+    }
+
+    function renderAgent() {
+      armAgentAgeTick();
+      if (!dom) return;
+      var line = agentLine();
+      dom.agentRow.setAttribute("data-agent", line ? line.state : "");
+      dom.agentText.textContent = line ? line.text : "";
+      dom.agentRow.title = line && AGENT_TITLE[line.state] ? AGENT_TITLE[line.state] : "";
+    }
+
+    /**
+     * The one timer this file owns, and it runs only while it has to.
+     *
+     * The helper sends the same payload for as long as nothing changes, so
+     * "oldest item 1m" would sit there saying 1m an hour later. This re-reads
+     * the clock on the only line that has one in it. It is armed by the
+     * unattended state and disarmed by anything else, so a watching rail, a
+     * working rail and an unmounted rail all hold no timer at all.
+     */
+    function armAgentAgeTick() {
+      var needed =
+        mounted &&
+        getAgentState() === AGENT_STATE.UNATTENDED &&
+        !!(agentLiveness && agentLiveness[AGENT_FIELD.OLDEST_UNANSWERED_AT]);
+      if (needed === !!agentAgeTimer) return agentAgeTimer;
+      if (!needed) {
+        if (timers) timers.clearInterval(agentAgeTimer);
+        agentAgeTimer = null;
+        return null;
+      }
+      if (!timers) return null;
+      agentAgeTimer = timers.setInterval(function () {
+        if (!dom) return;
+        var line = agentLine();
+        dom.agentText.textContent = line ? line.text : "";
+      }, AGENT_AGE_TICK_MS);
+      return agentAgeTimer;
+    }
+
+    /**
+     * Self-report for the closed root: what the agent line actually renders.
+     *
+     * The shadow root is closed, so a browser test cannot query it. It reads
+     * COMPUTED style rather than the attribute, because "the state is set" was
+     * true the whole time the row could have been display:none, and the whole
+     * point of the line is that a reviewer sees it.
+     */
+    function agentLineInfo() {
+      if (!dom) return { present: false };
+      var view = dom.agentRow.ownerDocument ? dom.agentRow.ownerDocument.defaultView : null;
+      var computed = view ? view.getComputedStyle(dom.agentRow) : null;
+      var dotComputed = view ? view.getComputedStyle(dom.agentDot) : null;
+      return {
+        present: true,
+        state: dom.agentRow.getAttribute("data-agent") || "",
+        text: dom.agentText.textContent || "",
+        title: dom.agentRow.title || "",
+        display: computed ? computed.display : null,
+        visible: !!computed && computed.display !== "none",
+        weight: computed ? computed.fontWeight : null,
+        dotColor: dotComputed ? dotComputed.backgroundColor : null
+      };
+    }
+
     // The one case nothing can refuse (D5): two windows, separate storage, no
     // helper. It is said here rather than claimed as covered anywhere.
     function setLimitNote(text) {
@@ -10009,6 +10519,12 @@
       STATUS: STATUS,
       STATUS_TEXT: STATUS_TEXT,
       STATUS_SHORT: STATUS_SHORT,
+      AGENT_STATE: AGENT_STATE,
+      AGENT_TEXT: AGENT_TEXT,
+      setAgentLiveness: setAgentLiveness,
+      agentState: getAgentState,
+      agentLine: agentLine,
+      agentLineInfo: agentLineInfo,
       LIMIT_SEPARATE_STORAGE_NO_HELPER: LIMIT_SEPARATE_STORAGE_NO_HELPER,
       mount: mount,
       unmount: unmount,
@@ -10068,7 +10584,10 @@
     STATUS: STATUS,
     STATUS_TEXT: STATUS_TEXT,
     STATUS_SHORT: STATUS_SHORT,
+    AGENT_STATE: AGENT_STATE,
+    AGENT_TEXT: AGENT_TEXT,
     LIMIT_SEPARATE_STORAGE_NO_HELPER: LIMIT_SEPARATE_STORAGE_NO_HELPER,
+    timestampLabel: timestampLabel,
     createRail: createRail,
     shared: shared,
     OVERLAY_ROOT_ID: markers.OVERLAY_ROOT_ID,
@@ -10467,6 +10986,15 @@
       return noteHandle;
     }
 
+    // A refused window closes every composer before it becomes read-only. When
+    // an explicit takeover makes that window writable again, restore the
+    // always-available page-note composer instead of leaving a subtly reduced
+    // rail that can select comments but cannot write an untethered note.
+    function ensureNoteBox() {
+      if (noteHandle && comments.boxFor(noteHandle.id)) return noteHandle;
+      return openNoteBox();
+    }
+
     /** The hosted stylesheet, once, inside the rail's own closed root. */
     function ensureHostedStyle(node) {
       if (!hosted || hostedStyleAttached || !doc || !node) return;
@@ -10794,6 +11322,7 @@
       hintText: hintText,
       focusNote: focusNote,
       noteBox: noteBox,
+      ensureNoteBox: ensureNoteBox,
       collapse: collapse,
       isCollapsed: isCollapsed,
       bounds: bounds
@@ -10917,7 +11446,11 @@
     ".lahe-thread{display:flex;flex-direction:column;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}",
     ".lahe-thread-round{display:flex;flex-direction:column;gap:5px}",
     ".lahe-thread-turn{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12.5px;line-height:1.45}",
-    ".lahe-thread-turn strong{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint);margin-right:5px}",
+    ".lahe-thread-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}",
+    ".lahe-thread-turn strong{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint)}",
+    ".lahe-thread-time,.lahe-ask-time{font-size:10px;color:var(--ink-faint);font-variant-numeric:tabular-nums;white-space:nowrap}",
+    ".lahe-ask-time{margin-left:auto;font-weight:400;letter-spacing:0;text-transform:none}",
+    ".lahe-thread-text{display:block}",
     ".lahe-followup{display:flex;flex-direction:column;gap:7px;padding-top:8px}",
     ".lahe-followup-label{font-size:10px;font-weight:650;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-faint)}",
     ".lahe-followup textarea{box-sizing:border-box;width:100%;min-height:72px;resize:vertical;border:1px solid var(--line);border-radius:7px;padding:8px 9px;background:var(--paper);color:var(--ink);font:inherit;line-height:1.4}",
@@ -11237,24 +11770,32 @@
       var node = threads[id];
       while (node.firstChild) node.removeChild(node.firstChild);
       ensureStyle(node);
-      record.threadOf(item).forEach(function (round) {
+      record.chronologicalThread(item).forEach(function (round) {
         var pair = el("div", "lahe-thread-round");
         var reviewer = round.reviewer || {};
-        if (reviewer.note) appendTurn(pair, "Reviewer note", reviewer.note);
-        if (reviewer.change) appendTurn(pair, "Reviewer change", reviewer.change);
+        if (reviewer.note) appendTurn(pair, "Reviewer note", reviewer.note, reviewer.at);
+        if (reviewer.change) appendTurn(pair, "Reviewer change", reviewer.change, reviewer.at);
         var agent = round.agent || {};
-        if (agent.text) appendTurn(pair, agent.agent || "Agent", agent.text);
-        if (agent.reason) appendTurn(pair, (agent.agent || "Agent") + " reason", agent.reason);
-        if (!agent.text && !agent.reason) appendTurn(pair, agent.agent || "Agent", agent.status || "");
+        if (agent.text) appendTurn(pair, agent.agent || "Agent", agent.text, agent.at);
+        if (agent.reason) appendTurn(pair, (agent.agent || "Agent") + " reason", agent.reason, agent.at);
+        if (!agent.text && !agent.reason) appendTurn(pair, agent.agent || "Agent", agent.status || "", agent.at);
         node.appendChild(pair);
       });
       return node;
     }
 
-    function appendTurn(host, who, text) {
+    function appendTurn(host, who, text, at) {
       var line = el("p", "lahe-thread-turn");
-      line.appendChild(el("strong", null, who));
-      line.appendChild(doc.createTextNode(String(text || "")));
+      var head = el("span", "lahe-thread-head");
+      head.appendChild(el("strong", null, who));
+      if (at) {
+        var time = el("time", "lahe-thread-time", overlayModule.timestampLabel(at));
+        time.setAttribute("datetime", at);
+        time.setAttribute("title", new Date(at).toLocaleString());
+        head.appendChild(time);
+      }
+      line.appendChild(head);
+      line.appendChild(el("span", "lahe-thread-text", String(text || "")));
       host.appendChild(line);
     }
 
@@ -11559,6 +12100,16 @@
       }
       var node = asks[id];
       node.querySelector(".lahe-ask-name").textContent = agentName(reply) + " is asking";
+      var time = node.querySelector(".lahe-ask-time");
+      if (reply.at) {
+        time.textContent = overlayModule.timestampLabel(reply.at);
+        time.setAttribute("datetime", reply.at);
+        time.setAttribute("title", new Date(reply.at).toLocaleString());
+      } else {
+        time.textContent = "";
+        time.removeAttribute("datetime");
+        time.removeAttribute("title");
+      }
       node.querySelector(".lahe-ask-text").textContent = boundedText(reply.text || "");
       updateReopenAvailability(id);
       markCard(id, true);
@@ -11573,6 +12124,7 @@
       var who = el("div", "lahe-ask-who");
       who.appendChild(el("span", "lahe-ask-dot"));
       who.appendChild(el("span", "lahe-ask-name", ""));
+      who.appendChild(el("time", "lahe-ask-time", ""));
       node.appendChild(who);
 
       node.appendChild(el("p", "lahe-ask-text", ""));
@@ -13342,6 +13894,12 @@
     var win = opts.window || (typeof window !== "undefined" ? window : null);
     var fetchImpl = opts.fetch || (typeof fetch === "function" ? fetch.bind(typeof globalThis !== "undefined" ? globalThis : null) : null);
     var onStatus = opts.onStatus || function () {};
+    // The helper's answer to "is an agent listening?", raised on the poll that
+    // brought it. It rides the SAME channel target_mtime does (replies.poll),
+    // for the same reason: a number that only means anything while the helper is
+    // up should come from the helper, on a request the page already makes.
+    // Raised only on CHANGE, so a calm rail is not repainted every two seconds.
+    var onAgentLiveness = opts.onAgentLiveness || function () {};
     var onFailure = opts.onFailure || function () {};
     // The mirror of onFailure: a standing failure whose condition ENDED. The
     // rail clears that chip (clear, not dismiss, so the next real failure still
@@ -13401,6 +13959,11 @@
     // R36. The mtime this page last saw, the armed-but-not-yet-fired reload, and
     // its debounce timer.
     var targetMtime = null;
+    // The last agent_liveness the helper sent, and a key over the fields the
+    // rail draws from it. The key is kept separately so the change test is one
+    // string comparison rather than a deep one on every poll.
+    var agentLiveness = null;
+    var agentLivenessKey = null;
     var reloadPending = false;
     var reloadTimer = null;
     var reloadsFired = 0;
@@ -13813,6 +14376,7 @@
           var events = (result.body && result.body.events) || [];
           if (typeof (result.body && result.body.seq) === "number") cursor = result.body.seq;
           noteTargetMtime(result.body && result.body.target_mtime);
+          noteAgentLiveness(result.body && result.body.agent_liveness);
           if (events.length) {
             repliesSeen = repliesSeen.concat(events);
             onReplies(events);
@@ -13837,6 +14401,46 @@
      * @param {string|null} value an ISO string, or null
      * @returns {boolean} true when this call armed a reload
      */
+    /**
+     * The helper's report on whether an agent is listening.
+     *
+     * Raised when the payload MATERIALLY CHANGES, not only when the state string
+     * does. Raising on the state alone froze the one line that carries a number:
+     * "No agent watching, oldest item 1m" stayed at 1m for as long as nothing
+     * else changed, because the state was still unattended and the rail was
+     * never told again. Every field the line is drawn from is in the key.
+     *
+     * It is still not "every poll": an unchanged payload raises nothing, so a
+     * quiet rail is not repainted once a second. The rail runs its own slow tick
+     * for the age between deliveries.
+     *
+     * @param {object|null} value the agent_liveness object, or null
+     * @returns {boolean} true when something changed and the callback fired
+     */
+    function noteAgentLiveness(value) {
+      if (!value || typeof value !== "object") return false;
+      agentLiveness = value;
+      var next = livenessKey(value);
+      if (next === agentLivenessKey) return false;
+      agentLivenessKey = next;
+      onAgentLiveness(value);
+      return true;
+    }
+
+    // Every field the rail's agent line is drawn from, in one string. A deep
+    // compare would be the same answer for more code; the object is five scalars
+    // wide and that is the whole of it.
+    function livenessKey(value) {
+      var f = protocol.AGENT_LIVENESS.FIELD;
+      return [
+        value[f.STATE],
+        value[f.MONITOR_AT],
+        value[f.ACTIVITY_AT],
+        value[f.UNANSWERED],
+        value[f.OLDEST_UNANSWERED_AT]
+      ].join("|");
+    }
+
     function noteTargetMtime(value) {
       if (typeof value !== "string" || !value) return false;
       if (targetMtime === null) {
@@ -14408,6 +15012,7 @@
         queued: pendingCount(),
         cursor: cursor,
         targetMtime: targetMtime,
+        agentLiveness: agentLiveness,
         reloadPending: reloadPending,
         reloadsFired: reloadsFired,
         reloadChecks: reloadChecks,
@@ -14436,6 +15041,8 @@
       },
       poll: poll,
       noteTargetMtime: noteTargetMtime,
+      noteAgentLiveness: noteAgentLiveness,
+      agentLiveness: function () { return agentLiveness; },
       classify: classify,
       repliesSeen: function () {
         return repliesSeen.slice();
@@ -16151,7 +16758,9 @@
       });
       list.reverse();
       return list.sort(function (a, b) {
-        return String(b[record.FIELD.CREATED_AT]).localeCompare(String(a[record.FIELD.CREATED_AT]));
+        var at = a[record.FIELD.UPDATED_AT] || a[record.FIELD.CREATED_AT] || "";
+        var bt = b[record.FIELD.UPDATED_AT] || b[record.FIELD.CREATED_AT] || "";
+        return String(bt).localeCompare(String(at));
       });
     }
 
@@ -19876,7 +20485,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+38fbc3aed520";
+  var VERSION = "0.0.0+d92ed50ad86d";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -20139,6 +20748,7 @@
       readOnlyActive = false;
       comments.bind({ page: page });
       editing.bind({ page: page });
+      if (tab && typeof tab.ensureNoteBox === "function") tab.ensureNoteBox();
       done.setReadOnly();
       rail.hideRefusal();
       // The condition ended, so its chip goes too (clear, not dismiss: dismiss
@@ -20154,6 +20764,12 @@
       onStatus: function (state) {
         statusLog.push(state);
         rail.setStatusLine(state);
+      },
+      // Whether an agent is actually listening, from the helper's own files
+      // rather than from anything the agent said. The rail shows it under the
+      // status line, calm for watching and working, loud only for unattended.
+      onAgentLiveness: function (liveness) {
+        rail.setAgentLiveness(liveness);
       },
       onFailure: function (failure) {
         rail.failures.add(failure);

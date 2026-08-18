@@ -102,6 +102,10 @@ test.describe("the takeover walk, on the real boot", () => {
       await pollPage(winB, () => window.__lahe.handle.sync.lockState().acquired === true, undefined, {
         message: "the takeover to be granted"
       });
+      expect(
+        await winB.evaluate(() => window.__lahe.handle.comments.openBoxes().length),
+        "takeover restores the page-note composer that read-only mode closed"
+      ).toBe(1);
 
       // The whole point: the window can REVIEW now. A real gesture, a real
       // comment, landing in the log. This is the assertion that was missing

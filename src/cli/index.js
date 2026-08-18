@@ -10,7 +10,7 @@
 // `wait` IS RETIRED, and it is not wired here any more. It blocked, which meant
 // agents ran it in the foreground and stopped working while a reviewer typed,
 // and it answered for one review at a time behind a cursor an agent had to
-// carry. `lahe monitor --session <id> --seen-file <path>` answers the same
+// carry. `lahe monitor --session <id>` answers the same
 // question for one agent workstream, stays silent while polling locally, and
 // exits on new work so a background-task host can wake the agent without model
 // turns on no-ops. It needs no cursor or parser and survives a restart because
