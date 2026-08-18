@@ -1,0 +1,184 @@
+// The five review-session fixes, at the level each one is decidable without a
+// browser: `wait` surviving a helper bounce, the origin-versus-unreachable
+// decision, the pointer-outside commit rule, and the PATH-stable installer.
+//
+// The other halves live where they belong: `add` not restarting a held review
+// and the helper serving the library are in test/unit/add_command.test.js
+// (they need a real helper and a real command), and `status` is in
+// test/unit/status_command.test.js.
+//
+// Node-only.
+
+"use strict";
+
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+
+const gestures = require("../../src/shared/gestures.js");
+const syncModule = require("../../src/layer/sync.js");
+const waitCommand = require("../../src/cli/commands/wait.js");
+const installCli = require("../../scripts/install-cli.js");
+
+// ---------------------------------------------------------------------------
+// `lahe wait` survives the helper going away mid-wait
+// ---------------------------------------------------------------------------
+
+test("a dropped connection is retried from the SAME --since, not reported as unreachable", async () => {
+  const seen = [];
+  let calls = 0;
+  const fetchImpl = async (url) => {
+    seen.push(url);
+    calls += 1;
+    // The first two are the helper bouncing: the socket dies mid-long-poll.
+    if (calls <= 2) throw new Error("fetch failed");
+    return { ok: true, status: 200, json: async () => ({ events: [], seq: 12 }) };
+  };
+  const notes = [];
+
+  const response = await waitCommand.blockingRequest(
+    fetchImpl,
+    { origin: "http://127.0.0.1:7817", token: "t", reviewOrigin: "null" },
+    { review: "rev1", since: 7, timeout: 300 },
+    (text) => notes.push(text)
+  );
+
+  assert.equal(response.ok, true);
+  assert.equal(calls, 3, "it kept asking rather than giving up on the first drop");
+  seen.forEach((url) => {
+    assert.match(url, /since=7/, "every retry carries the same watermark, so nothing is skipped");
+  });
+  assert.equal(notes.length, 2, "one line when the connection went, one when it came back");
+  assert.match(notes[0], /lost the connection/);
+  assert.match(notes[1], /reconnected/);
+});
+
+test("the grace window is bounded: a helper that never comes back still fails", async () => {
+  const fetchImpl = async () => {
+    throw new Error("fetch failed");
+  };
+  // --timeout 0 leaves nothing of the caller's own deadline to retry inside, so
+  // the first failure is the answer. Outliving the caller's deadline would be a
+  // different bug.
+  await assert.rejects(
+    waitCommand.blockingRequest(
+      fetchImpl,
+      { origin: "http://127.0.0.1:7817", token: "t", reviewOrigin: null },
+      { review: "rev1", since: 0, timeout: 0 },
+      () => {}
+    ),
+    /fetch failed/
+  );
+});
+
+test("the reconnect window never outlives the caller's own timeout", () => {
+  assert.equal(waitCommand.RECONNECT_GRACE_MS, 30 * 1000);
+  assert.ok(waitCommand.RECONNECT_BACKOFF_MS.length > 0);
+});
+
+// ---------------------------------------------------------------------------
+// The origin trap, told apart from a helper that is down
+// ---------------------------------------------------------------------------
+
+test("a 403 and a live helper both mean the origin, not the helper", () => {
+  const decide = syncModule.decideFailureCode;
+  // The direct refusal, when the request itself got through.
+  assert.equal(decide({ status: 403 }), "SYNC_ORIGIN_NOT_ALLOWED");
+  // The ordinary shape: the preflight was refused, so fetch failed with no
+  // status at all, and health (unauthenticated, unpreflighted) still answered.
+  assert.equal(decide({ healthAnswered: true }), "SYNC_ORIGIN_NOT_ALLOWED");
+  // Nothing answered: the helper really is down.
+  assert.equal(decide({ healthAnswered: false }), "HELPER_UNREACHABLE");
+  assert.equal(decide({}), "HELPER_UNREACHABLE");
+  // The two that outrank it, unchanged.
+  assert.equal(decide({ cspRefused: true, healthAnswered: true }), "CSP_REFUSED");
+  assert.equal(decide({ status: 401 }), "SYNC_UNAUTHORIZED");
+});
+
+// ---------------------------------------------------------------------------
+// Leaving the block, every way there is
+// ---------------------------------------------------------------------------
+
+test("the pointer going down outside the edited block commits it, rail included", () => {
+  const outside = gestures.gestureFor({ type: "pointerdown", editing: true, inEditedBlock: false });
+  assert.equal(outside.gesture, gestures.GESTURE.COMMIT_EDIT);
+  assert.equal(outside.passThrough, true, "the page and the rail still get the event");
+
+  // The rail. A click here retargets to the overlay host and was swallowed by
+  // the overlay rule, which is how an edit sat in draft forever.
+  const onRail = gestures.gestureFor({ type: "pointerdown", editing: true, inEditedBlock: false, inOverlay: true });
+  assert.equal(onRail.gesture, gestures.GESTURE.COMMIT_EDIT, "clicking the rail commits the open edit");
+
+  // Inside the block is typing, not leaving.
+  const inside = gestures.gestureFor({ type: "pointerdown", editing: true, inEditedBlock: true });
+  assert.notEqual(inside.gesture, gestures.GESTURE.COMMIT_EDIT);
+
+  // With no edit open, a pointer going down is the page's own.
+  const idle = gestures.gestureFor({ type: "pointerdown", editing: false });
+  assert.equal(idle.gesture, gestures.GESTURE.PAGE_DEFAULT);
+});
+
+// ---------------------------------------------------------------------------
+// The installer, and the nvm PATH trap
+// ---------------------------------------------------------------------------
+
+test("the wrapper pins both absolute paths, so nvm and PATH cannot break it", () => {
+  const source = installCli.wrapperSource({ node: "/opt/node/bin/node", entry: "/repo/bin/lahe.js" });
+  assert.match(source, /^#!\/bin\/sh\n/);
+  assert.match(source, /exec "\/opt\/node\/bin\/node" "\/repo\/bin\/lahe\.js" "\$@"/);
+  assert.equal(installCli.isOurWrapper(source), true, "and it carries the marker that makes it recognizable");
+  assert.equal(installCli.isOurWrapper("#!/bin/sh\nexec something-else\n"), false);
+});
+
+test("it writes ~/.local/bin/lahe, and replaces only its own wrapper", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-home-"));
+  const out = [];
+  const err = [];
+  const write = () =>
+    installCli.install({
+      home: home,
+      node: "/opt/node/bin/node",
+      entry: "/repo/bin/lahe.js",
+      pathEnv: "/usr/bin",
+      stdout: (text) => out.push(text),
+      stderr: (text) => err.push(text)
+    });
+
+  assert.equal(write(), 0);
+  const target = path.join(home, ".local", "bin", "lahe");
+  assert.equal(fs.existsSync(target), true);
+  assert.equal((fs.statSync(target).mode & 0o111) !== 0, true, "and it is executable");
+  // ~/.local/bin was not on the PATH it was given, so it says so and prints the
+  // line to add rather than claiming success.
+  assert.match(out.join(""), /not on your PATH/);
+  assert.match(out.join(""), /export PATH=/);
+
+  // Run again: its own wrapper is replaced without complaint.
+  out.length = 0;
+  assert.equal(write(), 0);
+  assert.match(out.join(""), /replaced/);
+});
+
+test("it refuses, with the reason, rather than overwriting something else", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-home-"));
+  const binDir = path.join(home, ".local", "bin");
+  fs.mkdirSync(binDir, { recursive: true });
+  const target = path.join(binDir, "lahe");
+  fs.writeFileSync(target, "#!/bin/sh\necho somebody else's lahe\n");
+
+  const err = [];
+  const code = installCli.install({
+    home: home,
+    node: "/opt/node/bin/node",
+    entry: "/repo/bin/lahe.js",
+    pathEnv: binDir,
+    stdout: () => {},
+    stderr: (text) => err.push(text)
+  });
+
+  assert.equal(code, 1);
+  assert.match(err.join(""), /leaving .* alone/);
+  assert.equal(fs.readFileSync(target, "utf8"), "#!/bin/sh\necho somebody else's lahe\n", "untouched");
+});

@@ -819,7 +819,11 @@ async function run(argv) {
   var originNote;
   if (kind === "static") {
     origins = [FILE_ORIGIN].concat(options.origins);
-    originNote = FILE_ORIGIN + " (a page opened from disk sends no origin, on every browser)";
+    originNote =
+      origins.join(", ") +
+      (options.origins.length > 0
+        ? " (" + FILE_ORIGIN + " is what a page opened from disk sends; the rest were named with --origin)"
+        : " (a page opened from disk sends no origin, on every browser)");
   } else if (options.origins.length > 0) {
     origins = options.origins.slice();
     originNote = origins.join(", ");
@@ -1078,7 +1082,7 @@ async function run(argv) {
           : learned
             ? "  (already running, and it picked this review up without a restart)"
             : handedToHelper
-              ? "  (already running and holding this review, so it did the writing itself: nothing was restarted)"
+              ? "  (already running and holding this review, so it did the writing itself: no bounce)"
               : "  (already running)")
   );
   say("  origin    " + originNote);

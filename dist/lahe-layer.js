@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+0449a1e4f14f
+ * version 0.0.0+d7a180a92723
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+0449a1e4f14f";
+  g.LAHE.version = "0.0.0+d7a180a92723";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -2890,6 +2890,22 @@
         return decide(GESTURE.EDIT_BLOCK, false, true, "Cmd-Shift-E edits the block under the cursor, and nothing else");
       }
       return decide(GESTURE.NONE, true, false, "not a library gesture; the page and the edited block keep it");
+    }
+
+    // THE POINTER GOING DOWN ANYWHERE OUTSIDE THE EDITED BLOCK COMMITS IT,
+    // INCLUDING INSIDE THE LIBRARY'S OWN RAIL. The click rule below cannot do
+    // this job on its own: a click on the rail retargets to the overlay host,
+    // hits the overlay rule above, and the edit was left sitting in `draft`
+    // forever. A draft never passes protocol.countsAsNew, so the reviewer
+    // watched an edit they considered finished reach no agent at all (Ken's
+    // session, 2026-08-16). Pointerdown is the honest moment the reviewer left
+    // the block, it fires before focus moves, and the event still passes
+    // through untouched so the rail and the page both get their click.
+    if (e.type === "pointerdown" || e.type === "mousedown") {
+      if (e.editing === true && e.inEditedBlock !== true) {
+        return decide(GESTURE.COMMIT_EDIT, true, false, "the pointer went down outside the edited block, so the edit commits");
+      }
+      return decide(GESTURE.PAGE_DEFAULT, true, false, "a pointer going down with no edit open is the page's");
     }
 
     if (e.type !== "click") {
@@ -8850,11 +8866,22 @@
         dom.panes[name].setAttribute("data-current", name === activeTab ? "true" : "false");
         dom.counts[name].textContent = String(countFor(name));
       });
-      // An empty pill invites; it does not report a zero. "Review 0" on an
-      // untouched page prints the one number that is not information.
+      // THE COLLAPSED PILL'S COUNT: still to handle, then the all-time total in
+      // parentheses, "3 (7)". A finished review reads "0 (7)", which is the
+      // burn-down a reviewer wants to see rather than a blank pill. The rail can be
+      // collapsed for most of a session, and with only the open count on it a
+      // reviewer who had answered everything saw the same empty pill as one who
+      // had never written anything: no sense of how much is on the page and no
+      // sign the tool was alive. The total is every card the rail is holding for
+      // this page, whatever tab it sits under, so a finished review reads 0/7
+      // rather than blank.
+      //
+      // An empty pill still invites on an untouched page: "Review 0/0" prints
+      // the one number that is not information.
       var open = countFor(TAB.ACTIVE);
-      dom.pillCount.textContent = open ? String(open) : "";
-      dom.pillCount.hidden = open === 0;
+      var total = Object.keys(cards).length;
+      dom.pillCount.textContent = total ? String(open) + " (" + String(total) + ")" : "";
+      dom.pillCount.hidden = total === 0;
     }
 
     function selectTab(tab) {
@@ -9065,7 +9092,7 @@
     // Rects for both, plus the overlap answer, because "never overlaps" is a
     // geometric claim and a test should be able to check it as one.
     function geometry() {
-      if (!dom) return { railVisible: false, pillVisible: false, overlap: false, rail: null, pill: null };
+      if (!dom) return { railVisible: false, pillVisible: false, pillCount: "", overlap: false, rail: null, pill: null };
       var railRect = dom.rail.hidden ? null : dom.rail.getBoundingClientRect();
       var pillRect = dom.pill.hidden ? null : dom.pill.getBoundingClientRect();
       var overlap = false;
@@ -9079,6 +9106,9 @@
       return {
         railVisible: !!railRect,
         pillVisible: !!pillRect,
+        // The burn-down the pill shows, as the reviewer reads it: "3 (7)", or
+        // "" on a page nothing has been written on yet.
+        pillCount: dom.pillCount.hidden ? "" : dom.pillCount.textContent,
         overlap: overlap,
         rail: railRect ? { top: railRect.top, right: railRect.right, bottom: railRect.bottom, left: railRect.left } : null,
         pill: pillRect ? { top: pillRect.top, right: pillRect.right, bottom: pillRect.bottom, left: pillRect.left } : null
@@ -14653,8 +14683,12 @@
 //   Cmd-Shift-E           the block under the caret becomes editable, that one
 //                         block and nothing else, visibly framed
 //   typing                every keystroke is durable, synchronously
-//   Esc, or a click       the edit commits, protection lifts, and the block
-//   outside               rejoins the page
+//   Esc, or the pointer   the edit commits, protection lifts, and the block
+//   going down outside    rejoins the page. Outside means outside: the rest of
+//   the block            the page, AND the library's own rail, AND the window
+//                         losing focus altogether. An edit left in `draft`
+//                         reaches no agent at all, so every way of leaving the
+//                         block has to end the same way.
 //   navigating away       the open edit commits on the way out, and the event
 //                         is durable in browser storage whether or not the
 //                         keepalive post makes it (R1: navigation cannot be a
@@ -15896,6 +15930,18 @@
 
       listenerHandles.push(listeners.on(target, "keydown", onKeydown, true, LISTENER_GROUP));
       listenerHandles.push(listeners.on(target, "click", onClick, true, LISTENER_GROUP));
+      // Pointerdown, in capture, so a click that lands on the rail (or on
+      // anything that stops the click from propagating) still commits the open
+      // edit. mousedown as well, because a synthetic click in a test and an
+      // engine without pointer events both still produce one; commit() is
+      // idempotent, so the pair costs nothing.
+      listenerHandles.push(listeners.on(target, "pointerdown", onPointerDown, true, LISTENER_GROUP));
+      listenerHandles.push(listeners.on(target, "mousedown", onPointerDown, true, LISTENER_GROUP));
+
+      if (win) {
+        // The window losing focus is the reviewer leaving too.
+        listenerHandles.push(listeners.on(win, "blur", onWindowBlur, false, LISTENER_GROUP));
+      }
 
       if (win) {
         // Navigation cannot be a losing move (R1). Both events are bound
@@ -15944,6 +15990,44 @@
         if (got.preventDefault) event.preventDefault();
         commit({ reason: "escape" });
       }
+    }
+
+    /**
+     * The pointer went down somewhere. If an edit is open and this is outside
+     * it, that is the reviewer leaving the block, so it commits.
+     *
+     * DELIBERATELY NOT SKIPPED FOR THE OVERLAY. onClick below returns early on
+     * anything inside the library's own rail, and a click on the rail retargets
+     * to the overlay host, so an edit the reviewer finished by clicking the rail
+     * stayed in `draft` forever. A draft never passes protocol.countsAsNew, so
+     * no agent ever saw it and the reviewer had no way to tell (Ken's session,
+     * 2026-08-16). Nothing is prevented and nothing is stopped here: the rail
+     * and the page both still get their event.
+     *
+     * This is not the blur hazard rule 3 warns about. That hazard is the ELEMENT
+     * blur that firing when contenteditable comes off would commit a second
+     * time; commit() clears the session before it touches the DOM, so a second
+     * call is a no-op, and this handler never runs while no session is open.
+     */
+    function onPointerDown(event) {
+      if (!session) return;
+      var got = gestures.gestureFor(describe(event));
+      if (got.gesture !== gestures.GESTURE.COMMIT_EDIT) return;
+      commit({ reason: "pointer outside" });
+    }
+
+    /**
+     * The whole window lost focus: another window, another tab, the desktop.
+     *
+     * The reviewer has left the block by any reading, and leaving an edit open
+     * across a tab switch is how one comes back to a page whose edit never
+     * reached the agent. Guarded to the window's own blur: element blur does not
+     * bubble, but a stray retarget must not be read as the reviewer leaving.
+     */
+    function onWindowBlur(event) {
+      if (!session) return;
+      if (event && event.target && win && event.target !== win && event.target !== doc) return;
+      commit({ reason: "window blur" });
     }
 
     function onClick(event) {
@@ -17819,7 +17903,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+0449a1e4f14f";
+  var VERSION = "0.0.0+d7a180a92723";
 
   var protocol = ns.protocol;
   var record = ns.record;

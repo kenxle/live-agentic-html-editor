@@ -184,6 +184,22 @@
       return decide(GESTURE.NONE, true, false, "not a library gesture; the page and the edited block keep it");
     }
 
+    // THE POINTER GOING DOWN ANYWHERE OUTSIDE THE EDITED BLOCK COMMITS IT,
+    // INCLUDING INSIDE THE LIBRARY'S OWN RAIL. The click rule below cannot do
+    // this job on its own: a click on the rail retargets to the overlay host,
+    // hits the overlay rule above, and the edit was left sitting in `draft`
+    // forever. A draft never passes protocol.countsAsNew, so the reviewer
+    // watched an edit they considered finished reach no agent at all (Ken's
+    // session, 2026-08-16). Pointerdown is the honest moment the reviewer left
+    // the block, it fires before focus moves, and the event still passes
+    // through untouched so the rail and the page both get their click.
+    if (e.type === "pointerdown" || e.type === "mousedown") {
+      if (e.editing === true && e.inEditedBlock !== true) {
+        return decide(GESTURE.COMMIT_EDIT, true, false, "the pointer went down outside the edited block, so the edit commits");
+      }
+      return decide(GESTURE.PAGE_DEFAULT, true, false, "a pointer going down with no edit open is the page's");
+    }
+
     if (e.type !== "click") {
       return decide(GESTURE.NONE, true, false, "not a click or a keydown");
     }

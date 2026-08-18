@@ -212,6 +212,11 @@
     removeCard: function (id) {
       return rail.removeCard(id);
     },
+    // The lifecycle chip, which is also what moves a card between tabs: the
+    // pill's burn-down count is read off exactly this.
+    setCardState: function (id, state) {
+      return rail.setCardState(id, state);
+    },
 
     /**
      * One keystroke and the durability check IN THE SAME TASK: the input event

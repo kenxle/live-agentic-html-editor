@@ -238,7 +238,14 @@ function readFromDisk(dir, reviewId) {
   var log = logModule.createEventLog({ dir: dir });
   var events = log.read(reviewId);
   if (!events.length) return null;
-  return projectionModule.project(reviewId, events);
+  // Drafts are not in the projection (R7: the reviewer mid-sentence never
+  // reaches an agent) and they stay out of everything status lists. The COUNT
+  // is still worth saying: an edit stuck in draft reaches nobody, and before
+  // this there was no way to see one at all.
+  var drafts = projectionModule.itemsFrom(events).filter(function (item) {
+    return item.state === "draft";
+  }).length;
+  return { projection: projectionModule.project(reviewId, events), draftCount: drafts };
 }
 
 // ---------------------------------------------------------------------------
@@ -325,6 +332,7 @@ async function run(argv, options) {
     var held = ready && ready.reviews ? ready.reviews[id] : null;
     var projection = null;
     var pageLastSeen = null;
+    var draftCount = 0;
     var helperUp = false;
 
     if (helperOrigin && held) {
@@ -338,6 +346,7 @@ async function run(argv, options) {
         if (answer.ok) {
           projection = answer.projection;
           pageLastSeen = projection && projection.page_last_seen_at ? projection.page_last_seen_at : null;
+          draftCount = projection && typeof projection.draft_count === "number" ? projection.draft_count : 0;
           helperUp = true;
         }
       } catch (error) {
@@ -347,7 +356,11 @@ async function run(argv, options) {
 
     if (!projection) {
       try {
-        projection = readFromDisk(dir, id);
+        var offDisk = readFromDisk(dir, id);
+        if (offDisk) {
+          projection = offDisk.projection;
+          draftCount = offDisk.draftCount;
+        }
       } catch (error) {
         projection = null;
       }
@@ -367,11 +380,16 @@ async function run(argv, options) {
     var open = items.filter(isUnansweredReady);
     totalUnanswered += open.length;
 
-    var liveness = { helper_up: helperUp, page_last_seen_at: pageLastSeen, last_item_at: lastItemAt(items) };
+    var liveness = {
+      helper_up: helperUp,
+      page_last_seen_at: pageLastSeen,
+      last_item_at: lastItemAt(items),
+      drafts: draftCount
+    };
 
     if (args.json) {
       open.forEach(function (item) {
-        jsonItems.push(Object.assign({ review: id }, item));
+        jsonItems.push(Object.assign({ review: id, liveness: liveness }, item));
       });
     }
 
@@ -391,6 +409,12 @@ async function run(argv, options) {
         counts[record.STATE.NOT_HANDLED] +
         " not handled"
     );
+    if (draftCount > 0) {
+      // Listed apart, and never in the work list or in --json: a draft is the
+      // reviewer still writing, and protocol.countsAsNew agrees. It is said out
+      // loud so an edit stuck in draft is visible to somebody.
+      lines.push("  drafts    " + draftCount + " (the reviewer is still writing these; they are not yours yet)");
+    }
     lines.push("  live      " + livenessLine(liveness, nowMs));
     lines.push(
       "            " +

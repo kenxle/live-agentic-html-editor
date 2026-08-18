@@ -190,7 +190,15 @@ var HANDLERS = {
     if (typeof deps.projection.startWatching === "function") {
       deps.projection.startWatching(deps, [request.review]);
     }
-    var projected = deps.projection.project(request.review, deps.log.read(request.review));
+    var events = deps.log.read(request.review);
+    var projected = deps.projection.project(request.review, events);
+    // How many items the reviewer is still writing. Drafts are NOT in the
+    // projection (R7: they never reach an agent) and that stays true; this is a
+    // count and nothing else, so `lahe status` can say "3 drafts, the reviewer
+    // is still writing" instead of leaving a stuck draft invisible to everyone.
+    var draftCount = deps.projection.itemsFrom(events).filter(function (item) {
+      return item.state === "draft";
+    }).length;
     return {
       status: 200,
       // `page_last_seen_at` is the liveness fact `lahe status` reports: when the
@@ -200,7 +208,8 @@ var HANDLERS = {
       // anything while the helper is up should come from the helper.
       body: Object.assign({}, projected, {
         seq: deps.log.currentSeq(request.review),
-        page_last_seen_at: deps.reviews.lastSeenAt(request.review)
+        page_last_seen_at: deps.reviews.lastSeenAt(request.review),
+        draft_count: draftCount
       })
     };
   },

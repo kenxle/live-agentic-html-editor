@@ -1334,11 +1334,22 @@
         dom.panes[name].setAttribute("data-current", name === activeTab ? "true" : "false");
         dom.counts[name].textContent = String(countFor(name));
       });
-      // An empty pill invites; it does not report a zero. "Review 0" on an
-      // untouched page prints the one number that is not information.
+      // THE COLLAPSED PILL'S COUNT: still to handle, then the all-time total in
+      // parentheses, "3 (7)". A finished review reads "0 (7)", which is the
+      // burn-down a reviewer wants to see rather than a blank pill. The rail can be
+      // collapsed for most of a session, and with only the open count on it a
+      // reviewer who had answered everything saw the same empty pill as one who
+      // had never written anything: no sense of how much is on the page and no
+      // sign the tool was alive. The total is every card the rail is holding for
+      // this page, whatever tab it sits under, so a finished review reads 0/7
+      // rather than blank.
+      //
+      // An empty pill still invites on an untouched page: "Review 0/0" prints
+      // the one number that is not information.
       var open = countFor(TAB.ACTIVE);
-      dom.pillCount.textContent = open ? String(open) : "";
-      dom.pillCount.hidden = open === 0;
+      var total = Object.keys(cards).length;
+      dom.pillCount.textContent = total ? String(open) + " (" + String(total) + ")" : "";
+      dom.pillCount.hidden = total === 0;
     }
 
     function selectTab(tab) {
@@ -1549,7 +1560,7 @@
     // Rects for both, plus the overlap answer, because "never overlaps" is a
     // geometric claim and a test should be able to check it as one.
     function geometry() {
-      if (!dom) return { railVisible: false, pillVisible: false, overlap: false, rail: null, pill: null };
+      if (!dom) return { railVisible: false, pillVisible: false, pillCount: "", overlap: false, rail: null, pill: null };
       var railRect = dom.rail.hidden ? null : dom.rail.getBoundingClientRect();
       var pillRect = dom.pill.hidden ? null : dom.pill.getBoundingClientRect();
       var overlap = false;
@@ -1563,6 +1574,9 @@
       return {
         railVisible: !!railRect,
         pillVisible: !!pillRect,
+        // The burn-down the pill shows, as the reviewer reads it: "3 (7)", or
+        // "" on a page nothing has been written on yet.
+        pillCount: dom.pillCount.hidden ? "" : dom.pillCount.textContent,
         overlap: overlap,
         rail: railRect ? { top: railRect.top, right: railRect.right, bottom: railRect.bottom, left: railRect.left } : null,
         pill: pillRect ? { top: pillRect.top, right: pillRect.right, bottom: pillRect.bottom, left: pillRect.left } : null

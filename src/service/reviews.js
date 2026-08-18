@@ -443,6 +443,11 @@ function createReviews(options) {
       })
     ]);
     log.helperLog("review " + reviewId + " registered origin " + value);
+    // service.json lists each review's origins, and it is how everything else on
+    // the machine (`add`, `wait`, `status`) knows what this helper holds. An
+    // origin registered while the helper is running has to reach it, or `add`
+    // would keep believing the origin is missing and writing it again.
+    if (lastReadyDetails) writeReadyFile(lastReadyDetails);
     return review;
   }
 
