@@ -25,10 +25,17 @@ no network access or a locked-down npm registry.
 
 ## Node version
 
-`engines.node` is `>=20.0.0`. Node's built-in test runner (`node:test`) is
-what unit tests use; it's stable from Node 20. Playwright 1.62 also
-requires Node >=20, which is what pins the floor here. A `.nvmrc` (20.19.0)
-is checked in; run `nvm use` if you have nvm.
+`engines.node` is `>=18.0.0`. The tool itself is `node:`-prefixed core modules
+and the global `fetch`, both stable from Node 18, and the unit suite passes on
+18. The DEV floor is higher: Playwright 1.62 requires Node >=20, so
+`npm run test:browser` needs 20. A `.nvmrc` (20.19.0) is checked in; run
+`nvm use` if you have nvm.
+
+Install the command with `npm run install-cli`, not `npm link`. It writes a
+wrapper at `~/.local/bin/lahe` naming absolute paths to the Node that ran it and
+to the clone. `npm link` under nvm puts `lahe` in that version's own bin
+directory, which is off PATH the moment the shell default is a different Node:
+the install reports success and the command is then not found.
 
 ## Directory layout
 

@@ -1338,6 +1338,13 @@
      */
     function onPointerDown(event) {
       if (!session) return;
+      // THE ONE EXEMPTION: the edit frame's own bar (Bold, Italic, Delete
+      // block). Those buttons act ON the open edit, so a pointer landing on one
+      // is the reviewer still editing, not leaving. The bar lives in the
+      // library's closed shadow root, so the event's target as the document
+      // sees it is the overlay host and is no help; composedPath is what can
+      // tell the frame's bar from the rest of the rail.
+      if (onOwnFrame(event)) return;
       var got = gestures.gestureFor(describe(event));
       if (got.gesture !== gestures.GESTURE.COMMIT_EDIT) return;
       commit({ reason: "pointer outside" });
@@ -1351,6 +1358,27 @@
      * reached the agent. Guarded to the window's own blur: element blur does not
      * bubble, but a stray retarget must not be read as the reviewer leaving.
      */
+    /**
+     * Did this pointer land on the frame's own bar, which belongs to this edit?
+     *
+     * BY GEOMETRY, not by node identity. The bar lives in the library's CLOSED
+     * shadow root, and a closed root is exactly what composedPath refuses to
+     * reveal to a listener outside it, so from the document the target is the
+     * overlay host and nothing distinguishes the bar from the rail. The bar's
+     * rectangle does.
+     */
+    function onOwnFrame(event) {
+      if (!barNode || typeof event.clientX !== "number") return false;
+      var rect = barNode.getBoundingClientRect();
+      if (!rect || (rect.width === 0 && rect.height === 0)) return false;
+      return (
+        event.clientX >= rect.left &&
+        event.clientX <= rect.right &&
+        event.clientY >= rect.top &&
+        event.clientY <= rect.bottom
+      );
+    }
+
     function onWindowBlur(event) {
       if (!session) return;
       if (event && event.target && win && event.target !== win && event.target !== doc) return;

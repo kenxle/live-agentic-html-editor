@@ -223,9 +223,17 @@ it would see without the library (R13, which outranks editing convenience).
 | Cmd-Shift-C | nothing selected | Element-pick mode; click an element, Esc cancels |
 | Cmd-Shift-E | cursor or selection in a block | Edit that block, and nothing else |
 | Cmd-Enter | in a comment box | Mark ready for the agent |
-| Esc, or a click outside | a block is in edit state | Commit the edit |
+| Esc | a block is in edit state | Commit the edit |
+| the pointer going down anywhere outside the block, INCLUDING on the rail | a block is in edit state | Commit the edit; the event still passes through |
+| the window losing focus | a block is in edit state | Commit the edit |
 | Esc | picking, or in a comment box | Cancel; the draft is kept |
 | everything else | always | The page's |
+
+**Every way of leaving the block commits it**, because an edit left in `draft` passes no watermark and
+reaches no agent, while the page looks finished to the reviewer. Clicking the rail used to be the hole:
+a click there retargets to the overlay host, which the click rule skips as the library's own UI. The
+pointer rule does not skip it. Commit is idempotent (the session is cleared before the DOM is touched),
+which is what lets pointerdown, click and blur all fire on one gesture without bumping the revision.
 
 Ctrl is the same modifier as Cmd, so one rule covers macOS, Linux, and Windows.
 `gestures.gestureFor(descriptor)` is a pure function over a plain descriptor, never over a DOM event,
@@ -418,12 +426,21 @@ Public API, because D1 makes this the one line a person or an agent types by han
 (`protocol.scriptTag`):
 
 ```
-<script src="<path to the built library>"
+<script src="http://127.0.0.1:7817/lahe-layer.js"
         data-lahe-review="<review-id>"
         data-lahe-token="<per-review token>"
         data-lahe-helper="http://127.0.0.1:7817"
         defer></script>
 ```
+
+**The `src` is the helper's own URL, and that supersedes D1's "the library works
+alone" for this one field.** D1 wanted a path on disk so a page still loaded the
+library with no helper up. In practice a relative path (or a copy into the page's
+assets directory) resolves against wherever the page is SERVED from, so the first
+time that is another folder the library 404s and the page silently does nothing;
+and a review with no helper records nothing anyway, so the state D1 protected was
+never usable. One absolute URL resolves from any folder, origin and depth. The
+helper serves those bytes on the unauthenticated `library.get` route.
 
 Read via `document.currentScript`, falling back to `document.querySelector('script[data-lahe-review]')`
 (`protocol.SCRIPT_SELECTOR`) for the deferred and re-executed cases. **7817 is the fixed default
@@ -438,12 +455,31 @@ Loopback is not a boundary, so the page proves itself on every request. The help
 | Route | Method | Path | Auth |
 | --- | --- | --- | --- |
 | `health` | GET | `/lahe/v1/health` | none |
+| `library.get` | GET | `/lahe-layer.js` | **none** |
 | `events.append` | POST | `/lahe/v1/events` | per-review token |
 | `review.read` | GET | `/lahe/v1/review` | per-review token |
+| `review.write` | POST | `/lahe/v1/review` | per-review token |
 | `replies.poll` | GET | `/lahe/v1/replies?review=&since=<seq>` | per-review token |
 | `window.claim` | POST | `/lahe/v1/window` | per-review token |
 | `review.end` | POST | `/lahe/v1/end` | per-review token |
 | `wait` | GET | `/lahe/v1/wait?review=&since=&timeout=` | per-review token |
+
+`library.get` is the built library, served as `application/javascript`, read from `dist/` once at serve
+start (a missing build is a loud startup failure, never a 404 a reviewer meets). It needs no credential
+because it carries no review data and no token: it is the same public bytes as the file in the repo.
+The exemption is `AUTH.NONE` in the route table, exactly the way `health`'s is, so there is still no
+branch around the check block.
+
+`review.write` body is `{review, origins: [origin...], target_path?, source_path?, source_hint?, page_path?}`.
+It exists so `add` never has to stop a running helper: writes to a review the helper HOLDS go through
+the helper, which is the single writer of that review's log. Stopping the helper drops every blocked
+`lahe wait` long-poll, which is an agent losing the review it was watching mid-session. `add` writes to
+disk itself only when no helper is appending to that review. Everything on the route is idempotent.
+
+`review.read`'s response carries two fields beyond the projection: `page_last_seen_at`, the last time
+the LIBRARY (never the CLI) made an authenticated request for this review, and `draft_count`. Both are
+what `lahe status` reports as liveness; `page_last_seen_at` is in memory only, because a number that
+survived a restart would be a stale claim that a page is connected.
 
 `window.claim` body is `{review, window_id, session_secret?, takeover?}` (D5's one-session-per-review).
 A grant returns `{granted:true, since, heartbeat_seconds, took_over, session_secret}`; the
@@ -475,6 +511,37 @@ unobservable. Error bodies are one shape:
 A page opened from a file sends no usable origin; `"null"` passes only when the add step registered
 it for that review, which is D11's stated residual risk rather than a hole.
 
+**The origin trap, and how the page diagnoses it.** A static file registers `"null"` and nothing else.
+Serve that same page over http and the browser sends the server's origin, which no review registered,
+so every request is refused. The refusal is invisible to `fetch`: every route carries the custom header
+D11 requires, so the browser preflights, and a refused preflight surfaces as a plain network error with
+no status. So after a network-level failure the library asks `health`, which is unauthenticated and
+therefore unpreflighted: if health answers, the helper is up and the ORIGIN is what is being refused,
+and the chip says so and names this page's origin (`sync.decideFailureCode`). `add` also warns before
+it happens, whenever a static file registers `"null"` alone.
+
+### `lahe status`
+
+```
+lahe status [--review <id>] [--json] [--state-dir <path>]
+```
+
+The read path beside `wait`'s blocking one. `wait` blocks, and it was the only read, so every agent
+hand-rolled a walk of `review.json` with its own idea of what counted.
+
+- **What it lists:** the UNANSWERED READY items, meaning state `ready` with no reply on them. That is
+  the projection's own vocabulary, and it is the same watermark `wait` wakes on. Items in `not_handled`
+  or carrying a `question` are in front of the REVIEWER, so they are counted and not listed. Drafts are
+  counted separately and never listed, matching `protocol.countsAsNew`.
+- **Liveness:** `page last seen <n> ago` (from `review.read`'s `page_last_seen_at`), `no page has
+  connected yet`, or `unknown` when no helper is running. Plus when the last comment arrived. This is
+  the answer to "are you getting my edits?", which neither side could give before.
+- **Where it reads from:** `review.read` when a helper is up, and the projector off disk when not. A
+  projection is a pure function of the log, so both paths agree.
+- **Exit codes:** `wait`'s, reused: `0` it printed (even zero items), `2` nothing readable, `3` unknown
+  review, `4` bad usage.
+
+
 ### `lahe wait`
 
 ```
@@ -492,6 +559,10 @@ lahe wait --review <id> [--since <cursor>] [--timeout <seconds>, default 300]
 - **Exit codes:** `0` new work printed, `1` timeout with nothing new, `2` helper not reachable,
   `3` unknown review id, `4` bad usage (`protocol.WAIT.EXIT`).
 - **Concurrency:** two waiters on one review both wake. There is no queue and no claim.
+- **A helper that goes away mid-wait is retried, not reported.** A dropped connection is re-asked from
+  the SAME `--since` (a read consumes nothing, so nothing is skipped or double-counted) for up to
+  thirty seconds or the rest of `--timeout`, whichever is smaller, with one stderr line on reconnect.
+  Only then is it `HELPER_UNREACHABLE`.
 
 ### The failure table
 

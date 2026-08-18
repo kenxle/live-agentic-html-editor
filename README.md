@@ -8,8 +8,10 @@ source.
 Two pieces, and that is the whole design:
 
 - **The library.** One built JavaScript file, added to the page with one
-  `<script>` line. It runs alone: if the local process is not up, the work is
-  kept in browser storage and posted when it comes back.
+  `<script>` line whose `src` is the helper's own URL
+  (`http://127.0.0.1:7817/lahe-layer.js`). Your work is kept in browser storage
+  every keystroke, so a helper that goes away costs nothing: everything posts
+  when it comes back.
 - **The helper.** One Node process beside the page (`lahe serve`), listening on
   `127.0.0.1:7817`. It keeps an append-only log of the review and writes the
   file your agent reads.
@@ -20,9 +22,11 @@ implemented and tested against real browsers (Chromium, Firefox, WebKit). See
 
 ## What you need
 
-**Node 20 or later.** The helper is plain Node with no runtime dependencies: it
+**Node 18 or later.** The helper is plain Node with no runtime dependencies: it
 uses `node:`-prefixed core modules and the global `fetch`, both of which are
-stable from Node 20 on. Nothing else is installed to run the tool.
+stable from Node 18 on. Nothing else is installed to run the tool. (The
+Playwright browser suite in `test/browser/` needs Node 20; running the tool does
+not.)
 
 **A current Chrome, Edge, Safari, or Firefox.** The floor is the
 [Custom Highlight API](https://developer.mozilla.org/en-US/docs/Web/API/CSS_Custom_Highlight_API),
@@ -56,8 +60,21 @@ path done by hand.
 git clone <this repo>
 cd live-agentic-html-editor
 npm install
-npm link          # once, so `lahe` is a command on your PATH
+npm run install-cli    # puts a `lahe` wrapper in ~/.local/bin
+lahe --help || echo "not on PATH"
 ```
+
+`install-cli` writes a two-line shell wrapper at `~/.local/bin/lahe` that names
+the absolute path of the Node that ran it and the absolute path of this clone. It
+is there because `npm link` puts the command in the bin directory of whichever
+Node ran it: under nvm that is `~/.nvm/versions/node/vXX/bin`, which is on your
+PATH only while that version is selected, so the install reports success and then
+`lahe` is not found in an ordinary shell. The wrapper does not care what Node is
+on PATH or what nvm is doing. If `~/.local/bin` is not on your PATH, the command
+says so and prints the line to add.
+
+`npm link` still works as an alternative if you prefer it, and so does running
+from the clone with no install at all (below).
 
 Then, for any page you want to review:
 
@@ -68,6 +85,22 @@ lahe add path/to/page.html
 `add` does the whole install: it writes the one script line into the page,
 mints that review's token, registers the page's origin, and **starts the helper
 if it is not already running**. It prints what it did and what to open.
+
+**Review a static file over a local server**, which is the ordinary way. Serve
+the page's own folder and register that origin:
+
+```sh
+cd path/to            # the folder holding page.html
+python3 -m http.server 8000 --bind 127.0.0.1 &
+lahe add path/to/page.html --origin http://127.0.0.1:8000
+# then open http://127.0.0.1:8000/page.html
+```
+
+Opening the file directly (`file://`) also works and is the fallback: a page
+opened from disk sends the origin `null`, which `add` always registers. What does
+NOT work is registering only `null` and then opening the page through a server:
+the browser sends the server's origin, the helper refuses it, and the page tells
+you so with the command that fixes it.
 
 For a dev server, point it at the project instead:
 
@@ -110,8 +143,10 @@ lahe add path/to/page.html --remove
 
 That deletes the one script line `add` wrote and changes nothing else in the
 file. For a dev server, delete the line you pasted into your layout yourself:
-it is the one carrying `data-lahe-review`. If `add` copied `lahe-layer.js` into
-your assets or `public/` directory, that copy is yours to delete too.
+it is the one carrying `data-lahe-review`. Nothing is copied into your project:
+the script `src` is the helper's own URL, so there is no stray `lahe-layer.js` to
+find. (Older reviews, added before that change, may have left one in your assets
+or `public/` directory.)
 
 **Stop the helper.** Ctrl-C in the window running `lahe serve`, or, when `add`
 started it for you, kill the pid in `service.json` in the state directory.
@@ -119,7 +154,8 @@ started it for you, kill the pid in `service.json` in the state directory.
 **Forget the reviews.** Delete the state directory (`$LAHE_STATE_DIR`, or
 `$XDG_STATE_HOME/lahe`, or `~/.local/state/lahe`). It holds every review's
 history and token, so this is the step that throws work away; nothing does it
-for you. Uninstalling the command itself is `npm unlink` in the clone.
+for you. Uninstalling the command itself is deleting `~/.local/bin/lahe` (or
+`npm unlink` in the clone, if that is how you installed it).
 
 ## Using it
 
@@ -131,7 +167,7 @@ not need this file open to work them out.
 | Cmd-Shift-C with text selected | Comment on the selection |
 | Cmd-Shift-C with nothing selected | Element-pick mode: hover to outline, click to comment, Esc to cancel |
 | Cmd-Shift-E | Edit the block under the cursor |
-| Esc, or a click outside | Commit the edit and give the block back to the page |
+| Esc, or clicking anywhere outside the block (the page, the rail, another window) | Commit the edit and give the block back to the page |
 | Cmd-Enter in a comment box | This comment is done, and the agent may act on it |
 | The open box at the foot of the rail | A note tied to nothing in particular |
 
@@ -159,8 +195,17 @@ once, and after that a plain sentence works:
 | `lahe add ... --new` | Mint a fresh review even though the page already carries one |
 | `lahe add path/to/page.html --remove` | Take the script line back out of the page, and change nothing else |
 | `lahe add ... --source path/to/template` | Record where the source lives, so an agent edits the template rather than build output |
+| `lahe add ... --review <id>` | Re-attach this page to a review that already exists, by id |
+| `lahe status [--review <id>] [--json]` | What is open right now: per review, the pages, the counts, the items waiting on you, and whether the reviewer's page is still connected. Blocks on nothing |
 | `lahe serve [--port N]` | Run the helper by hand (`add` starts it for you, so this is rarely needed) |
 | `lahe wait --review <id> [--since <cursor>] [--timeout <seconds>] [--state-dir <path>]` | Block until new items are ready; prints them as JSON lines plus the next cursor. Exit codes: 0 new work, 1 timeout, 2 helper unreachable, 3 unknown review, 4 bad usage. Reading acknowledges nothing |
+
+**If the page is build output**, an agent should rebuild and re-run `lahe add` on
+the built page before it reports an item handled: `handled` is supposed to mean
+your page shows the change. Re-running `add` on a rebuilt page is one idempotent
+command and keeps the same review, because the review remembers the path it was
+added at. Reloading under you is safe by design: the library re-applies your
+outstanding comments and edits on the new page.
 
 **The files, which are the agent's real interface.** In the review folder that
 `add` names: `review.json` is what an agent reads (its top-level `contract`
