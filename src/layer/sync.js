@@ -390,11 +390,11 @@
     // R36. The mtime this page last saw, the armed-but-not-yet-fired reload, and
     // its debounce timer.
     var targetMtime = null;
-    // The last agent_liveness the helper sent, and the state string it carried.
-    // The state is kept separately so the change test is one comparison rather
-    // than a deep one on every poll.
+    // The last agent_liveness the helper sent, and a key over the fields the
+    // rail draws from it. The key is kept separately so the change test is one
+    // string comparison rather than a deep one on every poll.
     var agentLiveness = null;
-    var agentLivenessState = null;
+    var agentLivenessKey = null;
     var reloadPending = false;
     var reloadTimer = null;
     var reloadsFired = 0;
@@ -835,25 +835,41 @@
     /**
      * The helper's report on whether an agent is listening.
      *
-     * Raised on a STATE CHANGE only. The rail's agent line is calm text most of
-     * the time, and repainting it on every two-second poll is churn nobody
-     * needs; a state change is the only thing a reviewer would notice.
+     * Raised when the payload MATERIALLY CHANGES, not only when the state string
+     * does. Raising on the state alone froze the one line that carries a number:
+     * "No agent watching, oldest item 1m" stayed at 1m for as long as nothing
+     * else changed, because the state was still unattended and the rail was
+     * never told again. Every field the line is drawn from is in the key.
      *
-     * The unattended state is the exception, and it is handled by the rail
-     * rather than here: the object is stored whichever way this goes, so the
-     * rail can re-read the oldest item's age whenever it repaints.
+     * It is still not "every poll": an unchanged payload raises nothing, so a
+     * quiet rail is not repainted once a second. The rail runs its own slow tick
+     * for the age between deliveries.
      *
      * @param {object|null} value the agent_liveness object, or null
-     * @returns {boolean} true when the state changed and the callback fired
+     * @returns {boolean} true when something changed and the callback fired
      */
     function noteAgentLiveness(value) {
       if (!value || typeof value !== "object") return false;
       agentLiveness = value;
-      var next = typeof value.state === "string" ? value.state : null;
-      if (next === agentLivenessState) return false;
-      agentLivenessState = next;
+      var next = livenessKey(value);
+      if (next === agentLivenessKey) return false;
+      agentLivenessKey = next;
       onAgentLiveness(value);
       return true;
+    }
+
+    // Every field the rail's agent line is drawn from, in one string. A deep
+    // compare would be the same answer for more code; the object is five scalars
+    // wide and that is the whole of it.
+    function livenessKey(value) {
+      var f = protocol.AGENT_LIVENESS.FIELD;
+      return [
+        value[f.STATE],
+        value[f.MONITOR_AT],
+        value[f.ACTIVITY_AT],
+        value[f.UNANSWERED],
+        value[f.OLDEST_UNANSWERED_AT]
+      ].join("|");
     }
 
     function noteTargetMtime(value) {

@@ -14,6 +14,7 @@ const reviewsModule = require("../../src/service/reviews.js");
 const projectionModule = require("../../src/service/projection.js");
 const record = require("../../src/shared/record.js");
 const syncModule = require("../../src/layer/sync.js");
+const overlay = require("../../src/layer/overlay.js");
 
 const NOW = Date.parse("2026-08-18T12:00:00.000Z");
 const STATE = protocol.AGENT_LIVENESS.STATE;
@@ -309,7 +310,61 @@ test("the unanswered count is computed once per log position, not once per poll"
   assert.equal(poll({ review: "r_cache", query: { since: 0 } }, deps).body.agent_liveness.unanswered, 2);
 });
 
-test("the layer raises the liveness on a state change and holds it in between", async () => {
+test("the rail's unattended line re-reads its own clock instead of freezing at 1m", () => {
+  let clock = Date.parse("2026-08-18T12:00:00.000Z");
+  const intervals = [];
+  const rail = overlay.createRail({
+    document: null,
+    now: () => clock,
+    timers: {
+      setInterval: (fn, ms) => {
+        const handle = { fn: fn, ms: ms, cleared: false };
+        intervals.push(handle);
+        return handle;
+      },
+      clearInterval: (handle) => {
+        if (handle) handle.cleared = true;
+      }
+    }
+  });
+  rail.mount();
+
+  // A healthy state holds no timer: nothing on that line goes stale.
+  rail.setAgentLiveness({ state: STATE.WATCHING, unanswered: 0, oldest_unanswered_at: null });
+  assert.equal(intervals.length, 0);
+
+  const oldest = new Date(clock - 60000).toISOString();
+  rail.setAgentLiveness({ state: STATE.UNATTENDED, unanswered: 1, oldest_unanswered_at: oldest });
+  assert.equal(rail.agentLine().text, "No agent watching · oldest item 1m");
+  assert.equal(intervals.length, 1, "the one line with an age in it gets a tick");
+  assert.equal(intervals[0].ms, 30000);
+
+  // The helper says nothing new for ten minutes. The line used to still read
+  // "oldest item 1m", because the rail was only ever told on a state change.
+  clock += 10 * 60000;
+  assert.equal(rail.agentLine().text, "No agent watching · oldest item 11m");
+
+  // Leaving the loud state stops the tick, and so does unmounting.
+  rail.setAgentLiveness({ state: STATE.WATCHING, unanswered: 1, oldest_unanswered_at: oldest });
+  assert.equal(intervals[0].cleared, true, "a watching rail holds no timer");
+
+  rail.setAgentLiveness({ state: STATE.UNATTENDED, unanswered: 1, oldest_unanswered_at: oldest });
+  assert.equal(intervals.length, 2);
+  rail.unmount();
+  assert.equal(intervals[1].cleared, true, "an unmounted rail leaves no interval behind");
+});
+
+test("a state the rail has never heard of says nothing rather than inventing a sentence", () => {
+  const rail = overlay.createRail({ document: null });
+  assert.equal(rail.setAgentLiveness({ state: "hibernating", unanswered: 4 }) !== null, true);
+  assert.equal(rail.agentLine(), null);
+  // And the state the protocol does define as quiet is quiet for the same
+  // reason a reviewer would want: nothing is waiting.
+  rail.setAgentLiveness({ state: STATE.NONE, unanswered: 0 });
+  assert.equal(rail.agentLine(), null);
+});
+
+test("the layer delivers the liveness whenever the payload changes, not only the state string", async () => {
   const raised = [];
   let answer = { events: [], seq: 0, target_mtime: null, agent_liveness: null };
   const sync = syncModule.createSync({
@@ -331,17 +386,31 @@ test("the layer raises the liveness on a state change and holds it in between", 
   await sync.poll();
   assert.deepEqual(raised, ["unattended"]);
 
-  // The same state on the next poll raises nothing. The rail's agent line is
-  // calm text; repainting it every two seconds is churn nobody asked for.
+  // An IDENTICAL payload on the next poll raises nothing. The rail's agent line
+  // is calm text; repainting it every second is churn nobody asked for.
   await sync.poll();
   await sync.poll();
   assert.deepEqual(raised, ["unattended"]);
   // The object is still held, so a repaint can re-read the oldest item's age.
   assert.equal(sync.status().agentLiveness.unanswered, 2);
 
-  answer = Object.assign({}, answer, { agent_liveness: { state: "watching", unanswered: 2 } });
+  // A payload that changed while the STATE STRING did not is still news: the
+  // count and the oldest item are both on the line the reviewer reads, and
+  // raising on the state alone left them frozen at whatever they first said.
+  answer = Object.assign({}, answer, { agent_liveness: { state: "unattended", unanswered: 3 } });
   await sync.poll();
-  assert.deepEqual(raised, ["unattended", "watching"]);
+  assert.deepEqual(raised, ["unattended", "unattended"]);
+  assert.equal(sync.status().agentLiveness.unanswered, 3);
+
+  answer = Object.assign({}, answer, {
+    agent_liveness: { state: "unattended", unanswered: 3, oldest_unanswered_at: "2026-08-18T12:00:00.000Z" }
+  });
+  await sync.poll();
+  assert.equal(raised.length, 3, "a new oldest item is delivered too");
+
+  answer = Object.assign({}, answer, { agent_liveness: { state: "watching", unanswered: 3 } });
+  await sync.poll();
+  assert.deepEqual(raised.slice(3), ["watching"]);
 });
 
 test("the route table documents agent_liveness, so nobody has to read the handler to find it", () => {

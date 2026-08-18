@@ -77,16 +77,23 @@
   var browser = typeof window !== "undefined" && !!window.document;
   if (browser) {
     root.LAHE = root.LAHE || {};
-    root.LAHE.overlay = factory(root.LAHE.markers, root.LAHE.failures, root.LAHE.record, root.LAHE.highlight);
+    root.LAHE.overlay = factory(
+      root.LAHE.markers,
+      root.LAHE.failures,
+      root.LAHE.record,
+      root.LAHE.highlight,
+      root.LAHE.protocol
+    );
   } else {
     module.exports = factory(
       require("../shared/markers.js"),
       require("../shared/failures.js"),
       require("../shared/record.js"),
-      require("./highlight.js")
+      require("./highlight.js"),
+      require("../shared/protocol.js")
     );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, failuresModule, record, highlightModule) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, failuresModule, record, highlightModule, protocol) {
   "use strict";
 
   // D10's three tabs. Contents come from the three tab files; the shell is
@@ -141,22 +148,32 @@
   // healthy readings; a rail that shouts in a healthy state is a rail nobody
   // reads by the third comment. `none` renders nothing at all, because "no
   // agent is watching and nothing is waiting" is not news.
-  var AGENT_STATE = {
-    WATCHING: "watching",
-    WORKING: "working",
-    UNATTENDED: "unattended",
-    NONE: "none"
-  };
-  var AGENT_TEXT = {
-    watching: "Agent watching",
-    working: "Agent working",
-    unattended: "No agent watching"
-  };
-  var AGENT_TITLE = {
-    watching: "An agent's monitor checked in within the last minute.",
-    working: "No monitor is checked in, but this agent session ran a lahe command in the last few minutes.",
-    unattended: "Nothing is listening: no monitor has checked in and no agent command has run. Your items are waiting."
-  };
+  //
+  // The strings come from protocol.js, which is already above this file in the
+  // bundle. They were hand-copied here, which is two spellings of one wire
+  // value: rename a state on the helper and the rail silently stops recognising
+  // it, which looks exactly like a healthy rail with nothing to say.
+  var AGENT_STATE = protocol.AGENT_LIVENESS.STATE;
+  var AGENT_FIELD = protocol.AGENT_LIVENESS.FIELD;
+  // How often the agent line re-reads its own clock. Only the unattended line
+  // carries an age, and it is the one line that goes stale on its own: the
+  // helper can send the same payload for minutes while "oldest item 1m" quietly
+  // becomes a lie. 30 seconds is well inside the units the line prints.
+  var AGENT_AGE_TICK_MS = 30000;
+  // Keyed by the protocol's own strings. `none` is deliberately absent from
+  // both: a state with no text renders nothing, which is what "nothing is
+  // waiting and nobody is watching" deserves.
+  var AGENT_TEXT = {};
+  AGENT_TEXT[AGENT_STATE.WATCHING] = "Agent watching";
+  AGENT_TEXT[AGENT_STATE.WORKING] = "Agent working";
+  AGENT_TEXT[AGENT_STATE.UNATTENDED] = "No agent watching";
+
+  var AGENT_TITLE = {};
+  AGENT_TITLE[AGENT_STATE.WATCHING] = "An agent's monitor checked in within the last minute.";
+  AGENT_TITLE[AGENT_STATE.WORKING] =
+    "No monitor is checked in, but this agent session ran a lahe command in the last few minutes.";
+  AGENT_TITLE[AGENT_STATE.UNATTENDED] =
+    "Nothing is listening: no monitor has checked in and no agent command has run. Your items are waiting.";
 
   var STATE_LABEL = {
     draft: "Draft",
@@ -476,6 +493,23 @@
     { keys: ["⌘", "⏎"], what: "done with this one" }
   ];
 
+  /**
+   * The page's own setInterval, bound to it, or null when there is no page.
+   *
+   * Bound because a bare `window.setInterval` called as a free function is an
+   * illegal invocation in some engines, and taken from the document's own view
+   * rather than a global so a rail mounted in another document uses that
+   * document's clock.
+   */
+  function timersFrom(doc) {
+    var view = doc && doc.defaultView ? doc.defaultView : null;
+    if (!view || typeof view.setInterval !== "function") return null;
+    return {
+      setInterval: function (fn, ms) { return view.setInterval(fn, ms); },
+      clearInterval: function (handle) { return view.clearInterval(handle); }
+    };
+  }
+
   function createRail(options) {
     var opts = options || {};
     var doc = opts.document || (typeof document !== "undefined" ? document : null);
@@ -486,6 +520,11 @@
     // default is the shared instance for the same reason: two instances would
     // be two hosts.
     var highlights = opts.highlights || highlightModule.shared;
+    // The clock and the timer source, as seams. A test drives the agent line's
+    // age without sleeping for a minute, and a page with no document (Node) gets
+    // no timers at all.
+    var now = typeof opts.now === "function" ? opts.now : function () { return Date.now(); };
+    var timers = opts.timers || timersFrom(doc);
 
     var cards = Object.create(null);
     var chips = [];
@@ -501,8 +540,11 @@
     var limitText = null;
     // The whole agent_liveness object the helper last sent, or null before one
     // has arrived. Held rather than reduced to a string, because the unattended
-    // line wants the oldest item's age too.
+    // line wants the oldest item's age too, and because that age is recomputed
+    // on every paint rather than frozen into the text once.
     var agentLiveness = null;
+    // The slow repaint for that age, running only while an age is on screen.
+    var agentAgeTimer = null;
     // The refusal is STATE, not a one-shot paint. A Turbo app remounts the rail
     // on its first navigation, and a refusal painted imperatively vanished with
     // the old dom while the (stateful) chip survived: the reviewer read a chip
@@ -814,6 +856,10 @@
       });
       dom = null;
       mounted = false;
+      // The age tick belongs to a rail that is on screen. A remount arms it
+      // again from renderAgent, so nothing is lost by dropping it here, and a
+      // page that navigates away leaves no interval of ours running.
+      armAgentAgeTick();
     }
 
     function isMounted() {
@@ -1514,6 +1560,10 @@
      * clear the line. An unknown state clears it too rather than throwing: this
      * comes off the wire, and a rail that breaks on an unfamiliar string is
      * worse than a rail that says nothing about a state it does not know.
+     *
+     * EVERY DELIVERY REPAINTS. The sync client no longer calls this only when
+     * the state string changes, and the line is redrawn from the object each
+     * time rather than trusted to be what it already said.
      */
     function setAgentLiveness(liveness) {
       agentLiveness = liveness && typeof liveness === "object" ? liveness : null;
@@ -1522,15 +1572,17 @@
     }
 
     function getAgentState() {
-      return agentLiveness && typeof agentLiveness.state === "string" ? agentLiveness.state : null;
+      return agentLiveness && typeof agentLiveness[AGENT_FIELD.STATE] === "string"
+        ? agentLiveness[AGENT_FIELD.STATE]
+        : null;
     }
 
     /** "12m" for a timestamp, or null. The rail's units, not a clock. */
-    function agentAge(iso, nowMs) {
+    function agentAge(iso, atMs) {
       if (typeof iso !== "string" || !iso) return null;
       var then = Date.parse(iso);
       if (Number.isNaN(then)) return null;
-      var seconds = Math.max(0, Math.round(((typeof nowMs === "number" ? nowMs : Date.now()) - then) / 1000));
+      var seconds = Math.max(0, Math.round(((typeof atMs === "number" ? atMs : now()) - then) / 1000));
       if (seconds < 60) return seconds + "s";
       if (seconds < 3600) return Math.round(seconds / 60) + "m";
       if (seconds < 86400) return Math.round(seconds / 3600) + "h";
@@ -1539,24 +1591,60 @@
 
     function agentLine() {
       var state = getAgentState();
+      // Two different silences, one behaviour, and the reason is worth saying:
+      // `none` is a state we know and deliberately draw nothing for, and an
+      // unfamiliar string is a helper newer than this page. Guessing at the
+      // second one would put an invented sentence on the rail, so both render
+      // nothing.
       if (!state || !Object.prototype.hasOwnProperty.call(AGENT_TEXT, state)) return null;
       var text = AGENT_TEXT[state];
       // The age is only on the loud state, and only there because it is what
       // makes the reviewer's next move obvious: five minutes is a busy agent,
-      // forty is a dead one.
+      // forty is a dead one. It is computed HERE, on every paint, so the slow
+      // tick below can keep it honest without the helper saying anything new.
       if (state === AGENT_STATE.UNATTENDED) {
-        var age = agentAge(agentLiveness.oldest_unanswered_at);
+        var age = agentAge(agentLiveness[AGENT_FIELD.OLDEST_UNANSWERED_AT]);
         if (age) text += " · oldest item " + age;
       }
       return { state: state, text: text };
     }
 
     function renderAgent() {
+      armAgentAgeTick();
       if (!dom) return;
       var line = agentLine();
       dom.agentRow.setAttribute("data-agent", line ? line.state : "");
       dom.agentText.textContent = line ? line.text : "";
       dom.agentRow.title = line && AGENT_TITLE[line.state] ? AGENT_TITLE[line.state] : "";
+    }
+
+    /**
+     * The one timer this file owns, and it runs only while it has to.
+     *
+     * The helper sends the same payload for as long as nothing changes, so
+     * "oldest item 1m" would sit there saying 1m an hour later. This re-reads
+     * the clock on the only line that has one in it. It is armed by the
+     * unattended state and disarmed by anything else, so a watching rail, a
+     * working rail and an unmounted rail all hold no timer at all.
+     */
+    function armAgentAgeTick() {
+      var needed =
+        mounted &&
+        getAgentState() === AGENT_STATE.UNATTENDED &&
+        !!(agentLiveness && agentLiveness[AGENT_FIELD.OLDEST_UNANSWERED_AT]);
+      if (needed === !!agentAgeTimer) return agentAgeTimer;
+      if (!needed) {
+        if (timers) timers.clearInterval(agentAgeTimer);
+        agentAgeTimer = null;
+        return null;
+      }
+      if (!timers) return null;
+      agentAgeTimer = timers.setInterval(function () {
+        if (!dom) return;
+        var line = agentLine();
+        dom.agentText.textContent = line ? line.text : "";
+      }, AGENT_AGE_TICK_MS);
+      return agentAgeTimer;
     }
 
     /**
