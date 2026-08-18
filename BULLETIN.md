@@ -15,6 +15,13 @@ tool is broken.**
 
 ## Board
 
+- [x] @codex 2026-08-18 LAHE-idle-energy -- the shared helper no longer scans
+  every accumulated review folder four times per second. Active page polls,
+  status reads, and browser event appends fold their review directly; a
+  five-second background scan remains for inactive reviews and direct file
+  readers. With 15 review folders, the old live helper measured 7 to 9 percent
+  idle CPU and the isolated fixed helper measured 0.0 percent in the sampled
+  process snapshot.
 - [x] @codex 2026-08-18 LAHE-thread-follow-up -- (Ken, 2026-08-18) after an
   agent answers, the reviewer needs a visible continuation box that sends a new
   message in the same thread. Preserve the original reviewer turn and agent

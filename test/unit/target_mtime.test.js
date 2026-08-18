@@ -54,6 +54,31 @@ test("replies.poll carries the reviewed file's mtime", () => {
   assert.equal(typeof body.seq, "number");
 });
 
+test("an active page poll folds its review directly instead of waiting for the background scan", () => {
+  const dir = tempDir();
+  const log = logModule.createEventLog({ dir: dir });
+  const reviews = reviewsModule.createReviews({ dir: dir, log: log });
+  reviews.create({ id: "review-1", origins: ["null"] });
+  const calls = [];
+
+  pollBody(
+    {
+      log: log,
+      reviews: reviews,
+      projection: {
+        tickReview(deps, reviewId) {
+          calls.push({ deps: deps, reviewId: reviewId });
+        }
+      }
+    },
+    "review-1"
+  );
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].reviewId, "review-1");
+  assert.equal(calls[0].deps.log, log);
+});
+
 test("a rebuild moves the mtime the poll reports", () => {
   const dir = tempDir();
   const page = path.join(dir, "page.html");

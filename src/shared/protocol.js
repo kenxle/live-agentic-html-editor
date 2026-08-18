@@ -715,9 +715,11 @@
   }
 
   // How the helper notices appends: it polls each replies*.jsonl in the review
-  // folder on this interval, tracking a byte offset per file.
+  // folder on this background safety interval, tracking a byte offset per
+  // file. Active pages and CLI reads also trigger a fold directly, so this is
+  // for inactive reviews and external file writes, not interaction latency.
   var REPLY_POLL = {
-    INTERVAL_MS: 250,
+    INTERVAL_MS: 5000,
     // A file SHORTER than its recorded offset was truncated or rewritten rather
     // than appended to, so the offset resets to zero and the file is re-folded.
     // Safe, because folding is idempotent.

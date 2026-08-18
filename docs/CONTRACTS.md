@@ -375,7 +375,10 @@ event naming the file, the line number and the reason, and raises a dismissible 
 reviewer's session with it, which is a worse failure than the one it reports.
 
 **How the helper notices appends:** it polls each `replies*.jsonl` in the review folder every
-**250ms**, tracking a **byte offset per file**. A file shorter than its recorded offset was truncated
+**5 seconds as an inactive-review safety scan**, tracking a **byte offset per file**. Active page
+polls, status reads, and browser event appends trigger the same fold immediately, so ordinary
+review latency stays at the page's one-second poll or better without scanning every accumulated
+review folder four times per second. A file shorter than its recorded offset was truncated
 or rewritten rather than appended to, so the offset **resets to zero and the file is re-folded**,
 which is safe because folding is idempotent (`protocol.nextReadOffset`). A final line with no
 trailing newline is **held until it completes**, so a torn write is never half-parsed

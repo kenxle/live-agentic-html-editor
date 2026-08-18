@@ -252,11 +252,10 @@ function countItems(projected) {
 // Keeping it fresh
 // ---------------------------------------------------------------------------
 //
-// One timer per helper, not per review: it folds every review's reply files on
-// protocol.REPLY_POLL.INTERVAL_MS and rewrites review.json for any review whose
-// log moved. An agent that only ever appends a line to a file is answered
-// within a quarter of a second, and a reviewer who marks something ready has it
-// in the agent's file just as fast.
+// One timer per helper, not per review: it is the safety net for inactive
+// reviews and direct file readers. Active page polls, status reads, and browser
+// event appends call tickReview directly, so ordinary interaction does not pay
+// for scanning every accumulated review folder several times a second.
 
 function createProjector(options) {
   var opts = options || {};
@@ -400,6 +399,12 @@ function startWatching(deps, reviewIds) {
   return projector;
 }
 
+function tickReview(deps, reviewId) {
+  var projector = attach(deps);
+  if (!projector) return null;
+  return projector.tickReview(reviewId);
+}
+
 module.exports = {
   itemsFrom: itemsFrom,
   actionableItems: actionableItems,
@@ -409,5 +414,6 @@ module.exports = {
   regenerate: regenerate,
   createProjector: createProjector,
   attach: attach,
-  startWatching: startWatching
+  startWatching: startWatching,
+  tickReview: tickReview
 };

@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+5ec23c2c8514
+ * version 0.0.0+18d392f276de
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+5ec23c2c8514";
+  g.LAHE.version = "0.0.0+18d392f276de";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -4212,9 +4212,11 @@
   }
 
   // How the helper notices appends: it polls each replies*.jsonl in the review
-  // folder on this interval, tracking a byte offset per file.
+  // folder on this background safety interval, tracking a byte offset per
+  // file. Active pages and CLI reads also trigger a fold directly, so this is
+  // for inactive reviews and external file writes, not interaction latency.
   var REPLY_POLL = {
-    INTERVAL_MS: 250,
+    INTERVAL_MS: 5000,
     // A file SHORTER than its recorded offset was truncated or rewritten rather
     // than appended to, so the offset resets to zero and the file is re-folded.
     // Safe, because folding is idempotent.
@@ -19826,7 +19828,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+5ec23c2c8514";
+  var VERSION = "0.0.0+18d392f276de";
 
   var protocol = ns.protocol;
   var record = ns.record;

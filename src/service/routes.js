@@ -65,6 +65,9 @@ var HANDLERS = {
       };
     }
     var result = deps.log.append(request.review, events);
+    if (deps.projection && typeof deps.projection.tickReview === "function") {
+      deps.projection.tickReview(deps, request.review);
+    }
     if (result.rejected.length > 0) {
       deps.log.helperLog(
         "review " +
@@ -242,6 +245,9 @@ var HANDLERS = {
     if (typeof deps.projection.startWatching === "function") {
       deps.projection.startWatching(deps, [request.review]);
     }
+    if (typeof deps.projection.tickReview === "function") {
+      deps.projection.tickReview(deps, request.review);
+    }
     var events = deps.log.read(request.review);
     var projected = deps.projection.project(request.review, events);
     // How many items the reviewer is still writing. Drafts are NOT in the
@@ -276,6 +282,9 @@ var HANDLERS = {
   // never a byte offset: two events in one millisecond are ordinary, and a clock
   // that steps backwards would silently skip work.
   "replies.poll": function (request, deps) {
+    if (deps.projection && typeof deps.projection.tickReview === "function") {
+      deps.projection.tickReview(deps, request.review);
+    }
     var since = numberOr(request.query.since, 0);
     var events = deps.log.since(request.review, since).filter(function (event) {
       var type = event[protocol.EVENT_FIELD.EVENT];

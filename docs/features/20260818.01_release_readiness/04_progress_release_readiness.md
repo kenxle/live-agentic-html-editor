@@ -32,6 +32,11 @@
 - Complete: post-integration lint and bundle checks passed; 490 unit tests and
   the 26 focused Chromium follow-up, rail, replay, and settling regressions
   passed.
+- Complete: idle helper polling was measured and redesigned. The existing
+  helper consumed roughly 7 to 9 percent CPU while scanning 15 review folders
+  four times per second. Active requests now fold their own review immediately,
+  while the all-review safety scan runs every five seconds. An isolated helper
+  with the same folder count sampled at 0.0 percent idle CPU.
 - Confirmed blocker: global monitoring crosses independent live agent sessions.
 - Confirmed known gaps: one-command static front door, cold-start proof,
   documentation pass, multi-page offline path reuse, and

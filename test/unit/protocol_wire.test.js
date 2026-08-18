@@ -134,7 +134,7 @@ test("the agent segment of a reply filename is a path component and is filtered"
 });
 
 test("the reply poll tracks a byte offset, resets on truncation, and holds a torn line", () => {
-  assert.equal(protocol.REPLY_POLL.INTERVAL_MS, 250);
+  assert.equal(protocol.REPLY_POLL.INTERVAL_MS, 5000);
   assert.deepEqual(protocol.nextReadOffset(120, 400), { offset: 120, refold: false });
   assert.deepEqual(protocol.nextReadOffset(400, 120), { offset: 0, refold: true }, "a shorter file was rewritten, not appended to");
   const split = protocol.splitCompleteLines('{"a":1}\n{"b":2}\n{"c":3 half-written');
