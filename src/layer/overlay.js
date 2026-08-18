@@ -132,6 +132,32 @@
     page_reloading: "Page updated. Reloading..."
   };
 
+  // Is an agent listening right now? This is GROUND TRUTH from the helper (a
+  // monitor heartbeat, a session activity stamp), never something an agent said
+  // about itself. A reviewer used to be told "monitoring is active" in a chat
+  // while seven items sat unanswered, and nothing on screen could contradict it.
+  //
+  // Four states, and only one of them is loud. Watching and working are the
+  // healthy readings; a rail that shouts in a healthy state is a rail nobody
+  // reads by the third comment. `none` renders nothing at all, because "no
+  // agent is watching and nothing is waiting" is not news.
+  var AGENT_STATE = {
+    WATCHING: "watching",
+    WORKING: "working",
+    UNATTENDED: "unattended",
+    NONE: "none"
+  };
+  var AGENT_TEXT = {
+    watching: "Agent watching",
+    working: "Agent working",
+    unattended: "No agent watching"
+  };
+  var AGENT_TITLE = {
+    watching: "An agent's monitor checked in within the last minute.",
+    working: "No monitor is checked in, but this agent session ran a lahe command in the last few minutes.",
+    unattended: "Nothing is listening: no monitor has checked in and no agent command has run. Your items are waiting."
+  };
+
   var STATE_LABEL = {
     draft: "Draft",
     ready: "Ready",
@@ -372,6 +398,28 @@
     ".status[data-status='agent_connected'] .status__dot{background:var(--accent)}",
     ".status[data-status='kept_locally'] .status__dot{background:var(--warn)}",
     ".status__text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+
+    // The agent line: is anybody actually listening? It sits under the status
+    // line because it answers the second half of the same question. Watching and
+    // working are CALM (a dot and quiet text): they are the healthy states and a
+    // rail that shouts in them teaches the reviewer to stop reading it. Only
+    // unattended is loud, because only unattended is a problem the reviewer can
+    // act on.
+    // `watch`, not `agent`: .agent is already the agent-reply block INSIDE a
+    // card, and reusing it here hid every reply on every card behind this
+    // row's display rule.
+    //
+    // Hidden until the helper has said something, and hidden again in the
+    // `none` state. The row always holds its dot and its span, so the hiding
+    // rule is the data attribute rather than :empty.
+    ".watch{display:none;align-items:center;gap:7px;font-size:12px;color:var(--ink-soft)}",
+    ".watch[data-agent='watching'],.watch[data-agent='working'],.watch[data-agent='unattended']{display:flex}",
+    ".watch__dot{width:6px;height:6px;border-radius:50%;background:var(--ink-faint);flex:none}",
+    ".watch[data-agent='watching'] .watch__dot{background:var(--good)}",
+    ".watch[data-agent='working'] .watch__dot{background:var(--accent)}",
+    ".watch[data-agent='unattended']{color:var(--warn-ink,var(--ink));font-weight:600}",
+    ".watch[data-agent='unattended'] .watch__dot{background:var(--warn)}",
+    ".watch__text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
     ".limit{font-size:11.5px;color:var(--ink-faint);line-height:1.4}",
     ".limit:empty{display:none}",
 
@@ -451,6 +499,10 @@
     var collapsed = preferredCollapsed;
     var mounted = false;
     var limitText = null;
+    // The whole agent_liveness object the helper last sent, or null before one
+    // has arrived. Held rather than reduced to a string, because the unattended
+    // line wants the oldest item's age too.
+    var agentLiveness = null;
     // The refusal is STATE, not a one-shot paint. A Turbo app remounts the rail
     // on its first navigation, and a refusal painted imperatively vanished with
     // the old dom while the (stateful) chip survived: the reviewer read a chip
@@ -653,6 +705,14 @@
       statusRow.appendChild(statusText);
       foot.appendChild(statusRow);
 
+      var agentRow = el("div", "watch");
+      agentRow.setAttribute("role", "status");
+      var agentDot = el("span", "watch__dot");
+      var agentText = el("span", "watch__text", "");
+      agentRow.appendChild(agentDot);
+      agentRow.appendChild(agentText);
+      foot.appendChild(agentRow);
+
       var limit = el("div", "limit");
       foot.appendChild(limit);
 
@@ -700,6 +760,9 @@
         chipList: chipList,
         statusRow: statusRow,
         statusText: statusText,
+        agentRow: agentRow,
+        agentDot: agentDot,
+        agentText: agentText,
         limit: limit,
         refusal: refusal,
         refusalReason: refusalReason,
@@ -722,6 +785,7 @@
       });
       renderChips();
       renderStatus();
+      renderAgent();
       renderTabs();
       renderCollapsed();
       if (mo.hidden) setCollapsed(true, false);
@@ -1443,6 +1507,83 @@
       return status ? STATUS_TEXT[status] : null;
     }
 
+    /**
+     * The helper's answer to "is an agent listening?".
+     *
+     * Takes the whole `agent_liveness` object from `replies.poll`, or null to
+     * clear the line. An unknown state clears it too rather than throwing: this
+     * comes off the wire, and a rail that breaks on an unfamiliar string is
+     * worse than a rail that says nothing about a state it does not know.
+     */
+    function setAgentLiveness(liveness) {
+      agentLiveness = liveness && typeof liveness === "object" ? liveness : null;
+      renderAgent();
+      return agentLiveness;
+    }
+
+    function getAgentState() {
+      return agentLiveness && typeof agentLiveness.state === "string" ? agentLiveness.state : null;
+    }
+
+    /** "12m" for a timestamp, or null. The rail's units, not a clock. */
+    function agentAge(iso, nowMs) {
+      if (typeof iso !== "string" || !iso) return null;
+      var then = Date.parse(iso);
+      if (Number.isNaN(then)) return null;
+      var seconds = Math.max(0, Math.round(((typeof nowMs === "number" ? nowMs : Date.now()) - then) / 1000));
+      if (seconds < 60) return seconds + "s";
+      if (seconds < 3600) return Math.round(seconds / 60) + "m";
+      if (seconds < 86400) return Math.round(seconds / 3600) + "h";
+      return Math.round(seconds / 86400) + "d";
+    }
+
+    function agentLine() {
+      var state = getAgentState();
+      if (!state || !Object.prototype.hasOwnProperty.call(AGENT_TEXT, state)) return null;
+      var text = AGENT_TEXT[state];
+      // The age is only on the loud state, and only there because it is what
+      // makes the reviewer's next move obvious: five minutes is a busy agent,
+      // forty is a dead one.
+      if (state === AGENT_STATE.UNATTENDED) {
+        var age = agentAge(agentLiveness.oldest_unanswered_at);
+        if (age) text += " · oldest item " + age;
+      }
+      return { state: state, text: text };
+    }
+
+    function renderAgent() {
+      if (!dom) return;
+      var line = agentLine();
+      dom.agentRow.setAttribute("data-agent", line ? line.state : "");
+      dom.agentText.textContent = line ? line.text : "";
+      dom.agentRow.title = line && AGENT_TITLE[line.state] ? AGENT_TITLE[line.state] : "";
+    }
+
+    /**
+     * Self-report for the closed root: what the agent line actually renders.
+     *
+     * The shadow root is closed, so a browser test cannot query it. It reads
+     * COMPUTED style rather than the attribute, because "the state is set" was
+     * true the whole time the row could have been display:none, and the whole
+     * point of the line is that a reviewer sees it.
+     */
+    function agentLineInfo() {
+      if (!dom) return { present: false };
+      var view = dom.agentRow.ownerDocument ? dom.agentRow.ownerDocument.defaultView : null;
+      var computed = view ? view.getComputedStyle(dom.agentRow) : null;
+      var dotComputed = view ? view.getComputedStyle(dom.agentDot) : null;
+      return {
+        present: true,
+        state: dom.agentRow.getAttribute("data-agent") || "",
+        text: dom.agentText.textContent || "",
+        title: dom.agentRow.title || "",
+        display: computed ? computed.display : null,
+        visible: !!computed && computed.display !== "none",
+        weight: computed ? computed.fontWeight : null,
+        dotColor: dotComputed ? dotComputed.backgroundColor : null
+      };
+    }
+
     // The one case nothing can refuse (D5): two windows, separate storage, no
     // helper. It is said here rather than claimed as covered anywhere.
     function setLimitNote(text) {
@@ -1823,6 +1964,12 @@
       STATUS: STATUS,
       STATUS_TEXT: STATUS_TEXT,
       STATUS_SHORT: STATUS_SHORT,
+      AGENT_STATE: AGENT_STATE,
+      AGENT_TEXT: AGENT_TEXT,
+      setAgentLiveness: setAgentLiveness,
+      agentState: getAgentState,
+      agentLine: agentLine,
+      agentLineInfo: agentLineInfo,
       LIMIT_SEPARATE_STORAGE_NO_HELPER: LIMIT_SEPARATE_STORAGE_NO_HELPER,
       mount: mount,
       unmount: unmount,
@@ -1882,6 +2029,8 @@
     STATUS: STATUS,
     STATUS_TEXT: STATUS_TEXT,
     STATUS_SHORT: STATUS_SHORT,
+    AGENT_STATE: AGENT_STATE,
+    AGENT_TEXT: AGENT_TEXT,
     LIMIT_SEPARATE_STORAGE_NO_HELPER: LIMIT_SEPARATE_STORAGE_NO_HELPER,
     createRail: createRail,
     shared: shared,

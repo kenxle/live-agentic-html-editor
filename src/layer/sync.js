@@ -325,6 +325,12 @@
     var win = opts.window || (typeof window !== "undefined" ? window : null);
     var fetchImpl = opts.fetch || (typeof fetch === "function" ? fetch.bind(typeof globalThis !== "undefined" ? globalThis : null) : null);
     var onStatus = opts.onStatus || function () {};
+    // The helper's answer to "is an agent listening?", raised on the poll that
+    // brought it. It rides the SAME channel target_mtime does (replies.poll),
+    // for the same reason: a number that only means anything while the helper is
+    // up should come from the helper, on a request the page already makes.
+    // Raised only on CHANGE, so a calm rail is not repainted every two seconds.
+    var onAgentLiveness = opts.onAgentLiveness || function () {};
     var onFailure = opts.onFailure || function () {};
     // The mirror of onFailure: a standing failure whose condition ENDED. The
     // rail clears that chip (clear, not dismiss, so the next real failure still
@@ -384,6 +390,11 @@
     // R36. The mtime this page last saw, the armed-but-not-yet-fired reload, and
     // its debounce timer.
     var targetMtime = null;
+    // The last agent_liveness the helper sent, and the state string it carried.
+    // The state is kept separately so the change test is one comparison rather
+    // than a deep one on every poll.
+    var agentLiveness = null;
+    var agentLivenessState = null;
     var reloadPending = false;
     var reloadTimer = null;
     var reloadsFired = 0;
@@ -796,6 +807,7 @@
           var events = (result.body && result.body.events) || [];
           if (typeof (result.body && result.body.seq) === "number") cursor = result.body.seq;
           noteTargetMtime(result.body && result.body.target_mtime);
+          noteAgentLiveness(result.body && result.body.agent_liveness);
           if (events.length) {
             repliesSeen = repliesSeen.concat(events);
             onReplies(events);
@@ -820,6 +832,30 @@
      * @param {string|null} value an ISO string, or null
      * @returns {boolean} true when this call armed a reload
      */
+    /**
+     * The helper's report on whether an agent is listening.
+     *
+     * Raised on a STATE CHANGE only. The rail's agent line is calm text most of
+     * the time, and repainting it on every two-second poll is churn nobody
+     * needs; a state change is the only thing a reviewer would notice.
+     *
+     * The unattended state is the exception, and it is handled by the rail
+     * rather than here: the object is stored whichever way this goes, so the
+     * rail can re-read the oldest item's age whenever it repaints.
+     *
+     * @param {object|null} value the agent_liveness object, or null
+     * @returns {boolean} true when the state changed and the callback fired
+     */
+    function noteAgentLiveness(value) {
+      if (!value || typeof value !== "object") return false;
+      agentLiveness = value;
+      var next = typeof value.state === "string" ? value.state : null;
+      if (next === agentLivenessState) return false;
+      agentLivenessState = next;
+      onAgentLiveness(value);
+      return true;
+    }
+
     function noteTargetMtime(value) {
       if (typeof value !== "string" || !value) return false;
       if (targetMtime === null) {
@@ -1391,6 +1427,7 @@
         queued: pendingCount(),
         cursor: cursor,
         targetMtime: targetMtime,
+        agentLiveness: agentLiveness,
         reloadPending: reloadPending,
         reloadsFired: reloadsFired,
         reloadChecks: reloadChecks,
@@ -1419,6 +1456,8 @@
       },
       poll: poll,
       noteTargetMtime: noteTargetMtime,
+      noteAgentLiveness: noteAgentLiveness,
+      agentLiveness: function () { return agentLiveness; },
       classify: classify,
       repliesSeen: function () {
         return repliesSeen.slice();

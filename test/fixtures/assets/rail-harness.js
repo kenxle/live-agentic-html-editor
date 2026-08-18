@@ -48,6 +48,11 @@
       limitNote = text;
       rail.setLimitNote(text);
     },
+    // Mirrors the real boot (src/layer/index.js): the helper's report on
+    // whether an agent is listening goes straight to the rail's agent line.
+    onAgentLiveness: function (liveness) {
+      rail.setAgentLiveness(liveness);
+    },
     // Mirrors the real boot (src/layer/index.js): a refused window shows the
     // refusal panel; becoming the holder hides it. Without this wiring the
     // harness silently diverged from the product on the exact surface the
@@ -254,6 +259,16 @@
 
     limit: function () {
       return limitNote;
+    },
+
+    // The rendered agent line, through the rail's own self-report: the shadow
+    // root is closed, so a test cannot query it. Reports COMPUTED style, so a
+    // pass cannot mean "the attribute is set on an invisible row".
+    agentLine: function () {
+      return rail.agentLineInfo();
+    },
+    setAgentLiveness: function (liveness) {
+      return rail.setAgentLiveness(liveness);
     },
 
     // --- sync ----------------------------------------------------------------

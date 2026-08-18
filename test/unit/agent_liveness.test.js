@@ -13,6 +13,7 @@ const logModule = require("../../src/service/log.js");
 const reviewsModule = require("../../src/service/reviews.js");
 const projectionModule = require("../../src/service/projection.js");
 const record = require("../../src/shared/record.js");
+const syncModule = require("../../src/layer/sync.js");
 
 const NOW = Date.parse("2026-08-18T12:00:00.000Z");
 const STATE = protocol.AGENT_LIVENESS.STATE;
@@ -175,6 +176,47 @@ test("replies.poll answers with the owning session's liveness", () => {
 
   store.writeMonitor("s_wire", { pid: process.pid, handoff_rev: 0 });
   assert.equal(poll({ review: "r_wire", query: { since: 0 } }, deps).body.agent_liveness.state, STATE.WATCHING);
+});
+
+test("the layer raises the liveness on a state change and holds it in between", async () => {
+  const raised = [];
+  let answer = { events: [], seq: 0, target_mtime: null, agent_liveness: null };
+  const sync = syncModule.createSync({
+    review: "review-1",
+    token: "t",
+    store: { pendingEvents: () => [], windowId: "w1" },
+    document: null,
+    window: { location: { pathname: "/p.html", reload: () => {} } },
+    fetch: async () => ({ ok: true, status: 200, json: async () => answer }),
+    onAgentLiveness: (liveness) => raised.push(liveness.state)
+  });
+
+  // Nothing said yet: nothing raised, and nothing invented.
+  await sync.poll();
+  assert.deepEqual(raised, []);
+  assert.equal(sync.status().agentLiveness, null);
+
+  answer = Object.assign({}, answer, { agent_liveness: { state: "unattended", unanswered: 2 } });
+  await sync.poll();
+  assert.deepEqual(raised, ["unattended"]);
+
+  // The same state on the next poll raises nothing. The rail's agent line is
+  // calm text; repainting it every two seconds is churn nobody asked for.
+  await sync.poll();
+  await sync.poll();
+  assert.deepEqual(raised, ["unattended"]);
+  // The object is still held, so a repaint can re-read the oldest item's age.
+  assert.equal(sync.status().agentLiveness.unanswered, 2);
+
+  answer = Object.assign({}, answer, { agent_liveness: { state: "watching", unanswered: 2 } });
+  await sync.poll();
+  assert.deepEqual(raised, ["unattended", "watching"]);
+});
+
+test("the route table documents agent_liveness, so nobody has to read the handler to find it", () => {
+  const route = protocol.route("replies.poll");
+  assert.match(route.response, /agent_liveness/);
+  assert.match(route.response, /oldest_unanswered_at/);
 });
 
 test("a review with no agent session reports none rather than a false alarm", () => {

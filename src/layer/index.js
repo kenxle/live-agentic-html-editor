@@ -353,6 +353,12 @@
         statusLog.push(state);
         rail.setStatusLine(state);
       },
+      // Whether an agent is actually listening, from the helper's own files
+      // rather than from anything the agent said. The rail shows it under the
+      // status line, calm for watching and working, loud only for unattended.
+      onAgentLiveness: function (liveness) {
+        rail.setAgentLiveness(liveness);
+      },
       onFailure: function (failure) {
         rail.failures.add(failure);
       },

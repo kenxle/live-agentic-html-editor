@@ -231,7 +231,11 @@
         "the reviewed file's mtime, which is R36's refresh trigger for a static page: a changed value means the " +
         "agent rebuilt the page and the library reloads it",
       request: "?review=<id>&since=<seq>&page_path=<location.pathname>",
-      response: "{events: [event...], seq, target_mtime}; target_mtime is the requesting page's ISO mtime, or null when its retained target cannot be identified or the file is missing"
+      response:
+        "{events: [event...], seq, target_mtime, agent_liveness}; target_mtime is the requesting page's ISO mtime, " +
+        "or null when its retained target cannot be identified or the file is missing. agent_liveness is " +
+        "{state, monitor_at, activity_at, unanswered, oldest_unanswered_at}: whether an agent is actually listening, " +
+        "read off the owning session's monitor heartbeat and activity stamp rather than taken from anything the agent said"
     },
     {
       name: "window.claim",
