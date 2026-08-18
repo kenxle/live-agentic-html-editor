@@ -223,6 +223,10 @@ function createStore(options) {
       session.closed_at = null;
       write(session);
     }
+    // A reopened session gets a live feed again. It was never removed, but a
+    // session that predates the feed has none, and the reopen output points an
+    // agent straight at that path.
+    feed.ensure(id);
     return session;
   }
 

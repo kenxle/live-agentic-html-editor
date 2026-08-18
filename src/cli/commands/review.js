@@ -95,6 +95,10 @@ async function run(argv) {
       sessionId = store.create().id;
       createdSession = true;
     }
+    // The block printed below names the wake feed's path, so the file has to be
+    // there before an agent copies that line. A session created before the feed
+    // existed gets one here too.
+    store.wake.ensure(sessionId);
   } catch (err) {
     process.stderr.write("lahe review: " + err.message + "\n");
     return 1;

@@ -67,7 +67,13 @@ test("lahe review renders Markdown without touching it, serves assets, and reuse
   assert.match(first.stdout, /rebuild\s+rerun this same review command after editing the Markdown, before replying handled/);
   // The wake line comes first and names the real path, so a Claude Code Monitor
   // can be armed by copying it rather than by assembling it from a doc.
-  assert.match(first.stdout, new RegExp("wake\\s+tail -n 0 -f \\S+/agent-sessions/" + sessionId + "/wake\\.log"));
+  const wakePath = first.stdout.match(/^\s*wake\s+tail -n 0 -f (\S+)$/m);
+  assert.ok(wakePath, "the wake command is printed with a real path");
+  assert.match(wakePath[1], new RegExp("/agent-sessions/" + sessionId + "/wake\\.log$"));
+  // The path has to EXIST when it is printed. A `tail -f` on a file that is not
+  // there yet is a race, and losing it is a session that never wakes.
+  assert.ok(fs.existsSync(wakePath[1]), "the wake feed is on disk before the agent is told to tail it");
+  assert.equal(fs.readFileSync(wakePath[1], "utf8"), "", "and it starts empty");
   assert.match(first.stdout, new RegExp("monitor\\s+lahe monitor --session " + sessionId + "$", "m"));
   assert.match(first.stdout, new RegExp("drain\\s+lahe status --session " + sessionId + " --json --quiet"));
   assert.match(first.stdout, /exits\s+monitor: 0 work printed, 5 session closed, 6 taken over/);
