@@ -443,7 +443,11 @@
     var dismissed = Object.create(null);
     var status = null;
     var activeTab = TAB.ACTIVE;
-    var collapsed = false;
+    // A person's choice, separate from the rail's momentary visibility. A
+    // second-window refusal has to open the rail so its remedy is visible, but
+    // that forced opening must not erase the choice to keep the rail collapsed.
+    var preferredCollapsed = readCollapsedPreference();
+    var collapsed = preferredCollapsed;
     var mounted = false;
     var limitText = null;
     // The refusal is STATE, not a one-shot paint. A Turbo app remounts the rail
@@ -719,7 +723,7 @@
       renderStatus();
       renderTabs();
       renderCollapsed();
-      if (mo.hidden) collapse(true);
+      if (mo.hidden) setCollapsed(true, false);
       if (refusalInfo) showRefusal(refusalInfo);
       return { rootId: markers.OVERLAY_ROOT_ID, remounted: false };
     }
@@ -772,10 +776,14 @@
 
     function setReview(id) {
       reviewId = id;
+      preferredCollapsed = readCollapsedPreference();
+      collapsed = preferredCollapsed;
       loadChips();
       if (dom) {
         dom.rail.querySelector(".review").textContent = id || "";
         renderChips();
+        renderCollapsed();
+        if (refusalInfo) setCollapsed(false, false);
       }
       return reviewId;
     }
@@ -1403,7 +1411,7 @@
       // cannot type and is told nothing reads it as "broken" (Ken hit exactly
       // this on first real use). Expanding is safe here: a refused window is
       // read-only, so there is no focused card for the expand to disturb.
-      collapse(false);
+      setCollapsed(false, false);
       return true;
     }
 
@@ -1415,6 +1423,10 @@
       // so the next refusal (or a probe) never meets a stuck disabled button.
       dom.refusalBtn.disabled = false;
       dom.refusalBtn.textContent = "Review here instead";
+      // Put the rail back where the reviewer chose to keep it. If they changed
+      // that choice while the refusal was visible, preferredCollapsed already
+      // carries the newer answer.
+      setCollapsed(preferredCollapsed, false);
       return true;
     }
 
@@ -1673,13 +1685,40 @@
 
     // The collapsed pill never overlaps the open rail (D10), and the mechanism
     // is that the two are never on screen at the same time.
-    function collapse(next) {
+    function readCollapsedPreference() {
+      if (!reviewId || !store || typeof store.readUiPreferences !== "function") return false;
+      try {
+        return store.readUiPreferences(reviewId).collapsed === true;
+      } catch (err) {
+        return false;
+      }
+    }
+
+    function persistCollapsedPreference() {
+      if (!reviewId || !store || typeof store.writeUiPreferences !== "function") return false;
+      try {
+        store.writeUiPreferences(reviewId, { collapsed: preferredCollapsed });
+        return true;
+      } catch (err) {
+        return false;
+      }
+    }
+
+    function setCollapsed(next, persist) {
       collapsed = next === undefined ? !collapsed : !!next;
+      if (persist !== false) {
+        preferredCollapsed = collapsed;
+        persistCollapsedPreference();
+      }
       // A menu hanging where the rail used to be is the reviewer's page wearing
       // a fragment of a tool they just put away.
       if (collapsed) closeMenu(false);
       renderCollapsed();
       return collapsed;
+    }
+
+    function collapse(next) {
+      return setCollapsed(next, true);
     }
 
     function renderCollapsed() {

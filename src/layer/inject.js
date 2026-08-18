@@ -16,7 +16,7 @@
 //     turbo:morph      Hotwire replaced part of the page
 //     turbo:load       a Turbo Drive navigation finished
 //     popstate         the reviewer went back or forward
-//     pageshow         a fresh load, OR a back/forward cache restore
+//     pageshow         a back/forward cache restore (`persisted === true`)
 //     a MutationObserver fallback, for a framework that fires none of the above
 //
 //   EVERY HANDLER IS DE-REGISTERED BEFORE RE-REGISTRATION, through the listener
@@ -241,8 +241,9 @@
         var persisted = !!(event && event.persisted);
         // A fresh load fires pageshow too, and boot has already done this work.
         // The restore is the one that has nothing else behind it.
-        if (persisted) counters.bfcacheRestores += 1;
-        remount(persisted ? "pageshow-persisted" : "pageshow", { persisted: persisted });
+        if (!persisted) return;
+        counters.bfcacheRestores += 1;
+        remount("pageshow-persisted", { persisted: true });
       }, false, group);
     }
 

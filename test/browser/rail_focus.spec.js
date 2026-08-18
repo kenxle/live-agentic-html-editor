@@ -102,4 +102,47 @@ test.describe("the rail updates in place", () => {
     expect(collapsed.railVisible).toBe(false);
     expect(collapsed.overlap, "pill and rail are never both on screen").toBe(false);
   });
+
+  test("collapse and expansion persist per review across remounts and full reloads", async ({ page }) => {
+    const url = server.urlFor("test/fixtures/rail.html") + "?review=collapse-reload-review";
+    await page.goto(url);
+
+    expect(await page.evaluate(() => window.__laheRail.isCollapsed()), "a new review starts open").toBe(false);
+
+    await page.evaluate(() => window.__laheRail.collapse(true));
+    expect(await page.evaluate(() => window.__laheRail.remount()), "the rail remounted").toBe(true);
+    expect(await page.evaluate(() => window.__laheRail.isCollapsed()), "a remount keeps it collapsed").toBe(true);
+
+    await page.reload();
+    await pollPage(page, () => !!window.__laheRail, undefined, { message: "the rail to boot after reload" });
+    expect(await page.evaluate(() => window.__laheRail.isCollapsed()), "a full reload keeps it collapsed").toBe(true);
+
+    await page.evaluate(() => window.__laheRail.collapse(false));
+    await page.reload();
+    await pollPage(page, () => !!window.__laheRail, undefined, { message: "the rail to boot after expansion" });
+    expect(await page.evaluate(() => window.__laheRail.isCollapsed()), "pill expansion persists too").toBe(false);
+  });
+
+  test("a refusal expands transiently without erasing the collapsed preference", async ({ page }) => {
+    const url = server.urlFor("test/fixtures/rail.html") + "?review=refusal-collapse-review";
+    await page.goto(url);
+    await page.evaluate(() => window.__laheRail.collapse(true));
+
+    await page.evaluate(() => window.__laheRail.showRefusal("Held by another window."));
+    expect(await page.evaluate(() => window.__laheRail.isCollapsed()), "the refusal is visible in an open rail").toBe(
+      false
+    );
+
+    await page.evaluate(() => window.__laheRail.hideRefusal());
+    expect(await page.evaluate(() => window.__laheRail.isCollapsed()), "closing it restores the user's choice").toBe(
+      true
+    );
+
+    await page.reload();
+    await pollPage(page, () => !!window.__laheRail, undefined, { message: "the rail to boot after the refusal" });
+    expect(
+      await page.evaluate(() => window.__laheRail.isCollapsed()),
+      "the forced expansion never overwrote browser storage"
+    ).toBe(true);
+  });
 });

@@ -29,6 +29,7 @@ const path = require("node:path");
 
 const { test, expect, pollPage, pollUntil, startStaticServer, startService } = require("../helpers");
 const protocol = require("../../src/shared/protocol.js");
+const syncModule = require("../../src/layer/sync.js");
 
 const REVIEW = "auto-reload";
 const PAGE_FILE = "page.html";
@@ -47,6 +48,7 @@ function docHtml(helperOrigin, token, edition) {
     '<p id="body">' +
     PARAGRAPH +
     "</p>\n" +
+    '<div id="scroll-space" style="height: 3200px; width: 2400px"></div>\n' +
     "</main>\n" +
     '<script src="' +
     helperOrigin +
@@ -200,6 +202,76 @@ test.describe("the page updates itself as the agent lands changes (R36)", () => 
       { message: "the comment to survive the reload", timeoutMs: 20000 }
     );
     expect(await page.evaluate(() => window.__lahe.cardIds().length), "and its card is redrawn").toBe(1);
+  });
+
+  test("a hashless LAHE reload restores the exact viewport once before returning native mode to auto", async ({
+    page
+  }) => {
+    await page.addInitScript(() => {
+      window.__laheScrollTimeline = [];
+      window.__laheScrollEvents = [];
+      const nativeScrollTo = window.scrollTo.bind(window);
+      window.scrollTo = function () {
+        const first = arguments[0];
+        const call =
+          first && typeof first === "object"
+            ? { x: first.left, y: first.top, behavior: first.behavior }
+            : { x: first, y: arguments[1], behavior: null };
+        window.__laheScrollTimeline.push({
+          x: call.x,
+          y: call.y,
+          behavior: call.behavior,
+          restoration: history.scrollRestoration
+        });
+        return nativeScrollTo.apply(window, arguments);
+      };
+      window.addEventListener("scroll", () => {
+        window.__laheScrollEvents.push({ x: window.scrollX, y: window.scrollY });
+      });
+    });
+
+    rebuild(filePath, service.url, token, "Viewport first edition");
+    await page.goto(pages.origin + "/" + PAGE_FILE);
+    await booted(page);
+    await pollPage(page, () => !!window.__lahe.handle.sync.status().targetMtime, undefined, {
+      message: "the first poll to establish the baseline mtime"
+    });
+    await page.evaluate(() => window.scrollTo(37, 913));
+    expect(await page.evaluate(() => ({ x: window.scrollX, y: window.scrollY }))).toEqual({ x: 37, y: 913 });
+
+    // The agent rebuilds while the reviewer is well down and across the page.
+    // The init script runs in both documents, so the incoming timeline records
+    // LAHE's restore call rather than relying on the final coordinates alone.
+    rebuild(filePath, service.url, token, "Viewport second edition");
+    await pollPage(page, () => document.querySelector("#edition").textContent === "Viewport second edition", undefined, {
+      message: "the page to reload itself onto the rebuilt file",
+      timeoutMs: 20000
+    });
+    await booted(page);
+
+    // Let pageshow and two paints pass. A native restoration competing after
+    // LAHE's call would now be present as a second scroll transition.
+    await page.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    );
+
+    const landed = await page.evaluate((key) => ({
+      x: window.scrollX,
+      y: window.scrollY,
+      restoration: history.scrollRestoration,
+      marker: sessionStorage.getItem(key),
+      timeline: window.__laheScrollTimeline.slice(),
+      events: window.__laheScrollEvents.slice()
+    }), syncModule.VIEWPORT_MARKER_KEY);
+    expect({ x: landed.x, y: landed.y }).toEqual({ x: 37, y: 913 });
+    expect(landed.timeline).toEqual([{ x: 37, y: 913, behavior: "instant", restoration: "manual" }]);
+    expect(landed.events.length, "the exact restore produced a scroll transition").toBeGreaterThan(0);
+    expect(
+      landed.events.every((event) => event.x === 37 && event.y === 913),
+      "no later native scroll competed with LAHE's exact restore"
+    ).toBe(true);
+    expect(landed.restoration).toBe("auto");
+    expect(landed.marker).toBeNull();
   });
 
   test("no reload lands on an open edit; it waits until the edit is committed", async ({ page }) => {

@@ -15,17 +15,24 @@ tool is broken.**
 
 ## Board
 
+- [x] @codex 2026-08-18 LAHE-reload-viewport-continuity -- LAHE's own
+  hashless auto-reload now performs one instant, exact viewport restore and
+  keeps native restoration manual through `pageshow`, preventing the visible
+  top-then-scroll sequence. Fragment URLs, back/forward, bfcache, and denied
+  storage retain browser-owned behavior. Verified in Chromium, Firefox, and
+  WebKit.
 - [ ] LAHE-change-highlight-fade @anyone -- (Ken, 2026-08-18) after a source
   rebuild removes an addressed highlight, briefly highlight the changed text
   and fade it out so the reviewer can see what landed without losing their
   reading position. Treat this as a separate enhancement after reload position
   and rail-state continuity are reliable.
-- [ ] LAHE-rail-remembers-collapsed @anyone -- (Ken, 2026-08-18) the rail
+- [x] @codex 2026-08-18 LAHE-rail-remembers-collapsed -- (Ken, 2026-08-18) the rail
   overlays the text he is reading, so he collapses it; every reload (incl.
   the new auto-reload, which makes this constant) pops it OPEN again and he
   closes it over and over. Persist the open/collapsed state per review in
   browser storage and restore it on load; the count pill already carries the
-  numbers while collapsed.
+  numbers while collapsed. Done: the versioned per-review preference survives
+  remounts and reloads; refusal expansion remains transient.
 - [x] @claude-fable 2026-08-18 LAHE-push-and-pr -- push `fix/review-session-flaws` and open the
   PR. Blocked only on Ken's word. Done: pushed, PR #1 open: https://github.com/kenxle/live-agentic-html-editor/pull/1 (44 commits, gate 467/206/0). The branch is twice code-reviewed, gate
   green (471 unit / 204 browser at last full run), and hand-verified in a

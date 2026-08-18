@@ -173,6 +173,33 @@ test("the root is only re-created when it is actually gone", () => {
   assert.equal(injector.counters.rootsRecreated, 1);
 });
 
+test("fresh-load pageshow is ignored, while persisted pageshow remounts once", () => {
+  const registry = listeners.createRegistry();
+  const doc = fakeDocument({ rootPresent: true });
+  const win = fakeTarget("window");
+  let merges = 0;
+  const injector = inject.install({
+    document: doc,
+    window: win,
+    registry: registry,
+    merge: function () {
+      merges += 1;
+    }
+  });
+  injector.start();
+  const pageshow = win.bound.filter((entry) => entry.type === "pageshow")[0].handler;
+
+  pageshow({ persisted: false });
+  assert.equal(injector.counters.remounts, 0, "boot already handled the fresh document");
+  assert.equal(merges, 0);
+
+  pageshow({ persisted: true });
+  assert.equal(injector.counters.remounts, 1);
+  assert.equal(injector.counters.bfcacheRestores, 1);
+  assert.equal(merges, 1);
+  assert.equal(injector.last().reason, "pageshow-persisted");
+});
+
 test("a policy refusal is a different failure from a helper that is down", () => {
   const refused = inject.cspFailure("connect-src blocked http://127.0.0.1:7817");
   const down = failures.failure("HELPER_UNREACHABLE", null);

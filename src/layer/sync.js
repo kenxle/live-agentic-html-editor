@@ -113,6 +113,180 @@
   // sentence is on screen before the page goes away.
   var RELOAD_NOTICE_MS = 250;
 
+  // LAHE's own reload is the one navigation where the browser cannot know the
+  // reviewer's intended viewport after a rebuilt document lands. Keep one
+  // exact, versioned marker in this tab only. It is consumed by the next real
+  // boot, never by inject.js's SPA, Turbo, popstate, or bfcache remounts.
+  var VIEWPORT_MARKER_VERSION = 1;
+  var VIEWPORT_MARKER_KEY = "lahe.viewport.v1";
+
+  function removeViewportMarker(storage) {
+    try {
+      if (storage && typeof storage.removeItem === "function") storage.removeItem(VIEWPORT_MARKER_KEY);
+    } catch (error) {
+      // Best effort. A denied sessionStorage must never prevent the reload.
+    }
+  }
+
+  function setScrollRestoration(win, mode) {
+    try {
+      if (!win || !win.history || !("scrollRestoration" in win.history)) return false;
+      win.history.scrollRestoration = mode;
+      return win.history.scrollRestoration === mode;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function restoreNativeScrollingAfterPageShow(win) {
+    if (!win || typeof win.addEventListener !== "function") {
+      setScrollRestoration(win, "auto");
+      return;
+    }
+    try {
+      // Native reload restoration is complete by pageshow. Keeping manual mode
+      // through that point prevents a later browser scroll from competing with
+      // the exact restore below. A direct/test call after load has no event left
+      // to hear, so it returns to auto immediately.
+      if (win.document && win.document.readyState !== "complete") {
+        win.addEventListener(
+          "pageshow",
+          function () {
+            setScrollRestoration(win, "auto");
+          },
+          { once: true }
+        );
+        return;
+      }
+    } catch (error) {
+      // Fall through to the immediate, safe reset.
+    }
+    setScrollRestoration(win, "auto");
+  }
+
+  function navigationType(win) {
+    try {
+      if (!win || !win.performance || typeof win.performance.getEntriesByType !== "function") return null;
+      var entries = win.performance.getEntriesByType("navigation");
+      return entries && entries[0] && typeof entries[0].type === "string" ? entries[0].type : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  /**
+   * Remember the viewport for the reload LAHE is about to initiate.
+   *
+   * Manual restoration is enabled only after the marker is durable. If either
+   * storage or history refuses us, the marker is removed and the browser keeps
+   * its native behaviour.
+   */
+  function saveViewportForReload(win, review) {
+    if (!win || !win.location || !review) return false;
+
+    var storage = null;
+    try {
+      storage = win.sessionStorage;
+    } catch (error) {
+      return false;
+    }
+    if (!storage || typeof storage.setItem !== "function") return false;
+
+    // A fragment is an instruction to the browser. Do not replace anchor
+    // navigation with coordinates captured from the old document.
+    if (typeof win.location.hash === "string" && win.location.hash) {
+      removeViewportMarker(storage);
+      setScrollRestoration(win, "auto");
+      return false;
+    }
+
+    var href = typeof win.location.href === "string" ? win.location.href : "";
+    var x = typeof win.scrollX === "number" ? win.scrollX : 0;
+    var y = typeof win.scrollY === "number" ? win.scrollY : 0;
+    if (!href || !Number.isFinite(x) || !Number.isFinite(y)) return false;
+
+    var marker = { version: VIEWPORT_MARKER_VERSION, exactHref: href, review: review, x: x, y: y };
+    try {
+      storage.setItem(VIEWPORT_MARKER_KEY, JSON.stringify(marker));
+    } catch (error) {
+      return false;
+    }
+
+    if (!setScrollRestoration(win, "manual")) {
+      removeViewportMarker(storage);
+      setScrollRestoration(win, "auto");
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Consume LAHE's one-shot viewport marker on the next normal document boot.
+   *
+   * Exact URL and review matching prevents a stale same-tab marker from moving
+   * an unrelated page. A back/forward navigation and a URL with a fragment are
+   * explicitly left to the browser. A valid restore keeps native restoration
+   * manual through pageshow, then returns it to auto.
+   */
+  function restoreViewportAfterReload(win, review) {
+    if (!win || !win.location || !review) return false;
+
+    var storage = null;
+    var raw = null;
+    try {
+      storage = win.sessionStorage;
+      if (!storage || typeof storage.getItem !== "function") return false;
+      raw = storage.getItem(VIEWPORT_MARKER_KEY);
+      if (raw !== null) removeViewportMarker(storage);
+    } catch (error) {
+      return false;
+    }
+    if (!raw) return false;
+
+    var marker = null;
+    try {
+      marker = JSON.parse(raw);
+    } catch (error) {
+      setScrollRestoration(win, "auto");
+      return false;
+    }
+
+    var hash = typeof win.location.hash === "string" ? win.location.hash : "";
+    var href = typeof win.location.href === "string" ? win.location.href : "";
+    var valid =
+      marker &&
+      marker.version === VIEWPORT_MARKER_VERSION &&
+      marker.exactHref === href &&
+      marker.review === review &&
+      typeof marker.x === "number" &&
+      Number.isFinite(marker.x) &&
+      typeof marker.y === "number" &&
+      Number.isFinite(marker.y);
+    var backForward = navigationType(win) === "back_forward";
+
+    if (hash || backForward || !valid) {
+      setScrollRestoration(win, "auto");
+      return false;
+    }
+
+    // Re-assert manual on the incoming document before the numeric restore so
+    // native restoration cannot race it. The old document already requested
+    // manual, but browsers differ in how that mode crosses a reload.
+    if (!setScrollRestoration(win, "manual")) {
+      setScrollRestoration(win, "auto");
+      return false;
+    }
+    try {
+      if (typeof win.scrollTo !== "function") return false;
+      win.scrollTo({ left: marker.x, top: marker.y, behavior: "instant" });
+      return true;
+    } catch (error) {
+      return false;
+    } finally {
+      restoreNativeScrollingAfterPageShow(win);
+    }
+  }
+
   /**
    * Which failure a refused or failed request really is.
    *
@@ -693,7 +867,10 @@
       // harness-allow-timer: the pause that lets "Page updated. Reloading..."
       // paint before the document goes away.
       setTimeout(function () {
-        if (win && win.location && typeof win.location.reload === "function") win.location.reload();
+        if (win && win.location && typeof win.location.reload === "function") {
+          saveViewportForReload(win, review);
+          win.location.reload();
+        }
       }, reloadNoticeMs);
       return true;
     }
@@ -1237,6 +1414,10 @@
     POLL_INTERVAL_MS: POLL_INTERVAL_MS,
     RELOAD_DEBOUNCE_MS: RELOAD_DEBOUNCE_MS,
     RELOAD_NOTICE_MS: RELOAD_NOTICE_MS,
+    VIEWPORT_MARKER_VERSION: VIEWPORT_MARKER_VERSION,
+    VIEWPORT_MARKER_KEY: VIEWPORT_MARKER_KEY,
+    saveViewportForReload: saveViewportForReload,
+    restoreViewportAfterReload: restoreViewportAfterReload,
     decideFailureCode: decideFailureCode,
     createSync: createSync
   };

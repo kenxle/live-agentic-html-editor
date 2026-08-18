@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+c3fbb81371e1
+ * version 0.0.0+d2eca5e96106
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+c3fbb81371e1";
+  g.LAHE.version = "0.0.0+d2eca5e96106";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -5454,7 +5454,7 @@
 //
 // Owner: 1B.
 //
-// Four things live in browser storage, all keyed by REVIEW ID and all written
+// Five things live in browser storage, all keyed by REVIEW ID and all written
 // synchronously:
 //
 //   items    the records themselves, drafts included
@@ -5466,6 +5466,8 @@
 //            survives a remount and a navigation and stays gone once dismissed
 //   holder   which window holds this review, so the second window's refusal can
 //            NAME the first one rather than saying "somewhere else"
+//   ui       the reviewer's small rail preferences. These are best effort: a
+//            denied or corrupt preference must never stop the review itself
 //
 // THE TWO RULES, both from D5:
 //
@@ -5509,6 +5511,7 @@
   var ACKED_PREFIX = "lahe.acked.v1:";
   var HOLDER_PREFIX = "lahe.holder.v1:";
   var LOCK_PREFIX = "lahe.window.v1:";
+  var UI_PREFIX = "lahe.ui.v1:";
   // The window IDENTITY and the helper SESSION SECRET live in sessionStorage,
   // not localStorage: sessionStorage survives a same-tab navigation (page 1 to
   // /clients of one review is the same reviewer, not a second window) but a
@@ -5875,6 +5878,44 @@
       });
     }
 
+    // -----------------------------------------------------------------------
+    // Rail preferences
+    // -----------------------------------------------------------------------
+    //
+    // Unlike records and the outbox, these are convenience state. Browser
+    // storage may be denied, full, or contain an old malformed value; none of
+    // those conditions may stop the reviewer from using the rail. Keep this
+    // deliberately separate from readJson/writeJson, whose loud failures are
+    // the correct contract for work the reviewer typed.
+
+    function uiKey(reviewId) {
+      keyFor(reviewId); // the same non-empty review-id guard every bucket uses
+      return UI_PREFIX + reviewId;
+    }
+
+    function readUiPreferences(reviewId) {
+      try {
+        var raw = backing.getItem(uiKey(reviewId));
+        if (!raw) return { collapsed: false };
+        var got = JSON.parse(raw);
+        if (!got || typeof got !== "object") return { collapsed: false };
+        return { collapsed: got.collapsed === true };
+      } catch (err) {
+        return { collapsed: false };
+      }
+    }
+
+    function writeUiPreferences(reviewId, value) {
+      var next = { collapsed: !!(value && value.collapsed) };
+      try {
+        backing.setItem(uiKey(reviewId), JSON.stringify(next));
+      } catch (err) {
+        // Best effort. Losing chrome preference is recoverable; losing review
+        // work is not, which is why record writes still fail loudly above.
+      }
+      return next;
+    }
+
     // -------------------------------------------------------------------------
     // The second window, client side (D5)
     // -------------------------------------------------------------------------
@@ -6110,6 +6151,8 @@
       acknowledge: acknowledge,
       readChips: readChips,
       writeChips: writeChips,
+      readUiPreferences: readUiPreferences,
+      writeUiPreferences: writeUiPreferences,
       readHolder: readHolder,
       describeHolder: describeHolder,
       claimWindow: claimWindow,
@@ -6128,6 +6171,7 @@
     CHIPS_PREFIX: CHIPS_PREFIX,
     HOLDER_PREFIX: HOLDER_PREFIX,
     LOCK_PREFIX: LOCK_PREFIX,
+    UI_PREFIX: UI_PREFIX,
     keyFor: keyFor,
     createStore: createStore,
     shared: shared
@@ -8433,7 +8477,11 @@
     var dismissed = Object.create(null);
     var status = null;
     var activeTab = TAB.ACTIVE;
-    var collapsed = false;
+    // A person's choice, separate from the rail's momentary visibility. A
+    // second-window refusal has to open the rail so its remedy is visible, but
+    // that forced opening must not erase the choice to keep the rail collapsed.
+    var preferredCollapsed = readCollapsedPreference();
+    var collapsed = preferredCollapsed;
     var mounted = false;
     var limitText = null;
     // The refusal is STATE, not a one-shot paint. A Turbo app remounts the rail
@@ -8709,7 +8757,7 @@
       renderStatus();
       renderTabs();
       renderCollapsed();
-      if (mo.hidden) collapse(true);
+      if (mo.hidden) setCollapsed(true, false);
       if (refusalInfo) showRefusal(refusalInfo);
       return { rootId: markers.OVERLAY_ROOT_ID, remounted: false };
     }
@@ -8762,10 +8810,14 @@
 
     function setReview(id) {
       reviewId = id;
+      preferredCollapsed = readCollapsedPreference();
+      collapsed = preferredCollapsed;
       loadChips();
       if (dom) {
         dom.rail.querySelector(".review").textContent = id || "";
         renderChips();
+        renderCollapsed();
+        if (refusalInfo) setCollapsed(false, false);
       }
       return reviewId;
     }
@@ -9393,7 +9445,7 @@
       // cannot type and is told nothing reads it as "broken" (Ken hit exactly
       // this on first real use). Expanding is safe here: a refused window is
       // read-only, so there is no focused card for the expand to disturb.
-      collapse(false);
+      setCollapsed(false, false);
       return true;
     }
 
@@ -9405,6 +9457,10 @@
       // so the next refusal (or a probe) never meets a stuck disabled button.
       dom.refusalBtn.disabled = false;
       dom.refusalBtn.textContent = "Review here instead";
+      // Put the rail back where the reviewer chose to keep it. If they changed
+      // that choice while the refusal was visible, preferredCollapsed already
+      // carries the newer answer.
+      setCollapsed(preferredCollapsed, false);
       return true;
     }
 
@@ -9663,13 +9719,40 @@
 
     // The collapsed pill never overlaps the open rail (D10), and the mechanism
     // is that the two are never on screen at the same time.
-    function collapse(next) {
+    function readCollapsedPreference() {
+      if (!reviewId || !store || typeof store.readUiPreferences !== "function") return false;
+      try {
+        return store.readUiPreferences(reviewId).collapsed === true;
+      } catch (err) {
+        return false;
+      }
+    }
+
+    function persistCollapsedPreference() {
+      if (!reviewId || !store || typeof store.writeUiPreferences !== "function") return false;
+      try {
+        store.writeUiPreferences(reviewId, { collapsed: preferredCollapsed });
+        return true;
+      } catch (err) {
+        return false;
+      }
+    }
+
+    function setCollapsed(next, persist) {
       collapsed = next === undefined ? !collapsed : !!next;
+      if (persist !== false) {
+        preferredCollapsed = collapsed;
+        persistCollapsedPreference();
+      }
       // A menu hanging where the rail used to be is the reviewer's page wearing
       // a fragment of a tool they just put away.
       if (collapsed) closeMenu(false);
       renderCollapsed();
       return collapsed;
+    }
+
+    function collapse(next) {
+      return setCollapsed(next, true);
     }
 
     function renderCollapsed() {
@@ -12624,6 +12707,180 @@
   // sentence is on screen before the page goes away.
   var RELOAD_NOTICE_MS = 250;
 
+  // LAHE's own reload is the one navigation where the browser cannot know the
+  // reviewer's intended viewport after a rebuilt document lands. Keep one
+  // exact, versioned marker in this tab only. It is consumed by the next real
+  // boot, never by inject.js's SPA, Turbo, popstate, or bfcache remounts.
+  var VIEWPORT_MARKER_VERSION = 1;
+  var VIEWPORT_MARKER_KEY = "lahe.viewport.v1";
+
+  function removeViewportMarker(storage) {
+    try {
+      if (storage && typeof storage.removeItem === "function") storage.removeItem(VIEWPORT_MARKER_KEY);
+    } catch (error) {
+      // Best effort. A denied sessionStorage must never prevent the reload.
+    }
+  }
+
+  function setScrollRestoration(win, mode) {
+    try {
+      if (!win || !win.history || !("scrollRestoration" in win.history)) return false;
+      win.history.scrollRestoration = mode;
+      return win.history.scrollRestoration === mode;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function restoreNativeScrollingAfterPageShow(win) {
+    if (!win || typeof win.addEventListener !== "function") {
+      setScrollRestoration(win, "auto");
+      return;
+    }
+    try {
+      // Native reload restoration is complete by pageshow. Keeping manual mode
+      // through that point prevents a later browser scroll from competing with
+      // the exact restore below. A direct/test call after load has no event left
+      // to hear, so it returns to auto immediately.
+      if (win.document && win.document.readyState !== "complete") {
+        win.addEventListener(
+          "pageshow",
+          function () {
+            setScrollRestoration(win, "auto");
+          },
+          { once: true }
+        );
+        return;
+      }
+    } catch (error) {
+      // Fall through to the immediate, safe reset.
+    }
+    setScrollRestoration(win, "auto");
+  }
+
+  function navigationType(win) {
+    try {
+      if (!win || !win.performance || typeof win.performance.getEntriesByType !== "function") return null;
+      var entries = win.performance.getEntriesByType("navigation");
+      return entries && entries[0] && typeof entries[0].type === "string" ? entries[0].type : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  /**
+   * Remember the viewport for the reload LAHE is about to initiate.
+   *
+   * Manual restoration is enabled only after the marker is durable. If either
+   * storage or history refuses us, the marker is removed and the browser keeps
+   * its native behaviour.
+   */
+  function saveViewportForReload(win, review) {
+    if (!win || !win.location || !review) return false;
+
+    var storage = null;
+    try {
+      storage = win.sessionStorage;
+    } catch (error) {
+      return false;
+    }
+    if (!storage || typeof storage.setItem !== "function") return false;
+
+    // A fragment is an instruction to the browser. Do not replace anchor
+    // navigation with coordinates captured from the old document.
+    if (typeof win.location.hash === "string" && win.location.hash) {
+      removeViewportMarker(storage);
+      setScrollRestoration(win, "auto");
+      return false;
+    }
+
+    var href = typeof win.location.href === "string" ? win.location.href : "";
+    var x = typeof win.scrollX === "number" ? win.scrollX : 0;
+    var y = typeof win.scrollY === "number" ? win.scrollY : 0;
+    if (!href || !Number.isFinite(x) || !Number.isFinite(y)) return false;
+
+    var marker = { version: VIEWPORT_MARKER_VERSION, exactHref: href, review: review, x: x, y: y };
+    try {
+      storage.setItem(VIEWPORT_MARKER_KEY, JSON.stringify(marker));
+    } catch (error) {
+      return false;
+    }
+
+    if (!setScrollRestoration(win, "manual")) {
+      removeViewportMarker(storage);
+      setScrollRestoration(win, "auto");
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Consume LAHE's one-shot viewport marker on the next normal document boot.
+   *
+   * Exact URL and review matching prevents a stale same-tab marker from moving
+   * an unrelated page. A back/forward navigation and a URL with a fragment are
+   * explicitly left to the browser. A valid restore keeps native restoration
+   * manual through pageshow, then returns it to auto.
+   */
+  function restoreViewportAfterReload(win, review) {
+    if (!win || !win.location || !review) return false;
+
+    var storage = null;
+    var raw = null;
+    try {
+      storage = win.sessionStorage;
+      if (!storage || typeof storage.getItem !== "function") return false;
+      raw = storage.getItem(VIEWPORT_MARKER_KEY);
+      if (raw !== null) removeViewportMarker(storage);
+    } catch (error) {
+      return false;
+    }
+    if (!raw) return false;
+
+    var marker = null;
+    try {
+      marker = JSON.parse(raw);
+    } catch (error) {
+      setScrollRestoration(win, "auto");
+      return false;
+    }
+
+    var hash = typeof win.location.hash === "string" ? win.location.hash : "";
+    var href = typeof win.location.href === "string" ? win.location.href : "";
+    var valid =
+      marker &&
+      marker.version === VIEWPORT_MARKER_VERSION &&
+      marker.exactHref === href &&
+      marker.review === review &&
+      typeof marker.x === "number" &&
+      Number.isFinite(marker.x) &&
+      typeof marker.y === "number" &&
+      Number.isFinite(marker.y);
+    var backForward = navigationType(win) === "back_forward";
+
+    if (hash || backForward || !valid) {
+      setScrollRestoration(win, "auto");
+      return false;
+    }
+
+    // Re-assert manual on the incoming document before the numeric restore so
+    // native restoration cannot race it. The old document already requested
+    // manual, but browsers differ in how that mode crosses a reload.
+    if (!setScrollRestoration(win, "manual")) {
+      setScrollRestoration(win, "auto");
+      return false;
+    }
+    try {
+      if (typeof win.scrollTo !== "function") return false;
+      win.scrollTo({ left: marker.x, top: marker.y, behavior: "instant" });
+      return true;
+    } catch (error) {
+      return false;
+    } finally {
+      restoreNativeScrollingAfterPageShow(win);
+    }
+  }
+
   /**
    * Which failure a refused or failed request really is.
    *
@@ -13204,7 +13461,10 @@
       // harness-allow-timer: the pause that lets "Page updated. Reloading..."
       // paint before the document goes away.
       setTimeout(function () {
-        if (win && win.location && typeof win.location.reload === "function") win.location.reload();
+        if (win && win.location && typeof win.location.reload === "function") {
+          saveViewportForReload(win, review);
+          win.location.reload();
+        }
       }, reloadNoticeMs);
       return true;
     }
@@ -13748,6 +14008,10 @@
     POLL_INTERVAL_MS: POLL_INTERVAL_MS,
     RELOAD_DEBOUNCE_MS: RELOAD_DEBOUNCE_MS,
     RELOAD_NOTICE_MS: RELOAD_NOTICE_MS,
+    VIEWPORT_MARKER_VERSION: VIEWPORT_MARKER_VERSION,
+    VIEWPORT_MARKER_KEY: VIEWPORT_MARKER_KEY,
+    saveViewportForReload: saveViewportForReload,
+    restoreViewportAfterReload: restoreViewportAfterReload,
     decideFailureCode: decideFailureCode,
     createSync: createSync
   };
@@ -18687,7 +18951,7 @@
 //     turbo:morph      Hotwire replaced part of the page
 //     turbo:load       a Turbo Drive navigation finished
 //     popstate         the reviewer went back or forward
-//     pageshow         a fresh load, OR a back/forward cache restore
+//     pageshow         a back/forward cache restore (`persisted === true`)
 //     a MutationObserver fallback, for a framework that fires none of the above
 //
 //   EVERY HANDLER IS DE-REGISTERED BEFORE RE-REGISTRATION, through the listener
@@ -18912,8 +19176,9 @@
         var persisted = !!(event && event.persisted);
         // A fresh load fires pageshow too, and boot has already done this work.
         // The restore is the one that has nothing else behind it.
-        if (persisted) counters.bfcacheRestores += 1;
-        remount(persisted ? "pageshow-persisted" : "pageshow", { persisted: persisted });
+        if (!persisted) return;
+        counters.bfcacheRestores += 1;
+        remount("pageshow-persisted", { persisted: true });
       }, false, group);
     }
 
@@ -19131,7 +19396,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+c3fbb81371e1";
+  var VERSION = "0.0.0+d2eca5e96106";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -19230,6 +19495,11 @@
     if (current) return current;
 
     var reviewId = config.review;
+    // LAHE's hashless auto-reload leaves one exact, one-shot viewport marker.
+    // Consume it before mounting the rail, merging records, or replaying edits,
+    // all of which are avoidable layout work. This call only lives on boot, so
+    // an SPA/Turbo remount and a bfcache restore never apply numeric scrolling.
+    ns.sync.restoreViewportAfterReload(win, reviewId);
     var store = opts.store || ns.store.createStore();
     var rail = opts.rail || ns.overlay.createRail({ store: store, reviewId: reviewId });
     rail.mount();

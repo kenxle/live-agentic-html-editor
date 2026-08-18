@@ -173,6 +173,11 @@
     if (current) return current;
 
     var reviewId = config.review;
+    // LAHE's hashless auto-reload leaves one exact, one-shot viewport marker.
+    // Consume it before mounting the rail, merging records, or replaying edits,
+    // all of which are avoidable layout work. This call only lives on boot, so
+    // an SPA/Turbo remount and a bfcache restore never apply numeric scrolling.
+    ns.sync.restoreViewportAfterReload(win, reviewId);
     var store = opts.store || ns.store.createStore();
     var rail = opts.rail || ns.overlay.createRail({ store: store, reviewId: reviewId });
     rail.mount();

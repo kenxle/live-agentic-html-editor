@@ -2,7 +2,7 @@
 //
 // Owner: 1B.
 //
-// Four things live in browser storage, all keyed by REVIEW ID and all written
+// Five things live in browser storage, all keyed by REVIEW ID and all written
 // synchronously:
 //
 //   items    the records themselves, drafts included
@@ -14,6 +14,8 @@
 //            survives a remount and a navigation and stays gone once dismissed
 //   holder   which window holds this review, so the second window's refusal can
 //            NAME the first one rather than saying "somewhere else"
+//   ui       the reviewer's small rail preferences. These are best effort: a
+//            denied or corrupt preference must never stop the review itself
 //
 // THE TWO RULES, both from D5:
 //
@@ -57,6 +59,7 @@
   var ACKED_PREFIX = "lahe.acked.v1:";
   var HOLDER_PREFIX = "lahe.holder.v1:";
   var LOCK_PREFIX = "lahe.window.v1:";
+  var UI_PREFIX = "lahe.ui.v1:";
   // The window IDENTITY and the helper SESSION SECRET live in sessionStorage,
   // not localStorage: sessionStorage survives a same-tab navigation (page 1 to
   // /clients of one review is the same reviewer, not a second window) but a
@@ -423,6 +426,44 @@
       });
     }
 
+    // -----------------------------------------------------------------------
+    // Rail preferences
+    // -----------------------------------------------------------------------
+    //
+    // Unlike records and the outbox, these are convenience state. Browser
+    // storage may be denied, full, or contain an old malformed value; none of
+    // those conditions may stop the reviewer from using the rail. Keep this
+    // deliberately separate from readJson/writeJson, whose loud failures are
+    // the correct contract for work the reviewer typed.
+
+    function uiKey(reviewId) {
+      keyFor(reviewId); // the same non-empty review-id guard every bucket uses
+      return UI_PREFIX + reviewId;
+    }
+
+    function readUiPreferences(reviewId) {
+      try {
+        var raw = backing.getItem(uiKey(reviewId));
+        if (!raw) return { collapsed: false };
+        var got = JSON.parse(raw);
+        if (!got || typeof got !== "object") return { collapsed: false };
+        return { collapsed: got.collapsed === true };
+      } catch (err) {
+        return { collapsed: false };
+      }
+    }
+
+    function writeUiPreferences(reviewId, value) {
+      var next = { collapsed: !!(value && value.collapsed) };
+      try {
+        backing.setItem(uiKey(reviewId), JSON.stringify(next));
+      } catch (err) {
+        // Best effort. Losing chrome preference is recoverable; losing review
+        // work is not, which is why record writes still fail loudly above.
+      }
+      return next;
+    }
+
     // -------------------------------------------------------------------------
     // The second window, client side (D5)
     // -------------------------------------------------------------------------
@@ -658,6 +699,8 @@
       acknowledge: acknowledge,
       readChips: readChips,
       writeChips: writeChips,
+      readUiPreferences: readUiPreferences,
+      writeUiPreferences: writeUiPreferences,
       readHolder: readHolder,
       describeHolder: describeHolder,
       claimWindow: claimWindow,
@@ -676,6 +719,7 @@
     CHIPS_PREFIX: CHIPS_PREFIX,
     HOLDER_PREFIX: HOLDER_PREFIX,
     LOCK_PREFIX: LOCK_PREFIX,
+    UI_PREFIX: UI_PREFIX,
     keyFor: keyFor,
     createStore: createStore,
     shared: shared
