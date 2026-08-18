@@ -84,6 +84,15 @@ running it on a page a rebuild stripped the script line out of: the review
 remembers the path it was added at. `lahe add --new` mints a fresh one, and
 `lahe add <page> --review <id>` re-attaches a page to a review by id.
 
+**A different document gets its own review.** `--review <id>` is for putting a
+page back on the review it already belonged to, usually after a rebuild. Do not
+use it to file a second, unrelated document under an existing review to keep
+things together: the reviewer opens the new page, sees the first document's
+comments, and finds that commenting does nothing. `lahe add <page> --new` is
+the fix, and the page works as soon as they reload. From the command line the
+tell is a `lahe status` entry whose `page` line names a document you did not
+expect (observed 2026-08-18).
+
 Re-running `add` never restarts a helper that is up, so a `lahe wait` you have
 blocked on somewhere else keeps waiting.
 
