@@ -38,6 +38,7 @@ test("the dispatcher advertises review and session lifecycle", async () => {
   assert.match(help.stdout, /\bsession\b/);
   assert.match(help.stdout, /\badd\b/);
   assert.match(help.stdout, /\bstatus\b/);
+  assert.match(help.stdout, /\bmonitor\b/);
   assert.equal(/\bwait\b/.test(help.stdout), false);
 });
 
@@ -51,8 +52,8 @@ test("missing and unknown commands use the shared CLI bad-usage exit", async () 
   assert.match(unknown.stderr, /unknown command/);
 });
 
-test("add and serve help use stdout and the successful help exit", async () => {
-  for (const command of ["add", "serve"]) {
+test("add, serve, and monitor help use stdout and the successful help exit", async () => {
+  for (const command of ["add", "serve", "monitor"]) {
     const help = await captureMain([command, "--help"]);
     assert.equal(help.code, protocol.CLI_EXIT.OK, command + " --help exits successfully");
     assert.match(help.stdout, new RegExp("usage: lahe " + command));

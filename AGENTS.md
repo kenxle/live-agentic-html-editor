@@ -199,7 +199,7 @@ agent opens another document:
 
 ```sh
 lahe review path/to/another.html --session <session-id>
-lahe status --session <session-id> --json --seen-file ~/.lahe-seen-<session-id>
+lahe monitor --session <session-id> --seen-file ~/.lahe-seen-<session-id>
 ```
 
 Never monitor globally. A review has one immutable agent-session owner, and the
@@ -320,46 +320,45 @@ not yours: the reviewer is still writing them.
 ### Keep up with a session-scoped monitor
 
 ```sh
-lahe status --session <session-id> --json --seen-file ~/.lahe-seen-<session-id>
+lahe monitor --session <session-id> --seen-file ~/.lahe-seen-<session-id>
 ```
 
-That command is one check; the monitor runs it every 20 to 30 seconds. Prefer
-the agent client's native background monitor or wakeup facility so the primary
-chat remains available. In Claude, use its background Task/Timer facility and
-add `--quiet` to suppress idle output. Other clients should use their native
-background facility when available. A background monitor must post no idle
-“standing by” message. When status prints an item line, deliver that line to the
-agent as new work.
+Launch that exact command as a background terminal task. It polls the
+session-scoped status locally every 15 seconds, prints nothing while the page is
+unchanged, and exits as soon as new work appears. The host can then wake the
+agent with the completed task and its item output. After handling that batch,
+launch the same command again with the same seen-file.
+
+The reason for this design is model allowance. Native Claude Tasks/Timers,
+Antigravity schedules, and similar wakeups invoke the model on every check, even
+when there is no work. A document left open overnight can therefore burn tokens
+on no-ops. A forever background daemon avoids model calls but may never wake the
+agent because it never completes. `lahe monitor` keeps empty polling in one tiny
+local Node process, uses zero model turns and zero model tokens while idle, then
+exits on work so task completion can wake the agent.
+
+#### Codex
+
+Run the printed `lahe monitor` command in a background exec session. Do not use
+a Codex Timer. Wait on that exec session through the tool runtime. Idle polling
+stays local; when the process prints items and exits, handle them and launch a
+fresh background monitor. Retain the exec session id for interruption and never
+start two monitors for one agent session.
 
 #### Antigravity / AGY agent frameworks
 
-Antigravity's correct monitor is a chain of one-shot wakeup timers. A background
-terminal daemon with `--quiet` cannot wake the agent, and a foreground shell
-loop occupies the active turn. Do this instead:
+Run the printed `lahe monitor` command as a background terminal task. Do not use
+Antigravity's native `schedule` loop for routine monitoring: every scheduled
+wakeup invokes Gemini and spends allowance on no-ops. This background task is
+different from a forever daemon. It exits when new work appears, so completion
+wakes the agent. Handle the printed batch, launch the same command again, and
+end the turn so chat remains available.
 
-1. Call `schedule(DurationSeconds=20, Prompt="Check LAHE status for session <id>")`.
-2. End the turn immediately, leaving the primary chat available.
-3. On wakeup, run the status command above without `--quiet`.
-4. If item lines exist, edit the durable source, rebuild the page, verify it,
-   append the replies, and briefly summarize the completed changes.
-5. Schedule exactly one new 20-second wakeup and end the turn. If no item lines
-   exist, reschedule and yield silently. If the session is closed, do not
-   reschedule.
-
-Every wakeup uses the same seen-file path. Never attach a repeating timer to the
-active conversation and never leave two pending LAHE wakeups for one session.
-
-Outside Antigravity, if the client has no background-monitor or wakeup facility,
-use an interruptible foreground loop:
-
-```sh
-while lahe status --session <session-id> --json --seen-file ~/.lahe-seen-<session-id> --quiet; do sleep 20; done
-```
-
-Tell the human before starting that the loop owns the chat while it waits and
-that they can interrupt it when they want to speak directly. Do not build a
-parser or custom dedupe around the command. Never announce repeated “standing
-by” updates.
+If a client cannot wake an agent when a background terminal task completes, run
+the same `lahe monitor` command in the foreground. Tell the human before
+starting that it owns the chat while it waits and that they can interrupt it
+when they want to speak directly. Do not build a parser or custom dedupe around
+the command. Never announce repeated “standing by” updates.
 
 The session scope covers reviews added later to this session and never another
 agent's reviews. The seen file supplies the cursor and dedupe. The monitor
@@ -372,8 +371,8 @@ state, so nothing is re-shown and nothing is skipped.
 
 Older historical plans may mention `lahe wait`. It was retired and removed
 because it watched only one review behind a cursor and did not use the durable
-seen ledger. It is not a command to run; use only the session-scoped status
-monitor above.
+seen ledger. It is not a command to run; use only the session-scoped `lahe
+monitor` command above.
 
 ### More than one document
 

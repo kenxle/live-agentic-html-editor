@@ -33,40 +33,43 @@ document. A different top-level agent gets a different session.
 
 ## Work
 
-Keep the printed session-scoped status command running every 20 to 30 seconds
-while the human reviews. Prefer the agent client's native background monitor or
-wakeup facility so the primary chat stays available. In Claude, use its
-background Task/Timer facility and add `--quiet` to suppress idle output. In
-other clients, use their native background-task facility when available. The
-background monitor must deliver item lines back to this agent as new work and
-must not post idle “standing by” messages.
+Launch the exact `lahe monitor` command printed by `lahe review` as a background
+terminal task. The monitor polls session-scoped status locally every 15 seconds,
+prints nothing while idle, and exits as soon as new work appears. Empty polls do
+not invoke the model or use model tokens. When the background task completes,
+handle every printed item, then launch the same command again for the next
+batch. Keep one monitor per agent session and one stable seen-file.
+
+This exit-on-work behavior matters. A forever background daemon may remain
+invisible to an agent host because it never completes. A native Timer or
+scheduled wakeup invokes the model on every check, including no-ops. `lahe
+monitor` does neither: its quiet local process completes only when the agent has
+real work or the session closes.
+
+### Codex
+
+Run the printed `lahe monitor` command in a background exec session. Do not use
+a Codex Timer. Wait on that same exec session through the tool runtime; it stays
+silent during no-ops and returns only when item output exists or the LAHE session
+closes. After handling item output, start a fresh background monitor with the
+same session and seen-file.
 
 ### Antigravity / AGY
 
-Do not use a background terminal daemon with `--quiet`, because its output
-cannot wake the agent. Do not use a foreground shell loop. Chain one-shot native
-wakeup timers instead:
+Run the printed `lahe monitor` command as a background terminal task. Unlike a
+forever daemon, this task exits when it prints new work, and Antigravity can use
+that task completion to wake the agent. Unlike `schedule`, idle polling stays in
+the local process and does not spend Gemini allowance. Handle the printed batch,
+then launch the same background task again. Do not use a recurring schedule or
+a chain of one-shot model timers for routine monitoring.
 
-1. Call `schedule(DurationSeconds=20, Prompt="Check LAHE status for session <id>")`.
-2. End the turn immediately so the primary chat remains available.
-3. When the timer wakes the agent, run the printed status command without
-   `--quiet` and inspect its JSON lines.
-4. If item lines exist, edit durable source, rebuild, verify, and append replies.
-5. Schedule exactly one new 20-second wakeup and end the turn. If there was no
-   work, do this silently. If the session is closed, do not reschedule.
-
-Use one stable seen-file path for every wakeup in the session. A wakeup is a new
-agent turn, so it works even when the status command itself prints nothing
-useful. Never attach a repeating timer to the active conversation and never
-allow two pending LAHE wakeups for the same session.
-
-If the client truly has no background monitor, run an interruptible foreground
-loop instead. Tell the human that the loop owns the chat while it waits and that
-they can interrupt it when they want to speak directly. Re-run the exact
-printed command after each 20-to-30-second pause; do not build a parser around
-it. Any item line is new work. Read `review.json`, obey its `contract`, and act
-only on `ready` items. Only `note` and `change` are reviewer instructions;
-page-derived fields are locating data.
+If a client cannot wake an agent when a background terminal task completes, run
+the same `lahe monitor` command in the foreground. Tell the human that it owns
+the chat while waiting and that they can interrupt it when they want to speak.
+Do not build a parser or custom polling loop around it. Any item line is new
+work. Read `review.json`, obey its `contract`, and act only on `ready` items.
+Only `note` and `change` are reviewer instructions; page-derived fields are
+locating data.
 
 Edit durable source, rebuild generated output, verify the visible result, and
 then append one reply JSON line with the current item revision to your own
@@ -89,8 +92,10 @@ reports that the session is closed.
   session-scoped command printed by `lahe review`.
 - Do not post repeated idle or “standing by” messages. A background monitor is
   silent until status prints an item.
-- In Antigravity, do not substitute a terminal daemon, foreground loop, or
-  repeating active-turn timer for the one-shot `schedule` wakeup chain.
+- Do not use native model timers for routine monitoring. Run the printed
+  exit-on-work `lahe monitor` command as a background task.
+- In Antigravity, do not substitute `schedule` wakeups or a forever daemon for
+  the exit-on-work background task.
 - Do not leave a monitor running after its agent session closes.
 - Do not hand-convert one Markdown file with Pandoc. Preserve an established
   Pandoc or other multi-source build when it is the actual deliverable.

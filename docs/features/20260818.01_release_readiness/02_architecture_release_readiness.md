@@ -82,18 +82,26 @@ IPC channel to the process that started them and exit when that owner
 disappears, including interrupted test runs. This prevents old worktrees and
 aborted browser suites from leaving polling processes adopted by PID 1.
 
-Agent monitoring remains a session-scoped status command on a 20-to-30-second
-cadence. The client-specific wakeup mechanism is part of the contract. Claude
-uses a quiet background Task/Timer. Antigravity chains one-shot native
-`schedule(DurationSeconds=20, ...)` wakeups, runs status without `--quiet`,
-schedules exactly one successor, and yields after every wakeup; a terminal
-daemon cannot wake that agent and a foreground loop blocks its active turn.
-Other clients prefer a native background monitor and fall back to an
-interruptible foreground loop only when necessary. Every form uses
-`--seen-file` directly, launches no parser pipeline, posts no idle message, and
-ends with the agent session. A hidden review page may reduce nonessential
-reply/mtime polling while retaining its low-frequency ownership heartbeat; a
-visible page keeps the interactive cadence.
+Agent monitoring is session-scoped and exit-on-work. `lahe monitor` owns one
+local 15-second polling loop over `status --session --json --seen-file --quiet`.
+It emits nothing while idle, prints new item lines, and exits. Agents launch it
+as a background terminal task, handle the batch when completion wakes them, and
+then launch it again. A client without completion-triggered wakeups may run the
+same command in the foreground with an explicit warning that the chat is
+occupied.
+
+This boundary exists to prevent token burn on no-ops. Claude Tasks,
+Antigravity schedules, Codex Timers, and equivalent facilities invoke a model
+even when no document state changed. Leaving those active overnight can spend a
+large allowance doing empty reads. A forever quiet daemon avoids those model
+calls but does not complete, so some hosts never wake the agent. The local
+exit-on-work process gives both properties: zero model turns while idle and a
+completion event when work exists. It also retains the session/revision
+semantics of `status --seen-file`, launches no parser pipeline, posts no idle
+message, discovers later reviews in the session, and exits when the agent
+session closes. A hidden review page may reduce nonessential reply/mtime polling
+while retaining its low-frequency ownership heartbeat; a visible page keeps the
+interactive cadence.
 
 ### Rejected alternatives
 

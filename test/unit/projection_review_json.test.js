@@ -108,10 +108,10 @@ test("the contract field is in the real projection byte for byte, and names no a
   );
 
   // The file tells an agent to append a line, and never to run a command that
-  // no longer exists. `lahe status` is the one keep-up command named; `lahe
+  // no longer exists. `lahe monitor` is the one keep-up command named; `lahe
   // wait` is retired and must not survive here either.
   const wholeFile = fs.readFileSync(written, "utf8");
-  assert.ok(/lahe status --session <agent-session-id> --json --seen-file/.test(wholeFile), "the file names the scoped keep-up command an agent may run");
+  assert.ok(/lahe monitor --session <agent-session-id> --seen-file/.test(wholeFile), "the file names the scoped keep-up command an agent may run");
   assert.equal(/lahe wait/.test(wholeFile), false, "the retired blocking command is named nowhere");
   assert.equal(/lahe ack|lahe next|lahe send/.test(wholeFile), false, "review.json names no acknowledge command");
   // The retired acknowledgement vocabulary is gone entirely.

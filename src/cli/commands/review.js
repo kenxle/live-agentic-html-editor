@@ -159,9 +159,9 @@ async function run(argv) {
       );
     }
     process.stdout.write(
-      (staticServer ? "" : "\n") + "  monitor   lahe status --session " + sessionId +
-        " --json --seen-file <path>\n" +
-        "            Antigravity: one-shot schedule wakeups; other background monitors may add --quiet\n" +
+      (staticServer ? "" : "\n") + "  monitor   lahe monitor --session " + sessionId +
+        " --seen-file <path>\n" +
+        "            launch as a background task; after it exits on work, handle the batch and relaunch\n" +
         "  close     lahe session close " + sessionId + "\n"
     );
   }

@@ -3,17 +3,19 @@
 // Owner: 1A, which wires `serve`. `add` is 3B's and `status` is 3A's, each wired
 // the same way serve is.
 //
-// The three commands are the whole surface. The agent-facing pair from the
+// The public commands are the whole surface. The agent-facing pair from the
 // archived send model (`next` and `ack`) is gone: an agent answers by appending
 // one JSON line to a reply file, which needs no command at all.
 //
 // `wait` IS RETIRED, and it is not wired here any more. It blocked, which meant
 // agents ran it in the foreground and stopped working while a reviewer typed,
 // and it answered for one review at a time behind a cursor an agent had to
-// carry. `lahe status --session <id> --json --seen-file <path> --quiet`
-// answers the same question for one agent workstream, blocks on nothing, needs
-// no cursor or parser, and survives a restart because the seen file is the state. Two ways to keep up,
-// one of them a trap, is not a thing a young tool should carry.
+// carry. `lahe monitor --session <id> --seen-file <path>` answers the same
+// question for one agent workstream, stays silent while polling locally, and
+// exits on new work so a background-task host can wake the agent without model
+// turns on no-ops. It needs no cursor or parser and survives a restart because
+// the seen file is the state. Two subtly different blocking commands would be
+// a trap, so monitor is the only public waiting surface.
 //
 // Node-only.
 
@@ -29,7 +31,7 @@ var USAGE = [
   "  session close or reopen an agent session and its helper lease",
   "  add     add the library to a page and mint that review's token",
   "  status  print what is open right now, and whether the page is still connected",
-  "          (--session <id> --json --seen-file <path> --quiet is the agent keep-up loop)",
+  "  monitor watch locally for session work, print it, and exit (zero-token no-ops)",
   "",
   "Run `lahe <command> --help` for a command's own options."
 ].join("\n");
@@ -53,6 +55,7 @@ async function main(argv) {
   if (command === "session") return require("./commands/session.js").run(rest);
   if (command === "add") return require("./commands/add.js").run(rest);
   if (command === "status") return require("./commands/status.js").run(rest);
+  if (command === "monitor") return require("./commands/monitor.js").run(rest);
 
   process.stderr.write("lahe: unknown command " + JSON.stringify(command) + "\n\n" + USAGE + "\n");
   return protocol.CLI_EXIT.BAD_USAGE;

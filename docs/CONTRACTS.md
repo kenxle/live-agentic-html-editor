@@ -437,7 +437,7 @@ copy in `test/unit/review_format.test.js`:
   "status is one of: handled, you made the change; not_handled, you did not, and reason says why in words the reviewer will read; question, you need an answer, and text asks for it.",
   "rev must be the rev carried with the item. If the reviewer reworded the item after you read it, your line is refused and the item stays open. Re-read the item and answer its new rev.",
   "To see what is open right now, run: lahe status --review <id> (add --json for machine-readable lines). It prints the unanswered ready items and whether the reviewer's page is connected.",
-  "To keep up, run this command every 20 to 30 seconds: lahe status --session <agent-session-id> --json --seen-file <path>. Use the review.agent_session_id above. Prefer the client’s native background monitor or wakeup facility. Claude may add --quiet. Antigravity must chain one-shot schedule(DurationSeconds=20, ...) wakeups, run status without --quiet on each wakeup, schedule exactly one successor, and yield silently when idle; do not use a quiet terminal daemon or foreground loop there. Other clients without background wakeups may use an interruptible foreground loop after warning the human. Never monitor globally or build a parser pipeline. Stop the monitor when the agent session closes.",
+  "To keep up, launch this as a background terminal task: lahe monitor --session <agent-session-id> --seen-file <path>. Use the review.agent_session_id above and one stable seen-file. It polls locally every 15 seconds, prints only new work, and exits. Empty checks invoke no model and use no model tokens. When item output wakes the agent, handle the batch and relaunch the same command. Do not use native model timers, a forever daemon, a global monitor, or a parser pipeline. If the host cannot wake on background-task completion, run the same command in the foreground after warning the human that it owns the chat. Stop relaunching when the agent session closes.",
   "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and a running helper puts the script line back when the rebuild strips it out.",
   "The only way to say you handled an item is to append a reply line."
 ]
@@ -613,11 +613,13 @@ The one read path, and the one keep-up loop. Before it, every agent hand-rolled 
   `intent_fields`, straight from `src/shared/review_format.js`), then the item lines, then the summary.
   Item fields keep the names they have in `review.json`, so the classification an agent already learned
   there applies unchanged.
-- **The keep-up loop:** `--seen-file <path>` requires `--session <id>` and `--json`. Its identity is
-  session + review + item + revision. Claude-style background monitors may add `--quiet` to emit no
-  terminal churn while waiting. Antigravity wakeups omit it because the scheduled agent turn, not
-  terminal output, drives the check. Neither form needs a parser; both discover later reviews in their
-  own session and can never receive another top-level agent's work.
+- **The keep-up loop:** `lahe monitor --session <id> --seen-file <path>` owns local polling and exits
+  when new work exists. Underneath, `--seen-file` requires `--session` and `--json`; its identity is
+  session + review + item + revision. Silent idle checks stay in the local process and therefore use
+  zero model turns and zero model tokens. Native agent timers were rejected because every no-op wakes
+  the model; forever daemons were rejected because task-completion hosts may never wake. No parser is
+  needed, later reviews in the same session are discovered, and another top-level agent's work cannot
+  cross the boundary.
 - **Exit codes:** `0` completed (even with zero items), `2` nothing readable, `3` unknown review, `4` bad
   usage. The shared table is `protocol.CLI_EXIT`.
 
@@ -654,9 +656,9 @@ are externally owned, so LAHE never terminates them.
 ### `lahe wait` is retired
 
 It blocked, so agents ran it in the foreground and stopped working while the reviewer typed, and it
-watched one review behind a cursor the caller had to carry. `lahe status --session <id> --json
---seen-file <path>` answers the same question without blocking or crossing agent sessions; monitor
-hosts that benefit from suppressed idle output may add `--quiet`.
+watched one review behind a cursor the caller had to carry. `lahe monitor --session <id>
+--seen-file <path>` answers the same question without crossing agent sessions or waking a model on
+empty checks.
 The command, route, wait-only protocol constants, implementation, and tests have
 all been removed. Historical feature documents retain the old design only as a
 superseded record.

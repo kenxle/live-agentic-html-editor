@@ -274,23 +274,22 @@ once, and after that a plain sentence works:
 | `lahe add ... --source path/to/template` | Record where the source lives, so an agent edits the template rather than build output |
 | `lahe add ... --review <id>` | Re-attach this page to a review that already exists, by id |
 | `lahe status [--session <id>] [--review <id>] [--json]` | What is open right now. Agent monitors must name their session; plain global status is only a human diagnostic |
+| `lahe monitor --session <id> --seen-file <path>` | Poll locally without model wakeups, print new session work, and exit |
 | `lahe session close <id>` | Close an agent workstream, stop its static servers, and keep all review history. The final close also stops the shared helper |
 | `lahe session reopen <id>` | Reopen the workstream and restart its helper and static servers |
 | `lahe serve [--port N]` | Run the helper by hand (`add` starts it for you, so this is rarely needed) |
 
-`lahe status --session <id> --json --seen-file <path>` is the monitor's one-shot
-check. Run it every 20 to 30 seconds using the agent client's native background
-monitor or wakeup facility whenever one is available. Claude should use its
-background Task/Timer facility and add `--quiet`. Antigravity must instead chain
-one-shot `schedule(DurationSeconds=20, ...)` wakeups: each wakeup runs status
-without `--quiet`, processes any item lines, schedules exactly one successor,
-and ends its turn. It must not use a quiet terminal daemon or foreground loop,
-because neither correctly wakes the Antigravity agent while leaving chat free.
-Other clients without a background facility may use an interruptible foreground
-loop after telling the user how to regain the chat. Idle monitors post no
-“standing by” messages. Do not monitor globally or wrap status in a parser
-pipeline. The seen key includes the session, review, item, and revision. Stop or
-delete the monitor when the agent session closes.
+Launch `lahe monitor --session <id> --seen-file <path>` as a background terminal
+task. It polls locally every 15 seconds, stays silent while idle, and exits when
+new work arrives. Task completion wakes the agent; after handling the printed
+batch, the agent relaunches it. This avoids token burn on no-ops: native Claude
+timers, Antigravity schedules, and similar wakeups invoke a model even when
+nothing changed, while the monitor's empty checks never invoke a model. A
+forever daemon is also unsuitable because some hosts only wake the agent when a
+background task completes. Use one stable seen-file, never monitor globally,
+and stop relaunching when the session closes. If a host cannot wake on task
+completion, run the same command in the foreground after telling the user how
+to interrupt it.
 
 **If the page is build output**, an agent should rebuild before it reports an
 item handled: `handled` is supposed to mean your page shows the change. It does
