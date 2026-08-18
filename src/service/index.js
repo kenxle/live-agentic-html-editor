@@ -51,7 +51,7 @@ var VERSION = "0.0.0";
 // largest post is an unload flush, which the browser already caps near 64KB
 // (protocol.FLUSH.KEEPALIVE_MAX_BYTES); a megabyte is generous for a re-post
 // backlog and still bounded.
-var MAX_BODY_BYTES = 1024 * 1024;
+var MAX_BODY_BYTES = 8 * 1024 * 1024;
 
 // The built library, which the helper serves at GET /lahe-layer.js so the
 // script line on a page can be one absolute URL rather than a relative path

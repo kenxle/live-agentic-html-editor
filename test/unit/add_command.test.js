@@ -399,7 +399,11 @@ test("a dev server target prints a guarded line and edits nothing", async () => 
 
     const review = /data-lahe-review="([^"]+)"/.exec(run.stdout)[1];
     const meta = JSON.parse(fs.readFileSync(path.join(stateDir, "reviews", review, "meta.json"), "utf8"));
-    assert.deepEqual(meta.origins, ["http://localhost:4321"], "the origin that was named is registered");
+    assert.deepEqual(
+      meta.origins,
+      ["http://localhost:4321", "http://127.0.0.1:4321"],
+      "the named origin is registered along with its loopback twin"
+    );
 
     // The source hint is RECORDED, not only printed: it rides a page.visited
     // event so an agent edits the template instead of the build output.

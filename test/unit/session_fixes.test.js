@@ -182,3 +182,37 @@ test("it refuses, with the reason, rather than overwriting something else", () =
   assert.match(err.join(""), /leaving .* alone/);
   assert.equal(fs.readFileSync(target, "utf8"), "#!/bin/sh\necho somebody else's lahe\n", "untouched");
 });
+
+// ---------------------------------------------------------------------------
+// The loopback-twin rule: a named localhost origin registers 127.0.0.1 too,
+// and the reverse. Same server in every human's mind, two origins to every
+// browser; a real review died on the difference (2026-08-17).
+// ---------------------------------------------------------------------------
+
+const addCommand = require("../../src/cli/commands/add.js");
+
+test("a localhost origin brings its 127.0.0.1 twin, and the reverse", () => {
+  assert.deepEqual(addCommand.withLoopbackTwins(["http://localhost:8899"]), [
+    "http://localhost:8899",
+    "http://127.0.0.1:8899"
+  ]);
+  assert.deepEqual(addCommand.withLoopbackTwins(["http://127.0.0.1:3000"]), [
+    "http://127.0.0.1:3000",
+    "http://localhost:3000"
+  ]);
+});
+
+test("twins are not duplicated, ports are respected, and other hosts pass through", () => {
+  assert.deepEqual(
+    addCommand.withLoopbackTwins(["http://localhost:8899", "http://127.0.0.1:8899"]),
+    ["http://localhost:8899", "http://127.0.0.1:8899"]
+  );
+  assert.deepEqual(addCommand.withLoopbackTwins(["http://localhost"]), [
+    "http://localhost",
+    "http://127.0.0.1"
+  ]);
+  assert.deepEqual(addCommand.withLoopbackTwins(["https://dev.example.test:4443"]), [
+    "https://dev.example.test:4443"
+  ]);
+  assert.deepEqual(addCommand.withLoopbackTwins([]), []);
+});

@@ -94,6 +94,29 @@ var FILE_ORIGIN = "null";
 // buckets and one review spans them only because the helper holds a set.
 var DEFAULT_DEV_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"];
 
+/**
+ * Every named loopback origin brings its twin. `http://localhost:8899` and
+ * `http://127.0.0.1:8899` are the same server in every human's mind and two
+ * different origins to every browser, and a review registered under one refuses
+ * the other. That is exactly the trap the dev-server default already avoids by
+ * registering both, so a named --origin gets the same treatment; a review
+ * session died on this for real (2026-08-17, the reviewer typed localhost, the
+ * agent registered 127.0.0.1). Non-loopback origins pass through untouched.
+ */
+function withLoopbackTwins(list) {
+  var out = [];
+  (list || []).forEach(function (origin) {
+    if (out.indexOf(origin) === -1) out.push(origin);
+    var twin = null;
+    var atLocalhost = origin.match(/^(https?:\/\/)localhost(:\d+)?$/);
+    var atLoopbackIp = origin.match(/^(https?:\/\/)127\.0\.0\.1(:\d+)?$/);
+    if (atLocalhost) twin = atLocalhost[1] + "127.0.0.1" + (atLocalhost[2] || "");
+    if (atLoopbackIp) twin = atLoopbackIp[1] + "localhost" + (atLoopbackIp[2] || "");
+    if (twin && out.indexOf(twin) === -1) out.push(twin);
+  });
+  return out;
+}
+
 // Directories a static page is likely to load its own scripts from. When one
 // sits beside the page, the bundle is copied into it and the src is a short
 // relative URL; otherwise the src is a relative path back to the repo's dist.
@@ -815,17 +838,18 @@ async function run(argv) {
   }
 
   // --- the origins this review needs -----------------------------------------
+  var namedOrigins = withLoopbackTwins(options.origins);
   var origins;
   var originNote;
   if (kind === "static") {
-    origins = [FILE_ORIGIN].concat(options.origins);
+    origins = [FILE_ORIGIN].concat(namedOrigins);
     originNote =
       origins.join(", ") +
       (options.origins.length > 0
         ? " (" + FILE_ORIGIN + " is what a page opened from disk sends; the rest were named with --origin)"
         : " (a page opened from disk sends no origin, on every browser)");
-  } else if (options.origins.length > 0) {
-    origins = options.origins.slice();
+  } else if (namedOrigins.length > 0) {
+    origins = namedOrigins.slice();
     originNote = origins.join(", ");
   } else {
     origins = DEFAULT_DEV_ORIGINS.slice();
@@ -1173,6 +1197,7 @@ module.exports = {
   FILE_ORIGIN: FILE_ORIGIN,
   DEFAULT_DEV_ORIGINS: DEFAULT_DEV_ORIGINS,
   ASSET_DIR_NAMES: ASSET_DIR_NAMES,
+  withLoopbackTwins: withLoopbackTwins,
   parseArgs: parseArgs,
   placeScriptLine: placeScriptLine,
   replaceScriptLine: replaceScriptLine,
