@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+3cef2470ae94
+ * version 0.0.0+c573623e3c10
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+3cef2470ae94";
+  g.LAHE.version = "0.0.0+c573623e3c10";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -4066,7 +4066,9 @@
     "Every reply line names the item id, the item's rev, and your own agent name. The reviewer sees that name on the card.",
     "status is one of: handled, you made the change; not_handled, you did not, and reason says why in words the reviewer will read; question, you need an answer, and text asks for it.",
     "rev must be the rev carried with the item. If the reviewer reworded the item after you read it, your line is refused and the item stays open. Re-read the item and answer its new rev.",
+    "To see what is open right now, run: lahe status --review <id> (add --json for machine-readable lines). It prints the unanswered ready items and whether the reviewer's page is connected.",
     "To keep up, re-read this file between work items, or run: lahe wait --review <id> --since <cursor>. It blocks until something new is ready, prints the new items as JSON lines, and prints the cursor to pass next time. Waiting consumes nothing and acknowledges nothing.",
+    "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, re-run lahe add on the built page (it re-attaches to the same review), and only then reply. The page reloads itself when the file changes.",
     "The only way to say you handled an item is to append a reply line."
   ];
 
@@ -18127,7 +18129,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+3cef2470ae94";
+  var VERSION = "0.0.0+c573623e3c10";
 
   var protocol = ns.protocol;
   var record = ns.record;

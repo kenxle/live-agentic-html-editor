@@ -111,7 +111,7 @@ test("review.json names no acknowledge command, because there is none", () => {
 
 test("the contract is exported as the module's own constant and is frozen text", () => {
   assert.deepEqual(rf.CONTRACT, CONTRACT_VERBATIM);
-  assert.equal(rf.CONTRACT.length, 12);
+  assert.equal(rf.CONTRACT.length, 14);
 });
 
 // ---------------------------------------------------------------------------
