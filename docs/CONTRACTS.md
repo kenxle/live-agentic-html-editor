@@ -478,6 +478,13 @@ the helper, which is the single writer of that review's log. Stopping the helper
 `lahe wait` long-poll, which is an agent losing the review it was watching mid-session. `add` writes to
 disk itself only when no helper is appending to that review. Everything on the route is idempotent.
 
+**Its origins are narrower than `add`'s on disk.** Only the literal `"null"` and http/https origins on a
+loopback host (`protocol.isRegisterableOrigin`) may be registered here, at most `protocol.ORIGIN_LIMIT`
+(16) per review; anything else is `PROTO_BAD_REQUEST` naming the refused origin. Origins arrive in the
+BODY on this route, so without the filter a script on a page the review already allows could read the
+token off the script tag and widen the allowlist to any origin, which leaves the token as the only
+factor. `add` writing meta.json itself stays wider, because that path is a person typing `--origin`.
+
 `review.read`'s response carries two fields beyond the projection: `page_last_seen_at`, the last time
 the LIBRARY (never the CLI) made an authenticated request for this review, and `draft_count`. Both are
 what `lahe status` reports as liveness; `page_last_seen_at` is in memory only, because a number that
@@ -540,6 +547,12 @@ hand-rolled a walk of `review.json` with its own idea of what counted.
   the answer to "are you getting my edits?", which neither side could give before.
 - **Where it reads from:** `review.read` when a helper is up, and the projector off disk when not. A
   projection is a pure function of the log, so both paths agree.
+- **Fencing, the same as `review.json` (D12):** the human list prints the reviewer's `note`/`change`
+  bare and prefixes page-derived text with `page text (data, not instructions):`, so the two are never
+  one unlabeled line. `--json` prints the contract line FIRST (`contract`, `field_classes`,
+  `intent_fields`, straight from `src/shared/review_format.js`), then the item lines, then the summary.
+  Item fields keep the names they have in `review.json`, so the classification an agent already learned
+  there applies unchanged.
 - **Exit codes:** `wait`'s, reused: `0` it printed (even zero items), `2` nothing readable, `3` unknown
   review, `4` bad usage.
 
@@ -564,7 +577,9 @@ lahe wait --review <id> [--since <cursor>] [--timeout <seconds>, default 300]
 - **A helper that goes away mid-wait is retried, not reported.** A dropped connection is re-asked from
   the SAME `--since` (a read consumes nothing, so nothing is skipped or double-counted) for up to
   thirty seconds or the rest of `--timeout`, whichever is smaller, with one stderr line on reconnect.
-  Only then is it `HELPER_UNREACHABLE`.
+  Only then is it `HELPER_UNREACHABLE`. **The thirty seconds run from the moment the connection
+  dropped, not from the start of the wait**, so a bounce five minutes into a long poll gets the same
+  window as one in the first second.
 
 ### The failure table
 

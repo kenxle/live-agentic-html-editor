@@ -196,7 +196,7 @@ once, and after that a plain sentence works:
 | `lahe add path/to/page.html --remove` | Take the script line back out of the page, and change nothing else |
 | `lahe add ... --source path/to/template` | Record where the source lives, so an agent edits the template rather than build output |
 | `lahe add ... --review <id>` | Re-attach this page to a review that already exists, by id |
-| `lahe status [--review <id>] [--json]` | What is open right now: per review, the pages, the counts, the items waiting on you, and whether the reviewer's page is still connected. Blocks on nothing |
+| `lahe status [--review <id>] [--json]` | What is open right now: per review, the pages, the counts, the items waiting on you, and whether the reviewer's page is still connected. Blocks on nothing. `--json` prints the contract and field classes on line one, before any page text |
 | `lahe serve [--port N]` | Run the helper by hand (`add` starts it for you, so this is rarely needed) |
 | `lahe wait --review <id> [--since <cursor>] [--timeout <seconds>] [--state-dir <path>]` | Block until new items are ready; prints them as JSON lines plus the next cursor. Exit codes: 0 new work, 1 timeout, 2 helper unreachable, 3 unknown review, 4 bad usage. Reading acknowledges nothing |
 
