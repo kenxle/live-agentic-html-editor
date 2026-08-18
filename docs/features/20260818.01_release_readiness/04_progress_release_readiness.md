@@ -15,11 +15,15 @@
   viewport once, uses instant scrolling, and prevents a later native restore
   through `pageshow`. Fragment navigation and history navigation remain
   browser-owned.
+- Complete: the retired blocking `lahe wait` implementation, wait-only protocol
+  constants, and false-positive tests are removed. Living docs teach only the
+  global `status --json --seen-file` timer loop; the original feature plan marks
+  its former wait design as superseded history.
 - Complete: post-fix Node 20 release gate, 475 unit and 629 browser tests
   passed across Chromium, Firefox, and WebKit, with 7 documented skips.
 - Confirmed blocker: global monitoring crosses independent live agent sessions.
 - Confirmed known gaps: one-command static front door, cold-start proof,
-  documentation pass, multi-page offline path reuse, retired wait cleanup, and
+  documentation pass, multi-page offline path reuse, and
   acceptance evidence.
 - In progress: session-scoped agent monitoring and the remaining correctness
   cleanup.

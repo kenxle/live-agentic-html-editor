@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+d2eca5e96106
+ * version 0.0.0+28638957d279
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+d2eca5e96106";
+  g.LAHE.version = "0.0.0+28638957d279";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -3060,8 +3060,8 @@
     // INCLUDING INSIDE THE LIBRARY'S OWN RAIL. The click rule below cannot do
     // this job on its own: a click on the rail retargets to the overlay host,
     // hits the overlay rule above, and the edit was left sitting in `draft`
-    // forever. A draft never passes protocol.countsAsNew, so the reviewer
-    // watched an edit they considered finished reach no agent at all (Ken's
+    // forever. Status never offers drafts to an agent, so the reviewer watched
+    // an edit they considered finished reach no agent at all (Ken's
     // session, 2026-08-16). Pointerdown is the honest moment the reviewer left
     // the block, it fires before focus moves, and the event still passes
     // through untouched so the rail and the page both get their click.
@@ -3402,7 +3402,7 @@
 //
 // Owner: 0A-wire. Imported by: the helper's router and per-request check block
 // (1A), the sync client and reply poll loop (1B), the projection and reply
-// folder (3A), the add command (3B), and the wait command (3A).
+// folder (3A), and the CLI commands.
 //
 // Four things live here, and they are here because something OUTSIDE this repo
 // reads or writes them: an agent, a browser, or a person typing a script tag.
@@ -3419,8 +3419,7 @@
 //     request's own header. Absent configuration fails closed, and every
 //     refusal names the check that failed.
 //  4. THE THINGS A PERSON TYPES: the script tag's attributes with the fixed
-//     default port, and `lahe wait`'s invocation, watermark, output and exit
-//     codes.
+//     default port, plus the CLI exit codes shared by the dispatcher and status.
 //
 // The record's own field names are NOT here. Import them from record.js.
 //
@@ -3596,7 +3595,7 @@
       mutating: true,
       why:
         "what `add` calls for a review the helper already holds: the helper applies the writes itself, so `add` " +
-        "never has to stop a helper that is holding somebody's live review (and never drops an open `lahe wait`). " +
+        "never has to stop a helper that is holding somebody's live review. " +
         "Its origins are DELIBERATELY NARROWER than what `add` may write to disk: only \"null\" and loopback " +
         "http/https pass (isRegisterableOrigin), capped at ORIGIN_LIMIT per review. A body-supplied origin is the " +
         "one way a script on an allowed page could widen the allowlist with a token it read off the script tag, " +
@@ -3624,8 +3623,8 @@
         "the library's reply poll loop. The cursor is a seq, never a timestamp and never an offset. It also carries " +
         "the reviewed file's mtime, which is R36's refresh trigger for a static page: a changed value means the " +
         "agent rebuilt the page and the library reloads it",
-      request: "?review=<id>&since=<seq>",
-      response: "{events: [event...], seq, target_mtime}; target_mtime is an ISO string, or null when the review has no recorded path or the file is missing"
+      request: "?review=<id>&since=<seq>&page_path=<location.pathname>",
+      response: "{events: [event...], seq, target_mtime}; target_mtime is the requesting page's ISO mtime, or null when its retained target cannot be identified or the file is missing"
     },
     {
       name: "window.claim",
@@ -3647,11 +3646,6 @@
       request: "{review}",
       response: "{ended_at, outstanding_kept}"
     }
-    // THE `wait` ROUTE IS RETIRED WITH THE COMMAND THAT CALLED IT. Nothing in
-    // the library ever used it (the page keeps up on replies.poll); it existed
-    // for a blocking CLI that agents ran in the foreground and stalled on. The
-    // keep-up loop is `lahe status --json --seen-file <path>`, which reads the
-    // same projection this table already serves through review.read.
   ];
 
   function route(name) {
@@ -4230,53 +4224,15 @@
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // lahe wait
-  // ---------------------------------------------------------------------------
-  //
-  // A half-specified convenience is the thing most likely to get half-built, so
-  // it is specified whole: the watermark, what counts as new, the output, the
-  // five exit codes, the timeout, and the fact that it consumes nothing.
-
-  var WAIT = {
-    USAGE: "lahe wait --review <id> [--since <cursor>] [--timeout <seconds>]",
-    DEFAULT_TIMEOUT_SECONDS: 300,
-    // --since is a seq from the log. wait returns events with a HIGHER seq and
-    // prints the highest seq it printed, which is the caller's next cursor.
-    CURSOR_FIELD: EVENT_FIELD.SEQ,
-    // IT STORES NOTHING AND CONSUMES NOTHING. It is a read, never an
-    // acknowledgment. A killed wait, a repeated wait, and two agents waiting at
-    // once are all harmless.
-    CONSUMES_NOTHING: true,
-    // Two waiters on one review both wake. There is no queue and no claim.
-    CONCURRENT_WAITERS_BOTH_WAKE: true,
-    // New ready items print as JSON LINES, one line per item, each carrying the
-    // same fields the item carries in review.json, with page text in the same
-    // data-named fields.
-    OUTPUT: "json-lines",
-    EXIT: {
-      NEW_WORK: 0,
-      TIMEOUT: 1,
-      HELPER_UNREACHABLE: 2,
-      UNKNOWN_REVIEW: 3,
-      BAD_USAGE: 4
-    }
+  // Shared process exits for the command dispatcher and status. Status uses all
+  // four; the other commands share BAD_USAGE rather than inventing a different
+  // number for the same caller error.
+  var CLI_EXIT = {
+    OK: 0,
+    HELPER_UNREACHABLE: 2,
+    UNKNOWN_REVIEW: 3,
+    BAD_USAGE: 4
   };
-
-  // What counts as new: an item newly ready, an item reworded to a higher
-  // revision, an item flagged as lost, and a reply from another agent. DRAFTS
-  // NEVER COUNT.
-  var WAIT_EVENT_TYPES = [EVENT.ITEM_READY, EVENT.ITEM_CONTENT, EVENT.REPLY_FOLDED];
-
-  function countsAsNew(event) {
-    if (!event || typeof event !== "object") return false;
-    var type = event[EVENT_FIELD.EVENT];
-    if (type === EVENT.ITEM_READY || type === EVENT.REPLY_FOLDED) return true;
-    // A content event counts only when it moved a ready item to a higher
-    // revision, or flagged it lost. A draft keystroke is neither.
-    if (type === EVENT.ITEM_CONTENT) return event.draft !== true && (event.reworded === true || event.lost === true);
-    return false;
-  }
 
   return {
     API_VERSION: API_VERSION,
@@ -4341,9 +4297,7 @@
     SCRIPT_FALLBACK_ONERROR: SCRIPT_FALLBACK_ONERROR,
     scriptTag: scriptTag,
 
-    WAIT: WAIT,
-    WAIT_EVENT_TYPES: WAIT_EVENT_TYPES,
-    countsAsNew: countsAsNew
+    CLI_EXIT: CLI_EXIT
   };
 });
 
@@ -13108,12 +13062,6 @@
           // Drafts flow to the helper marked draft, and never appear as
           // actionable in what the agent reads (D5, R7).
           draft: record.isDraft(item),
-          // Finding 18: an item.content event only wakes `lahe wait` when it
-          // carries lost:true (protocol.countsAsNew). replay's markLost stamps
-          // region.lost on the record; lift it to the event so an anchor going
-          // lost is not a dead capability at the wait watermark. newEvent spreads
-          // these payload keys onto the top-level event countsAsNew reads.
-          lost: !!(item[record.FIELD.REGION] && item[record.FIELD.REGION].lost),
           record: item
         }
       });
@@ -13361,7 +13309,15 @@
 
     function poll() {
       counters.polls += 1;
-      return request("replies.poll", { method: "GET", query: { review: requireReview(), since: cursor } }).then(
+      var query = { review: requireReview(), since: cursor };
+      var pagePath =
+        win && win.location && typeof win.location.pathname === "string"
+          ? win.location.pathname
+          : doc && doc.location && typeof doc.location.pathname === "string"
+            ? doc.location.pathname
+            : null;
+      if (pagePath) query.page_path = pagePath;
+      return request("replies.poll", { method: "GET", query: query }).then(
         function (result) {
           if (!result.ok) {
             // A poll the navigation cancelled says nothing about the helper.
@@ -17320,8 +17276,8 @@
      * DELIBERATELY NOT SKIPPED FOR THE OVERLAY. onClick below returns early on
      * anything inside the library's own rail, and a click on the rail retargets
      * to the overlay host, so an edit the reviewer finished by clicking the rail
-     * stayed in `draft` forever. A draft never passes protocol.countsAsNew, so
-     * no agent ever saw it and the reviewer had no way to tell (Ken's session,
+     * stayed in `draft` forever. Status never offers drafts to an agent, so no
+     * agent ever saw it and the reviewer had no way to tell (Ken's session,
      * 2026-08-16). Nothing is prevented and nothing is stopped here: the rail
      * and the page both still get their event.
      *
@@ -19396,7 +19352,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+d2eca5e96106";
+  var VERSION = "0.0.0+28638957d279";
 
   var protocol = ns.protocol;
   var record = ns.record;

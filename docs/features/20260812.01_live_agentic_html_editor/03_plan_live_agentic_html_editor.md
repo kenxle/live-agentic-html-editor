@@ -1,5 +1,14 @@
 # Plan: Live Agentic HTML Editor
 
+> **Historical supersession, 2026-08-18:** This plan records the implementation
+> as originally designed. Its `lahe wait` command, route, cursor semantics, and
+> tests were later retired and removed because a blocking foreground command
+> stopped agents from working and watched only one review. The current and only
+> monitoring workflow is a timer running
+> `lahe status --json --seen-file <path>` with no `--review`, as documented in
+> `AGENTS.md`, `README.md`, and `docs/CONTRACTS.md`. Every wait-specific entry
+> below is historical, not current product guidance.
+
 ## Shape of the build
 
 Five phases, eighteen tasks, four checkpoints. Phase 0 is four tasks on three tracks that start at hour
@@ -403,8 +412,9 @@ for the deferred and re-executed cases. **7817 is the fixed default port**, conf
 per the architecture: the page has to find the helper again after a restart, and an ephemeral port makes
 the reconnect-and-re-post promise false the first time the helper is restarted.
 
-**The `lahe wait` semantics**, in full, because a half-specified convenience is the thing most likely to
-get half-built:
+**Superseded historical design: the former `lahe wait` semantics.** The command,
+route, constants, implementation, and tests described below were removed on
+2026-08-18. They remain here only to explain what the original plan built:
 
 - **Invocation:** `lahe wait --review <id> [--since <cursor>] [--timeout <seconds>, default 300]`.
 - **The watermark:** `--since` is a `seq` from the log. `wait` returns events with a higher `seq` and

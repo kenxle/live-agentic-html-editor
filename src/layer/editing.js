@@ -1379,8 +1379,8 @@
      * DELIBERATELY NOT SKIPPED FOR THE OVERLAY. onClick below returns early on
      * anything inside the library's own rail, and a click on the rail retargets
      * to the overlay host, so an edit the reviewer finished by clicking the rail
-     * stayed in `draft` forever. A draft never passes protocol.countsAsNew, so
-     * no agent ever saw it and the reviewer had no way to tell (Ken's session,
+     * stayed in `draft` forever. Status never offers drafts to an agent, so no
+     * agent ever saw it and the reviewer had no way to tell (Ken's session,
      * 2026-08-16). Nothing is prevented and nothing is stopped here: the rail
      * and the page both still get their event.
      *

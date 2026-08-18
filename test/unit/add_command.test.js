@@ -500,37 +500,16 @@ test("a second review on a running helper works without the user restarting anyt
   }
 });
 
-test("re-adding a review the helper HOLDS never restarts it, and an open wait survives", async () => {
+test("re-adding a review the helper holds keeps the same process and status remains readable", async () => {
   // The flaw this covers: re-running `add` on a page whose review the helper was
-  // already holding stopped the helper, and stopping it drops every blocked
-  // `lahe wait` long-poll. The agent watching the review Ken was reviewing
-  // simply died, mid-session.
+  // already holding stopped and replaced the helper, disconnecting the live
+  // page mid-session.
   const work = await aWorkspace();
   try {
     const first = work.add();
     assert.equal(first.code, 0, first.stdout + first.stderr);
     const review = reviewIdIn(work.read());
     const before = JSON.parse(fs.readFileSync(path.join(work.stateDir, "service.json"), "utf8"));
-
-    // A blocked wait on that review, held open across the add.
-    const waiting = new Promise(function (resolve) {
-      require("node:child_process").execFile(
-        process.execPath,
-        [BIN, "wait", "--review", review, "--state-dir", work.stateDir, "--timeout", "4"],
-        { encoding: "utf8" },
-        function (error, stdout, stderr) {
-          resolve({ code: error && typeof error.code === "number" ? error.code : 0, stdout: stdout, stderr: stderr });
-        }
-      );
-    });
-    // Let the long-poll actually get to the helper before add runs.
-    await pollUntil(
-      async function () {
-        const up = await service.probeHealth("127.0.0.1", work.port);
-        return up ? true : null;
-      },
-      { message: "the helper to be answering before the wait is interrupted" }
-    );
 
     // Both of these are WRITES to a review the helper holds: a new origin, and a
     // source hint. Each one used to force the restart.
@@ -560,13 +539,15 @@ test("re-adding a review the helper HOLDS never restarts it, and an open wait su
       "the source hint was recorded once, by the helper"
     );
 
-    // And the waiter is still waiting: it did not die of HELPER_UNREACHABLE.
-    const result = await waiting;
-    assert.notEqual(
-      result.code,
-      protocol.WAIT.EXIT.HELPER_UNREACHABLE,
-      "the blocked wait survived the add:\n" + result.stderr
+    // Exercise the real read command after the write. This replaces the old
+    // false positive that spawned the already-unknown `wait` command and only
+    // proved its fast failure was not HELPER_UNREACHABLE.
+    const statusText = execFileSync(
+      process.execPath,
+      [BIN, "status", "--review", review, "--state-dir", work.stateDir],
+      { encoding: "utf8" }
     );
+    assert.match(statusText, new RegExp("review " + review));
   } finally {
     await work.stop();
   }
@@ -576,7 +557,7 @@ test("a brand-new --origin on a held review goes through review.write, not a res
   // The flaw this covers: the write request presented origins[0] as computed by
   // THIS run. On a dev-server target that is the origin being ADDED, which the
   // review has not registered yet, so the helper answered 403 and `add` fell
-  // back to bouncing the helper, dropping every blocked wait. The request now
+  // back to bouncing the helper. The request now
   // presents an origin the helper already holds.
   const project = tempDir();
   fs.mkdirSync(path.join(project, "public"), { recursive: true });
@@ -633,6 +614,44 @@ test("a rebuilt page with no script line is matched back to its review by path",
     const fresh = work.add(["--new"]);
     assert.equal(fresh.code, 0, fresh.stdout + fresh.stderr);
     assert.notEqual(reviewIdIn(work.read()), review);
+  } finally {
+    await work.stop();
+  }
+});
+
+test("an older retained page still reuses its multi-page review after the helper stops", async () => {
+  const work = await aWorkspace();
+  try {
+    const first = work.add();
+    assert.equal(first.code, 0, first.stdout + first.stderr);
+    const review = reviewIdIn(work.read());
+
+    const other = path.join(work.dir, "other.html");
+    fs.writeFileSync(other, PAGE);
+    const attached = runAdd([
+      other,
+      "--port",
+      String(work.port),
+      "--state-dir",
+      work.stateDir,
+      "--review",
+      review
+    ]);
+    assert.equal(attached.code, 0, attached.stdout + attached.stderr);
+
+    const metaPath = path.join(work.stateDir, "reviews", review, "meta.json");
+    const meta = JSON.parse(fs.readFileSync(metaPath, "utf8"));
+    assert.equal(meta.target_path, other, "the scalar target now names the newer page");
+    assert.deepEqual(meta.target_paths, [work.page, other], "both page identities remain retained");
+
+    await work.stop();
+    fs.writeFileSync(work.page, PAGE);
+    assert.equal(scriptTagsIn(work.read()).length, 0, "the older page was rebuilt without its script line");
+
+    const again = work.add();
+    assert.equal(again.code, 0, again.stdout + again.stderr);
+    assert.equal(reviewIdIn(work.read()), review, "the retained target_paths entry reuses the original review");
+    assert.match(again.stdout, /matched by path/i);
   } finally {
     await work.stop();
   }
@@ -831,11 +850,11 @@ test("add refuses what it cannot do, with a reason and a non-zero exit", async (
   assert.match(missing.stderr, /nothing at/);
 
   const noTarget = runAdd([]);
-  assert.equal(noTarget.code, protocol.WAIT.EXIT.BAD_USAGE);
+  assert.equal(noTarget.code, protocol.CLI_EXIT.BAD_USAGE);
   assert.match(noTarget.stderr, /usage: lahe add/);
 
   const unknown = runAdd(["--nope", "x.html"]);
-  assert.equal(unknown.code, protocol.WAIT.EXIT.BAD_USAGE);
+  assert.equal(unknown.code, protocol.CLI_EXIT.BAD_USAGE);
   assert.match(unknown.stderr, /unknown option/);
 });
 

@@ -514,12 +514,6 @@
           // Drafts flow to the helper marked draft, and never appear as
           // actionable in what the agent reads (D5, R7).
           draft: record.isDraft(item),
-          // Finding 18: an item.content event only wakes `lahe wait` when it
-          // carries lost:true (protocol.countsAsNew). replay's markLost stamps
-          // region.lost on the record; lift it to the event so an anchor going
-          // lost is not a dead capability at the wait watermark. newEvent spreads
-          // these payload keys onto the top-level event countsAsNew reads.
-          lost: !!(item[record.FIELD.REGION] && item[record.FIELD.REGION].lost),
           record: item
         }
       });
@@ -767,7 +761,15 @@
 
     function poll() {
       counters.polls += 1;
-      return request("replies.poll", { method: "GET", query: { review: requireReview(), since: cursor } }).then(
+      var query = { review: requireReview(), since: cursor };
+      var pagePath =
+        win && win.location && typeof win.location.pathname === "string"
+          ? win.location.pathname
+          : doc && doc.location && typeof doc.location.pathname === "string"
+            ? doc.location.pathname
+            : null;
+      if (pagePath) query.page_path = pagePath;
+      return request("replies.poll", { method: "GET", query: query }).then(
         function (result) {
           if (!result.ok) {
             // A poll the navigation cancelled says nothing about the helper.

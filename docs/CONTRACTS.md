@@ -510,8 +510,8 @@ branch around the check block.
 
 `review.write` body is `{review, origins: [origin...], target_path?, source_path?, source_hint?, page_path?}`.
 It exists so `add` never has to stop a running helper: writes to a review the helper HOLDS go through
-the helper, which is the single writer of that review's log. Stopping the helper drops every open
-long-poll a page is holding, which is a reviewer's session hiccuping for no reason. `add` writes to
+the helper, which is the single writer of that review's log. Stopping the helper disconnects every
+open review page, which is a reviewer's session hiccuping for no reason. `add` writes to
 disk itself only when no helper is appending to that review. Everything on the route is idempotent.
 
 **Its origins are narrower than `add`'s on disk.** Only the literal `"null"` and http/https origins on a
@@ -527,8 +527,10 @@ the LIBRARY (never the CLI) made an authenticated request for this review; `draf
 are what `lahe status` reports, and all three are in memory only, because a number that survived a
 restart would be a stale claim about a session nobody is in any more.
 
-**Healing a rebuilt page** (`src/service/heal.js`). `replies.poll` already stats each recorded target
-file for `target_mtime`, and that stat is where the repair happens: when the file changed and no longer
+**Healing a rebuilt page** (`src/service/heal.js`). `replies.poll` identifies the requesting browser
+page with its `location.pathname` and reports only that retained target's `target_mtime`; a rebuild of
+page A therefore never reloads page B in the same review. It still stats every recorded target for
+repair, and those stats are where healing happens: when a file changed and no longer
 carries this review's script line, the helper writes the line back (`protocol.scriptTag`, placed by
 `src/shared/script_line.js`, the same module `lahe add` writes with) and refreshes the sibling
 `lahe-layer.js` fallback copy. The rules: a new mtime is examined only after it has stood still for one
@@ -579,7 +581,7 @@ it happens, whenever a static file registers `"null"` alone.
 ### `lahe status`
 
 ```
-lahe status [--review <id>] [--json] [--state-dir <path>]
+lahe status [--review <id>] [--json] [--seen-file <path>] [--state-dir <path>]
 ```
 
 The one read path, and the one keep-up loop. Before it, every agent hand-rolled a walk of
@@ -588,7 +590,7 @@ The one read path, and the one keep-up loop. Before it, every agent hand-rolled 
 - **What it lists:** the UNANSWERED READY items, meaning state `ready` with no reply on them. That is
   the projection's own vocabulary. Items in `not_handled`
   or carrying a `question` are in front of the REVIEWER, so they are counted and not listed. Drafts are
-  counted separately and never listed, matching `protocol.countsAsNew`.
+  counted separately and never listed.
 - **Liveness:** `page last seen <n> ago` (from `review.read`'s `page_last_seen_at`), `no page has
   connected yet`, or `unknown` when no helper is running. Plus when the last comment arrived. This is
   the answer to "are you getting my edits?", which neither side could give before. Plus one line,
@@ -605,16 +607,17 @@ The one read path, and the one keep-up loop. Before it, every agent hand-rolled 
   file has not recorded, then records them. Run it on a timer and any item line is new work: no cursor,
   no parser, no dedupe of the caller's own, every review at once, and a restarted loop misses nothing
   because the file is the state. A reworded item is new work again, which is why `rev` is in the key.
-- **Exit codes:** `0` it printed (even zero items), `2` nothing readable, `3` unknown review, `4` bad
-  usage. The table lives in `protocol.WAIT.EXIT`, which keeps its name from the retired command.
+- **Exit codes:** `0` completed (even with zero items), `2` nothing readable, `3` unknown review, `4` bad
+  usage. The shared table is `protocol.CLI_EXIT`.
 
 ### `lahe wait` is retired
 
 It blocked, so agents ran it in the foreground and stopped working while the reviewer typed, and it
 watched one review behind a cursor the caller had to carry. `lahe status --json --seen-file <path>`
 answers the same question without blocking, for every review, and survives a restart by construction.
-The command is unwired from the dispatcher and its route is off the wire; `src/cli/commands/wait.js`
-and its tests are on the cleanup batch.
+The command, route, wait-only protocol constants, implementation, and tests have
+all been removed. Historical feature documents retain the old design only as a
+superseded record.
 
 ### The failure table
 

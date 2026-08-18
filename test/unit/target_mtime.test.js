@@ -27,8 +27,10 @@ function tempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "lahe-mtime-"));
 }
 
-function pollBody(deps, reviewId) {
-  return routes.handlerFor("replies.poll")({ review: reviewId, query: { since: 0 } }, deps).body;
+function pollBody(deps, reviewId, pagePath) {
+  const query = { since: 0 };
+  if (pagePath) query.page_path = pagePath;
+  return routes.handlerFor("replies.poll")({ review: reviewId, query: query }, deps).body;
 }
 
 // ---------------------------------------------------------------------------
@@ -77,6 +79,41 @@ test("a rebuild moves the mtime the poll reports", () => {
   assert.notEqual(after, before, "the rebuild is visible on the wire");
 });
 
+test("a multi-page poll reports only the requesting page's target mtime", () => {
+  const dir = tempDir();
+  const one = path.join(dir, "one.html");
+  const two = path.join(dir, "two.html");
+  const line = '<script data-lahe-review="review-1"></script>';
+  fs.writeFileSync(one, "<h1>one</h1>" + line);
+  fs.writeFileSync(two, "<h1>two</h1>" + line);
+
+  const log = logModule.createEventLog({ dir: dir });
+  let now = 1000;
+  const reviews = reviewsModule.createReviews({ dir: dir, log: log, now: () => now });
+  reviews.create({ id: "review-1", origins: ["null"], target_path: one });
+  reviews.recordPaths("review-1", { target_path: two });
+  const deps = { log: log, reviews: reviews };
+
+  const oneBefore = pollBody(deps, "review-1", "/one.html").target_mtime;
+  const twoBefore = pollBody(deps, "review-1", "/two.html").target_mtime;
+  const later = new Date(Date.now() + 5000);
+  fs.writeFileSync(one, "<h1>one rebuilt</h1>" + line);
+  fs.utimesSync(one, later, later);
+  now += 1000;
+
+  assert.notEqual(pollBody(deps, "review-1", "/one.html").target_mtime, oneBefore);
+  assert.equal(
+    pollBody(deps, "review-1", "/two.html").target_mtime,
+    twoBefore,
+    "page one's rebuild is not page two's reload trigger"
+  );
+  assert.equal(
+    pollBody(deps, "review-1").target_mtime,
+    null,
+    "an old multi-page client without page identity fails closed"
+  );
+});
+
 test("a missing file and a review with no path both report null, and the route still answers", () => {
   const dir = tempDir();
   const log = logModule.createEventLog({ dir: dir });
@@ -97,6 +134,7 @@ test("a missing file and a review with no path both report null, and the route s
 test("the route table documents target_mtime, so nobody has to read the handler to find it", () => {
   const route = protocol.route("replies.poll");
   assert.match(route.response, /target_mtime/);
+  assert.match(route.request, /page_path/);
 });
 
 // ---------------------------------------------------------------------------
@@ -134,6 +172,28 @@ function reloaded(sync, n) {
 function decided(sync, n) {
   return pollUntil(() => sync.status().reloadChecks >= (n || 1), { message: "the debounce window to close" });
 }
+
+test("the layer identifies its current pathname on every reply poll", async () => {
+  let requested = null;
+  const h = syncFor({
+    window: {
+      location: { pathname: "/reports/two.html", reload: () => {} }
+    },
+    fetch: async (url) => {
+      requested = url;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ events: [], seq: 0, target_mtime: null })
+      };
+    }
+  });
+
+  await h.sync.poll();
+  const query = new URL(requested).searchParams;
+  assert.equal(query.get("review"), "review-1");
+  assert.equal(query.get("page_path"), "/reports/two.html");
+});
 
 test("the first mtime is a baseline: the page already shows that version", () => {
   const h = syncFor();

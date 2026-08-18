@@ -221,15 +221,10 @@ var NON_BUNDLE_FILES = [
   { path: "src/service/review_writer.js", owner: "3A", why: "the single writer of review.json, and the path-safety rules" },
   { path: "src/service/replies.js", owner: "3A", why: "reply file discovery, byte-offset reading, folding, the conflict rule" },
 
-  { path: "src/cli/index.js", owner: "1A", why: "the command dispatcher: serve, add, status, wait" },
+  { path: "src/cli/index.js", owner: "1A", why: "the command dispatcher: serve, add, status" },
   { path: "src/cli/commands/serve.js", owner: "1A", why: "serve" },
   { path: "src/cli/commands/add.js", owner: "3B", why: "add" },
-  { path: "src/cli/commands/status.js", owner: "3A", why: "status: the read path beside wait's blocking one" },
-  {
-    path: "src/cli/commands/wait.js",
-    owner: "3A",
-    why: "the RETIRED blocking wait. Nothing loads it: the dispatcher does not wire it and its route is off the wire. On the cleanup batch"
-  }
+  { path: "src/cli/commands/status.js", owner: "3A", why: "status: the one agent-facing read path" }
 ];
 
 var BUNDLE_OUTPUT = "dist/lahe-layer.js";

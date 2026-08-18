@@ -103,7 +103,7 @@ async function run(argv) {
   var parsed = parseArgs(argv);
   if (!parsed.ok) {
     process.stderr.write(parsed.message + "\n");
-    return protocol.WAIT.EXIT.BAD_USAGE;
+    return protocol.CLI_EXIT.BAD_USAGE;
   }
 
   var helper;

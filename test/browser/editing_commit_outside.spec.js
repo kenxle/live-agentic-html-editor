@@ -1,7 +1,7 @@
 // Leaving the edited block, every way a reviewer actually leaves it.
 //
-// THE BUG THIS PINS. An edit left in `draft` never passes
-// protocol.countsAsNew, so it reaches no agent at all, and the reviewer has no
+// THE BUG THIS PINS. Status never offers an edit left in `draft` to an agent,
+// so it reaches no agent at all, and the reviewer has no
 // way to tell: the page looks finished. In a live session, clicking the rail
 // (the natural thing to do after finishing an edit) left the edit in draft,
 // because the click retargets to the overlay host and the click handler skips

@@ -3,8 +3,8 @@
 // library polls.
 //
 // Owner: 3A. Imported by: the helper (src/service/index.js hands it to the
-// router as deps.projection), the `review.read` route, `lahe wait`, and the
-// reply folder.
+// router as deps.projection), the `review.read` route, status, and the reply
+// folder.
 //
 // Architecture D5 (the log is the source of truth and everything else is a
 // projection of it), D6 (the agent contract is one JSON file), and D12 (page

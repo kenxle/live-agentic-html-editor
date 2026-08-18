@@ -55,7 +55,7 @@ tool is broken.**
   edge-case matrix (origins, offline, second window, multi-doc, hot reload,
   stuck drafts) on that cold path. Publish only after this passes.
 - [ ] LAHE-doc-pass @anyone -- comprehensive documentation pass once the
-  in-flight heal/wait-retirement work lands: skill (~/.claude/skills/lahe),
+  in-flight heal work lands: skill (~/.claude/skills/lahe),
   AGENTS.md, README, docs/CONTRACTS.md, and the review.json contract field
   (+ its restated test copy + dist rebuild, per the pairing rule in
   CLAUDE.md), all cross-checked against the session record's feature list.
@@ -70,9 +70,7 @@ tool is broken.**
   batch: `check.tmp.mjs` (also untrack: it slipped into a commit),
   `sbcheck.tmp.mjs`, `test-results/`, the dead assets-hunting code in
   add.js (`assetDirBeside`, `libraryForServer`, `libraryFor`,
-  `ASSET_DIR_NAMES`), `src/cli/commands/wait.js` + its unit tests once the
-  retirement lands, the wait constants rename (`protocol.WAIT.EXIT` is
-  status's exit table now), and `/tmp` scratch from the debug runs
+  `ASSET_DIR_NAMES`), and `/tmp` scratch from the debug runs
   (`/tmp/lahe-base`, `/tmp/lahe-head`, `/tmp/*.keep*.js`, probe specs).
 - [ ] LAHE-multipage-offline-path @anyone -- small punt from the service
   wave: the no-helper disk path in `add` still records only the LAST page's

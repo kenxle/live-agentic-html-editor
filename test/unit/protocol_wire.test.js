@@ -1,5 +1,5 @@
-// The wire: the event log line, the reply line, the request checks, the script
-// tag, and lahe wait.
+// The wire: the event log line, the reply line, the request checks, and the
+// script tag.
 //
 // Owner: 0A-wire. Everything asserted here is read or written by something
 // OUTSIDE this repo (an agent, a browser, a person typing a script tag), which
@@ -348,36 +348,6 @@ test("the script tag carries the offline fallback when one is named", () => {
 test("the script tag refuses to be written without a token or with an unsafe review id", () => {
   assert.throws(() => protocol.scriptTag({ src: "x.js", review: "rev_a" }), /token/);
   assert.throws(() => protocol.scriptTag({ src: "x.js", review: "../etc", token: "t" }), /safe id/);
-});
-
-// ---------------------------------------------------------------------------
-// lahe wait
-// ---------------------------------------------------------------------------
-
-test("wait has five exit codes, a 300 second default, and consumes nothing", () => {
-  assert.deepEqual(protocol.WAIT.EXIT, {
-    NEW_WORK: 0,
-    TIMEOUT: 1,
-    HELPER_UNREACHABLE: 2,
-    UNKNOWN_REVIEW: 3,
-    BAD_USAGE: 4
-  });
-  assert.equal(protocol.WAIT.DEFAULT_TIMEOUT_SECONDS, 300);
-  assert.equal(protocol.WAIT.CURSOR_FIELD, "seq");
-  assert.equal(protocol.WAIT.CONSUMES_NOTHING, true);
-  assert.equal(protocol.WAIT.CONCURRENT_WAITERS_BOTH_WAKE, true);
-  assert.equal(protocol.WAIT.OUTPUT, "json-lines");
-});
-
-test("drafts never count as new work, and a rewording does", () => {
-  const ev = (type, extra) =>
-    protocol.newEvent(Object.assign({ event: type, event_id: "e", review: "rev_a" }, { payload: extra || {} }));
-  assert.equal(protocol.countsAsNew(ev(protocol.EVENT.ITEM_READY)), true);
-  assert.equal(protocol.countsAsNew(ev(protocol.EVENT.REPLY_FOLDED)), true);
-  assert.equal(protocol.countsAsNew(ev(protocol.EVENT.ITEM_CONTENT, { draft: true })), false);
-  assert.equal(protocol.countsAsNew(ev(protocol.EVENT.ITEM_CONTENT, { reworded: true })), true);
-  assert.equal(protocol.countsAsNew(ev(protocol.EVENT.ITEM_CONTENT, { lost: true })), true);
-  assert.equal(protocol.countsAsNew(ev(protocol.EVENT.ITEM_CREATED)), false);
 });
 
 // ---------------------------------------------------------------------------

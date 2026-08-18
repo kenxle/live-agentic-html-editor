@@ -101,9 +101,9 @@ had to carry. `lahe status --json --seen-file <path>` answers the same
 question without blocking, across every review at once, needs no cursor and no
 parser, and survives a restart because the seen file is the state. The command
 is unwired from the dispatcher, its route is off the wire, and the contract
-field, AGENTS.md and the README teach the one loop. `protocol.WAIT.EXIT` keeps
-its name because `status` borrows the table. `src/cli/commands/wait.js` is
-still on disk, unreferenced, on the cleanup batch.
+field, AGENTS.md and the README teach the one loop. The cleanup completed on
+2026-08-18: the dead implementation and wait-only protocol/tests were removed,
+and the active status/dispatcher exits now live under `protocol.CLI_EXIT`.
 
 ## Morning close-out, 2026-08-18
 

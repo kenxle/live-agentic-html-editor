@@ -206,8 +206,9 @@ once, and after that a plain sentence works:
 `lahe status --json --seen-file <path>` is the keep-up loop: run it on a timer,
 and any item line in the output is new work. The seen file records what was
 printed, so nothing is shown twice and a restarted loop misses nothing. There is
-no blocking watch command; `lahe wait` was retired in favour of this one, which
-covers every review at once and needs no cursor.
+no blocking watch command. Older historical plans may mention `lahe wait`; it
+was retired and removed. Use only the status loop above, which covers every
+review at once and needs no cursor.
 
 **If the page is build output**, an agent should rebuild before it reports an
 item handled: `handled` is supposed to mean your page shows the change. It does

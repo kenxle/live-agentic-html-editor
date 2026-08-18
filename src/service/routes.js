@@ -116,11 +116,10 @@ var HANDLERS = {
   // What `add` calls for a review this helper ALREADY HOLDS.
   //
   // Without it, `add` had to stop the helper to write to such a review (two
-  // writers on one events.jsonl is the thing being avoided), and stopping the
-  // helper drops every blocked `lahe wait` long-poll: an agent waiting on the
-  // review Ken was reviewing died every time he re-ran add. So the writes come
-  // here instead and the helper, the single writer, applies them itself. `add`
-  // now only writes to disk when NO helper is answering.
+  // writers on one events.jsonl is the thing being avoided), disconnecting the
+  // page every time add ran. So the writes come here instead and the helper,
+  // the single writer, applies them itself. `add` now only writes to disk when
+  // NO helper is answering.
   //
   // Everything here is idempotent: registering an origin twice is a no-op, and
   // a repeated source hint is one more page.visited event, which the projector
@@ -288,7 +287,11 @@ var HANDLERS = {
       // agent rebuilds the reviewed file, this number changes and the library
       // reloads the page itself. Null when the review has no recorded path or
       // the file is not there, which the library reads as "nothing to say".
-      body: { events: events, seq: deps.log.currentSeq(request.review), target_mtime: deps.reviews.targetMtime(request.review) }
+      body: {
+        events: events,
+        seq: deps.log.currentSeq(request.review),
+        target_mtime: deps.reviews.targetMtime(request.review, request.query.page_path || null)
+      }
     };
   },
 
@@ -322,12 +325,7 @@ var HANDLERS = {
     var ended = deps.reviews.endReview(request.review);
     var outstanding = deps.log.read(request.review).length;
     return { status: 200, body: { ended_at: ended.ended_at, outstanding_kept: outstanding } };
-  },
-
-  // THE `wait` HANDLER IS GONE WITH ITS ROUTE. `lahe wait` is retired: it
-  // blocked, so agents stalled in the foreground on it, and it answered for one
-  // review behind a cursor. `lahe status --json --seen-file <path>` reads the
-  // same log through review.read, for every review, without blocking anything.
+  }
 };
 
 function numberOr(value, fallback) {

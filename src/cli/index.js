@@ -43,7 +43,7 @@ async function main(argv) {
 
   if (!command || command === "--help" || command === "-h" || command === "help") {
     process.stdout.write(USAGE + "\n");
-    return command ? 0 : protocol.WAIT.EXIT.BAD_USAGE;
+    return command ? protocol.CLI_EXIT.OK : protocol.CLI_EXIT.BAD_USAGE;
   }
 
   if (command === "serve") return require("./commands/serve.js").run(rest);
@@ -51,7 +51,7 @@ async function main(argv) {
   if (command === "status") return require("./commands/status.js").run(rest);
 
   process.stderr.write("lahe: unknown command " + JSON.stringify(command) + "\n\n" + USAGE + "\n");
-  return protocol.WAIT.EXIT.BAD_USAGE;
+  return protocol.CLI_EXIT.BAD_USAGE;
 }
 
 module.exports = { USAGE: USAGE, main: main };

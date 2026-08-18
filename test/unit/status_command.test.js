@@ -1,4 +1,4 @@
-// `lahe status`: the read path beside `wait`'s blocking one.
+// `lahe status`: the one agent-facing read path.
 //
 // These tests build a review's log on disk directly and read it back through
 // the command, because that is the path an agent takes with no helper running,
@@ -96,7 +96,7 @@ test("status prints a per-review summary and the items that are waiting", async 
   seed(dir, "rev1", [anItem("tighten this headline", record.STATE.READY), anItem("half a thought", record.STATE.DRAFT)]);
 
   const run = await runStatus([], dir);
-  assert.equal(run.code, protocol.WAIT.EXIT.NEW_WORK, run.stderr);
+  assert.equal(run.code, protocol.CLI_EXIT.OK, run.stderr);
   assert.match(run.stdout, /review rev1/);
   assert.match(run.stdout, /\/report\.html/);
   assert.match(run.stdout, /1 ready for you/);
@@ -119,12 +119,12 @@ test("--json prints one line per unanswered item, then a summary line", async ()
   seed(dir, "rev1", [anItem("fix the footer", record.STATE.READY), anItem("still typing", record.STATE.DRAFT)]);
 
   const run = await runStatus(["--json"], dir);
-  assert.equal(run.code, protocol.WAIT.EXIT.NEW_WORK, run.stderr);
+  assert.equal(run.code, protocol.CLI_EXIT.OK, run.stderr);
   const lines = run.stdout.trim().split("\n").map((line) => JSON.parse(line));
   assert.equal(lines.length, 3, "the contract line, one item, then the summary");
   assert.equal(lines[1].note, "fix the footer");
   assert.equal(lines[1].review, "rev1");
-  assert.equal(lines[1].page.path, "/report.html", "the same field shapes wait prints");
+  assert.equal(lines[1].page.path, "/report.html", "the same field shape review.json uses");
   assert.equal(lines[2].unanswered_ready, 1);
   assert.equal(lines[2].reviews, 1);
 });
@@ -184,20 +184,20 @@ test("--review scopes it, and an unknown one is exit UNKNOWN_REVIEW", async () =
   assert.equal(one.stdout.indexOf("review rev1"), -1);
 
   const missing = await runStatus(["--review", "nope"], dir);
-  assert.equal(missing.code, protocol.WAIT.EXIT.UNKNOWN_REVIEW);
+  assert.equal(missing.code, protocol.CLI_EXIT.UNKNOWN_REVIEW);
 });
 
 test("an empty state directory prints that, and still exits 0", async () => {
   const dir = tempState();
   const run = await runStatus([], dir);
-  assert.equal(run.code, protocol.WAIT.EXIT.NEW_WORK);
+  assert.equal(run.code, protocol.CLI_EXIT.OK);
   assert.match(run.stdout, /no reviews/);
 });
 
 test("a mistyped flag is bad usage, never a silent default", async () => {
   const dir = tempState();
   const run = await runStatus(["--sicne", "3"], dir);
-  assert.equal(run.code, protocol.WAIT.EXIT.BAD_USAGE);
+  assert.equal(run.code, protocol.CLI_EXIT.BAD_USAGE);
   assert.match(run.stderr, /unknown option/);
 });
 

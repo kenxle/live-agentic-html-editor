@@ -295,7 +295,7 @@ test("a review minted after the helper started is learned from disk, and a bogus
   assert.equal(learned.token, minted.token, "with the token it was minted with, not a new one");
   assert.deepEqual(learned.origins, ["null"]);
 
-  // The readiness file is how `lahe wait` and anything else on the machine finds
+  // The readiness file is how CLI commands and anything else on the machine find
   // a token, so learning a review has to show up there too.
   const ready = JSON.parse(fs.readFileSync(path.join(dir, "service.json"), "utf8"));
   assert.equal(ready.reviews["r-after-start"].token, minted.token);

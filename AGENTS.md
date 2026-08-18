@@ -264,9 +264,9 @@ handled is a reply line.
 Restarting the loop, or the machine, changes nothing: the seen file is the
 state, so nothing is re-shown and nothing is skipped.
 
-`lahe wait` is RETIRED. It blocked, which is how agents ended up sitting in the
-foreground doing no work while a reviewer typed, and it watched one review
-behind a cursor. If you find it in an older doc, use the loop above.
+Older historical plans may mention `lahe wait`. It was retired and removed
+because it blocked agents in the foreground and watched only one review behind
+a cursor. It is not a command to run; use only the status loop above.
 
 ### More than one document
 

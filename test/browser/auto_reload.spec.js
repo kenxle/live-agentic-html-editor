@@ -33,6 +33,7 @@ const syncModule = require("../../src/layer/sync.js");
 
 const REVIEW = "auto-reload";
 const PAGE_FILE = "page.html";
+const OTHER_PAGE_FILE = "other.html";
 const SAID = "Say which week this is about.";
 
 const PARAGRAPH = "Runners come back too fast after a layoff, and the third week is where it shows.";
@@ -135,13 +136,20 @@ async function commentOnBody(page, text) {
 function reloadState(page) {
   return page.evaluate(() => {
     const s = window.__lahe.handle.sync.status();
-    return { checks: s.reloadChecks, fired: s.reloadsFired, pending: s.reloadPending, mtime: s.targetMtime };
+    return {
+      checks: s.reloadChecks,
+      fired: s.reloadsFired,
+      pending: s.reloadPending,
+      mtime: s.targetMtime,
+      polls: s.counters.polls
+    };
   });
 }
 
 test.describe("the page updates itself as the agent lands changes (R36)", () => {
   let dir;
   let filePath;
+  let otherPath;
   let pages;
   let service;
   let token;
@@ -149,6 +157,7 @@ test.describe("the page updates itself as the agent lands changes (R36)", () => 
   test.beforeAll(async () => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-auto-reload-"));
     filePath = path.join(dir, PAGE_FILE);
+    otherPath = path.join(dir, OTHER_PAGE_FILE);
     pages = await startStaticServer({ root: dir, label: "auto-reload" });
     // Port 0, so this helper never collides with the machine's real one on
     // 7817. A developer running this suite is usually mid-review themselves.
@@ -168,6 +177,19 @@ test.describe("the page updates itself as the agent lands changes (R36)", () => 
       body: JSON.stringify({ review: REVIEW, origins: [pages.origin], target_path: filePath })
     });
     expect(written.status, "the helper recorded the reviewed file's path").toBe(200);
+
+    rebuild(otherPath, service.url, token, "Other page edition");
+    const otherWritten = await fetch(service.url + protocol.route("review.write").path, {
+      method: "POST",
+      headers: {
+        "Content-Type": protocol.JSON_CONTENT_TYPE,
+        "x-lahe-client": protocol.CLIENT_CLI,
+        "x-lahe-token": token,
+        Origin: pages.origin
+      },
+      body: JSON.stringify({ review: REVIEW, origins: [pages.origin], target_path: otherPath })
+    });
+    expect(otherWritten.status, "the helper recorded the review's second page").toBe(200);
   });
 
   test.afterAll(async () => {
@@ -202,6 +224,34 @@ test.describe("the page updates itself as the agent lands changes (R36)", () => 
       { message: "the comment to survive the reload", timeoutMs: 20000 }
     );
     expect(await page.evaluate(() => window.__lahe.cardIds().length), "and its card is redrawn").toBe(1);
+  });
+
+  test("rebuilding one retained page does not reload another page in the review", async ({ page }) => {
+    const navigations = [];
+    const replyPolls = [];
+    page.on("framenavigated", (frame) => {
+      if (frame === page.mainFrame()) navigations.push(frame.url());
+    });
+    page.on("request", (request) => {
+      if (request.url().indexOf(protocol.route("replies.poll").path) !== -1) replyPolls.push(request.url());
+    });
+
+    rebuild(otherPath, service.url, token, "Other page baseline");
+    await page.goto(pages.origin + "/" + OTHER_PAGE_FILE);
+    await booted(page);
+    await pollPage(page, () => !!window.__lahe.handle.sync.status().targetMtime, undefined, {
+      message: "the second page to establish its own mtime baseline"
+    });
+
+    rebuild(filePath, service.url, token, "A rebuild on the first page only");
+    await pollUntil(() => (replyPolls.length >= 3 ? true : null), {
+      timeoutMs: 20000,
+      message: "the second page to poll across the first page's rebuild"
+    });
+
+    expect(navigations, "only the initial navigation occurred").toHaveLength(1);
+    expect(await page.evaluate(() => document.querySelector("#edition").textContent)).toBe("Other page baseline");
+    expect((await reloadState(page)).fired, "the other page never armed or fired a reload").toBe(0);
   });
 
   test("a hashless LAHE reload restores the exact viewport once before returning native mode to auto", async ({

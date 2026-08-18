@@ -23,8 +23,7 @@
 //     only copy of its identity) on the review it has always had. `--new`
 //     overrides all three and mints a fresh review.
 //  3. The helper is made to know about it, AND NOTHING EVER RESTARTS IT WHILE
-//     IT IS UP. A restart drops every blocked `lahe wait` long-poll, which is
-//     an agent losing the review it was watching. So:
+//     IT IS UP. A restart disconnects every open review page. So:
 //       - no helper answering: `add` writes to disk itself and starts one.
 //         `serve` is idempotent, which is what makes the install one command.
 //       - a helper is up and does NOT hold this review: `add` writes the review
@@ -40,7 +39,7 @@
 //     A restart is the fallback of last resort, when a running helper will not
 //     take either path, and the reason is printed. Nothing is lost by it: the
 //     log is append-only, tokens persist, and the library re-posts anything
-//     unacknowledged; a blocked `wait` reconnects on its own grace window.
+//     unacknowledged.
 //  4. Only then is the script line written, so a page loaded the instant after
 //     `add` prints has a helper that will accept it.
 //
@@ -89,12 +88,11 @@ var BIN = path.join(REPO_ROOT, "bin", "lahe.js");
 var BUNDLE = path.join(REPO_ROOT, manifest.BUNDLE_OUTPUT);
 var BUNDLE_BASENAME = path.basename(manifest.BUNDLE_OUTPUT);
 
-// Exit codes. `add` is not `wait`, so it does not borrow `wait`'s five; it uses
-// the two ordinary ones plus the shared "you typed it wrong".
+// Exit codes: the two command-specific outcomes plus the shared caller error.
 var EXIT = {
   OK: 0,
   FAILED: 1,
-  BAD_USAGE: protocol.WAIT.EXIT.BAD_USAGE
+  BAD_USAGE: protocol.CLI_EXIT.BAD_USAGE
 };
 
 // A page opened from disk sends the literal origin "null" on every request, on
@@ -438,7 +436,14 @@ function reviewMatchingPath(dir, target) {
     if (!entry.isDirectory() || !protocol.isSafeId(entry.name)) return;
     var meta = readMetaOnDisk(dir, entry.name);
     if (!meta || typeof meta.token !== "string") return;
-    if (meta.target_path !== target && meta.source_path !== target) return;
+    var retainedTargets = Array.isArray(meta.target_paths) ? meta.target_paths : [];
+    if (
+      meta.target_path !== target &&
+      meta.source_path !== target &&
+      retainedTargets.indexOf(target) === -1
+    ) {
+      return;
+    }
     var at = meta.created_at || "";
     if (!best || at > best.at) best = { id: entry.name, at: at };
   });
@@ -451,14 +456,13 @@ function reviewMatchingPath(dir, target) {
  * This is the whole no-restart-for-a-held-review path. The helper is the single
  * writer of that review's events.jsonl, so `add` does not touch it: it posts
  * what needs writing and the helper applies it. Stopping the helper instead
- * would drop every blocked `lahe wait`, which is an agent losing the review it
- * was watching mid-session.
+ * would disconnect every review page using that helper mid-session.
  *
  * The origin presented here is one the review has ALREADY REGISTERED, read from
  * service.json, not one this run wants to add. The helper checks the header
  * against the review's allowlist, so presenting a brand-new `--origin` (or the
  * two defaults a bare re-run falls back to) got a 403 and forced exactly the
- * restart this route exists to avoid, dropping every open `wait`. The new
+ * restart this route exists to avoid. The new
  * origins still travel in the body, which is what registers them.
  *
  * @param {string[]} registeredOrigins the origins the helper already holds for
@@ -625,7 +629,7 @@ async function startHelper(host, port, dir) {
  * did not learn the review, and the caller falls back to a restart and says so.
  *
  * A command-line process has no origin of its own, so it presents one this
- * review just registered, which is what `lahe wait` does for the same reason.
+ * review just registered.
  */
 async function helperLearnedReview(host, port, review, origins) {
   var target =
@@ -935,7 +939,7 @@ async function run(argv) {
   } else if (heldByHelper) {
     // THE HELD-REVIEW WRITE. The helper is the single writer of this review's
     // log, so it applies the writes and `add` never stops it. Stopping it here
-    // is what used to kill an agent's open `lahe wait`.
+    // is what used to disconnect the live review page.
     review = { id: reuseId, token: heldToken };
     // What the helper already has registered for this review, straight off its
     // own service.json, is what the request may present as its origin.

@@ -188,8 +188,8 @@
     // INCLUDING INSIDE THE LIBRARY'S OWN RAIL. The click rule below cannot do
     // this job on its own: a click on the rail retargets to the overlay host,
     // hits the overlay rule above, and the edit was left sitting in `draft`
-    // forever. A draft never passes protocol.countsAsNew, so the reviewer
-    // watched an edit they considered finished reach no agent at all (Ken's
+    // forever. Status never offers drafts to an agent, so the reviewer watched
+    // an edit they considered finished reach no agent at all (Ken's
     // session, 2026-08-16). Pointerdown is the honest moment the reviewer left
     // the block, it fires before focus moves, and the event still passes
     // through untouched so the rail and the page both get their click.

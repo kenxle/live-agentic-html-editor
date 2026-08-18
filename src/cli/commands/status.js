@@ -1,10 +1,9 @@
 // `lahe status`: what is open right now, and is the page still connected?
 //
-// Owner: 3A, beside `wait`, because it answers with the same watermark
-// semantics `wait` does and shares its exit codes.
+// Owner: 3A. This is the one agent-facing read command.
 //
-// WHY THIS COMMAND EXISTS. `wait` blocks, and it was the only read path, so
-// every agent hand-rolled a recursive walk of review.json to answer "what is
+// WHY THIS COMMAND EXISTS. Before it, every agent hand-rolled a recursive walk
+// of review.json to answer "what is
 // open right now" and each one invented its own idea of which items counted.
 // One command, one definition, read from the same projection the reviewer's
 // page reconciles against.
@@ -49,10 +48,8 @@ var logModule = require("../../service/log.js");
 var projectionModule = require("../../service/projection.js");
 var reviewFormat = require("../../shared/review_format.js");
 
-// Status borrows `wait`'s codes rather than minting a second set: an agent
-// scripting the two reads one table. NEW_WORK is 0 and means "it printed",
-// whether or not there was anything to print.
-var EXIT = protocol.WAIT.EXIT;
+// Shared CLI codes. OK means status completed, whether or not it found an item.
+var EXIT = protocol.CLI_EXIT;
 
 var USAGE = [
   "usage: lahe status [--review <id>] [--json] [--seen-file <path>] [--state-dir <path>]",
@@ -68,7 +65,7 @@ var USAGE = [
   "It lists the items an agent should act on: state ready, with no reply yet.",
   "It consumes nothing and acknowledges nothing.",
   "",
-  "Exit codes: " + EXIT.NEW_WORK + " it printed, " + EXIT.HELPER_UNREACHABLE + " no helper and nothing on disk, " + EXIT.UNKNOWN_REVIEW + " unknown review, " + EXIT.BAD_USAGE + " bad usage."
+  "Exit codes: " + EXIT.OK + " completed, " + EXIT.HELPER_UNREACHABLE + " no helper and nothing on disk, " + EXIT.UNKNOWN_REVIEW + " unknown review, " + EXIT.BAD_USAGE + " bad usage."
 ].join("\n");
 
 function parseArgs(argv) {
@@ -129,7 +126,7 @@ function parseArgs(argv) {
  * Ready is record.STATE.READY, the state the review.json contract names as the
  * one an agent may act on. No reply means no agent has answered this revision;
  * a reworded item drops its reply in the projection, so it comes back here on
- * its own, which is the same rule `wait` wakes on.
+ * its own.
  */
 function isUnansweredReady(item) {
   return !!item && item.state === record.STATE.READY && !item.reply;
@@ -321,7 +318,7 @@ function readFromDisk(dir, reviewId) {
 /**
  * @param {string[]} argv everything after `status`
  * @param {{stateDir?: string, fetch?: function, stdout?: function, stderr?: function, now?: number}} [options]
- * @returns {Promise<number>} the exit code, from protocol.WAIT.EXIT
+ * @returns {Promise<number>} the exit code, from protocol.CLI_EXIT
  */
 async function run(argv, options) {
   var opts = options || {};
@@ -337,7 +334,7 @@ async function run(argv, options) {
   var args = parseArgs(argv);
   if (args.help) {
     out(USAGE + "\n");
-    return EXIT.NEW_WORK;
+    return EXIT.OK;
   }
   if (args.error) {
     err("lahe status: " + args.error + "\n\n" + USAGE + "\n");
@@ -388,7 +385,7 @@ async function run(argv, options) {
     } else {
       out("lahe status: no reviews in " + stateDirModule.reviewsRoot(dir) + ". Start one with `lahe add <page>`.\n");
     }
-    return EXIT.NEW_WORK;
+    return EXIT.OK;
   }
 
   var lines = [];
@@ -483,8 +480,8 @@ async function run(argv, options) {
     );
     if (draftCount > 0) {
       // Listed apart, and never in the work list or in --json: a draft is the
-      // reviewer still writing, and protocol.countsAsNew agrees. It is said out
-      // loud so an edit stuck in draft is visible to somebody.
+      // reviewer still writing. It is said out loud so an edit stuck in draft
+      // is visible to somebody.
       lines.push("  drafts    " + draftCount + " (the reviewer is still writing these; they are not yours yet)");
     }
     lines.push("  live      " + livenessLine(liveness, nowMs));
@@ -584,11 +581,11 @@ async function run(argv, options) {
         return EXIT.BAD_USAGE;
       }
     }
-    return EXIT.NEW_WORK;
+    return EXIT.OK;
   }
 
   out(lines.join("\n") + "\n");
-  return EXIT.NEW_WORK;
+  return EXIT.OK;
 }
 
 module.exports = {

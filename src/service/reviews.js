@@ -333,9 +333,9 @@ function createReviews(options) {
       created_at: parsed.created_at || new Date().toISOString()
     };
     log.helperLog("review " + reviewId + " learned from disk without a restart");
-    // The readiness file is how everything else on the machine finds a review's
-    // token, `lahe wait` included, so it is rewritten the moment the set of
-    // reviews changes. Skipping this would leave service.json quietly wrong.
+    // The readiness file is how every CLI command on the machine finds a
+    // review's token, so it is rewritten the moment the set of reviews changes.
+    // Skipping this would leave service.json quietly wrong.
     if (lastReadyDetails) writeReadyFile(lastReadyDetails);
     return reviews[reviewId];
   }
@@ -450,8 +450,8 @@ function createReviews(options) {
       })
     ]);
     log.helperLog("review " + reviewId + " registered origin " + value);
-    // service.json lists each review's origins, and it is how everything else on
-    // the machine (`add`, `wait`, `status`) knows what this helper holds. An
+    // service.json lists each review's origins, and it is how the CLI commands
+    // (`add` and `status`) know what this helper holds. An
     // origin registered while the helper is running has to reach it, or `add`
     // would keep believing the origin is missing and writing it again.
     if (lastReadyDetails) writeReadyFile(lastReadyDetails);
@@ -563,14 +563,49 @@ function createReviews(options) {
     return "http://" + protocol.DEFAULT_HOST + ":" + port;
   }
 
+  /** The one retained filesystem target represented by a browser pathname. */
+  function targetForPage(paths, pagePath) {
+    if (paths.length === 1) return paths[0];
+    if (typeof pagePath !== "string" || !pagePath) return null;
+
+    var decoded = pagePath;
+    try {
+      decoded = decodeURIComponent(pagePath);
+    } catch (error) {
+      // A malformed escape is simply not a target identity. The poll still
+      // heals every retained page below, but reports no cross-page mtime.
+    }
+    var page = decoded.replace(/\\/g, "/");
+    var variants = [page];
+    if (page.charAt(page.length - 1) === "/") variants.push(page + "index.html", page + "index.htm");
+
+    var matches = paths.filter(function (target) {
+      var normalized = String(target).replace(/\\/g, "/");
+      return variants.some(function (variant) {
+        if (!variant) return false;
+        return (
+          normalized === variant ||
+          normalized === variant.replace(/^\//, "") ||
+          normalized.slice(-variant.length) === variant
+        );
+      });
+    });
+    return matches.length === 1 ? matches[0] : null;
+  }
+
   /**
-   * The reviewed file's modification time, as an ISO string, or null.
+   * The requesting page's modification time, as an ISO string, or null.
+   *
+   * Every retained page is still considered for script-line healing. Only the
+   * value returned to the browser is page-specific, so rebuilding page A can
+   * repair A without telling an open page B that B itself changed.
    *
    * @param {string} reviewId
-   * @returns {string|null} null when the review has no target path, the file is
-   *   gone, or the stat failed for any reason at all
+   * @param {string|null} pagePath the requesting browser's location.pathname
+   * @returns {string|null} null when the request cannot be mapped uniquely, the
+   *   file is gone, or the stat failed for any reason at all
    */
-  function targetMtime(reviewId) {
+  function targetMtime(reviewId, pagePath) {
     var review = get(reviewId);
     if (!review) return null;
     var paths = targetPathsOf(review);
@@ -578,9 +613,13 @@ function createReviews(options) {
     var key = paths.join("\n");
     var cached = mtimeCache[reviewId];
     var now = clock();
-    if (cached && cached.key === key && now - cached.at < MTIME_TTL_MS) return cached.mtime;
-    // The newest mtime across every page this review holds: any of them being
-    // rebuilt is a reason for the reviewer's page to reload.
+    var selected = targetForPage(paths, pagePath);
+    if (cached && cached.key === key && now - cached.at < MTIME_TTL_MS) {
+      return selected && Object.prototype.hasOwnProperty.call(cached.byPath, selected)
+        ? cached.byPath[selected]
+        : null;
+    }
+    var byPath = Object.create(null);
     var newest = null;
     paths.forEach(function (target) {
       var at = healer.consider({
@@ -589,10 +628,15 @@ function createReviews(options) {
         token: review.token,
         helperOrigin: helperOrigin()
       });
+      byPath[target] = at;
       if (at && (!newest || at > newest)) newest = at;
     });
-    mtimeCache[reviewId] = { key: key, at: now, mtime: newest };
-    return newest;
+    mtimeCache[reviewId] = { key: key, at: now, byPath: byPath };
+    // Old callers and old pages did not send page_path. Keep the original
+    // single-page contract, but fail closed for an ambiguous multi-page review
+    // instead of making one page reload for another page's write.
+    if (!selected) return paths.length === 1 ? newest : null;
+    return byPath[selected] || null;
   }
 
   /**

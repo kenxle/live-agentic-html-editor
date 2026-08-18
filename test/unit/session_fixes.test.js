@@ -21,16 +21,6 @@ const gestures = require("../../src/shared/gestures.js");
 const syncModule = require("../../src/layer/sync.js");
 const installCli = require("../../scripts/install-cli.js");
 
-// `lahe wait` IS RETIRED, and the four tests that lived here went with it.
-//
-// They covered the command's reconnect behaviour: retry from the same --since,
-// a grace window measured from the drop rather than from the start of the poll,
-// and a bounded window so a helper that never returns still fails. All of it
-// worked. The command was retired anyway, because it blocked: agents ran it in
-// the foreground and stopped working while the reviewer typed. The keep-up loop
-// is `lahe status --json --seen-file <path>`, which blocks on nothing and covers
-// every review at once. What holds the retirement is test/unit/cli_wait.test.js.
-
 // ---------------------------------------------------------------------------
 // The origin trap, told apart from a helper that is down
 // ---------------------------------------------------------------------------

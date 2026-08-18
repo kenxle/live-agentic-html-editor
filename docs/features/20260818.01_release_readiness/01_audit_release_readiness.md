@@ -104,6 +104,10 @@ because the retired command exits as unknown, not because the old survival
 claim is still exercised. The dead command and its dedicated contract should
 be removed; shared exit codes should get a neutral name.
 
+Resolved 2026-08-18: the dead command, route, constants, and wait-only tests
+were removed. Shared CLI exit codes now live under `protocol.CLI_EXIT`, and
+dispatch/status tests exercise the supported command surface directly.
+
 The dev-server snippet is described as development-guarded, but it is only
 preceded by a comment. The output and docs must say that the agent must place it
 inside the application's real development guard.

@@ -117,12 +117,13 @@ test("re-registering an origin the review already holds never trips the cap", ()
 // One review, several pages
 // ---------------------------------------------------------------------------
 
-test("two pages on one review both trigger the reload", () => {
+test("two pages stay recorded, but each reports only its own reload mtime", () => {
   const f = fixture("review-1");
   const one = path.join(f.dir, "one.html");
   const two = path.join(f.dir, "two.html");
-  fs.writeFileSync(one, "<h1>one</h1>");
-  fs.writeFileSync(two, "<h1>two</h1>");
+  const line = '<script data-lahe-review="review-1"></script>';
+  fs.writeFileSync(one, "<h1>one</h1>" + line);
+  fs.writeFileSync(two, "<h1>two</h1>" + line);
 
   write(f, "review-1", { origins: [], target_path: one });
   write(f, "review-1", { origins: [], target_path: two });
@@ -131,15 +132,19 @@ test("two pages on one review both trigger the reload", () => {
   const recorded = f.reviews.get("review-1").target_paths;
   assert.deepEqual(recorded, [one, two]);
 
-  // A rebuild of the FIRST page still moves the reported mtime, which is what
-  // the reviewer's open page reloads on.
-  const before = f.reviews.targetMtime("review-1");
+  const oneBefore = f.reviews.targetMtime("review-1", "/one.html");
+  const twoBefore = f.reviews.targetMtime("review-1", "/two.html");
   const later = new Date(Date.now() + 5000);
-  fs.writeFileSync(one, "<h1>one, rebuilt</h1>");
+  fs.writeFileSync(one, "<h1>one, rebuilt</h1>" + line);
   fs.utimesSync(one, later, later);
   f.clock.at += 1000;
-  assert.notEqual(f.reviews.targetMtime("review-1"), before);
-  assert.equal(f.reviews.targetMtime("review-1"), fs.statSync(one).mtime.toISOString());
+  assert.notEqual(f.reviews.targetMtime("review-1", "/one.html"), oneBefore);
+  assert.equal(f.reviews.targetMtime("review-1", "/one.html"), fs.statSync(one).mtime.toISOString());
+  assert.equal(
+    f.reviews.targetMtime("review-1", "/two.html"),
+    twoBefore,
+    "page two does not receive page one's rebuild signal"
+  );
 });
 
 test("path matching keeps working for every page ever added", () => {

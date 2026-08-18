@@ -51,7 +51,7 @@ src/
              is spelled. Both service and layer import from here. If you
              find yourself defining the same shape twice, it belongs here
              instead.
-  cli/       The helper's commands (serve, add, the blocking wait)
+  cli/       The helper's commands (serve, add, status)
 test/
   unit/      node:test unit tests
   browser/   Playwright tests (Chromium by default, three lanes on gate:all)
