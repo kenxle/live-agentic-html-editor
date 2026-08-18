@@ -55,10 +55,13 @@ var reviewFormat = require("../../shared/review_format.js");
 var EXIT = protocol.WAIT.EXIT;
 
 var USAGE = [
-  "usage: lahe status [--review <id>] [--json] [--state-dir <path>]",
+  "usage: lahe status [--review <id>] [--json] [--seen-file <path>] [--state-dir <path>]",
   "",
   "  --review <id>        just this review. Default: every review the helper holds",
   "  --json               one JSON line per unanswered ready item, then one summary line",
+  "  --seen-file <path>   with --json: print only items (id, rev) this file has not recorded,",
+  "                       then record them in it. A watcher becomes: run this, and any item",
+  "                       line in the output is new work. No parsing, no hand-rolled dedupe.",
   "  --state-dir <path>   where the helper keeps its data, the same flag every command takes.",
   "                       Default $LAHE_STATE_DIR, then $XDG_STATE_HOME/lahe, then ~/.local/state/lahe.",
   "",
@@ -69,7 +72,7 @@ var USAGE = [
 ].join("\n");
 
 function parseArgs(argv) {
-  var out = { review: null, json: false, stateDir: null, help: false, error: null };
+  var out = { review: null, json: false, seenFile: null, stateDir: null, help: false, error: null };
   var list = argv || [];
 
   for (var i = 0; i < list.length; i += 1) {
@@ -84,6 +87,12 @@ function parseArgs(argv) {
         break;
       }
       out.review = list[(i += 1)];
+    } else if (arg === "--seen-file") {
+      if (list[i + 1] === undefined) {
+        out.error = "--seen-file needs a value";
+        break;
+      }
+      out.seenFile = list[(i += 1)];
     } else if (arg === "--state-dir") {
       if (list[i + 1] === undefined) {
         out.error = "--state-dir needs a value";
@@ -99,6 +108,13 @@ function parseArgs(argv) {
   if (out.help || out.error) return out;
   if (out.review !== null && !protocol.isSafeId(out.review)) {
     out.error = "--review must be a safe id: " + String(protocol.SAFE_ID);
+  }
+  if (out.seenFile !== null && !out.json) {
+    // The seen file records what was PRINTED, and only the item lines of
+    // --json are a stable thing to record. Requiring the pairing keeps the
+    // human output free to change wording without silently un-deduping
+    // somebody's watcher.
+    out.error = "--seen-file needs --json";
   }
   return out;
 }
@@ -484,20 +500,71 @@ async function run(argv, options) {
   }
 
   if (args.json) {
+    // The seen file makes a watcher parser-free: an (id, rev) already
+    // recorded is not printed again, and what IS printed is recorded before
+    // this command returns. Rev is part of the key on purpose: a reworded
+    // item is new work again. The file is read and written with plain lines
+    // ("id rev"), append-only, and any failure to read or WRITE it is loud:
+    // a watcher whose dedupe silently broke reports quiet forever, which is
+    // this feature's whole reason to exist (a hand-rolled monitor did
+    // exactly that, 2026-08-18).
+    var toPrint = jsonItems;
+    var newlySeen = [];
+    if (args.seenFile) {
+      var seen = Object.create(null);
+      try {
+        if (fs.existsSync(args.seenFile)) {
+          fs.readFileSync(args.seenFile, "utf8")
+            .split("\n")
+            .forEach(function (line) {
+              var trimmed = line.trim();
+              if (trimmed) seen[trimmed] = true;
+            });
+        }
+      } catch (readErr) {
+        err("lahe status: could not read --seen-file " + args.seenFile + ": " + readErr.message + "\n");
+        return EXIT.BAD_USAGE;
+      }
+      toPrint = jsonItems.filter(function (item) {
+        var key = String(item.id) + " " + String(item.rev);
+        if (seen[key]) return false;
+        newlySeen.push(key);
+        return true;
+      });
+    }
+
     // Line one is the contract and the field classes, before any page-derived
     // text reaches the reader.
     out(JSON.stringify(contractLine()) + "\n");
-    jsonItems.forEach(function (item) {
+    toPrint.forEach(function (item) {
       out(JSON.stringify(item) + "\n");
     });
     out(
       JSON.stringify({
         reviews: ids.length,
         unanswered_ready: totalUnanswered,
+        new_since_seen_file: args.seenFile ? toPrint.length : undefined,
         helper: helperOrigin,
         state_dir: dir
       }) + "\n"
     );
+
+    if (args.seenFile && newlySeen.length > 0) {
+      try {
+        fs.appendFileSync(args.seenFile, newlySeen.join("\n") + "\n");
+      } catch (writeErr) {
+        err(
+          "lahe status: printed " +
+            newlySeen.length +
+            " new item(s) but could NOT record them in --seen-file " +
+            args.seenFile +
+            ": " +
+            writeErr.message +
+            "\nThe next run will print them again rather than lose them.\n"
+        );
+        return EXIT.BAD_USAGE;
+      }
+    }
     return EXIT.NEW_WORK;
   }
 

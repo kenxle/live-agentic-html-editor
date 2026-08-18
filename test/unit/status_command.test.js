@@ -210,3 +210,34 @@ test("the liveness sentence has three honest states and never invents a fourth",
     /page last seen 4s ago/
   );
 });
+
+// ---------------------------------------------------------------------------
+// --seen-file: the parser-free watcher. A monitor whose hand-rolled dedupe
+// broke reported quiet forever (2026-08-18); this puts the dedupe in the tool.
+// ---------------------------------------------------------------------------
+
+test("--seen-file prints an item once, again on a rev bump, and fails loud without --json", async () => {
+  const dir = tempState();
+  seed(dir, "rseenfile00001", [anItem("first thing", record.STATE.READY), anItem("second thing", record.STATE.READY)]);
+  const seenPath = path.join(dir, "watcher-seen.txt");
+
+  const first = await runStatus(["--json", "--seen-file", seenPath], dir);
+  assert.equal(first.code, 0, first.stderr);
+  const firstItems = first.stdout.trim().split("\n").slice(1, -1);
+  assert.equal(firstItems.length, 2, "the first run prints both unanswered items");
+
+  const second = await runStatus(["--json", "--seen-file", seenPath], dir);
+  assert.equal(second.code, 0, second.stderr);
+  const secondItems = second.stdout.trim().split("\n").slice(1, -1);
+  assert.equal(secondItems.length, 0, "the second run prints nothing new");
+  const summary = JSON.parse(second.stdout.trim().split("\n").slice(-1)[0]);
+  assert.equal(summary.new_since_seen_file, 0, "and the summary says so");
+
+  const recorded = fs.readFileSync(seenPath, "utf8").trim().split("\n");
+  assert.equal(recorded.length, 2, "one recorded line per printed item");
+  assert.match(recorded[0], /^itm_[0-9a-f]+ \d+$/, "recorded as id space rev");
+
+  const usage = await runStatus(["--seen-file", seenPath], dir);
+  assert.equal(usage.code, 4, "--seen-file without --json is a usage error");
+  assert.match(usage.stderr, /--seen-file needs --json/);
+});
