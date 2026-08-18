@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+d7fc3e751d5d
+ * version 0.0.0+6d4d57edc75a
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+d7fc3e751d5d";
+  g.LAHE.version = "0.0.0+6d4d57edc75a";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -904,8 +904,8 @@
       SEVERITY.BLOCKING,
       true,
       SURFACE.FAILURES_LIST,
-      "This page's origin is not registered for this review, so the helper refuses its requests. The helper itself is fine.",
-      "Register this origin: lahe add <page> --origin <this page's origin>, then reload."
+      "This page's address is not registered for this review. The helper is fine; it refuses addresses it does not know.",
+      "Have your agent re-run the add step with this page's address, then reload."
     ),
 
     // --- browser storage and windows ---------------------------------------
@@ -12387,7 +12387,7 @@
     }
 
     function originRemedy() {
-      return "This page is on " + pageOrigin() + ". Register it: lahe add <page> --origin " + pageOrigin();
+      return "This page is on " + pageOrigin() + ". Register it: lahe add <the page's html file> --origin " + pageOrigin() + ", then reload.";
     }
 
     /**
@@ -17931,7 +17931,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+d7fc3e751d5d";
+  var VERSION = "0.0.0+6d4d57edc75a";
 
   var protocol = ns.protocol;
   var record = ns.record;

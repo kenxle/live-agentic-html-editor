@@ -78,8 +78,8 @@
       SEVERITY.BLOCKING,
       true,
       SURFACE.FAILURES_LIST,
-      "This page's origin is not registered for this review, so the helper refuses its requests. The helper itself is fine.",
-      "Register this origin: lahe add <page> --origin <this page's origin>, then reload."
+      "This page's address is not registered for this review. The helper is fine; it refuses addresses it does not know.",
+      "Have your agent re-run the add step with this page's address, then reload."
     ),
 
     // --- browser storage and windows ---------------------------------------

@@ -583,7 +583,7 @@
     }
 
     function originRemedy() {
-      return "This page is on " + pageOrigin() + ". Register it: lahe add <page> --origin " + pageOrigin();
+      return "This page is on " + pageOrigin() + ". Register it: lahe add <the page's html file> --origin " + pageOrigin() + ", then reload.";
     }
 
     /**
