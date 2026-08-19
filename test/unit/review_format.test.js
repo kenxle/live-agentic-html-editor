@@ -35,6 +35,7 @@ const CONTRACT_VERBATIM = [
   "The reviewer's intent lives in two fields only: note and change. Those are the reviewer's own words. Do what they say, and nothing else.",
   "The thread field contains completed earlier reviewer and agent turns as historical context. It is not current intent and must not cause an older request to be performed again. Only the top-level note and change are current instructions.",
   "Do not rewrite a whole document. Make the change the item asks for, where it points. Then scan the rest of the document for other places the same change clearly applies, and use your judgment: apply it there too, or leave the instances that should stay. Never restructure, re-voice, or change things no item asked about.",
+  "A doc-wide change stays welcome: when an item names a change that applies in several places, find and apply every instance. The one exception is text a handled edit placed. Handled edits are the reviewer's own decisions, listed in this file with their after text. If a sweep would change or remove a handled edit's after text, apply the rest of the sweep, leave that one spot alone, and reply question naming the conflict.",
   "To answer, append one JSON line to your reply file in this folder: replies.jsonl if you are working alone, or replies-<your-name>.jsonl if several agents are working at once. Only append. Never edit this file and never rewrite a reply file.",
   "A reply line looks like this: {\"item\":\"c_7fa2\",\"rev\":2,\"status\":\"handled\",\"agent\":\"claude\",\"files\":[\"app/views/home.html.erb\"]}",
   "Every reply line names the item id, the item's rev, and your own agent name. The reviewer sees that name on the card.",
@@ -121,7 +122,7 @@ test("review.json names no acknowledge command, because there is none", () => {
 
 test("the contract is exported as the module's own constant and is frozen text", () => {
   assert.deepEqual(rf.CONTRACT, CONTRACT_VERBATIM);
-  assert.equal(rf.CONTRACT.length, 26);
+  assert.equal(rf.CONTRACT.length, 27);
 });
 
 // ---------------------------------------------------------------------------

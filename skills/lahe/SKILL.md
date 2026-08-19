@@ -70,6 +70,13 @@ prints, rebuild, verify the visible output, append your replies, then run it
 again. Repeat until it prints nothing. Work stays listed until your reply lands,
 so a wake you miss costs you nothing: the next drain shows the item again.
 
+**Doc-wide changes stay welcome.** When an item names a change that applies in
+several places, find and apply every instance. The one exception is text a
+handled edit placed. Handled edits are the reviewer's own decisions, listed in
+`review.json` with their `after_full` text. If a sweep would change or remove a
+handled edit's after text, apply the rest of the sweep, leave that one spot
+alone, and reply `question` naming the conflict.
+
 Run the line as it was printed. Reviews outside the default state directory get
 `--state-dir <path>` on every printed command, and the same command retyped
 without it reads the default directory and honestly reports no work.
