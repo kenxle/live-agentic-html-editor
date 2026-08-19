@@ -661,6 +661,62 @@
       }
     });
 
+    // -------------------------------------------------------------------------
+    // Clicking a card to find its place on the page
+    // -------------------------------------------------------------------------
+    //
+    // The rail decides what counts as a click on a card (not a control, not a
+    // selection, not a drag). This is the other half: where the card points, and
+    // saying so on the page. Three answers, and all three are honest:
+    //
+    //  - a live highlight. The passage is painted, so its own range is the
+    //    target: scroll it to the middle and wash it for a moment.
+    //  - no highlight. A handled item's paint is gone by rule (R37), so the
+    //    region is re-found through the SAME anchoring replay uses, and the
+    //    element it binds to is emphasized instead.
+    //  - nowhere. A page-level note points at nothing and a lost anchor points
+    //    at nothing findable. Both do nothing, quietly: no jump, no error. The
+    //    lost card already carries its notice.
+    function jumpToItem(id) {
+      var range = comments.highlights ? comments.highlights.rangeFor(id) : null;
+      if (range && rangeIsLive(range)) {
+        scrollToNode(nodeOf(range));
+        comments.highlights.emphasize(range);
+        return true;
+      }
+      var element = ns.replay.locate(id);
+      if (!element || !element.isConnected) return false;
+      scrollToNode(element);
+      if (comments.highlights && typeof doc.createRange === "function") {
+        var over = doc.createRange();
+        over.selectNodeContents(element);
+        comments.highlights.emphasize(over);
+      }
+      return true;
+    }
+
+    function rangeIsLive(range) {
+      var node = range.startContainer;
+      return !!(node && node.isConnected !== false);
+    }
+
+    function nodeOf(range) {
+      var node = range.startContainer;
+      if (node && node.nodeType !== 1) node = node.parentElement;
+      return node;
+    }
+
+    // Centered, so the passage is not left under the reviewer's own rail or off
+    // the top edge, and smooth, so they can see the page move rather than
+    // arriving somewhere new with no idea how.
+    function scrollToNode(node) {
+      if (!node || typeof node.scrollIntoView !== "function") return false;
+      node.scrollIntoView({ block: "center", behavior: "smooth" });
+      return true;
+    }
+
+    rail.onCardActivate(jumpToItem);
+
     // "The page changed, so replay gets a pass."
     //
     // The ORDINARY coalescing path, deliberately: no {immediate: true} anywhere
@@ -1011,6 +1067,13 @@
       },
       flaggedIds: function () {
         return ns.replay.conflictIds();
+      },
+      // What the short-lived "here it is" wash is on right now, as text, or ""
+      // when nothing is emphasized. A paint has no node to select, so this is
+      // the only way a spec can see it.
+      emphasizedText: function () {
+        var range = handle.comments.highlights ? handle.comments.highlights.emphasisRange() : null;
+        return range ? String(range) : "";
       },
       lastPass: function () {
         var summary = ns.replay.lastPass();

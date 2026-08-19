@@ -63,9 +63,22 @@
     // A passage a comment is attached to.
     COMMENT: PREFIX + "comment",
     // The one whose box is open. Quieter than a selection, louder than the rest.
-    ACTIVE: PREFIX + "comment-active"
+    ACTIVE: PREFIX + "comment-active",
+    // "Here it is": the passage a card was just clicked to find. It lasts about
+    // a second and a half and then it is gone, so it never becomes a third
+    // permanent state a reviewer has to learn.
+    EMPHASIS: PREFIX + "emphasis"
   };
-  var NAMES = [NAME.COMMENT, NAME.ACTIVE];
+  var NAMES = [NAME.COMMENT, NAME.ACTIVE, NAME.EMPHASIS];
+
+  // How long the "here it is" wash stays up. Long enough to find with the eye
+  // after a smooth scroll, short enough that it cannot be mistaken for state.
+  var EMPHASIS_MS = 1500;
+
+  // The one reserved key in the painted map. An item's own paint is keyed by its
+  // record id, so the emphasis rides on a key no record can have: emphasizing a
+  // passage must not disturb the comment highlight already on it.
+  var EMPHASIS_KEY = "__lahe_emphasis__";
 
   // The marked page-level stylesheet. Both attributes matter: `data-lahe` is
   // the one spelling of "this node is ours" that the normalizer strips, and
@@ -101,6 +114,14 @@
     "}",
     "::highlight(" + NAME.ACTIVE + ") {",
     "  background-color: rgba(60, 86, 165, 0.26);",
+    "  color: inherit;",
+    "}",
+    // The same accent again, at its strongest, and NOTHING that moves: no
+    // animation, no outline, no border. A wash cannot shift the page's layout,
+    // which is D8's whole point, and a flashing page is not an answer to "where
+    // is this comment".
+    "::highlight(" + NAME.EMPHASIS + ") {",
+    "  background-color: rgba(60, 86, 165, 0.38);",
     "  color: inherit;",
     "}"
   ].join("\n");
@@ -311,6 +332,53 @@
       return painted[id] ? painted[id].range : null;
     }
 
+    // ------------------------------------------------------------------------
+    // "Here it is": the short-lived emphasis
+    // ------------------------------------------------------------------------
+    //
+    // Clicking a card scrolls the page to where the card points and washes the
+    // passage for a moment. It is a paint and nothing else: no wrapper, no
+    // style on the page's own nodes, no layout touched.
+
+    var emphasisTimer = null;
+
+    /**
+     * Wash one range, briefly.
+     *
+     * @param {Range} range a live Range over reviewed content
+     * @param {number} [ms] how long to hold it; EMPHASIS_MS by default
+     * @returns {Range|null} the range now emphasized, or null when there is none
+     */
+    function emphasize(range, ms) {
+      if (!range || typeof range.cloneRange !== "function") return null;
+      if (!supported()) return null;
+      // A second click replaces the first rather than stacking two washes and
+      // two timers, so the last thing clicked is the thing lit.
+      clearEmphasis();
+      paint(EMPHASIS_KEY, range, NAME.EMPHASIS);
+      var g = global();
+      var hold = typeof ms === "number" && ms > 0 ? ms : EMPHASIS_MS;
+      if (g && typeof g.setTimeout === "function") {
+        emphasisTimer = g.setTimeout(function () {
+          emphasisTimer = null;
+          clearEmphasis();
+        }, hold);
+      }
+      return range;
+    }
+
+    function clearEmphasis() {
+      var g = global();
+      if (emphasisTimer && g && typeof g.clearTimeout === "function") g.clearTimeout(emphasisTimer);
+      emphasisTimer = null;
+      return clear(EMPHASIS_KEY);
+    }
+
+    /** The range wearing the emphasis right now, or null. For tests and probes. */
+    function emphasisRange() {
+      return rangeFor(EMPHASIS_KEY);
+    }
+
     function paintedIds() {
       return Object.keys(painted);
     }
@@ -411,6 +479,7 @@
     }
 
     function teardown() {
+      clearEmphasis();
       clearAll();
       removeStylesheet();
       if (surfaceHost && surfaceHost.parentNode) surfaceHost.parentNode.removeChild(surfaceHost);
@@ -433,6 +502,9 @@
       clearAll: clearAll,
       rangeFor: rangeFor,
       paintedIds: paintedIds,
+      emphasize: emphasize,
+      clearEmphasis: clearEmphasis,
+      emphasisRange: emphasisRange,
       surface: surface,
       addSurfaceStyle: addSurfaceStyle,
       pageScheme: pageScheme,
@@ -453,6 +525,8 @@
     SURFACE_ID: SURFACE_ID,
     SCHEME_ATTR: SCHEME_ATTR,
     STYLE_TEXT: STYLE_TEXT,
+    EMPHASIS_MS: EMPHASIS_MS,
+    EMPHASIS_KEY: EMPHASIS_KEY,
     schemeForPage: schemeForPage,
     createHighlights: createHighlights,
     shared: shared

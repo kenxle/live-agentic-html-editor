@@ -1064,6 +1064,42 @@
   // node is not the protected one.
   var lastElement = Object.create(null);
 
+  /**
+   * Where on the page does this record point, right now?
+   *
+   * READ-ONLY. It writes nothing, stamps nothing, and counts nothing: it is the
+   * same anchoring a pass does, asked as a question. The reviewer clicking a
+   * card to find its passage is the caller, and a handled edit is the case that
+   * needs it, because a handled item has no highlight left to scroll to (R37):
+   * its region ref and its before/after context are all that remain.
+   *
+   * A record whose anchor is LOST returns null rather than a best guess.
+   * Scrolling somewhere wrong is worse than not scrolling: the card already
+   * carries the notice saying the passage could not be found.
+   *
+   * @param {string} id  the record's id
+   * @param {Object} [override] context override, as everywhere else here
+   * @returns {Element|null}
+   */
+  function locate(id, override) {
+    var ctx = contextFor(override);
+    var item = itemWithId(ctx, id);
+    if (!item) return null;
+    var region = item[record.FIELD.REGION] || null;
+    if (region && region.lost) return null;
+    // The node the last pass bound, when it is still in the document. This is
+    // what carries an element pick whose text the matcher can never re-find.
+    var bound = lastElement[id];
+    if (bound && bound.isConnected !== false) return bound;
+    var ref = region ? region.ref : null;
+    // A page-level note points at nothing, and neither does a record whose ref
+    // never minted. There is no wrong place to send the reviewer, so nowhere is
+    // the answer.
+    if (!ref) return null;
+    var verdict = resolveRegion(item, ref, ctx);
+    return verdict && verdict.element ? verdict.element : null;
+  }
+
   // `isProtected`, never `touches`. They are different questions: `touches` is
   // the veto's ("would morphing this element destroy the protected block"), and
   // it answers true for an ancestor of the block, which is most of the page.
@@ -1594,6 +1630,7 @@
     bindElement: function (id, element) {
       if (id && element && element.nodeType === 1) lastElement[id] = element;
     },
+    locate: locate,
     schedule: schedule,
     runPass: runPass,
     compare: compare,

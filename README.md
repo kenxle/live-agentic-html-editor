@@ -246,6 +246,7 @@ not need this file open to work them out.
 | Cmd-Enter, Esc, or clicking anywhere outside the block (the page, the rail, another window) | Commit the edit and give the block back to the page |
 | Cmd-Enter in a comment box | This comment is done, and the agent may act on it |
 | The open box at the foot of the rail | A note tied to nothing in particular |
+| Clicking a card in the rail, anywhere but its buttons and boxes | Scroll the page to the spot that card is about, and light it up for a second |
 
 **The comment box itself.** It grows as you write: the box gets taller and a
 little wider with your text, up to about 40% of the window's height, and scrolls
@@ -256,6 +257,13 @@ until you close it, and the next box you open anchors to its own passage as
 usual. Along the bottom of the box are two small controls: **Send**, which does
 exactly what Cmd-Enter does, and **Delete**, which throws the draft away with no
 confirmation dialog. Every keyboard gesture is unchanged.
+
+**Clicking a card finds its passage.** It works in every tab, and on a handled
+item too: the highlight is gone by then, so the tool re-finds the region the same
+way it puts your edits back. Selecting text inside a card copies it as usual and
+never jumps. A note tied to nothing has nowhere to go, so clicking it does
+nothing, and neither does a card whose passage the tool has lost: that card
+already says so.
 
 Browsing is the page untouched: links navigate, buttons act, forms submit. Edit
 state is entered deliberately, one block at a time, and the block is visibly

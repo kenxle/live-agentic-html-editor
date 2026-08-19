@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+928e271c129c
+ * version 0.0.0+36f08f75234b
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+928e271c129c";
+  g.LAHE.version = "0.0.0+36f08f75234b";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -8085,9 +8085,22 @@
     // A passage a comment is attached to.
     COMMENT: PREFIX + "comment",
     // The one whose box is open. Quieter than a selection, louder than the rest.
-    ACTIVE: PREFIX + "comment-active"
+    ACTIVE: PREFIX + "comment-active",
+    // "Here it is": the passage a card was just clicked to find. It lasts about
+    // a second and a half and then it is gone, so it never becomes a third
+    // permanent state a reviewer has to learn.
+    EMPHASIS: PREFIX + "emphasis"
   };
-  var NAMES = [NAME.COMMENT, NAME.ACTIVE];
+  var NAMES = [NAME.COMMENT, NAME.ACTIVE, NAME.EMPHASIS];
+
+  // How long the "here it is" wash stays up. Long enough to find with the eye
+  // after a smooth scroll, short enough that it cannot be mistaken for state.
+  var EMPHASIS_MS = 1500;
+
+  // The one reserved key in the painted map. An item's own paint is keyed by its
+  // record id, so the emphasis rides on a key no record can have: emphasizing a
+  // passage must not disturb the comment highlight already on it.
+  var EMPHASIS_KEY = "__lahe_emphasis__";
 
   // The marked page-level stylesheet. Both attributes matter: `data-lahe` is
   // the one spelling of "this node is ours" that the normalizer strips, and
@@ -8123,6 +8136,14 @@
     "}",
     "::highlight(" + NAME.ACTIVE + ") {",
     "  background-color: rgba(60, 86, 165, 0.26);",
+    "  color: inherit;",
+    "}",
+    // The same accent again, at its strongest, and NOTHING that moves: no
+    // animation, no outline, no border. A wash cannot shift the page's layout,
+    // which is D8's whole point, and a flashing page is not an answer to "where
+    // is this comment".
+    "::highlight(" + NAME.EMPHASIS + ") {",
+    "  background-color: rgba(60, 86, 165, 0.38);",
     "  color: inherit;",
     "}"
   ].join("\n");
@@ -8333,6 +8354,53 @@
       return painted[id] ? painted[id].range : null;
     }
 
+    // ------------------------------------------------------------------------
+    // "Here it is": the short-lived emphasis
+    // ------------------------------------------------------------------------
+    //
+    // Clicking a card scrolls the page to where the card points and washes the
+    // passage for a moment. It is a paint and nothing else: no wrapper, no
+    // style on the page's own nodes, no layout touched.
+
+    var emphasisTimer = null;
+
+    /**
+     * Wash one range, briefly.
+     *
+     * @param {Range} range a live Range over reviewed content
+     * @param {number} [ms] how long to hold it; EMPHASIS_MS by default
+     * @returns {Range|null} the range now emphasized, or null when there is none
+     */
+    function emphasize(range, ms) {
+      if (!range || typeof range.cloneRange !== "function") return null;
+      if (!supported()) return null;
+      // A second click replaces the first rather than stacking two washes and
+      // two timers, so the last thing clicked is the thing lit.
+      clearEmphasis();
+      paint(EMPHASIS_KEY, range, NAME.EMPHASIS);
+      var g = global();
+      var hold = typeof ms === "number" && ms > 0 ? ms : EMPHASIS_MS;
+      if (g && typeof g.setTimeout === "function") {
+        emphasisTimer = g.setTimeout(function () {
+          emphasisTimer = null;
+          clearEmphasis();
+        }, hold);
+      }
+      return range;
+    }
+
+    function clearEmphasis() {
+      var g = global();
+      if (emphasisTimer && g && typeof g.clearTimeout === "function") g.clearTimeout(emphasisTimer);
+      emphasisTimer = null;
+      return clear(EMPHASIS_KEY);
+    }
+
+    /** The range wearing the emphasis right now, or null. For tests and probes. */
+    function emphasisRange() {
+      return rangeFor(EMPHASIS_KEY);
+    }
+
     function paintedIds() {
       return Object.keys(painted);
     }
@@ -8433,6 +8501,7 @@
     }
 
     function teardown() {
+      clearEmphasis();
       clearAll();
       removeStylesheet();
       if (surfaceHost && surfaceHost.parentNode) surfaceHost.parentNode.removeChild(surfaceHost);
@@ -8455,6 +8524,9 @@
       clearAll: clearAll,
       rangeFor: rangeFor,
       paintedIds: paintedIds,
+      emphasize: emphasize,
+      clearEmphasis: clearEmphasis,
+      emphasisRange: emphasisRange,
       surface: surface,
       addSurfaceStyle: addSurfaceStyle,
       pageScheme: pageScheme,
@@ -8475,6 +8547,8 @@
     SURFACE_ID: SURFACE_ID,
     SCHEME_ATTR: SCHEME_ATTR,
     STYLE_TEXT: STYLE_TEXT,
+    EMPHASIS_MS: EMPHASIS_MS,
+    EMPHASIS_KEY: EMPHASIS_KEY,
     schemeForPage: schemeForPage,
     createHighlights: createHighlights,
     shared: shared
@@ -9059,6 +9133,14 @@
     // Who wants to know the reviewer moved to a tab. This is how the Done tab
     // learns to mark its replies seen without this file knowing what a reply is.
     var tabSelectHandlers = [];
+    // Who wants to know a card was clicked. The rail decides what counts as a
+    // click on the CARD (rather than on a control inside it, or a text
+    // selection); what to DO about it, which is finding the passage on the page,
+    // belongs to whoever knows about anchors. See onCardActivate.
+    var cardActivateHandlers = [];
+    // Where the pointer went down, so a drag that ends inside a card is read as
+    // a drag and not as a click.
+    var pressPoint = null;
     // A person's choice, separate from the rail's momentary visibility. A
     // second-window refusal has to open the rail so its remedy is visible, but
     // that forced opening must not erase the choice to keep the rail collapsed.
@@ -9499,11 +9581,121 @@
       return handleFor(id);
     }
 
+    // -------------------------------------------------------------------------
+    // Clicking a card to find its place on the page
+    // -------------------------------------------------------------------------
+    //
+    // A card is a pointer at a passage, and the reviewer's question in front of
+    // it is "where is this?". So the whole card is the gesture, in every tab.
+    // Three things are NOT that gesture, and this is where they are ruled out:
+    //
+    //  - a control. Every button, link, box and composer inside a card does its
+    //    own job, and a jump on top of it is the rail acting on a press that was
+    //    meant for something else.
+    //  - a text selection. Copying the agent's answer out of a card ends in a
+    //    click, and that click must not throw the page somewhere.
+    //  - a drag. Same reason, before the selection exists to be read.
+    var CLICK_SKIP_TAGS = {
+      button: 1,
+      a: 1,
+      input: 1,
+      textarea: 1,
+      select: 1,
+      option: 1,
+      label: 1,
+      summary: 1
+    };
+
+    // How far the pointer may travel between down and up and still be a click.
+    var CLICK_SLOP = 4;
+
+    function isInteractiveTarget(node, cardNodeEl) {
+      var current = node;
+      while (current && current !== cardNodeEl) {
+        if (current.nodeType === 1) {
+          var tag = (current.tagName || "").toLowerCase();
+          if (CLICK_SKIP_TAGS[tag]) return true;
+          if (current.isContentEditable) return true;
+          // The escape hatch for anything a tab owner attaches that is
+          // interactive without being one of the tags above.
+          if (current.getAttribute && current.getAttribute("data-lahe-no-jump") !== null) return true;
+        }
+        current = current.parentNode;
+      }
+      return false;
+    }
+
+    // The reviewer is holding a selection inside this card. Asked of the shadow
+    // root first, because that is where the card lives and a closed root answers
+    // for its own selection; the document is the fallback for engines that do
+    // not implement ShadowRoot.getSelection.
+    function selectionInside(cardNodeEl) {
+      var roots = [];
+      var root = cardNodeEl.getRootNode ? cardNodeEl.getRootNode() : null;
+      if (root && typeof root.getSelection === "function") roots.push(root);
+      var doc = cardNodeEl.ownerDocument;
+      var view = doc && doc.defaultView;
+      if (view && typeof view.getSelection === "function") {
+        roots.push({ getSelection: function () { return view.getSelection(); } });
+      }
+      for (var i = 0; i < roots.length; i += 1) {
+        var selection = null;
+        try {
+          selection = roots[i].getSelection();
+        } catch (err) {
+          selection = null;
+        }
+        if (!selection || selection.isCollapsed) continue;
+        if (!String(selection).replace(/\s+/g, "")) continue;
+        var anchor = selection.anchorNode;
+        if (!anchor) continue;
+        if (anchor === cardNodeEl || cardNodeEl.contains(anchor)) return true;
+      }
+      return false;
+    }
+
+    function activateCard(id) {
+      cardActivateHandlers.forEach(function (fn) {
+        try {
+          fn(id);
+        } catch (err) {
+          // One bad listener must never make a card feel broken to click.
+        }
+      });
+      return id;
+    }
+
+    /**
+     * Tell me when the reviewer clicks a card (and means it).
+     *
+     * @param {function(string)} fn called with the card's item id
+     * @returns {function} unsubscribe
+     */
+    function onCardActivate(fn) {
+      if (typeof fn !== "function") throw new TypeError("onCardActivate: a function is required");
+      cardActivateHandlers.push(fn);
+      return function () {
+        var at = cardActivateHandlers.indexOf(fn);
+        if (at !== -1) cardActivateHandlers.splice(at, 1);
+      };
+    }
+
     function buildCardNode(card) {
       if (!dom || card.node) return card.node;
       var node = el("article", "card");
       node.setAttribute("data-card-id", card.id);
       markers.markChrome(node);
+      node.addEventListener("mousedown", function (event) {
+        pressPoint = { x: event.clientX, y: event.clientY };
+      });
+      node.addEventListener("click", function (event) {
+        var press = pressPoint;
+        pressPoint = null;
+        if (isInteractiveTarget(event.target, node)) return;
+        if (press && Math.abs(event.clientX - press.x) + Math.abs(event.clientY - press.y) > CLICK_SLOP) return;
+        if (selectionInside(node)) return;
+        activateCard(card.id);
+      });
 
       var top = el("div", "card__top");
       var kind = el("span", "card__kind");
@@ -10742,6 +10934,8 @@
       selectTab: selectTab,
       currentTab: currentTab,
       onTabSelect: onTabSelect,
+      onCardActivate: onCardActivate,
+      activateCard: activateCard,
       setTabNewCount: setTabNewCount,
       tabNewCount: tabNewCount,
       pillNewCount: pillNewCount,
@@ -20537,6 +20731,42 @@
   // node is not the protected one.
   var lastElement = Object.create(null);
 
+  /**
+   * Where on the page does this record point, right now?
+   *
+   * READ-ONLY. It writes nothing, stamps nothing, and counts nothing: it is the
+   * same anchoring a pass does, asked as a question. The reviewer clicking a
+   * card to find its passage is the caller, and a handled edit is the case that
+   * needs it, because a handled item has no highlight left to scroll to (R37):
+   * its region ref and its before/after context are all that remain.
+   *
+   * A record whose anchor is LOST returns null rather than a best guess.
+   * Scrolling somewhere wrong is worse than not scrolling: the card already
+   * carries the notice saying the passage could not be found.
+   *
+   * @param {string} id  the record's id
+   * @param {Object} [override] context override, as everywhere else here
+   * @returns {Element|null}
+   */
+  function locate(id, override) {
+    var ctx = contextFor(override);
+    var item = itemWithId(ctx, id);
+    if (!item) return null;
+    var region = item[record.FIELD.REGION] || null;
+    if (region && region.lost) return null;
+    // The node the last pass bound, when it is still in the document. This is
+    // what carries an element pick whose text the matcher can never re-find.
+    var bound = lastElement[id];
+    if (bound && bound.isConnected !== false) return bound;
+    var ref = region ? region.ref : null;
+    // A page-level note points at nothing, and neither does a record whose ref
+    // never minted. There is no wrong place to send the reviewer, so nowhere is
+    // the answer.
+    if (!ref) return null;
+    var verdict = resolveRegion(item, ref, ctx);
+    return verdict && verdict.element ? verdict.element : null;
+  }
+
   // `isProtected`, never `touches`. They are different questions: `touches` is
   // the veto's ("would morphing this element destroy the protected block"), and
   // it answers true for an ancestor of the block, which is most of the page.
@@ -21067,6 +21297,7 @@
     bindElement: function (id, element) {
       if (id && element && element.nodeType === 1) lastElement[id] = element;
     },
+    locate: locate,
     schedule: schedule,
     runPass: runPass,
     compare: compare,
@@ -21543,7 +21774,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+928e271c129c";
+  var VERSION = "0.0.0+36f08f75234b";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -22130,6 +22361,62 @@
       }
     });
 
+    // -------------------------------------------------------------------------
+    // Clicking a card to find its place on the page
+    // -------------------------------------------------------------------------
+    //
+    // The rail decides what counts as a click on a card (not a control, not a
+    // selection, not a drag). This is the other half: where the card points, and
+    // saying so on the page. Three answers, and all three are honest:
+    //
+    //  - a live highlight. The passage is painted, so its own range is the
+    //    target: scroll it to the middle and wash it for a moment.
+    //  - no highlight. A handled item's paint is gone by rule (R37), so the
+    //    region is re-found through the SAME anchoring replay uses, and the
+    //    element it binds to is emphasized instead.
+    //  - nowhere. A page-level note points at nothing and a lost anchor points
+    //    at nothing findable. Both do nothing, quietly: no jump, no error. The
+    //    lost card already carries its notice.
+    function jumpToItem(id) {
+      var range = comments.highlights ? comments.highlights.rangeFor(id) : null;
+      if (range && rangeIsLive(range)) {
+        scrollToNode(nodeOf(range));
+        comments.highlights.emphasize(range);
+        return true;
+      }
+      var element = ns.replay.locate(id);
+      if (!element || !element.isConnected) return false;
+      scrollToNode(element);
+      if (comments.highlights && typeof doc.createRange === "function") {
+        var over = doc.createRange();
+        over.selectNodeContents(element);
+        comments.highlights.emphasize(over);
+      }
+      return true;
+    }
+
+    function rangeIsLive(range) {
+      var node = range.startContainer;
+      return !!(node && node.isConnected !== false);
+    }
+
+    function nodeOf(range) {
+      var node = range.startContainer;
+      if (node && node.nodeType !== 1) node = node.parentElement;
+      return node;
+    }
+
+    // Centered, so the passage is not left under the reviewer's own rail or off
+    // the top edge, and smooth, so they can see the page move rather than
+    // arriving somewhere new with no idea how.
+    function scrollToNode(node) {
+      if (!node || typeof node.scrollIntoView !== "function") return false;
+      node.scrollIntoView({ block: "center", behavior: "smooth" });
+      return true;
+    }
+
+    rail.onCardActivate(jumpToItem);
+
     // "The page changed, so replay gets a pass."
     //
     // The ORDINARY coalescing path, deliberately: no {immediate: true} anywhere
@@ -22480,6 +22767,13 @@
       },
       flaggedIds: function () {
         return ns.replay.conflictIds();
+      },
+      // What the short-lived "here it is" wash is on right now, as text, or ""
+      // when nothing is emphasized. A paint has no node to select, so this is
+      // the only way a spec can see it.
+      emphasizedText: function () {
+        var range = handle.comments.highlights ? handle.comments.highlights.emphasisRange() : null;
+        return range ? String(range) : "";
       },
       lastPass: function () {
         var summary = ns.replay.lastPass();

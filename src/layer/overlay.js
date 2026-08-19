@@ -575,6 +575,14 @@
     // Who wants to know the reviewer moved to a tab. This is how the Done tab
     // learns to mark its replies seen without this file knowing what a reply is.
     var tabSelectHandlers = [];
+    // Who wants to know a card was clicked. The rail decides what counts as a
+    // click on the CARD (rather than on a control inside it, or a text
+    // selection); what to DO about it, which is finding the passage on the page,
+    // belongs to whoever knows about anchors. See onCardActivate.
+    var cardActivateHandlers = [];
+    // Where the pointer went down, so a drag that ends inside a card is read as
+    // a drag and not as a click.
+    var pressPoint = null;
     // A person's choice, separate from the rail's momentary visibility. A
     // second-window refusal has to open the rail so its remedy is visible, but
     // that forced opening must not erase the choice to keep the rail collapsed.
@@ -1015,11 +1023,121 @@
       return handleFor(id);
     }
 
+    // -------------------------------------------------------------------------
+    // Clicking a card to find its place on the page
+    // -------------------------------------------------------------------------
+    //
+    // A card is a pointer at a passage, and the reviewer's question in front of
+    // it is "where is this?". So the whole card is the gesture, in every tab.
+    // Three things are NOT that gesture, and this is where they are ruled out:
+    //
+    //  - a control. Every button, link, box and composer inside a card does its
+    //    own job, and a jump on top of it is the rail acting on a press that was
+    //    meant for something else.
+    //  - a text selection. Copying the agent's answer out of a card ends in a
+    //    click, and that click must not throw the page somewhere.
+    //  - a drag. Same reason, before the selection exists to be read.
+    var CLICK_SKIP_TAGS = {
+      button: 1,
+      a: 1,
+      input: 1,
+      textarea: 1,
+      select: 1,
+      option: 1,
+      label: 1,
+      summary: 1
+    };
+
+    // How far the pointer may travel between down and up and still be a click.
+    var CLICK_SLOP = 4;
+
+    function isInteractiveTarget(node, cardNodeEl) {
+      var current = node;
+      while (current && current !== cardNodeEl) {
+        if (current.nodeType === 1) {
+          var tag = (current.tagName || "").toLowerCase();
+          if (CLICK_SKIP_TAGS[tag]) return true;
+          if (current.isContentEditable) return true;
+          // The escape hatch for anything a tab owner attaches that is
+          // interactive without being one of the tags above.
+          if (current.getAttribute && current.getAttribute("data-lahe-no-jump") !== null) return true;
+        }
+        current = current.parentNode;
+      }
+      return false;
+    }
+
+    // The reviewer is holding a selection inside this card. Asked of the shadow
+    // root first, because that is where the card lives and a closed root answers
+    // for its own selection; the document is the fallback for engines that do
+    // not implement ShadowRoot.getSelection.
+    function selectionInside(cardNodeEl) {
+      var roots = [];
+      var root = cardNodeEl.getRootNode ? cardNodeEl.getRootNode() : null;
+      if (root && typeof root.getSelection === "function") roots.push(root);
+      var doc = cardNodeEl.ownerDocument;
+      var view = doc && doc.defaultView;
+      if (view && typeof view.getSelection === "function") {
+        roots.push({ getSelection: function () { return view.getSelection(); } });
+      }
+      for (var i = 0; i < roots.length; i += 1) {
+        var selection = null;
+        try {
+          selection = roots[i].getSelection();
+        } catch (err) {
+          selection = null;
+        }
+        if (!selection || selection.isCollapsed) continue;
+        if (!String(selection).replace(/\s+/g, "")) continue;
+        var anchor = selection.anchorNode;
+        if (!anchor) continue;
+        if (anchor === cardNodeEl || cardNodeEl.contains(anchor)) return true;
+      }
+      return false;
+    }
+
+    function activateCard(id) {
+      cardActivateHandlers.forEach(function (fn) {
+        try {
+          fn(id);
+        } catch (err) {
+          // One bad listener must never make a card feel broken to click.
+        }
+      });
+      return id;
+    }
+
+    /**
+     * Tell me when the reviewer clicks a card (and means it).
+     *
+     * @param {function(string)} fn called with the card's item id
+     * @returns {function} unsubscribe
+     */
+    function onCardActivate(fn) {
+      if (typeof fn !== "function") throw new TypeError("onCardActivate: a function is required");
+      cardActivateHandlers.push(fn);
+      return function () {
+        var at = cardActivateHandlers.indexOf(fn);
+        if (at !== -1) cardActivateHandlers.splice(at, 1);
+      };
+    }
+
     function buildCardNode(card) {
       if (!dom || card.node) return card.node;
       var node = el("article", "card");
       node.setAttribute("data-card-id", card.id);
       markers.markChrome(node);
+      node.addEventListener("mousedown", function (event) {
+        pressPoint = { x: event.clientX, y: event.clientY };
+      });
+      node.addEventListener("click", function (event) {
+        var press = pressPoint;
+        pressPoint = null;
+        if (isInteractiveTarget(event.target, node)) return;
+        if (press && Math.abs(event.clientX - press.x) + Math.abs(event.clientY - press.y) > CLICK_SLOP) return;
+        if (selectionInside(node)) return;
+        activateCard(card.id);
+      });
 
       var top = el("div", "card__top");
       var kind = el("span", "card__kind");
@@ -2258,6 +2376,8 @@
       selectTab: selectTab,
       currentTab: currentTab,
       onTabSelect: onTabSelect,
+      onCardActivate: onCardActivate,
+      activateCard: activateCard,
       setTabNewCount: setTabNewCount,
       tabNewCount: tabNewCount,
       pillNewCount: pillNewCount,
