@@ -247,6 +247,16 @@ not need this file open to work them out.
 | Cmd-Enter in a comment box | This comment is done, and the agent may act on it |
 | The open box at the foot of the rail | A note tied to nothing in particular |
 
+**The comment box itself.** It grows as you write: the box gets taller and a
+little wider with your text, up to about 40% of the window's height, and scrolls
+inside once it is there. Delete text and it shrinks back. Drag the dotted strip
+along its top edge to move it anywhere on screen, which is what you want when
+the box lands on the paragraph you are writing about; it stays where you put it
+until you close it, and the next box you open anchors to its own passage as
+usual. Along the bottom of the box are two small controls: **Send**, which does
+exactly what Cmd-Enter does, and **Delete**, which throws the draft away with no
+confirmation dialog. Every keyboard gesture is unchanged.
+
 Browsing is the page untouched: links navigate, buttons act, forms submit. Edit
 state is entered deliberately, one block at a time, and the block is visibly
 framed while it is in it. Ctrl replaces Cmd on non-macOS systems.

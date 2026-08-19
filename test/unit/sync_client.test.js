@@ -568,3 +568,25 @@ test("clearing a code with no chip on it writes nothing and rebuilds nothing", (
   assert.equal(rail.failures.count(), 1, "the unrelated chip is untouched");
   assert.equal(rail.failures.clear("REPLY_LINE_MALFORMED"), true, "a chip that IS there still clears");
 });
+
+test("deleting an item the helper has seen queues item.deleted; a never-sent draft queues nothing", (t) => {
+  const { store, sync } = harness();
+  t.after(() => sync.stop());
+
+  // Never posted, so the helper's projection has never heard of it and a
+  // delete naming it would be a line that means nothing.
+  const unsent = draft("never left the browser");
+  assert.equal(sync.deleteItem(unsent), null);
+  assert.equal(store.pendingEvents("review-1").length, 0);
+
+  const sent = draft("this one went");
+  sync.recordItem(sent);
+  const event = sync.deleteItem(sent);
+  assert.equal(event.event, protocol.EVENT.ITEM_DELETED);
+  assert.equal(event.item, sent.id);
+  assert.equal(event.rev, sent.rev);
+
+  const queued = store.pendingEvents("review-1");
+  assert.equal(queued.length, 2);
+  assert.equal(queued[1].event, protocol.EVENT.ITEM_DELETED);
+});

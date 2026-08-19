@@ -591,10 +591,19 @@
     });
 
     comments.onChange(function (item, event, createdOnElement) {
-      // "removed" carries an id and nothing else, and "closed" is not a change
-      // to the record: the state it would post was already posted by the
-      // keystroke or by ready.
-      if (event === "removed" || event === "closed") return;
+      // The reviewer deleted their own item. The card goes, and so does the
+      // helper's copy: an item left in review.json after the browser dropped it
+      // is work the agent would do that nobody is asking for. sync posts
+      // nothing for an item it never sent (a draft deleted before its first
+      // flush), so the log stays honest either way.
+      if (event === "removed") {
+        rail.removeCard(item[record.FIELD.ID]);
+        sync.deleteItem(item);
+        return;
+      }
+      // "closed" is not a change to the record: the state it would post was
+      // already posted by the keystroke or by ready.
+      if (event === "closed") return;
       // Creation is a binding: hand replay the node the item was made on, so
       // the still-bound rule covers element picks the text matcher can never
       // re-find (comments loads before replay, so the bridge is here).

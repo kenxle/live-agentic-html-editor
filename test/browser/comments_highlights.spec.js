@@ -302,6 +302,188 @@ test.describe("1D: comments, gestures, and highlights", () => {
     expect(painted.every((h) => h.ranges === 0)).toBe(true);
   });
 
+  // ---------------------------------------------------------------------------
+  // The floating box as the whole interface
+  // ---------------------------------------------------------------------------
+  //
+  // Ken reviews with the rail collapsed, so this small card is everything he
+  // touches. It grows with what he writes, he can move it off the paragraph he
+  // is writing about, and it carries the two controls the keyboard already had.
+
+  // The open box's own geometry, read through the handle, because the box lives
+  // in a closed shadow root the test cannot query.
+  // The rail keeps its own note composer open all session, so "the box" is
+  // always the anchored one: the card floating over the passage.
+  const ANCHORED = `window.__lahe.comments.openBoxes().filter(function (b) {
+    return b.placement === "anchored";
+  })`;
+
+  function anchoredBoxes(page) {
+    return page.evaluate(new Function("return " + ANCHORED + ".length;"));
+  }
+
+  function boxSize(page) {
+    return page.evaluate(new Function("var b = " + ANCHORED + "[0]; return b ? b.size() : null;"));
+  }
+
+  function typeInBox(page, text) {
+    return page.evaluate(new Function("text", ANCHORED + "[0].type(text);"), text);
+  }
+
+  // One of the box's two controls, as a real rectangle a real mouse can hit.
+  function controlRect(page, act) {
+    return page.evaluate(new Function("name", `
+      var box = ${ANCHORED}[0];
+      if (!box || !box.node) return null;
+      var button = box.node.querySelector("[data-lahe-act='" + name + "']");
+      if (!button) return null;
+      var r = button.getBoundingClientRect();
+      return { x: r.x, y: r.y, width: r.width, height: r.height, disabled: !!button.disabled };
+    `), act);
+  }
+
+  async function openBoxOn(page, selector) {
+    await selectElementText(page, selector);
+    await page.keyboard.press("ControlOrMeta+Shift+KeyC");
+  }
+
+  test("the box grows with the text, holds both caps, and shrinks again", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(server.urlFor(FIXTURE));
+    await bootLayer(page);
+    await openBoxOn(page, "#reset-intro");
+
+    const fresh = await boxSize(page);
+    expect(fresh.width).toBe(288);
+
+    // Enough prose to wrap several times. Typed through the handle rather than
+    // the keyboard because the assertion is about the size, not about typing.
+    // Past the three rows a fresh box already shows, which is where growth
+    // starts: below that the box is exactly the size it has always been.
+    await typeInBox(
+      page,
+      "the tone of this whole passage is wrong, and here is the longer explanation of why it is wrong, " +
+        "written out at the length a reviewer actually writes at when they are trying to be understood " +
+        "by an agent that cannot ask them a follow-up question"
+    );
+    const grown = await boxSize(page);
+    expect(grown.height, "the box is taller").toBeGreaterThan(fresh.height);
+    expect(grown.width, "and wider").toBeGreaterThan(fresh.width);
+
+    // Both caps: 40% of an 800px viewport is 320px tall, and the width stops at
+    // 1.5x the starting 288.
+    await typeInBox(page, new Array(200).join("a long sentence that keeps going and going. "));
+    const capped = await boxSize(page);
+    expect(capped.height).toBeLessThanOrEqual(320);
+    expect(capped.width).toBe(432);
+    // Past the cap the words scroll inside the box rather than off the screen.
+    expect(capped.top + capped.height).toBeLessThanOrEqual(800);
+    expect(capped.left + capped.width).toBeLessThanOrEqual(1280);
+
+    // Deleting the text puts it back exactly where it started.
+    await typeInBox(page, "");
+    const shrunk = await boxSize(page);
+    expect(shrunk.width).toBe(fresh.width);
+    expect(Math.round(shrunk.height)).toBe(Math.round(fresh.height));
+  });
+
+  test("the handle drags the box anywhere on screen, keeping the caret and the draft", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(server.urlFor(FIXTURE));
+    await bootLayer(page);
+    await openBoxOn(page, "#reset-intro");
+    await page.keyboard.type("move this out of my way");
+
+    const before = await boxSize(page);
+    expect(before.grip, "the box has a drag handle").toBeTruthy();
+
+    await page.mouse.move(before.grip.x + before.grip.width / 2, before.grip.y + before.grip.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(200, 600, { steps: 8 });
+    await page.mouse.up();
+
+    const moved = await boxSize(page);
+    expect(moved.dragged).toBe(true);
+    expect(Math.abs(moved.left - before.left) + Math.abs(moved.top - before.top)).toBeGreaterThan(40);
+    expect(moved.left).toBeGreaterThanOrEqual(16);
+    expect(moved.top).toBeGreaterThanOrEqual(16);
+    expect(Math.round(moved.left + moved.width)).toBeLessThanOrEqual(1280 - 16);
+    expect(Math.round(moved.top + moved.height)).toBeLessThanOrEqual(800 - 16);
+
+    // The draft is untouched and the reviewer is still in it: they type on.
+    const state = await page.evaluate(function () {
+      return {
+        focused: !!window.__lahe.comments.focusedBox(),
+        note: window.__lahe.comments.openBoxes().filter(function (b) {
+          return b.placement === "anchored";
+        })[0].item.note
+      };
+    });
+    expect(state.note).toBe("move this out of my way");
+    expect(state.focused, "dragging never took the caret out of the box").toBe(true);
+
+    // Growth respects where the box was PUT, not where it was anchored.
+    await page.keyboard.type(
+      " and here is a good deal more text so that the box has to grow again, well past the three rows it " +
+        "opened with, which is the point at which growing starts"
+    );
+    const after = await boxSize(page);
+    expect(Math.round(after.left)).toBe(Math.round(moved.left));
+    expect(after.height).toBeGreaterThan(moved.height);
+
+    // A fresh box anchors as it always did: the position is never persisted.
+    await page.keyboard.press("ControlOrMeta+Enter");
+    await openBoxOn(page, "#reset-scratch");
+    const next = await boxSize(page);
+    expect(next.dragged).toBe(false);
+  });
+
+  test("the Send button commits the item ready, exactly as Cmd-Enter does", async ({ page }) => {
+    await page.goto(server.urlFor(FIXTURE));
+    await bootLayer(page);
+    await openBoxOn(page, "#reset-intro");
+
+    // Nothing to send yet, so nothing is offered.
+    expect((await controlRect(page, "send")).disabled).toBe(true);
+
+    await page.keyboard.type("this says the opposite of the heading");
+    const send = await controlRect(page, "send");
+    expect(send.disabled).toBe(false);
+    await page.mouse.click(send.x + send.width / 2, send.y + send.height / 2);
+
+    const items = await itemsIn(page);
+    expect(items).toHaveLength(1);
+    // The same record the Cmd-Enter test above asserts, field for field.
+    expect(items[0].state).toBe("ready");
+    expect(items[0].note).toBe("this says the opposite of the heading");
+    expect(items[0].rev).toBe(1);
+    expect(items[0].context.quote).toContain("resets list markers away");
+    // The box has done its job and gone, the way Cmd-Enter leaves it.
+    expect(await anchoredBoxes(page)).toBe(0);
+  });
+
+  test("the Delete button discards the draft, and it stays gone across a reload", async ({ page }) => {
+    await page.goto(server.urlFor(FIXTURE));
+    await bootLayer(page, { reviewId: "rev_delete" });
+    await openBoxOn(page, "#reset-intro");
+    await page.keyboard.type("never mind, this one is fine");
+    expect(await itemsIn(page)).toHaveLength(1);
+
+    const del = await controlRect(page, "delete");
+    await page.mouse.click(del.x + del.width / 2, del.y + del.height / 2);
+
+    // No dialog, no box, no record, and no paint.
+    expect(await anchoredBoxes(page)).toBe(0);
+    expect(await itemsIn(page)).toHaveLength(0);
+    const painted = await paintedHighlights(page);
+    expect(painted.every((h) => h.ranges === 0)).toBe(true);
+
+    // Browser storage went with it: the draft does not come back on reload.
+    await page.reload();
+    await bootLayer(page, { reviewId: "rev_delete" });
+    expect(await itemsIn(page)).toHaveLength(0);
+  });
+
   test("every gesture appears as a readable hint line on the rail", async ({ page }) => {
     await page.goto(server.urlFor(FIXTURE));
     await bootLayer(page);

@@ -444,6 +444,10 @@
       if (!mounted) return;
       if (event === "removed") {
         dropRow(item.id);
+        // Deleting the page-note draft takes its box with it, and the composer
+        // at the foot of the thread is meant to stand open all session. A fresh
+        // empty one replaces it, exactly as finishing a note does.
+        if (noteHandle && item.id === noteHandle.id) openNoteBox();
         refreshCount();
         return;
       }

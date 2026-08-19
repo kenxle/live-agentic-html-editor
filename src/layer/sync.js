@@ -535,6 +535,40 @@
     }
 
     /**
+     * The reviewer deleted their own item, so the helper's projection has to
+     * drop it too. Otherwise a comment deleted in the browser stays in
+     * review.json and the agent works on something nobody is asking for.
+     *
+     * ONLY FOR AN ITEM THE HELPER HAS SEEN. A draft deleted before its first
+     * flush was never posted, and a delete naming an item the projection has
+     * never heard of is a line in the log that means nothing.
+     *
+     * @param {Object} item the record as it stood before the delete
+     */
+    function deleteItem(item) {
+      if (readOnly || !item) return null;
+      var id = item[record.FIELD.ID];
+      if (!id || !seenItems[id]) return null;
+      delete seenItems[id];
+      var event = protocol.newEvent({
+        event: protocol.EVENT.ITEM_DELETED,
+        event_id: record.randomId("evt"),
+        review: requireReview(),
+        item: id,
+        rev: item[record.FIELD.REV],
+        page_path: item[record.FIELD.PAGE_PATH],
+        page_title: item[record.FIELD.PAGE_TITLE],
+        page_seq: item[record.FIELD.PAGE_SEQ],
+        source_hint: item[record.FIELD.SOURCE_HINT],
+        payload: { record: item }
+      });
+      store.queueEvent(requireReview(), event);
+      scheduleFlush(0);
+      recomputeStatus();
+      return event;
+    }
+
+    /**
      * The typing path. SYNCHRONOUS and non-blocking: the event is queued in
      * browser storage in this task, and the network happens later or never.
      *
@@ -1463,6 +1497,7 @@
       start: start,
       stop: stop,
       recordItem: recordItem,
+      deleteItem: deleteItem,
       eventFor: eventFor,
       flush: flush,
       commitOnUnload: commitOnUnload,

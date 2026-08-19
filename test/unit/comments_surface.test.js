@@ -199,3 +199,89 @@ test("outstanding is newest first, and a handled item is not outstanding", () =>
   assert.equal(out.length, 1);
   assert.equal(out[0].id, second.id);
 });
+
+// ---------------------------------------------------------------------------
+// How big the box gets, and where its corner lands
+// ---------------------------------------------------------------------------
+//
+// The browser half (test/browser/comments_highlights.spec.js) drives a real
+// textarea and a real pointer. What is here is the arithmetic behind both, which
+// a browser would only make slower to check.
+
+const VIEWPORT = { viewportWidth: 1280, viewportHeight: 800 };
+
+function grow(extra) {
+  return commentsModule.growthFor(
+    Object.assign(
+      {
+        lineHeight: 20,
+        chromeHeight: 60,
+        baseWidth: commentsModule.BOX_WIDTH,
+        top: 100,
+        left: 100
+      },
+      VIEWPORT,
+      extra
+    )
+  );
+}
+
+test("a fresh box is exactly the size it has always been", () => {
+  const size = grow({ contentHeight: 40 });
+  assert.equal(size.inputHeight, commentsModule.INPUT_MIN_HEIGHT, "the floor is today's size");
+  assert.equal(size.width, commentsModule.BOX_WIDTH, "one line stays one width");
+  assert.equal(size.capped, false);
+});
+
+test("the box follows the words: taller with the content, wider once it wraps", () => {
+  const short = grow({ contentHeight: 40 });
+  const longer = grow({ contentHeight: 140 });
+  assert.ok(longer.inputHeight > short.inputHeight, "height follows content");
+  assert.equal(longer.inputHeight, 140);
+  assert.ok(longer.width > short.width, "width follows the line count");
+
+  // ...and back down again when the words are deleted.
+  const shrunk = grow({ contentHeight: 40 });
+  assert.deepEqual(
+    { w: shrunk.width, h: shrunk.inputHeight },
+    { w: short.width, h: short.inputHeight },
+    "deleting text puts the box back"
+  );
+});
+
+test("both caps hold: 40% of the viewport tall, 1.5x the starting width", () => {
+  const huge = grow({ contentHeight: 4000 });
+  assert.equal(huge.boxHeight, Math.round(VIEWPORT.viewportHeight * commentsModule.BOX_MAX_VIEWPORT_SHARE));
+  assert.equal(huge.capped, true, "past the cap the textarea scrolls instead");
+  const cap = Math.min(Math.round(commentsModule.BOX_WIDTH * 1.5), commentsModule.BOX_WIDTH_CAP);
+  assert.equal(huge.width, cap);
+  assert.equal(cap, 432);
+});
+
+test("growth never leaves the viewport: it grows the other way instead", () => {
+  // A box anchored near the foot of the page grows upward, by exactly as much
+  // as it has to, rather than off the bottom edge.
+  const low = grow({ contentHeight: 300, top: 700 });
+  assert.ok(low.top < 700, "the corner moves only because the bottom edge is there");
+  assert.equal(low.top + low.boxHeight, VIEWPORT.viewportHeight - commentsModule.BOX_EDGE);
+
+  const right = grow({ contentHeight: 300, left: 1250 });
+  assert.equal(right.left + right.width, VIEWPORT.viewportWidth - commentsModule.BOX_EDGE);
+
+  // A box with room grows down and right from where it is, and does not move.
+  const roomy = grow({ contentHeight: 300, top: 100, left: 100 });
+  assert.deepEqual({ top: roomy.top, left: roomy.left }, { top: 100, left: 100 });
+});
+
+test("a dragged box is kept whole on screen", () => {
+  const box = { width: 300, height: 200, viewportWidth: 1280, viewportHeight: 800 };
+  const inside = commentsModule.dragTo(Object.assign({ left: 400, top: 300 }, box));
+  assert.deepEqual(inside, { left: 400, top: 300 }, "a drag with room lands where it was put");
+
+  const offTop = commentsModule.dragTo(Object.assign({ left: -80, top: -80 }, box));
+  assert.deepEqual(offTop, { left: commentsModule.BOX_EDGE, top: commentsModule.BOX_EDGE });
+
+  const offEnd = commentsModule.dragTo(Object.assign({ left: 5000, top: 5000 }, box));
+  assert.equal(offEnd.left + box.width, 1280 - commentsModule.BOX_EDGE);
+  assert.equal(offEnd.top + box.height, 800 - commentsModule.BOX_EDGE);
+});

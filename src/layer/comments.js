@@ -344,6 +344,49 @@
     "  box-shadow: none;",
     "  border-color: rgba(17, 17, 17, 0.16);",
     "}",
+    // The drag strip. The rail's dotted idiom, quiet enough to read as texture
+    // until the reviewer wants to move the box.
+    ".lahe-comment-grip {",
+    "  height: 10px;",
+    "  margin: -4px -4px 0 -4px;",
+    "  border-radius: 6px;",
+    "  cursor: grab;",
+    "  touch-action: none;",
+    "  user-select: none;",
+    "  -webkit-user-select: none;",
+    "  background-image: radial-gradient(rgba(17,17,17,0.28) 1px, transparent 1px);",
+    "  background-size: 5px 5px;",
+    "  background-position: center;",
+    "  background-repeat: repeat-x;",
+    "}",
+    "." + BOX_CLASS + "[data-lahe-placement='inline'] .lahe-comment-grip { display: none; }",
+    "." + BOX_CLASS + "[data-lahe-dragging='true'] { user-select: none; -webkit-user-select: none; }",
+    "." + BOX_CLASS + "[data-lahe-dragging='true'] .lahe-comment-grip { cursor: grabbing; }",
+    // The two controls, in the rail's own card-action register: small, outlined,
+    // under the reviewer's sentence and never competing with it.
+    ".lahe-comment-acts {",
+    "  display: flex;",
+    "  align-items: center;",
+    "  justify-content: space-between;",
+    "  gap: 8px;",
+    "}",
+    ".lahe-comment-act {",
+    "  font: inherit;",
+    "  font-size: 11.5px;",
+    "  font-weight: 550;",
+    "  color: rgba(17, 17, 17, 0.62);",
+    "  border: 1px solid rgba(17, 17, 17, 0.12);",
+    "  border-radius: 7px;",
+    "  padding: 3px 9px;",
+    "  background: #ffffff;",
+    "  cursor: pointer;",
+    "}",
+    ".lahe-comment-act:hover { color: #111111; background: rgba(17, 17, 17, 0.04); }",
+    ".lahe-comment-act:focus-visible { outline: 2px solid rgba(60, 86, 165, 0.9); outline-offset: 1px; }",
+    ".lahe-comment-act[disabled] { opacity: 0.45; cursor: default; }",
+    ".lahe-comment-act--quiet { border-color: transparent; background: none; padding: 3px 5px; }",
+    ".lahe-comment-act--quiet:hover { background: rgba(17, 17, 17, 0.04);",
+    "  border-color: rgba(17, 17, 17, 0.08); }",
     ".lahe-comment-quote {",
     "  margin: 0;",
     "  padding-left: 8px;",
@@ -405,8 +448,130 @@
     ":host([data-lahe-scheme='dark']) .lahe-comment-quote { color: rgba(242,242,242,0.66);",
     "  border-left-color: rgba(147, 167, 234, 0.8); }",
     ":host([data-lahe-scheme='dark']) .lahe-comment-foot { color: rgba(242,242,242,0.55); }",
+    ":host([data-lahe-scheme='dark']) .lahe-comment-grip {",
+    "  background-image: radial-gradient(rgba(255,255,255,0.3) 1px, transparent 1px); }",
+    ":host([data-lahe-scheme='dark']) .lahe-comment-act { color: rgba(242,242,242,0.66);",
+    "  background: #1b1b1d; border-color: rgba(255,255,255,0.16); }",
+    ":host([data-lahe-scheme='dark']) .lahe-comment-act:hover { color: #f2f2f2;",
+    "  background: rgba(255,255,255,0.06); }",
+    ":host([data-lahe-scheme='dark']) .lahe-comment-act--quiet { border-color: transparent; background: none; }",
     PILL_STYLE
   ].join("\n");
+
+  // ---------------------------------------------------------------------------
+  // How big the box is, and where its corner sits
+  // ---------------------------------------------------------------------------
+  //
+  // The box grows with what the reviewer writes. Ken reviews with the rail
+  // collapsed, so this small floating card is the whole interface, and a
+  // three-line input that scrolls internally after the third line is the whole
+  // interface being too small.
+  //
+  // The growth is driven from the textarea's own scrollHeight rather than from
+  // CSS field-sizing, which only Chromium has: this layer supports current
+  // Chrome, Edge, Safari and Firefox.
+  //
+  // The math is pure and lives out here, so it is unit-testable with no browser
+  // and so the drag path and the growth path cannot disagree about where the
+  // corner is allowed to be.
+
+  // The box's starting width, and the one positionAt measures against.
+  var BOX_WIDTH = 288;
+  // The textarea's floor: today's size, so a fresh box looks exactly as it did.
+  var INPUT_MIN_HEIGHT = 66;
+  // The box's ceiling, as a share of the viewport. Past it the textarea scrolls.
+  var BOX_MAX_VIEWPORT_SHARE = 0.4;
+  // Width grows a step per wrapped line, up to the smaller of 1.5x the starting
+  // width and this. 288 * 1.5 = 432, so 432 is the cap in practice.
+  var BOX_WIDTH_CAP = 480;
+  var BOX_WIDTH_STEP = 24;
+  // How close to the viewport edge the box may sit.
+  var BOX_EDGE = 16;
+
+  function clamp(value, low, high) {
+    if (high < low) return low;
+    if (value < low) return low;
+    if (value > high) return high;
+    return value;
+  }
+
+  /**
+   * The box's size and corner for the content it is holding right now.
+   *
+   * @param {Object} m
+   *   contentHeight  the textarea's scrollHeight with its height released
+   *   lineHeight     one line of the textarea, in pixels
+   *   chromeHeight   everything of the box that is not the textarea
+   *   baseWidth      the width a fresh box opens at
+   *   top, left      the corner the box is anchored (or was dragged) to
+   *   viewportWidth, viewportHeight
+   * @returns {{width: number, inputHeight: number, boxHeight: number,
+   *            top: number, left: number, capped: boolean}}
+   */
+  function growthFor(m) {
+    var g = m || {};
+    var vw = g.viewportWidth > 0 ? g.viewportWidth : 1024;
+    var vh = g.viewportHeight > 0 ? g.viewportHeight : 768;
+    var lineHeight = g.lineHeight > 0 ? g.lineHeight : 20;
+    var chrome = g.chromeHeight > 0 ? g.chromeHeight : 0;
+    var baseWidth = g.baseWidth > 0 ? g.baseWidth : BOX_WIDTH;
+    // The textarea's resting height: what it measures with nothing typed in it.
+    // The constant is the floor, but the real number is whatever the page's own
+    // font makes of three rows, and the box must not read its own resting size
+    // as growth and open one step too wide.
+    var restHeight = Math.max(INPUT_MIN_HEIGHT, g.restHeight > 0 ? g.restHeight : INPUT_MIN_HEIGHT);
+
+    // Height. The cap is on the whole box, so the textarea gets what is left of
+    // it once the quote and the footer have taken theirs.
+    var boxCap = Math.round(vh * BOX_MAX_VIEWPORT_SHARE);
+    var inputCap = Math.max(restHeight, boxCap - chrome);
+    var wanted = g.contentHeight > 0 ? Math.ceil(g.contentHeight) : restHeight;
+    var inputHeight = clamp(wanted, restHeight, inputCap);
+    var capped = wanted > inputCap;
+
+    // Width. The box stays exactly the size it opened at until the reviewer has
+    // written past the input it opened with, then widens a step per line beyond
+    // it. Measured from the content rather than from the applied height, so the
+    // three lines a fresh box already shows do not count as growth.
+    var lines = 1 + Math.max(0, Math.ceil((wanted - restHeight) / lineHeight));
+    var widthCap = Math.min(Math.round(baseWidth * 1.5), BOX_WIDTH_CAP);
+    var roomy = Math.max(baseWidth, vw - BOX_EDGE * 2);
+    var width = clamp(baseWidth + BOX_WIDTH_STEP * (lines - 1), baseWidth, Math.min(widthCap, roomy));
+
+    // The corner. Growth goes down and to the right from where the box is, so
+    // the words already on screen do not move under the caret. It only moves
+    // when growing that way would put the box off screen, and then it moves by
+    // exactly as much as it has to.
+    var boxHeight = inputHeight + chrome;
+    var left = typeof g.left === "number" ? g.left : BOX_EDGE;
+    var top = typeof g.top === "number" ? g.top : BOX_EDGE;
+    left = clamp(left, BOX_EDGE, Math.max(BOX_EDGE, vw - BOX_EDGE - width));
+    top = clamp(top, BOX_EDGE, Math.max(BOX_EDGE, vh - BOX_EDGE - boxHeight));
+
+    return {
+      width: width,
+      inputHeight: inputHeight,
+      boxHeight: boxHeight,
+      top: top,
+      left: left,
+      capped: capped
+    };
+  }
+
+  /**
+   * Where a dragged box lands: the pointer's own offset into it, kept whole on
+   * screen. Same clamp as growth, so a dragged box and a grown one obey one
+   * rule about the edges.
+   */
+  function dragTo(m) {
+    var g = m || {};
+    var vw = g.viewportWidth > 0 ? g.viewportWidth : 1024;
+    var vh = g.viewportHeight > 0 ? g.viewportHeight : 768;
+    return {
+      left: clamp(g.left || 0, BOX_EDGE, Math.max(BOX_EDGE, vw - BOX_EDGE - (g.width || 0))),
+      top: clamp(g.top || 0, BOX_EDGE, Math.max(BOX_EDGE, vh - BOX_EDGE - (g.height || 0)))
+    };
+  }
 
   function createComments(options) {
     var opts = options || {};
@@ -634,6 +799,15 @@
       var node = null;
       var inputEl = null;
       var stateEl = null;
+      var gripEl = null;
+      var sendEl = null;
+      var deleteEl = null;
+      // Where the reviewer PUT the box, once they have moved it. Null until
+      // then, and never persisted: a fresh box anchors to its passage the way
+      // it always has, on this page load and on the next one.
+      var dragPos = null;
+      var dragFrom = null;
+      var restHeight = null;
       // A session the reviewer started by typing in the card's own words: the
       // note node IS the input, so no box is built and none is torn down.
       var inNote = (src && src.inputNode) || null;
@@ -662,6 +836,17 @@
         markers.markChrome(node);
         node.setAttribute("data-lahe-item", id);
         node.setAttribute("data-lahe-placement", placement);
+
+        // The drag strip, first, so the reviewer grabs the box by its top edge
+        // the way they grab any window. Hidden on an inline box: a box inside
+        // the rail's own thread has nowhere to be dragged to.
+        gripEl = doc.createElement("div");
+        gripEl.className = "lahe-comment-grip";
+        gripEl.setAttribute("data-lahe-grip", "");
+        gripEl.setAttribute("aria-hidden", "true");
+        gripEl.setAttribute("title", "Drag to move this box");
+        markers.markChrome(gripEl);
+        node.appendChild(gripEl);
 
         var quote = item[record.FIELD.CONTEXT] ? item[record.FIELD.CONTEXT].quote : null;
         if (quote) {
@@ -695,11 +880,51 @@
         foot.appendChild(stateEl);
         node.appendChild(foot);
 
+        // The two controls. Neither is a second way of doing anything: Send runs
+        // the very function Cmd-Enter runs, and Delete runs the very remove path
+        // the rail's own Delete runs.
+        var acts = doc.createElement("div");
+        acts.className = "lahe-comment-acts";
+        deleteEl = actionButton("Delete", "lahe-comment-act lahe-comment-act--quiet", "delete", discardDraft);
+        sendEl = actionButton("Send", "lahe-comment-act", "send", commitFromControl);
+        acts.appendChild(deleteEl);
+        acts.appendChild(sendEl);
+        node.appendChild(acts);
+
         inputEl.addEventListener("input", onInput);
         inputEl.addEventListener("keydown", onKeydown);
+        bindGrip();
 
         if (host) host.appendChild(node);
         if (placement === "anchored") positionAt(node, src && src.range ? src.range : null);
+        paintSendable();
+        grow();
+      }
+
+      /**
+       * One small control on the box, wired so pressing it never takes the
+       * caret out of the textarea.
+       *
+       * The mousedown preventDefault is the whole of that: without it the press
+       * blurs the input, and on a box that closes on focusout (a rewording in a
+       * card's own note) the session ends before the click ever arrives.
+       */
+      function actionButton(label, className, act, run) {
+        var button = doc.createElement("button");
+        button.type = "button";
+        button.className = className;
+        button.setAttribute("data-lahe-act", act);
+        button.textContent = label;
+        markers.markChrome(button);
+        button.addEventListener("mousedown", function (event) {
+          event.preventDefault();
+        });
+        button.addEventListener("click", function (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          run();
+        });
+        return button;
       }
 
       // The note this box last COMMITTED. A rewording is measured against it, so
@@ -736,6 +961,175 @@
         type(readInput());
       }
 
+      /**
+       * Fit the box to what is in it: the textarea's height follows its own
+       * content, and the box widens once the text has passed one line.
+       *
+       * Both numbers come from growthFor, which caps the height at 40% of the
+       * viewport (the textarea scrolls past that) and the width at the smaller
+       * of 1.5x the starting width and 480px. Everything it needs is measured
+       * here; the decisions are all out there, where a unit test can reach them.
+       */
+      function grow() {
+        if (!node || !inputEl || inNote || !win || !node.isConnected) return null;
+        var measure = inputEl.style.height;
+        // Released first, so the scrollHeight read is the content's own height
+        // rather than the height this function set last time. Without it the
+        // box could grow and never shrink.
+        inputEl.style.height = "auto";
+        var content = inputEl.scrollHeight;
+        var boxRect = node.getBoundingClientRect();
+        var inputRect = inputEl.getBoundingClientRect();
+        var chrome = Math.max(0, boxRect.height - inputRect.height);
+        inputEl.style.height = measure;
+
+        var lineHeight = 20;
+        if (win.getComputedStyle) {
+          var parsed = parseFloat(win.getComputedStyle(inputEl).lineHeight);
+          if (parsed > 0) lineHeight = parsed;
+        }
+
+        // Measured once, from the box as it opened. It is the datum for "has
+        // this grown at all", so it has to be taken before anything is typed.
+        if (restHeight === null) restHeight = content;
+
+        var size = growthFor({
+          restHeight: restHeight,
+          contentHeight: content,
+          lineHeight: lineHeight,
+          chromeHeight: chrome,
+          baseWidth: BOX_WIDTH,
+          top: dragPos ? dragPos.top : boxRect.top,
+          left: dragPos ? dragPos.left : boxRect.left,
+          viewportWidth: win.innerWidth,
+          viewportHeight: win.innerHeight
+        });
+
+        inputEl.style.height = size.inputHeight + "px";
+        inputEl.style.overflowY = size.capped ? "auto" : "hidden";
+        if (placement !== "anchored") return size;
+        node.style.width = size.width + "px";
+        node.style.top = Math.round(size.top) + "px";
+        node.style.left = Math.round(size.left) + "px";
+        // A box that has been moved keeps the corner growth left it at, so the
+        // next keystroke does not walk it back toward its passage.
+        if (dragPos) dragPos = { top: size.top, left: size.left };
+        return size;
+      }
+
+      // ----------------------------------------------------------------------
+      // Moving the box
+      // ----------------------------------------------------------------------
+      //
+      // Ken reviews with the rail collapsed, so this box is the interface, and
+      // an interface that lands on the paragraph being discussed has to be
+      // movable. It is a pointer drag on the top strip and nothing else: no
+      // keyboard gesture is added, and none is taken away.
+
+      function bindGrip() {
+        if (!gripEl) return null;
+        gripEl.addEventListener("pointerdown", onGripDown);
+        gripEl.addEventListener("pointermove", onGripMove);
+        gripEl.addEventListener("pointerup", onGripUp);
+        gripEl.addEventListener("pointercancel", onGripUp);
+        return gripEl;
+      }
+
+      function onGripDown(event) {
+        if (placement !== "anchored" || !node || !win) return;
+        if (typeof event.button === "number" && event.button !== 0) return;
+        // THE DEFAULT IS THE PROBLEM, NOT THE EVENT. A press on the box's own
+        // chrome selects text and moves focus; preventing it is what keeps the
+        // caret and the draft exactly where they were through the drag.
+        event.preventDefault();
+        var rect = node.getBoundingClientRect();
+        dragFrom = {
+          dx: event.clientX - rect.left,
+          dy: event.clientY - rect.top,
+          width: rect.width,
+          height: rect.height
+        };
+        node.setAttribute("data-lahe-dragging", "true");
+        if (typeof gripEl.setPointerCapture === "function" && event.pointerId !== undefined) {
+          try {
+            gripEl.setPointerCapture(event.pointerId);
+          } catch (err) {
+            // A pointer the engine will not let us capture still drags: the
+            // move events keep arriving on this node while the button is down.
+            dragFrom.captured = false;
+          }
+        }
+      }
+
+      function onGripMove(event) {
+        if (!dragFrom || !node || !win) return;
+        event.preventDefault();
+        var placed = dragTo({
+          left: event.clientX - dragFrom.dx,
+          top: event.clientY - dragFrom.dy,
+          width: dragFrom.width,
+          height: dragFrom.height,
+          viewportWidth: win.innerWidth,
+          viewportHeight: win.innerHeight
+        });
+        dragPos = placed;
+        node.style.top = Math.round(placed.top) + "px";
+        node.style.left = Math.round(placed.left) + "px";
+      }
+
+      function onGripUp(event) {
+        if (!dragFrom) return;
+        dragFrom = null;
+        if (node) node.removeAttribute("data-lahe-dragging");
+        if (gripEl && typeof gripEl.releasePointerCapture === "function" && event.pointerId !== undefined) {
+          try {
+            gripEl.releasePointerCapture(event.pointerId);
+          } catch (err) {
+            // Already released with the pointer itself. Nothing to undo.
+          }
+        }
+      }
+
+      // ----------------------------------------------------------------------
+      // The two buttons
+      // ----------------------------------------------------------------------
+
+      /** Send: the Cmd-Enter path, called by the key and by the button alike. */
+      function commitFromControl() {
+        var next = markReady();
+        // A box has done its job and goes. A session in a card's own note stays
+        // where it is with the reviewer still in it.
+        if (!inNote) close();
+        return next;
+      }
+
+      /**
+       * Delete: the draft goes, with no dialog. Drafts are cheap, and a
+       * confirm() would block the reviewed page.
+       *
+       * It is the module's own remove path, so browser storage, the highlight,
+       * the rail's row and the helper's log all hear about it exactly once. A
+       * note box that has never been typed in has no record to remove, so it
+       * simply closes.
+       */
+      function discardDraft() {
+        var existing = store.readItem(requireReview(), id);
+        if (existing) return remove(id);
+        writeInput("");
+        close();
+        return false;
+      }
+
+      /**
+       * Send is offered only when there is something to send. The keyboard path
+       * is untouched: Cmd-Enter does what it has always done.
+       */
+      function paintSendable() {
+        if (!sendEl) return null;
+        sendEl.disabled = !readInput().trim();
+        return sendEl;
+      }
+
       function onFocusOut() {
         close();
       }
@@ -751,11 +1145,10 @@
         });
         if (got.gesture === gestures.GESTURE.MARK_READY) {
           if (got.preventDefault) event.preventDefault();
-          markReady();
-          // A box has done its job and goes. The card's own note stays where it
-          // is with the reviewer still in it: they are looking at the words they
-          // just committed, and typing on is simply the next rewording.
-          if (!inNote) close();
+          // The very function the Send button calls. The card's own note stays
+          // where it is with the reviewer still in it: they are looking at the
+          // words they just committed, and typing on is the next rewording.
+          commitFromControl();
         } else if (got.gesture === gestures.GESTURE.CANCEL) {
           if (got.preventDefault) event.preventDefault();
           // Esc cancels the thing that is open. Picking is more recent than
@@ -826,6 +1219,10 @@
         }
         store.write(requireReview(), next);
         writeInput(next[record.FIELD.NOTE]);
+        // The box fits itself to the words on every keystroke, whether the
+        // keystroke came from a keyboard or from a caller driving this handle.
+        paintSendable();
+        grow();
         paintState(next);
         emit(next, "typed");
         return next;
@@ -886,6 +1283,24 @@
         stateEl.textContent = next[record.FIELD.STATE] === record.STATE.READY ? "Ready" : "Draft";
       }
 
+      /**
+       * Take the box down WITHOUT committing anything.
+       *
+       * The one caller is remove(): the record is about to be deleted, and
+       * close()'s ordinary reword flush would write the deleted words straight
+       * back into storage, which is a draft that resurrects itself.
+       */
+      function discard() {
+        sessionOff.forEach(function (off) {
+          off();
+        });
+        sessionOff = [];
+        if (!inNote && node && node.parentNode) node.parentNode.removeChild(node);
+        delete open[id];
+        if (highlights) highlights.setActive(id, false);
+        return true;
+      }
+
       function close() {
         // Closing ends a rewording session as surely as Cmd-Enter does, so the
         // words the reviewer leaves behind are committed at one revision here
@@ -929,10 +1344,34 @@
         },
         node: node,
         input: inputEl,
+        grip: gripEl,
+        send: sendEl,
         placement: placement,
         focus: focus,
         type: type,
         markReady: markReady,
+        // What the box measures to right now, for a caller that cannot reach
+        // into the closed root: the specs' way in.
+        size: function () {
+          if (!node || !node.isConnected) return null;
+          var rect = node.getBoundingClientRect();
+          var grip = gripEl ? gripEl.getBoundingClientRect() : null;
+          var field = inputEl && inputEl.getBoundingClientRect ? inputEl.getBoundingClientRect() : null;
+          return {
+            width: rect.width,
+            height: rect.height,
+            top: rect.top,
+            left: rect.left,
+            dragged: !!dragPos,
+            sendDisabled: sendEl ? !!sendEl.disabled : null,
+            input: field ? { width: field.width, height: field.height } : null,
+            grip: grip ? { x: grip.x, y: grip.y, width: grip.width, height: grip.height } : null
+          };
+        },
+        grow: grow,
+        commit: commitFromControl,
+        discardDraft: discardDraft,
+        discard: discard,
         // Ending a rewording session without closing the box. Cmd-Enter and
         // close both go through it; this is the same seam for a caller that has
         // neither.
@@ -951,7 +1390,8 @@
     // the rail; when that space is wide enough the box goes there, beside its
     // passage, and nothing is covered. Below is the fallback for a page whose
     // content runs the full width.
-    var BOX_WIDTH = 288;
+    // BOX_WIDTH is the module's, shared with the growth math: placement and
+    // growth have to agree about how wide a fresh box is.
     var GUTTER_GAP = 14;
     // Roughly the box's own height, for the "is there room below" question. The
     // box is measured when it is on screen; before that this is the estimate.
@@ -1614,10 +2054,18 @@
     // ------------------------------------------------------------------------
 
     function remove(id) {
+      // The box goes FIRST, and it goes without committing. close() ends a
+      // rewording session by writing the words back, so closing after the
+      // delete put the record straight back into storage and the draft came
+      // back on the next reload.
+      var doomed = store.readItem(requireReview(), id);
+      if (open[id]) open[id].discard();
       var removed = store.remove(requireReview(), id);
-      if (open[id]) open[id].close();
       if (highlights) highlights.clear(id);
-      if (removed) emit({ id: id }, "removed");
+      // The whole record, not just its id: the helper's log needs the revision
+      // and the page the deleted item belonged to, and the rail reads the id
+      // off it either way.
+      if (removed) emit(doomed || { id: id }, "removed");
       return removed;
     }
 
@@ -1927,6 +2375,13 @@
     POPOVER_DELAY_MS: POPOVER_DELAY_MS,
     HINT_READY: HINT_READY,
     BOX_STYLE: BOX_STYLE,
+    BOX_WIDTH: BOX_WIDTH,
+    BOX_WIDTH_CAP: BOX_WIDTH_CAP,
+    BOX_MAX_VIEWPORT_SHARE: BOX_MAX_VIEWPORT_SHARE,
+    INPUT_MIN_HEIGHT: INPUT_MIN_HEIGHT,
+    BOX_EDGE: BOX_EDGE,
+    growthFor: growthFor,
+    dragTo: dragTo,
     createComments: createComments
   };
 });
