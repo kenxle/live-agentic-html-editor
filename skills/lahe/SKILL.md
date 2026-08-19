@@ -140,6 +140,12 @@ then append one reply JSON line with the current item revision to your own
 reply file. The page reloads itself. Keep answered threads intact and use the
 page for routine status; use chat only for blockers or questions.
 
+Set `"user_needs_to_see_reply": true` on a reply the reviewer should actually
+read: an answer to them, a caveat, a judgment call, or a change you made
+differently than asked. It is what the rail's unread badge counts, so leave it
+off a routine confirmation. A `question` or `not_handled` reply reaches them
+regardless.
+
 Run the printed `lahe session close <id>` command when the agent session ends.
 That stops its owned servers and stops the shared helper after the final open
 session closes while retaining review history. Stop this session's wake tail or

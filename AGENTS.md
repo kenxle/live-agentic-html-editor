@@ -305,6 +305,14 @@ Inside the review folder:
 Always echo the item's `rev`: if the reviewer reworded the item after you read
 it, your line is refused and the item stays open, which is correct.
 
+Add `"user_needs_to_see_reply": true` when the reply is worth the reviewer's
+attention: an answer to something they asked, a caveat, a judgment call, or a
+change you made differently than asked. That flag is what the rail's unread
+badge counts. Leave it off a routine confirmation ("carried this into the
+source") so the badge keeps meaning something. A `question` or `not_handled`
+reply reaches the reviewer either way, flag or no flag. An unflagged `handled`
+reply still shows on its card in Done; it just does not interrupt.
+
 ### If the page is build output, REBUILD BEFORE YOU REPLY
 
 This is a hard rule, not a preference. For a generated page, the item's

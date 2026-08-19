@@ -365,7 +365,12 @@ function createReplyFolder(options) {
           agent: reply[protocol.REPLY_FIELD.AGENT],
           reason: reply[protocol.REPLY_FIELD.REASON],
           text: reply[protocol.REPLY_FIELD.TEXT],
-          files: reply[protocol.REPLY_FIELD.FILES]
+          files: reply[protocol.REPLY_FIELD.FILES],
+          // The agent's own judgment about whether this answer is worth
+          // interrupting the reviewer for. Carried through the fold because the
+          // badge in the rail is the only thing that reads it, and the rail
+          // only ever sees what the helper folded.
+          user_needs_to_see_reply: reply[protocol.REPLY_FIELD.NEEDS_SEE] === true
         }
       }
     });

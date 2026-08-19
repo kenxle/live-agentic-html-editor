@@ -48,7 +48,10 @@
   // 10: older helpers never append wake-feed lines and omit agent_liveness, so
   // a tail-armed agent would sleep through work and the rail could not tell
   // whether an agent is watching. They must be restarted.
-  var SERVICE_CONTRACT = 10;
+  // 11: older helpers drop user_needs_to_see_reply during the reply fold, so a
+  // flagged reply would silently lose its flag and never badge the reviewer.
+  // They must be restarted.
+  var SERVICE_CONTRACT = 11;
   var BASE = "/lahe/" + API_VERSION;
 
   // ---------------------------------------------------------------------------
@@ -634,7 +637,14 @@
   // nowhere else:
   //
   //   {"item":"<item-id>","rev":<n>,"status":"handled|not_handled|question",
-  //    "agent":"<name>","reason":"<why not>","text":"<the question>","files":["<path>"]}
+  //    "agent":"<name>","reason":"<why not>","text":"<the question>","files":["<path>"],
+  //    "user_needs_to_see_reply":true}
+  //
+  // `user_needs_to_see_reply` is how an agent says this answer is worth the
+  // reviewer's attention: an answer to them, a caveat, a judgment call, a change
+  // made differently than asked. It is what the unread badge counts, so a
+  // routine "carried this into the source" no longer interrupts anyone. A
+  // `question` or `not_handled` reply counts with or without it.
 
   var REPLY_FIELD = {
     ITEM: "item",
@@ -643,7 +653,8 @@
     AGENT: "agent",
     REASON: "reason",
     TEXT: "text",
-    FILES: "files"
+    FILES: "files",
+    NEEDS_SEE: "user_needs_to_see_reply"
   };
 
   var REPLY_STATUS = { HANDLED: "handled", NOT_HANDLED: "not_handled", QUESTION: "question" };
@@ -727,6 +738,12 @@
     reply[REPLY_FIELD.REASON] = typeof parsed[REPLY_FIELD.REASON] === "string" ? parsed[REPLY_FIELD.REASON] : null;
     reply[REPLY_FIELD.TEXT] = typeof parsed[REPLY_FIELD.TEXT] === "string" ? parsed[REPLY_FIELD.TEXT] : null;
     reply[REPLY_FIELD.FILES] = Array.isArray(parsed[REPLY_FIELD.FILES]) ? parsed[REPLY_FIELD.FILES].slice() : [];
+    // Optional, and lenient like every other optional field above: only the
+    // literal boolean true sets it, and anything else ("true", 1, an object)
+    // drops to false rather than costing the agent the whole line. Losing a
+    // badge is a smaller failure than losing the answer, and question and
+    // not_handled replies reach the reviewer without this field anyway.
+    reply[REPLY_FIELD.NEEDS_SEE] = parsed[REPLY_FIELD.NEEDS_SEE] === true;
     return { ok: true, reply: reply, reason: null };
   }
 

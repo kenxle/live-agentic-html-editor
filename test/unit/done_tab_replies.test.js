@@ -52,6 +52,31 @@ function readyItem(overrides) {
   );
 }
 
+/** A routine confirmation: handled, and the agent did not flag it. */
+function plainReply() {
+  return { status: "handled", agent: "claude", at: "2026-08-19T10:00:00.000Z" };
+}
+
+/** The same reply, flagged as something the reviewer should read. */
+function flaggedReply() {
+  return Object.assign(plainReply(), { user_needs_to_see_reply: true });
+}
+
+/** A fold whose reply the agent flagged, which is what the badge counts. */
+function flaggedFoldEvent(item, extra) {
+  return foldEvent(item, {
+    payload: Object.assign(
+      {
+        accepted: true,
+        state: record.STATE.HANDLED,
+        file: "replies-claude.jsonl",
+        reply: { status: "handled", agent: "claude", files: [], user_needs_to_see_reply: true }
+      },
+      extra || {}
+    )
+  });
+}
+
 function foldEvent(item, fields) {
   return protocol.newEvent(
     Object.assign(
@@ -337,9 +362,9 @@ test("NEW-1: reopening bumps the rev, so a stale same-rev fold cannot re-bury th
 // An agent's reply used to move the item to Done and say nothing at all. The
 // rule under the badge is here; what the reviewer sees is a browser test.
 
-test("unseenReplyIds counts an item whose reply the reviewer has no mark for", () => {
+test("unseenReplyIds counts an item whose flagged reply the reviewer has no mark for", () => {
   const item = readyItem({ id: "itm_a" });
-  item.reply = { status: "handled", agent: "claude", at: "2026-08-19T10:00:00.000Z" };
+  item.reply = flaggedReply();
 
   assert.deepEqual(tabDone.unseenReplyIds([item], {}), ["itm_a"]);
   assert.deepEqual(
@@ -353,9 +378,45 @@ test("unseenReplyIds ignores an item with no reply at all", () => {
   assert.deepEqual(tabDone.unseenReplyIds([readyItem({ id: "itm_b" })], {}), []);
 });
 
+test("a handled reply the agent did not flag is not something the reviewer has to read", () => {
+  const item = readyItem({ id: "itm_routine" });
+  item.reply = plainReply();
+  assert.equal(tabDone.needsToSeeReply(item.reply), false);
+  assert.deepEqual(
+    tabDone.unseenReplyIds([item], {}),
+    [],
+    "carried this change into the source is not news"
+  );
+});
+
+test("a question and a refusal count without the flag; the flag only decides a handled reply", () => {
+  const asking = readyItem({ id: "itm_q" });
+  asking.reply = { status: "question", agent: "claude", text: "which heading?", at: "2026-08-19T10:00:00.000Z" };
+  const refused = readyItem({ id: "itm_n" });
+  refused.reply = { status: "not_handled", agent: "claude", reason: "no such file", at: "2026-08-19T10:00:00.000Z" };
+
+  assert.equal(tabDone.needsToSeeReply(asking.reply), true, "a question needs an answer");
+  assert.equal(tabDone.needsToSeeReply(refused.reply), true, "a refusal needs its reason read");
+  assert.deepEqual(tabDone.unseenReplyIds([asking, refused], {}), ["itm_q", "itm_n"]);
+
+  // And the flag is the only thing that separates two handled replies.
+  assert.equal(tabDone.needsToSeeReply(plainReply()), false);
+  assert.equal(tabDone.needsToSeeReply(flaggedReply()), true);
+});
+
+test("only the literal boolean true is a flag", () => {
+  ["true", 1, {}, null, undefined].forEach((value) => {
+    assert.equal(
+      tabDone.needsToSeeReply(Object.assign(plainReply(), { user_needs_to_see_reply: value })),
+      false,
+      "a " + JSON.stringify(value) + " flag is not a flag"
+    );
+  });
+});
+
 test("a SECOND reply on the same item reads as unseen again", () => {
   const item = readyItem({ id: "itm_c" });
-  item.reply = { status: "handled", agent: "claude", at: "2026-08-19T10:00:00.000Z" };
+  item.reply = flaggedReply();
   const marks = tabDone.seenMarksFor([item]);
   assert.deepEqual(tabDone.unseenReplyIds([item], marks), []);
 
@@ -363,25 +424,25 @@ test("a SECOND reply on the same item reads as unseen again", () => {
   // later revision. A boolean mark would have swallowed this one.
   const answered = Object.assign({}, item, {
     rev: item.rev + 1,
-    reply: { status: "handled", agent: "claude", at: "2026-08-19T11:30:00.000Z" }
+    reply: Object.assign(flaggedReply(), { at: "2026-08-19T11:30:00.000Z" })
   });
   assert.deepEqual(tabDone.unseenReplyIds([answered], marks), ["itm_c"]);
 });
 
 test("seenMarksFor drops an item that no longer carries a reply, so the bucket cannot grow forever", () => {
   const answered = readyItem({ id: "itm_d" });
-  answered.reply = { status: "handled", agent: "claude", at: "2026-08-19T10:00:00.000Z" };
+  answered.reply = plainReply();
   const marks = tabDone.seenMarksFor([answered, readyItem({ id: "itm_e" })]);
   assert.deepEqual(Object.keys(marks), ["itm_d"]);
 });
 
-test("a fold while the reviewer is on another tab leaves an unseen reply, and the Done tab carries the count", () => {
+test("a flagged fold while the reviewer is on another tab leaves an unseen reply, and the Done tab carries the count", () => {
   const { store, rail, done } = setup();
   const item = store.write(REVIEW, readyItem());
   rail.upsertCard(item);
   assert.equal(rail.currentTab(), overlay.TAB.ACTIVE, "the reviewer is writing, not reading");
 
-  done.applyReplies([foldEvent(item)]);
+  done.applyReplies([flaggedFoldEvent(item)]);
   assert.deepEqual(done.unseenIds(), [item.id]);
   assert.equal(rail.tabNewCount(overlay.TAB.DONE), 1);
 
@@ -398,9 +459,69 @@ test("a fold that lands while the reviewer is already on Done is read on arrival
   rail.upsertCard(item);
   rail.selectTab(overlay.TAB.DONE);
 
-  done.applyReplies([foldEvent(item)]);
+  done.applyReplies([flaggedFoldEvent(item)]);
   assert.deepEqual(done.unseenIds(), [], "it arrived in front of them, so there is nothing to flag");
   assert.equal(rail.tabNewCount(overlay.TAB.DONE), 0);
+});
+
+test("an unflagged handled reply never badges, and is marked seen the moment it folds", () => {
+  const { store, rail, done } = setup();
+  const item = store.write(REVIEW, readyItem());
+  rail.upsertCard(item);
+  assert.equal(rail.currentTab(), overlay.TAB.ACTIVE, "the reviewer is not looking at Done");
+
+  done.applyReplies([foldEvent(item)]);
+
+  const stored = store.readItem(REVIEW, item.id);
+  assert.equal(stored.state, record.STATE.HANDLED, "it still retires the item");
+  assert.equal(stored.reply.user_needs_to_see_reply, false);
+  assert.deepEqual(done.unseenIds(), [], "and it does not interrupt");
+  assert.equal(rail.tabNewCount(overlay.TAB.DONE), 0);
+  assert.equal(
+    store.readSeenReplies(REVIEW)[item.id],
+    tabDone.replyStamp(stored),
+    "it is recorded as read on arrival, so it can never surface as unread later"
+  );
+});
+
+test("a question badges the Done tab with no flag on the line", () => {
+  const { store, rail, done } = setup();
+  const item = store.write(REVIEW, readyItem());
+  rail.upsertCard(item);
+
+  done.applyReplies([
+    foldEvent(item, {
+      payload: {
+        accepted: true,
+        state: record.STATE.READY,
+        file: "replies-claude.jsonl",
+        reply: { status: "question", agent: "claude", text: "which heading do you mean?" }
+      }
+    })
+  ]);
+
+  assert.deepEqual(done.unseenIds(), [item.id]);
+  assert.equal(rail.tabNewCount(overlay.TAB.DONE), 1);
+});
+
+test("a refusal badges the Done tab with no flag on the line", () => {
+  const { store, rail, done } = setup();
+  const item = store.write(REVIEW, readyItem());
+  rail.upsertCard(item);
+
+  done.applyReplies([
+    foldEvent(item, {
+      payload: {
+        accepted: true,
+        state: record.STATE.NOT_HANDLED,
+        file: "replies-claude.jsonl",
+        reply: { status: "not_handled", agent: "claude", reason: "no such file" }
+      }
+    })
+  ]);
+
+  assert.deepEqual(done.unseenIds(), [item.id]);
+  assert.equal(rail.tabNewCount(overlay.TAB.DONE), 1);
 });
 
 test("an unseen reply survives a reload: a fresh Done tab over the same storage still counts it", () => {
@@ -410,7 +531,7 @@ test("an unseen reply survives a reload: a fresh Done tab over the same storage 
   firstDone.mount();
   const item = store.write(REVIEW, readyItem());
   first.upsertCard(item);
-  firstDone.applyReplies([foldEvent(item)]);
+  firstDone.applyReplies([flaggedFoldEvent(item)]);
   assert.deepEqual(firstDone.unseenIds(), [item.id]);
 
   // The reviewer reloads without ever opening Done. Same storage, new rail.

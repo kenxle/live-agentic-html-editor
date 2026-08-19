@@ -108,6 +108,26 @@ test("each status requires its own fields", () => {
   assert.match(badStatus.reason, /handled, not_handled, question/);
 });
 
+test("user_needs_to_see_reply is optional, boolean, and lenient about anything else", () => {
+  const flagged = protocol.parseReplyLine(
+    '{"item":"c_7fa2","rev":2,"status":"handled","user_needs_to_see_reply":true}'
+  );
+  assert.equal(flagged.ok, true);
+  assert.equal(flagged.reply.user_needs_to_see_reply, true);
+
+  const absent = protocol.parseReplyLine('{"item":"c_7fa2","rev":2,"status":"handled"}');
+  assert.equal(absent.reply.user_needs_to_see_reply, false, "absent means no, not unknown");
+
+  // A wrong-typed optional field drops to false the way a wrong-typed `files`
+  // drops to []: losing the badge is a smaller failure than losing the answer.
+  ['"yes"', "1", "null", "{}"].forEach((value) => {
+    const line = '{"item":"c_7fa2","rev":2,"status":"handled","user_needs_to_see_reply":' + value + "}";
+    const parsed = protocol.parseReplyLine(line);
+    assert.equal(parsed.ok, true, value + " does not cost the agent the whole line");
+    assert.equal(parsed.reply.user_needs_to_see_reply, false, value + " is not a flag");
+  });
+});
+
 test("a malformed line is skipped with a reason, never thrown", () => {
   const bad = protocol.parseReplyLine("{oops");
   assert.equal(bad.ok, false);

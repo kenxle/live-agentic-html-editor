@@ -254,10 +254,13 @@ framed while it is in it. Ctrl replaces Cmd on non-macOS systems.
 **When the agent answers.** An answered item moves to the Done tab. If you were
 looking at another tab when it landed, the Done tab grows a small accent badge
 with the number of replies you have not read yet, and each of those cards wears
-a thin accent rule down its left edge. Opening the Done tab is the reading: the
-badge and the rules clear. Nothing new means no badge at all, never a zero. The
-count is yours alone, kept in your browser, so it survives a reload and never
-reaches the agent: an answer you have not read is still unread after a refresh.
+a thin accent rule down its left edge. The badge counts the replies the agent
+flagged for you, plus every question and every refusal. It does not count a
+routine confirmation: "carried this into the source" stays on the card for the
+record and never interrupts you. Opening the Done tab is the reading: the badge
+and the rules clear. Nothing new means no badge at all, never a zero. The count
+is yours alone, kept in your browser, so it survives a reload and never reaches
+the agent: an answer you have not read is still unread after a refresh.
 
 **If an agent later undoes one of your hand edits, the item reopens itself.** A
 doc-wide change is one of the good reasons to work this way: you say "this

@@ -364,7 +364,8 @@ The tool's public API to every agent on earth. Field names spelled exactly:
 
 ```
 {"item":"<item-id>","rev":<n>,"status":"handled|not_handled|question",
- "agent":"<name>","reason":"<why not>","text":"<the question>","files":["<path>", ...]}
+ "agent":"<name>","reason":"<why not>","text":"<the question>","files":["<path>", ...],
+ "user_needs_to_see_reply":true}
 ```
 
 | Status | Required |
@@ -373,8 +374,16 @@ The tool's public API to every agent on earth. Field names spelled exactly:
 | `not_handled` | those plus `reason` |
 | `question` | those plus `text` |
 
-`agent` and `files` are optional everywhere. `protocol.parseReplyLine(line, {filenameAgent})` is the
-one parser.
+`agent`, `files`, and `user_needs_to_see_reply` are optional everywhere.
+`protocol.parseReplyLine(line, {filenameAgent})` is the one parser.
+
+`user_needs_to_see_reply` is what the rail's unread badge counts. The agent sets it on a reply the
+reviewer should read: an answer to them, a caveat, a judgment call, a change made differently than
+asked. It is lenient like the other optional fields, so only the literal boolean `true` sets it and
+anything else drops to `false` rather than costing the agent the whole line. A `question` or
+`not_handled` reply counts as needs-to-see with or without the flag: a question needs an answer and a
+refusal needs its reason read. An unflagged `handled` reply still renders whole on its card in Done,
+with its text and timestamp; it just arrives already read.
 
 **Malformed-line behavior:** the helper skips that line, **never dies**, appends a `reply.rejected`
 event naming the file, the line number and the reason, and raises a dismissible chip on the rail
@@ -437,6 +446,7 @@ copy in `test/unit/review_format.test.js`:
   "A reply line looks like this: {\"item\":\"c_7fa2\",\"rev\":2,\"status\":\"handled\",\"agent\":\"claude\",\"files\":[\"app/views/home.html.erb\"]}",
   "Every reply line names the item id, the item's rev, and your own agent name. The reviewer sees that name on the card.",
   "status is one of: handled, you made the change; not_handled, you did not, and reason says why in words the reviewer will read; question, you need an answer, and text asks for it.",
+  "Add \"user_needs_to_see_reply\": true to a reply the reviewer should read: an answer, a caveat, or a change made differently than asked. Leave it off a routine confirmation; question and not_handled replies reach the reviewer regardless.",
   "rev must be the rev carried with the item. If the reviewer reworded the item after you read it, your line is refused and the item stays open. Re-read the item and answer its new rev.",
   "To see what is open right now, run: lahe status --review <id> (add --json for machine-readable lines). It prints the unanswered ready items and whether the reviewer's page is connected.",
   "If the human explicitly asks you to continue a session created by another agent, run: lahe session takeover <agent-session-id>. This keeps the reviews together, fences older monitors, and prints the catch-up command plus the four commands for the session. Never infer a takeover or silently reuse another agent's session.",

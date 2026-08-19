@@ -99,6 +99,32 @@
   }
 
   /**
+   * Is this a reply the reviewer actually has to read?
+   *
+   * The badge used to count every folded reply, which meant "claude carried this
+   * change into the source" interrupted the reviewer exactly as loudly as an
+   * open question did. Two things count now:
+   *
+   *   THE AGENT SAID SO   user_needs_to_see_reply on the reply line, which the
+   *                       contract asks for on an answer, a caveat, or a change
+   *                       made differently than asked
+   *   THE STATUS SAYS SO  question and not_handled, always, flag or no flag: a
+   *                       question needs an answer and a refusal needs its
+   *                       reason read, and neither is the agent's call
+   *
+   * Everything else still lands on its card in Done, whole, with its text and
+   * its timestamp. It simply arrives already read.
+   *
+   * @param {object} reply the reply as it sits on a record
+   */
+  function needsToSeeReply(reply) {
+    if (!reply) return false;
+    if (reply.status === record.REPLY_STATUS.QUESTION) return true;
+    if (reply.status === record.REPLY_STATUS.NOT_HANDLED) return true;
+    return reply.user_needs_to_see_reply === true;
+  }
+
+  /**
    * The ids whose reply the reviewer has not read.
    *
    * Pure: items in, marks in, ids out. Nothing here touches the DOM or storage,
@@ -114,6 +140,7 @@
     (items || []).forEach(function (item) {
       var stamp = replyStamp(item);
       if (!stamp) return;
+      if (!needsToSeeReply(item[record.FIELD.REPLY])) return;
       if (seen[item[record.FIELD.ID]] !== stamp) out.push(item[record.FIELD.ID]);
     });
     return out;
@@ -192,9 +219,10 @@
     // object with the block inside it.
     ".card[" + ASKING_ATTR + "='true']{order:-1;border-color:var(--accent)}",
 
-    // The unseen mark. A reply that folded while the reviewer was looking at
-    // another tab is the only sign they get that an answer arrived, so the card
-    // carries one: an accent rule down its left edge, drawn as an inset shadow
+    // The unseen mark. A reply the agent flagged (or a question, or a refusal)
+    // that folded while the reviewer was looking at another tab is the only
+    // sign they get that an answer arrived, so the card carries one: an accent
+    // rule down its left edge, drawn as an inset shadow
     // so it costs the card no layout and cannot fight the border a question
     // sets. Deliberately calmer than the question block above: a question is a
     // stop, and this is a "there is something here". If the same card is both,
@@ -886,7 +914,8 @@
         reason: reply.reason || null,
         text: reply.text || null,
         files: Array.isArray(reply.files) ? reply.files.slice() : [],
-        at: event[protocol.EVENT_FIELD.TS] || null
+        at: event[protocol.EVENT_FIELD.TS] || null,
+        user_needs_to_see_reply: reply.user_needs_to_see_reply === true
       };
       store.write(reviewId, next);
 
@@ -907,12 +936,16 @@
         clearQuestion(id);
       }
 
-      // IT ARRIVED IN FRONT OF THEM. The Done pane is newest first, so a reply
-      // that folds while the reviewer is on that tab is already on screen and
-      // needs no badge: stamp it read here, before applyReplies repaints, so the
-      // badge never flashes on and back off. Every other case leaves it unseen
-      // and the badge appears on the next paint.
-      if (watchingDone()) {
+      // IT ARRIVED IN FRONT OF THEM, OR IT NEVER NEEDED THEM. Two replies are
+      // stamped read the moment they fold: one that lands while the reviewer is
+      // sitting on Done (the pane is newest first, so it is already on screen,
+      // and a badge would flash on and back off around something they can see),
+      // and one the agent did not flag on a handled item (a routine
+      // confirmation, which belongs on the card for the record and nowhere
+      // else). Stamped here, before applyReplies repaints, so neither can turn
+      // up unread later. Every other case leaves it unseen and the badge
+      // appears on the next paint.
+      if (watchingDone() || !needsToSeeReply(next[record.FIELD.REPLY])) {
         var marks = readSeen();
         marks[id] = replyStamp(next);
         writeSeen(marks);
@@ -1077,6 +1110,7 @@
     STALE_NOTICE: STALE_NOTICE,
     STYLE: STYLE,
     replyStamp: replyStamp,
+    needsToSeeReply: needsToSeeReply,
     unseenReplyIds: unseenReplyIds,
     seenMarksFor: seenMarksFor,
     createDoneTab: createDoneTab

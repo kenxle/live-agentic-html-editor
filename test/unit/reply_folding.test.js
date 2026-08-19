@@ -147,6 +147,39 @@ test("a reply naming the current revision retires the item", () => {
   assert.deepEqual(after.reply.files, ["app/views/home.html.erb"]);
 });
 
+test("the needs-to-see flag survives the fold, and an unflagged reply folds as false", () => {
+  const { dir, log, folder } = setup();
+  const item = readyItem();
+  postItem(log, item, protocol.EVENT.ITEM_READY);
+
+  writeReplyFile(dir, "replies.jsonl", [
+    replyLine({
+      item: item.id,
+      rev: 1,
+      status: "handled",
+      agent: "claude",
+      text: "Done, but I used the shorter heading.",
+      user_needs_to_see_reply: true
+    })
+  ]);
+  folder.fold(REVIEW);
+
+  const folded = log.read(REVIEW).filter((e) => e.event === protocol.EVENT.REPLY_FOLDED);
+  assert.equal(folded[0].reply.user_needs_to_see_reply, true, "the flag reaches the log the rail reads");
+  assert.equal(itemsNow(log)[0].reply.user_needs_to_see_reply, true, "and the projection carries it");
+
+  // A routine confirmation on a second item folds with the flag off.
+  const routine = readyItem({ id: "itm_routine" });
+  postItem(log, routine, protocol.EVENT.ITEM_READY);
+  writeReplyFile(dir, "replies-codex.jsonl", [
+    replyLine({ item: routine.id, rev: 1, status: "handled", agent: "codex" })
+  ]);
+  folder.fold(REVIEW);
+
+  const answered = itemsNow(log).find((i) => i.id === routine.id);
+  assert.equal(answered.reply.user_needs_to_see_reply, false, "absent means no, not unknown");
+});
+
 test("two reply files answering one item at one revision fold deterministically, both lines kept", () => {
   const { dir, log, folder } = setup();
   const item = readyItem();

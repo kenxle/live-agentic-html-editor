@@ -155,6 +155,14 @@
   are reviewer-side browser storage keyed per review, so an unread answer is
   still unread after a reload and no agent ever sees the state.
 
+- Complete: the badge counts only replies worth reading. The contract asks the
+  agent for an optional `user_needs_to_see_reply` boolean on a reply line, and
+  the badge and the card accent count that flag plus every question and every
+  refusal. A routine confirmation still renders whole in Done and arrives
+  pre-read, so "carried this into the source" no longer interrupts anyone. The
+  service contract is bumped to 11: a helper started before this change strips
+  the unknown field during the fold, so it has to be restarted.
+
 ## 2026-08-19 a reverted hand edit reopens itself
 
 - Complete: a doc-wide sweep can no longer undo a reviewer's handled hand edit

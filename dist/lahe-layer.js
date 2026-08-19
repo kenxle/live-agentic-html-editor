@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+d7aa8693619b
+ * version 0.0.0+bd3c4c5777a6
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+d7aa8693619b";
+  g.LAHE.version = "0.0.0+bd3c4c5777a6";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -3595,7 +3595,10 @@
   // 10: older helpers never append wake-feed lines and omit agent_liveness, so
   // a tail-armed agent would sleep through work and the rail could not tell
   // whether an agent is watching. They must be restarted.
-  var SERVICE_CONTRACT = 10;
+  // 11: older helpers drop user_needs_to_see_reply during the reply fold, so a
+  // flagged reply would silently lose its flag and never badge the reviewer.
+  // They must be restarted.
+  var SERVICE_CONTRACT = 11;
   var BASE = "/lahe/" + API_VERSION;
 
   // ---------------------------------------------------------------------------
@@ -4181,7 +4184,14 @@
   // nowhere else:
   //
   //   {"item":"<item-id>","rev":<n>,"status":"handled|not_handled|question",
-  //    "agent":"<name>","reason":"<why not>","text":"<the question>","files":["<path>"]}
+  //    "agent":"<name>","reason":"<why not>","text":"<the question>","files":["<path>"],
+  //    "user_needs_to_see_reply":true}
+  //
+  // `user_needs_to_see_reply` is how an agent says this answer is worth the
+  // reviewer's attention: an answer to them, a caveat, a judgment call, a change
+  // made differently than asked. It is what the unread badge counts, so a
+  // routine "carried this into the source" no longer interrupts anyone. A
+  // `question` or `not_handled` reply counts with or without it.
 
   var REPLY_FIELD = {
     ITEM: "item",
@@ -4190,7 +4200,8 @@
     AGENT: "agent",
     REASON: "reason",
     TEXT: "text",
-    FILES: "files"
+    FILES: "files",
+    NEEDS_SEE: "user_needs_to_see_reply"
   };
 
   var REPLY_STATUS = { HANDLED: "handled", NOT_HANDLED: "not_handled", QUESTION: "question" };
@@ -4274,6 +4285,12 @@
     reply[REPLY_FIELD.REASON] = typeof parsed[REPLY_FIELD.REASON] === "string" ? parsed[REPLY_FIELD.REASON] : null;
     reply[REPLY_FIELD.TEXT] = typeof parsed[REPLY_FIELD.TEXT] === "string" ? parsed[REPLY_FIELD.TEXT] : null;
     reply[REPLY_FIELD.FILES] = Array.isArray(parsed[REPLY_FIELD.FILES]) ? parsed[REPLY_FIELD.FILES].slice() : [];
+    // Optional, and lenient like every other optional field above: only the
+    // literal boolean true sets it, and anything else ("true", 1, an object)
+    // drops to false rather than costing the agent the whole line. Losing a
+    // badge is a smaller failure than losing the answer, and question and
+    // not_handled replies reach the reviewer without this field anyway.
+    reply[REPLY_FIELD.NEEDS_SEE] = parsed[REPLY_FIELD.NEEDS_SEE] === true;
     return { ok: true, reply: reply, reason: null };
   }
 
@@ -4698,6 +4715,7 @@
     "A reply line looks like this: {\"item\":\"c_7fa2\",\"rev\":2,\"status\":\"handled\",\"agent\":\"claude\",\"files\":[\"app/views/home.html.erb\"]}",
     "Every reply line names the item id, the item's rev, and your own agent name. The reviewer sees that name on the card.",
     "status is one of: handled, you made the change; not_handled, you did not, and reason says why in words the reviewer will read; question, you need an answer, and text asks for it.",
+    "Add \"user_needs_to_see_reply\": true to a reply the reviewer should read: an answer, a caveat, or a change made differently than asked. Leave it off a routine confirmation; question and not_handled replies reach the reviewer regardless.",
     "rev must be the rev carried with the item. If the reviewer reworded the item after you read it, your line is refused and the item stays open. Re-read the item and answer its new rev.",
     "To see what is open right now, run: lahe status --review <id> (add --json for machine-readable lines). It prints the unanswered ready items and whether the reviewer's page is connected.",
     "If the human explicitly asks you to continue a session created by another agent, run: lahe session takeover <agent-session-id>. This keeps the reviews together, fences older monitors, and prints the catch-up command plus the four commands for the session. Never infer a takeover or silently reuse another agent's session.",
@@ -4780,6 +4798,7 @@
     "reply.reason": record.CLASS_DATA,
     "reply.text": record.CLASS_DATA,
     "reply.at": record.CLASS_DATA,
+    "reply.user_needs_to_see_reply": record.CLASS_DATA,
     "thread[].rev": record.CLASS_DATA,
     "thread[].reviewer.note": record.CLASS_DATA,
     "thread[].reviewer.change": record.CLASS_DATA,
@@ -5000,7 +5019,11 @@
           reason: boundData(reply.reason, BEFORE_MAX),
           text: boundData(reply.text, BEFORE_MAX),
           files: boundFiles(reply.files),
-          at: reply.at || null
+          at: reply.at || null,
+          // The agent's flag, projected back so a second agent reading this file
+          // sees what the first one claimed. A boolean, so it needs no bounding:
+          // only the literal true survives.
+          user_needs_to_see_reply: reply.user_needs_to_see_reply === true
         }
       : null;
 
@@ -11578,6 +11601,32 @@
   }
 
   /**
+   * Is this a reply the reviewer actually has to read?
+   *
+   * The badge used to count every folded reply, which meant "claude carried this
+   * change into the source" interrupted the reviewer exactly as loudly as an
+   * open question did. Two things count now:
+   *
+   *   THE AGENT SAID SO   user_needs_to_see_reply on the reply line, which the
+   *                       contract asks for on an answer, a caveat, or a change
+   *                       made differently than asked
+   *   THE STATUS SAYS SO  question and not_handled, always, flag or no flag: a
+   *                       question needs an answer and a refusal needs its
+   *                       reason read, and neither is the agent's call
+   *
+   * Everything else still lands on its card in Done, whole, with its text and
+   * its timestamp. It simply arrives already read.
+   *
+   * @param {object} reply the reply as it sits on a record
+   */
+  function needsToSeeReply(reply) {
+    if (!reply) return false;
+    if (reply.status === record.REPLY_STATUS.QUESTION) return true;
+    if (reply.status === record.REPLY_STATUS.NOT_HANDLED) return true;
+    return reply.user_needs_to_see_reply === true;
+  }
+
+  /**
    * The ids whose reply the reviewer has not read.
    *
    * Pure: items in, marks in, ids out. Nothing here touches the DOM or storage,
@@ -11593,6 +11642,7 @@
     (items || []).forEach(function (item) {
       var stamp = replyStamp(item);
       if (!stamp) return;
+      if (!needsToSeeReply(item[record.FIELD.REPLY])) return;
       if (seen[item[record.FIELD.ID]] !== stamp) out.push(item[record.FIELD.ID]);
     });
     return out;
@@ -11671,9 +11721,10 @@
     // object with the block inside it.
     ".card[" + ASKING_ATTR + "='true']{order:-1;border-color:var(--accent)}",
 
-    // The unseen mark. A reply that folded while the reviewer was looking at
-    // another tab is the only sign they get that an answer arrived, so the card
-    // carries one: an accent rule down its left edge, drawn as an inset shadow
+    // The unseen mark. A reply the agent flagged (or a question, or a refusal)
+    // that folded while the reviewer was looking at another tab is the only
+    // sign they get that an answer arrived, so the card carries one: an accent
+    // rule down its left edge, drawn as an inset shadow
     // so it costs the card no layout and cannot fight the border a question
     // sets. Deliberately calmer than the question block above: a question is a
     // stop, and this is a "there is something here". If the same card is both,
@@ -12365,7 +12416,8 @@
         reason: reply.reason || null,
         text: reply.text || null,
         files: Array.isArray(reply.files) ? reply.files.slice() : [],
-        at: event[protocol.EVENT_FIELD.TS] || null
+        at: event[protocol.EVENT_FIELD.TS] || null,
+        user_needs_to_see_reply: reply.user_needs_to_see_reply === true
       };
       store.write(reviewId, next);
 
@@ -12386,12 +12438,16 @@
         clearQuestion(id);
       }
 
-      // IT ARRIVED IN FRONT OF THEM. The Done pane is newest first, so a reply
-      // that folds while the reviewer is on that tab is already on screen and
-      // needs no badge: stamp it read here, before applyReplies repaints, so the
-      // badge never flashes on and back off. Every other case leaves it unseen
-      // and the badge appears on the next paint.
-      if (watchingDone()) {
+      // IT ARRIVED IN FRONT OF THEM, OR IT NEVER NEEDED THEM. Two replies are
+      // stamped read the moment they fold: one that lands while the reviewer is
+      // sitting on Done (the pane is newest first, so it is already on screen,
+      // and a badge would flash on and back off around something they can see),
+      // and one the agent did not flag on a handled item (a routine
+      // confirmation, which belongs on the card for the record and nowhere
+      // else). Stamped here, before applyReplies repaints, so neither can turn
+      // up unread later. Every other case leaves it unseen and the badge
+      // appears on the next paint.
+      if (watchingDone() || !needsToSeeReply(next[record.FIELD.REPLY])) {
         var marks = readSeen();
         marks[id] = replyStamp(next);
         writeSeen(marks);
@@ -12556,6 +12612,7 @@
     STALE_NOTICE: STALE_NOTICE,
     STYLE: STYLE,
     replyStamp: replyStamp,
+    needsToSeeReply: needsToSeeReply,
     unseenReplyIds: unseenReplyIds,
     seenMarksFor: seenMarksFor,
     createDoneTab: createDoneTab
@@ -20941,7 +20998,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+d7aa8693619b";
+  var VERSION = "0.0.0+bd3c4c5777a6";
 
   var protocol = ns.protocol;
   var record = ns.record;

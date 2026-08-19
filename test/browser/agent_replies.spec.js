@@ -829,7 +829,7 @@ test.describe("3A: an agent answers by appending one line", () => {
   // who is on the Active tab writing the next comment, had no idea an answer had
   // arrived and no way to tell answers they had read from ones they had not.
 
-  test("a reply that folds while the reviewer is on another tab badges the Done tab, and opening it clears the badge", async ({
+  test("a flagged reply that folds while the reviewer is on another tab badges the Done tab, and opening it clears the badge", async ({
     page
   }) => {
     const { app, helper, token } = await startBoth();
@@ -849,7 +849,9 @@ test.describe("3A: an agent answers by appending one line", () => {
           item: item.id,
           rev: item.rev,
           status: "handled",
-          agent: "claude"
+          agent: "claude",
+          text: "Done, but I kept the second clause.",
+          user_needs_to_see_reply: true
         });
       });
 
@@ -888,7 +890,14 @@ test.describe("3A: an agent answers by appending one line", () => {
       const second = items.find((i) => i.note === "this button is doing two jobs");
       for (const item of items) await waitForItemInLog(helper, item.id);
 
-      appendReply(helper, "replies-claude.jsonl", { item: first.id, rev: first.rev, status: "handled", agent: "claude" });
+      appendReply(helper, "replies-claude.jsonl", {
+        item: first.id,
+        rev: first.rev,
+        status: "handled",
+        agent: "claude",
+        text: "Shortened it, but the second sentence had to go too.",
+        user_needs_to_see_reply: true
+      });
       await pollPage(page, () => window.__lahe.rail.tabNewCount("done") === 1, undefined, {
         message: "the reply to fold and badge the tab"
       });
@@ -913,13 +922,81 @@ test.describe("3A: an agent answers by appending one line", () => {
         item: second.id,
         rev: second.rev,
         status: "handled",
-        agent: "claude"
+        agent: "claude",
+        text: "Split it into two buttons.",
+        user_needs_to_see_reply: true
       });
       await pollPage(page, (id) => window.__lahe.itemById(id).reply !== null, second.id, {
         message: "the second reply to fold onto its card"
       });
       expect(await unseenState(page)).toMatchObject({ count: 0, ids: [], badgeHidden: true, tab: "done" });
       expect(await cardIsUnseen(page, second.id)).toBe(false);
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
+  // The negative, which is the whole point of the flag: "claude carried this
+  // change into the source" is not something the reviewer needs to be told.
+  test("a routine handled reply lands on its card without badging the tab or marking the card", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      await commentOnSelection(page, "p.lede", "shorten this");
+      await commentOnElement(page, "#log-session", "this button is doing two jobs");
+      const items = await itemsIn(page);
+      const routine = items.find((i) => i.note === "shorten this");
+      const flagged = items.find((i) => i.note === "this button is doing two jobs");
+      for (const item of items) await waitForItemInLog(helper, item.id);
+
+      // No flag on the line. The reviewer is on Active, which is exactly the
+      // case that used to badge.
+      appendReply(helper, "replies-claude.jsonl", {
+        item: routine.id,
+        rev: routine.rev,
+        status: "handled",
+        agent: "claude"
+      });
+      await pollPage(page, (id) => window.__lahe.itemById(id).reply !== null, routine.id, {
+        message: "the routine reply to fold onto its card"
+      });
+
+      expect(await unseenState(page)).toMatchObject({ count: 0, ids: [], badgeHidden: true, tab: "active" });
+      expect(await cardIsUnseen(page, routine.id), "and the card wears no accent rule").toBe(false);
+
+      // It is recorded as read on arrival, so it cannot resurface as unread on
+      // a later paint or a reload.
+      const stamped = await page.evaluate((id) => {
+        const done = window.__lahe.handle.doneTab();
+        const marks = window.__lahe.store().readSeenReplies(window.__lahe.review);
+        return { seen: !!marks[id], unseen: done.unseenIds() };
+      }, routine.id);
+      expect(stamped.seen, "the routine reply is stamped read the moment it folds").toBe(true);
+      expect(stamped.unseen).toEqual([]);
+
+      // The card still says everything the agent said: pre-read is not hidden.
+      const card = await cardOf(page, routine.id);
+      expect(card.state).toBe("handled");
+      expect(card.pane).toBe("done");
+      expect(card.agentMessage.agent).toBe("claude");
+      expect(card.agentMessage.at, "with its timestamp").toBeTruthy();
+
+      // And a flagged reply on the very next item still badges, so this is the
+      // flag doing the work and not the badge being broken.
+      appendReply(helper, "replies-claude.jsonl", {
+        item: flagged.id,
+        rev: flagged.rev,
+        status: "handled",
+        agent: "claude",
+        text: "Split it, but I dropped the icon.",
+        user_needs_to_see_reply: true
+      });
+      await pollPage(page, () => window.__lahe.rail.tabNewCount("done") === 1, undefined, {
+        message: "the flagged reply to badge the tab"
+      });
+      expect((await unseenState(page)).ids).toEqual([flagged.id]);
+      expect(await cardIsUnseen(page, routine.id), "the routine card stays quiet").toBe(false);
     } finally {
       await helper.kill9();
       await app.close();
