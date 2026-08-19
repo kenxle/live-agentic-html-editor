@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+d92ed50ad86d
+ * version 0.0.0+817b3327de6b
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+d92ed50ad86d";
+  g.LAHE.version = "0.0.0+817b3327de6b";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -3592,7 +3592,10 @@
   // whenever an old helper cannot safely back a newly built CLI/layer.
   // 9: older helpers omit reply.at, so they cannot back the timestamped rail
   // and must be restarted before a new page connects.
-  var SERVICE_CONTRACT = 9;
+  // 10: older helpers never append wake-feed lines and omit agent_liveness, so
+  // a tail-armed agent would sleep through work and the rail could not tell
+  // whether an agent is watching. They must be restarted.
+  var SERVICE_CONTRACT = 10;
   var BASE = "/lahe/" + API_VERSION;
 
   // ---------------------------------------------------------------------------
@@ -20485,7 +20488,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+d92ed50ad86d";
+  var VERSION = "0.0.0+817b3327de6b";
 
   var protocol = ns.protocol;
   var record = ns.record;

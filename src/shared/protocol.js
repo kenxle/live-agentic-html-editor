@@ -45,7 +45,10 @@
   // whenever an old helper cannot safely back a newly built CLI/layer.
   // 9: older helpers omit reply.at, so they cannot back the timestamped rail
   // and must be restarted before a new page connects.
-  var SERVICE_CONTRACT = 9;
+  // 10: older helpers never append wake-feed lines and omit agent_liveness, so
+  // a tail-armed agent would sleep through work and the rail could not tell
+  // whether an agent is watching. They must be restarted.
+  var SERVICE_CONTRACT = 10;
   var BASE = "/lahe/" + API_VERSION;
 
   // ---------------------------------------------------------------------------
