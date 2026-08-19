@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+817b3327de6b
+ * version 0.0.0+2efda0d555ed
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+817b3327de6b";
+  g.LAHE.version = "0.0.0+2efda0d555ed";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -9453,6 +9453,14 @@
       if (holdsFocus(card.id)) {
         pendingPlacement[card.id] = true;
         return;
+      }
+      // The Edits pane orders its cards with inline flex order. A card that
+      // leaves that pane keeps the inline style, and one stale negative order
+      // beats every DOM position this function chooses: the card renders at
+      // the top while the newest reply sinks below every migrated edit. Clear
+      // it on the way into any other pane; the Edits tab re-stamps its own.
+      if (card.pane !== TAB.EDITS && card.node.style && card.node.style.order) {
+        card.node.style.order = "";
       }
       var before = null;
       var at = activityAt(card.item);
@@ -20488,7 +20496,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+817b3327de6b";
+  var VERSION = "0.0.0+2efda0d555ed";
 
   var protocol = ns.protocol;
   var record = ns.record;

@@ -1045,6 +1045,14 @@
         pendingPlacement[card.id] = true;
         return;
       }
+      // The Edits pane orders its cards with inline flex order. A card that
+      // leaves that pane keeps the inline style, and one stale negative order
+      // beats every DOM position this function chooses: the card renders at
+      // the top while the newest reply sinks below every migrated edit. Clear
+      // it on the way into any other pane; the Edits tab re-stamps its own.
+      if (card.pane !== TAB.EDITS && card.node.style && card.node.style.order) {
+        card.node.style.order = "";
+      }
       var before = null;
       var at = activityAt(card.item);
       Array.prototype.some.call(pane.children, function (node) {
