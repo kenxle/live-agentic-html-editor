@@ -77,6 +77,30 @@ function flaggedFoldEvent(item, extra) {
   });
 }
 
+/** A question: the reply needs the reviewer, and the item stays outstanding. */
+function questionFoldEvent(item, text) {
+  return foldEvent(item, {
+    payload: {
+      accepted: true,
+      state: record.STATE.READY,
+      file: "replies-claude.jsonl",
+      reply: { status: "question", agent: "claude", text: text || "which heading do you mean?" }
+    }
+  });
+}
+
+/** A refusal: also unfinished, also on the card where the unfinished work is. */
+function refusalFoldEvent(item) {
+  return foldEvent(item, {
+    payload: {
+      accepted: true,
+      state: record.STATE.NOT_HANDLED,
+      file: "replies-claude.jsonl",
+      reply: { status: "not_handled", agent: "claude", reason: "no such file" }
+    }
+  });
+}
+
 function foldEvent(item, fields) {
   return protocol.newEvent(
     Object.assign(
@@ -429,6 +453,34 @@ test("a SECOND reply on the same item reads as unseen again", () => {
   assert.deepEqual(tabDone.unseenReplyIds([answered], marks), ["itm_c"]);
 });
 
+test("unseenByTab groups the unseen ids under the tab each card sits in", () => {
+  const asking = readyItem({ id: "itm_ask" });
+  asking.reply = { status: "question", agent: "claude", text: "which?", at: "2026-08-19T10:00:00.000Z" };
+  const finished = readyItem({ id: "itm_fin", state: record.STATE.HANDLED });
+  finished.reply = flaggedReply();
+
+  assert.deepEqual(tabDone.unseenByTab([asking, finished], {}, overlay.paneForItem), {
+    active: ["itm_ask"],
+    done: ["itm_fin"]
+  });
+});
+
+test("seenMarksFor keeps the marks it was not asked about, so reading one tab cannot un-read another", () => {
+  const asking = readyItem({ id: "itm_ask" });
+  asking.reply = { status: "question", agent: "claude", text: "which?", at: "2026-08-19T10:00:00.000Z" };
+  const finished = readyItem({ id: "itm_fin", state: record.STATE.HANDLED });
+  finished.reply = flaggedReply();
+
+  const items = [asking, finished];
+  const all = tabDone.seenMarksFor(items);
+  const readActiveOnly = tabDone.seenMarksFor(items, {}, (item) => overlay.paneForItem(item) === overlay.TAB.ACTIVE);
+  assert.deepEqual(Object.keys(readActiveOnly), ["itm_ask"]);
+
+  // Now read Done, holding what Active already knew.
+  const both = tabDone.seenMarksFor(items, readActiveOnly, (item) => overlay.paneForItem(item) === overlay.TAB.DONE);
+  assert.deepEqual(both, all, "reading both tabs, one at a time, ends where reading everything ends");
+});
+
 test("seenMarksFor drops an item that no longer carries a reply, so the bucket cannot grow forever", () => {
   const answered = readyItem({ id: "itm_d" });
   answered.reply = plainReply();
@@ -484,44 +536,107 @@ test("an unflagged handled reply never badges, and is marked seen the moment it 
   );
 });
 
-test("a question badges the Done tab with no flag on the line", () => {
+test("a question badges the tab its card is in, which is Active, not Done", () => {
   const { store, rail, done } = setup();
   const item = store.write(REVIEW, readyItem());
   rail.upsertCard(item);
+  // The reviewer is reading finished work, so the question lands out of sight.
+  rail.selectTab(overlay.TAB.DONE);
 
-  done.applyReplies([
-    foldEvent(item, {
-      payload: {
-        accepted: true,
-        state: record.STATE.READY,
-        file: "replies-claude.jsonl",
-        reply: { status: "question", agent: "claude", text: "which heading do you mean?" }
-      }
-    })
-  ]);
+  done.applyReplies([questionFoldEvent(item)]);
 
   assert.deepEqual(done.unseenIds(), [item.id]);
-  assert.equal(rail.tabNewCount(overlay.TAB.DONE), 1);
+  assert.equal(
+    rail.getCard(item.id).pane,
+    overlay.TAB.ACTIVE,
+    "a question leaves the work outstanding, so the card stays on the active side"
+  );
+  assert.equal(rail.tabNewCount(overlay.TAB.ACTIVE), 1, "and the badge is where the card is");
+  assert.equal(rail.tabNewCount(overlay.TAB.DONE), 0, "Done is empty; sending the reviewer there was the bug");
 });
 
-test("a refusal badges the Done tab with no flag on the line", () => {
+test("a refusal badges Active too: it is unfinished work, and its card sits with the unfinished work", () => {
+  const { store, rail, done } = setup();
+  const item = store.write(REVIEW, readyItem());
+  rail.upsertCard(item);
+  rail.selectTab(overlay.TAB.DONE);
+
+  done.applyReplies([refusalFoldEvent(item)]);
+
+  assert.deepEqual(done.unseenIds(), [item.id]);
+  assert.equal(rail.getCard(item.id).pane, overlay.TAB.ACTIVE);
+  assert.equal(rail.tabNewCount(overlay.TAB.ACTIVE), 1);
+  assert.equal(rail.tabNewCount(overlay.TAB.DONE), 0);
+});
+
+test("a question on a hand edit badges the Edits tab, which is where that card lives", () => {
+  const { store, rail, done } = setup();
+  const item = store.write(REVIEW, readyItem({ kind: record.KIND.EDIT, before: "a", after: "b" }));
+  rail.upsertCard(item);
+
+  done.applyReplies([questionFoldEvent(item)]);
+
+  assert.equal(rail.getCard(item.id).pane, overlay.TAB.EDITS);
+  assert.equal(rail.tabNewCount(overlay.TAB.EDITS), 1);
+  assert.equal(rail.tabNewCount(overlay.TAB.ACTIVE), 0);
+  assert.equal(rail.tabNewCount(overlay.TAB.DONE), 0);
+});
+
+test("a flagged handled reply badges Done, because handled is the one that really moves the card there", () => {
   const { store, rail, done } = setup();
   const item = store.write(REVIEW, readyItem());
   rail.upsertCard(item);
 
-  done.applyReplies([
-    foldEvent(item, {
-      payload: {
-        accepted: true,
-        state: record.STATE.NOT_HANDLED,
-        file: "replies-claude.jsonl",
-        reply: { status: "not_handled", agent: "claude", reason: "no such file" }
-      }
-    })
-  ]);
+  done.applyReplies([flaggedFoldEvent(item)]);
 
-  assert.deepEqual(done.unseenIds(), [item.id]);
+  assert.equal(rail.getCard(item.id).pane, overlay.TAB.DONE);
   assert.equal(rail.tabNewCount(overlay.TAB.DONE), 1);
+  assert.equal(rail.tabNewCount(overlay.TAB.ACTIVE), 0);
+});
+
+test("opening Active clears Active's badge and leaves Done's standing", () => {
+  const { store, rail, done } = setup();
+  const asking = store.write(REVIEW, readyItem({ note: "which heading?" }));
+  const finished = store.write(REVIEW, readyItem({ note: "shorten the lede" }));
+  rail.upsertCard(asking);
+  rail.upsertCard(finished);
+  // Neither answer lands on the tab the reviewer is looking at.
+  rail.selectTab(overlay.TAB.EDITS);
+
+  done.applyReplies([questionFoldEvent(asking), flaggedFoldEvent(finished)]);
+  assert.equal(rail.tabNewCount(overlay.TAB.ACTIVE), 1);
+  assert.equal(rail.tabNewCount(overlay.TAB.DONE), 1);
+
+  rail.selectTab(overlay.TAB.ACTIVE);
+  assert.equal(rail.tabNewCount(overlay.TAB.ACTIVE), 0, "they read the question");
+  assert.equal(rail.tabNewCount(overlay.TAB.DONE), 1, "and the answer in Done is still unread");
+  assert.deepEqual(done.unseenIds(), [finished.id]);
+
+  rail.selectTab(overlay.TAB.DONE);
+  assert.equal(rail.tabNewCount(overlay.TAB.DONE), 0);
+  assert.deepEqual(done.unseenIds(), []);
+});
+
+test("a card that moves tabs while unseen carries its badge with it", () => {
+  const { store, rail, done } = setup();
+  const item = store.write(REVIEW, readyItem());
+  rail.upsertCard(item);
+  rail.selectTab(overlay.TAB.EDITS);
+
+  // The agent asks. The card is in Active, and so is the badge.
+  done.applyReplies([questionFoldEvent(item)]);
+  assert.equal(rail.tabNewCount(overlay.TAB.ACTIVE), 1);
+  assert.equal(rail.tabNewCount(overlay.TAB.DONE), 0);
+
+  // The reviewer never opens Active. The agent works it out and folds the item
+  // handled: the same unread reply, on a card that is now in Done.
+  const asked = store.readItem(REVIEW, item.id);
+  done.applyReplies([flaggedFoldEvent(asked)]);
+
+  assert.deepEqual(done.unseenIds(), [item.id], "still unread; nothing here was read");
+  assert.equal(rail.getCard(item.id).pane, overlay.TAB.DONE);
+  assert.equal(rail.tabNewCount(overlay.TAB.ACTIVE), 0, "the badge left the tab the card left");
+  assert.equal(rail.tabNewCount(overlay.TAB.DONE), 1, "and arrived on the tab the card arrived on");
 });
 
 test("an unseen reply survives a reload: a fresh Done tab over the same storage still counts it", () => {
@@ -565,6 +680,25 @@ test("the pill jewel carries the Done tab badge's own number", () => {
   // Reading the replies clears both, because the jewel is a view of the badge.
   rail.selectTab(overlay.TAB.DONE);
   assert.equal(rail.tabNewCount(overlay.TAB.DONE), 0);
+  assert.equal(rail.pillNewCount(), 0);
+});
+
+test("the jewel is the total across tabs, so a question in Active counts on the pill too", () => {
+  const { store, rail, done } = setup();
+  const asking = store.write(REVIEW, readyItem({ note: "which heading?" }));
+  const finished = store.write(REVIEW, readyItem({ note: "shorten the lede" }));
+  rail.upsertCard(asking);
+  rail.upsertCard(finished);
+  rail.selectTab(overlay.TAB.EDITS);
+
+  done.applyReplies([questionFoldEvent(asking), flaggedFoldEvent(finished)]);
+  assert.equal(rail.tabNewCount(overlay.TAB.ACTIVE), 1);
+  assert.equal(rail.tabNewCount(overlay.TAB.DONE), 1);
+  assert.equal(rail.pillNewCount(), 2, "two things need the reviewer, in two tabs, on one jewel");
+
+  rail.selectTab(overlay.TAB.ACTIVE);
+  assert.equal(rail.pillNewCount(), 1, "reading one of them takes one off");
+  rail.selectTab(overlay.TAB.DONE);
   assert.equal(rail.pillNewCount(), 0);
 });
 

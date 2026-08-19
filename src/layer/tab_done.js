@@ -147,16 +147,58 @@
   }
 
   /**
-   * The marks after the reviewer has looked at everything on screen.
+   * The unseen ids, grouped by the tab their card actually sits in.
+   *
+   * THE BADGE GOES WHERE THE CARD IS. A question or a refusal keeps its card on
+   * the ACTIVE (or Edits) side, deliberately: the work is not finished, so it
+   * stays where unfinished work lives. Badging Done for it sent the reviewer to
+   * a tab the thing was not in. The pane rule is not restated here; `paneOf` is
+   * the rail's own paneForItem, passed in.
+   *
+   * @param {object[]} items every record this review holds
+   * @param {object} marks id -> the stamp of the reply already read
+   * @param {function} paneOf item -> the tab name its card lives in
+   * @returns {object} tab -> ids, tabs with nothing unseen simply absent
+   */
+  function unseenByTab(items, marks, paneOf) {
+    var byId = Object.create(null);
+    (items || []).forEach(function (item) {
+      byId[item[record.FIELD.ID]] = item;
+    });
+    // A plain object, so a caller can compare it with a literal.
+    var out = {};
+    unseenReplyIds(items, marks).forEach(function (id) {
+      var tab = paneOf(byId[id]);
+      if (!out[tab]) out[tab] = [];
+      out[tab].push(id);
+    });
+    return out;
+  }
+
+  /**
+   * The marks after the reviewer has looked at a set of replies.
    *
    * Built fresh from the items rather than merged into the old map, so an item
    * that no longer has a reply drops out and the bucket cannot grow forever.
+   *
+   * `includes` narrows WHICH replies this reading covers, which is how opening
+   * one tab marks that tab's replies read and leaves another tab's badge
+   * standing. An item the filter excludes keeps whatever mark it already had
+   * (from `prior`), so reading Active cannot un-read Done.
+   *
+   * @param {object[]} items every record this review holds
+   * @param {object} [prior] the marks as they stand now
+   * @param {function} [includes] item -> is this one of the replies just read
    */
-  function seenMarksFor(items) {
+  function seenMarksFor(items, prior, includes) {
+    var had = prior && typeof prior === "object" ? prior : {};
     var next = {};
     (items || []).forEach(function (item) {
       var stamp = replyStamp(item);
-      if (stamp) next[item[record.FIELD.ID]] = stamp;
+      if (!stamp) return;
+      var id = item[record.FIELD.ID];
+      if (!includes || includes(item)) next[id] = stamp;
+      else if (Object.prototype.hasOwnProperty.call(had, id)) next[id] = had[id];
     });
     return next;
   }
@@ -304,9 +346,11 @@
       // OPENING THE TAB IS THE READING. The rail owns the tab strip and knows
       // nothing about replies, so it says "the reviewer moved here" and this
       // file decides what that means.
+      // Every tab, not only Done: an unseen reply is badged on the tab its card
+      // sits in, so the tab that clears it is that same tab.
       if (!dropTabWatch && typeof rail.onTabSelect === "function") {
         dropTabWatch = rail.onTabSelect(function (tab) {
-          if (tab === overlayModule.TAB.DONE) markRepliesSeen();
+          markRepliesSeen(tab);
         });
       }
       refresh();
@@ -342,12 +386,31 @@
       return true;
     }
 
-    /** Recompute from storage, repaint the cards, and hand the rail the count. */
+    /**
+     * Which tab this item's card is in, asked of the rail.
+     *
+     * The rail owns the pane rule; this file only needs the answer. It asks
+     * with the ITEM rather than reading a card's stored pane, so an item the
+     * rail has not been handed yet still answers, and a card that moved tabs
+     * answers with where it is now.
+     */
+    function paneOf(item) {
+      if (!item) return overlayModule.TAB.DONE;
+      if (typeof rail.paneForItem === "function") return rail.paneForItem(item);
+      var card = typeof rail.getCard === "function" ? rail.getCard(item[record.FIELD.ID]) : null;
+      return (card && card.pane) || overlayModule.TAB.DONE;
+    }
+
+    /** Recompute from storage, repaint the cards, and hand each tab its count. */
     function paintUnseen() {
-      var ids = unseenReplyIds(itemsNow(), readSeen());
+      var grouped = unseenByTab(itemsNow(), readSeen(), paneOf);
+      var ids = [];
       var next = Object.create(null);
-      ids.forEach(function (id) {
-        next[id] = true;
+      Object.keys(grouped).forEach(function (tab) {
+        grouped[tab].forEach(function (id) {
+          ids.push(id);
+          next[id] = true;
+        });
       });
       Object.keys(unseenNow).forEach(function (id) {
         if (!next[id]) markUnseenCard(id, false);
@@ -356,26 +419,40 @@
         markUnseenCard(id, true);
       });
       unseenNow = next;
-      if (typeof rail.setTabNewCount === "function") rail.setTabNewCount(overlayModule.TAB.DONE, ids.length);
+      // Every tab is told, including the ones with nothing: a card that moved
+      // out of a tab has to take its badge with it.
+      if (typeof rail.setTabNewCount === "function") {
+        overlayModule.TABS.forEach(function (tab) {
+          rail.setTabNewCount(tab, (grouped[tab] || []).length);
+        });
+      }
       return ids;
     }
 
     /**
-     * Everything answered right now counts as read.
+     * The replies in front of the reviewer right now count as read.
      *
-     * Called when the reviewer selects the Done tab, and when a reply folds
-     * while they are already sitting on it: in both cases the answer is in front
-     * of them, so a badge would be telling them about something they can see.
+     * Called when the reviewer selects a tab, and when a reply folds while they
+     * are already sitting on the tab its card lands in: in both cases the answer
+     * is in front of them, so a badge would be telling them about something they
+     * can see. With no tab named, everything answered counts as read.
+     *
+     * @param {string} [tab] the tab the reviewer just opened
      */
-    function markRepliesSeen() {
-      writeSeen(seenMarksFor(itemsNow()));
+    function markRepliesSeen(tab) {
+      var inTab = tab
+        ? function (item) {
+            return paneOf(item) === tab;
+          }
+        : null;
+      writeSeen(seenMarksFor(itemsNow(), readSeen(), inTab));
       return paintUnseen();
     }
 
-    /** Is the reviewer looking at the replies as this one lands? */
-    function watchingDone() {
+    /** Is the reviewer looking at this tab as the reply lands? */
+    function watchingTab(tab) {
       if (typeof rail.currentTab !== "function") return false;
-      if (rail.currentTab() !== overlayModule.TAB.DONE) return false;
+      if (rail.currentTab() !== tab) return false;
       // A collapsed rail is not being looked at, whatever tab it would open on.
       return typeof rail.isCollapsed === "function" ? rail.isCollapsed() !== true : true;
     }
@@ -937,15 +1014,15 @@
       }
 
       // IT ARRIVED IN FRONT OF THEM, OR IT NEVER NEEDED THEM. Two replies are
-      // stamped read the moment they fold: one that lands while the reviewer is
-      // sitting on Done (the pane is newest first, so it is already on screen,
-      // and a badge would flash on and back off around something they can see),
-      // and one the agent did not flag on a handled item (a routine
-      // confirmation, which belongs on the card for the record and nowhere
-      // else). Stamped here, before applyReplies repaints, so neither can turn
-      // up unread later. Every other case leaves it unseen and the badge
-      // appears on the next paint.
-      if (watchingDone() || !needsToSeeReply(next[record.FIELD.REPLY])) {
+      // stamped read the moment they fold: one that lands on the tab the
+      // reviewer is already sitting on (it is on screen, and a badge would flash
+      // on and back off around something they can see), and one the agent did
+      // not flag on a handled item (a routine confirmation, which belongs on the
+      // card for the record and nowhere else). Stamped here, before applyReplies
+      // repaints, so neither can turn up unread later. Every other case leaves
+      // it unseen and the badge appears on the next paint, on the tab the card
+      // is in.
+      if (watchingTab(paneOf(next)) || !needsToSeeReply(next[record.FIELD.REPLY])) {
         var marks = readSeen();
         marks[id] = replyStamp(next);
         writeSeen(marks);
@@ -1089,6 +1166,10 @@
       unseenIds: function () {
         return Object.keys(unseenNow);
       },
+      /** tab -> the unseen ids badged on it, as the last paint worked them out. */
+      unseenByTab: function () {
+        return unseenByTab(itemsNow(), readSeen(), paneOf);
+      },
       markRepliesSeen: markRepliesSeen,
       rowCount: function () {
         return Object.keys(rows).length;
@@ -1112,6 +1193,7 @@
     replyStamp: replyStamp,
     needsToSeeReply: needsToSeeReply,
     unseenReplyIds: unseenReplyIds,
+    unseenByTab: unseenByTab,
     seenMarksFor: seenMarksFor,
     createDoneTab: createDoneTab
   };

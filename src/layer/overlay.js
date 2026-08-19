@@ -102,6 +102,25 @@
   var TABS = [TAB.ACTIVE, TAB.EDITS, TAB.DONE];
   var TAB_LABEL = { active: "Active", edits: "Edits", done: "Done" };
 
+  /**
+   * Which pane a card belongs in, from the record alone.
+   *
+   * Module scope, and on both the module and every rail, because it is the ONE
+   * pane rule. The Done tab has to know which tab a card sits in to badge that
+   * tab rather than always Done, and a second copy of this rule in that file is
+   * how the two drift apart. Pure: item in, tab name out, no card required, so
+   * it answers for an item the rail has never been handed.
+   */
+  function paneForItem(item) {
+    var kind = item[record.FIELD.KIND];
+    var state = item[record.FIELD.STATE];
+    if (state === record.STATE.HANDLED) return TAB.DONE;
+    if (kind === record.KIND.EDIT || kind === record.KIND.FORMAT_ONLY || kind === record.KIND.DELETE) {
+      return TAB.EDITS;
+    }
+    return TAB.ACTIVE;
+  }
+
   // R12. The status line has states, not strings, so a test asserts the
   // TRANSITIONS rather than the presence of a sentence. The sentences live here
   // so two builders cannot write two wordings for the same state.
@@ -965,16 +984,6 @@
     // -------------------------------------------------------------------------
     // Cards
     // -------------------------------------------------------------------------
-
-    function paneForItem(item) {
-      var kind = item[record.FIELD.KIND];
-      var state = item[record.FIELD.STATE];
-      if (state === record.STATE.HANDLED) return TAB.DONE;
-      if (kind === record.KIND.EDIT || kind === record.KIND.FORMAT_ONLY || kind === record.KIND.DELETE) {
-        return TAB.EDITS;
-      }
-      return TAB.ACTIVE;
-    }
 
     function handleFor(id) {
       return {
@@ -2383,6 +2392,7 @@
       pillNewCount: pillNewCount,
       tabBody: tabBody,
       upsertCard: upsertCard,
+      paneForItem: paneForItem,
       getCard: getCard,
       cardNode: cardNode,
       cardBody: cardBody,
@@ -2433,6 +2443,7 @@
     AGENT_TEXT: AGENT_TEXT,
     LIMIT_SEPARATE_STORAGE_NO_HELPER: LIMIT_SEPARATE_STORAGE_NO_HELPER,
     timestampLabel: timestampLabel,
+    paneForItem: paneForItem,
     createRail: createRail,
     shared: shared,
     OVERLAY_ROOT_ID: markers.OVERLAY_ROOT_ID,

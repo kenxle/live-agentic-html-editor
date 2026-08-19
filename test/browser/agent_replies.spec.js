@@ -151,27 +151,29 @@ function doneTabState(page) {
 }
 
 /**
- * What the rail says about replies the reviewer has not read.
+ * What the rail says about replies the reviewer has not read, on one tab.
  *
  * Read off the painted tab strip, not off a counter: the badge lives in the
- * closed shadow root, so the card node is the way in.
+ * closed shadow root, so the card node is the way in. The tab is a parameter
+ * because the badge sits on whichever tab holds the card that needs the
+ * reviewer, which for a question is Active and not Done.
  */
-function unseenState(page) {
-  return page.evaluate(() => {
+function unseenState(page, tab) {
+  return page.evaluate((which) => {
     const rail = window.__lahe.rail;
     const done = window.__lahe.handle.doneTab();
     const anyId = rail.cardIds()[0];
     const node = anyId ? rail.cardNode(anyId) : null;
     const root = node ? node.getRootNode() : null;
-    const badge = root && root.querySelector ? root.querySelector("[data-tab-new='done']") : null;
+    const badge = root && root.querySelector ? root.querySelector("[data-tab-new='" + which + "']") : null;
     return {
-      count: rail.tabNewCount("done"),
+      count: rail.tabNewCount(which),
       ids: done.unseenIds().slice().sort(),
       badgeHidden: badge ? badge.hidden : null,
       badgeText: badge ? badge.textContent : null,
       tab: rail.currentTab()
     };
-  });
+  }, tab || "done");
 }
 
 function cardIsUnseen(page, id) {
@@ -869,6 +871,51 @@ test.describe("3A: an agent answers by appending one line", () => {
       const cleared = await unseenState(page);
       expect(cleared).toMatchObject({ count: 0, ids: [], badgeHidden: true, badgeText: "", tab: "done" });
       expect(await cardIsUnseen(page, items[0].id), "and the card's mark goes with it").toBe(false);
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
+  // The badge goes where the CARD is. A question leaves the item outstanding,
+  // so its card stays on the active side; badging Done for it sent the reviewer
+  // to a tab the thing that needed them was not in.
+  test("a question badges the Active tab, where its card actually is, and Done stays clean", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      await commentOnSelection(page, "p.lede", "shorten this");
+      const [item] = await itemsIn(page);
+      await waitForItemInLog(helper, item.id);
+
+      // The reviewer is reading finished work, so the question lands out of view.
+      await page.evaluate(() => window.__lahe.rail.selectTab("done"));
+
+      appendReply(helper, "replies-claude.jsonl", {
+        item: item.id,
+        rev: item.rev,
+        status: "question",
+        agent: "claude",
+        text: "Do you mean the page heading, or the one in the focus section?"
+      });
+
+      await pollPage(page, () => window.__lahe.rail.tabNewCount("active") === 1, undefined, {
+        message: "the question to badge the tab its card is in"
+      });
+      const active = await unseenState(page, "active");
+      expect(active.badgeHidden, "the Active badge is on screen").toBe(false);
+      expect(active.badgeText).toBe("1");
+      expect(active.ids).toEqual([item.id]);
+      expect(await cardOf(page, item.id)).toMatchObject({ state: "ready", pane: "active" });
+      expect(
+        (await unseenState(page, "done")).count,
+        "Done holds nothing that needs them, so it says nothing"
+      ).toBe(0);
+
+      // Opening Active is the reading, and it is the tab that clears it.
+      await page.evaluate(() => window.__lahe.rail.selectTab("active"));
+      expect(await unseenState(page, "active")).toMatchObject({ count: 0, ids: [], badgeHidden: true });
+      expect(await cardIsUnseen(page, item.id)).toBe(false);
     } finally {
       await helper.kill9();
       await app.close();
