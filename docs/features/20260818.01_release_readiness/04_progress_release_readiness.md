@@ -174,6 +174,16 @@
   passage that was genuinely rewritten is left alone, because both halves of the
   signal are required.
 
+## 2026-08-19 a handled reply and a lost anchor no longer contradict each other
+
+- Complete: a card can no longer say "I made the change" and "this feedback
+  could not be matched to this version of the page" at once. A fix that rewrites
+  the passage its item points at is the fix working, so a fold to handled clears
+  the anchor badges and the record's `region.lost` stamp, the stamping path
+  skips handled records, and `review.json` does not report a handled item as
+  lost. A reply that folds as not_handled or as a question changes nothing: the
+  work is still open and the badge is still honest.
+
 ## Still open
 
 These are not done. They were found during the work above and deliberately left

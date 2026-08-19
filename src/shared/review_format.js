@@ -361,7 +361,14 @@
     out[PROJECTED.AFTER_HTML] = boundData(it[F.AFTER_HTML], BEFORE_MAX);
     out[PROJECTED.REGION_LABEL] = boundData((it[F.REGION] && it[F.REGION].label) || null, CONTEXT_MAX);
 
-    var lost = it[F.REGION] && it[F.REGION].lost;
+    // A HANDLED ITEM HAS NO LOST ANCHOR. The fix an agent reported was expected
+    // to rewrite the passage the item points at, so an anchor that no longer
+    // binds is the fix landing rather than the feedback going missing. The
+    // layer clears the stamp when the reply folds; this also covers records
+    // stamped by an older build, so review.json never tells an agent the region
+    // is lost for work that is finished.
+    var handled = it[F.STATE] === record.STATE.HANDLED;
+    var lost = !handled && it[F.REGION] && it[F.REGION].lost;
     // The nested key is `hint`, never `note`: `note` is a declared intent field
     // (D12), so it may not also name this agent-facing sentence (NEW-6).
     out.lost = lost ? { code: lost.code || null, reason: lost.reason || null, at: lost.at || null, hint: LOST_NOTE } : null;
@@ -503,7 +510,9 @@
     lines.push(it[F.KIND] + " " + it[F.ID] + " rev " + it[F.REV] + " (" + it[F.STATE] + ")");
     var label = (it[F.REGION] && it[F.REGION].label) || null;
     if (label) lines.push("  Where: " + boundData(label, CONTEXT_MAX));
-    if (it[F.REGION] && it[F.REGION].lost) lines.push("  " + LOST_NOTE);
+    // Same rule as the JSON projection: a handled item's fix was expected to
+    // change its own passage, so it is not reported as a lost anchor.
+    if (it[F.STATE] !== record.STATE.HANDLED && it[F.REGION] && it[F.REGION].lost) lines.push("  " + LOST_NOTE);
     record.chronologicalThread(it).forEach(function (round) {
       var reviewer = round.reviewer || {};
       var agent = round.agent || {};

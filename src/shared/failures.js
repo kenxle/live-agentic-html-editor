@@ -304,6 +304,13 @@
   var CODE_NAMES = Object.keys(CODES);
   var ALIAS_NAMES = Object.keys(ALIASES);
 
+  // Every code a card can be wearing because an anchor did not bind. Two files
+  // clear these badges (replay, when the anchor binds again; tab_done, when a
+  // reply folds as handled), and a list typed twice is a badge that outlives
+  // the state behind it the moment one copy gains a code. ANCHOR_LOST is the
+  // legacy spelling, kept so a card drawn by an older build still clears.
+  var ANCHOR_FAILURE_CODES = ["ANCHOR_NO_TEXT_MATCH", "ANCHOR_AMBIGUOUS", "ANCHOR_STRUCTURE_ONLY", "ANCHOR_LOST"];
+
   function canonical(code) {
     return Object.prototype.hasOwnProperty.call(ALIASES, code) ? ALIASES[code] : code;
   }
@@ -400,6 +407,7 @@
     CODE_NAMES: CODE_NAMES,
     ALIASES: ALIASES,
     ALIAS_NAMES: ALIAS_NAMES,
+    ANCHOR_FAILURE_CODES: ANCHOR_FAILURE_CODES,
     CHIP_ACTIONS: CHIP_ACTIONS,
     COPYABLE: COPYABLE,
     canonical: canonical,

@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+e853a09a1712
+ * version 0.0.0+ec78a42ce8e1
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+e853a09a1712";
+  g.LAHE.version = "0.0.0+ec78a42ce8e1";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -1130,6 +1130,13 @@
   var CODE_NAMES = Object.keys(CODES);
   var ALIAS_NAMES = Object.keys(ALIASES);
 
+  // Every code a card can be wearing because an anchor did not bind. Two files
+  // clear these badges (replay, when the anchor binds again; tab_done, when a
+  // reply folds as handled), and a list typed twice is a badge that outlives
+  // the state behind it the moment one copy gains a code. ANCHOR_LOST is the
+  // legacy spelling, kept so a card drawn by an older build still clears.
+  var ANCHOR_FAILURE_CODES = ["ANCHOR_NO_TEXT_MATCH", "ANCHOR_AMBIGUOUS", "ANCHOR_STRUCTURE_ONLY", "ANCHOR_LOST"];
+
   function canonical(code) {
     return Object.prototype.hasOwnProperty.call(ALIASES, code) ? ALIASES[code] : code;
   }
@@ -1226,6 +1233,7 @@
     CODE_NAMES: CODE_NAMES,
     ALIASES: ALIASES,
     ALIAS_NAMES: ALIAS_NAMES,
+    ANCHOR_FAILURE_CODES: ANCHOR_FAILURE_CODES,
     CHIP_ACTIONS: CHIP_ACTIONS,
     COPYABLE: COPYABLE,
     canonical: canonical,
@@ -5004,7 +5012,14 @@
     out[PROJECTED.AFTER_HTML] = boundData(it[F.AFTER_HTML], BEFORE_MAX);
     out[PROJECTED.REGION_LABEL] = boundData((it[F.REGION] && it[F.REGION].label) || null, CONTEXT_MAX);
 
-    var lost = it[F.REGION] && it[F.REGION].lost;
+    // A HANDLED ITEM HAS NO LOST ANCHOR. The fix an agent reported was expected
+    // to rewrite the passage the item points at, so an anchor that no longer
+    // binds is the fix landing rather than the feedback going missing. The
+    // layer clears the stamp when the reply folds; this also covers records
+    // stamped by an older build, so review.json never tells an agent the region
+    // is lost for work that is finished.
+    var handled = it[F.STATE] === record.STATE.HANDLED;
+    var lost = !handled && it[F.REGION] && it[F.REGION].lost;
     // The nested key is `hint`, never `note`: `note` is a declared intent field
     // (D12), so it may not also name this agent-facing sentence (NEW-6).
     out.lost = lost ? { code: lost.code || null, reason: lost.reason || null, at: lost.at || null, hint: LOST_NOTE } : null;
@@ -5146,7 +5161,9 @@
     lines.push(it[F.KIND] + " " + it[F.ID] + " rev " + it[F.REV] + " (" + it[F.STATE] + ")");
     var label = (it[F.REGION] && it[F.REGION].label) || null;
     if (label) lines.push("  Where: " + boundData(label, CONTEXT_MAX));
-    if (it[F.REGION] && it[F.REGION].lost) lines.push("  " + LOST_NOTE);
+    // Same rule as the JSON projection: a handled item's fix was expected to
+    // change its own passage, so it is not reported as a lost anchor.
+    if (it[F.STATE] !== record.STATE.HANDLED && it[F.REGION] && it[F.REGION].lost) lines.push("  " + LOST_NOTE);
     record.chronologicalThread(it).forEach(function (round) {
       var reviewer = round.reviewer || {};
       var agent = round.agent || {};
@@ -12723,6 +12740,44 @@
       return { kind: "rejected", detail: detail };
     }
 
+    /**
+     * A HANDLED FIX IS EXPECTED TO CHANGE ITS OWN PASSAGE.
+     *
+     * The agent rewrites the passage the item pointed at, the page reloads,
+     * replay cannot re-anchor the record (correctly: those words are gone), and
+     * the card gets the lost-anchor badge. Then the reply folds and the same
+     * card says both "I made the change" and "this could not be matched to this
+     * version of the page". The reviewer read it as the tool contradicting
+     * itself, and they were right: reported live on 2026-08-18.
+     *
+     * So a fold to HANDLED ends the anchor's claim on the card. The stamp is
+     * cleared on the record too, not just the badge, because the stamp is what
+     * review.json projects: leaving it would keep telling agents the region is
+     * lost for work that is finished. Nothing reads the stamp on the way back
+     * out (a reopen bumps the revision and returns the item to ready, and the
+     * next replay pass re-evaluates the anchor from scratch), so clearing it
+     * costs the reopen path nothing and a genuinely lost region is stamped
+     * again on that pass.
+     *
+     * Only HANDLED. A not_handled reply or a question leaves work in front of
+     * the reviewer, the anchor still matters, and the badge stays honest.
+     */
+    function forgetLostAnchor(item) {
+      var region = item[record.FIELD.REGION];
+      if (!region || !region.lost) return false;
+      var nextRegion = Object.assign({}, region);
+      nextRegion.lost = null;
+      item[record.FIELD.REGION] = nextRegion;
+      return true;
+    }
+
+    function clearAnchorBadges(id) {
+      if (typeof rail.clearCardBadge !== "function") return;
+      failures.ANCHOR_FAILURE_CODES.forEach(function (code) {
+        rail.clearCardBadge(id, code);
+      });
+    }
+
     function foldedReply(event) {
       var id = event[protocol.EVENT_FIELD.ITEM];
       var item = id ? itemById(id) : null;
@@ -12756,11 +12811,13 @@
         at: event[protocol.EVENT_FIELD.TS] || null,
         user_needs_to_see_reply: reply.user_needs_to_see_reply === true
       };
+      if (next[record.FIELD.STATE] === record.STATE.HANDLED) forgetLostAnchor(next);
       store.write(reviewId, next);
 
       rail.upsertCard(next);
       rail.setCardState(id, next[record.FIELD.STATE]);
       rail.setCardNotice(id, null);
+      if (next[record.FIELD.STATE] === record.STATE.HANDLED) clearAnchorBadges(id);
 
       // A QUESTION IS NOT AN AGENT MESSAGE. The rail's own carrier is the quiet
       // one, and it is right for "I made the change" and for "I could not, and
@@ -20933,13 +20990,9 @@
     return "this feedback could not be safely matched to the current page, so nothing was written or moved";
   }
 
-  var ANCHOR_FAILURE_CODES = [
-    "ANCHOR_NO_TEXT_MATCH",
-    "ANCHOR_AMBIGUOUS",
-    "ANCHOR_STRUCTURE_ONLY",
-    // Kept for records and cards written by older builds.
-    "ANCHOR_LOST"
-  ];
+  // Spelled once, in failures.js, because tab_done clears the same badges when
+  // a reply folds as handled.
+  var ANCHOR_FAILURE_CODES = (failures && failures.ANCHOR_FAILURE_CODES) || [];
 
   function anchorFailureCode(verdict) {
     if (verdict && typeof verdict.failureCode === "string" && verdict.failureCode) return verdict.failureCode;
@@ -21021,6 +21074,18 @@
   }
 
   function markLost(item, verdict, ctx) {
+    // A HANDLED ITEM IS NEVER STAMPED LOST. The agent's fix is expected to have
+    // rewritten the very passage the item points at, so a failed re-anchor is
+    // the fix working, not the feedback going missing. Saying "this could not
+    // be matched to this version of the page" beside "I made the change" is one
+    // card contradicting itself, which is how this was reported live on
+    // 2026-08-18. applyRecord already returns before this on a handled record
+    // (it is not outstanding); the guard is stated here too so the stamping
+    // path itself carries the rule, whatever calls it.
+    if (item && item[record.FIELD.STATE] === record.STATE.HANDLED) {
+      return { wrote: false, branch: null, lost: false, reason: "handled: the fix was expected to change this passage", item: item, element: null };
+    }
+
     // The page is still drawing itself, so this verdict is about a document
     // that is not finished. Say nothing yet, and come back when it is.
     if (isSettling()) {
@@ -21867,7 +21932,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+e853a09a1712";
+  var VERSION = "0.0.0+ec78a42ce8e1";
 
   var protocol = ns.protocol;
   var record = ns.record;

@@ -1173,13 +1173,9 @@
     return "this feedback could not be safely matched to the current page, so nothing was written or moved";
   }
 
-  var ANCHOR_FAILURE_CODES = [
-    "ANCHOR_NO_TEXT_MATCH",
-    "ANCHOR_AMBIGUOUS",
-    "ANCHOR_STRUCTURE_ONLY",
-    // Kept for records and cards written by older builds.
-    "ANCHOR_LOST"
-  ];
+  // Spelled once, in failures.js, because tab_done clears the same badges when
+  // a reply folds as handled.
+  var ANCHOR_FAILURE_CODES = (failures && failures.ANCHOR_FAILURE_CODES) || [];
 
   function anchorFailureCode(verdict) {
     if (verdict && typeof verdict.failureCode === "string" && verdict.failureCode) return verdict.failureCode;
@@ -1261,6 +1257,18 @@
   }
 
   function markLost(item, verdict, ctx) {
+    // A HANDLED ITEM IS NEVER STAMPED LOST. The agent's fix is expected to have
+    // rewritten the very passage the item points at, so a failed re-anchor is
+    // the fix working, not the feedback going missing. Saying "this could not
+    // be matched to this version of the page" beside "I made the change" is one
+    // card contradicting itself, which is how this was reported live on
+    // 2026-08-18. applyRecord already returns before this on a handled record
+    // (it is not outstanding); the guard is stated here too so the stamping
+    // path itself carries the rule, whatever calls it.
+    if (item && item[record.FIELD.STATE] === record.STATE.HANDLED) {
+      return { wrote: false, branch: null, lost: false, reason: "handled: the fix was expected to change this passage", item: item, element: null };
+    }
+
     // The page is still drawing itself, so this verdict is about a document
     // that is not finished. Say nothing yet, and come back when it is.
     if (isSettling()) {

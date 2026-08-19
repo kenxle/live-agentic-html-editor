@@ -961,6 +961,44 @@
       return { kind: "rejected", detail: detail };
     }
 
+    /**
+     * A HANDLED FIX IS EXPECTED TO CHANGE ITS OWN PASSAGE.
+     *
+     * The agent rewrites the passage the item pointed at, the page reloads,
+     * replay cannot re-anchor the record (correctly: those words are gone), and
+     * the card gets the lost-anchor badge. Then the reply folds and the same
+     * card says both "I made the change" and "this could not be matched to this
+     * version of the page". The reviewer read it as the tool contradicting
+     * itself, and they were right: reported live on 2026-08-18.
+     *
+     * So a fold to HANDLED ends the anchor's claim on the card. The stamp is
+     * cleared on the record too, not just the badge, because the stamp is what
+     * review.json projects: leaving it would keep telling agents the region is
+     * lost for work that is finished. Nothing reads the stamp on the way back
+     * out (a reopen bumps the revision and returns the item to ready, and the
+     * next replay pass re-evaluates the anchor from scratch), so clearing it
+     * costs the reopen path nothing and a genuinely lost region is stamped
+     * again on that pass.
+     *
+     * Only HANDLED. A not_handled reply or a question leaves work in front of
+     * the reviewer, the anchor still matters, and the badge stays honest.
+     */
+    function forgetLostAnchor(item) {
+      var region = item[record.FIELD.REGION];
+      if (!region || !region.lost) return false;
+      var nextRegion = Object.assign({}, region);
+      nextRegion.lost = null;
+      item[record.FIELD.REGION] = nextRegion;
+      return true;
+    }
+
+    function clearAnchorBadges(id) {
+      if (typeof rail.clearCardBadge !== "function") return;
+      failures.ANCHOR_FAILURE_CODES.forEach(function (code) {
+        rail.clearCardBadge(id, code);
+      });
+    }
+
     function foldedReply(event) {
       var id = event[protocol.EVENT_FIELD.ITEM];
       var item = id ? itemById(id) : null;
@@ -994,11 +1032,13 @@
         at: event[protocol.EVENT_FIELD.TS] || null,
         user_needs_to_see_reply: reply.user_needs_to_see_reply === true
       };
+      if (next[record.FIELD.STATE] === record.STATE.HANDLED) forgetLostAnchor(next);
       store.write(reviewId, next);
 
       rail.upsertCard(next);
       rail.setCardState(id, next[record.FIELD.STATE]);
       rail.setCardNotice(id, null);
+      if (next[record.FIELD.STATE] === record.STATE.HANDLED) clearAnchorBadges(id);
 
       // A QUESTION IS NOT AN AGENT MESSAGE. The rail's own carrier is the quiet
       // one, and it is right for "I made the change" and for "I could not, and

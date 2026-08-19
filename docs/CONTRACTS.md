@@ -100,7 +100,7 @@ not stage it. The orchestrator rebuilds and commits it once at each checkpoint.
 | `after` | data | The region's wording now. Never truncated, never cleaned up (R3) |
 | `before_html`, `after_html` | data | The same pair as markup, so an agent sees structure |
 | `after_history` | data | Every `after` this record has had, in order. Replay's branch three reads it |
-| `region` | data | `{ref, label, lost}`. The anchor reference (1C mints it), the pinned display label, and the lost-anchor state |
+| `region` | data | `{ref, label, lost}`. The anchor reference (1C mints it), the pinned display label, and the lost-anchor state. A handled item's `lost` is cleared when its reply folds and is never projected, because a handled fix is expected to have changed its own passage |
 | `context` | data | `{quote, prefix, suffix, heading, element}` |
 | `page_origin` | — | The origin the record was made on |
 | `page_path` | data | The pathname, with the query string and fragment collapsed away |

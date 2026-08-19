@@ -430,6 +430,43 @@ test("a visible structurally similar wireframe element is not described as delet
   assert.equal(persisted.length, 2, "both the classified failure and its clear are durable");
 });
 
+test("a handled item is never stamped or badged lost: its fix was expected to change that passage", () => {
+  const item = fixtures.edit();
+  const page = pageOf(["Before it.", item.before, "After it."]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+  // The agent rewrote the passage this item points at, and the reply folded.
+  anchoredItem[record.FIELD.STATE] = record.STATE.HANDLED;
+  page.blocks[1].remove();
+
+  const persisted = [];
+  const first = runOne(anchoredItem, page.root, {
+    persist: function (record_) {
+      persisted.push(record_);
+    }
+  });
+
+  assert.equal(first.result.lost, false, "a passage the fix rewrote is not lost feedback");
+  assert.equal(replay.counters.regionsLost, 0);
+  assert.equal(anchoredItem.region.lost, null, "nothing is stamped on the record");
+  assert.deepEqual(first.cards.badges[item.id], undefined, "and nothing lands on the card beside the reply");
+  assert.equal(persisted.length, 0);
+
+  // A later pass, on a page that still does not hold the old words, says the
+  // same thing: the reviewer cannot be told the fix failed once per pass.
+  const second = runOne(anchoredItem, page.root);
+  assert.equal(second.result.lost, false);
+  assert.equal(anchoredItem.region.lost, null);
+  assert.deepEqual(second.cards.badges[item.id], undefined);
+
+  // Reopened, it is ordinary outstanding work again, and this pass judges the
+  // anchor from scratch: a region that really is gone is stamped lost.
+  anchoredItem[record.FIELD.STATE] = record.STATE.READY;
+  const reopened = runOne(anchoredItem, page.root);
+  assert.equal(reopened.result.lost, true);
+  assert.equal(anchoredItem.region.lost.code, "ANCHOR_NO_TEXT_MATCH");
+  assert.equal(reopened.cards.badges[item.id][0].canonical_code, "ANCHOR_NO_TEXT_MATCH");
+});
+
 // ---------------------------------------------------------------------------
 // The property that makes the rest safe
 // ---------------------------------------------------------------------------

@@ -432,6 +432,17 @@ test("a lost anchor travels in the projection, so the agent is told rather than 
   assert.equal(Object.prototype.hasOwnProperty.call(p.lost, "note"), false);
 });
 
+test("a handled item's lost stamp is not projected: the fix was expected to change that passage", () => {
+  const item = anEdit({
+    state: record.STATE.HANDLED,
+    region: { ref: { id: "ref_1" }, label: "Introduction, p 2", lost: { code: "ANCHOR_NOT_FOUND", reason: null, at: null } }
+  });
+  const json = rf.projectReview(reviewWith([item], null));
+  assert.equal(json.pages[0].items[0].lost, null, "finished work is not reported as unmatched feedback");
+  const text = rf.renderText(reviewWith([item], null));
+  assert.doesNotMatch(text, /no longer on the page/);
+});
+
 test("drafts are projected with their state so an agent can leave them alone", () => {
   const draft = anEdit({ state: record.STATE.DRAFT, note: "half a thou" });
   const json = rf.projectReview(reviewWith([draft], null));

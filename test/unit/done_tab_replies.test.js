@@ -19,6 +19,7 @@ const overlay = require("../../src/layer/overlay.js");
 const tabDone = require("../../src/layer/tab_done.js");
 const record = require("../../src/shared/record.js");
 const protocol = require("../../src/shared/protocol.js");
+const failures = require("../../src/shared/failures.js");
 
 const REVIEW = "done-tab-review";
 
@@ -240,6 +241,81 @@ test("a malformed line becomes a dismissible chip naming the file and the line",
     })
   ]);
   assert.equal(rail.failures.count(), 0, "dismissed stays dismissed");
+});
+
+// ---------------------------------------------------------------------------
+// The lost anchor and the handled reply, which used to contradict each other
+// ---------------------------------------------------------------------------
+//
+// The agent's fix rewrote the passage the item pointed at, the page reloaded,
+// replay could not re-anchor the record and stamped it lost, and then the reply
+// folded. The card said "I made the change" over "this could not be matched to
+// this version of the page" (reported live on 2026-08-18).
+
+/** An item already carrying replay's lost stamp, with the badge on its card. */
+function lostItem(store, rail, overrides) {
+  const item = store.write(REVIEW, readyItem(overrides));
+  const stamped = Object.assign({}, item);
+  stamped.region = Object.assign({}, item.region, {
+    lost: { code: "ANCHOR_NO_TEXT_MATCH", reason: "this feedback could not be safely matched", at: "2026-08-19T09:00:00.000Z" }
+  });
+  store.write(REVIEW, stamped);
+  rail.upsertCard(stamped);
+  rail.setCardBadge(stamped.id, failures.failure("ANCHOR_NO_TEXT_MATCH"));
+  return stamped;
+}
+
+function anchorBadgeCodes(rail, id) {
+  return rail.cardBadges(id)
+    .map(function (badge) {
+      return badge.code;
+    })
+    .filter(function (code) {
+      return failures.ANCHOR_FAILURE_CODES.indexOf(code) !== -1;
+    });
+}
+
+test("a handled fold clears the lost-anchor badge and the stamp behind it", () => {
+  const { store, rail, done } = setup();
+  const item = lostItem(store, rail);
+  assert.deepEqual(anchorBadgeCodes(rail, item.id), ["ANCHOR_NO_TEXT_MATCH"], "the badge is there to begin with");
+
+  done.applyReplies([foldEvent(item)]);
+
+  assert.deepEqual(anchorBadgeCodes(rail, item.id), [], "the card no longer contradicts the reply");
+  assert.equal(store.readItem(REVIEW, item.id).region.lost, null, "and review.json stops calling a finished item's region lost");
+});
+
+test("a not_handled fold keeps the lost-anchor badge: the work is still open", () => {
+  const { store, rail, done } = setup();
+  const item = lostItem(store, rail);
+
+  done.applyReplies([refusalFoldEvent(item)]);
+
+  assert.deepEqual(anchorBadgeCodes(rail, item.id), ["ANCHOR_NO_TEXT_MATCH"]);
+  assert.equal(store.readItem(REVIEW, item.id).region.lost.code, "ANCHOR_NO_TEXT_MATCH");
+});
+
+test("a question fold keeps the lost-anchor badge too", () => {
+  const { store, rail, done } = setup();
+  const item = lostItem(store, rail);
+
+  done.applyReplies([questionFoldEvent(item)]);
+
+  assert.deepEqual(anchorBadgeCodes(rail, item.id), ["ANCHOR_NO_TEXT_MATCH"]);
+  assert.equal(store.readItem(REVIEW, item.id).region.lost.code, "ANCHOR_NO_TEXT_MATCH");
+});
+
+test("reopening a handled item leaves the anchor to be judged again from scratch", () => {
+  const { store, rail, done } = setup();
+  const item = lostItem(store, rail);
+  done.applyReplies([foldEvent(item)]);
+
+  const reopened = done.reopen(item.id);
+
+  assert.equal(reopened.state, record.STATE.READY, "it is ordinary outstanding work again");
+  assert.equal(reopened.region.lost, null, "carrying no verdict from the round that just closed");
+  assert.equal(store.readItem(REVIEW, item.id).region.lost, null);
 });
 
 test("reopening a handled issue archives its answer and queues ordinary ready work", () => {
