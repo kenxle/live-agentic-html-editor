@@ -542,3 +542,57 @@ test("an unseen reply survives a reload: a fresh Done tab over the same storage 
   assert.deepEqual(secondDone.unseenIds(), [item.id], "unread stays unread across a reload");
   assert.equal(second.tabNewCount(overlay.TAB.DONE), 1);
 });
+
+// ---------------------------------------------------------------------------
+// The collapsed pill's jewel
+// ---------------------------------------------------------------------------
+//
+// The badge lives on the Done tab, and the tab strip is not on screen while the
+// rail is collapsed to its pill: that is where the reviewer actually works. The
+// jewel puts the SAME number on the pill. These assert it is the same number,
+// not a second tally; whether it is painted is a browser test (rail_pill_jewel).
+
+test("the pill jewel carries the Done tab badge's own number", () => {
+  const { store, rail, done } = setup();
+  const item = store.write(REVIEW, readyItem());
+  rail.upsertCard(item);
+  assert.equal(rail.pillNewCount(), 0, "nothing has been answered yet");
+
+  done.applyReplies([flaggedFoldEvent(item)]);
+  assert.equal(rail.tabNewCount(overlay.TAB.DONE), 1);
+  assert.equal(rail.pillNewCount(), 1, "one number, two places it shows");
+
+  // Reading the replies clears both, because the jewel is a view of the badge.
+  rail.selectTab(overlay.TAB.DONE);
+  assert.equal(rail.tabNewCount(overlay.TAB.DONE), 0);
+  assert.equal(rail.pillNewCount(), 0);
+});
+
+test("an unflagged handled reply leaves the pill jewel at zero, so nothing is drawn", () => {
+  const { store, rail, done } = setup();
+  const item = store.write(REVIEW, readyItem());
+  rail.upsertCard(item);
+
+  done.applyReplies([foldEvent(item)]);
+
+  assert.equal(rail.tabNewCount(overlay.TAB.DONE), 0);
+  assert.equal(rail.pillNewCount(), 0, "zero is no jewel, not a jewel reading 0");
+});
+
+test("the jewel's count is the same collapsed or expanded: it is state, not a paint", () => {
+  const { store, rail, done } = setup();
+  const item = store.write(REVIEW, readyItem());
+  rail.upsertCard(item);
+  done.applyReplies([flaggedFoldEvent(item)]);
+
+  rail.collapse(true);
+  assert.equal(rail.isCollapsed(), true);
+  assert.equal(rail.pillNewCount(), 1);
+
+  rail.collapse(false);
+  assert.equal(rail.isCollapsed(), false);
+  assert.equal(rail.pillNewCount(), 1, "still waiting to be read; only opening Done answers it");
+
+  rail.selectTab(overlay.TAB.DONE);
+  assert.equal(rail.pillNewCount(), 0);
+});

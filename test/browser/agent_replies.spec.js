@@ -1002,4 +1002,63 @@ test.describe("3A: an agent answers by appending one line", () => {
       await app.close();
     }
   });
+
+  // The reviewer works with the rail put away. A badge on the Done tab is a
+  // badge on a strip that is not on screen, so the same number goes on the pill.
+  test("with the rail collapsed, a flagged reply lights the pill's jewel, and opening Done clears both", async ({
+    page
+  }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      await commentOnSelection(page, "p.lede", "shorten this");
+      const [item] = await itemsIn(page);
+      await waitForItemInLog(helper, item.id);
+
+      // The rail goes away, which is how a reviewer reads a page.
+      await page.evaluate(() => window.__lahe.rail.collapse(true));
+      await pollPage(page, () => window.__lahe.rail.geometry().pillVisible === true, undefined, {
+        message: "the collapsed pill to be on screen"
+      });
+      expect(
+        await page.evaluate(() => window.__lahe.rail.geometry().pillJewel),
+        "nothing is waiting to be read yet"
+      ).toBe("");
+
+      appendReply(helper, "replies-claude.jsonl", {
+        item: item.id,
+        rev: item.rev,
+        status: "handled",
+        agent: "claude",
+        text: "Shortened it, but the second sentence had to go too.",
+        user_needs_to_see_reply: true
+      });
+      await pollPage(page, () => window.__lahe.rail.geometry().pillJewel === "1", undefined, {
+        message: "the jewel to appear on the collapsed pill"
+      });
+      expect(
+        await page.evaluate(() => window.__lahe.rail.tabNewCount("done")),
+        "the jewel is the badge's own number"
+      ).toBe(1);
+
+      // Expanding shows the badge; the pill is gone, so the jewel goes with it.
+      await page.evaluate(() => window.__lahe.rail.collapse(false));
+      const expanded = await unseenState(page);
+      expect(expanded.badgeText).toBe("1");
+      expect(
+        await page.evaluate(() => window.__lahe.rail.geometry().pillJewel),
+        "no pill on screen, no jewel on screen"
+      ).toBe("");
+
+      // Reading the replies clears the badge, and the jewel with it: collapsing
+      // again shows a plain pill.
+      await page.evaluate(() => window.__lahe.rail.selectTab("done"));
+      expect(await unseenState(page)).toMatchObject({ count: 0, badgeHidden: true });
+      await page.evaluate(() => window.__lahe.rail.collapse(true));
+      expect(await page.evaluate(() => window.__lahe.rail.geometry().pillJewel)).toBe("");
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
 });

@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+43a059fb86dd
+ * version 0.0.0+928e271c129c
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+43a059fb86dd";
+  g.LAHE.version = "0.0.0+928e271c129c";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -8986,7 +8986,16 @@
     ".pill:hover{background:var(--surface)}",
     ".pill__dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}",
     ".pill__count{font-variant-numeric:tabular-nums;color:var(--ink-faint);font-weight:500}",
-    ".pill__count[hidden]{display:none}"
+    ".pill__count[hidden]{display:none}",
+    // THE JEWEL: the same number the Done tab badge carries, on the one surface
+    // that is still on screen once the rail is put away. A reviewer works with
+    // the rail collapsed, and a question or a refusal was badging a tab strip
+    // nobody could see. Same accent, same size, same restraint as .newmark: no
+    // motion, no pulsing, and nothing at all when the count is zero.
+    ".pill__jewel{font-variant-numeric:tabular-nums;font-size:10px;font-weight:700;line-height:1;",
+    "color:#fff;background:var(--accent);border-radius:999px;padding:2px 5px;min-width:14px;text-align:center}",
+    ":host([data-lahe-scheme='dark']) .pill__jewel{color:#12151a}",
+    ".pill__jewel[hidden]{display:none}"
   ].join("");
 
   // The review-level actions, in the head's menu. They are the same two the
@@ -9304,6 +9313,9 @@
       pill.appendChild(el("span", null, "Review"));
       var pillCount = el("span", "pill__count", "0");
       pill.appendChild(pillCount);
+      var pillJewel = el("span", "pill__jewel");
+      pillJewel.hidden = true;
+      pill.appendChild(pillJewel);
       pill.addEventListener("click", function () {
         collapse(false);
       });
@@ -9341,7 +9353,8 @@
         menuWrap: menuWrap,
         collapseBtn: collapseBtn,
         pill: pill,
-        pillCount: pillCount
+        pillCount: pillCount,
+        pillJewel: pillJewel
       };
 
       // Everything already in state is painted once, here. This is the only
@@ -10368,6 +10381,29 @@
       var total = Object.keys(cards).length;
       dom.pillCount.textContent = total ? String(open) + " (" + String(total) + ")" : "";
       dom.pillCount.hidden = total === 0;
+      // The jewel is a VIEW of the tab badges, never a second tally. It reads
+      // whatever setTabNewCount was last told, so opening Done and clearing the
+      // badge clears the jewel in the same call: there is one number and two
+      // places it shows.
+      var fresh = pillNewCount();
+      dom.pillJewel.textContent = fresh ? String(fresh) : "";
+      dom.pillJewel.hidden = fresh === 0;
+    }
+
+    /**
+     * The number the collapsed pill's jewel shows.
+     *
+     * Every tab's unseen count, added up. Today only Done fills one (replies the
+     * reviewer needs to read), so this IS the Done badge's number; a second tab
+     * that starts counting gets carried to the pill for free rather than needing
+     * this to be taught about it.
+     */
+    function pillNewCount() {
+      var total = 0;
+      TABS.forEach(function (name) {
+        total += tabNewCounts[name] || 0;
+      });
+      return total;
     }
 
     function selectTab(tab) {
@@ -10645,7 +10681,17 @@
     // Rects for both, plus the overlap answer, because "never overlaps" is a
     // geometric claim and a test should be able to check it as one.
     function geometry() {
-      if (!dom) return { railVisible: false, pillVisible: false, pillCount: "", overlap: false, rail: null, pill: null };
+      if (!dom) {
+        return {
+          railVisible: false,
+          pillVisible: false,
+          pillCount: "",
+          pillJewel: "",
+          overlap: false,
+          rail: null,
+          pill: null
+        };
+      }
       var railRect = dom.rail.hidden ? null : dom.rail.getBoundingClientRect();
       var pillRect = dom.pill.hidden ? null : dom.pill.getBoundingClientRect();
       var overlap = false;
@@ -10662,6 +10708,10 @@
         // The burn-down the pill shows, as the reviewer reads it: "3 (7)", or
         // "" on a page nothing has been written on yet.
         pillCount: dom.pillCount.hidden ? "" : dom.pillCount.textContent,
+        // The jewel, as the reviewer reads it: "2", or "" when there is nothing
+        // waiting. Empty is the honest answer for a hidden jewel and for a pill
+        // that is not on screen at all.
+        pillJewel: dom.pill.hidden || dom.pillJewel.hidden ? "" : dom.pillJewel.textContent,
         overlap: overlap,
         rail: railRect ? { top: railRect.top, right: railRect.right, bottom: railRect.bottom, left: railRect.left } : null,
         pill: pillRect ? { top: pillRect.top, right: pillRect.right, bottom: pillRect.bottom, left: pillRect.left } : null
@@ -10694,6 +10744,7 @@
       onTabSelect: onTabSelect,
       setTabNewCount: setTabNewCount,
       tabNewCount: tabNewCount,
+      pillNewCount: pillNewCount,
       tabBody: tabBody,
       upsertCard: upsertCard,
       getCard: getCard,
@@ -21492,7 +21543,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+43a059fb86dd";
+  var VERSION = "0.0.0+928e271c129c";
 
   var protocol = ns.protocol;
   var record = ns.record;

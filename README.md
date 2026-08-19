@@ -282,6 +282,13 @@ item goes back to ready with a line saying so. The agent is woken the same way i
 is for anything else. A passage that was genuinely rewritten, rather than put
 back the way it was, is left alone.
 
+**With the rail collapsed, the pill carries the same number.** Most of a session
+is spent with the rail put away, and a badge on a tab strip that is not on screen
+tells you nothing. So the pill wears a small accent jewel with the count of
+replies that need you: the same number the Done tab badge shows, not a second
+tally. Nothing waiting means no jewel. Opening the rail and the Done tab clears
+both at once.
+
 ## Every invocation
 
 **Things a person says to their agent.** The agent-readable playbook is
