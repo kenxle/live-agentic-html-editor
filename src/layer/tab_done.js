@@ -80,6 +80,59 @@
   var ROW_CLASS = "lahe-done-row";
   var ASK_CLASS = "lahe-ask";
   var ASKING_ATTR = "data-lahe-asking";
+  // A card holding a reply the reviewer has not read yet.
+  var UNSEEN_ATTR = "data-lahe-unseen";
+
+  /**
+   * Which reply this is, as one string.
+   *
+   * A boolean cannot carry this. An item that is answered, reopened, and
+   * answered again has to read as new the second time, so the mark has to name
+   * WHICH reply was read: the time it landed, plus the revision it answered.
+   * Returns null when there is no reply to have seen.
+   */
+  function replyStamp(item) {
+    var reply = item && item[record.FIELD.REPLY];
+    if (!reply) return null;
+    var rev = item[record.FIELD.REV];
+    return String(reply.at || "") + "@" + String(rev === undefined || rev === null ? "" : rev);
+  }
+
+  /**
+   * The ids whose reply the reviewer has not read.
+   *
+   * Pure: items in, marks in, ids out. Nothing here touches the DOM or storage,
+   * which is what makes the rule testable without a browser.
+   *
+   * @param {object[]} items every record this review holds
+   * @param {object} marks id -> the stamp of the reply already read
+   * @returns {string[]}
+   */
+  function unseenReplyIds(items, marks) {
+    var seen = marks && typeof marks === "object" ? marks : {};
+    var out = [];
+    (items || []).forEach(function (item) {
+      var stamp = replyStamp(item);
+      if (!stamp) return;
+      if (seen[item[record.FIELD.ID]] !== stamp) out.push(item[record.FIELD.ID]);
+    });
+    return out;
+  }
+
+  /**
+   * The marks after the reviewer has looked at everything on screen.
+   *
+   * Built fresh from the items rather than merged into the old map, so an item
+   * that no longer has a reply drops out and the bucket cannot grow forever.
+   */
+  function seenMarksFor(items) {
+    var next = {};
+    (items || []).forEach(function (item) {
+      var stamp = replyStamp(item);
+      if (stamp) next[item[record.FIELD.ID]] = stamp;
+    });
+    return next;
+  }
 
   // What the reviewer reads when their own rewording outran an agent's answer.
   // A constant, so the test asserts the sentence the reviewer sees.
@@ -137,7 +190,17 @@
     // The card carrying a question is pulled to the top of its pane and given
     // the accent border, so it is the first thing in the tab and reads as one
     // object with the block inside it.
-    ".card[" + ASKING_ATTR + "='true']{order:-1;border-color:var(--accent)}"
+    ".card[" + ASKING_ATTR + "='true']{order:-1;border-color:var(--accent)}",
+
+    // The unseen mark. A reply that folded while the reviewer was looking at
+    // another tab is the only sign they get that an answer arrived, so the card
+    // carries one: an accent rule down its left edge, drawn as an inset shadow
+    // so it costs the card no layout and cannot fight the border a question
+    // sets. Deliberately calmer than the question block above: a question is a
+    // stop, and this is a "there is something here". If the same card is both,
+    // the question treatment is the one that reads.
+    ".card[" + UNSEEN_ATTR + "='true']{box-shadow:inset 3px 0 0 0 var(--accent)}",
+    ".card[" + UNSEEN_ATTR + "='true'][" + ASKING_ATTR + "='true']{box-shadow:none}"
   ].join("");
 
   function createDoneTab(options) {
@@ -172,6 +235,11 @@
     // Undo. Whoever removes the row still has to remove the button.
     var reopens = Object.create(null);
     var counters = { folded: 0, refused: 0, rejected: 0, reopened: 0, questions: 0 };
+    // id -> true for the cards currently wearing the unseen mark, so a paint
+    // knows which ones to take it back off. The durable truth is in storage;
+    // this is only what is on screen right now.
+    var unseenNow = Object.create(null);
+    var dropTabWatch = null;
 
     function el(tag, className, text) {
       var node = doc.createElement(tag);
@@ -205,12 +273,94 @@
     function mount() {
       if (mounted) return api;
       mounted = true;
+      // OPENING THE TAB IS THE READING. The rail owns the tab strip and knows
+      // nothing about replies, so it says "the reviewer moved here" and this
+      // file decides what that means.
+      if (!dropTabWatch && typeof rail.onTabSelect === "function") {
+        dropTabWatch = rail.onTabSelect(function (tab) {
+          if (tab === overlayModule.TAB.DONE) markRepliesSeen();
+        });
+      }
       refresh();
       return api;
     }
 
+    // -------------------------------------------------------------------------
+    // Replies the reviewer has not read yet
+    // -------------------------------------------------------------------------
+    //
+    // An agent's reply used to move an item to Done and say nothing. The
+    // reviewer, who is on the Active tab writing the next comment, got no signal
+    // that an answer had arrived, and no way to tell the answers they had read
+    // from the ones they had not. The mark below is that signal, and it is
+    // reviewer-side only: it lives in browser storage, never in review.json, and
+    // no agent sees it or can set it.
+
+    function readSeen() {
+      return typeof store.readSeenReplies === "function" ? store.readSeenReplies(reviewId) : {};
+    }
+
+    function writeSeen(marks) {
+      if (typeof store.writeSeenReplies === "function") store.writeSeenReplies(reviewId, marks);
+      return marks;
+    }
+
+    /** The card wears the mark, so it survives whatever this file draws inside it. */
+    function markUnseenCard(id, unseen) {
+      var node = rail.cardNode(id);
+      if (!node) return false;
+      if (unseen) node.setAttribute(UNSEEN_ATTR, "true");
+      else node.removeAttribute(UNSEEN_ATTR);
+      return true;
+    }
+
+    /** Recompute from storage, repaint the cards, and hand the rail the count. */
+    function paintUnseen() {
+      var ids = unseenReplyIds(itemsNow(), readSeen());
+      var next = Object.create(null);
+      ids.forEach(function (id) {
+        next[id] = true;
+      });
+      Object.keys(unseenNow).forEach(function (id) {
+        if (!next[id]) markUnseenCard(id, false);
+      });
+      ids.forEach(function (id) {
+        markUnseenCard(id, true);
+      });
+      unseenNow = next;
+      if (typeof rail.setTabNewCount === "function") rail.setTabNewCount(overlayModule.TAB.DONE, ids.length);
+      return ids;
+    }
+
+    /**
+     * Everything answered right now counts as read.
+     *
+     * Called when the reviewer selects the Done tab, and when a reply folds
+     * while they are already sitting on it: in both cases the answer is in front
+     * of them, so a badge would be telling them about something they can see.
+     */
+    function markRepliesSeen() {
+      writeSeen(seenMarksFor(itemsNow()));
+      return paintUnseen();
+    }
+
+    /** Is the reviewer looking at the replies as this one lands? */
+    function watchingDone() {
+      if (typeof rail.currentTab !== "function") return false;
+      if (rail.currentTab() !== overlayModule.TAB.DONE) return false;
+      // A collapsed rail is not being looked at, whatever tab it would open on.
+      return typeof rail.isCollapsed === "function" ? rail.isCollapsed() !== true : true;
+    }
+
     function refresh() {
-      if (!mounted || !doc) return api;
+      if (!mounted) return api;
+      // The unseen count is RECORD truth, not DOM truth. A headless rail (no
+      // document, which is the shape the unit tests run in) draws nothing and
+      // still has to know how many replies are waiting to be read.
+      if (!doc) {
+        paintUnseen();
+        return api;
+      }
       var seen = Object.create(null);
 
       itemsNow().forEach(function (item) {
@@ -257,6 +407,9 @@
         if (seen[id]) return;
         dropRow(id);
       });
+
+      // Last, because it reads the cards this paint just created.
+      paintUnseen();
 
       return api;
     }
@@ -737,6 +890,17 @@
         clearQuestion(id);
       }
 
+      // IT ARRIVED IN FRONT OF THEM. The Done pane is newest first, so a reply
+      // that folds while the reviewer is on that tab is already on screen and
+      // needs no badge: stamp it read here, before applyReplies repaints, so the
+      // badge never flashes on and back off. Every other case leaves it unseen
+      // and the badge appears on the next paint.
+      if (watchingDone()) {
+        var marks = readSeen();
+        marks[id] = replyStamp(next);
+        writeSeen(marks);
+      }
+
       return { kind: "folded", item: id, state: next[record.FIELD.STATE], status: reply.status };
     }
 
@@ -815,6 +979,12 @@
     }
 
     function unmount() {
+      if (dropTabWatch) dropTabWatch();
+      dropTabWatch = null;
+      Object.keys(unseenNow).forEach(function (id) {
+        markUnseenCard(id, false);
+      });
+      unseenNow = Object.create(null);
       Object.keys(rows).forEach(dropRow);
       Object.keys(asks).forEach(clearQuestion);
       Object.keys(threads).forEach(clearThread);
@@ -834,6 +1004,7 @@
       ROW_CLASS: ROW_CLASS,
       ASK_CLASS: ASK_CLASS,
       ASKING_ATTR: ASKING_ATTR,
+      UNSEEN_ATTR: UNSEEN_ATTR,
       STALE_NOTICE: STALE_NOTICE,
       mount: mount,
       unmount: unmount,
@@ -865,6 +1036,10 @@
       questionIds: function () {
         return Object.keys(asks);
       },
+      unseenIds: function () {
+        return Object.keys(unseenNow);
+      },
+      markRepliesSeen: markRepliesSeen,
       rowCount: function () {
         return Object.keys(rows).length;
       },
@@ -881,8 +1056,12 @@
     ROW_CLASS: ROW_CLASS,
     ASK_CLASS: ASK_CLASS,
     ASKING_ATTR: ASKING_ATTR,
+    UNSEEN_ATTR: UNSEEN_ATTR,
     STALE_NOTICE: STALE_NOTICE,
     STYLE: STYLE,
+    replyStamp: replyStamp,
+    unseenReplyIds: unseenReplyIds,
+    seenMarksFor: seenMarksFor,
     createDoneTab: createDoneTab
   };
 });

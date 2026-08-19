@@ -149,6 +149,12 @@
   task, and every surface (`AGENTS.md`, the skill, the CLI output, and the
   contract in `review.json`) says the same thing.
 
+- Complete: an agent's reply no longer moves an item to Done in silence. The
+  Done tab carries a badge counting replies the reviewer has not read, those
+  cards wear a quiet accent rule, and selecting the tab clears both. The marks
+  are reviewer-side browser storage keyed per review, so an unread answer is
+  still unread after a reload and no agent ever sees the state.
+
 ## Still open
 
 These are not done. They were found during the work above and deliberately left

@@ -207,6 +207,82 @@ test.describe("3D: the Edits tab", () => {
     expect(cardText, "no draft label and no Reword/Delete pair on a hand edit").not.toMatch(/Empty draft|Reword/);
   });
 
+  // A REGRESSION, fixed in ce02c19.
+  //
+  // The Edits pane orders its cards with inline flex `order`. A card that got
+  // answered migrated to Done and TOOK THE INLINE STYLE WITH IT, and one stale
+  // negative order beats every DOM position the rail chooses: the old edit sat
+  // pinned at the top of Done while the reply that had just arrived sank below
+  // it. The reviewer's newest answer was the hardest one to find.
+  //
+  // Asserted on painted geometry, not DOM order, because flex `order` moves what
+  // is on screen without moving anything in the tree.
+  test("a hand edit answered out of the Edits pane drops its inline order, and the newest reply is first in Done", async ({
+    page
+  }) => {
+    await page.goto(fixtureUrl(pages));
+    await pollPage(page, () => !!window.__lahe && !!window.__laheEdits, undefined, { message: "the real boot" });
+    await typeEdit(page, "one", TYPED[0].add);
+    await typeEdit(page, "two", TYPED[1].add);
+
+    const ids = await page.evaluate(() => window.__lahe.items().map((item) => item.id));
+    expect(ids, "two hand edits, each with its own card").toHaveLength(2);
+
+    // Both cards are in Edits, and the pane really does stamp an inline order.
+    const stampedInEdits = await page.evaluate(
+      (all) => all.some((id) => !!window.__lahe.rail.cardNode(id).style.order),
+      ids
+    );
+    expect(stampedInEdits, "the Edits pane orders its rows with inline flex order").toBe(true);
+
+    // The agent answers the FIRST edit, then the second a minute later. Nothing
+    // test-only about the path: it is the real fold the poll loop calls.
+    await page.evaluate(
+      ({ all, review }) => {
+        const P = window.LAHE.protocol;
+        const events = all.map((id, index) =>
+          P.newEvent({
+            event: P.EVENT.REPLY_FOLDED,
+            event_id: window.LAHE.record.randomId("evt"),
+            review: review,
+            item: id,
+            rev: window.__lahe.itemById(id).rev,
+            ts: new Date(Date.UTC(2026, 7, 19, 12, index)).toISOString(),
+            payload: {
+              accepted: true,
+              state: "handled",
+              file: "replies-claude.jsonl",
+              reply: { status: "handled", agent: "claude", reason: null, text: null, files: [] }
+            }
+          })
+        );
+        events.forEach((event) => window.__lahe.handle.doneTab().applyReplies([event]));
+      },
+      { all: ids, review: await page.evaluate(() => window.__lahe.handle.review) }
+    );
+
+    await pollPage(page, (all) => all.every((id) => window.__lahe.rail.getCard(id).pane === "done"), ids, {
+      message: "both answered edits to migrate into the Done pane"
+    });
+
+    const laidOut = await page.evaluate((all) => {
+      window.__lahe.rail.collapse(false);
+      window.__lahe.rail.selectTab("done");
+      return all.map((id) => {
+        const node = window.__lahe.rail.cardNode(id);
+        return { id: id, order: node.style.order, top: node.getBoundingClientRect().top };
+      });
+    }, ids);
+
+    laidOut.forEach((card) => {
+      expect(card.order, "no card in Done carries the Edits pane's inline order any more").toBe("");
+    });
+    const [older, newer] = laidOut;
+    expect(newer.top, "the card whose reply is newest sits above the one answered a minute earlier").toBeLessThan(
+      older.top
+    );
+  });
+
   // The export module ships in the bundle now, so "absent" can only mean the
   // namespace was lost at runtime. The guard's promise is unchanged: the button
   // says so instead of failing quietly.

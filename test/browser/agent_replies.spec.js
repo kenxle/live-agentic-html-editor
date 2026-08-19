@@ -150,6 +150,37 @@ function doneTabState(page) {
   });
 }
 
+/**
+ * What the rail says about replies the reviewer has not read.
+ *
+ * Read off the painted tab strip, not off a counter: the badge lives in the
+ * closed shadow root, so the card node is the way in.
+ */
+function unseenState(page) {
+  return page.evaluate(() => {
+    const rail = window.__lahe.rail;
+    const done = window.__lahe.handle.doneTab();
+    const anyId = rail.cardIds()[0];
+    const node = anyId ? rail.cardNode(anyId) : null;
+    const root = node ? node.getRootNode() : null;
+    const badge = root && root.querySelector ? root.querySelector("[data-tab-new='done']") : null;
+    return {
+      count: rail.tabNewCount("done"),
+      ids: done.unseenIds().slice().sort(),
+      badgeHidden: badge ? badge.hidden : null,
+      badgeText: badge ? badge.textContent : null,
+      tab: rail.currentTab()
+    };
+  });
+}
+
+function cardIsUnseen(page, id) {
+  return page.evaluate((itemId) => {
+    const node = window.__lahe.rail.cardNode(itemId);
+    return !!node && node.getAttribute("data-lahe-unseen") === "true";
+  }, id);
+}
+
 async function bootedPage(page, app, helper, token) {
   app.useLayer({ review: REVIEW, token: token, helper: helper.url });
   await page.goto(app.urlFor("/?morph=off"));
@@ -787,6 +818,108 @@ test.describe("3A: an agent answers by appending one line", () => {
           })
         }
       );
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+  // --- the unseen-reply badge ----------------------------------------------------
+  //
+  // An agent's reply used to move the item to Done and say nothing. The reviewer,
+  // who is on the Active tab writing the next comment, had no idea an answer had
+  // arrived and no way to tell answers they had read from ones they had not.
+
+  test("a reply that folds while the reviewer is on another tab badges the Done tab, and opening it clears the badge", async ({
+    page
+  }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      await commentOnSelection(page, "p.lede", "shorten this");
+      await commentOnElement(page, "#log-session", "this button is doing two jobs");
+      const items = await itemsIn(page);
+      for (const item of items) await waitForItemInLog(helper, item.id);
+
+      // Nothing has been answered, so there is no badge at all. Not a zero: a
+      // permanent dot saying "nothing new" is the one that stops registering.
+      expect(await unseenState(page)).toMatchObject({ count: 0, ids: [], badgeHidden: true, tab: "active" });
+
+      items.forEach((item) => {
+        appendReply(helper, "replies-claude.jsonl", {
+          item: item.id,
+          rev: item.rev,
+          status: "handled",
+          agent: "claude"
+        });
+      });
+
+      await pollPage(page, () => window.__lahe.rail.tabNewCount("done") === 2, undefined, {
+        message: "both folded replies to badge the Done tab the reviewer is not looking at"
+      });
+      const badged = await unseenState(page);
+      expect(badged.badgeHidden, "the badge is on screen").toBe(false);
+      expect(badged.badgeText, "and it says how many are new, apart from the tab's own total").toBe("2");
+      expect(badged.ids).toEqual(items.map((i) => i.id).sort());
+      expect(await cardIsUnseen(page, items[0].id), "the card carries the quiet accent mark too").toBe(true);
+
+      // Opening the tab IS the reading.
+      await page.evaluate(() => window.__lahe.rail.selectTab("done"));
+      const cleared = await unseenState(page);
+      expect(cleared).toMatchObject({ count: 0, ids: [], badgeHidden: true, badgeText: "", tab: "done" });
+      expect(await cardIsUnseen(page, items[0].id), "and the card's mark goes with it").toBe(false);
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
+  test("an unread reply is still unread after a reload, and one that lands while the reviewer is on Done never badges", async ({
+    page
+  }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      // Both comments are written up front, while the reviewer is on Active,
+      // so the second half of this test never has to leave the Done tab.
+      await commentOnSelection(page, "p.lede", "shorten this");
+      await commentOnElement(page, "#log-session", "this button is doing two jobs");
+      const items = await itemsIn(page);
+      const first = items.find((i) => i.note === "shorten this");
+      const second = items.find((i) => i.note === "this button is doing two jobs");
+      for (const item of items) await waitForItemInLog(helper, item.id);
+
+      appendReply(helper, "replies-claude.jsonl", { item: first.id, rev: first.rev, status: "handled", agent: "claude" });
+      await pollPage(page, () => window.__lahe.rail.tabNewCount("done") === 1, undefined, {
+        message: "the reply to fold and badge the tab"
+      });
+
+      // The reviewer reloads without ever opening Done. An unread answer that
+      // quietly becomes read on a refresh is the bug this feature exists to fix.
+      await page.reload();
+      await pollPage(page, () => !!(window.__lahe && window.__lahe.booted), undefined, {
+        message: "the layer to boot again"
+      });
+      await pollPage(page, () => window.__lahe.rail.tabNewCount("done") === 1, undefined, {
+        message: "the unread reply to survive the reload as unread"
+      });
+      expect((await unseenState(page)).ids).toEqual([first.id]);
+
+      // Now they open Done and stay there. The next answer arrives in front of
+      // them, newest first, so it is read on arrival and no badge ever flashes.
+      await page.evaluate(() => window.__lahe.rail.selectTab("done"));
+      expect(await unseenState(page)).toMatchObject({ count: 0, badgeHidden: true });
+
+      appendReply(helper, "replies-claude.jsonl", {
+        item: second.id,
+        rev: second.rev,
+        status: "handled",
+        agent: "claude"
+      });
+      await pollPage(page, (id) => window.__lahe.itemById(id).reply !== null, second.id, {
+        message: "the second reply to fold onto its card"
+      });
+      expect(await unseenState(page)).toMatchObject({ count: 0, ids: [], badgeHidden: true, tab: "done" });
+      expect(await cardIsUnseen(page, second.id)).toBe(false);
     } finally {
       await helper.kill9();
       await app.close();

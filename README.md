@@ -251,6 +251,14 @@ Browsing is the page untouched: links navigate, buttons act, forms submit. Edit
 state is entered deliberately, one block at a time, and the block is visibly
 framed while it is in it. Ctrl replaces Cmd on non-macOS systems.
 
+**When the agent answers.** An answered item moves to the Done tab. If you were
+looking at another tab when it landed, the Done tab grows a small accent badge
+with the number of replies you have not read yet, and each of those cards wears
+a thin accent rule down its left edge. Opening the Done tab is the reading: the
+badge and the rules clear. Nothing new means no badge at all, never a zero. The
+count is yours alone, kept in your browser, so it survives a reload and never
+reaches the agent: an answer you have not read is still unread after a refresh.
+
 ## Every invocation
 
 **Things a person says to their agent.** The agent-readable playbook is

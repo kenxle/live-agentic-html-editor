@@ -16,6 +16,9 @@
 //            NAME the first one rather than saying "somewhere else"
 //   ui       the reviewer's small rail preferences. These are best effort: a
 //            denied or corrupt preference must never stop the review itself
+//   seen     which agent replies the reviewer has already read, so a reply that
+//            arrived while they were on another tab can be flagged as new.
+//            Best effort for the same reason `ui` is
 //
 // THE TWO RULES, both from D5:
 //
@@ -63,6 +66,11 @@
   // Private reviewer text. Versioned and review-scoped, but deliberately not a
   // record field: an unfinished follow-up must never enter review.json.
   var FOLLOWUP_PREFIX = "lahe.followups.v1:";
+  // Which agent replies the reviewer has already looked at. Reviewer-side only:
+  // it never reaches review.json and no agent ever sees it. Best effort, like
+  // the UI preferences above; a denied or corrupt bucket just means a reply is
+  // treated as unseen again, which is the safe direction to fail in.
+  var SEEN_REPLIES_PREFIX = "lahe.seenreplies.v1:";
   // The window IDENTITY and the helper SESSION SECRET live in sessionStorage,
   // not localStorage: sessionStorage survives a same-tab navigation (page 1 to
   // /clients of one review is the same reviewer, not a second window) but a
@@ -467,6 +475,46 @@
       return next;
     }
 
+    // id -> the stamp of the reply the reviewer has seen for that item. The
+    // stamp, not a boolean: an item that gets a SECOND reply later has to read
+    // as unseen again, and a boolean cannot say that.
+    function seenRepliesKey(reviewId) {
+      keyFor(reviewId);
+      return SEEN_REPLIES_PREFIX + reviewId;
+    }
+
+    function readSeenReplies(reviewId) {
+      try {
+        var raw = backing.getItem(seenRepliesKey(reviewId));
+        if (!raw) return {};
+        var got = JSON.parse(raw);
+        if (!got || typeof got !== "object" || Array.isArray(got)) return {};
+        var clean = {};
+        Object.keys(got).forEach(function (id) {
+          if (typeof got[id] === "string") clean[id] = got[id];
+        });
+        return clean;
+      } catch (err) {
+        return {};
+      }
+    }
+
+    function writeSeenReplies(reviewId, marks) {
+      var next = {};
+      if (marks && typeof marks === "object") {
+        Object.keys(marks).forEach(function (id) {
+          if (typeof marks[id] === "string") next[id] = marks[id];
+        });
+      }
+      try {
+        backing.setItem(seenRepliesKey(reviewId), JSON.stringify(next));
+      } catch (err) {
+        // Best effort, on purpose. A full or denied storage costs the reviewer
+        // one badge that comes back, never a word of their own work.
+      }
+      return next;
+    }
+
     function followupKey(reviewId) {
       keyFor(reviewId);
       return FOLLOWUP_PREFIX + reviewId;
@@ -735,6 +783,8 @@
       writeChips: writeChips,
       readUiPreferences: readUiPreferences,
       writeUiPreferences: writeUiPreferences,
+      readSeenReplies: readSeenReplies,
+      writeSeenReplies: writeSeenReplies,
       readFollowupDraft: readFollowupDraft,
       writeFollowupDraft: writeFollowupDraft,
       clearFollowupDraft: clearFollowupDraft,
@@ -758,6 +808,7 @@
     LOCK_PREFIX: LOCK_PREFIX,
     UI_PREFIX: UI_PREFIX,
     FOLLOWUP_PREFIX: FOLLOWUP_PREFIX,
+    SEEN_REPLIES_PREFIX: SEEN_REPLIES_PREFIX,
     keyFor: keyFor,
     createStore: createStore,
     shared: shared

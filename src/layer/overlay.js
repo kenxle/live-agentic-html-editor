@@ -309,6 +309,14 @@
     ".count{font-variant-numeric:tabular-nums;font-size:11px;color:var(--ink-faint);",
     "background:var(--surface);border-radius:999px;padding:1px 6px;min-width:20px;text-align:center}",
     ".tab[aria-selected='true'] .count{color:var(--accent-ink);background:var(--accent-wash)}",
+    // The unseen badge, next to (never instead of) the total count. The count
+    // says how much is in the tab; this says how much of it is NEW since the
+    // reviewer last looked. Accent-filled so it reads at a glance, small enough
+    // that a question card is still the loudest thing in the rail.
+    ".newmark{font-variant-numeric:tabular-nums;font-size:10px;font-weight:700;line-height:1;",
+    "color:#fff;background:var(--accent);border-radius:999px;padding:2px 5px;min-width:14px;text-align:center}",
+    ":host([data-lahe-scheme='dark']) .newmark{color:#12151a}",
+    ".newmark[hidden]{display:none}",
 
     // --- panes --------------------------------------------------------------
     ".panes{flex:1;overflow:hidden;display:flex;background:var(--surface)}",
@@ -550,6 +558,14 @@
     var dismissed = Object.create(null);
     var status = null;
     var activeTab = TAB.ACTIVE;
+    // tab -> how many things in it the reviewer has not looked at yet. Held as
+    // state rather than painted imperatively, for the reason the refusal is: a
+    // remount rebuilds the tab strip and an imperative badge would vanish with
+    // the old dom while the fact it stood for was still true.
+    var tabNewCounts = Object.create(null);
+    // Who wants to know the reviewer moved to a tab. This is how the Done tab
+    // learns to mark its replies seen without this file knowing what a reply is.
+    var tabSelectHandlers = [];
     // A person's choice, separate from the rail's momentary visibility. A
     // second-window refusal has to open the rail so its remedy is visible, but
     // that forced opening must not erase the choice to keep the rail collapsed.
@@ -700,6 +716,7 @@
       tabs.setAttribute("role", "tablist");
       var tabButtons = Object.create(null);
       var counts = Object.create(null);
+      var newmarks = Object.create(null);
       TABS.forEach(function (name) {
         var button = el("button", "tab");
         button.setAttribute("role", "tab");
@@ -707,12 +724,17 @@
         button.appendChild(el("span", null, TAB_LABEL[name]));
         var count = el("span", "count", "0");
         button.appendChild(count);
+        var newmark = el("span", "newmark", "");
+        newmark.setAttribute("data-tab-new", name);
+        newmark.hidden = true;
+        button.appendChild(newmark);
         button.addEventListener("click", function () {
           selectTab(name);
         });
         tabs.appendChild(button);
         tabButtons[name] = button;
         counts[name] = count;
+        newmarks[name] = newmark;
       });
       rail.appendChild(tabs);
 
@@ -817,6 +839,7 @@
         rail: rail,
         tabButtons: tabButtons,
         counts: counts,
+        newmarks: newmarks,
         panes: paneNodes,
         chipList: chipList,
         statusRow: statusRow,
@@ -1835,6 +1858,12 @@
         dom.tabButtons[name].setAttribute("aria-selected", name === activeTab ? "true" : "false");
         dom.panes[name].setAttribute("data-current", name === activeTab ? "true" : "false");
         dom.counts[name].textContent = String(countFor(name));
+        // ZERO UNSEEN IS NO BADGE, not a badge reading 0. A permanent little
+        // dot saying "nothing new" is noise the reviewer learns to ignore, and
+        // then the one that means something does not register either.
+        var fresh = tabNewCounts[name] || 0;
+        dom.newmarks[name].textContent = fresh ? String(fresh) : "";
+        dom.newmarks[name].hidden = fresh === 0;
       });
       // THE COLLAPSED PILL'S COUNT: still to handle, then the all-time total in
       // parentheses, "3 (7)". A finished review reads "0 (7)", which is the
@@ -1860,8 +1889,48 @@
     function selectTab(tab) {
       if (TABS.indexOf(tab) === -1) throw new Error("selectTab: unknown tab " + String(tab));
       activeTab = tab;
+      // Handlers run BEFORE the paint, so a listener that clears its own badge
+      // (the Done tab does exactly that) lands in the same frame the tab opens
+      // in. Painting first would show the badge for one frame and then drop it.
+      tabSelectHandlers.forEach(function (fn) {
+        try {
+          fn(tab);
+        } catch (err) {
+          // One bad listener must never leave the reviewer on a tab that did
+          // not finish switching.
+        }
+      });
       renderTabs();
       return activeTab;
+    }
+
+    /** Tell me when the reviewer moves to a tab. Returns an unsubscribe. */
+    function onTabSelect(fn) {
+      if (typeof fn !== "function") throw new TypeError("onTabSelect: a function is required");
+      tabSelectHandlers.push(fn);
+      return function () {
+        var at = tabSelectHandlers.indexOf(fn);
+        if (at !== -1) tabSelectHandlers.splice(at, 1);
+      };
+    }
+
+    /**
+     * How many things in this tab the reviewer has not seen yet.
+     *
+     * The rail owns the badge; WHAT counts as unseen belongs to whoever fills
+     * the tab. Zero removes it.
+     */
+    function setTabNewCount(tab, count) {
+      if (TABS.indexOf(tab) === -1) throw new Error("setTabNewCount: unknown tab " + String(tab));
+      var n = typeof count === "number" && count > 0 ? Math.floor(count) : 0;
+      if (tabNewCounts[tab] === n) return n;
+      tabNewCounts[tab] = n;
+      renderTabs();
+      return n;
+    }
+
+    function tabNewCount(tab) {
+      return tabNewCounts[tab] || 0;
     }
 
     function currentTab() {
@@ -2138,6 +2207,9 @@
       geometry: geometry,
       selectTab: selectTab,
       currentTab: currentTab,
+      onTabSelect: onTabSelect,
+      setTabNewCount: setTabNewCount,
+      tabNewCount: tabNewCount,
       tabBody: tabBody,
       upsertCard: upsertCard,
       getCard: getCard,

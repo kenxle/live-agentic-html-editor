@@ -331,3 +331,93 @@ test("NEW-1: reopening bumps the rev, so a stale same-rev fold cannot re-bury th
     "the reopen survives the stale fold"
   );
 });
+
+// --- unseen replies -----------------------------------------------------------
+//
+// An agent's reply used to move the item to Done and say nothing at all. The
+// rule under the badge is here; what the reviewer sees is a browser test.
+
+test("unseenReplyIds counts an item whose reply the reviewer has no mark for", () => {
+  const item = readyItem({ id: "itm_a" });
+  item.reply = { status: "handled", agent: "claude", at: "2026-08-19T10:00:00.000Z" };
+
+  assert.deepEqual(tabDone.unseenReplyIds([item], {}), ["itm_a"]);
+  assert.deepEqual(
+    tabDone.unseenReplyIds([item], tabDone.seenMarksFor([item])),
+    [],
+    "and stops counting it once the reviewer has looked"
+  );
+});
+
+test("unseenReplyIds ignores an item with no reply at all", () => {
+  assert.deepEqual(tabDone.unseenReplyIds([readyItem({ id: "itm_b" })], {}), []);
+});
+
+test("a SECOND reply on the same item reads as unseen again", () => {
+  const item = readyItem({ id: "itm_c" });
+  item.reply = { status: "handled", agent: "claude", at: "2026-08-19T10:00:00.000Z" };
+  const marks = tabDone.seenMarksFor([item]);
+  assert.deepEqual(tabDone.unseenReplyIds([item], marks), []);
+
+  // The reviewer reopened and the agent answered again: a later reply, on a
+  // later revision. A boolean mark would have swallowed this one.
+  const answered = Object.assign({}, item, {
+    rev: item.rev + 1,
+    reply: { status: "handled", agent: "claude", at: "2026-08-19T11:30:00.000Z" }
+  });
+  assert.deepEqual(tabDone.unseenReplyIds([answered], marks), ["itm_c"]);
+});
+
+test("seenMarksFor drops an item that no longer carries a reply, so the bucket cannot grow forever", () => {
+  const answered = readyItem({ id: "itm_d" });
+  answered.reply = { status: "handled", agent: "claude", at: "2026-08-19T10:00:00.000Z" };
+  const marks = tabDone.seenMarksFor([answered, readyItem({ id: "itm_e" })]);
+  assert.deepEqual(Object.keys(marks), ["itm_d"]);
+});
+
+test("a fold while the reviewer is on another tab leaves an unseen reply, and the Done tab carries the count", () => {
+  const { store, rail, done } = setup();
+  const item = store.write(REVIEW, readyItem());
+  rail.upsertCard(item);
+  assert.equal(rail.currentTab(), overlay.TAB.ACTIVE, "the reviewer is writing, not reading");
+
+  done.applyReplies([foldEvent(item)]);
+  assert.deepEqual(done.unseenIds(), [item.id]);
+  assert.equal(rail.tabNewCount(overlay.TAB.DONE), 1);
+
+  // Opening the tab IS the reading, and the mark is durable.
+  rail.selectTab(overlay.TAB.DONE);
+  assert.deepEqual(done.unseenIds(), []);
+  assert.equal(rail.tabNewCount(overlay.TAB.DONE), 0);
+  assert.equal(store.readSeenReplies(REVIEW)[item.id], tabDone.replyStamp(store.readItem(REVIEW, item.id)));
+});
+
+test("a fold that lands while the reviewer is already on Done is read on arrival", () => {
+  const { store, rail, done } = setup();
+  const item = store.write(REVIEW, readyItem());
+  rail.upsertCard(item);
+  rail.selectTab(overlay.TAB.DONE);
+
+  done.applyReplies([foldEvent(item)]);
+  assert.deepEqual(done.unseenIds(), [], "it arrived in front of them, so there is nothing to flag");
+  assert.equal(rail.tabNewCount(overlay.TAB.DONE), 0);
+});
+
+test("an unseen reply survives a reload: a fresh Done tab over the same storage still counts it", () => {
+  const store = storeModule.createStore({ storage: null });
+  const first = overlay.createRail({ store: store, reviewId: REVIEW });
+  const firstDone = tabDone.createDoneTab({ store: store, reviewId: REVIEW, overlay: first, document: null });
+  firstDone.mount();
+  const item = store.write(REVIEW, readyItem());
+  first.upsertCard(item);
+  firstDone.applyReplies([foldEvent(item)]);
+  assert.deepEqual(firstDone.unseenIds(), [item.id]);
+
+  // The reviewer reloads without ever opening Done. Same storage, new rail.
+  const second = overlay.createRail({ store: store, reviewId: REVIEW });
+  const secondDone = tabDone.createDoneTab({ store: store, reviewId: REVIEW, overlay: second, document: null });
+  second.upsertCard(store.readItem(REVIEW, item.id));
+  secondDone.mount();
+  assert.deepEqual(secondDone.unseenIds(), [item.id], "unread stays unread across a reload");
+  assert.equal(second.tabNewCount(overlay.TAB.DONE), 1);
+});
