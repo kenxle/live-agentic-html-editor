@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+c91e6073d840
+ * version 0.0.0+d7aa8693619b
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+c91e6073d840";
+  g.LAHE.version = "0.0.0+d7aa8693619b";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -12223,8 +12223,16 @@
      * The transition is asserted rather than assumed, so a reopen from a state
      * the table does not allow fails loud here instead of leaving the rail and
      * the log disagreeing.
+     *
+     * `options.note` adds one tool-generated sentence to the carried note, and
+     * `options.notice` replaces the line the card shows. Both exist for the
+     * revert check (replay.isRevertedHandledEdit), which reopens an item the
+     * reviewer is not looking at and therefore has to say why on the card. The
+     * button in this file passes neither, so the reviewer's own reopen is
+     * unchanged: same rev bump, same event, same rail behavior.
      */
-    function reopenItem(id) {
+    function reopenItem(id, options) {
+      var opts = options || {};
       var item = itemById(id);
       if (!item) return null;
       if (isReadOnly()) return item;
@@ -12239,8 +12247,17 @@
       // merge's BROWSER_NEWER_REV protects it instead of it being discarded at
       // equal rev (STATE/REPLY are not content fields).
       var reopened = record.reopenIssue(item);
+      if (typeof opts.note === "string" && opts.note.trim()) {
+        var carried = reopened[record.FIELD.NOTE];
+        reopened[record.FIELD.NOTE] =
+          typeof carried === "string" && carried.trim() ? carried + "\n\n" + opts.note : opts.note;
+      }
       counters.reopened += 1;
-      return continueItem(item, reopened, "Issue reopened. The unchanged request is back in front of the agent.");
+      return continueItem(
+        item,
+        reopened,
+        opts.notice || "Issue reopened. The unchanged request is back in front of the agent."
+      );
     }
 
     /**
@@ -18931,7 +18948,8 @@
       root.LAHE.record,
       root.LAHE.failures,
       root.LAHE.anchor,
-      root.LAHE.protect
+      root.LAHE.protect,
+      root.LAHE.markers
     );
   } else {
     module.exports = factory(
@@ -18941,7 +18959,8 @@
       require("../shared/record.js"),
       require("../shared/failures.js"),
       require("./anchor.js"),
-      require("./protect.js")
+      require("./protect.js"),
+      require("../shared/markers.js")
     );
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function (
@@ -18951,7 +18970,8 @@
   record,
   failures,
   anchorEngine,
-  protectModule
+  protectModule,
+  markers
 ) {
   "use strict";
 
@@ -19433,6 +19453,124 @@
       if (normalize.equalsInMode(mode, domText, accepted[i])) return true;
     }
     return false;
+  }
+
+  // ---------------------------------------------------------------------------
+  // The revert check: a handled hand edit whose change is gone again
+  // ---------------------------------------------------------------------------
+  //
+  // The case this exists for. The reviewer hand-edits a line, the agent carries
+  // the edit into the source and replies handled, and the item moves to Done.
+  // Later the agent runs a doc-wide change for some other item and its sweep
+  // takes the hand-edited line back out. The reviewer's decision is undone and
+  // nothing says so: the item is in Done, so nobody is looking at it, and the
+  // page just quietly reads the way it did before they touched it.
+  //
+  // The check runs once per page load, after the settling window closes, and it
+  // reopens the item so the change becomes ready work again. The wake feed
+  // already wakes on a reopen, so the agent is told without the reviewer having
+  // to notice anything.
+  //
+  // BOTH HALVES ARE REQUIRED, and that is the whole design.
+  //
+  //   after gone       on its own is a legitimate rewrite. The passage was
+  //                    rewritten for a reason nobody here can see, and calling
+  //                    that a revert would reopen items every time a document
+  //                    moves on.
+  //   before back      is the signature of a straight revert: not only is the
+  //                    reviewer's wording missing, the exact words they replaced
+  //                    are sitting there again.
+  //
+  // Scope. In practice this is the `edit` kind. `format_only` records carry the
+  // same text in `before` and `after` by construction (their difference is in
+  // the markup), so the two halves can never both hold, and a `delete` has no
+  // `after` text to go missing. Both fall out through the text requirements
+  // below rather than through a kind list, so nothing has to be kept in sync.
+  //
+  // Whitespace-insensitive, via normalize's own key: a rebuild that rewraps a
+  // paragraph has not reverted anything, and a substring compare on raw text
+  // would say it had.
+
+  // The sentence the reopened item carries. It is tool-generated, and it says so
+  // in its own first words, because the record shape has no field that could
+  // carry "this text is not the reviewer's". It names no page content: the item
+  // already carries the before and after text, and repeating page text into the
+  // note would push page content into the intent channel (D12).
+  var REVERTED_EDIT_NOTE =
+    "Reopened by the page check: this handled change is no longer on the page and the original text is back. " +
+    "Reapply it, or reply not_handled saying why.";
+
+  /**
+   * Has this handled hand edit been reverted on the page?
+   *
+   * Pure: a record and the page's current text in, a boolean out.
+   *
+   * @param {Object} item the record
+   * @param {string} pageText the reviewed page's current text, the library's own
+   *                 chrome excluded (see pageTextOf)
+   * @returns {boolean}
+   */
+  function isRevertedHandledEdit(item, pageText) {
+    if (!item || typeof pageText !== "string") return false;
+    if (!record.isHandEdit(item)) return false;
+    if (item[record.FIELD.STATE] !== record.STATE.HANDLED) return false;
+
+    var after = item[record.FIELD.AFTER];
+    var before = item[record.FIELD.BEFORE];
+    if (typeof after !== "string" || typeof before !== "string") return false;
+
+    var afterKey = normalize.normalizeText(after);
+    var beforeKey = normalize.normalizeText(before);
+    // An edit whose after text was never page text (a delete, an empty region)
+    // has nothing to go missing, and an edit whose before and after read the
+    // same cannot be both gone and back.
+    if (!afterKey || !beforeKey || afterKey === beforeKey) return false;
+
+    var pageKey = normalize.normalizeText(pageText);
+    if (!pageKey) return false;
+    if (pageKey.indexOf(afterKey) !== -1) return false;
+    return pageKey.indexOf(beforeKey) !== -1;
+  }
+
+  /** The ids of every item in `items` the check says was reverted. */
+  function revertedHandledEditIds(items, pageText) {
+    var list = Array.isArray(items) ? items : [];
+    var out = [];
+    for (var i = 0; i < list.length; i += 1) {
+      if (isRevertedHandledEdit(list[i], pageText)) out.push(list[i][record.FIELD.ID]);
+    }
+    return out;
+  }
+
+  /**
+   * The reviewed page's own text, with the library's chrome left out.
+   *
+   * The rail draws a handled edit's after text on its card, so text taken off
+   * the whole document would find the after text in the library's own UI and
+   * conclude nothing had been reverted. The rail lives in a closed shadow root,
+   * which textContent does not cross, but the skip is explicit here anyway: a
+   * chrome node that ever lands in the light DOM must not be read as page
+   * content.
+   *
+   * Text nodes are joined with nothing between them, which is what textContent
+   * does, so this string compares against a record's before and after exactly
+   * the way the text those fields were captured from did.
+   */
+  function pageTextOf(root) {
+    if (!root) return "";
+    var parts = [];
+    walkText(root, parts);
+    return parts.join("");
+  }
+
+  function walkText(node, parts) {
+    if (!node) return;
+    if (node.nodeType === 1) {
+      if (markers.isToolNode(node)) return;
+      for (var child = node.firstChild; child; child = child.nextSibling) walkText(child, parts);
+      return;
+    }
+    if (node.nodeType === 3 && typeof node.nodeValue === "string") parts.push(node.nodeValue);
   }
 
   // What the card says when branch three fires. Written once here so the
@@ -20331,6 +20469,10 @@
     runPass: runPass,
     compare: compare,
     applyRecord: applyRecord,
+    REVERTED_EDIT_NOTE: REVERTED_EDIT_NOTE,
+    isRevertedHandledEdit: isRevertedHandledEdit,
+    revertedHandledEditIds: revertedHandledEditIds,
+    pageTextOf: pageTextOf,
     uniqueness: uniqueness
   };
 });
@@ -20799,7 +20941,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+c91e6073d840";
+  var VERSION = "0.0.0+d7aa8693619b";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -21024,7 +21166,10 @@
     }
 
     var statusLog = [];
-    var counters = { merges: 0, cardsDrawn: 0 };
+    // revertChecks counts the check having RUN on this load, which is what a
+    // test waits on: "the check ran and reopened nothing" is a real result and
+    // an arbitrary sleep is the only other way to observe it.
+    var counters = { merges: 0, cardsDrawn: 0, revertChecks: 0, revertReopens: 0 };
 
     // The window-session state machine's boot half (D5, findings 1/12, NEW-2). A
     // window that loses the claim goes READ-ONLY: its edit and comment handlers
@@ -21495,7 +21640,38 @@
         // A torn-down library paints nothing: teardown drops `current`.
         if (!handle || current !== handle) return;
         repaintHighlights(refreshItems());
+        runRevertCheck();
       }, ns.replay.SETTLE_MS + 100);
+    }
+
+    /**
+     * The revert check, run ONCE per page load.
+     *
+     * A handled hand edit whose change is gone from the page while the text it
+     * replaced is back has been reverted, and the reviewer's decision was undone
+     * without anyone saying so. Reopening it puts it back in front of the agent
+     * through the same path the reviewer's own Reopen issue button uses, and the
+     * wake feed already wakes on a reopen.
+     *
+     * Once, not in a loop. An item the agent answers again without actually
+     * fixing the page is caught on the next load, which is the right cadence: it
+     * is one more piece of ready work, not a live watcher fighting the page.
+     */
+    function runRevertCheck() {
+      if (readOnlyActive) return [];
+      var body = doc && doc.body;
+      if (!body) return [];
+      var pageText = ns.replay.pageTextOf(body);
+      var ids = ns.replay.revertedHandledEditIds(refreshItems(), pageText);
+      counters.revertChecks += 1;
+      ids.forEach(function (id) {
+        done.reopen(id, {
+          note: ns.replay.REVERTED_EDIT_NOTE,
+          notice: "This change was undone on the page. The item is open again."
+        });
+        counters.revertReopens += 1;
+      });
+      return ids;
     }
 
     var handle = {
@@ -21521,6 +21697,9 @@
       doneTab: function () {
         return done;
       },
+      // The revert check the settling window runs on its own. Exposed so a test
+      // can run it at a known moment rather than racing the timer.
+      revertCheck: runRevertCheck,
       sync: sync,
       exporter: exporter,
       editing: editing,
@@ -21608,6 +21787,12 @@
     );
     live("merges", function () {
       return handle.counters.merges;
+    });
+    live("revertChecks", function () {
+      return handle.counters.revertChecks;
+    });
+    live("revertReopens", function () {
+      return handle.counters.revertReopens;
     });
     // 2B's, published here so a test reads one counters object whichever module
     // owns the number.

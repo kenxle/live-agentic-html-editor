@@ -299,7 +299,10 @@
     }
 
     var statusLog = [];
-    var counters = { merges: 0, cardsDrawn: 0 };
+    // revertChecks counts the check having RUN on this load, which is what a
+    // test waits on: "the check ran and reopened nothing" is a real result and
+    // an arbitrary sleep is the only other way to observe it.
+    var counters = { merges: 0, cardsDrawn: 0, revertChecks: 0, revertReopens: 0 };
 
     // The window-session state machine's boot half (D5, findings 1/12, NEW-2). A
     // window that loses the claim goes READ-ONLY: its edit and comment handlers
@@ -770,7 +773,38 @@
         // A torn-down library paints nothing: teardown drops `current`.
         if (!handle || current !== handle) return;
         repaintHighlights(refreshItems());
+        runRevertCheck();
       }, ns.replay.SETTLE_MS + 100);
+    }
+
+    /**
+     * The revert check, run ONCE per page load.
+     *
+     * A handled hand edit whose change is gone from the page while the text it
+     * replaced is back has been reverted, and the reviewer's decision was undone
+     * without anyone saying so. Reopening it puts it back in front of the agent
+     * through the same path the reviewer's own Reopen issue button uses, and the
+     * wake feed already wakes on a reopen.
+     *
+     * Once, not in a loop. An item the agent answers again without actually
+     * fixing the page is caught on the next load, which is the right cadence: it
+     * is one more piece of ready work, not a live watcher fighting the page.
+     */
+    function runRevertCheck() {
+      if (readOnlyActive) return [];
+      var body = doc && doc.body;
+      if (!body) return [];
+      var pageText = ns.replay.pageTextOf(body);
+      var ids = ns.replay.revertedHandledEditIds(refreshItems(), pageText);
+      counters.revertChecks += 1;
+      ids.forEach(function (id) {
+        done.reopen(id, {
+          note: ns.replay.REVERTED_EDIT_NOTE,
+          notice: "This change was undone on the page. The item is open again."
+        });
+        counters.revertReopens += 1;
+      });
+      return ids;
     }
 
     var handle = {
@@ -796,6 +830,9 @@
       doneTab: function () {
         return done;
       },
+      // The revert check the settling window runs on its own. Exposed so a test
+      // can run it at a known moment rather than racing the timer.
+      revertCheck: runRevertCheck,
       sync: sync,
       exporter: exporter,
       editing: editing,
@@ -883,6 +920,12 @@
     );
     live("merges", function () {
       return handle.counters.merges;
+    });
+    live("revertChecks", function () {
+      return handle.counters.revertChecks;
+    });
+    live("revertReopens", function () {
+      return handle.counters.revertReopens;
     });
     // 2B's, published here so a test reads one counters object whichever module
     // owns the number.

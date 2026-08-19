@@ -744,8 +744,16 @@
      * The transition is asserted rather than assumed, so a reopen from a state
      * the table does not allow fails loud here instead of leaving the rail and
      * the log disagreeing.
+     *
+     * `options.note` adds one tool-generated sentence to the carried note, and
+     * `options.notice` replaces the line the card shows. Both exist for the
+     * revert check (replay.isRevertedHandledEdit), which reopens an item the
+     * reviewer is not looking at and therefore has to say why on the card. The
+     * button in this file passes neither, so the reviewer's own reopen is
+     * unchanged: same rev bump, same event, same rail behavior.
      */
-    function reopenItem(id) {
+    function reopenItem(id, options) {
+      var opts = options || {};
       var item = itemById(id);
       if (!item) return null;
       if (isReadOnly()) return item;
@@ -760,8 +768,17 @@
       // merge's BROWSER_NEWER_REV protects it instead of it being discarded at
       // equal rev (STATE/REPLY are not content fields).
       var reopened = record.reopenIssue(item);
+      if (typeof opts.note === "string" && opts.note.trim()) {
+        var carried = reopened[record.FIELD.NOTE];
+        reopened[record.FIELD.NOTE] =
+          typeof carried === "string" && carried.trim() ? carried + "\n\n" + opts.note : opts.note;
+      }
       counters.reopened += 1;
-      return continueItem(item, reopened, "Issue reopened. The unchanged request is back in front of the agent.");
+      return continueItem(
+        item,
+        reopened,
+        opts.notice || "Issue reopened. The unchanged request is back in front of the agent."
+      );
     }
 
     /**

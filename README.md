@@ -259,6 +259,16 @@ badge and the rules clear. Nothing new means no badge at all, never a zero. The
 count is yours alone, kept in your browser, so it survives a reload and never
 reaches the agent: an answer you have not read is still unread after a refresh.
 
+**If an agent later undoes one of your hand edits, the item reopens itself.** A
+doc-wide change is one of the good reasons to work this way: you say "this
+number is wrong" once and the agent fixes it in twelve places. The risk is that a
+sweep like that walks over a line you edited by hand and already had handled. So
+every time the page loads, the tool looks at your handled hand edits: if your
+wording is gone and the words it replaced are back, that edit was undone, and the
+item goes back to ready with a line saying so. The agent is woken the same way it
+is for anything else. A passage that was genuinely rewritten, rather than put
+back the way it was, is left alone.
+
 ## Every invocation
 
 **Things a person says to their agent.** The agent-readable playbook is

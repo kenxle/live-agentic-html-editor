@@ -77,7 +77,8 @@
       root.LAHE.record,
       root.LAHE.failures,
       root.LAHE.anchor,
-      root.LAHE.protect
+      root.LAHE.protect,
+      root.LAHE.markers
     );
   } else {
     module.exports = factory(
@@ -87,7 +88,8 @@
       require("../shared/record.js"),
       require("../shared/failures.js"),
       require("./anchor.js"),
-      require("./protect.js")
+      require("./protect.js"),
+      require("../shared/markers.js")
     );
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function (
@@ -97,7 +99,8 @@
   record,
   failures,
   anchorEngine,
-  protectModule
+  protectModule,
+  markers
 ) {
   "use strict";
 
@@ -579,6 +582,124 @@
       if (normalize.equalsInMode(mode, domText, accepted[i])) return true;
     }
     return false;
+  }
+
+  // ---------------------------------------------------------------------------
+  // The revert check: a handled hand edit whose change is gone again
+  // ---------------------------------------------------------------------------
+  //
+  // The case this exists for. The reviewer hand-edits a line, the agent carries
+  // the edit into the source and replies handled, and the item moves to Done.
+  // Later the agent runs a doc-wide change for some other item and its sweep
+  // takes the hand-edited line back out. The reviewer's decision is undone and
+  // nothing says so: the item is in Done, so nobody is looking at it, and the
+  // page just quietly reads the way it did before they touched it.
+  //
+  // The check runs once per page load, after the settling window closes, and it
+  // reopens the item so the change becomes ready work again. The wake feed
+  // already wakes on a reopen, so the agent is told without the reviewer having
+  // to notice anything.
+  //
+  // BOTH HALVES ARE REQUIRED, and that is the whole design.
+  //
+  //   after gone       on its own is a legitimate rewrite. The passage was
+  //                    rewritten for a reason nobody here can see, and calling
+  //                    that a revert would reopen items every time a document
+  //                    moves on.
+  //   before back      is the signature of a straight revert: not only is the
+  //                    reviewer's wording missing, the exact words they replaced
+  //                    are sitting there again.
+  //
+  // Scope. In practice this is the `edit` kind. `format_only` records carry the
+  // same text in `before` and `after` by construction (their difference is in
+  // the markup), so the two halves can never both hold, and a `delete` has no
+  // `after` text to go missing. Both fall out through the text requirements
+  // below rather than through a kind list, so nothing has to be kept in sync.
+  //
+  // Whitespace-insensitive, via normalize's own key: a rebuild that rewraps a
+  // paragraph has not reverted anything, and a substring compare on raw text
+  // would say it had.
+
+  // The sentence the reopened item carries. It is tool-generated, and it says so
+  // in its own first words, because the record shape has no field that could
+  // carry "this text is not the reviewer's". It names no page content: the item
+  // already carries the before and after text, and repeating page text into the
+  // note would push page content into the intent channel (D12).
+  var REVERTED_EDIT_NOTE =
+    "Reopened by the page check: this handled change is no longer on the page and the original text is back. " +
+    "Reapply it, or reply not_handled saying why.";
+
+  /**
+   * Has this handled hand edit been reverted on the page?
+   *
+   * Pure: a record and the page's current text in, a boolean out.
+   *
+   * @param {Object} item the record
+   * @param {string} pageText the reviewed page's current text, the library's own
+   *                 chrome excluded (see pageTextOf)
+   * @returns {boolean}
+   */
+  function isRevertedHandledEdit(item, pageText) {
+    if (!item || typeof pageText !== "string") return false;
+    if (!record.isHandEdit(item)) return false;
+    if (item[record.FIELD.STATE] !== record.STATE.HANDLED) return false;
+
+    var after = item[record.FIELD.AFTER];
+    var before = item[record.FIELD.BEFORE];
+    if (typeof after !== "string" || typeof before !== "string") return false;
+
+    var afterKey = normalize.normalizeText(after);
+    var beforeKey = normalize.normalizeText(before);
+    // An edit whose after text was never page text (a delete, an empty region)
+    // has nothing to go missing, and an edit whose before and after read the
+    // same cannot be both gone and back.
+    if (!afterKey || !beforeKey || afterKey === beforeKey) return false;
+
+    var pageKey = normalize.normalizeText(pageText);
+    if (!pageKey) return false;
+    if (pageKey.indexOf(afterKey) !== -1) return false;
+    return pageKey.indexOf(beforeKey) !== -1;
+  }
+
+  /** The ids of every item in `items` the check says was reverted. */
+  function revertedHandledEditIds(items, pageText) {
+    var list = Array.isArray(items) ? items : [];
+    var out = [];
+    for (var i = 0; i < list.length; i += 1) {
+      if (isRevertedHandledEdit(list[i], pageText)) out.push(list[i][record.FIELD.ID]);
+    }
+    return out;
+  }
+
+  /**
+   * The reviewed page's own text, with the library's chrome left out.
+   *
+   * The rail draws a handled edit's after text on its card, so text taken off
+   * the whole document would find the after text in the library's own UI and
+   * conclude nothing had been reverted. The rail lives in a closed shadow root,
+   * which textContent does not cross, but the skip is explicit here anyway: a
+   * chrome node that ever lands in the light DOM must not be read as page
+   * content.
+   *
+   * Text nodes are joined with nothing between them, which is what textContent
+   * does, so this string compares against a record's before and after exactly
+   * the way the text those fields were captured from did.
+   */
+  function pageTextOf(root) {
+    if (!root) return "";
+    var parts = [];
+    walkText(root, parts);
+    return parts.join("");
+  }
+
+  function walkText(node, parts) {
+    if (!node) return;
+    if (node.nodeType === 1) {
+      if (markers.isToolNode(node)) return;
+      for (var child = node.firstChild; child; child = child.nextSibling) walkText(child, parts);
+      return;
+    }
+    if (node.nodeType === 3 && typeof node.nodeValue === "string") parts.push(node.nodeValue);
   }
 
   // What the card says when branch three fires. Written once here so the
@@ -1477,6 +1598,10 @@
     runPass: runPass,
     compare: compare,
     applyRecord: applyRecord,
+    REVERTED_EDIT_NOTE: REVERTED_EDIT_NOTE,
+    isRevertedHandledEdit: isRevertedHandledEdit,
+    revertedHandledEditIds: revertedHandledEditIds,
+    pageTextOf: pageTextOf,
     uniqueness: uniqueness
   };
 });

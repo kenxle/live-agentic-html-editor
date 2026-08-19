@@ -334,6 +334,14 @@ refreshes the fallback copy beside the page. The reviewer's page reloads onto
 the healed file and the rail is there. `lahe status` says
 `script line re-injected after a rebuild, Ns ago` when that happened.
 
+**A handled hand edit that gets undone reopens itself.** Every time the page
+loads, the tool checks the reviewer's handled hand edits against the page: if
+the reviewer's wording is gone and the text it replaced is back, the change was
+reverted, so the item goes back to ready with a tool-written note saying why and
+you are woken for it like any other work. That is the safety net under the sweep
+rule above, not a replacement for it. Do the check yourself before you sweep,
+because an item that comes back this way is a change you made and then undid.
+
 Re-running `lahe add path/to/built/page.html` is still harmless, and it is still
 the thing to run in three cases: no helper is up, the page is served from a new
 origin (`--origin`), or you are recording a `--source` path.

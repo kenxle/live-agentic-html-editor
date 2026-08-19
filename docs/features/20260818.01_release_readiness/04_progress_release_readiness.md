@@ -155,6 +155,17 @@
   are reviewer-side browser storage keyed per review, so an unread answer is
   still unread after a reload and no agent ever sees the state.
 
+## 2026-08-19 a reverted hand edit reopens itself
+
+- Complete: a doc-wide sweep can no longer undo a reviewer's handled hand edit
+  in silence. The contract carves out exactly one exception to a sweep (text a
+  handled edit placed), and the layer checks once per page load: a handled edit
+  whose wording is gone while the text it replaced is back is reopened through
+  the same path the Done tab's Reopen issue button uses, so the rev bump, the
+  events, the rail behavior and the wake line are all the ordinary ones. A
+  passage that was genuinely rewritten is left alone, because both halves of the
+  signal are required.
+
 ## Still open
 
 These are not done. They were found during the work above and deliberately left
