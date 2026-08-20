@@ -23,6 +23,18 @@ no network access or a locked-down npm registry.
 `devDependencies` are fine and expected: they are the test harness
 (Playwright), not something the shipped tool needs at runtime.
 
+Two Markdown packages are vendored under `vendor/` rather than installed:
+
+- `vendor/marked/marked.cjs`: marked 15.0.12, MIT.
+- `vendor/mermaid/mermaid.tiny.js`: `@mermaid-js/tiny` 11.16.1, MIT.
+
+Each folder carries the upstream LICENSE and a README naming the package and
+version. `src/service/markdown.js` requires them by relative path. To take a
+newer version, copy the new file and its license over the old ones and update
+the README (for mermaid, also update `MERMAID_ASSET` in
+`src/service/markdown.js`, which names the version in the served filename).
+Never add either package to `dependencies`.
+
 ## Node version
 
 `engines.node` is `>=18.2.0`. The tool itself is `node:`-prefixed core modules
@@ -94,7 +106,10 @@ runs a single lane by name.
 
 Cross-platform: macOS, Linux, and Windows all run the helper (standard
 Node), and the layer is standard DOM APIs that current Chrome, Edge,
-Safari, and Firefox all support. The one capability floor is the CSS
+Safari, and Firefox all support. One caveat on Windows: `npm run install-cli`
+writes a POSIX shell wrapper to `~/.local/bin/lahe`, so it is a macOS and Linux
+convenience only. Windows users run `node bin/lahe.js` from the clone, or work
+inside WSL, where the wrapper installs normally. The one capability floor is the CSS
 Custom Highlight API, stated with its reason in the architecture doc. The
 Playwright suite has all three lanes (Chromium, Firefox, WebKit) and runs them
 on `npm run gate:all` at every checkpoint; a builder's default run is Chromium,
