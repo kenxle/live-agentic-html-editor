@@ -46,7 +46,9 @@ var routes = require("./routes.js");
 var projection = require("./projection.js");
 var agentSessionsModule = require("./agent_sessions.js");
 
-var VERSION = "0.0.0";
+// Read from package.json rather than restated here, so the version the helper
+// reports cannot drift from the version the repo ships.
+var VERSION = require("../../package.json").version;
 
 // A body larger than this is refused before it is parsed. The library's own
 // largest post is an unload flush, which the browser already caps near 64KB

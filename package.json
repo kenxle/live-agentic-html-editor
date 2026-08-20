@@ -1,12 +1,29 @@
 {
   "name": "live-agentic-html-editor",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
   "description": "Comment on and edit a live HTML page in the browser; hand every change back to your coding agent.",
   "bin": {
     "lahe": "bin/lahe.js"
   },
   "license": "MIT",
+  "keywords": [
+    "live review",
+    "coding agents",
+    "claude code",
+    "codex",
+    "antigravity",
+    "html",
+    "markdown",
+    "review"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kenxle/live-agentic-html-editor.git"
+  },
+  "homepage": "https://github.com/kenxle/live-agentic-html-editor#readme",
+  "bugs": {
+    "url": "https://github.com/kenxle/live-agentic-html-editor/issues"
+  },
   "engines": {
     "node": ">=18.2.0"
   },
