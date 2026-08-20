@@ -9,6 +9,8 @@ var http = require("node:http");
 var path = require("node:path");
 
 var protocol = require("../shared/protocol.js");
+var markdown = require("./markdown.js");
+var markdownLinks = require("./markdown_links.js");
 var stateDir = require("./state_dir.js");
 
 var SCHEMA = 1;
@@ -110,8 +112,13 @@ function writeMeta(dir, sessionId, meta) {
 async function registerMount(dir, sessionId, meta, prefix, rootInput) {
   if (!/^\/\.lahe-source\/[a-f0-9]+\/$/.test(prefix)) throw new Error("invalid static source mount " + JSON.stringify(prefix));
   if (!(await isExactServer(meta))) throw new Error("refusing to update a static server whose identity is no longer live");
+  // The server registers link mounts itself while rendering a linked document,
+  // so the on-disk copy can hold mounts this caller's `meta` never saw. Merge
+  // rather than replace, or a review command silently unmounts them.
+  var onDisk = readJson(stateDir.staticServerPath(dir, sessionId, meta.id));
   var next = Object.assign({}, meta);
-  next.mounts = Object.assign({}, meta.mounts || {});
+  next.mounts = Object.assign({}, meta.mounts || {}, onDisk && onDisk.mounts ? onDisk.mounts : {});
+  if (onDisk && Array.isArray(onDisk.auto_mounts)) next.auto_mounts = onDisk.auto_mounts.slice();
   next.mounts[prefix] = fs.realpathSync(path.resolve(rootInput));
   writeMeta(dir, sessionId, next);
   try { process.kill(meta.pid, "SIGHUP"); }
@@ -205,10 +212,54 @@ function runServer(file, sessionId, id, instance, rootInput) {
   var root = fs.realpathSync(rootInput);
   var prior = readJson(file);
   var mounts = prior && prior.root === root && prior.mounts && typeof prior.mounts === "object" ? prior.mounts : {};
+  var autoMounts = prior && prior.root === root && Array.isArray(prior.auto_mounts) ? prior.auto_mounts.slice() : [];
   function reloadMounts() {
     var current = readJson(file);
     if (!current || current.root !== root || !current.mounts || typeof current.mounts !== "object") return;
-    mounts = current.mounts;
+    mounts = Object.assign({}, current.mounts, mounts);
+    if (Array.isArray(current.auto_mounts)) {
+      current.auto_mounts.forEach(function (prefix) {
+        if (autoMounts.indexOf(prefix) === -1) autoMounts.push(prefix);
+      });
+    }
+  }
+
+  // Mounts this server registered for itself while rendering a linked document.
+  // They are written back to the same metadata file the CLI reads, so a restart
+  // or a later registerMount keeps them.
+  function persistAutoMounts(added) {
+    if (!added.length) return;
+    added.forEach(function (entry) {
+      mounts[entry.prefix] = entry.dir;
+      if (autoMounts.indexOf(entry.prefix) === -1) autoMounts.push(entry.prefix);
+    });
+    var current = readJson(file);
+    if (!current) return;
+    current.mounts = Object.assign({}, current.mounts || {}, mounts);
+    current.auto_mounts = autoMounts.slice();
+    try { stateDir.writeAtomic(file, JSON.stringify(current, null, 2) + "\n"); }
+    catch (err) { /* the render still answers; the mount is re-derived next start */ }
+  }
+
+  // A Markdown file inside a mount is answered with the SAME deterministic
+  // rendering the review artifact uses: read-only, enrolled in no review, no
+  // library script line and no token. Links out of it are translated the same
+  // way, so a chain of documents keeps working.
+  function renderMarkdown(candidate, req, res) {
+    var registry = markdownLinks.createRegistry({ mounts: mounts, consumed: autoMounts });
+    var html;
+    try { html = markdown.render(candidate, { readOnlyNote: true, links: registry }); }
+    catch (err) { return send(res, 500, "could not render " + path.basename(candidate) + "\n"); }
+    persistAutoMounts(registry.added);
+    var body = Buffer.from(html, "utf8");
+    res.writeHead(200, {
+      "cache-control": "no-store",
+      "content-length": body.length,
+      "content-type": "text/html; charset=utf-8",
+      "x-content-type-options": "nosniff"
+    });
+    if (req.method === "HEAD") return res.end();
+    res.end(body);
   }
   var startedAt = new Date().toISOString();
   var server = http.createServer(function (req, res) {
@@ -246,8 +297,13 @@ function runServer(file, sessionId, id, instance, rootInput) {
       if (real !== servingRoot && real.indexOf(servingRoot + path.sep) !== 0) return send(res, 403, "forbidden\n");
       if (!stat.isFile()) return send(res, 404, "not found\n");
     } catch (err) {
-      return send(res, 404, "not found\n");
+      // A rendered document may pull the Mermaid runtime beside itself, and the
+      // source directory has no copy of it. The packaged one is the same bytes.
+      if (path.basename(candidate) === markdown.MERMAID_ASSET) candidate = markdown.MERMAID_SOURCE;
+      else return send(res, 404, "not found\n");
+      try { stat = fs.statSync(candidate); } catch (missing) { return send(res, 404, "not found\n"); }
     }
+    if (markdown.isMarkdown(candidate)) return renderMarkdown(candidate, req, res);
     res.writeHead(200, {
       "cache-control": "no-store",
       "content-length": stat.size,

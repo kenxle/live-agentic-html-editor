@@ -215,6 +215,7 @@ var NON_BUNDLE_FILES = [
   { path: "src/service/wake_feed.js", owner: "1A", why: "the per-session append-only wake feed a host tails" },
   { path: "src/service/static_servers.js", owner: "1A", why: "session-owned static HTTP server lifecycle" },
   { path: "src/service/markdown.js", owner: "1A", why: "deterministic Markdown review artifacts" },
+  { path: "src/service/markdown_links.js", owner: "1A", why: "render-time translation of local Markdown links, and the mount path-safety rules that bound it" },
   { path: "src/service/reviews.js", owner: "1A", why: "review creation, per-review token minting, origin registration, the second-window session" },
   {
     path: "src/service/heal.js",

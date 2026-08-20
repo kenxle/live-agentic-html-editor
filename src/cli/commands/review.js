@@ -127,6 +127,18 @@ async function run(argv) {
           rendered.assetPrefix,
           rendered.assetRoot
         );
+        // Local links the renderer translated need their target directory
+        // served read-only. The Markdown on disk keeps the links its author
+        // wrote; only the rendered page points at these mounts.
+        for (var i = 0; i < rendered.linkMounts.length; i += 1) {
+          await staticServers.registerMount(
+            dir,
+            sessionId,
+            staticServer.meta,
+            rendered.linkMounts[i].prefix,
+            rendered.linkMounts[i].dir
+          );
+        }
       }
       list.push("--origin", "http://" + staticServer.meta.host + ":" + staticServer.meta.port);
     }
@@ -159,7 +171,16 @@ async function run(argv) {
     if (rendered) {
       process.stdout.write(
         "  source    " + originalTarget + "  (Markdown rendered deterministically)\n" +
-        "  rebuild   rerun this same review command after editing the Markdown, before replying handled\n"
+        "  rebuild   rerun this same review command after editing the Markdown, before replying handled\n" +
+        (rendered.linkMounts.length
+          ? "  links     " + rendered.linkMounts.length + " linked folder" +
+            (rendered.linkMounts.length === 1 ? "" : "s") + " served read-only for this session\n"
+          : "") +
+        (rendered.linkMountsSkipped
+          ? "  links     " + rendered.linkMountsSkipped + " local link" +
+            (rendered.linkMountsSkipped === 1 ? "" : "s") + " past the " + markdown.MOUNT_CAP +
+            "-folder cap render as inert text\n"
+          : "")
       );
     }
     process.stdout.write(

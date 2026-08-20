@@ -10,6 +10,7 @@ var path = require("node:path");
 
 var markedPackage = require("marked");
 var marked = markedPackage.marked;
+var links = require("./markdown_links.js");
 var stateDir = require("./state_dir.js");
 
 var MARKDOWN_EXTENSIONS = [".md", ".markdown"];
@@ -48,6 +49,20 @@ function rewriteRelativeUrls(html, prefix) {
   });
 }
 
+function realOr(target) {
+  try { return fs.realpathSync(target); } catch (err) { return path.resolve(target); }
+}
+
+// The document's own directory is already served under its asset prefix, so a
+// link that lands back in it reuses that mount instead of registering another.
+function keyedMount(prefix, resolved) {
+  var dir = path.dirname(realOr(resolved));
+  var mounts = {};
+  mounts[prefix] = dir;
+  mounts[links.mountPrefix(dir)] = dir;
+  return mounts;
+}
+
 function titleFrom(source, body) {
   var heading = String(body).match(/^#\s+(.+)$/m);
   return heading ? heading[1].replace(/[*_`]/g, "").trim() : path.basename(source);
@@ -60,14 +75,36 @@ function artifactPath(dir, sessionId, source) {
   return path.join(stateDir.reviewArtifactsRoot(dir, sessionId), base + "-" + hash + ".html");
 }
 
+function sourceNote(sourcePath) {
+  return "<p class=\"lahe-readonly-note\">Read-only rendered view of <code>" + escapeHtml(sourcePath) +
+    "</code>. This document is not under review.</p>";
+}
+
 function render(source, options) {
   var opts = options || {};
   var resolved = path.resolve(source);
   var markdown = fs.readFileSync(resolved, "utf8").replace(/^[\u200B\u200C\u200D\u200E\u200F\uFEFF]/, "");
   var parts = splitFrontmatter(markdown);
   var prefix = opts.assetPrefix || assetPrefix(resolved);
+  var registry = opts.links || links.createRegistry({ mounts: keyedMount(prefix, resolved) });
+  var sourceDir = path.dirname(realOr(resolved));
   var containsMermaid = false;
   var renderer = new markedPackage.Renderer();
+  renderer.link = function (token) {
+    var text = this.parser.parseInline(token.tokens);
+    var title = token.title ? " title=\"" + escapeHtml(token.title) + "\"" : "";
+    var decision = links.classify(token.href, sourceDir, registry);
+    if (decision.kind === "translate") {
+      return "<a href=\"" + escapeHtml(decision.url) + "\"" + title + ">" + text + "</a>";
+    }
+    if (decision.kind === "inert") {
+      // Not a 404 and not a custom protocol: a plain span that says where the
+      // file is, so the reviewer knows the link is local rather than broken.
+      return "<span class=\"lahe-local-link\" title=\"local file, open it on disk: " +
+        escapeHtml(decision.target) + "\">" + text + "</span>";
+    }
+    return "<a href=\"" + escapeHtml(token.href) + "\"" + title + ">" + text + "</a>";
+  };
   renderer.code = function (token) {
       var language = String(token.lang || "").trim().split(/\s+/)[0].toLowerCase();
       if (language === "mermaid") {
@@ -94,7 +131,10 @@ function render(source, options) {
     "code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}blockquote{margin-left:0;padding-left:1rem;border-left:3px solid #9aa0a6}li+li{margin-top:.35rem}",
     ".mermaid{overflow:visible;padding:1rem 0;background:transparent;text-align:center}.mermaid svg{max-width:100%;height:auto}",
     ".frontmatter{margin-bottom:2rem;color:#5f6368}.frontmatter summary{cursor:pointer}",
+    ".lahe-local-link{color:#1a73e8;text-decoration:underline dotted;cursor:help}",
+    ".lahe-readonly-note{margin:0 0 2rem;padding:.5rem .75rem;border-left:3px solid #9aa0a6;color:#5f6368;font-size:.9rem}",
     "</style></head><body><main data-container=\"Markdown document\">",
+    opts.readOnlyNote ? sourceNote(resolved) : "",
     metadata,
     body,
     "</main>",
@@ -106,22 +146,33 @@ function render(source, options) {
 function writeArtifact(dir, sessionId, source) {
   stateDir.ensureReviewArtifactsRoot(dir, sessionId);
   var target = artifactPath(dir, sessionId, source);
-  var html = render(source);
+  var prefix = assetPrefix(source);
+  var registry = links.createRegistry({ mounts: keyedMount(prefix, path.resolve(source)) });
+  var html = render(source, { assetPrefix: prefix, links: registry });
   if (html.indexOf("./" + MERMAID_ASSET) !== -1) {
     fs.copyFileSync(MERMAID_SOURCE, path.join(path.dirname(target), MERMAID_ASSET));
   }
   stateDir.writeAtomic(target, html);
-  return { target: target, assetPrefix: assetPrefix(source), assetRoot: path.dirname(path.resolve(source)) };
+  return {
+    target: target,
+    assetPrefix: prefix,
+    assetRoot: path.dirname(path.resolve(source)),
+    linkMounts: registry.added.slice(),
+    linkMountsSkipped: registry.skipped
+  };
 }
 
 module.exports = {
   MARKDOWN_EXTENSIONS: MARKDOWN_EXTENSIONS,
   MERMAID_ASSET: MERMAID_ASSET,
+  MERMAID_SOURCE: MERMAID_SOURCE,
+  MOUNT_CAP: links.MOUNT_CAP,
   isMarkdown: isMarkdown,
   splitFrontmatter: splitFrontmatter,
   assetPrefix: assetPrefix,
   rewriteRelativeUrls: rewriteRelativeUrls,
   artifactPath: artifactPath,
+  sourceNote: sourceNote,
   render: render,
   writeArtifact: writeArtifact
 };

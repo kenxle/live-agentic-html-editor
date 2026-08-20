@@ -51,7 +51,10 @@
   // 11: older helpers drop user_needs_to_see_reply during the reply fold, so a
   // flagged reply would silently lose its flag and never badge the reviewer.
   // They must be restarted.
-  var SERVICE_CONTRACT = 11;
+  // 12: older static servers hand back raw Markdown bytes from a source mount
+  // and have no on-request renderer, so a reviewed document's links to other
+  // local documents download or 404 behind them. They must be restarted.
+  var SERVICE_CONTRACT = 12;
   var BASE = "/lahe/" + API_VERSION;
 
   // ---------------------------------------------------------------------------
