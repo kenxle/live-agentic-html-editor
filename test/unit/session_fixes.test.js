@@ -252,9 +252,14 @@ test("the canonical skill rejects the retired and cross-session workflows", () =
   assert.match(skill, /Do not start `python3 -m http\.server`/);
   assert.match(skill, /lahe monitor/);
   assert.match(skill, /background terminal task/);
-  // The Claude profile: a persistent tail on the wake feed, armed once.
+  // The Claude profile: a persistent tail on the wake feed, armed once. The
+  // literal `persistent: true` parameter is what the instruction has to name.
+  // Prose that only says "persistent" reads as satisfied by a default-timeout
+  // Monitor call, which wakes the model every 300 seconds on nothing.
   assert.match(skill, /tail -n 0 -f <state-dir>\/agent-sessions\/<id>\/wake\.log/);
-  assert.match(skill, /persistent Monitor, once per\s+session/);
+  assert.match(skill, /Monitor tool, once per\s+session/);
+  assert.match(skill, /`persistent: true`/);
+  assert.match(skill, /default 300 second timeout/);
   assert.match(skill, /nothing to relaunch and\s+nothing to remember/);
   // The trap the wake feed exists to avoid, named so nobody re-invents it.
   assert.match(skill, /Do not `tail -f review\.json`/);

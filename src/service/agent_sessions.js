@@ -130,7 +130,8 @@ function commandBlock(input) {
   var flagDir = stateDir.flagFor(spec.dir);
   return (
     "  wake      tail -n 0 -f " + wake + "\n" +
-    "            Claude Code: arm this once as a persistent Monitor. Each new line means run drain.\n" +
+    "            Claude Code: arm this once as a Monitor with persistent true, never the default\n" +
+    "            timeout. Each new line means run drain.\n" +
     "  monitor   " + protocol.monitorCommand(spec.session, flagDir) + "\n" +
     "            Codex: run as a foreground pending exec and keep waiting on it. Antigravity: a\n" +
     "            background terminal task, never the native schedule timer. It prints work and exits.\n" +

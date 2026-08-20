@@ -350,8 +350,10 @@ default directory and reports no work.
 The **wake channel** is per host, because hosts differ in what they can do
 without spending model tokens:
 
-- **Claude Code** arms one persistent Monitor on
-  `tail -n 0 -f <state-dir>/agent-sessions/<id>/wake.log`. The wake feed is one
+- **Claude Code** arms one Monitor, with `persistent: true` in the tool call, on
+  `tail -n 0 -f <state-dir>/agent-sessions/<id>/wake.log`. Without that parameter
+  the Monitor times out at its default 300 seconds, and a timing-out monitor is a
+  scheduled model wakeup in disguise. The wake feed is one
   append-only file per agent session, created empty when the session is, so the
   tail can be armed before any work exists. It gets a line when a ready item
   lands, when the reviewer reopens an item, when the session is taken over, and

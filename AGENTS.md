@@ -423,11 +423,18 @@ items sit unanswered.
 
 #### Claude Code
 
-Arm the printed `wake` command once per session, as a persistent Monitor:
+Arm the printed `wake` command once per session with the Monitor tool, and pass
+`persistent: true` in the tool call:
 
 ```sh
 tail -n 0 -f <state-dir>/agent-sessions/<session-id>/wake.log
 ```
+
+`persistent: true` is the load-bearing part, not the word "persistent" in this
+sentence. Without it the Monitor tool uses its default 300 second timeout, and a
+timing-out monitor is a scheduled model wakeup in disguise: every five minutes
+the model wakes, finds nothing, re-arms, and says so. That is the exact no-op
+token burn the wake feed exists to eliminate.
 
 The wake feed is one append-only file per agent session. It gets one line when a
 ready item lands for a review this session owns, one line when the reviewer

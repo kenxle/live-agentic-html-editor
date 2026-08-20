@@ -86,12 +86,17 @@ one.
 
 ### Claude Code
 
-Arm the `wake` command `lahe review` printed as a persistent Monitor, once per
-session:
+Arm the `wake` command `lahe review` printed with the Monitor tool, once per
+session, and pass `persistent: true` in the tool call:
 
 ```sh
 tail -n 0 -f <state-dir>/agent-sessions/<id>/wake.log
 ```
+
+`persistent: true` is the load-bearing part. Without it the Monitor tool uses its
+default 300 second timeout, and a timing-out monitor is a scheduled model wakeup
+in disguise: the model wakes every five minutes, finds nothing, and re-arms. That
+is the no-op token burn this wake feed exists to eliminate.
 
 Each new line means work landed. Run the drain command and work it to empty. The
 Monitor stays armed for the whole session, so there is nothing to relaunch and
