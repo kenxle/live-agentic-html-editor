@@ -1,439 +1,131 @@
-# live-agentic-html-editor
+# LAHE
 
-Review a live HTML page in your own browser. Select a passage and comment on it,
-or edit the text directly on the page. Every change is captured as a record, sent
-to a small local process, and handed to your coding agent to apply against the
-source.
+**Review a web page or a Markdown doc in your own browser. Comment on a passage, or fix the words right on the page. Your coding agent makes the change in the source and answers you where you left the note.**
 
-Two pieces, and that is the whole design:
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%E2%89%A518.2-brightgreen.svg)](package.json)
+[![Runtime dependencies: none](https://img.shields.io/badge/runtime%20dependencies-none-brightgreen.svg)](package.json)
+[![Agents: Claude Code, Codex, Antigravity](https://img.shields.io/badge/agents-Claude%20Code%20%7C%20Codex%20%7C%20Antigravity-8A7CFF.svg)](#which-agents-this-works-with)
 
-- **The library.** One built JavaScript file, added to the page with one
-  `<script>` line whose `src` is the helper's own URL
-  (`http://127.0.0.1:7817/lahe-layer.js`), with a copy of the same file beside
-  the page as a fallback for when the helper is not running. Your work is kept
-  in browser storage every keystroke, so a helper that goes away costs nothing:
-  the page still opens, the rail still says the helper is away, and everything
-  posts when it comes back.
-- **The helper.** One Node process beside the page (`lahe serve`), listening on
-  `127.0.0.1:7817`. It keeps an append-only log of the review and writes the
-  file your agent reads.
+![A page under review, with the rail on the right and a comment box open on a selected passage](docs/images/hero-comment.jpg)
 
-**Status: v1 built.** The library, the helper, and the agent surface are
-implemented and tested against real browsers (Chromium, Firefox, WebKit). See
-`docs/features/` for the brief, architecture, plan, and review record.
+## Why
 
-## What you need
+You ask your agent for a document or a page. You read it, and you can see what is wrong with the third paragraph. So you go back to the chat and try to describe where the problem is, and what it should say instead, in words.
 
-**Node 18 or later.** The helper uses Node's stable core APIs plus two pinned
-local packages for deterministic Markdown review: Marked for CommonMark/GFM and
-Mermaid's dependency-free browser bundle for diagrams. `npm install` installs
-them from the clone; there is no separate global package or npm-published LAHE
-release to keep in sync. (The Playwright browser suite in `test/browser/` needs
-Node 20; running the tool does not.)
+That description is the expensive part. You already know the fix. Typing it in the paragraph is faster than explaining it, and it carries your exact words instead of a paraphrase.
 
-**A current Chrome, Edge, Safari, or Firefox.** The floor is the
-[Custom Highlight API](https://developer.mozilla.org/en-US/docs/Web/API/CSS_Custom_Highlight_API),
-and it is a floor for a reason worth stating: it is how the library draws a
-highlight over your text **without putting anything into the page's DOM**. The
-alternative is wrapping the highlighted words in `<span>` elements, which changes
-the page you are trying to review: the app's own scripts see nodes that were
-never there, its CSS selectors match differently, and its own re-renders fight
-whatever was inserted. The API is available in current versions of all four
-browsers.
+LAHE puts a review layer on the page you are already looking at. Select a sentence and comment on it, or press an edit key and rewrite it in place. Your agent picks the item up within a second or two, edits the source, rebuilds, and replies on the card you left.
 
-**macOS or Linux.** The documented `install-cli` flow writes a POSIX shell
-wrapper to `~/.local/bin`, and those are the platforms currently supported by
-that installer. Windows is not yet part of the tested public CLI workflow.
-
-## The fastest start: tell your agent
-
-This tool is usually driven through a coding agent. After the one-time install
-below, a fresh Claude, Codex, or Gemini agent should need only this:
-
-> Find the LAHE skill and use it to review `path/to/page.html`.
-
-The skill starts the review, tells you what to open, and works your comments and
-edits as you leave them. If the machine has not been set up yet, give the agent
-this repository URL and ask it to follow the install section first.
-
-## Install
+## Quickstart
 
 ```sh
 git clone https://github.com/kenxle/live-agentic-html-editor
 cd live-agentic-html-editor
-npm install
-npm run install-cli    # installs the CLI wrapper and agent skill
-lahe --help || echo "not on PATH"
+npm run install-cli                       # writes ~/.local/bin/lahe
+lahe review path/to/page.html             # or path/to/notes.md
 ```
 
-`install-cli` writes a two-line shell wrapper at `~/.local/bin/lahe` that names
-the absolute path of the Node that ran it and the absolute path of this clone. It
-is there because `npm link` puts the command in the bin directory of whichever
-Node ran it: under nvm that is `~/.nvm/versions/node/vXX/bin`, which is on your
-PATH only while that version is selected, so the install reports success and then
-`lahe` is not found in an ordinary shell. The wrapper does not care what Node is
-on PATH or what nvm is doing. If `~/.local/bin` is not on your PATH, the command
-says so and prints the line to add.
+The command prints a URL. Open it, select some text, and press Cmd-Shift-C.
 
-The same setup command copies the repository-owned `skills/lahe/SKILL.md` to
-exactly two locations:
+Then tell your agent, in its own chat:
 
-- `~/.agents/skills/lahe/SKILL.md` for Codex and Gemini CLI
-- `~/.claude/skills/lahe/SKILL.md` for Claude Code
+> Find the LAHE skill and use it to review `path/to/page.html`.
 
-Both Codex and Gemini discover the shared Agent Skills location, so LAHE does
-not install redundant `.codex` or `.gemini` copies. Claude Code uses its own
-personal skill directory and needs the second identical copy. These installed
-files are projections, not separate sources: update the repository skill first,
-then rerun `npm run install-cli` (or the narrower `npm run install-skills`). A
-pre-existing hand-maintained LAHE skill is preserved once under
-`~/.local/state/lahe/skill-backups/` before migration.
+The agent starts watching, works each item as you commit it, and answers on the card.
 
-The repository keeps the responsibilities separate to limit drift:
+![The same card after the agent answered, showing its reply and a follow-up box](docs/images/agent-reply.jpg)
 
-- `skills/lahe/SKILL.md` is the short discovery and cold-start workflow.
-- `AGENTS.md` is the detailed operational contract agents follow after the
-  skill activates.
-- `README.md` is the human-facing installation and product guide.
+## What you can review
 
-Do not maintain agent-specific variants of the skill. If an agent needs a new
-instruction, change the canonical skill or the shared playbook according to
-that split, test it, and run the installer again.
+- **A static HTML file.** `lahe review report.html` serves it and opens it for review.
+- **A Markdown file.** `lahe review notes.md` renders it with a reading style and local diagrams. Your `.md` on disk is never rewritten to make the browser page work.
+- **Build output.** `lahe review site/index.html --source src/index.md` so the agent edits the template, not the generated file.
+- **A running dev server.** `lahe add --origin http://localhost:3000` and paste the printed script line into your layout, inside a development-only conditional.
 
-`npm link` still works as an alternative if you prefer it, and so does running
-from the clone with no install at all (below).
+## Which agents this works with
 
-Then, for any page you want to review:
+Each host wakes an agent differently, so each gets its own instruction. The agent reads this from the review itself, so you do not have to remember it.
 
-```sh
-lahe review path/to/page.html
-```
+| Agent | How it keeps up |
+| --- | --- |
+| Claude Code | Arms one persistent Monitor on the review's wake file. Push, sub-second, no polling. |
+| Codex | Runs `lahe monitor` as a foreground pending exec call and waits on it. |
+| Antigravity | Runs `lahe monitor` as a background terminal task. Task completion wakes it. |
+| Anything else | Runs `lahe monitor` in the foreground after warning you it owns the chat. |
 
-`review` does the whole setup: it creates the agent session, writes the one script line into the page, drops
-a `lahe-layer.js` copy beside the page as the offline fallback (refreshed every
-run), mints that review's token, registers the page's origin, and **starts the
-helper if it is not already running**. It prints what it did and what to open.
+An idle review costs no model tokens on any of them. The watcher is a small local process or a file tail, never a scheduled model wakeup.
 
-A helper can outlive a repository update when reviews remain open. Every
-`review` therefore checks the running backend's service contract. A verified
-older helper is restarted onto the installed code without losing review history
-or browser-queued work. An older clone refuses to replace a newer helper.
+Proven end to end in Claude Code. The Codex and Antigravity paths are implemented and unit-tested, and their live proving run has not happened yet.
 
-For a static file, that one command also starts or reuses a read-only Node
-server rooted at the page's folder and registers its exact origin. Open the URL
-on the printed `open` line:
-
-```sh
-lahe review path/to/page.html
-```
-
-Markdown is also a first-class input:
-
-```sh
-lahe review path/to/SKILL.md
-```
-
-LAHE renders the Markdown itself, gives generated documents a simple readable
-style, preserves proper block and list structure, resolves relative assets, and
-turns fenced `mermaid` flowcharts into diagrams using a local browser asset. It
-does not modify the `.md` file. Agents should never improvise a Markdown-to-HTML
-conversion or start their own review server. After editing the Markdown source,
-rerun the same command to rebuild the review page before reporting the change
-handled.
-
-Local links keep working in the rendered page, and the file on disk is never
-rewritten to make them work. What each link form does:
-
-- A link to a file in the document's own folder, or below it, is served from
-  that folder as it always was.
-- A link that leaves the folder, such as `../crucible/SKILL.md`, and an
-  absolute path under your home directory, are both resolved against the source
-  file's directory. LAHE serves the target's folder read-only for the session
-  and points the rendered link at it.
-- A link to another `.md` or `.markdown` file opens as the same rendered
-  reading view, marked read-only and not under review. Its own links are
-  translated the same way, so a skill to a template to a sub-template chain
-  works.
-- `#heading` links stay ordinary in-page anchors.
-- A link LAHE will not serve renders as plain text, not a broken link, with the
-  full path in its tooltip so you can open it on disk. That covers a target
-  outside your home directory, a symlink pointing out of it, a hidden
-  (dot-prefixed) location, a missing file, and links past the 16-folder cap on
-  how many folders one document may mount.
-
-That direct path is for a single Markdown file that is itself the document. If
-the deliverable is assembled from chapters, includes, templates, citations,
-generated sections, or several source files, review the project's real HTML
-build instead:
-
-```sh
-npm run build-docs
-lahe review path/to/build/report.html --source path/to/build-entrypoint
-```
-
-The source argument should identify the entrypoint that explains the build's
-inputs, such as the top-level Markdown file, manifest, build script, or
-template. Individual comments may belong in other fragments. The agent locates
-the right fragment from the captured page text, edits source, runs the canonical
-build, verifies the HTML, and then replies.
-
-Pandoc remains a good choice when it is already the document build or the
-deliverable intentionally needs a reproducible multi-file compiler. Keep that
-configuration in the project, including its styles, filters, and Mermaid
-runtime. Do not add Pandoc just to review one `.md` file, and do not maintain a
-hand-generated HTML twin of that file.
-
-That server belongs to the agent session. `session close` stops it, and
-`session reopen` restores it. Passing `--origin` means you supplied an external
-server instead, so LAHE neither starts nor stops that process.
-
-Opening the file directly (`file://`) also works and is the fallback: a page
-opened from disk sends the origin `null`, which `add` always registers. What does
-NOT work is registering only `null` and then opening the page through a server:
-the browser sends the server's origin, the helper refuses it, and the page tells
-you so with the command that fixes it.
-
-For a dev server, point it at the project instead:
-
-```sh
-lahe review path/to/project --origin http://localhost:3000
-```
-
-Nothing in your application is edited. `add` prints the one line with a reminder
-comment. That comment is not a guard: wrap the script in your framework's actual
-development-only conditional before pasting it into the layout.
-
-### Without installing
-
-`npm link` is a convenience, and on some machines it needs a writable npm prefix
-(`npm config set prefix ~/.npm-global`) or `sudo`. You never have to sort that
-out: every command works the same way from the clone, with nothing on your PATH:
-
-```sh
-node bin/lahe.js review path/to/page.html
-node bin/lahe.js serve
-```
-
-### A note on the token
-
-The script line carries a per-review token, and the helper refuses any request
-that does not present it. That means a token ends up written into a file. If that
-file is in a repository, the token can be committed and shared with everyone who
-reads it. It is scoped to **one review**: a leak opens that review's feedback and
-nothing else, not your machine and not another review. `add` says so at the
-moment it writes.
-
-### Removing it
-
-Three separate things, because they come apart:
-
-**Take the library out of a page.**
-
-```sh
-lahe add path/to/page.html --remove
-```
-
-That deletes the one script line `add` wrote and changes nothing else in the
-file. For a dev server, delete the line you pasted into your layout yourself:
-it is the one carrying `data-lahe-review`. One file is left behind on a static
-page: the `lahe-layer.js` copy beside it, which is the fallback the line loaded
-when the helper was down. Nothing loads it once the line is gone, so delete it
-whenever you like. (Older reviews may also have left one in an `assets/` or
-`public/` directory.)
-
-**Close the agent session.** Run the exact `lahe session close <id>` command
-printed by `lahe review`. It stops the shared helper when no other agent session
-is open and stops this session's static review servers, while retaining every
-review and reply. `session reopen` starts that infrastructure again. Application
-dev servers are never stopped by LAHE.
-
-**Forget the reviews.** Delete the state directory (`$LAHE_STATE_DIR`, or
-`$XDG_STATE_HOME/lahe`, or `~/.local/state/lahe`). It holds every review's
-history and token, so this is the step that throws work away; nothing does it
-for you. Uninstalling the command itself is deleting `~/.local/bin/lahe` (or
-`npm unlink` in the clone, if that is how you installed it).
-
-## Using it
-
-The gestures are also shown as hint lines on the rail beside the page, so you do
-not need this file open to work them out.
+## The gestures
 
 | Gesture | What it does |
 | --- | --- |
 | Cmd-Shift-C with text selected | Comment on the selection |
-| Cmd-Shift-C with nothing selected | Element-pick mode: hover to outline, click to comment, Esc to cancel |
+| Cmd-Shift-C with nothing selected | Pick an element: hover to outline, click to comment, Esc to cancel |
 | Cmd-Shift-E | Edit the block under the cursor |
-| Cmd-Enter, Esc, or clicking anywhere outside the block (the page, the rail, another window) | Commit the edit and give the block back to the page |
-| Cmd-Enter in a comment box | This comment is done, and the agent may act on it |
-| The open box at the foot of the rail | A note tied to nothing in particular |
-| Clicking a card in the rail, anywhere but its buttons and boxes | Scroll the page to the spot that card is about, and light it up for a second |
+| Cmd-Enter in a comment box | This one is ready, and the agent may act on it |
+| Cmd-Enter, Esc, or a click outside an edit | Commit the edit and give the block back to the page |
+| The box at the foot of the rail | A note about the page, tied to nothing in particular |
+| Clicking a card, anywhere but its buttons | Scroll the page to the passage that card is about |
 
-**The comment box itself.** It grows as you write: the box gets taller and a
-little wider with your text, up to about 40% of the window's height, and scrolls
-inside once it is there. Delete text and it shrinks back. Drag the dotted strip
-along its top edge to move it anywhere on screen, which is what you want when
-the box lands on the paragraph you are writing about; it stays where you put it
-until you close it, and the next box you open anchors to its own passage as
-usual. Along the bottom of the box are two small controls: **Send**, which does
-exactly what Cmd-Enter does, and **Delete**, which throws the draft away with no
-confirmation dialog. Every keyboard gesture is unchanged.
+The rail also shows these as hints, so you do not need this file open to work them out.
 
-**Clicking a card finds its passage.** It works in every tab, and on a handled
-item too: the highlight is gone by then, so the tool re-finds the region the same
-way it puts your edits back. Selecting text inside a card copies it as usual and
-never jumps. A note tied to nothing has nowhere to go, so clicking it does
-nothing, and neither does a card whose passage the tool has lost: that card
-already says so.
+## When something goes wrong
 
-Browsing is the page untouched: links navigate, buttons act, forms submit. Edit
-state is entered deliberately, one block at a time, and the block is visibly
-framed while it is in it. Ctrl replaces Cmd on non-macOS systems.
+- **The helper is not running.** The page still opens, the rail says the helper is away, and your work is kept in the browser. It posts when the helper comes back.
+- **The agent rebuilds the page while you are typing.** The reload waits until you finish the sentence, then swaps the page and puts your outstanding work back on it.
+- **An agent stops listening.** The rail says so: it shows whether an agent is watching, working, or gone, read from the helper's own files rather than from anything the agent claimed.
+- **An agent undoes an edit you made by hand.** Handled edits are carved out of doc-wide sweeps, and an edit that gets reverted anyway reopens itself on the next page load.
+- **Your page uses the DOM in its own way.** Highlights are drawn with the CSS Custom Highlight API, so nothing is wrapped in extra elements and your app keeps behaving the way it did.
 
-**When the agent answers.** A handled item moves to the Done tab. A question or
-a refusal does not: the work is still open, so that card stays where open work
-lives, on Active or Edits. If you were looking at another tab when the answer
-landed, the tab holding that card grows a small accent badge with the number of
-replies you have not read yet, and each of those cards wears a thin accent rule
-down its left edge. The badge is always on the tab that holds the thing needing
-you, so a question badges Active and a flagged answer badges Done. The badge
-counts the replies the agent flagged for you, plus every question and every
-refusal. It does not count a routine confirmation: "carried this into the
-source" stays on the card for the record and never interrupts you. Opening a tab
-is the reading: that tab's badge and its rules clear, and any other tab's badge
-stands until you go there. Nothing new means no badge at all, never a zero. The
-count is yours alone, kept in your browser, so it survives a reload and never
-reaches the agent: an answer you have not read is still unread after a refresh.
+## What your agent reads
 
-**If an agent later undoes one of your hand edits, the item reopens itself.** A
-doc-wide change is one of the good reasons to work this way: you say "this
-number is wrong" once and the agent fixes it in twelve places. The risk is that a
-sweep like that walks over a line you edited by hand and already had handled. So
-every time the page loads, the tool looks at your handled hand edits: if your
-wording is gone and the words it replaced are back, that edit was undone, and the
-item goes back to ready with a line saying so. The agent is woken the same way it
-is for anything else. A passage that was genuinely rewritten, rather than put
-back the way it was, is left alone.
+One file per review, `review.json`, with the instructions embedded in it. No prompt to paste and no chat relay:
 
-**With the rail collapsed, the pill carries the same number.** Most of a session
-is spent with the rail put away, and a badge on a tab strip that is not on screen
-tells you nothing. So the pill wears a small accent jewel with the count of
-replies that need you: the tab badges added up, not a second tally. Nothing
-waiting means no jewel. Opening the rail and reading each badged tab clears them
-together.
+```json
+{
+  "contract": ["...the rules the agent follows, shipped with every review..."],
+  "pages": [{
+    "path": "/report.html",
+    "items": [{
+      "id": "itm_98d6",
+      "kind": "comment",
+      "state": "ready",
+      "note": "Can we tighten this paragraph? It says the same thing twice.",
+      "quote": "You are allowed to argue against building the thing",
+      "reply": null
+    }]
+  }]
+}
+```
 
-## Every invocation
+The agent answers by appending one line to `replies.jsonl`. Text copied off your page is labelled as page content, not as instructions, so a page that says "ignore your instructions" is data and stays data.
 
-**Things a person says to their agent.** The agent-readable playbook is
-[`AGENTS.md`](AGENTS.md); an agent that has never seen this tool needs the URL
-once, and after that a plain sentence works:
+## Requirements
 
-> Set up a live review of `path/to/page.html` — follow
-> https://raw.githubusercontent.com/kenxle/live-agentic-html-editor/main/AGENTS.md
+- Node 18.2 or later. No runtime dependencies: the two Markdown packages are vendored in the repo, so a clone works with no install step.
+- A current Chrome, Edge, Safari, or Firefox.
+- macOS or Linux for the `install-cli` wrapper. On Windows, run `node bin/lahe.js` from the clone or work in WSL.
 
-> Open this page for a live review. You have `lahe` installed.
+## Known limits
 
-**The CLI.** Every command also runs uninstalled as `node bin/lahe.js ...`.
+- A browser profile that has never seen the review cannot rebuild the earlier cards from history. It receives new replies, but the older cards under them are missing until the review is reopened in the profile that made them.
+- After a helper restart, the message that says a review server was reused does not check that the server is actually alive.
+- The Codex and Antigravity wake paths have unit coverage but no live proving run yet.
+- Tested by 634 unit tests and a browser suite that runs in Chromium, Firefox, and WebKit.
 
-| Command | What it does |
-| --- | --- |
-| `lahe review path/to/page.html` | Start a review and isolated agent session: writes the script line, starts or reuses its static server and the shared helper, then prints the URL plus the wake, monitor, drain, and close commands |
-| `lahe review another.html --session <id>` | Add a later document to the same agent workstream without receiving another agent's comments |
-| `lahe add path/to/project --origin http://localhost:3000` | Dev-server variant: edits nothing, prints a commented snippet that you must wrap in your framework's development-only conditional |
-| `lahe add ... --new` | Mint a fresh review even though the page already carries one |
-| `lahe add path/to/page.html --remove` | Take the script line back out of the page, and change nothing else |
-| `lahe add ... --source path/to/template` | Record where the source lives, so an agent edits the template rather than build output |
-| `lahe add ... --review <id>` | Re-attach this page to a review that already exists, by id |
-| `lahe status [--session <id>] [--review <id>] [--json]` | What is open right now. Agent monitors must name their session; plain global status is only a human diagnostic |
-| `lahe monitor --session <id>` | Poll locally without model wakeups, print unanswered session work, and exit |
-| `lahe session list [--json]` | Read-only: every agent session on this machine, open ones first, with its handoff revision, reviews owned, unanswered items, and whether a monitor is watching. This is how you find a session id |
-| `lahe session close <id>` | Close an agent workstream, stop its static servers, and keep all review history. The final close also stops the shared helper |
-| `lahe session reopen <id>` | Reopen the workstream and restart its helper and static servers |
-| `lahe session takeover <id>` | Explicitly hand an existing workstream to a new agent, fence its older monitors, and print catch-up commands |
-| `lahe serve [--port N]` | Run the helper by hand (`add` starts it for you, so this is rarely needed) |
+## Docs
 
-Takeover is designed for token exhaustion, crashes, and switching agent clients
-mid-review. Its catch-up command lists every unanswered item, so work the old
-agent read but never finished reappears. Completed items do not reappear, every
-review in the session moves together, and older monitor processes are fenced.
-Use it only after the human explicitly requests the handoff.
-
-**Keeping an agent current** takes two things, and `lahe review` prints both.
-
-The **drain command** is `lahe status --session <id> --json --quiet`. It prints
-every ready item nobody has answered, and nothing at all when there is none. An
-agent runs it, handles what it prints, replies, and runs it again until it prints
-nothing. Work stays listed until a reply lands, so a missed wake costs nothing:
-the next drain shows the item again. When the reviews are not in the default
-state directory, every command the tool prints carries `--state-dir <path>`
-already: copy them as printed, because the same command without it reads the
-default directory and reports no work.
-
-The **wake channel** is per host, because hosts differ in what they can do
-without spending model tokens:
-
-- **Claude Code** arms one Monitor, with `persistent: true` in the tool call, on
-  `tail -n 0 -f <state-dir>/agent-sessions/<id>/wake.log`. Without that parameter
-  the Monitor times out at its default 300 seconds, and a timing-out monitor is a
-  scheduled model wakeup in disguise. The wake feed is one
-  append-only file per agent session, created empty when the session is, so the
-  tail can be armed before any work exists. It gets a line when a ready item
-  lands, when the reviewer reopens an item, when the session is taken over, and
-  when it closes. Nothing to relaunch,
-  and no model turns at all while it is quiet.
-- **Codex** runs `lahe monitor --session <id>` as a foreground pending exec call
-  and keeps waiting on it. It must not detach the process, announce that
-  monitoring started, and end the turn: detached task completion alone does not
-  guarantee a new Codex turn.
-- **Antigravity** runs the same command as a background terminal task, never the
-  native `schedule` timer, which invokes Gemini on every no-op.
-- **Any other host** runs it in the foreground after telling the user how to
-  interrupt it.
-
-The monitor keeps its idle polling in one small local Node process, so no host
-pays model tokens for a quiet document. It prints `LAHE ACTION REQUIRED` ahead of
-the work, on both stdout and stderr. That is an interrupt, not a stopping point:
-the agent continues the same turn through editing, rebuilding, verification, and
-replies. Merely reporting that an item arrived is a workflow failure.
-
-Monitor exit codes tell a host what to do next: `0` work is printed, `4` bad
-usage or a live monitor already holds the session, `5` the session is closed, and
-`6` another agent took it over. On `5` or `6`, stop relaunching.
-
-**The rail says whether an agent is actually listening**, from files rather than
-from anything the agent claims. It reads *watching* when a monitor heartbeat is
-fresh, *agent working* when there are unanswered items and this session ran a
-`lahe` command in the last few minutes, and *no agent watching* with the oldest
-item's age when neither is true.
-
-**If the page is build output**, an agent should rebuild before it reports an
-item handled: `handled` is supposed to mean your page shows the change. It does
-not have to re-run `lahe add` afterwards. A rebuild strips the script line out
-of the built page, and a running helper puts it back: it is already watching
-that file, so when the file returns without the line, the helper writes the same
-line back (same review, same token) and refreshes the fallback copy beside the
-page. `lahe status` says `script line re-injected after a rebuild` when that
-happened. Re-run `add` when no helper is up, when the page is served from a new
-origin, or to record a `--source` path. You do not have to reload: the page
-updates itself. The helper watches
-the file the review was added at, and when a rebuild lands, your page reloads
-onto the new version and re-applies your outstanding comments and edits (R36).
-It waits while you are mid-work, so a page never swaps under an open edit or a
-comment you are still typing, and it says "Page updated. Reloading..." on the
-rail first. If your page is served by a dev server that hot-reloads on its own,
-that keeps working and this does not fight it: the reload is one per rebuild
-either way.
-
-**The files, which are the agent's real interface.** In the review folder that
-`add` names: `review.json` is what an agent reads (its top-level `contract`
-field is the whole contract), and `replies.jsonl` (or `replies-<agent>.jsonl`)
-is where an agent answers, one appended JSON line per item. `events.jsonl` is
-the append-only history underneath both.
+- [AGENTS.md](AGENTS.md): the playbook an agent reads. Point your agent here.
+- [docs/INSTALL.md](docs/INSTALL.md): install details, the CLI wrapper, and dev-server setup.
+- [docs/CLI.md](docs/CLI.md): every command and flag.
+- [docs/CONTRACTS.md](docs/CONTRACTS.md): the wire protocol, the record shape, and the review file format.
+- [docs/](docs/): the build history, including the brief, architecture, plan, and reviews.
 
 ## License
 
-MIT. See `LICENSE`.
+MIT. See [LICENSE](LICENSE).
 
-Credit: the interaction model (page beside a rail, select text to comment, edit
-directly) was established by
-[human-review](https://github.com/petergyang/human-review) by Peter Yang (MIT),
-which this tool learned from and builds on.
+Credit: the interaction model (a page beside a rail, select text to comment, edit directly) was established by [human-review](https://github.com/petergyang/human-review) by Peter Yang, which this tool learned from and builds on.

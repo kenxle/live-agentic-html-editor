@@ -872,34 +872,45 @@ test("package.json installs one command, and it is bin/lahe.js", () => {
   );
 });
 
-test("the README states the tested platform and browser requirements", () => {
+test("the README and the install doc state the tested platform and browser requirements", () => {
   const readme = fs.readFileSync(path.join(REPO_ROOT, "README.md"), "utf8");
+  const install = fs.readFileSync(path.join(REPO_ROOT, "docs", "INSTALL.md"), "utf8");
   const agents = fs.readFileSync(path.join(REPO_ROOT, "AGENTS.md"), "utf8");
 
   // The claim the plan sends 3B to delete (S13): it contradicted D1 and the
   // cross-browser lanes, both of which are real.
   assert.doesNotMatch(readme, /macOS and Chromium/i);
   assert.doesNotMatch(readme, /Chromium only/i);
+
+  // The README is the landing page: the pitch, the quickstart, the floors a
+  // reader needs before cloning, and the honest limits. The detail moved to
+  // docs/INSTALL.md and docs/CLI.md, so the pins follow it there rather than
+  // holding the landing page hostage to sentences that now live elsewhere.
   assert.match(readme, /macOS or Linux/, "the documented installer names its supported operating systems");
-  assert.match(readme, /Windows is not yet/, "Windows is not presented as tested CLI support");
   assert.match(readme, /Node 18/, "the runtime floor is stated");
   assert.match(readme, /Custom Highlight API/, "and the browser floor");
   assert.match(readme, /MIT/, "the license");
-  assert.match(readme, /npm link/, "the documented install");
-  assert.match(readme, /node bin\/lahe\.js/, "and the no-install fallback");
+  assert.match(readme, /node bin\/lahe\.js/, "and what a Windows user runs instead of the wrapper");
   assert.match(readme, /lahe review/, "and the public command that installs the library into a page");
   assert.match(readme, /git clone https:\/\/github\.com\/kenxle\/live-agentic-html-editor/);
   assert.match(readme, /lahe review path\/to\/page\.html/);
+  assert.doesNotMatch(readme, /npm install/, "the clone runs with no install step, so the quickstart must not ask for one");
+
+  // The install doc carries what the README used to spell out.
+  assert.match(install, /Windows is not yet/, "Windows is not presented as tested CLI support");
+  assert.match(install, /npm link/, "the documented install");
+  assert.match(install, /comment is not a guard/);
+  assert.match(install, /If\s+the deliverable is assembled from chapters, includes, templates/);
+  assert.match(install, /Do not add Pandoc just to review one `\.md` file/);
+  assert.doesNotMatch(install, /python3 -m http\.server/);
+
   assert.match(agents, /lahe review path\/to\/page\.html/);
-  assert.doesNotMatch(readme, /python3 -m http\.server/);
-  assert.doesNotMatch(agents, /python3 -m http\.server/);
-  assert.match(readme, /comment is not a guard/);
   assert.match(agents, /comment is not a guard/);
   assert.match(agents, /Choose the source workflow before opening the review/);
   assert.match(agents, /Do not introduce Pandoc merely to\s+open one Markdown file/);
   assert.match(agents, /point it at the build entrypoint/);
-  assert.match(readme, /If\s+the deliverable is assembled from chapters, includes, templates/);
-  assert.match(readme, /Do not add Pandoc just to review one `\.md` file/);
+  assert.doesNotMatch(agents, /python3 -m http\.server/);
+  assert.doesNotMatch(readme, /python3 -m http\.server/);
 
   // The in-page hints, so a new user can work the tool out without this file.
   assert.match(readme, /Cmd-Shift-C/);
