@@ -866,11 +866,25 @@ test.describe("3A: an agent answers by appending one line", () => {
       expect(badged.ids).toEqual(items.map((i) => i.id).sort());
       expect(await cardIsUnseen(page, items[0].id), "the card carries the quiet accent mark too").toBe(true);
 
-      // Opening the tab IS the reading.
+      // Opening the tab IS the reading, so the count goes. The MARK does not:
+      // a badge that says two and a tab where every card looks the same leaves
+      // the reviewer unable to tell which two (reported live on 2026-08-18).
       await page.evaluate(() => window.__lahe.rail.selectTab("done"));
       const cleared = await unseenState(page);
       expect(cleared).toMatchObject({ count: 0, ids: [], badgeHidden: true, badgeText: "", tab: "done" });
-      expect(await cardIsUnseen(page, items[0].id), "and the card's mark goes with it").toBe(false);
+      expect(
+        await cardIsUnseen(page, items[0].id),
+        "the card still points itself out for the length of the visit"
+      ).toBe(true);
+      expect(await cardIsUnseen(page, items[1].id)).toBe(true);
+
+      // Leaving the tab ends the visit, and coming back is ordinary reading.
+      await page.evaluate(() => window.__lahe.rail.selectTab("active"));
+      expect(await cardIsUnseen(page, items[0].id), "the mark goes when the visit does").toBe(false);
+      await page.evaluate(() => window.__lahe.rail.selectTab("done"));
+      expect(await cardIsUnseen(page, items[0].id), "and it does not come back on the next visit").toBe(false);
+      expect(await cardIsUnseen(page, items[1].id)).toBe(false);
+      expect(await unseenState(page)).toMatchObject({ count: 0, ids: [], badgeHidden: true });
     } finally {
       await helper.kill9();
       await app.close();
@@ -912,10 +926,16 @@ test.describe("3A: an agent answers by appending one line", () => {
         "Done holds nothing that needs them, so it says nothing"
       ).toBe(0);
 
-      // Opening Active is the reading, and it is the tab that clears it.
+      // Opening Active is the reading, and it is the tab that clears the count.
+      // The card keeps its mark until the reviewer leaves, on this tab for the
+      // same reason as on Done: the badge sent them here to find one card.
       await page.evaluate(() => window.__lahe.rail.selectTab("active"));
       expect(await unseenState(page, "active")).toMatchObject({ count: 0, ids: [], badgeHidden: true });
-      expect(await cardIsUnseen(page, item.id)).toBe(false);
+      expect(await cardIsUnseen(page, item.id), "the card says which one it meant").toBe(true);
+
+      await page.evaluate(() => window.__lahe.rail.selectTab("done"));
+      await page.evaluate(() => window.__lahe.rail.selectTab("active"));
+      expect(await cardIsUnseen(page, item.id), "and stops on the next visit").toBe(false);
     } finally {
       await helper.kill9();
       await app.close();

@@ -594,6 +594,11 @@
     // Who wants to know the reviewer moved to a tab. This is how the Done tab
     // learns to mark its replies seen without this file knowing what a reply is.
     var tabSelectHandlers = [];
+    // Who wants to know the rail was collapsed or opened again. Same seam as
+    // onTabSelect and for the same reason: collapsing the rail ENDS the visit to
+    // whatever tab was open, and the Done tab has per-visit state to drop when
+    // that happens. This file still knows nothing about replies.
+    var collapseHandlers = [];
     // Who wants to know a card was clicked. The rail decides what counts as a
     // click on the CARD (rather than on a control inside it, or a text
     // selection); what to DO about it, which is finding the passage on the page,
@@ -2304,7 +2309,24 @@
       // a fragment of a tool they just put away.
       if (collapsed) closeMenu(false);
       renderCollapsed();
+      collapseHandlers.forEach(function (fn) {
+        try {
+          fn(collapsed);
+        } catch (err) {
+          // One bad listener must never leave the rail half collapsed.
+        }
+      });
       return collapsed;
+    }
+
+    /** Tell me when the rail collapses or opens. Returns an unsubscribe. */
+    function onCollapse(fn) {
+      if (typeof fn !== "function") throw new TypeError("onCollapse: a function is required");
+      collapseHandlers.push(fn);
+      return function () {
+        var at = collapseHandlers.indexOf(fn);
+        if (at !== -1) collapseHandlers.splice(at, 1);
+      };
     }
 
     function collapse(next) {
@@ -2381,6 +2403,7 @@
       setReview: setReview,
       collapse: collapse,
       isCollapsed: isCollapsed,
+      onCollapse: onCollapse,
       geometry: geometry,
       selectTab: selectTab,
       currentTab: currentTab,

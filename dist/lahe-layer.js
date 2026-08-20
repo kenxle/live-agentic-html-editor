@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+cc019611cb22
+ * version 0.0.0+afcb0901d618
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+cc019611cb22";
+  g.LAHE.version = "0.0.0+afcb0901d618";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -9174,6 +9174,11 @@
     // Who wants to know the reviewer moved to a tab. This is how the Done tab
     // learns to mark its replies seen without this file knowing what a reply is.
     var tabSelectHandlers = [];
+    // Who wants to know the rail was collapsed or opened again. Same seam as
+    // onTabSelect and for the same reason: collapsing the rail ENDS the visit to
+    // whatever tab was open, and the Done tab has per-visit state to drop when
+    // that happens. This file still knows nothing about replies.
+    var collapseHandlers = [];
     // Who wants to know a card was clicked. The rail decides what counts as a
     // click on the CARD (rather than on a control inside it, or a text
     // selection); what to DO about it, which is finding the passage on the page,
@@ -10884,7 +10889,24 @@
       // a fragment of a tool they just put away.
       if (collapsed) closeMenu(false);
       renderCollapsed();
+      collapseHandlers.forEach(function (fn) {
+        try {
+          fn(collapsed);
+        } catch (err) {
+          // One bad listener must never leave the rail half collapsed.
+        }
+      });
       return collapsed;
+    }
+
+    /** Tell me when the rail collapses or opens. Returns an unsubscribe. */
+    function onCollapse(fn) {
+      if (typeof fn !== "function") throw new TypeError("onCollapse: a function is required");
+      collapseHandlers.push(fn);
+      return function () {
+        var at = collapseHandlers.indexOf(fn);
+        if (at !== -1) collapseHandlers.splice(at, 1);
+      };
     }
 
     function collapse(next) {
@@ -10961,6 +10983,7 @@
       setReview: setReview,
       collapse: collapse,
       isCollapsed: isCollapsed,
+      onCollapse: onCollapse,
       geometry: geometry,
       selectTab: selectTab,
       currentTab: currentTab,
@@ -12053,6 +12076,11 @@
     // sets. Deliberately calmer than the question block above: a question is a
     // stop, and this is a "there is something here". If the same card is both,
     // the question treatment is the one that reads.
+    //
+    // The mark OUTLIVES the badge by one visit. Opening the tab clears the
+    // count, and the cards that were unread when the reviewer got there keep
+    // this rule until they leave the tab. Otherwise the badge says four and the
+    // tab it sends them to has no way of saying which four.
     ".card[" + UNSEEN_ATTR + "='true']{box-shadow:inset 3px 0 0 0 var(--accent)}",
     ".card[" + UNSEEN_ATTR + "='true'][" + ASKING_ATTR + "='true']{box-shadow:none}"
   ].join("");
@@ -12089,11 +12117,19 @@
     // Undo. Whoever removes the row still has to remove the button.
     var reopens = Object.create(null);
     var counters = { folded: 0, refused: 0, rejected: 0, reopened: 0, questions: 0 };
-    // id -> true for the cards currently wearing the unseen mark, so a paint
-    // knows which ones to take it back off. The durable truth is in storage;
-    // this is only what is on screen right now.
+    // id -> true for the replies the reviewer genuinely has not read. This is
+    // what the tab badges count. The durable truth is in storage.
     var unseenNow = Object.create(null);
+    // id -> true for the cards that were unread at the moment the reviewer
+    // arrived on this tab. See "the two-step decay" below.
+    var freshNow = Object.create(null);
+    // Which tab that visit is to, so a paint can tell a real visit from none.
+    var freshTab = null;
+    // id -> true for the cards currently wearing the mark on screen, so a paint
+    // knows which ones to take it back off. Unseen or fresh, both wear it.
+    var markedNow = Object.create(null);
     var dropTabWatch = null;
+    var dropCollapseWatch = null;
 
     function el(tag, className, text) {
       var node = doc.createElement(tag);
@@ -12134,7 +12170,15 @@
       // sits in, so the tab that clears it is that same tab.
       if (!dropTabWatch && typeof rail.onTabSelect === "function") {
         dropTabWatch = rail.onTabSelect(function (tab) {
-          markRepliesSeen(tab);
+          visitTab(tab);
+        });
+      }
+      // Collapsing the rail ends the visit, so the cards the reviewer was given
+      // a second look at go back to ordinary. Opening it again is a new visit,
+      // and a new visit to an already-read tab has nothing fresh in it.
+      if (!dropCollapseWatch && typeof rail.onCollapse === "function") {
+        dropCollapseWatch = rail.onCollapse(function () {
+          clearFresh();
         });
       }
       refresh();
@@ -12196,12 +12240,23 @@
           next[id] = true;
         });
       });
-      Object.keys(unseenNow).forEach(function (id) {
-        if (!next[id]) markUnseenCard(id, false);
-      });
+      // Unseen OR fresh wears the mark. The badge counts only the unseen ones,
+      // which is what makes the count clear on arrival while the cards under it
+      // stay pointed out for the length of the visit.
+      var marked = Object.create(null);
       ids.forEach(function (id) {
+        marked[id] = true;
+      });
+      Object.keys(freshNow).forEach(function (id) {
+        marked[id] = true;
+      });
+      Object.keys(markedNow).forEach(function (id) {
+        if (!marked[id]) markUnseenCard(id, false);
+      });
+      Object.keys(marked).forEach(function (id) {
         markUnseenCard(id, true);
       });
+      markedNow = marked;
       unseenNow = next;
       // Every tab is told, including the ones with nothing: a card that moved
       // out of a tab has to take its badge with it.
@@ -12211,6 +12266,50 @@
         });
       }
       return ids;
+    }
+
+    /**
+     * The reviewer arrived on a tab. Two things decay, at two different speeds.
+     *
+     * THE BADGE CLEARS AT ONCE. It said "there are four things here", the
+     * reviewer came to look, and a count that keeps standing while they read is
+     * a count that stops meaning anything. The seen marks go to storage in the
+     * same breath, so a reload does not resurrect them as unread.
+     *
+     * THE CARDS KEEP THEIR MARK FOR THE VISIT. This is the half that was
+     * missing: the badge said four, the reviewer opened the tab, and every card
+     * looked the same, so the one question the badge had raised ("which four?")
+     * had no answer anywhere on screen (reported live on 2026-08-18). The ids
+     * that were unread at the moment of arrival are held here, in memory only,
+     * and the card treatment reads unseen OR fresh. Leaving the tab drops them,
+     * so the next visit shows ordinary cards.
+     *
+     * @param {string} tab the tab the reviewer just opened
+     */
+    function visitTab(tab) {
+      // Captured BEFORE the marks are written, because writing them is exactly
+      // what makes these ids stop being unseen.
+      var arriving = unseenByTab(itemsNow(), readSeen(), paneOf)[tab] || [];
+      freshNow = Object.create(null);
+      freshTab = tab;
+      arriving.forEach(function (id) {
+        freshNow[id] = true;
+      });
+      return markRepliesSeen(tab);
+    }
+
+    /**
+     * The visit is over: another tab, a collapsed rail, or an unmount.
+     *
+     * Session memory only, so there is nothing to erase in storage and nothing
+     * a reload could bring back.
+     */
+    function clearFresh() {
+      if (!freshTab && !Object.keys(freshNow).length) return false;
+      freshNow = Object.create(null);
+      freshTab = null;
+      paintUnseen();
+      return true;
     }
 
     /**
@@ -12932,10 +13031,17 @@
     function unmount() {
       if (dropTabWatch) dropTabWatch();
       dropTabWatch = null;
-      Object.keys(unseenNow).forEach(function (id) {
+      if (dropCollapseWatch) dropCollapseWatch();
+      dropCollapseWatch = null;
+      Object.keys(markedNow).forEach(function (id) {
         markUnseenCard(id, false);
       });
       unseenNow = Object.create(null);
+      // A remount is a new visit. Nothing is fresh in it: the cards were already
+      // pointed out once, in the visit this unmount ended.
+      freshNow = Object.create(null);
+      freshTab = null;
+      markedNow = Object.create(null);
       Object.keys(rows).forEach(dropRow);
       Object.keys(asks).forEach(clearQuestion);
       Object.keys(threads).forEach(clearThread);
@@ -12990,6 +13096,18 @@
       unseenIds: function () {
         return Object.keys(unseenNow);
       },
+      /** The ids still pointed out on screen: unseen, or fresh this visit. */
+      markedIds: function () {
+        return Object.keys(markedNow);
+      },
+      /** The ids that were unread when the reviewer arrived on the open tab. */
+      freshIds: function () {
+        return Object.keys(freshNow);
+      },
+      freshTab: function () {
+        return freshTab;
+      },
+      clearFresh: clearFresh,
       /** tab -> the unseen ids badged on it, as the last paint worked them out. */
       unseenByTab: function () {
         return unseenByTab(itemsNow(), readSeen(), paneOf);
@@ -22062,7 +22180,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+cc019611cb22";
+  var VERSION = "0.0.0+afcb0901d618";
 
   var protocol = ns.protocol;
   var record = ns.record;

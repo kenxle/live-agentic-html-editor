@@ -735,6 +735,143 @@ test("an unseen reply survives a reload: a fresh Done tab over the same storage 
 });
 
 // ---------------------------------------------------------------------------
+// Fresh this visit: the badge and the card mark decay at different speeds
+// ---------------------------------------------------------------------------
+//
+// The badge said four unread replies, the reviewer opened the tab, and every
+// card looked the same: selecting the tab cleared the per-card mark at the very
+// moment it was needed (reported live on 2026-08-18). The count still clears on
+// arrival, and the cards that were unread when the reviewer got there keep the
+// mark until they leave.
+
+test("selecting the tab clears the count, and the cards that were unread report as fresh", () => {
+  const { store, rail, done } = setup();
+  const first = store.write(REVIEW, readyItem({ note: "shorten the lede" }));
+  const second = store.write(REVIEW, readyItem({ note: "cut the second clause" }));
+  rail.upsertCard(first);
+  rail.upsertCard(second);
+
+  done.applyReplies([flaggedFoldEvent(first), flaggedFoldEvent(second)]);
+  assert.equal(rail.tabNewCount(overlay.TAB.DONE), 2);
+
+  rail.selectTab(overlay.TAB.DONE);
+  assert.equal(rail.tabNewCount(overlay.TAB.DONE), 0, "the notification did its job");
+  assert.deepEqual(done.unseenIds(), [], "and nothing is unread any more");
+  assert.deepEqual(
+    done.freshIds().sort(),
+    [first.id, second.id].sort(),
+    "but the reviewer can still tell WHICH two the badge meant"
+  );
+  assert.deepEqual(done.markedIds().sort(), [first.id, second.id].sort());
+  assert.equal(done.freshTab(), overlay.TAB.DONE);
+});
+
+test("leaving the tab ends the visit, so the next one shows ordinary cards", () => {
+  const { store, rail, done } = setup();
+  const item = store.write(REVIEW, readyItem());
+  rail.upsertCard(item);
+  done.applyReplies([flaggedFoldEvent(item)]);
+
+  rail.selectTab(overlay.TAB.DONE);
+  assert.deepEqual(done.freshIds(), [item.id]);
+
+  rail.selectTab(overlay.TAB.ACTIVE);
+  assert.deepEqual(done.freshIds(), [], "the visit is over");
+  assert.deepEqual(done.markedIds(), [], "and the card carries nothing");
+
+  rail.selectTab(overlay.TAB.DONE);
+  assert.deepEqual(done.freshIds(), [], "coming back is an ordinary visit");
+  assert.deepEqual(done.markedIds(), []);
+});
+
+test("collapsing the rail ends the visit too", () => {
+  const { store, rail, done } = setup();
+  const item = store.write(REVIEW, readyItem());
+  rail.upsertCard(item);
+  done.applyReplies([flaggedFoldEvent(item)]);
+  rail.selectTab(overlay.TAB.DONE);
+  assert.deepEqual(done.freshIds(), [item.id]);
+
+  rail.collapse(true);
+  assert.deepEqual(done.freshIds(), [], "a rail that is not on screen is not being visited");
+  assert.deepEqual(done.markedIds(), []);
+  rail.collapse(false);
+  assert.deepEqual(done.freshIds(), [], "opening it again is a new visit, with nothing new in it");
+});
+
+test("a remount starts a fresh visit with nothing fresh in it", () => {
+  const { store, rail, done } = setup();
+  const item = store.write(REVIEW, readyItem());
+  rail.upsertCard(item);
+  done.applyReplies([flaggedFoldEvent(item)]);
+  rail.selectTab(overlay.TAB.DONE);
+  assert.deepEqual(done.freshIds(), [item.id]);
+
+  done.unmount();
+  assert.deepEqual(done.freshIds(), []);
+  done.mount();
+  assert.deepEqual(done.freshIds(), []);
+  assert.deepEqual(done.markedIds(), []);
+});
+
+test("a reload after the reviewer read the tab shows nothing unread and nothing fresh", () => {
+  const store = storeModule.createStore({ storage: null });
+  const first = overlay.createRail({ store: store, reviewId: REVIEW });
+  const firstDone = tabDone.createDoneTab({ store: store, reviewId: REVIEW, overlay: first, document: null });
+  firstDone.mount();
+  const item = store.write(REVIEW, readyItem());
+  first.upsertCard(item);
+  firstDone.applyReplies([flaggedFoldEvent(item)]);
+  first.selectTab(overlay.TAB.DONE);
+  assert.deepEqual(firstDone.freshIds(), [item.id]);
+
+  // Same storage, new rail: the fresh set is session memory and never reached it.
+  const second = overlay.createRail({ store: store, reviewId: REVIEW });
+  const secondDone = tabDone.createDoneTab({ store: store, reviewId: REVIEW, overlay: second, document: null });
+  second.upsertCard(store.readItem(REVIEW, item.id));
+  secondDone.mount();
+
+  assert.deepEqual(secondDone.unseenIds(), [], "reading it stuck");
+  assert.deepEqual(secondDone.freshIds(), [], "and it is ordinary finished work now");
+  assert.equal(second.tabNewCount(overlay.TAB.DONE), 0);
+});
+
+test("a reply that folds while the reviewer is on the tab is neither unseen nor fresh", () => {
+  const { store, rail, done } = setup();
+  const item = store.write(REVIEW, readyItem());
+  rail.upsertCard(item);
+  rail.selectTab(overlay.TAB.DONE);
+
+  done.applyReplies([flaggedFoldEvent(item)]);
+
+  assert.deepEqual(done.unseenIds(), [], "it landed in front of them");
+  assert.deepEqual(done.freshIds(), [], "so there is nothing to point out");
+  assert.deepEqual(done.markedIds(), []);
+  assert.equal(rail.tabNewCount(overlay.TAB.DONE), 0);
+});
+
+test("the fresh set is per tab: reading Active points out Active's cards, not Done's", () => {
+  const { store, rail, done } = setup();
+  const asking = store.write(REVIEW, readyItem({ note: "which heading?" }));
+  const finished = store.write(REVIEW, readyItem({ note: "shorten the lede" }));
+  rail.upsertCard(asking);
+  rail.upsertCard(finished);
+  rail.selectTab(overlay.TAB.EDITS);
+
+  done.applyReplies([questionFoldEvent(asking), flaggedFoldEvent(finished)]);
+
+  rail.selectTab(overlay.TAB.ACTIVE);
+  assert.deepEqual(done.freshIds(), [asking.id], "the question is the one they came to read");
+  assert.deepEqual(done.unseenIds(), [finished.id], "and the answer in Done is still unread");
+  assert.deepEqual(done.markedIds().sort(), [asking.id, finished.id].sort(), "both cards are pointed out, for different reasons");
+
+  rail.selectTab(overlay.TAB.DONE);
+  assert.deepEqual(done.freshIds(), [finished.id]);
+  assert.deepEqual(done.unseenIds(), []);
+  assert.deepEqual(done.markedIds(), [finished.id], "and the question they already read is ordinary again");
+});
+
+// ---------------------------------------------------------------------------
 // The collapsed pill's jewel
 // ---------------------------------------------------------------------------
 //
