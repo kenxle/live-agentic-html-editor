@@ -1,0 +1,28 @@
+name: gate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 20, not the tool's own floor of 18.2: Playwright 1.62 needs 20.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # devDependencies only. The tool itself has no runtime dependencies, so
+      # this installs the test harness and nothing else.
+      - run: npm ci
+
+      - run: npx playwright install --with-deps chromium
+
+      # lint, check:layer, unit, Chromium. check:layer is the reason CI runs
+      # `gate` rather than `gate:builder`: it catches a committed bundle that
+      # no longer matches the sources.
+      - run: npm run gate
