@@ -90,10 +90,10 @@ not stage it. The orchestrator rebuilds and commits it once at each checkpoint.
 
 | Field | Class | What it is |
 | --- | --- | --- |
-| `id` | — | Client-minted, from a CSPRNG. Never reused |
-| `rev` | — | Starts at 1, bumped on every rewording. A reply names `(id, rev)` |
-| `kind` | — | `comment`, `edit`, `delete`, `format_only`, `note`. Closed |
-| `state` | — | `draft`, `ready`, `handled`, `not_handled`. Closed, and exactly four |
+| `id` | n/a | Client-minted, from a CSPRNG. Never reused |
+| `rev` | n/a | Starts at 1, bumped on every rewording. A reply names `(id, rev)` |
+| `kind` | n/a | `comment`, `edit`, `delete`, `format_only`, `note`. Closed |
+| `state` | n/a | `draft`, `ready`, `handled`, `not_handled`. Closed, and exactly four |
 | `note` | **intent** | The reviewer's own words. Verbatim, never truncated, never cleaned up |
 | `change` | **intent** | The specific change the reviewer made, in their words |
 | `before` | data | The region's wording when the reviewer first touched it (R29) |
@@ -102,14 +102,14 @@ not stage it. The orchestrator rebuilds and commits it once at each checkpoint.
 | `after_history` | data | Every `after` this record has had, in order. Replay's branch three reads it |
 | `region` | data | `{ref, label, lost}`. The anchor reference (1C mints it), the pinned display label, and the lost-anchor state. A handled item's `lost` is cleared when its reply folds and is never projected, because a handled fix is expected to have changed its own passage |
 | `context` | data | `{quote, prefix, suffix, heading, element}` |
-| `page_origin` | — | The origin the record was made on |
+| `page_origin` | n/a | The origin the record was made on |
 | `page_path` | data | The pathname, with the query string and fragment collapsed away |
 | `page_title` | data | The page's title at first visit |
-| `page_seq` | — | First-visit order, which is how `review.json` orders its groups |
-| `source_hint` | — | The template the page came from, when the add step was given one |
+| `page_seq` | n/a | First-visit order, which is how `review.json` orders its groups |
+| `source_hint` | n/a | The template the page came from, when the add step was given one |
 | `reply` | data | The folded agent reply, or null. Its `at` is the durable agent-turn timestamp |
 | `thread` | data | Completed reviewer/agent rounds, presented in stable timestamp order |
-| `created_at`, `updated_at` | — | ISO 8601 |
+| `created_at`, `updated_at` | n/a | ISO 8601 |
 
 **The page fields are not optional.** Without them `review.json` cannot be grouped by page. The
 group key is `record.pageKey(item)`, which is **origin plus pathname**, never pathname alone: two dev
