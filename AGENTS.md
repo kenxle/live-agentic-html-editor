@@ -25,14 +25,14 @@ and does not switch models without the human's request.
 
 ## Step 1: install (once per machine)
 
-Requires Node 18+ (`node --version`). The documented `install-cli` wrapper is
-for macOS and Linux POSIX shells; Windows is not yet part of the tested public
-CLI workflow.
+Requires Node 18+ (`node --version`). There is no install step: the tool has no
+runtime dependencies, and the two Markdown packages it uses are vendored under
+`vendor/`. The documented `install-cli` wrapper is for macOS and Linux POSIX
+shells; on Windows, run `node bin/lahe.js` from the clone directly, or use WSL.
 
 ```sh
 git clone https://github.com/kenxle/live-agentic-html-editor
 cd live-agentic-html-editor
-npm install
 npm run install-cli
 lahe --help || echo "not on PATH"
 ```

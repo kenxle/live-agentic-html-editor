@@ -8,14 +8,18 @@ var crypto = require("node:crypto");
 var fs = require("node:fs");
 var path = require("node:path");
 
-var markedPackage = require("marked");
+// Both Markdown packages are vendored under vendor/, not installed: this tool
+// runs from a git clone with no install step, so nothing may be resolved out of
+// node_modules at runtime. See vendor/marked/README.md and
+// vendor/mermaid/README.md for the versions and how to update them.
+var markedPackage = require("../../vendor/marked/marked.cjs");
 var marked = markedPackage.marked;
 var links = require("./markdown_links.js");
 var stateDir = require("./state_dir.js");
 
 var MARKDOWN_EXTENSIONS = [".md", ".markdown"];
 var MERMAID_ASSET = ".lahe-mermaid-11.16.1.js";
-var MERMAID_SOURCE = require.resolve("@mermaid-js/tiny");
+var MERMAID_SOURCE = path.join(__dirname, "..", "..", "vendor", "mermaid", "mermaid.tiny.js");
 
 function isMarkdown(file) {
   return MARKDOWN_EXTENSIONS.indexOf(path.extname(file).toLowerCase()) !== -1;
