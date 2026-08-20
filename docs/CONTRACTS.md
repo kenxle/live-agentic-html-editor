@@ -461,6 +461,7 @@ copy in `test/unit/review_format.test.js`:
   "LAHE ACTION REQUIRED means the output is an interrupt, not finished work. Continue the same turn and handle every item printed with it. Receiving an item is not handling it, and describing it is not handling it.",
   "Do not use a native model timer, a forever daemon, a global monitor, or a parser pipeline.",
   "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and a running helper puts the script line back when the rebuild strips it out.",
+  "Links in a Markdown source are source-true: never rewrite an on-disk link to make the browser page work. The renderer translates local links when it builds the page, so fix a broken link only if it is wrong on disk too.",
   "The only way to say you handled an item is to append a reply line."
 ]
 ```
@@ -757,6 +758,26 @@ and uses pinned local renderers for GFM and supported Mermaid diagrams. The
 source is never modified. Re-running the command atomically rebuilds the same
 artifact and reuses the same review; agents must do that before replying
 `handled` after a Markdown source edit.
+
+Local links in that Markdown are translated at render time, never on disk. A
+link that stays inside the document's own folder is served by the folder's
+existing mount. A link that leaves it, or an absolute path, is resolved against
+the source file's directory; when the target is a regular file the renderer
+registers a read-only session mount for the target's DIRECTORY and rewrites the
+link in the rendered output only. Requesting a `.md` or `.markdown` file from any
+of those mounts returns the same deterministic rendering, with a header line
+naming the source path and saying it is read-only and not under review: no
+script line, no token, no review enrollment. Its own links translate the same
+way, so chains of documents work.
+
+The path-safety rules on that translation: real paths decide, so a symlink
+pointing out of the home directory is refused even from inside it; nothing
+outside the home directory is ever mounted (`LAHE_HOME_DIR` moves that boundary
+for tests, the way `LAHE_STATE_DIR` moves the state directory); hidden
+(dot-prefixed) locations below home are refused; and one render may mount at most
+16 distinct directories. A link failing any rule renders as a non-clickable span
+titled `local file, open it on disk: <path>` rather than a link to a 404. There
+is no custom protocol handler.
 
 That renderer has single-source semantics. A document assembled from several
 inputs remains build output and must travel through its canonical build. Review

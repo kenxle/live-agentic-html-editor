@@ -41,7 +41,9 @@ Use the exact `open`, `wake`, `monitor`, `drain`, and `close` values it prints.
 Do not invent a
 server or origin for a static file. Direct `.md` and `.markdown` targets are
 rendered with readable styles and local Mermaid support without changing the
-source. For a document compiled from several sources, run its canonical build
+source. Links in a Markdown source are source-true: never rewrite an on-disk
+link to make the browser page work. The renderer translates local links when it
+builds the page, so fix a broken link only if it is wrong on disk too. For a document compiled from several sources, run its canonical build
 and review the built HTML with `--source <build-entrypoint>` as `AGENTS.md`
 describes.
 
@@ -185,5 +187,8 @@ wake feed and any running monitor exits with code 5.
 - Do not refuse an explicit human-requested handoff merely because another
   agent created the session. Use `lahe session takeover <id>`; never silently
   reuse the old session.
+- Do not edit a link in the Markdown source to make the rendered page resolve
+  it. A local link LAHE cannot serve renders as plain text naming the path on
+  purpose.
 - Do not hand-convert one Markdown file with Pandoc. Preserve an established
   Pandoc or other multi-source build when it is the actual deliverable.

@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.0.0+4d6b6a04299d
+ * version 0.0.0+a63b65dd997d
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.0.0+4d6b6a04299d";
+  g.LAHE.version = "0.0.0+a63b65dd997d";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -3606,7 +3606,10 @@
   // 11: older helpers drop user_needs_to_see_reply during the reply fold, so a
   // flagged reply would silently lose its flag and never badge the reviewer.
   // They must be restarted.
-  var SERVICE_CONTRACT = 11;
+  // 12: older static servers hand back raw Markdown bytes from a source mount
+  // and have no on-request renderer, so a reviewed document's links to other
+  // local documents download or 404 behind them. They must be restarted.
+  var SERVICE_CONTRACT = 12;
   var BASE = "/lahe/" + API_VERSION;
 
   // ---------------------------------------------------------------------------
@@ -4738,6 +4741,7 @@
     "LAHE ACTION REQUIRED means the output is an interrupt, not finished work. Continue the same turn and handle every item printed with it. Receiving an item is not handling it, and describing it is not handling it.",
     "Do not use a native model timer, a forever daemon, a global monitor, or a parser pipeline.",
     "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and a running helper puts the script line back when the rebuild strips it out.",
+    "Links in a Markdown source are source-true: never rewrite an on-disk link to make the browser page work. The renderer translates local links when it builds the page, so fix a broken link only if it is wrong on disk too.",
     "The only way to say you handled an item is to append a reply line."
   ];
 
@@ -21932,7 +21936,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.0.0+4d6b6a04299d";
+  var VERSION = "0.0.0+a63b65dd997d";
 
   var protocol = ns.protocol;
   var record = ns.record;

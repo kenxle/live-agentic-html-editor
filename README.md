@@ -141,6 +141,26 @@ conversion or start their own review server. After editing the Markdown source,
 rerun the same command to rebuild the review page before reporting the change
 handled.
 
+Local links keep working in the rendered page, and the file on disk is never
+rewritten to make them work. What each link form does:
+
+- A link to a file in the document's own folder, or below it, is served from
+  that folder as it always was.
+- A link that leaves the folder, such as `../crucible/SKILL.md`, and an
+  absolute path under your home directory, are both resolved against the source
+  file's directory. LAHE serves the target's folder read-only for the session
+  and points the rendered link at it.
+- A link to another `.md` or `.markdown` file opens as the same rendered
+  reading view, marked read-only and not under review. Its own links are
+  translated the same way, so a skill to a template to a sub-template chain
+  works.
+- `#heading` links stay ordinary in-page anchors.
+- A link LAHE will not serve renders as plain text, not a broken link, with the
+  full path in its tooltip so you can open it on disk. That covers a target
+  outside your home directory, a symlink pointing out of it, a hidden
+  (dot-prefixed) location, a missing file, and links past the 16-folder cap on
+  how many folders one document may mount.
+
 That direct path is for a single Markdown file that is itself the document. If
 the deliverable is assembled from chapters, includes, templates, citations,
 generated sections, or several source files, review the project's real HTML

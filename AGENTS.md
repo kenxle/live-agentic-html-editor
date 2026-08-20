@@ -100,6 +100,15 @@ review, rebuilds the generated page, and lets the reviewer's page reload onto
 the result. A reply is not handled until the changed Markdown has been rendered
 and is visible there.
 
+Links in a Markdown source are source-true: never rewrite an on-disk link to
+make the browser page work. The renderer translates local links when it builds
+the page, so fix a broken link only if it is wrong on disk too. A link out of
+the document's folder, or an absolute path under the home directory, gets its
+target folder served read-only for the session, and a linked `.md` file opens as
+the same rendered view, marked read-only and not under review. A link LAHE
+cannot serve renders as plain text naming the path, which is not a bug to go
+fix in the source.
+
 ### Choose the source workflow before opening the review
 
 Use direct Markdown review only when that one file is the document the person
