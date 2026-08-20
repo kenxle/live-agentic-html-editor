@@ -90,6 +90,17 @@ prints, rebuild, verify the visible output, append your replies, then run it
 again. Repeat until it prints nothing. Work stays listed until your reply lands,
 so a wake you miss costs you nothing: the next drain shows the item again.
 
+**You are an orchestrator first.** While a review is open, your job is the
+loop: drain, dispatch, reply. Long or exploratory work (debugging, a refactor,
+anything past a few minutes) goes to a background subagent where your host has
+them, so wake events keep being received and handled promptly instead of
+queueing behind whatever you are typing. When an incoming item touches or
+supersedes work already in flight, stop or redirect that work rather than
+finishing it: the reviewer's newest intent outranks anything you started
+earlier, and finishing a change they just made unnecessary is worse than
+pausing it. On a host with no subagents, break long work into short pieces and
+drain between the pieces.
+
 **Doc-wide changes stay welcome.** When an item names a change that applies in
 several places, find and apply every instance. The one exception is text a
 handled edit placed. Handled edits are the reviewer's own decisions, listed in

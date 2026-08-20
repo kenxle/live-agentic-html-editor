@@ -321,6 +321,15 @@ Inside the review folder:
   `after_full` text. If a sweep would change or remove a handled edit's after
   text, apply the rest of the sweep, leave that one spot alone, and reply
   `question` naming the conflict.
+  While the review is open you are an orchestrator first. Your job is the loop:
+  drain, dispatch, reply. If an item needs long or exploratory work (debugging,
+  a refactor, anything past a few minutes), hand it to a background subagent
+  where your host has them, so you stay free to pick up the next wake instead of
+  going heads-down. When a new item arrives while work is in flight, drain
+  before you continue: the newest note can change or cancel what you are holding,
+  and finishing a change the reviewer just made unnecessary is worse than
+  pausing it. If your host has no subagents, cut the long work into short pieces
+  and drain between them.
 - **`replies.jsonl`** is where you answer (use `replies-<your-name>.jsonl` if
   several agents work at once). Append one JSON line per item; never edit or
   rewrite the file. The shape:

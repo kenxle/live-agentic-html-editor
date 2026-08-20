@@ -298,6 +298,14 @@ test("the canonical skill rejects the retired and cross-session workflows", () =
   assert.match(skill, /Stop this session's wake tail or\s+background monitor/);
   assert.doesNotMatch(skill, /moderate timer/);
   assert.doesNotMatch(skill, /--seen-file/, "the retired ledger flag is taught nowhere");
+  // Orchestration. An agent watching a live review went heads-down for twenty
+  // minutes debugging an animation while the reviewer committed an item that
+  // made the animation unnecessary (2026-08-20). The skill has to say that the
+  // loop comes first and that new intent preempts work in flight.
+  assert.match(skill, /You are an orchestrator first/);
+  assert.match(skill, /goes to a background subagent/);
+  assert.match(skill, /stop or redirect that work rather than\s+finishing it/);
+  assert.match(skill, /break long work into short pieces and\s+drain between the pieces/);
 });
 
 // ---------------------------------------------------------------------------
