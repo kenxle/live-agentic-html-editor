@@ -359,7 +359,7 @@ does not, asking the agent is a perfectly good answer.
 ## Ken's Review, Round 1
 
 Sixty-two comments on the first draft. The full record is in
-`archive_ken_comments_round1_brief.md`.
+`archive_comments_round1_brief.md`.
 
 | Finding | Disposition | Notes |
 | --- | --- | --- |
