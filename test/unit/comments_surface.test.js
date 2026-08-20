@@ -256,6 +256,67 @@ test("both caps hold: 40% of the viewport tall, 1.5x the starting width", () => 
   const cap = Math.min(Math.round(commentsModule.BOX_WIDTH * 1.5), commentsModule.BOX_WIDTH_CAP);
   assert.equal(huge.width, cap);
   assert.equal(cap, 432);
+
+  // Holding a step open cannot push the box past either cap: a box held at a
+  // step wider than the cap allows is still exactly the cap.
+  const heldPastCap = grow({ contentHeight: 4000, heldLines: 40, heldHeight: 4000, allowShrink: false });
+  assert.equal(heldPastCap.width, cap);
+  assert.equal(heldPastCap.boxHeight, Math.round(VIEWPORT.viewportHeight * commentsModule.BOX_MAX_VIEWPORT_SHARE));
+});
+
+// The bug this pins: the box used to measure its text inside itself, so its own
+// width fed back into the size it chose. On a wrap boundary a keystroke wrapped
+// the text, the box widened, the wider box unwrapped it, and the box narrowed:
+// visible jitter on every keystroke. The measure is now taken at the starting
+// width, and these three tests are the properties that keep it honest.
+test("the same words give the same size, whatever size the box already is", () => {
+  const held = [1, 2, 3, 5, 9];
+  const sizes = held.map(function (lines) {
+    return grow({ contentHeight: 146, heldLines: lines, allowShrink: true });
+  });
+  sizes.forEach(function (size) {
+    assert.deepEqual(
+      { w: size.width, h: size.inputHeight },
+      { w: sizes[0].width, h: sizes[0].inputHeight },
+      "the size is a function of the content, not of the box"
+    );
+  });
+});
+
+test("a value on the threshold cannot flip the box between two sizes", () => {
+  // 146px of content is one line past the 126px that wins the fourth step
+  // (66 + 3 * 20), so it grows.
+  const grown = grow({ contentHeight: 146 });
+  const step = grown.lines;
+  assert.ok(step > 1, "past the threshold, the box grows");
+
+  // The same content, with the box already standing on that step, does not
+  // hand the step back: it is inside the band.
+  const again = grow({ contentHeight: 146, heldLines: step, allowShrink: true });
+  assert.equal(again.width, grown.width, "no oscillation on a boundary value");
+  const nudged = grow({ contentHeight: 140, heldLines: step, allowShrink: true });
+  assert.equal(nudged.width, grown.width, "nor a hair under it");
+
+  // Clearly below the band, it does shrink.
+  const clear = grow({
+    contentHeight: 146 - commentsModule.SHRINK_BAND - 20,
+    heldLines: step,
+    allowShrink: true
+  });
+  assert.ok(clear.width < grown.width, "a clearly shorter text does put the step back");
+});
+
+test("typing forward never makes the box smaller, deleting does", () => {
+  const wide = grow({ contentHeight: 300 });
+  // Nothing shrinks mid-sentence, however the wrap count moves.
+  const typing = grow({ contentHeight: 80, heldLines: wide.lines, heldHeight: wide.inputHeight, allowShrink: false });
+  assert.equal(typing.width, wide.width, "the width is held while typing forward");
+  assert.equal(typing.inputHeight, wide.inputHeight, "and so is the height");
+
+  // Deleting text (or leaving the box) is what lets it back down.
+  const deleted = grow({ contentHeight: 80, heldLines: wide.lines, heldHeight: wide.inputHeight, allowShrink: true });
+  assert.ok(deleted.width < wide.width);
+  assert.equal(deleted.inputHeight, 80);
 });
 
 test("growth never leaves the viewport: it grows the other way instead", () => {

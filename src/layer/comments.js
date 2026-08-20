@@ -95,6 +95,10 @@
 
   var BOX_CLASS = "lahe-comment-box";
   var INPUT_CLASS = "lahe-comment-input";
+  // The offscreen twin of the textarea. It is what the box measures, always at
+  // the box's STARTING width, so what the box decides never depends on the size
+  // the box already is.
+  var MIRROR_CLASS = "lahe-comment-mirror";
   var OUTLINE_CLASS = "lahe-pick-outline";
   var PILL_CLASS = "lahe-sel-pill";
   var PILL_BTN_CLASS = "lahe-sel-act";
@@ -411,6 +415,22 @@
     "  color: inherit;",
     "  background: #ffffff;",
     "}",
+    // The measuring twin. Out of flow and invisible, so it costs the box no
+    // layout and the reviewer never sees it. Everything about how text wraps in
+    // it is copied from the textarea at measure time; what is here is only what
+    // keeps it out of the way.
+    "." + MIRROR_CLASS + " {",
+    "  position: absolute;",
+    "  top: 0;",
+    "  left: -99999px;",
+    "  visibility: hidden;",
+    "  pointer-events: none;",
+    "  height: auto;",
+    "  overflow: hidden;",
+    "  white-space: pre-wrap;",
+    "  overflow-wrap: break-word;",
+    "  word-break: break-word;",
+    "}",
     "." + INPUT_CLASS + ":focus-visible, ." + INPUT_CLASS + ":focus {",
     "  outline: 2px solid rgba(60, 86, 165, 0.9);",
     "  outline-offset: 1px;",
@@ -467,9 +487,17 @@
   // three-line input that scrolls internally after the third line is the whole
   // interface being too small.
   //
-  // The growth is driven from the textarea's own scrollHeight rather than from
-  // CSS field-sizing, which only Chromium has: this layer supports current
-  // Chrome, Edge, Safari and Firefox.
+  // The growth is driven from a measurement of the text rather than from CSS
+  // field-sizing, which only Chromium has: this layer supports current Chrome,
+  // Edge, Safari and Firefox.
+  //
+  // THE MEASUREMENT IS TAKEN AT THE BOX'S STARTING WIDTH, NEVER AT ITS CURRENT
+  // ONE. Reading the live textarea's scrollHeight made the box's size an input
+  // to its own size: near a wrap boundary a keystroke wrapped the text, the line
+  // count rose, the box widened, the wider box unwrapped the text, the count
+  // fell, and the box narrowed again. Every keystroke jittered. Measuring an
+  // offscreen twin pinned at the starting width breaks the loop: the same words
+  // measure the same, whatever size the box happens to be.
   //
   // The math is pure and lives out here, so it is unit-testable with no browser
   // and so the drag path and the growth path cannot disagree about where the
@@ -487,6 +515,10 @@
   var BOX_WIDTH_STEP = 24;
   // How close to the viewport edge the box may sit.
   var BOX_EDGE = 16;
+  // How far below the height that won a width step the content has to fall
+  // before the box gives that step back. A full line, so a value sitting on a
+  // threshold cannot flip the box between two sizes.
+  var SHRINK_BAND = 24;
 
   function clamp(value, low, high) {
     if (high < low) return low;
@@ -498,15 +530,25 @@
   /**
    * The box's size and corner for the content it is holding right now.
    *
+   * The content measure is the ONLY thing that decides the wanted size: the
+   * same contentHeight in gives the same size out, whatever the box currently
+   * measures. heldLines and heldHeight are not a second measure, they are the
+   * step the box is already standing on, and they can only ever hold it there.
+   *
    * @param {Object} m
-   *   contentHeight  the textarea's scrollHeight with its height released
+   *   contentHeight  the text's height measured at the box's STARTING width
    *   lineHeight     one line of the textarea, in pixels
    *   chromeHeight   everything of the box that is not the textarea
    *   baseWidth      the width a fresh box opens at
+   *   heldLines      the line step the box is showing right now (1 when fresh)
+   *   heldHeight     the textarea height the box is showing right now
+   *   allowShrink    false while the reviewer is typing forward: the box may
+   *                  grow but may not give a step back until they delete text
+   *                  or leave the box
    *   top, left      the corner the box is anchored (or was dragged) to
    *   viewportWidth, viewportHeight
    * @returns {{width: number, inputHeight: number, boxHeight: number,
-   *            top: number, left: number, capped: boolean}}
+   *            lines: number, top: number, left: number, capped: boolean}}
    */
   function growthFor(m) {
     var g = m || {};
@@ -526,6 +568,7 @@
     var boxCap = Math.round(vh * BOX_MAX_VIEWPORT_SHARE);
     var inputCap = Math.max(restHeight, boxCap - chrome);
     var wanted = g.contentHeight > 0 ? Math.ceil(g.contentHeight) : restHeight;
+    var allowShrink = g.allowShrink !== false;
     var inputHeight = clamp(wanted, restHeight, inputCap);
     var capped = wanted > inputCap;
 
@@ -533,7 +576,22 @@
     // written past the input it opened with, then widens a step per line beyond
     // it. Measured from the content rather than from the applied height, so the
     // three lines a fresh box already shows do not count as growth.
-    var lines = 1 + Math.max(0, Math.ceil((wanted - restHeight) / lineHeight));
+    var raw = 1 + Math.max(0, Math.ceil((wanted - restHeight) / lineHeight));
+    var held = g.heldLines > 0 ? Math.round(g.heldLines) : 1;
+    var lines = raw;
+    if (raw < held) {
+      // Giving a step back is the move that can jitter, so it is the move with
+      // a band under it. The height that won this step is the floor; the
+      // content has to fall a whole line below it before the step goes back,
+      // and it never goes back at all while the reviewer is typing forward.
+      var won = restHeight + (held - 2) * lineHeight;
+      var band = Math.max(lineHeight, SHRINK_BAND);
+      if (!allowShrink || wanted > won - band) lines = held;
+    }
+    // The same rule for the height: typing forward never makes the box smaller.
+    if (!allowShrink && g.heldHeight > 0) {
+      inputHeight = clamp(Math.max(inputHeight, g.heldHeight), restHeight, inputCap);
+    }
     var widthCap = Math.min(Math.round(baseWidth * 1.5), BOX_WIDTH_CAP);
     var roomy = Math.max(baseWidth, vw - BOX_EDGE * 2);
     var width = clamp(baseWidth + BOX_WIDTH_STEP * (lines - 1), baseWidth, Math.min(widthCap, roomy));
@@ -552,6 +610,7 @@
       width: width,
       inputHeight: inputHeight,
       boxHeight: boxHeight,
+      lines: lines,
       top: top,
       left: left,
       capped: capped
@@ -808,6 +867,17 @@
       var dragPos = null;
       var dragFrom = null;
       var restHeight = null;
+      // The offscreen twin the box measures its text in, and the step the box
+      // is standing on right now. The step is what hysteresis holds: without it
+      // a content height sitting on a threshold could flip the box between two
+      // widths on consecutive keystrokes.
+      var mirrorEl = null;
+      var heldLines = 1;
+      var heldHeight = 0;
+      // How long the text was at the last fit. Shorter means the reviewer
+      // deleted something, which is the only thing (besides leaving the box)
+      // that lets it shrink.
+      var lastLength = null;
       // A session the reviewer started by typing in the card's own words: the
       // note node IS the input, so no box is built and none is torn down.
       var inNote = (src && src.inputNode) || null;
@@ -867,6 +937,14 @@
         inputEl.value = item[record.FIELD.NOTE] || "";
         node.appendChild(inputEl);
 
+        // The twin, in the box's own DOM so it inherits the same font the
+        // textarea does, and out of flow so it changes nothing the eye sees.
+        mirrorEl = doc.createElement("div");
+        mirrorEl.className = MIRROR_CLASS;
+        mirrorEl.setAttribute("aria-hidden", "true");
+        markers.markChrome(mirrorEl);
+        node.appendChild(mirrorEl);
+
         var foot = doc.createElement("div");
         foot.className = "lahe-comment-foot";
         var hint = doc.createElement("span");
@@ -893,6 +971,11 @@
 
         inputEl.addEventListener("input", onInput);
         inputEl.addEventListener("keydown", onKeydown);
+        // Leaving the box is when it settles: the size it takes then is the one
+        // the words really ask for, with nothing held open by the typing rule.
+        inputEl.addEventListener("blur", function () {
+          grow({ allowShrink: true });
+        });
         bindGrip();
 
         if (host) host.appendChild(node);
@@ -970,18 +1053,43 @@
        * of 1.5x the starting width and 480px. Everything it needs is measured
        * here; the decisions are all out there, where a unit test can reach them.
        */
-      function grow() {
+      /**
+       * The text's height, measured in the twin at the width a fresh box opens
+       * at. Width-independent by construction: the twin is never resized with
+       * the box, so the same words always come back the same height.
+       */
+      function measureText(text, boxWidth, inputWidth) {
+        if (!mirrorEl || !win || !win.getComputedStyle) return 0;
+        var from = win.getComputedStyle(inputEl);
+        var style = mirrorEl.style;
+        style.boxSizing = from.boxSizing;
+        style.font = from.font;
+        style.fontFamily = from.fontFamily;
+        style.fontSize = from.fontSize;
+        style.fontWeight = from.fontWeight;
+        style.lineHeight = from.lineHeight;
+        style.letterSpacing = from.letterSpacing;
+        style.padding = from.padding;
+        style.borderStyle = "solid";
+        style.borderWidth = from.borderWidth;
+        style.minHeight = from.minHeight;
+        // The one number that matters: the textarea's width when the BOX is at
+        // its starting width. The horizontal difference between the box and the
+        // textarea is the box's own padding and border, which does not change
+        // as the box widens.
+        var inset = Math.max(0, boxWidth - inputWidth);
+        style.width = Math.max(1, BOX_WIDTH - inset) + "px";
+        // The trailing newline is what makes a text ending in a line break, or
+        // an empty one, measure the line it is actually sitting on.
+        mirrorEl.textContent = String(text == null ? "" : text) + "\n";
+        return mirrorEl.scrollHeight;
+      }
+
+      function grow(options) {
         if (!node || !inputEl || inNote || !win || !node.isConnected) return null;
-        var measure = inputEl.style.height;
-        // Released first, so the scrollHeight read is the content's own height
-        // rather than the height this function set last time. Without it the
-        // box could grow and never shrink.
-        inputEl.style.height = "auto";
-        var content = inputEl.scrollHeight;
         var boxRect = node.getBoundingClientRect();
         var inputRect = inputEl.getBoundingClientRect();
         var chrome = Math.max(0, boxRect.height - inputRect.height);
-        inputEl.style.height = measure;
 
         var lineHeight = 20;
         if (win.getComputedStyle) {
@@ -989,9 +1097,20 @@
           if (parsed > 0) lineHeight = parsed;
         }
 
-        // Measured once, from the box as it opened. It is the datum for "has
-        // this grown at all", so it has to be taken before anything is typed.
-        if (restHeight === null) restHeight = content;
+        // Measured once, from the twin holding nothing. It is the datum for
+        // "has this grown at all", and it is the empty box's height rather than
+        // whatever happens to be typed right now, so reopening a comment with
+        // words already in it measures against the same datum a fresh one does.
+        if (restHeight === null) restHeight = measureText("", boxRect.width, inputRect.width);
+
+        var text = readInput();
+        var content = measureText(text, boxRect.width, inputRect.width);
+
+        // Typing forward never shrinks the box. Deleting can, and so can
+        // leaving it (the blur pass asks for the fit the words really want).
+        var forced = !!(options && options.allowShrink);
+        var deleted = lastLength !== null && text.length < lastLength;
+        lastLength = text.length;
 
         var size = growthFor({
           restHeight: restHeight,
@@ -999,11 +1118,16 @@
           lineHeight: lineHeight,
           chromeHeight: chrome,
           baseWidth: BOX_WIDTH,
+          heldLines: heldLines,
+          heldHeight: heldHeight,
+          allowShrink: forced || deleted,
           top: dragPos ? dragPos.top : boxRect.top,
           left: dragPos ? dragPos.left : boxRect.left,
           viewportWidth: win.innerWidth,
           viewportHeight: win.innerHeight
         });
+        heldLines = size.lines;
+        heldHeight = size.inputHeight;
 
         inputEl.style.height = size.inputHeight + "px";
         inputEl.style.overflowY = size.capped ? "auto" : "hidden";
@@ -2380,6 +2504,7 @@
     BOX_MAX_VIEWPORT_SHARE: BOX_MAX_VIEWPORT_SHARE,
     INPUT_MIN_HEIGHT: INPUT_MIN_HEIGHT,
     BOX_EDGE: BOX_EDGE,
+    SHRINK_BAND: SHRINK_BAND,
     growthFor: growthFor,
     dragTo: dragTo,
     createComments: createComments

@@ -356,6 +356,25 @@ test.describe("1D: comments, gestures, and highlights", () => {
     const fresh = await boxSize(page);
     expect(fresh.width).toBe(288);
 
+    // The box used to measure its text inside itself, so a keystroke near a
+    // wrap boundary wrapped the text, widened the box, unwrapped the text in
+    // the wider box, and narrowed it again: the box jittered on every
+    // keystroke. Walking one character at a time across a boundary, the width
+    // may only ever hold or rise, and may never come back to a width it left.
+    const walk = [];
+    const boundary =
+      "the tone of this whole passage is wrong and this sentence is here to reach a wrap boundary";
+    for (let i = boundary.length - 14; i <= boundary.length; i += 1) {
+      await typeInBox(page, boundary.slice(0, i));
+      walk.push((await boxSize(page)).width);
+    }
+    for (let i = 1; i < walk.length; i += 1) {
+      expect(walk[i], "the box never narrows while the reviewer types forward").toBeGreaterThanOrEqual(walk[i - 1]);
+    }
+    expect(new Set(walk).size, "at most one step is taken across a boundary, and never taken back").toBeLessThanOrEqual(
+      2
+    );
+
     // Enough prose to wrap several times. Typed through the handle rather than
     // the keyboard because the assertion is about the size, not about typing.
     // Past the three rows a fresh box already shows, which is where growth
