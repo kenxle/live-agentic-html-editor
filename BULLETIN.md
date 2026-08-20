@@ -15,6 +15,34 @@ tool is broken.**
 
 ## Board
 
+- [x] @claude 2026-08-20 LAHE-live-review-polish -- two days of Ken's live
+  feedback, worked through the tool itself: composer auto-grow with a
+  feedback-free measuring twin (no jitter), drag handle, Send and Delete
+  buttons; unread-reply attention system (user_needs_to_see_reply flag,
+  per-tab badges, collapsed-pill jewel, fresh-for-the-visit markers);
+  click-a-card-to-jump with anchor edge cases; handled-fold clears the
+  lost-anchor badge so a card cannot say the fix worked and did not work.
+- [x] @claude 2026-08-20 LAHE-md-local-links -- linked local Markdown renders
+  as pages hop to hop (contract 12); cross-folder links mount read-only under
+  home with symlink and dot-path refusals and a 16-dir cap; unservable links
+  go politely inert; the contract now says on-disk links are source-true and
+  never rewritten for the browser.
+- [x] @claude 2026-08-20 LAHE-session-discovery -- lahe session list plus the
+  "a LAHE session is not your host's session" disambiguation, after an agent
+  hunted Claude sessions when told to claim the lahe ones.
+- [x] @claude 2026-08-20 LAHE-agent-discipline -- contract now names the
+  literal Monitor persistent:true parameter (a 300s-timeout monitor woke a
+  model every five minutes all night), makes the watching agent an
+  orchestrator first (new feedback preempts work in flight), and carves
+  handled hand-edits out of doc-wide sweeps with revert detection reopening
+  a clobbered edit on the next page load.
+- [x] @claude 2026-08-19 LAHE-monitoring-rewrite -- the cross-agent wake
+  architecture: per-session append-only wake feed for tail -f hosts, monitor
+  exit codes 5/6 and heartbeats, watching/working/unattended liveness in the
+  rail, redelivery-until-reply with no seen ledger, per-host launch modes
+  (Claude persistent Monitor, Codex pending exec, Antigravity background
+  task). Proven live end to end; design record in
+  docs/features/20260818.01_release_readiness/.
 - [x] @codex 2026-08-18 LAHE-idle-energy -- the shared helper no longer scans
   every accumulated review folder four times per second. Active page polls,
   status reads, and browser event appends fold their review directly; a
