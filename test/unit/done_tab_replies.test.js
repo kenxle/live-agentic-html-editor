@@ -943,3 +943,58 @@ test("the jewel's count is the same collapsed or expanded: it is state, not a pa
   rail.selectTab(overlay.TAB.DONE);
   assert.equal(rail.pillNewCount(), 0);
 });
+
+// ---------------------------------------------------------------------------
+// The shared card, and who is allowed to remove it
+// ---------------------------------------------------------------------------
+//
+// One item is one card, and three tabs draw rows inside it. A tab finishing
+// with its own row is not the card ending. The Active tab used to remove the
+// card whenever its row went away, which deleted the handled reply the Done tab
+// was showing the moment the reviewer closed the still-open comment box.
+
+test("a tab releasing its row leaves the card alone when another pane owns it", () => {
+  const { store, rail, done } = setup();
+  const item = store.write(REVIEW, readyItem());
+  rail.upsertCard(item);
+  assert.equal(rail.getCard(item.id).pane, overlay.TAB.ACTIVE);
+
+  done.applyReplies([foldEvent(item)]);
+  assert.equal(rail.getCard(item.id).pane, overlay.TAB.DONE, "the fold moved the card to Done");
+
+  const removed = rail.releaseCard(item.id, overlay.TAB.ACTIVE);
+  assert.equal(removed, false, "the Active tab is told no");
+  assert.notEqual(rail.getCard(item.id), null, "and the card the Done tab owns is still there");
+  assert.equal(rail.cardIds().indexOf(item.id) !== -1, true);
+  assert.equal(rail.getCard(item.id).state, record.STATE.HANDLED);
+});
+
+test("a tab releasing its row removes the card when that tab still owns the pane", () => {
+  const { store, rail } = setup();
+  const item = store.write(REVIEW, readyItem());
+  rail.upsertCard(item);
+
+  assert.equal(rail.releaseCard(item.id, overlay.TAB.ACTIVE), true);
+  assert.equal(rail.getCard(item.id), null);
+  assert.equal(rail.cardIds().indexOf(item.id), -1);
+});
+
+test("a record the store no longer holds takes its card with it, whatever the pane says", () => {
+  const { store, rail, done } = setup();
+  const item = store.write(REVIEW, readyItem());
+  rail.upsertCard(item);
+  done.applyReplies([foldEvent(item)]);
+  assert.equal(rail.getCard(item.id).pane, overlay.TAB.DONE);
+
+  store.remove(REVIEW, item.id);
+
+  assert.equal(rail.releaseCard(item.id, overlay.TAB.ACTIVE), true, "gone is gone");
+  assert.equal(rail.getCard(item.id), null);
+});
+
+test("releaseCard refuses a tab name that is not a tab", () => {
+  const { store, rail } = setup();
+  const item = store.write(REVIEW, readyItem());
+  rail.upsertCard(item);
+  assert.throws(() => rail.releaseCard(item.id, "somewhere"), /unknown tab/);
+});

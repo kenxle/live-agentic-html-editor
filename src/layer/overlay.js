@@ -1416,6 +1416,51 @@
       return true;
     }
 
+    /**
+     * A tab is finished with its own row for this card. The CARD goes only when
+     * nobody else owns it.
+     *
+     * The card is shared: the Active tab, the Edits tab and the Done tab all
+     * draw their rows inside the same card node, and exactly one of them owns
+     * it at a time (paneForItem says which). A tab that removed the card
+     * whenever its own row went away deleted a card another tab was still
+     * showing. That is how a handled reply vanished: the item folds to handled,
+     * its card moves to the Done pane, then closing the still-open comment box
+     * re-runs the Active tab's refresh, the handled item is not outstanding
+     * any more, and the Active tab dropped the card out from under Done. The
+     * reply was still in the store, so a reload brought it back, which is
+     * exactly what the reviewer reported ("I got the update but I had to
+     * reload").
+     *
+     * So: remove the card when this tab is still the card's pane, or when the
+     * record is gone from the store entirely. Otherwise leave the card standing
+     * and let the owning tab keep its contents.
+     *
+     * @param {string} id item id
+     * @param {string} tab the calling tab, one of TABS
+     * @returns {boolean} true when the card itself was removed
+     */
+    function releaseCard(id, tab) {
+      if (TABS.indexOf(tab) === -1) throw new Error("releaseCard: unknown tab " + String(tab));
+      if (!cards[id]) return false;
+      if (cards[id].pane === tab) return removeCard(id);
+      if (!itemIsStored(id)) return removeCard(id);
+      return false;
+    }
+
+    /**
+     * Does the store still hold this record?
+     *
+     * A rail built with no store (the standalone shape, and some tests) cannot
+     * ask, and answers yes: keeping a card another pane owns is the safe way to
+     * be wrong, because the reviewer can still see it and a stale card is not
+     * what anyone reported.
+     */
+    function itemIsStored(id) {
+      if (!store || !reviewId || typeof store.readItem !== "function") return true;
+      return !!store.readItem(reviewId, id);
+    }
+
     function setCardState(id, state) {
       if (record.STATES.indexOf(state) === -1) {
         throw new Error("setCardState: unknown state " + String(state));
@@ -2424,6 +2469,7 @@
       attachCardContinuation: attachCardContinuation,
       detachCardNode: detachCardNode,
       removeCard: removeCard,
+      releaseCard: releaseCard,
       setCardState: setCardState,
       setCardBadge: setCardBadge,
       clearCardBadge: clearCardBadge,

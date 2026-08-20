@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.1.0+afcb0901d618
+ * version 0.1.0+b2a679d00e6b
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.1.0+afcb0901d618";
+  g.LAHE.version = "0.1.0+b2a679d00e6b";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -9996,6 +9996,51 @@
       return true;
     }
 
+    /**
+     * A tab is finished with its own row for this card. The CARD goes only when
+     * nobody else owns it.
+     *
+     * The card is shared: the Active tab, the Edits tab and the Done tab all
+     * draw their rows inside the same card node, and exactly one of them owns
+     * it at a time (paneForItem says which). A tab that removed the card
+     * whenever its own row went away deleted a card another tab was still
+     * showing. That is how a handled reply vanished: the item folds to handled,
+     * its card moves to the Done pane, then closing the still-open comment box
+     * re-runs the Active tab's refresh, the handled item is not outstanding
+     * any more, and the Active tab dropped the card out from under Done. The
+     * reply was still in the store, so a reload brought it back, which is
+     * exactly what the reviewer reported ("I got the update but I had to
+     * reload").
+     *
+     * So: remove the card when this tab is still the card's pane, or when the
+     * record is gone from the store entirely. Otherwise leave the card standing
+     * and let the owning tab keep its contents.
+     *
+     * @param {string} id item id
+     * @param {string} tab the calling tab, one of TABS
+     * @returns {boolean} true when the card itself was removed
+     */
+    function releaseCard(id, tab) {
+      if (TABS.indexOf(tab) === -1) throw new Error("releaseCard: unknown tab " + String(tab));
+      if (!cards[id]) return false;
+      if (cards[id].pane === tab) return removeCard(id);
+      if (!itemIsStored(id)) return removeCard(id);
+      return false;
+    }
+
+    /**
+     * Does the store still hold this record?
+     *
+     * A rail built with no store (the standalone shape, and some tests) cannot
+     * ask, and answers yes: keeping a card another pane owns is the safe way to
+     * be wrong, because the reviewer can still see it and a stale card is not
+     * what anyone reported.
+     */
+    function itemIsStored(id) {
+      if (!store || !reviewId || typeof store.readItem !== "function") return true;
+      return !!store.readItem(reviewId, id);
+    }
+
     function setCardState(id, state) {
       if (record.STATES.indexOf(state) === -1) {
         throw new Error("setCardState: unknown state " + String(state));
@@ -11004,6 +11049,7 @@
       attachCardContinuation: attachCardContinuation,
       detachCardNode: detachCardNode,
       removeCard: removeCard,
+      releaseCard: releaseCard,
       setCardState: setCardState,
       setCardBadge: setCardBadge,
       clearCardBadge: clearCardBadge,
@@ -11666,14 +11712,25 @@
       return "Handled";
     }
 
+    // This tab's row goes, always. The CARD goes only when no other tab is
+    // showing it: it is one shared card per item, and a handled comment's card
+    // belongs to the Done tab while this tab still has a row to clean up (the
+    // reviewer closes the comment box, this tab refreshes, the handled item is
+    // no longer outstanding). Removing the card there deleted the reply Done
+    // was displaying. rail.releaseCard is the one place that rule is spelled.
     function dropRow(id) {
       // The note goes with the row it was drawn in: a session left registered
       // against a node nobody can see is a rewording nobody can end.
       comments.detachNoteEditor(id);
       var row = rows[id];
-      if (row && row.parentNode) row.parentNode.removeChild(row);
+      // detachCardNode, not removeChild: the card remembers the nodes attached
+      // to it and puts them back when it is rebuilt, so a row torn out of the
+      // DOM alone comes back on the next remount.
+      if (row && !rail.detachCardNode(id, row) && row.parentNode) {
+        row.parentNode.removeChild(row);
+      }
       delete rows[id];
-      rail.removeCard(id);
+      rail.releaseCard(id, overlayModule.TAB.ACTIVE);
     }
 
     function focusNote() {
@@ -22180,7 +22237,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.1.0+afcb0901d618";
+  var VERSION = "0.1.0+b2a679d00e6b";
 
   var protocol = ns.protocol;
   var record = ns.record;

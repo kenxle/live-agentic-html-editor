@@ -1128,4 +1128,73 @@ test.describe("3A: an agent answers by appending one line", () => {
       await app.close();
     }
   });
+  // The reviewer leaves the comment box open, the way they do while the agent
+  // works. Closing it later is NOT a change to the record, but it does re-run
+  // the Active tab, and the Active tab used to take the shared card away with
+  // its own row: the answer disappeared from Done until the page was reloaded.
+  // Reported twice, as "where did the answer go, it is not in the done column"
+  // and "I got the update but I had to reload". Nothing below reloads.
+  test("closing the comment box after a reply folds leaves the answer standing in Done", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      await commentOnSelection(page, "p.lede", "shorten this");
+      const [item] = await itemsIn(page);
+      await waitForItemInLog(helper, item.id);
+
+      // The reviewer goes back into their own words on the card and leaves the
+      // session OPEN, which is the whole setup. A note session is the one that
+      // survives Cmd-Enter: the caret stays where the reviewer put it.
+      const opened = await page.evaluate((id) => {
+        const box = window.__lahe.handle.comments.editInPlace(id);
+        return box ? box.placement : null;
+      }, item.id);
+      expect(opened, "the reviewer is editing the note on the card").toBe("in-note");
+
+      appendReply(helper, "replies-claude.jsonl", {
+        item: item.id,
+        rev: item.rev,
+        status: "handled",
+        agent: "claude",
+        text: "Cut it to one sentence.",
+        user_needs_to_see_reply: true
+      });
+      await pollPage(page, (id) => window.__lahe.itemById(id).reply !== null, item.id, {
+        message: "the reply to fold onto the card"
+      });
+      expect(await cardOf(page, item.id)).toMatchObject({ state: "handled", pane: "done" });
+
+      // The reviewer closes the box they left open. This is not a change to the
+      // record; it is one "closed" event.
+      await page.evaluate(() => window.__lahe.handle.comments.closeAll());
+
+      const after = await page.evaluate((id) => {
+        const rail = window.__lahe.rail;
+        const card = rail.getCard(id);
+        const node = rail.cardNode(id);
+        return {
+          cardIds: rail.cardIds(),
+          pane: card ? card.pane : null,
+          state: card ? card.state : null,
+          text: node ? node.textContent : "",
+          doneRows: window.__lahe.handle.doneTab().rowCount(),
+          activeRows: window.__lahe.handle.tab().rowCount(),
+          stored: window.__lahe.itemById(id)
+        };
+      }, item.id);
+
+      expect(after.cardIds, "the card is still on the rail, with no reload").toContain(item.id);
+      expect(after.pane).toBe("done");
+      expect(after.state).toBe("handled");
+      expect(after.text, "and it still says what the agent said").toContain("Cut it to one sentence.");
+      expect(after.text, "with the reviewer's own words above it").toContain("shorten this");
+      expect(after.doneRows, "the Done tab still has its row on that card").toBe(1);
+      expect(after.activeRows, "and the Active row correctly went away").toBe(0);
+      expect(after.stored.state).toBe("handled");
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
 });

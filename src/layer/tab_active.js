@@ -609,14 +609,25 @@
       return "Handled";
     }
 
+    // This tab's row goes, always. The CARD goes only when no other tab is
+    // showing it: it is one shared card per item, and a handled comment's card
+    // belongs to the Done tab while this tab still has a row to clean up (the
+    // reviewer closes the comment box, this tab refreshes, the handled item is
+    // no longer outstanding). Removing the card there deleted the reply Done
+    // was displaying. rail.releaseCard is the one place that rule is spelled.
     function dropRow(id) {
       // The note goes with the row it was drawn in: a session left registered
       // against a node nobody can see is a rewording nobody can end.
       comments.detachNoteEditor(id);
       var row = rows[id];
-      if (row && row.parentNode) row.parentNode.removeChild(row);
+      // detachCardNode, not removeChild: the card remembers the nodes attached
+      // to it and puts them back when it is rebuilt, so a row torn out of the
+      // DOM alone comes back on the next remount.
+      if (row && !rail.detachCardNode(id, row) && row.parentNode) {
+        row.parentNode.removeChild(row);
+      }
       delete rows[id];
-      rail.removeCard(id);
+      rail.releaseCard(id, overlayModule.TAB.ACTIVE);
     }
 
     function focusNote() {
