@@ -184,6 +184,17 @@
   lost. A reply that folds as not_handled or as a question changes nothing: the
   work is still open and the badge is still honest.
 
+## 2026-08-20 an agent can find a session
+
+- Complete: `lahe session list` is the read-only discovery command. It prints
+  every agent session on the machine, open first and newest activity first, with
+  each session's handoff revision, reviews owned, unanswered ready items, and
+  watcher state, then a one-line hint naming `lahe session takeover <id>`. The
+  contract, AGENTS.md, and the skill now also say plainly that a LAHE agent
+  session is not the host's session, because a fresh agent told to "claim the
+  lahe sessions" searched its Claude peer sessions instead: the word was
+  overloaded and no command could answer "which sessions".
+
 ## Still open
 
 These are not done. They were found during the work above and deliberately left

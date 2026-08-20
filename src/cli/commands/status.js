@@ -681,5 +681,10 @@ module.exports = {
   excerpt: excerpt,
   PAGE_TEXT_LABEL: PAGE_TEXT_LABEL,
   contractLine: contractLine,
+  // `lahe session list` counts reviews and unanswered work per session. It asks
+  // these two, rather than spelling the routing rule a second time: one answer
+  // to "who owns this review" and one list of reviews with state on disk.
+  reviewsOnDisk: reviewsOnDisk,
+  ownerOfReview: ownerOfReview,
   run: run
 };

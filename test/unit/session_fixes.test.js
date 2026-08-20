@@ -279,6 +279,20 @@ test("the canonical skill rejects the retired and cross-session workflows", () =
   assert.match(skill, /Do not relaunch a monitor that exited with 5 or 6/);
   assert.match(skill, /lahe session takeover <id>/);
   assert.match(skill, /Never infer or silently\s+perform a takeover/);
+  // Session disambiguation. "Session" is overloaded, and a fresh agent told to
+  // "claim the lahe sessions" searched its HOST's sessions because nothing said
+  // these are a different thing (2026-08-20). The skill has to say so, name the
+  // id shape, and point at the discovery command.
+  assert.match(skill, /A LAHE agent session is this tool's own workstream record/);
+  assert.match(skill, /s_0e28da9885a6d67a/);
+  assert.match(skill, /not a Claude session, not a terminal session, and\s+not a browser session/);
+  assert.match(skill, /claim the lahe session\(s\)/);
+  assert.match(skill, /Run `lahe session list`/);
+  assert.match(skill, /ask the human which id or ids they mean/);
+  assert.match(skill, /Never search your host's sessions for this/);
+  // The routing description has to carry the trigger phrasing too, or the skill
+  // never loads on the sentence that caused this.
+  assert.match(skill, /description:.*"claim the lahe session", "take over the lahe session", or "lahe sessions"/);
   assert.match(skill, /never silently\s+reuse the old session/i);
   assert.match(skill, /Run the printed `lahe monitor` command in the foreground/);
   assert.match(skill, /Stop this session's wake tail or\s+background monitor/);

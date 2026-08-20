@@ -345,6 +345,7 @@ once, and after that a plain sentence works:
 | `lahe add ... --review <id>` | Re-attach this page to a review that already exists, by id |
 | `lahe status [--session <id>] [--review <id>] [--json]` | What is open right now. Agent monitors must name their session; plain global status is only a human diagnostic |
 | `lahe monitor --session <id>` | Poll locally without model wakeups, print unanswered session work, and exit |
+| `lahe session list [--json]` | Read-only: every agent session on this machine, open ones first, with its handoff revision, reviews owned, unanswered items, and whether a monitor is watching. This is how you find a session id |
 | `lahe session close <id>` | Close an agent workstream, stop its static servers, and keep all review history. The final close also stops the shared helper |
 | `lahe session reopen <id>` | Reopen the workstream and restart its helper and static servers |
 | `lahe session takeover <id>` | Explicitly hand an existing workstream to a new agent, fence its older monitors, and print catch-up commands |

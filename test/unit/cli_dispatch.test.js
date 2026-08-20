@@ -4,6 +4,9 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 
 const cli = require("../../src/cli/index.js");
 const protocol = require("../../src/shared/protocol.js");
@@ -40,6 +43,19 @@ test("the dispatcher advertises review and session lifecycle", async () => {
   assert.match(help.stdout, /\bstatus\b/);
   assert.match(help.stdout, /\bmonitor\b/);
   assert.equal(/\bwait\b/.test(help.stdout), false);
+});
+
+test("the dispatcher routes `session list`, the one session action that needs no id", async () => {
+  // Discovery has to be reachable from the top-level usage text: an agent that
+  // cannot see the command goes looking through its host's sessions instead.
+  const help = await captureMain(["--help"]);
+  assert.match(help.stdout, /session list the agent sessions/);
+
+  const empty = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-dispatch-list-"));
+  const listed = await captureMain(["session", "list", "--state-dir", empty]);
+  assert.equal(listed.code, protocol.CLI_EXIT.OK, listed.stderr);
+  assert.match(listed.stdout, /no agent sessions/);
+  assert.equal(listed.stderr, "");
 });
 
 test("missing and unknown commands use the shared CLI bad-usage exit", async () => {

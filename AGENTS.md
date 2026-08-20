@@ -224,6 +224,26 @@ Never monitor globally. A review has one immutable agent-session owner, and the
 CLI refuses to attach a page owned by another session. Plain `lahe add` remains
 an advanced legacy command; use `lahe review` for normal work.
 
+### Find a session: a LAHE session is not your host's session
+
+A LAHE agent session is this tool's own workstream record, with an id like
+`s_0e28da9885a6d67a`. It is not a Claude session, not a terminal session, and
+not a browser session.
+
+When the human says "claim the lahe session(s)" or "take over the lahe
+session(s)", run:
+
+```sh
+lahe session list
+```
+
+It is read-only. It prints every agent session on the machine, open ones first,
+with each session's handoff revision, how many reviews it owns, how many items
+are still waiting on an agent, and whether a monitor is watching it. If more
+than one session is open, confirm with the human which id or ids they mean,
+then run `lahe session takeover <id>`. Never search your host's own sessions
+for this, and never guess an id.
+
 ### Hand a workstream to a different agent
 
 The immutable owner is the agent session, not the Claude, Codex, Gemini, or

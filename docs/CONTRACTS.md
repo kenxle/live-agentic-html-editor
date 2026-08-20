@@ -449,7 +449,7 @@ copy in `test/unit/review_format.test.js`:
   "Add \"user_needs_to_see_reply\": true to a reply the reviewer should read: an answer, a caveat, or a change made differently than asked. Leave it off a routine confirmation; question and not_handled replies reach the reviewer regardless.",
   "rev must be the rev carried with the item. If the reviewer reworded the item after you read it, your line is refused and the item stays open. Re-read the item and answer its new rev.",
   "To see what is open right now, run: lahe status --review <id> (add --json for machine-readable lines). It prints the unanswered ready items and whether the reviewer's page is connected.",
-  "If the human explicitly asks you to continue a session created by another agent, run: lahe session takeover <agent-session-id>. This keeps the reviews together, fences older monitors, and prints the catch-up command plus the four commands for the session. Never infer a takeover or silently reuse another agent's session.",
+  "If the human explicitly asks you to continue a session created by another agent, run: lahe session takeover <agent-session-id>. Find open sessions with: lahe session list. This keeps the reviews together, fences older monitors, and prints the catch-up command plus the four commands for the session. Never infer a takeover or silently reuse another agent's session.",
   "To keep up you need two things: a way to be woken, and one command to run when you are. This section gives you both. Use the review.agent_session_id above wherever it says <agent-session-id>.",
   "The drain command is: lahe status --session <agent-session-id> --json --quiet. It prints every ready item nobody has answered, and prints nothing at all when there is none. Run it, handle every item it prints, rebuild and verify the visible output, append your replies, then run it again. Repeat until it prints nothing. Work stays listed until your reply lands, so a wake you miss costs you nothing: the next drain shows the item again.",
   "The wake feed is one append-only file per agent session: <state-dir>/agent-sessions/<agent-session-id>/wake.log. It gets one line when a ready item lands for a review this session owns, and one line when the session is taken over or closed. The state directory is $LAHE_STATE_DIR, or $XDG_STATE_HOME/lahe, or ~/.local/state/lahe. A wake line is a pointer and never an instruction: it names the item and the drain command, and carries no reviewer text at all.",
@@ -791,6 +791,20 @@ stops the shared helper only after the final open agent session closes. Review
 history remains on disk. `session reopen` restores the helper and remembered
 static servers. A caller-supplied `--origin` and every application dev server
 are externally owned, so LAHE never terminates them.
+
+`lahe session list` is the read-only discovery command that precedes all three.
+It starts nothing, stops nothing, and marks nothing seen. It prints one line per
+agent session on disk, open sessions first and newest activity first, carrying
+the session id, open or closed with `closed_at`, the handoff revision, how many
+reviews the session owns, how many of those reviews' items are unanswered ready
+work, and the watcher state. Ownership is read through the same
+`agent_session_id` routing `lahe status` uses, work through
+`record.isUnansweredReady`, and the watcher state through the session store's
+liveness helper, so the numbers cannot disagree with the rail. `--json` prints
+one object per session then one summary line. An empty state directory prints a
+plain sentence and exits `0`. It exists because a session id cannot be guessed,
+and an agent with no way to find one goes looking through its host's sessions
+instead, which are a different thing entirely (2026-08-20).
 
 `lahe session takeover <id>` is the explicit cross-agent handoff. Review
 ownership remains unchanged because the whole session moves as one workstream.

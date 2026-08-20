@@ -13,8 +13,22 @@ var sessions = require("../../service/agent_sessions.js");
 var service = require("../../service/index.js");
 var staticServers = require("../../service/static_servers.js");
 
+var statusCommand = require("./status.js");
+var projection = require("../../service/projection.js");
+var eventLog = require("../../service/log.js");
+
 var BIN = path.join(__dirname, "..", "..", "..", "bin", "lahe.js");
-var USAGE = "usage: lahe session <close|reopen|takeover> <session-id> [--port <n>] [--state-dir <path>]";
+var USAGE = [
+  "usage: lahe session <list|close|reopen|takeover> [session-id] [--port <n>] [--state-dir <path>] [--json]",
+  "",
+  "  list      every agent session on this machine, open ones first. Read-only: it takes no id",
+  "            and changes nothing. This is how you FIND a session id.",
+  "  close     end a session, keep its review history",
+  "  reopen    reopen a closed session you already own",
+  "  takeover  explicitly continue another agent's session, only when the human asks for it",
+  "",
+  "  --json    with list: one JSON object per session, then one summary line"
+].join("\n");
 
 function delay(ms) {
   return new Promise(function (resolve) { setTimeout(resolve, ms); });
@@ -31,15 +45,25 @@ async function waitFor(check, timeoutMs) {
 
 function parse(argv) {
   var list = argv || [];
-  var out = { action: list[0] || null, id: list[1] || null, port: null, stateDir: null };
-  for (var i = 2; i < list.length; i += 1) {
-    if (list[i] === "--port" && list[i + 1] !== undefined) out.port = Number(list[(i += 1)]);
+  var action = list[0] || null;
+  // `list` is the only action that takes no id: it is the command an agent runs
+  // BECAUSE it has no id yet. Its options therefore start one slot earlier.
+  var listing = action === "list";
+  var out = { action: action, id: listing ? null : list[1] || null, port: null, stateDir: null, json: false };
+  for (var i = listing ? 1 : 2; i < list.length; i += 1) {
+    if (list[i] === "--json") out.json = true;
+    else if (list[i] === "--port" && list[i + 1] !== undefined) out.port = Number(list[(i += 1)]);
     else if (list[i] === "--state-dir" && list[i + 1] !== undefined) out.stateDir = list[(i += 1)];
     else return { error: "unknown or incomplete option " + JSON.stringify(list[i]) };
   }
-  if (out.action !== "close" && out.action !== "reopen" && out.action !== "takeover") {
-    return { error: "expected close, reopen, or takeover" };
+  if (listing) {
+    if (out.port !== null) return { error: "list takes no --port" };
+    return out;
   }
+  if (out.action !== "close" && out.action !== "reopen" && out.action !== "takeover") {
+    return { error: "expected list, close, reopen, or takeover" };
+  }
+  if (out.json) return { error: "--json is only for `lahe session list`" };
   if (!protocol.isSafeId(out.id)) return { error: "session id must match " + String(protocol.SAFE_ID) };
   if (out.port !== null && (!Number.isInteger(out.port) || out.port < 1 || out.port > 65535)) return { error: "--port takes a port number" };
   return out;
@@ -90,19 +114,189 @@ async function startHelper(dir, port) {
   return true;
 }
 
-async function run(argv) {
+// ---------------------------------------------------------------------------
+// `lahe session list`
+// ---------------------------------------------------------------------------
+//
+// WHY IT EXISTS. A human says "claim the lahe session" and the agent has no id.
+// Every other session action needs one, so without this command the agent's
+// only move was to guess, or to go looking through its HOST's sessions, which
+// are a different thing entirely (2026-08-20). This command is read-only: it
+// starts nothing, stops nothing, and marks nothing seen.
+//
+// It reuses the routing and work definitions rather than restating them:
+// ownership comes from status.ownerOfReview, an item counts as work only
+// through record.isUnansweredReady (status.isUnansweredReady), and watcher
+// liveness comes from the session store's own liveness helper.
+
+/** The unanswered ready work in one review, read straight off the log. */
+function reviewWork(dir, reviewId) {
+  var events;
+  try {
+    events = eventLog.createEventLog({ dir: dir }).read(reviewId);
+  } catch (err) {
+    return { unanswered: 0, oldestUnansweredAt: null, lastItemAt: null };
+  }
+  if (!events.length) return { unanswered: 0, oldestUnansweredAt: null, lastItemAt: null };
+  var items = statusCommand.itemsOf(projection.project(reviewId, events));
+  var open = items.filter(statusCommand.isUnansweredReady);
+  var oldest = null;
+  open.forEach(function (item) {
+    var at = item.created_at || item.updated_at || null;
+    if (typeof at === "string" && at && (!oldest || at < oldest)) oldest = at;
+  });
+  return { unanswered: open.length, oldestUnansweredAt: oldest, lastItemAt: statusCommand.lastItemAt(items) };
+}
+
+function newest() {
+  var best = null;
+  for (var i = 0; i < arguments.length; i += 1) {
+    var at = arguments[i];
+    if (typeof at === "string" && at && (!best || at > best)) best = at;
+  }
+  return best;
+}
+
+/**
+ * One row per agent session on disk, open first and newest activity first.
+ *
+ * @param {{dir: string, nowMs?: number}} input
+ */
+function collect(input) {
+  var spec = input || {};
+  var dir = spec.dir;
+  var nowMs = typeof spec.nowMs === "number" ? spec.nowMs : Date.now();
+  var store = sessions.createStore({ dir: dir });
+
+  var owners = Object.create(null);
+  statusCommand.reviewsOnDisk(dir).forEach(function (reviewId) {
+    var owner = statusCommand.ownerOfReview(dir, reviewId);
+    if (!owners[owner]) owners[owner] = [];
+    owners[owner].push(reviewId);
+  });
+
+  var rows = store.list().map(function (session) {
+    var owned = owners[session.id] || [];
+    var unanswered = 0;
+    var oldestUnansweredAt = null;
+    var lastItemAt = null;
+    owned.forEach(function (reviewId) {
+      var work = reviewWork(dir, reviewId);
+      unanswered += work.unanswered;
+      if (work.oldestUnansweredAt && (!oldestUnansweredAt || work.oldestUnansweredAt < oldestUnansweredAt)) {
+        oldestUnansweredAt = work.oldestUnansweredAt;
+      }
+      lastItemAt = newest(lastItemAt, work.lastItemAt);
+    });
+    var liveness = store.liveness(session.id, {
+      unanswered: unanswered,
+      oldestUnansweredAt: oldestUnansweredAt,
+      nowMs: nowMs
+    });
+    var monitorAt = liveness[protocol.AGENT_LIVENESS.FIELD.MONITOR_AT];
+    return {
+      id: session.id,
+      open: !session.closed_at,
+      closed_at: session.closed_at || null,
+      handoff_rev: sessions.handoffRev(session),
+      reviews: owned.length,
+      unanswered_ready: unanswered,
+      liveness: liveness,
+      last_activity_at: newest(
+        session.created_at,
+        session.taken_over_at,
+        session.closed_at,
+        liveness[protocol.AGENT_LIVENESS.FIELD.ACTIVITY_AT],
+        monitorAt,
+        lastItemAt
+      )
+    };
+  });
+
+  rows.sort(function (a, b) {
+    if (a.open !== b.open) return a.open ? -1 : 1;
+    var left = a.last_activity_at || "";
+    var right = b.last_activity_at || "";
+    if (left !== right) return left < right ? 1 : -1;
+    return a.id.localeCompare(b.id);
+  });
+  return rows;
+}
+
+/** Watching, or how long ago the last heartbeat was, or nobody. */
+function watcherText(row, nowMs) {
+  var state = row.liveness[protocol.AGENT_LIVENESS.FIELD.STATE];
+  if (state === protocol.AGENT_LIVENESS.STATE.WATCHING) return "watching";
+  var at = row.liveness[protocol.AGENT_LIVENESS.FIELD.MONITOR_AT];
+  var when = at ? statusCommand.ago(at, nowMs) : null;
+  return when ? "last heartbeat " + when : "no watcher";
+}
+
+function listLine(row, nowMs) {
+  return (
+    row.id +
+    "  " +
+    (row.open ? "open" : "closed " + row.closed_at) +
+    "  handoff " + row.handoff_rev +
+    "  reviews " + row.reviews +
+    "  unanswered " + row.unanswered_ready +
+    "  " + watcherText(row, nowMs)
+  );
+}
+
+var TAKEOVER_HINT = "claim one with: lahe session takeover <id> (requires the human's explicit request)";
+
+function runList(args, opts) {
+  var out = opts.stdout;
+  var err = opts.stderr;
+  var nowMs = typeof opts.now === "number" ? opts.now : Date.now();
+  var dir;
+  try { dir = args.stateDir ? stateDir.stateDir({ dir: args.stateDir }) : stateDir.stateDir(); }
+  catch (error) { err("lahe session: " + error.message + "\n"); return 1; }
+
+  var rows;
+  try { rows = collect({ dir: dir, nowMs: nowMs }); }
+  catch (error) { err("lahe session: " + error.message + "\n"); return 1; }
+
+  if (args.json) {
+    rows.forEach(function (row) { out(JSON.stringify(row) + "\n"); });
+    out(JSON.stringify({
+      sessions: rows.length,
+      open: rows.filter(function (row) { return row.open; }).length,
+      unanswered_ready: rows.reduce(function (sum, row) { return sum + row.unanswered_ready; }, 0),
+      state_dir: dir
+    }) + "\n");
+    return protocol.CLI_EXIT.OK;
+  }
+
+  if (rows.length === 0) {
+    // A plain sentence rather than an error: no sessions is a normal state, and
+    // an agent that just arrived needs to be told that in words.
+    out("no agent sessions in " + stateDir.agentSessionsRoot(dir) + "\n");
+    return protocol.CLI_EXIT.OK;
+  }
+  rows.forEach(function (row) { out(listLine(row, nowMs) + "\n"); });
+  out(TAKEOVER_HINT + "\n");
+  return protocol.CLI_EXIT.OK;
+}
+
+async function run(argv, options) {
+  var opts = options || {};
+  var out = opts.stdout || function (text) { process.stdout.write(text); };
+  var errOut = opts.stderr || function (text) { process.stderr.write(text); };
   if ((argv || []).indexOf("--help") !== -1 || (argv || []).indexOf("-h") !== -1) {
-    process.stdout.write(USAGE + "\n");
+    out(USAGE + "\n");
     return protocol.CLI_EXIT.OK;
   }
   var args = parse(argv);
   if (args.error) {
-    process.stderr.write("lahe session: " + args.error + "\n\n" + USAGE + "\n");
+    errOut("lahe session: " + args.error + "\n\n" + USAGE + "\n");
     return protocol.CLI_EXIT.BAD_USAGE;
   }
+  if (args.action === "list") return runList(args, { stdout: out, stderr: errOut, now: opts.now });
   var dir;
   try { dir = args.stateDir ? stateDir.stateDir({ dir: args.stateDir }) : stateDir.stateDir(); }
-  catch (err) { process.stderr.write("lahe session: " + err.message + "\n"); return 1; }
+  catch (err) { errOut("lahe session: " + err.message + "\n"); return 1; }
   var store = sessions.createStore({ dir: dir });
   try {
     if (args.action === "close") {
@@ -110,7 +304,7 @@ async function run(argv) {
       store.close(args.id);
       var stopped = false;
       if (store.openSessions().length === 0) stopped = await stopVerifiedHelper(dir);
-      process.stdout.write(
+      out(
         "agent session " + args.id + " closed; review history kept" +
           (staticStopped ? "; static review server" + (staticStopped === 1 ? "" : "s") + " stopped" : "") +
           (stopped ? "; shared helper stopped" : "") + "\n"
@@ -134,13 +328,23 @@ async function run(argv) {
           "            handle every unanswered item before you start watching\n" +
           sessions.commandBlock({ dir: dir, session: args.id });
       }
-      process.stdout.write(message);
+      out(message);
     }
     return protocol.CLI_EXIT.OK;
   } catch (err) {
-    process.stderr.write("lahe session: " + err.message + "\n");
+    errOut("lahe session: " + err.message + "\n");
     return 1;
   }
 }
 
-module.exports = { USAGE: USAGE, parse: parse, stopVerifiedHelper: stopVerifiedHelper, startHelper: startHelper, run: run };
+module.exports = {
+  USAGE: USAGE,
+  TAKEOVER_HINT: TAKEOVER_HINT,
+  parse: parse,
+  collect: collect,
+  listLine: listLine,
+  watcherText: watcherText,
+  stopVerifiedHelper: stopVerifiedHelper,
+  startHelper: startHelper,
+  run: run
+};

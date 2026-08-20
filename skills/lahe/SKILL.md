@@ -1,6 +1,6 @@
 ---
 name: lahe
-description: Open HTML, Markdown, generated documents, or a locally running page for live review with the live-agentic-html-editor. Use when someone says LAHE, live agentic editor, live review, comments module, review this page or document in the browser, or asks the agent to act on comments and direct edits arriving from a LAHE review.
+description: Open HTML, Markdown, generated documents, or a locally running page for live review with the live-agentic-html-editor. Use when someone says LAHE, live agentic editor, live review, comments module, review this page or document in the browser, says "claim the lahe session", "take over the lahe session", or "lahe sessions", or asks the agent to act on comments and direct edits arriving from a LAHE review.
 ---
 
 <!-- lahe canonical skill: managed by the live-agentic-html-editor repository -->
@@ -29,6 +29,23 @@ wrapper at `~/.local/bin/lahe` contains the absolute path to that clone. If the
 clone is unavailable, read:
 https://raw.githubusercontent.com/kenxle/live-agentic-html-editor/main/AGENTS.md
 
+## A LAHE session is not your host's session
+
+A LAHE agent session is this tool's own workstream record, with an id like
+`s_0e28da9885a6d67a`. It is not a Claude session, not a terminal session, and
+not a browser session. The word is overloaded, so treat it as a LAHE term
+whenever LAHE is in play.
+
+When the human says "claim the lahe session(s)" or "take over the lahe
+session(s)":
+
+1. Run `lahe session list`. It is read-only and prints every session id on the
+   machine, open ones first.
+2. If more than one is open, ask the human which id or ids they mean.
+3. Run `lahe session takeover <id>` on the one they named.
+
+Never search your host's sessions for this, and never guess an id.
+
 ## Start
 
 Run the public entrypoint on the target the user named:
@@ -50,7 +67,8 @@ describes.
 Pass the printed `--session <id>` when this same top-level agent opens another
 document. A different top-level agent normally gets a different session. If the
 human explicitly says the prior agent is finished and asks this agent to take
-over its existing workstream, run `lahe session takeover <id>` instead. Run the
+over its existing workstream, run `lahe session takeover <id>` instead. Find
+open sessions with `lahe session list`. Run the
 printed catch-up command before you start watching. Never infer or silently
 perform a takeover.
 
@@ -187,6 +205,8 @@ wake feed and any running monitor exits with code 5.
 - Do not refuse an explicit human-requested handoff merely because another
   agent created the session. Use `lahe session takeover <id>`; never silently
   reuse the old session.
+- Do not go looking through your host's own sessions when the human asks about
+  "the lahe session". Run `lahe session list` instead.
 - Do not edit a link in the Markdown source to make the rendered page resolve
   it. A local link LAHE cannot serve renders as plain text naming the path on
   purpose.
