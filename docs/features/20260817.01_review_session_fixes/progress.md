@@ -130,7 +130,7 @@ out-of-box, no agent workarounds):
   good); plus: a standing conflict counts once.
 - Reviewer-facing polish: kind-aware reply fallback, one surface per
   second-window fact, the separate-storage note only while actual.
-- The repo got its own BULLETIN.md carrying the release bar and all open
+- The repo got its own task board (now `docs/BULLETIN.md`) carrying all open
   work: `lahe review` (one-command serve, the out-of-box front door), the
   cold-start proving run, the doc pass, the chip registry, rail-remembers-
   collapsed, the cleanup batch.

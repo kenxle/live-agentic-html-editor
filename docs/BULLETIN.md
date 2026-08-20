@@ -1,17 +1,7 @@
 # lahe board
 
-Task source of truth for this repo. Same rules as the steady-thread board:
-append-only, newest first, claim before work (`[>] @handle`, commit the claim
-first), one finishable unit per row, `[ ]` open / `[>]` claimed / `[x]` done /
-`[!]` blocked. Detail lives in linked docs, not in rows.
-
-Context for everything below: the 2026-08-17/18 overhaul session record is
-`docs/features/20260817.01_review_session_fixes/progress.md`, and the branch
-`fix/review-session-flaws` (~40 commits, unpushed as of boarding) holds all of
-it. **The release bar is Ken's, stated 2026-08-18: this ships to the public
-and to students. Out of the box, every edge case, no bugs, and NO fix may
-live in an agent's workaround — if an agent had to patch around the tool, the
-tool is broken.**
+Internal task board for this repo. Append-only, newest first; see rows for
+status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
