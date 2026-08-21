@@ -26,15 +26,48 @@ function captured(text, html) {
   return editing.capture(block(text, html));
 }
 
-test("capture keeps the reviewer's text exactly and cleans only the markup", () => {
+test("capture keeps the reviewer's words, and reads the block the way it renders", () => {
   const got = editing.capture(block("Warm up  for ten minutes.", 'Warm up  for <span data-lahe="wrap">ten</span> minutes.'));
-  // Not trimmed, not collapsed, not tidied. Normalization is a COMPARISON rule
-  // and it happens in replay, never on the way into a record (R3).
-  assert.equal(got.text, "Warm up  for ten minutes.");
+  // The words are untouched. The double space is not a word: the page renders
+  // it as one space, so the record says what the reviewer is looking at.
+  assert.equal(got.text, "Warm up for ten minutes.");
   // The one direction that is required: nothing the library added reaches a
   // record (R23, R33). The wrapper goes, its contents stay.
   assert.equal(got.html.includes("data-lahe"), false);
   assert.equal(got.html.includes("ten"), true);
+});
+
+test("capture keeps a break the reviewer typed, in every shape Chrome writes it", () => {
+  // Enter in the middle of a paragraph, as Chromium actually writes it into a
+  // contenteditable block: a nested <p> and an &nbsp;. textContent reads this
+  // as "Hello world.", identical to the text before the break, which is how the
+  // whole edit used to be thrown away as a no-op.
+  const split = editing.capture(block("Hello world.", "Hello<p>&nbsp;world.</p>"));
+  assert.equal(split.text, "Hello\n\nworld.", "a paragraph break is a blank line");
+
+  // Shift-Enter, which writes a <br>.
+  const line = editing.capture(block("Hello world.", "Hello<br>&nbsp;world."));
+  assert.equal(line.text, "Hello\nworld.", "a line break is one newline");
+
+  // Enter at the end, then typing: two paragraphs.
+  const two = editing.capture(block("Hello world.Second para.", "Hello world.<p>Second para.</p>"));
+  assert.equal(two.text, "Hello world.\n\nSecond para.");
+});
+
+test("a typed break is a change; a rewrapped line is not", () => {
+  // The crux. Both halves have to hold at once, or the tool either drops the
+  // reviewer's break or reports a change every time a source is reformatted.
+  const plain = captured("Hello world.", "<p>Hello world.</p>");
+  const rewrapped = captured("Hello\n   world.", "<p>Hello\n   world.</p>");
+  const broken = captured("Hello world.", "<p>Hello<p>&nbsp;world.</p></p>");
+
+  assert.equal(editing.kindFor(plain, rewrapped).changed, false, "reformatting the source is not an edit");
+  const verdict = editing.kindFor(plain, broken);
+  assert.equal(verdict.changed, true, "the break the reviewer typed is an edit");
+  assert.equal(verdict.kind, record.KIND.EDIT);
+  // And the change line says so in words, rather than quoting an invisible
+  // character at the reviewer.
+  assert.equal(record.editChangeText(verdict.kind, plain.text, broken.text), record.BREAK_ADDED_PARAGRAPH);
 });
 
 test("capture of nothing is nulls, not empty strings", () => {

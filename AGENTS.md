@@ -100,6 +100,14 @@ review, rebuilds the generated page, and lets the reviewer's page reload onto
 the result. A reply is not handled until the changed Markdown has been rendered
 and is visible there.
 
+A break the reviewer typed is part of the edit. A blank line in an item's after
+text is a paragraph break; a single newline is a line break. Markdown does not
+read a single newline as a new paragraph, so carrying the after text into the
+source with one `\n` produces a source that rebuilds as the same one paragraph,
+and the reviewer watches their break disappear. Write a blank line between the
+two paragraphs, or the format's own hard-break form for a line break, and check
+the rebuilt page really shows it before replying `handled`.
+
 Links in a Markdown source are source-true: never rewrite an on-disk link to
 make the browser page work. The renderer translates local links when it builds
 the page, so fix a broken link only if it is wrong on disk too. A link out of

@@ -164,9 +164,27 @@
     return typeof value === "string" ? value : null;
   }
 
+  // The node's text, as the matcher compares it: whitespace-insensitive, so a
+  // rewrapped paragraph still matches the probe minted before it was rewrapped.
+  //
+  // It reads the text through normalize.blockTextFromNode rather than off
+  // textContent, for one reason: textContent runs the words on either side of a
+  // <br> or a nested block together. A reviewer who splits a paragraph turns
+  // "Hello world." into the textContent "Helloworld.", the probe stops matching
+  // the block it was minted on, and the item reports itself lost on a page the
+  // reviewer is looking straight at.
   function textOf(node) {
-    var text = node && typeof node.textContent === "string" ? node.textContent : "";
-    return normalize.normalizeText(text);
+    if (!node) return "";
+    // Skipped DESCENDANTS contribute nothing. The node itself is whatever the
+    // caller handed over, and answering "" for it would turn a mint into an
+    // empty-probe failure on an element a caller deliberately picked.
+    return normalize.normalizeText(
+      normalize.blockTextFromNode(node, {
+        skip: function (candidate) {
+          return candidate !== node && isSkipped(candidate);
+        }
+      })
+    );
   }
 
   // A node the engine walks past entirely: no prose in it, or it is ours.
@@ -429,8 +447,7 @@
 
     if (!element) return mintFailure(ref, MINT_FAILURE.NO_ELEMENT);
 
-    var text = typeof element.textContent === "string" ? element.textContent : "";
-    ref.probe = normalize.normalizeText(text);
+    ref.probe = textOf(element);
     if (!ref.probe) return mintFailure(ref, MINT_FAILURE.EMPTY_PROBE);
 
     var scope = scopeOf(input.root, element);

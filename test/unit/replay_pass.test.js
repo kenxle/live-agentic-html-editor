@@ -84,6 +84,25 @@ function el(tag, opts) {
       this.ownText = this.ownTextFromHtml;
     }
   });
+  // The three properties a DOM walker needs. domValueOf reads the region
+  // through normalize.blockTextFromNode now, so a break in the block is a break
+  // in the value replay compares.
+  Object.defineProperty(node, "nodeType", { value: 1 });
+  Object.defineProperty(node, "firstChild", {
+    get: function () {
+      if (this.children.length) return this.children[0];
+      const own = typeof this.ownTextFromHtml === "string" ? this.ownTextFromHtml : this.ownText;
+      return own ? { nodeType: 3, data: own, nextSibling: null } : null;
+    }
+  });
+  Object.defineProperty(node, "nextSibling", {
+    get: function () {
+      const parent = this.parentElement;
+      if (!parent) return null;
+      const at = parent.children.indexOf(this);
+      return at === -1 ? null : parent.children[at + 1] || null;
+    }
+  });
   (options.children || []).forEach(function (child) {
     child.parentElement = node;
     node.children.push(child);
@@ -563,6 +582,9 @@ test("every DOM write happens inside the write epoch, so replay does not retrigg
   const seen = [];
   const original = page.blocks[1];
   const spy = Object.create(original);
+  // BOTH write properties. An edit whose record carries the block's markup is
+  // written as markup, so a spy on textContent alone would watch a property
+  // replay never touches and report no writes at all.
   Object.defineProperty(spy, "textContent", {
     get: function () {
       return original.textContent;
@@ -570,6 +592,15 @@ test("every DOM write happens inside the write epoch, so replay does not retrigg
     set: function (value) {
       seen.push(epoch.isWriting());
       original.textContent = value;
+    }
+  });
+  Object.defineProperty(spy, "innerHTML", {
+    get: function () {
+      return original.innerHTML;
+    },
+    set: function (value) {
+      seen.push(epoch.isWriting());
+      original.innerHTML = value;
     }
   });
 

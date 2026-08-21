@@ -54,8 +54,33 @@ function el(tag, opts) {
         .join("");
     }
   });
+  simulateNodeInterface(node);
   (options.children || []).forEach(function (child) {
     append(node, child);
+  });
+  return node;
+}
+
+// The three properties a DOM walker needs on top of the five questions above.
+// The engine reads a node's text through normalize.blockTextFromNode now, so
+// that a <br> or a nested block puts a space between the words on either side
+// of it instead of running them into one made-up word.
+function simulateNodeInterface(node) {
+  Object.defineProperty(node, "nodeType", { value: 1 });
+  Object.defineProperty(node, "firstChild", {
+    get: function () {
+      if (this.children.length) return this.children[0];
+      const own = typeof this.ownTextFromHtml === "string" ? this.ownTextFromHtml : this.ownText;
+      return own ? { nodeType: 3, data: own, nextSibling: null } : null;
+    }
+  });
+  Object.defineProperty(node, "nextSibling", {
+    get: function () {
+      const parent = this.parentElement;
+      if (!parent) return null;
+      const at = parent.children.indexOf(this);
+      return at === -1 ? null : parent.children[at + 1] || null;
+    }
   });
   return node;
 }

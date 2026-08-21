@@ -281,3 +281,101 @@ test("modeFor picks structure for a format-only record and text for everything e
 test("equalsInMode refuses an unknown mode rather than guessing one", () => {
   assert.throws(() => n.equalsInMode("vibes", "<p>a</p>", "<p>a</p>"), /unknown comparison mode/);
 });
+
+// ---------------------------------------------------------------------------
+// Deliberate breaks (Ken, 2026-08-20: "I just want to add a paragraph break
+// and I've had this break on me")
+// ---------------------------------------------------------------------------
+//
+// The crux is that ONE distinction has to survive: the whitespace a source
+// carries because someone wrapped a line is incidental and folds, and the break
+// a reviewer typed is content and does not. Lose the first half and every
+// reformatted document reads as a change. Lose the second half and the
+// reviewer's break is thrown away as a no-op, which is the bug that was
+// reported.
+
+test("blockText reads a break off the markup, in each shape a browser writes it", () => {
+  // Enter in the middle of a paragraph, as Chromium writes it into a
+  // contenteditable block: a nested <p> and an &nbsp;.
+  assert.equal(n.blockText("Hello<p>&nbsp;world.</p>"), "Hello\n\nworld.");
+  // Shift-Enter.
+  assert.equal(n.blockText("Hello<br>&nbsp;world."), "Hello\nworld.");
+  // Enter at the end of the block, then typing.
+  assert.equal(n.blockText("Hello world.<p>Second para.</p>"), "Hello world.\n\nSecond para.");
+  // Two blocks of any kind, and a list.
+  assert.equal(n.blockText("<p>a</p><p>b</p>"), "a\n\nb");
+  assert.equal(n.blockText("<ul><li>one</li><li>two</li></ul>"), "one\n\ntwo");
+});
+
+test("blockText folds the whitespace a source carries, and only that", () => {
+  assert.equal(n.blockText("<p>Hello\n   world.</p>"), "Hello world.");
+  assert.equal(n.blockText("<p>Hello    world.</p>"), "Hello world.");
+  // Rewrapping a paragraph is not a change; typing a break is.
+  assert.equal(n.blockText("<p>Hello\nworld.</p>") === n.blockText("<p>Hello world.</p>"), true);
+  assert.equal(n.blockText("<p>Hello<br>world.</p>") === n.blockText("<p>Hello world.</p>"), false);
+});
+
+test("blockText keeps the whitespace inside a pre, where it is content", () => {
+  assert.equal(n.blockText("<pre>line one\n   indented</pre>"), "line one\n   indented");
+});
+
+test("the text mode is break-aware, so a typed break is a change and a rewrap is not", () => {
+  // Both of these are what the callers actually hold: block text, with the
+  // breaks stated as newlines.
+  assert.equal(n.equalsInMode(n.MODE.TEXT, "Hello world.", "Hello\n\nworld."), false);
+  assert.equal(n.equalsInMode(n.MODE.TEXT, "Hello world.", "Hello world."), true);
+  // Markup still works in the text mode, which is what a format-only record's
+  // fields carry: the tags go and the words stay.
+  assert.equal(n.equalsInMode(n.MODE.TEXT, "<p>Hello world.</p>", "Hello world."), true);
+  assert.equal(n.equalsInMode(n.MODE.TEXT, "<p>Hello <strong>world.</strong></p>", "Hello world."), true);
+  // The boundary between the two readers, stated so nobody trips on it: the
+  // text mode does NOT fold the whitespace inside a text run, because a
+  // record's text states its breaks with real newlines and folding them is the
+  // bug. Markup reaches a record through blockText, which folds a source's line
+  // wrap first, so nothing is ever recorded with an incidental newline in it.
+  assert.equal(n.blockText("<p>Hello\n  world.</p>"), "Hello world.");
+});
+
+test("normalizeBlockText folds like normalizeText except that a break survives", () => {
+  assert.equal(n.normalizeBlockText("  Hello   world.  "), "Hello world.");
+  assert.equal(n.normalizeBlockText("Hello \n\n\n\n world."), "Hello\n\nworld.");
+  assert.equal(n.normalizeBlockText("Hello\r\nworld."), "Hello\nworld.");
+  // Idempotent, like every other key in this file.
+  const once = n.normalizeBlockText("a \n\n\n b");
+  assert.equal(n.normalizeBlockText(once), once);
+  // normalizeText still folds the break away, which is what keeps anchoring
+  // and the revert check whitespace-insensitive.
+  assert.equal(n.normalizeText("Hello\n\nworld."), "Hello world.");
+});
+
+test("the two readers agree: markup in and a live node in give the same text", () => {
+  // A minimal stand-in for the DOM, which is all blockTextFromNode asks for.
+  function text(data) {
+    return { nodeType: 3, data: data, nextSibling: null };
+  }
+  function el(tag, kids) {
+    const node = { nodeType: 1, tagName: tag.toUpperCase(), firstChild: null };
+    let prev = null;
+    (kids || []).forEach(function (kid) {
+      kid.nextSibling = null;
+      if (prev) prev.nextSibling = kid;
+      else node.firstChild = kid;
+      prev = kid;
+    });
+    return node;
+  }
+
+  const split = el("p", [text("Hello"), el("p", [text(" world.")])]);
+  assert.equal(n.blockTextFromNode(split), "Hello\n\nworld.");
+  assert.equal(n.blockTextFromNode(split), n.blockText("Hello<p>&nbsp;world.</p>"));
+
+  const line = el("p", [text("Hello"), el("br", []), text(" world.")]);
+  assert.equal(n.blockTextFromNode(line), n.blockText("Hello<br>&nbsp;world."));
+
+  // A wrapped source line is incidental on this side too.
+  const wrapped = el("p", [text("Hello\n   world.")]);
+  assert.equal(n.blockTextFromNode(wrapped), "Hello world.");
+
+  // textContent would run these two words together into one made-up word.
+  assert.equal(n.blockTextFromNode(el("div", [el("p", [text("Hello")]), el("p", [text("world.")])])), "Hello\n\nworld.");
+});

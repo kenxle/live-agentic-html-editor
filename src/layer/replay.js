@@ -681,25 +681,14 @@
    * chrome node that ever lands in the light DOM must not be read as page
    * content.
    *
-   * Text nodes are joined with nothing between them, which is what textContent
-   * does, so this string compares against a record's before and after exactly
-   * the way the text those fields were captured from did.
+   * It reads the text the same way a record's before and after were captured,
+   * through the normalizer's break-aware reader, so the two compare like with
+   * like. The check itself folds whitespace on top of that (normalizeText), so
+   * a rebuild that rewraps a paragraph is still not a revert.
    */
   function pageTextOf(root) {
     if (!root) return "";
-    var parts = [];
-    walkText(root, parts);
-    return parts.join("");
-  }
-
-  function walkText(node, parts) {
-    if (!node) return;
-    if (node.nodeType === 1) {
-      if (markers.isToolNode(node)) return;
-      for (var child = node.firstChild; child; child = child.nextSibling) walkText(child, parts);
-      return;
-    }
-    if (node.nodeType === 3 && typeof node.nodeValue === "string") parts.push(node.nodeValue);
+    return normalize.blockTextFromNode(root, { skip: markers.isToolNode });
   }
 
   // What the card says when branch three fires. Written once here so the
@@ -1145,6 +1134,16 @@
     return Object.prototype.hasOwnProperty.call(WRITING_KINDS, item[record.FIELD.KIND]);
   }
 
+  // What the page tried to say in a protected block, in the shape the compare
+  // reads. Protection snapshots the block's raw textContent, which runs the
+  // words on either side of a break together; the markup it snapshots beside it
+  // is the same block, so the break-aware text comes from there when it exists.
+  function observedValue(commit) {
+    if (!commit) return null;
+    if (typeof commit.observedHtml === "string") return normalize.blockText(commit.observedHtml);
+    return typeof commit.observed === "string" ? commit.observed : null;
+  }
+
   // The region's current value, in the shape the record compares against: the
   // markup for a format-only record, the text for everything else, and null for
   // a delete whose block is not in the document.
@@ -1153,7 +1152,11 @@
     if (item[record.FIELD.KIND] === record.KIND.FORMAT_ONLY) {
       return typeof element.innerHTML === "string" ? element.innerHTML : String(element.textContent || "");
     }
-    return String(element.textContent === undefined || element.textContent === null ? "" : element.textContent);
+    // Read through the normalizer's break-aware reader, never off textContent:
+    // the record's `after` carries the breaks the reviewer typed, and textContent
+    // would compare a block that HAS those breaks against a record that says it
+    // should, decide they differ, and write the block back to one paragraph.
+    return normalize.blockTextFromNode(element);
   }
 
   // Why an anchor did not bind, in a sentence the reviewer can act on. Zero
@@ -1496,8 +1499,9 @@
       // raised by an earlier commit stops being sticky here and this pass gets
       // to raise it again or let it go.
       if (conflicts[id] && conflicts[id].displaced) delete conflicts[id];
-      if (typeof commit.observed === "string" && compare(item, commit.observed).branch === BRANCH.CONTENT_CHANGED) {
-        return flagConflict(ctx, item, id, element, commit.observed, true);
+      var observed = observedValue(commit);
+      if (typeof observed === "string" && compare(item, observed).branch === BRANCH.CONTENT_CHANGED) {
+        return flagConflict(ctx, item, id, element, observed, true);
       }
     }
 
@@ -1590,6 +1594,13 @@
 
   // The one place replay touches the reviewed page. Everything above decides;
   // this writes.
+  //
+  // An edit writes its MARKUP when it has any, not just its text. Writing
+  // textContent throws away everything the record's after_html knows: the
+  // paragraph break the reviewer typed, and the emphasis that was in the block
+  // before they touched it. That write was the second half of Ken's 2026-08-20
+  // report, the "some edit later reverts it" half: the break survived the
+  // commit and then the next replay pass flattened the block back to one line.
   function writeRegion(element, item) {
     var kind = item[record.FIELD.KIND];
     if (kind === record.KIND.DELETE) {
@@ -1604,7 +1615,40 @@
       element.innerHTML = item[record.FIELD.AFTER_HTML];
       return;
     }
-    element.textContent = item[record.FIELD.AFTER];
+    var afterText = item[record.FIELD.AFTER];
+    var afterHtml = item[record.FIELD.AFTER_HTML];
+    // The markup is used only when it still SAYS the record's after text. A
+    // record whose text was reworded without its markup would otherwise write
+    // an older wording back onto the page, which is worse than losing the
+    // emphasis. When they disagree, the text is the reviewer's answer.
+    if (
+      typeof afterHtml === "string" &&
+      afterHtml &&
+      typeof afterText === "string" &&
+      normalize.blockText(afterHtml) === normalize.normalizeBlockText(afterText)
+    ) {
+      element.innerHTML = afterHtml;
+      return;
+    }
+    writeTextWithBreaks(element, afterText);
+  }
+
+  // A record with no markup of its own, written so its breaks survive. Built
+  // node by node rather than as a markup string: the text is page-derived data
+  // and it goes into the page as text, never as markup.
+  function writeTextWithBreaks(element, after) {
+    var text = typeof after === "string" ? after : "";
+    if (text.indexOf("\n") === -1) {
+      element.textContent = text;
+      return;
+    }
+    var doc = element.ownerDocument;
+    element.textContent = "";
+    var lines = text.split("\n");
+    for (var i = 0; i < lines.length; i += 1) {
+      if (i > 0) element.appendChild(doc.createElement("br"));
+      if (lines[i]) element.appendChild(doc.createTextNode(lines[i]));
+    }
   }
 
   return {

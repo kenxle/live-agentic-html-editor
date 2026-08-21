@@ -108,6 +108,14 @@ handled edit placed. Handled edits are the reviewer's own decisions, listed in
 handled edit's after text, apply the rest of the sweep, leave that one spot
 alone, and reply `question` naming the conflict.
 
+**A break the reviewer typed is part of the edit.** A blank line in an item's
+`after_full` is a paragraph break; a single newline is a line break. Markdown
+does not read a single newline as a new paragraph, so writing the after text
+into a `.md` with one `\n` rebuilds as the same one paragraph and the reviewer
+watches their break disappear. Put a blank line between the two paragraphs, or
+the format's own hard-break form for a line break, and check the rebuilt page
+shows it before replying `handled`.
+
 Run the line as it was printed. Reviews outside the default state directory get
 `--state-dir <path>` on every printed command, and the same command retyped
 without it reads the default directory and honestly reports no work.

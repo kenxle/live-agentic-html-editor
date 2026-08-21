@@ -88,6 +88,7 @@
     "LAHE ACTION REQUIRED means the output is an interrupt, not finished work. Continue the same turn and handle every item printed with it. Receiving an item is not handling it, and describing it is not handling it.",
     "Do not use a native model timer, a forever daemon, a global monitor, or a parser pipeline.",
     "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and a running helper puts the script line back when the rebuild strips it out.",
+    "A break the reviewer typed is part of the edit: a blank line in the after text is a paragraph break, and a single newline is a line break. Markdown does not read a single newline as a new paragraph, so write a blank line between the two paragraphs in the source, or the format's own hard-break form for a line break, then rebuild and check the page really shows the break.",
     "Links in a Markdown source are source-true: never rewrite an on-disk link to make the browser page work. The renderer translates local links when it builds the page, so fix a broken link only if it is wrong on disk too.",
     "The only way to say you handled an item is to append a reply line."
   ];
@@ -505,6 +506,20 @@
     return out.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s+$/, "") + "\n";
   }
 
+  // Page text can carry the breaks the reviewer typed. In this one-item-per-
+  // block text format a bare newline would start a line that reads like a new
+  // field, so the continuation lines are indented under the field they belong
+  // to. A blank line stays blank rather than becoming four spaces.
+  function wrapped(value) {
+    return String(value)
+      .split("\n")
+      .map(function (line, at) {
+        if (at === 0 || !line) return line;
+        return "    " + line;
+      })
+      .join("\n");
+  }
+
   function renderItemText(it) {
     var F = record.FIELD;
     var ctx = it[F.CONTEXT] || {};
@@ -534,9 +549,11 @@
     if (it[F.CHANGE]) {
       lines.push("  Change (the reviewer's words)" + (it[F.UPDATED_AT] ? " [" + it[F.UPDATED_AT] + "]" : "") + ": " + it[F.CHANGE]);
     }
-    if (ctx.quote) lines.push("  Quoted from the page: " + boundData(ctx.quote, BEFORE_MAX));
-    if (typeof it[F.BEFORE] === "string") lines.push("  Before (page text): " + boundData(it[F.BEFORE], BEFORE_MAX));
-    if (typeof it[F.AFTER] === "string") lines.push("  After (page text, with the edit): " + boundData(it[F.AFTER], BEFORE_MAX));
+    if (ctx.quote) lines.push("  Quoted from the page: " + wrapped(boundData(ctx.quote, BEFORE_MAX)));
+    if (typeof it[F.BEFORE] === "string") lines.push("  Before (page text): " + wrapped(boundData(it[F.BEFORE], BEFORE_MAX)));
+    if (typeof it[F.AFTER] === "string") {
+      lines.push("  After (page text, with the edit): " + wrapped(boundData(it[F.AFTER], BEFORE_MAX)));
+    }
     if (it[F.REPLY]) {
       lines.push(
         "  " +

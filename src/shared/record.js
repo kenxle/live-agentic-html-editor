@@ -752,14 +752,41 @@
     return { removed: b.slice(start, endB), added: a.slice(start, endA) };
   }
 
+  // A break the reviewer typed, said in words. Quoting it would print a
+  // newline inside the quotes, where nobody can see it, and a reviewer reading
+  // the rail would be told their change was 'Changed " " to " "'.
+  var BREAK_ADDED_PARAGRAPH = "Added a paragraph break: this block becomes two paragraphs.";
+  var BREAK_ADDED_LINE = "Added a line break.";
+  var BREAK_REMOVED = "Removed a break, joining the lines into one.";
+
+  function breakChangeText(span) {
+    var addedBreak = span.added.indexOf("\n") !== -1;
+    var removedBreak = span.removed.indexOf("\n") !== -1;
+    if (!addedBreak && !removedBreak) return "";
+    if (addedBreak) return span.added.indexOf("\n\n") !== -1 ? BREAK_ADDED_PARAGRAPH : BREAK_ADDED_LINE;
+    return BREAK_REMOVED;
+  }
+
   function editChangeText(kind, before, after) {
     if (kind === KIND.DELETE) return "Deleted this block.";
     if (kind === KIND.FORMAT_ONLY) return "Changed the emphasis in this block; the words are the same.";
     var span = changedSpan(before, after);
-    if (span.added && span.removed) return 'Changed "' + span.removed + '" to "' + span.added + '".';
-    if (span.added) return 'Added "' + span.added + '".';
-    if (span.removed) return 'Removed "' + span.removed + '".';
-    return "Edited this block.";
+    var breakLine = breakChangeText(span);
+    var added = span.added;
+    var removed = span.removed;
+    if (breakLine) {
+      // The break is already stated in words, so what is left to quote is the
+      // wording either side of it, if any of it moved.
+      added = added.replace(/\s+/g, " ").trim();
+      removed = removed.replace(/\s+/g, " ").trim();
+    }
+    var words = "";
+    if (added && removed) words = 'Changed "' + removed + '" to "' + added + '".';
+    else if (added) words = 'Added "' + added + '".';
+    else if (removed) words = 'Removed "' + removed + '".';
+    if (breakLine && words) return breakLine + " " + words;
+    if (breakLine) return breakLine;
+    return words || "Edited this block.";
   }
 
   // Which pair of fields a record compares on. A format-only record's whole
@@ -894,6 +921,9 @@
     acceptPageText: acceptPageText,
     changedSpan: changedSpan,
     editChangeText: editChangeText,
+    BREAK_ADDED_PARAGRAPH: BREAK_ADDED_PARAGRAPH,
+    BREAK_ADDED_LINE: BREAK_ADDED_LINE,
+    BREAK_REMOVED: BREAK_REMOVED,
     comparisonFields: comparisonFields,
     validateItem: validateItem,
     isDraft: isDraft,

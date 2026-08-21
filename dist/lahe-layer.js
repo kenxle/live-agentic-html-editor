@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.1.0+7d9e0cb65bcb
+ * version 0.1.0+5fc2e9ed1d48
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.1.0+7d9e0cb65bcb";
+  g.LAHE.version = "0.1.0+5fc2e9ed1d48";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -570,6 +570,179 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Deliberate breaks: the one piece of whitespace folding must not lose
+  // ---------------------------------------------------------------------------
+  //
+  // normalizeText folds every run of whitespace to one space, which is what
+  // makes a rewrapped paragraph compare equal to the paragraph it was rewrapped
+  // from. A break the reviewer TYPED is the one run of whitespace that is not
+  // incidental: they pressed Enter because they wanted the block to become two
+  // paragraphs. Folded away, that commit compares equal to the text it started
+  // as, the edit is thrown out as a no-op, and the break the reviewer is
+  // looking at vanishes the next time the page is rebuilt. Ken reported exactly
+  // that on 2026-08-20: "it looks like it keeps it and then some edit later
+  // reverts it".
+  //
+  // So a break is read off the MARKUP and never off a whitespace character:
+  //
+  //   <br>              one newline, a line break
+  //   a block boundary  a blank line, a paragraph break
+  //
+  // Every other run of whitespace still folds to a single space, including the
+  // newlines an HTML source carries because its author wrapped a line. That
+  // keeps both halves of the distinction the tool needs: a rewrapped line is
+  // still not a change, and a typed break is.
+  //
+  // Two front-ends produce this text, because two callers hold two different
+  // things: blockText takes markup (the record's own html, a test fixture) and
+  // blockTextFromNode takes a live element (the anchor engine, replay). They
+  // share this file's break vocabulary and this file's folding tail, so they
+  // cannot drift, and a unit test asserts they answer the same on one fixture.
+
+  var LINE_BREAK = "\n";
+  var PARAGRAPH_BREAK = "\n\n";
+
+  // Tags whose edges are a paragraph break in text. Table cells are in here for
+  // the same reason list items are: two cells read as two things, and running
+  // their words together is how "Helloworld" gets into a record.
+  var BLOCK_TAGS = {
+    address: 1, article: 1, aside: 1, blockquote: 1, dd: 1, details: 1, div: 1,
+    dl: 1, dt: 1, fieldset: 1, figcaption: 1, figure: 1, footer: 1, form: 1,
+    h1: 1, h2: 1, h3: 1, h4: 1, h5: 1, h6: 1, header: 1, hgroup: 1, hr: 1,
+    li: 1, main: 1, nav: 1, ol: 1, p: 1, pre: 1, section: 1, summary: 1,
+    table: 1, tbody: 1, td: 1, tfoot: 1, th: 1, thead: 1, tr: 1, ul: 1
+  };
+
+  // Whitespace that folds to a space. Every unicode space EXCEPT the newline,
+  // which the folding tail below handles on its own.
+  var HORIZONTAL_SPACES =
+    /[\u0009\u000B\u000C\u0020\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]/g;
+
+  // Whitespace inside <pre> is content, not layout, so it is carried across the
+  // folding tail on these three private-use stand-ins and put back after. A
+  // reviewer editing a code block keeps their indentation.
+  var PRE_SPACE = "\uE000";
+  var PRE_NEWLINE = "\uE001";
+  var PRE_TAB = "\uE002";
+
+  function protectPre(text) {
+    return String(text)
+      .replace(/ /g, PRE_SPACE)
+      .replace(/\n/g, PRE_NEWLINE)
+      .replace(/\t/g, PRE_TAB);
+  }
+
+  function restorePre(text) {
+    return String(text)
+      .replace(new RegExp(PRE_SPACE, "g"), " ")
+      .replace(new RegExp(PRE_NEWLINE, "g"), "\n")
+      .replace(new RegExp(PRE_TAB, "g"), "\t");
+  }
+
+  function hasOwn(map, key) {
+    return Object.prototype.hasOwnProperty.call(map, key);
+  }
+
+  // What a tag contributes to the text: a line break, a paragraph break, or
+  // nothing at all. One answer, asked by both front-ends.
+  function breakForTag(name) {
+    if (name === "br") return LINE_BREAK;
+    return hasOwn(BLOCK_TAGS, name) ? PARAGRAPH_BREAK : "";
+  }
+
+  // The folding tail, and the comparison key for text that carries breaks.
+  // Everything normalizeText does, except that a newline survives: runs of
+  // horizontal whitespace fold to one space, spaces beside a newline go, and
+  // three or more newlines are one blank line.
+  function normalizeBlockText(input) {
+    if (typeof input !== "string") {
+      throw new TypeError("normalizeBlockText expects a string, got " + typeof input);
+    }
+    var s = input.normalize("NFC");
+    s = stripControls(s);
+    s = s.replace(INVISIBLES, "");
+    s = s.replace(/\r\n?/g, "\n");
+    s = s.replace(HORIZONTAL_SPACES, " ");
+    s = s.replace(/ +/g, " ");
+    s = s.replace(/ ?\n ?/g, "\n");
+    s = s.replace(/\n{3,}/g, "\n\n");
+    return s.trim();
+  }
+
+  // True when two strings are the same text INCLUDING the breaks in them.
+  function blockTextEquals(a, b) {
+    return normalizeBlockText(a) === normalizeBlockText(b);
+  }
+
+  /**
+   * The break-aware text of a live DOM node, without serializing it.
+   *
+   * Answers what blockText(element.innerHTML) answers, for a caller that holds
+   * the element. `options.skip` decides which subtrees are not page content;
+   * it defaults to the library's own chrome, which is what cleanMarkup drops on
+   * the markup side.
+   */
+  function blockTextFromNode(node, options) {
+    var opts = options || {};
+    var skip =
+      typeof opts.skip === "function"
+        ? opts.skip
+        : markers && typeof markers.isToolNode === "function"
+          ? markers.isToolNode
+          : null;
+    var parts = [];
+    collectNodeText(node, parts, skip, 0);
+    return restorePre(normalizeBlockText(parts.join("")));
+  }
+
+  function collectNodeText(node, parts, skip, preDepth) {
+    if (!node) return;
+    var type = node.nodeType;
+    if (type === 3 || type === 4) {
+      // `data` on a real text node; `nodeValue` is the same string, and the
+      // simulated DOMs the unit tests use spell it that way.
+      var data =
+        typeof node.data === "string" ? node.data : typeof node.nodeValue === "string" ? node.nodeValue : "";
+      // Outside <pre>, a text node's own whitespace is INCIDENTAL: it is there
+      // because the source wrapped a line. It folds here, exactly as cleanMarkup
+      // folds it on the markup side, so that every newline left in the joined
+      // string came from a break tag and is therefore deliberate.
+      parts.push(preDepth > 0 ? protectPre(data) : collapseText(data));
+      return;
+    }
+    if (type === 1) {
+      if (skip && skip(node)) return;
+      var tag = typeof node.tagName === "string" ? node.tagName.toLowerCase() : "";
+      if (hasOwn(DROP_SUBTREE_TAGS, tag)) return;
+      if (tag === "br") {
+        parts.push(LINE_BREAK);
+        return;
+      }
+      var isBlock = hasOwn(BLOCK_TAGS, tag);
+      if (isBlock) parts.push(PARAGRAPH_BREAK);
+      var childPre = preDepth + (hasOwn(PRESERVE_WS_TAGS, tag) ? 1 : 0);
+      for (var child = node.firstChild; child; child = child.nextSibling) {
+        collectNodeText(child, parts, skip, childPre);
+      }
+      if (isBlock) parts.push(PARAGRAPH_BREAK);
+      return;
+    }
+    if (type !== 9 && type !== 11) return;
+    for (var kid = node.firstChild; kid; kid = kid.nextSibling) {
+      collectNodeText(kid, parts, skip, preDepth);
+    }
+  }
+
+  /**
+   * The break-aware text of a markup string. Plain text passes through with its
+   * own breaks kept, so a caller holding a record's `after` and a caller
+   * holding a region's innerHTML get the same answer.
+   */
+  function blockText(html) {
+    return reduce(html, [], true);
+  }
+
+  // ---------------------------------------------------------------------------
   // The two comparison modes (D7's format-only branch, D9's one normalizer)
   // ---------------------------------------------------------------------------
   //
@@ -610,17 +783,24 @@
   // gives the text mode's view of the same input, which is what makes the two
   // modes comparable on one string: both take markup, and the only difference
   // between them is whether emphasis counts.
-  function reduce(html, keepTags) {
+  //
+  // keepBreaks says whether a break the markup states survives the fold. The
+  // text mode keeps it: that is the difference between "the reviewer split this
+  // paragraph" and "nothing changed". The structure mode does not, because its
+  // question is only which words are emphasized; it still emits the break so
+  // the words on either side of it do not run together into one made-up word.
+  function reduce(html, keepTags, keepBreaks) {
     var clean = cleanMarkup(html);
     var out = [];
+    var preDepth = 0;
     var i = 0;
     while (i < clean.length) {
       var lt = clean.indexOf("<", i);
       if (lt === -1) {
-        out.push(clean.slice(i));
+        out.push(emitChunk(clean.slice(i), preDepth));
         break;
       }
-      if (lt > i) out.push(clean.slice(i, lt));
+      if (lt > i) out.push(emitChunk(clean.slice(i, lt), preDepth));
       var tag = parseTag(clean, lt);
       if (!tag) {
         out.push("<");
@@ -630,27 +810,87 @@
       i = tag.end;
       if (keepTags.indexOf(tag.name) !== -1) {
         out.push(tag.closing ? "</" + tag.name + ">" : "<" + tag.name + ">");
+        continue;
       }
-      // Every other tag contributes nothing; its text is emitted by the loop.
+      if (hasOwn(PRESERVE_WS_TAGS, tag.name) && !tag.selfClosing) {
+        if (tag.closing) preDepth = preDepth > 0 ? preDepth - 1 : 0;
+        else preDepth += 1;
+      }
+      // Every other tag contributes its break, if it has one, and nothing else;
+      // its text is emitted by the loop.
+      out.push(breakForTag(tag.name));
     }
-    // The text between the kept markers is folded exactly the way normalizeText
-    // folds it, so whitespace differences are never a structural difference.
-    return out
-      .join("")
-      .replace(UNICODE_SPACES, " ")
-      .replace(/\s+/g, " ")
-      .trim();
+    var joined = out.join("");
+    // The text between the kept markers is folded the way normalizeText folds
+    // it, so whitespace differences are never a structural difference, or the
+    // way normalizeBlockText folds it, which is the same except that a break
+    // the markup stated is not whitespace.
+    if (keepBreaks) return restorePre(normalizeBlockText(joined));
+    return normalizeText(restorePre(joined));
+  }
+
+  function emitChunk(text, preDepth) {
+    return preDepth > 0 ? protectPre(text) : text;
   }
 
   function structureOf(html) {
-    return reduce(html, STRUCTURAL_TAGS);
+    return reduce(html, STRUCTURAL_TAGS, false);
   }
 
-  // The text mode's view: every tag gone, the words left. Plain text passes
-  // through unchanged, so a caller holding a record's `after` string and a
-  // caller holding a region's innerHTML get the same answer.
-  function textOf(html) {
-    return reduce(html, []);
+  // The text mode's view: every tag gone, the words left, and every break kept.
+  //
+  // It takes either kind of string, because both callers exist: a record's
+  // plain `after` (which states the reviewer's breaks with real newlines) and a
+  // fragment of markup (a format-only record's after_html). So, unlike
+  // blockText, it does NOT run cleanMarkup first: cleanMarkup folds the
+  // whitespace inside a text run, which is right for markup and would erase the
+  // newlines a record's text puts there on purpose.
+  //
+  // The rule that makes both safe: a newline already in the string is a break,
+  // and a tag contributes the break its name says it does.
+  function textOf(value) {
+    if (typeof value !== "string") {
+      throw new TypeError("textOf expects a string, got " + typeof value);
+    }
+    var out = [];
+    var dropDepth = 0;
+    var preDepth = 0;
+    var i = 0;
+    while (i < value.length) {
+      var lt = value.indexOf("<", i);
+      if (lt === -1) {
+        out.push(textChunk(value.slice(i), dropDepth, preDepth));
+        break;
+      }
+      if (lt > i) out.push(textChunk(value.slice(i, lt), dropDepth, preDepth));
+      var tag = parseTag(value, lt);
+      if (!tag) {
+        out.push("<");
+        i = lt + 1;
+        continue;
+      }
+      i = tag.end;
+      if (hasOwn(DROP_SUBTREE_TAGS, tag.name) && !tag.selfClosing) {
+        if (tag.closing) dropDepth = dropDepth > 0 ? dropDepth - 1 : 0;
+        else dropDepth += 1;
+        continue;
+      }
+      if (hasOwn(PRESERVE_WS_TAGS, tag.name) && !tag.selfClosing) {
+        if (tag.closing) preDepth = preDepth > 0 ? preDepth - 1 : 0;
+        else preDepth += 1;
+      }
+      if (dropDepth === 0) out.push(breakForTag(tag.name));
+    }
+    return restorePre(normalizeBlockText(out.join("")));
+  }
+
+  function textChunk(text, dropDepth, preDepth) {
+    if (dropDepth > 0 || !text) return "";
+    var t = text
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&#160;/g, " ")
+      .replace(/&#[xX]a0;/g, " ");
+    return preDepth > 0 ? protectPre(t) : t;
   }
 
   function structureEquals(a, b) {
@@ -806,6 +1046,14 @@
     foldTypography: foldTypography,
     cleanMarkup: cleanMarkup,
     markupEquals: markupEquals,
+    LINE_BREAK: LINE_BREAK,
+    PARAGRAPH_BREAK: PARAGRAPH_BREAK,
+    BLOCK_TAGS: BLOCK_TAGS,
+    breakForTag: breakForTag,
+    normalizeBlockText: normalizeBlockText,
+    blockTextEquals: blockTextEquals,
+    blockText: blockText,
+    blockTextFromNode: blockTextFromNode,
     STRUCTURAL_TAGS: STRUCTURAL_TAGS,
     MODE: MODE,
     MODES: MODES,
@@ -2007,14 +2255,41 @@
     return { removed: b.slice(start, endB), added: a.slice(start, endA) };
   }
 
+  // A break the reviewer typed, said in words. Quoting it would print a
+  // newline inside the quotes, where nobody can see it, and a reviewer reading
+  // the rail would be told their change was 'Changed " " to " "'.
+  var BREAK_ADDED_PARAGRAPH = "Added a paragraph break: this block becomes two paragraphs.";
+  var BREAK_ADDED_LINE = "Added a line break.";
+  var BREAK_REMOVED = "Removed a break, joining the lines into one.";
+
+  function breakChangeText(span) {
+    var addedBreak = span.added.indexOf("\n") !== -1;
+    var removedBreak = span.removed.indexOf("\n") !== -1;
+    if (!addedBreak && !removedBreak) return "";
+    if (addedBreak) return span.added.indexOf("\n\n") !== -1 ? BREAK_ADDED_PARAGRAPH : BREAK_ADDED_LINE;
+    return BREAK_REMOVED;
+  }
+
   function editChangeText(kind, before, after) {
     if (kind === KIND.DELETE) return "Deleted this block.";
     if (kind === KIND.FORMAT_ONLY) return "Changed the emphasis in this block; the words are the same.";
     var span = changedSpan(before, after);
-    if (span.added && span.removed) return 'Changed "' + span.removed + '" to "' + span.added + '".';
-    if (span.added) return 'Added "' + span.added + '".';
-    if (span.removed) return 'Removed "' + span.removed + '".';
-    return "Edited this block.";
+    var breakLine = breakChangeText(span);
+    var added = span.added;
+    var removed = span.removed;
+    if (breakLine) {
+      // The break is already stated in words, so what is left to quote is the
+      // wording either side of it, if any of it moved.
+      added = added.replace(/\s+/g, " ").trim();
+      removed = removed.replace(/\s+/g, " ").trim();
+    }
+    var words = "";
+    if (added && removed) words = 'Changed "' + removed + '" to "' + added + '".';
+    else if (added) words = 'Added "' + added + '".';
+    else if (removed) words = 'Removed "' + removed + '".';
+    if (breakLine && words) return breakLine + " " + words;
+    if (breakLine) return breakLine;
+    return words || "Edited this block.";
   }
 
   // Which pair of fields a record compares on. A format-only record's whole
@@ -2149,6 +2424,9 @@
     acceptPageText: acceptPageText,
     changedSpan: changedSpan,
     editChangeText: editChangeText,
+    BREAK_ADDED_PARAGRAPH: BREAK_ADDED_PARAGRAPH,
+    BREAK_ADDED_LINE: BREAK_ADDED_LINE,
+    BREAK_REMOVED: BREAK_REMOVED,
     comparisonFields: comparisonFields,
     validateItem: validateItem,
     isDraft: isDraft,
@@ -4742,6 +5020,7 @@
     "LAHE ACTION REQUIRED means the output is an interrupt, not finished work. Continue the same turn and handle every item printed with it. Receiving an item is not handling it, and describing it is not handling it.",
     "Do not use a native model timer, a forever daemon, a global monitor, or a parser pipeline.",
     "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and a running helper puts the script line back when the rebuild strips it out.",
+    "A break the reviewer typed is part of the edit: a blank line in the after text is a paragraph break, and a single newline is a line break. Markdown does not read a single newline as a new paragraph, so write a blank line between the two paragraphs in the source, or the format's own hard-break form for a line break, then rebuild and check the page really shows the break.",
     "Links in a Markdown source are source-true: never rewrite an on-disk link to make the browser page work. The renderer translates local links when it builds the page, so fix a broken link only if it is wrong on disk too.",
     "The only way to say you handled an item is to append a reply line."
   ];
@@ -5159,6 +5438,20 @@
     return out.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s+$/, "") + "\n";
   }
 
+  // Page text can carry the breaks the reviewer typed. In this one-item-per-
+  // block text format a bare newline would start a line that reads like a new
+  // field, so the continuation lines are indented under the field they belong
+  // to. A blank line stays blank rather than becoming four spaces.
+  function wrapped(value) {
+    return String(value)
+      .split("\n")
+      .map(function (line, at) {
+        if (at === 0 || !line) return line;
+        return "    " + line;
+      })
+      .join("\n");
+  }
+
   function renderItemText(it) {
     var F = record.FIELD;
     var ctx = it[F.CONTEXT] || {};
@@ -5188,9 +5481,11 @@
     if (it[F.CHANGE]) {
       lines.push("  Change (the reviewer's words)" + (it[F.UPDATED_AT] ? " [" + it[F.UPDATED_AT] + "]" : "") + ": " + it[F.CHANGE]);
     }
-    if (ctx.quote) lines.push("  Quoted from the page: " + boundData(ctx.quote, BEFORE_MAX));
-    if (typeof it[F.BEFORE] === "string") lines.push("  Before (page text): " + boundData(it[F.BEFORE], BEFORE_MAX));
-    if (typeof it[F.AFTER] === "string") lines.push("  After (page text, with the edit): " + boundData(it[F.AFTER], BEFORE_MAX));
+    if (ctx.quote) lines.push("  Quoted from the page: " + wrapped(boundData(ctx.quote, BEFORE_MAX)));
+    if (typeof it[F.BEFORE] === "string") lines.push("  Before (page text): " + wrapped(boundData(it[F.BEFORE], BEFORE_MAX)));
+    if (typeof it[F.AFTER] === "string") {
+      lines.push("  After (page text, with the edit): " + wrapped(boundData(it[F.AFTER], BEFORE_MAX)));
+    }
     if (it[F.REPLY]) {
       lines.push(
         "  " +
@@ -6817,9 +7112,27 @@
     return typeof value === "string" ? value : null;
   }
 
+  // The node's text, as the matcher compares it: whitespace-insensitive, so a
+  // rewrapped paragraph still matches the probe minted before it was rewrapped.
+  //
+  // It reads the text through normalize.blockTextFromNode rather than off
+  // textContent, for one reason: textContent runs the words on either side of a
+  // <br> or a nested block together. A reviewer who splits a paragraph turns
+  // "Hello world." into the textContent "Helloworld.", the probe stops matching
+  // the block it was minted on, and the item reports itself lost on a page the
+  // reviewer is looking straight at.
   function textOf(node) {
-    var text = node && typeof node.textContent === "string" ? node.textContent : "";
-    return normalize.normalizeText(text);
+    if (!node) return "";
+    // Skipped DESCENDANTS contribute nothing. The node itself is whatever the
+    // caller handed over, and answering "" for it would turn a mint into an
+    // empty-probe failure on an element a caller deliberately picked.
+    return normalize.normalizeText(
+      normalize.blockTextFromNode(node, {
+        skip: function (candidate) {
+          return candidate !== node && isSkipped(candidate);
+        }
+      })
+    );
   }
 
   // A node the engine walks past entirely: no prose in it, or it is ours.
@@ -7082,8 +7395,7 @@
 
     if (!element) return mintFailure(ref, MINT_FAILURE.NO_ELEMENT);
 
-    var text = typeof element.textContent === "string" ? element.textContent : "";
-    ref.probe = normalize.normalizeText(text);
+    ref.probe = textOf(element);
     if (!ref.probe) return mintFailure(ref, MINT_FAILURE.EMPTY_PROBE);
 
     var scope = scopeOf(input.root, element);
@@ -13427,7 +13739,11 @@
     "." + ROW_CLASS + "__pair{display:flex;flex-direction:column;gap:4px;",
     "border-left:2px solid var(--line);padding-left:9px}",
     "." + ROW_CLASS + "[data-kind='edit'] ." + ROW_CLASS + "__pair{border-left-color:var(--accent)}",
+    // pre-wrap, because an edit's text can carry the breaks the reviewer typed.
+    // Without it the rail draws their new paragraph as one more space and the
+    // row says the change did not happen.
     "." + ROW_CLASS + "__before,." + ROW_CLASS + "__after{font-size:12.5px;line-height:1.45;",
+    "white-space:pre-wrap;",
     "display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}",
     "." + ROW_CLASS + "__before{color:var(--ink-faint);text-decoration:line-through;",
     "text-decoration-thickness:1px}",
@@ -18951,10 +19267,20 @@
   /**
    * A region's text and markup, as a record carries them.
    *
-   * The text is RAW: the block's own text, exactly as it reads. Collapsing
-   * whitespace here would be cleaning up the reviewer's words on the way into
-   * the record, and R3's named failure is exactly that kind of helpfulness.
-   * Comparison normalizes; storage does not.
+   * The text is the block's own words, exactly as it READS: the breaks the
+   * reviewer typed are in it, and the whitespace the source happens to carry
+   * because someone wrapped a line is not. Nothing else about the wording is
+   * touched. R3's named failure is helpfulness that changes a reviewer's words,
+   * and neither half of this does that.
+   *
+   * textContent is deliberately NOT the text here, and this is the bug Ken
+   * reported on 2026-08-20. Press Enter in the middle of a paragraph and Chrome
+   * writes "Hello<p>&nbsp;world.</p>" into the block. textContent reads that as
+   * "Hello world.", character for character what the block said before, so the
+   * commit compares equal to its own before, the edit is dropped as a no-op,
+   * and the break the reviewer is looking at is gone at the next rebuild.
+   * normalize.blockText reads the break off the markup instead, so the record
+   * says "Hello\n\nworld." and the agent can see there are two paragraphs.
    *
    * The markup goes through cleanMarkup, which is the one direction that is
    * required rather than forbidden: it is what stops anything the library added
@@ -18965,10 +19291,14 @@
    */
   function capture(regionEl) {
     if (!regionEl) return { text: null, html: null };
-    return {
-      text: typeof regionEl.textContent === "string" ? regionEl.textContent : null,
-      html: typeof regionEl.innerHTML === "string" ? normalize.cleanMarkup(regionEl.innerHTML) : null
-    };
+    var html = typeof regionEl.innerHTML === "string" ? normalize.cleanMarkup(regionEl.innerHTML) : null;
+    var text =
+      html !== null
+        ? normalize.blockText(html)
+        : typeof regionEl.textContent === "string"
+          ? normalize.blockTextFromNode(regionEl)
+          : null;
+    return { text: text, html: html };
   }
 
   /**
@@ -20895,25 +21225,14 @@
    * chrome node that ever lands in the light DOM must not be read as page
    * content.
    *
-   * Text nodes are joined with nothing between them, which is what textContent
-   * does, so this string compares against a record's before and after exactly
-   * the way the text those fields were captured from did.
+   * It reads the text the same way a record's before and after were captured,
+   * through the normalizer's break-aware reader, so the two compare like with
+   * like. The check itself folds whitespace on top of that (normalizeText), so
+   * a rebuild that rewraps a paragraph is still not a revert.
    */
   function pageTextOf(root) {
     if (!root) return "";
-    var parts = [];
-    walkText(root, parts);
-    return parts.join("");
-  }
-
-  function walkText(node, parts) {
-    if (!node) return;
-    if (node.nodeType === 1) {
-      if (markers.isToolNode(node)) return;
-      for (var child = node.firstChild; child; child = child.nextSibling) walkText(child, parts);
-      return;
-    }
-    if (node.nodeType === 3 && typeof node.nodeValue === "string") parts.push(node.nodeValue);
+    return normalize.blockTextFromNode(root, { skip: markers.isToolNode });
   }
 
   // What the card says when branch three fires. Written once here so the
@@ -21359,6 +21678,16 @@
     return Object.prototype.hasOwnProperty.call(WRITING_KINDS, item[record.FIELD.KIND]);
   }
 
+  // What the page tried to say in a protected block, in the shape the compare
+  // reads. Protection snapshots the block's raw textContent, which runs the
+  // words on either side of a break together; the markup it snapshots beside it
+  // is the same block, so the break-aware text comes from there when it exists.
+  function observedValue(commit) {
+    if (!commit) return null;
+    if (typeof commit.observedHtml === "string") return normalize.blockText(commit.observedHtml);
+    return typeof commit.observed === "string" ? commit.observed : null;
+  }
+
   // The region's current value, in the shape the record compares against: the
   // markup for a format-only record, the text for everything else, and null for
   // a delete whose block is not in the document.
@@ -21367,7 +21696,11 @@
     if (item[record.FIELD.KIND] === record.KIND.FORMAT_ONLY) {
       return typeof element.innerHTML === "string" ? element.innerHTML : String(element.textContent || "");
     }
-    return String(element.textContent === undefined || element.textContent === null ? "" : element.textContent);
+    // Read through the normalizer's break-aware reader, never off textContent:
+    // the record's `after` carries the breaks the reviewer typed, and textContent
+    // would compare a block that HAS those breaks against a record that says it
+    // should, decide they differ, and write the block back to one paragraph.
+    return normalize.blockTextFromNode(element);
   }
 
   // Why an anchor did not bind, in a sentence the reviewer can act on. Zero
@@ -21710,8 +22043,9 @@
       // raised by an earlier commit stops being sticky here and this pass gets
       // to raise it again or let it go.
       if (conflicts[id] && conflicts[id].displaced) delete conflicts[id];
-      if (typeof commit.observed === "string" && compare(item, commit.observed).branch === BRANCH.CONTENT_CHANGED) {
-        return flagConflict(ctx, item, id, element, commit.observed, true);
+      var observed = observedValue(commit);
+      if (typeof observed === "string" && compare(item, observed).branch === BRANCH.CONTENT_CHANGED) {
+        return flagConflict(ctx, item, id, element, observed, true);
       }
     }
 
@@ -21804,6 +22138,13 @@
 
   // The one place replay touches the reviewed page. Everything above decides;
   // this writes.
+  //
+  // An edit writes its MARKUP when it has any, not just its text. Writing
+  // textContent throws away everything the record's after_html knows: the
+  // paragraph break the reviewer typed, and the emphasis that was in the block
+  // before they touched it. That write was the second half of Ken's 2026-08-20
+  // report, the "some edit later reverts it" half: the break survived the
+  // commit and then the next replay pass flattened the block back to one line.
   function writeRegion(element, item) {
     var kind = item[record.FIELD.KIND];
     if (kind === record.KIND.DELETE) {
@@ -21818,7 +22159,40 @@
       element.innerHTML = item[record.FIELD.AFTER_HTML];
       return;
     }
-    element.textContent = item[record.FIELD.AFTER];
+    var afterText = item[record.FIELD.AFTER];
+    var afterHtml = item[record.FIELD.AFTER_HTML];
+    // The markup is used only when it still SAYS the record's after text. A
+    // record whose text was reworded without its markup would otherwise write
+    // an older wording back onto the page, which is worse than losing the
+    // emphasis. When they disagree, the text is the reviewer's answer.
+    if (
+      typeof afterHtml === "string" &&
+      afterHtml &&
+      typeof afterText === "string" &&
+      normalize.blockText(afterHtml) === normalize.normalizeBlockText(afterText)
+    ) {
+      element.innerHTML = afterHtml;
+      return;
+    }
+    writeTextWithBreaks(element, afterText);
+  }
+
+  // A record with no markup of its own, written so its breaks survive. Built
+  // node by node rather than as a markup string: the text is page-derived data
+  // and it goes into the page as text, never as markup.
+  function writeTextWithBreaks(element, after) {
+    var text = typeof after === "string" ? after : "";
+    if (text.indexOf("\n") === -1) {
+      element.textContent = text;
+      return;
+    }
+    var doc = element.ownerDocument;
+    element.textContent = "";
+    var lines = text.split("\n");
+    for (var i = 0; i < lines.length; i += 1) {
+      if (i > 0) element.appendChild(doc.createElement("br"));
+      if (lines[i]) element.appendChild(doc.createTextNode(lines[i]));
+    }
   }
 
   return {
@@ -22329,7 +22703,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.1.0+7d9e0cb65bcb";
+  var VERSION = "0.1.0+5fc2e9ed1d48";
 
   var protocol = ns.protocol;
   var record = ns.record;

@@ -462,6 +462,7 @@ copy in `test/unit/review_format.test.js`:
   "LAHE ACTION REQUIRED means the output is an interrupt, not finished work. Continue the same turn and handle every item printed with it. Receiving an item is not handling it, and describing it is not handling it.",
   "Do not use a native model timer, a forever daemon, a global monitor, or a parser pipeline.",
   "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and a running helper puts the script line back when the rebuild strips it out.",
+  "A break the reviewer typed is part of the edit: a blank line in the after text is a paragraph break, and a single newline is a line break. Markdown does not read a single newline as a new paragraph, so write a blank line between the two paragraphs in the source, or the format's own hard-break form for a line break, then rebuild and check the page really shows the break.",
   "Links in a Markdown source are source-true: never rewrite an on-disk link to make the browser page work. The renderer translates local links when it builds the page, so fix a broken link only if it is wrong on disk too.",
   "The only way to say you handled an item is to append a reply line."
 ]

@@ -268,10 +268,20 @@
   /**
    * A region's text and markup, as a record carries them.
    *
-   * The text is RAW: the block's own text, exactly as it reads. Collapsing
-   * whitespace here would be cleaning up the reviewer's words on the way into
-   * the record, and R3's named failure is exactly that kind of helpfulness.
-   * Comparison normalizes; storage does not.
+   * The text is the block's own words, exactly as it READS: the breaks the
+   * reviewer typed are in it, and the whitespace the source happens to carry
+   * because someone wrapped a line is not. Nothing else about the wording is
+   * touched. R3's named failure is helpfulness that changes a reviewer's words,
+   * and neither half of this does that.
+   *
+   * textContent is deliberately NOT the text here, and this is the bug Ken
+   * reported on 2026-08-20. Press Enter in the middle of a paragraph and Chrome
+   * writes "Hello<p>&nbsp;world.</p>" into the block. textContent reads that as
+   * "Hello world.", character for character what the block said before, so the
+   * commit compares equal to its own before, the edit is dropped as a no-op,
+   * and the break the reviewer is looking at is gone at the next rebuild.
+   * normalize.blockText reads the break off the markup instead, so the record
+   * says "Hello\n\nworld." and the agent can see there are two paragraphs.
    *
    * The markup goes through cleanMarkup, which is the one direction that is
    * required rather than forbidden: it is what stops anything the library added
@@ -282,10 +292,14 @@
    */
   function capture(regionEl) {
     if (!regionEl) return { text: null, html: null };
-    return {
-      text: typeof regionEl.textContent === "string" ? regionEl.textContent : null,
-      html: typeof regionEl.innerHTML === "string" ? normalize.cleanMarkup(regionEl.innerHTML) : null
-    };
+    var html = typeof regionEl.innerHTML === "string" ? normalize.cleanMarkup(regionEl.innerHTML) : null;
+    var text =
+      html !== null
+        ? normalize.blockText(html)
+        : typeof regionEl.textContent === "string"
+          ? normalize.blockTextFromNode(regionEl)
+          : null;
+    return { text: text, html: html };
   }
 
   /**

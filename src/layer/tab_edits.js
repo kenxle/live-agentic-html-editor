@@ -134,7 +134,11 @@
     "." + ROW_CLASS + "__pair{display:flex;flex-direction:column;gap:4px;",
     "border-left:2px solid var(--line);padding-left:9px}",
     "." + ROW_CLASS + "[data-kind='edit'] ." + ROW_CLASS + "__pair{border-left-color:var(--accent)}",
+    // pre-wrap, because an edit's text can carry the breaks the reviewer typed.
+    // Without it the rail draws their new paragraph as one more space and the
+    // row says the change did not happen.
     "." + ROW_CLASS + "__before,." + ROW_CLASS + "__after{font-size:12.5px;line-height:1.45;",
+    "white-space:pre-wrap;",
     "display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}",
     "." + ROW_CLASS + "__before{color:var(--ink-faint);text-decoration:line-through;",
     "text-decoration-thickness:1px}",
