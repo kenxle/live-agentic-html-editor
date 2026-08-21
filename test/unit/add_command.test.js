@@ -888,7 +888,8 @@ test("the README and the install doc state the tested platform and browser requi
   // holding the landing page hostage to sentences that now live elsewhere.
   assert.match(readme, /macOS or Linux/, "the documented installer names its supported operating systems");
   assert.match(readme, /Node 18/, "the runtime floor is stated");
-  assert.match(readme, /Custom Highlight API/, "and the browser floor");
+  assert.match(readme, /Chrome, Edge, Safari, or Firefox/, "and the browser floor, named plainly for a reader");
+  assert.match(install, /Custom Highlight API/, "with the capability it actually rests on, in the install doc");
   assert.match(readme, /MIT/, "the license");
   assert.match(readme, /node bin\/lahe\.js/, "and what a Windows user runs instead of the wrapper");
   assert.match(readme, /lahe review/, "and the public command that installs the library into a page");
