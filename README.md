@@ -1,4 +1,4 @@
-# LAHE
+# Live Agentic HTML Editor (LAHE)
 
 **Review a web page or a Markdown doc in your own browser. Comment on a passage, or fix the words right on the page. Your coding agent makes the change in the source and answers you where you left the note.**
 
