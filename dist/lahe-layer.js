@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.1.0+5fc2e9ed1d48
+ * version 0.1.0+f8231b322139
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.1.0+5fc2e9ed1d48";
+  g.LAHE.version = "0.1.0+f8231b322139";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -9440,7 +9440,7 @@
   // runAction seam, so what they DO is still boot's business (D10, revised).
   var MENU_ITEMS = [
     { action: "copy", label: "Copy review" },
-    { action: "export", label: "Export review" }
+    { action: "export", label: "Export review to file" }
   ];
 
   var HINTS = [
@@ -22703,7 +22703,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.1.0+5fc2e9ed1d48";
+  var VERSION = "0.1.0+f8231b322139";
 
   var protocol = ns.protocol;
   var record = ns.record;

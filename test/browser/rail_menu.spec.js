@@ -13,7 +13,7 @@
 //                     an item, and on collapse, and Esc gives focus back to the
 //                     button that opened it
 //
-// And the outcome assertion that matters: choosing Export review produces the
+// And the outcome assertion that matters: choosing Export review to file produces the
 // same real download the footer button produced. The path under test is a real
 // mouse click at the control's on-screen geometry (the rail's root is closed,
 // so the geometry comes from the rail's own self-report, the way the takeover
@@ -185,7 +185,7 @@ test.describe("the review's actions live in the head's menu", () => {
         return got.open ? got : null;
       }, { message: "the menu to open on a real click" });
       expect(info.expanded).toBe("true");
-      expect(info.items.map((one) => one.label)).toEqual(["Copy review", "Export review"]);
+      expect(info.items.map((one) => one.label)).toEqual(["Copy review", "Export review to file"]);
       info.items.forEach((one) => {
         expect(one.rect.width, one.label + " is really on screen").toBeGreaterThan(0);
       });
@@ -277,7 +277,7 @@ test.describe("the review's actions live in the head's menu", () => {
     }
   });
 
-  test("choosing Export review downloads the review, the same way the footer button did", async ({ page }) => {
+  test("choosing Export review to file downloads the review, the same way the footer button did", async ({ page }) => {
     const { app, helper, token } = await startBoth();
     const said = "The notes column is doing two jobs. Split it.";
     try {
@@ -286,7 +286,7 @@ test.describe("the review's actions live in the head's menu", () => {
 
       const [download] = await Promise.all([
         page.waitForEvent("download"),
-        chooseMenuItem(page, "Export review")
+        chooseMenuItem(page, "Export review to file")
       ]);
       const text = fs.readFileSync(await download.path(), "utf8");
       expect(download.suggestedFilename()).toMatch(/\.txt$/);

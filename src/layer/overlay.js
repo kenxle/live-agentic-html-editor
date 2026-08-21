@@ -543,7 +543,7 @@
   // runAction seam, so what they DO is still boot's business (D10, revised).
   var MENU_ITEMS = [
     { action: "copy", label: "Copy review" },
-    { action: "export", label: "Export review" }
+    { action: "export", label: "Export review to file" }
   ];
 
   var HINTS = [

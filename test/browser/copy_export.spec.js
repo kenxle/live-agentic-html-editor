@@ -160,11 +160,11 @@ async function copyThroughTheButton(page) {
   );
 }
 
-/** Choose Export review and read the file the browser actually downloaded. */
+/** Choose Export review to file and read the file the browser actually downloaded. */
 async function exportThroughTheButton(page) {
   const [download] = await Promise.all([
     page.waitForEvent("download"),
-    chooseFromRailMenu(page, "Export review")
+    chooseFromRailMenu(page, "Export review to file")
   ]);
   const path = await download.path();
   return { text: fs.readFileSync(path, "utf8"), filename: download.suggestedFilename() };

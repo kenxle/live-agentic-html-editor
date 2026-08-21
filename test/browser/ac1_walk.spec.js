@@ -29,7 +29,7 @@
 //         then KILLED, so the whole review is made with nothing running
 //   REAL  the records: five, made by the reviewer's own gestures
 //   REAL  the way the review comes out: real clicks on the rail's own header
-//         menu, Export review read back off the downloaded file, and (on
+//         menu, Export review to file read back off the downloaded file, and (on
 //         Chromium) Copy review read back off the system clipboard
 //
 // NO AGENT EVER RUNS. Asserted rather than assumed: no reply file is ever
@@ -183,7 +183,7 @@ async function copyThroughTheButton(page) {
 }
 
 async function exportThroughTheButton(page) {
-  const [download] = await Promise.all([page.waitForEvent("download"), chooseFromRailMenu(page, "Export review")]);
+  const [download] = await Promise.all([page.waitForEvent("download"), chooseFromRailMenu(page, "Export review to file")]);
   const file = await download.path();
   return { text: fs.readFileSync(file, "utf8"), filename: download.suggestedFilename() };
 }
