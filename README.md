@@ -29,11 +29,12 @@ No matter how many files were used to create the HTML page, Lahe knows how to ed
 - **Drafted until sent.** A half-typed thought is private to your browser until you hit Cmd-Enter.
 - **Hotkeys for speed.** Comment, edit, and send without reaching for the mouse.
 
+- **Hand-made edits are protected.** If a doc-wide change would clobber your carefully crafted text, it stops at text you placed by hand and asks. If an edit gets reverted anyway, the item reopens itself.
+
 **Working with the source**
 
 - **Many source files, one page to review.** A page built from templates, includes, or partials is reviewed as a single built page. The agent edits the underlying file.
-- **Markdown or HTML.** A `.md` file (or multiple) is rendered for editing, diagrams included.
-- **Hand-made edits are protected.** If a doc-wide change would clobber your carefully crafted text, it stops at text you placed by hand and asks. If an edit gets reverted anyway, the item reopens itself.
+- **Markdown or HTML.** A `.md` file (or multiple) is rendered for editing, diagrams included. Your prompt is assembled from multiple underlying modular files? No worries, live edit the rendered output as a single page and let your agent edit the underlying template files.
 
 **Many reviews, many agents**
 
