@@ -1,21 +1,20 @@
-# Live Agentic HTML Editor (LAHE)
+# Live Agentic HTML Editor (Lahe)
 
-**Review a web page or a Markdown doc in your own browser. Comment on a passage, or fix the words right on the page. Your coding agent makes the change in the source and answers you where you left the note.**
+**We've graduated from MD to HTML for many of our docs. Or maybe you just want to edit your homepage in place. Lahe is injectable into any HTML on your machine, and provides direct editing, as well as threaded conversations for agentic updates.**
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A518.2-brightgreen.svg)](package.json)
 [![Runtime dependencies: none](https://img.shields.io/badge/runtime%20dependencies-none-brightgreen.svg)](package.json)
 [![Agents: Claude Code, Codex, Antigravity](https://img.shields.io/badge/agents-Claude%20Code%20%7C%20Codex%20%7C%20Antigravity-8A7CFF.svg)](#which-agents-this-works-with)
+[![Formats: HTML and Markdown](https://img.shields.io/badge/formats-HTML%20%7C%20Markdown-orange.svg)](#what-you-can-review)
 
-![A page under review, with the rail on the right and a comment box open on a selected passage](docs/images/hero-comment.jpg)
+![The Steady Thread home page under review, with a threaded exchange in the rail: a reviewer note, the agent's question, the answer, and the agent's fix](docs/images/hero-thread.jpg)
 
 ## Why
 
-You ask your agent for a document or a page. You read it, and you can see what is wrong with the third paragraph. So you go back to the chat and try to describe where the problem is, and what it should say instead, in words.
+We're now spending a significant amount of our time reviewing and editing documentation, prompts, and HTML pages. It's not fast enough to copy a paragraph and bring it back to paste into your agent and ask for edits.
 
-That description is the expensive part. You already know the fix. Typing it in the paragraph is faster than explaining it, and it carries your exact words instead of a paraphrase.
-
-LAHE puts a review layer on the page you are already looking at. Select a sentence and comment on it, or press an edit key and rewrite it in place. Your agent picks the item up within a second or two, edits the source, rebuilds, and replies on the card you left.
+Lahe adds a review layer to ANY HTML that's on your machine (including pages that are composed of many underlying files). Select a sentence and comment on it, or press an edit key and rewrite it in place. No matter how many files were used to create the HTML page, Lahe knows how to edit the underlying source. And if you asked a question, don't let the answer get lost in the neverending chat flow. Threaded sidebar conversations mean the answer is always easy to find.
 
 ## Quickstart
 
