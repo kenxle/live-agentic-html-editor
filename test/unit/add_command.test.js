@@ -872,49 +872,118 @@ test("package.json installs one command, and it is bin/lahe.js", () => {
   );
 });
 
-test("the README and the install doc state the tested platform and browser requirements", () => {
-  const readme = fs.readFileSync(path.join(REPO_ROOT, "README.md"), "utf8");
-  const install = fs.readFileSync(path.join(REPO_ROOT, "docs", "INSTALL.md"), "utf8");
-  const agents = fs.readFileSync(path.join(REPO_ROOT, "AGENTS.md"), "utf8");
+// The docs used to be pinned by grepping them for exact English sentences. That
+// broke on ordinary copy editing and every fix was to retype the assertion, so
+// it protected nothing and taxed every edit. What is worth pinning is the part
+// a reader can actually run: a command name in a doc is a promise that the
+// dispatcher routes it. Prose is free to change; a command that does not exist
+// is a broken instruction.
+const COMMAND_DOCS = [
+  "README.md",
+  "AGENTS.md",
+  path.join("docs", "INSTALL.md"),
+  path.join("docs", "CLI.md"),
+  path.join("skills", "lahe", "SKILL.md")
+];
 
-  // The claim the plan sends 3B to delete (S13): it contradicted D1 and the
-  // cross-browser lanes, both of which are real.
-  assert.doesNotMatch(readme, /macOS and Chromium/i);
-  assert.doesNotMatch(readme, /Chromium only/i);
+// `wait` was removed from the dispatcher on purpose. Both agent docs name it
+// only to say so, which is documentation working rather than drift.
+const NAMED_ONLY_TO_WARN_AGAINST = new Set(["wait"]);
 
-  // The README is the landing page: the pitch, the quickstart, the floors a
-  // reader needs before cloning, and the honest limits. The detail moved to
-  // docs/INSTALL.md and docs/CLI.md, so the pins follow it there rather than
-  // holding the landing page hostage to sentences that now live elsewhere.
-  assert.match(readme, /macOS or Linux/, "the documented installer names its supported operating systems");
-  assert.match(readme, /Node 18/, "the runtime floor is stated");
-  assert.match(readme, /Chrome, Edge, Safari, or Firefox/, "and the browser floor, named plainly for a reader");
-  assert.match(install, /Custom Highlight API/, "with the capability it actually rests on, in the install doc");
-  assert.match(readme, /MIT/, "the license");
-  assert.match(readme, /node bin\/lahe\.js/, "and what a Windows user runs instead of the wrapper");
-  assert.match(readme, /lahe review/, "and the public command that installs the library into a page");
-  assert.match(readme, /git clone https:\/\/github\.com\/kenxle\/live-agentic-html-editor/);
-  assert.match(readme, /lahe review path\/to\/page\.html/);
-  assert.doesNotMatch(readme, /npm install/, "the clone runs with no install step, so the quickstart must not ask for one");
+// Commands are read out of code: fenced blocks and inline code spans. That is
+// where a doc tells a reader what to type, and it keeps sentences like "claim
+// the lahe session" out of the results without reading any prose.
+function codeIn(markdown) {
+  const chunks = [];
+  const fenced = /^[ \t]*(```|~~~)[^\n]*\n([\s\S]*?)^[ \t]*\1/gm;
+  let match;
+  while ((match = fenced.exec(markdown)) !== null) chunks.push(match[2]);
+  const prose = markdown.replace(fenced, "\n");
+  const inline = /`([^`\n]+)`/g;
+  while ((match = inline.exec(prose)) !== null) chunks.push(match[1]);
+  return chunks;
+}
 
-  // The install doc carries what the README used to spell out.
-  assert.match(install, /Windows is not yet/, "Windows is not presented as tested CLI support");
-  assert.match(install, /npm link/, "the documented install");
-  assert.match(install, /comment is not a guard/);
-  assert.match(install, /If\s+the deliverable is assembled from chapters, includes, templates/);
-  assert.match(install, /Do not add Pandoc just to review one `\.md` file/);
-  assert.doesNotMatch(install, /python3 -m http\.server/);
+function commandsIn(markdown) {
+  const found = [];
+  for (const chunk of codeIn(markdown)) {
+    // `[ \t]` rather than `\s`: a command and its action are on one line, and
+    // crossing a newline would join the end of one line to the start of the next.
+    // `lahe.js` counts too, because that is what the docs tell a Windows reader
+    // to run from the clone.
+    const invocation = /\blahe(?:\.js)?[ \t]+([A-Za-z][A-Za-z0-9_-]*)(?:[ \t]+([A-Za-z][A-Za-z0-9_-]*))?/g;
+    let match;
+    while ((match = invocation.exec(chunk)) !== null) {
+      found.push({ command: match[1], action: match[2] || null, text: match[0] });
+    }
+  }
+  return found;
+}
 
-  assert.match(agents, /lahe review path\/to\/page\.html/);
-  assert.match(agents, /comment is not a guard/);
-  assert.match(agents, /Choose the source workflow before opening the review/);
-  assert.match(agents, /Do not introduce Pandoc merely to\s+open one Markdown file/);
-  assert.match(agents, /point it at the build entrypoint/);
-  assert.doesNotMatch(agents, /python3 -m http\.server/);
-  assert.doesNotMatch(readme, /python3 -m http\.server/);
+test("every lahe command the docs tell a reader to run is a real command", () => {
+  const cli = require("../../src/cli/index.js");
+  const sessionCommand = require("../../src/cli/commands/session.js");
+  const commands = new Set(cli.COMMAND_NAMES);
+  const sessionActions = new Set(sessionCommand.ACTIONS);
 
-  // The in-page hints, so a new user can work the tool out without this file.
-  assert.match(readme, /Cmd-Shift-C/);
-  assert.match(readme, /Cmd-Shift-E/);
-  assert.match(readme, /Cmd-Enter/);
+  assert.ok(commands.size > 0, "the dispatcher exports the commands it routes");
+  assert.ok(sessionActions.size > 0, "and the session command exports the actions it accepts");
+
+  let checked = 0;
+  for (const doc of COMMAND_DOCS) {
+    const text = fs.readFileSync(path.join(REPO_ROOT, doc), "utf8");
+    const found = commandsIn(text);
+    assert.ok(found.length > 0, doc + " names at least one lahe command to run");
+
+    for (const use of found) {
+      if (NAMED_ONLY_TO_WARN_AGAINST.has(use.command)) continue;
+      checked += 1;
+      assert.ok(
+        commands.has(use.command),
+        doc + " tells a reader to run `" + use.text + "`, but the dispatcher has no `" +
+          use.command + "` command. It routes: " + [...commands].join(", ")
+      );
+      if (use.command === "session" && use.action) {
+        assert.ok(
+          sessionActions.has(use.action),
+          doc + " tells a reader to run `" + use.text + "`, but `lahe session` has no `" +
+            use.action + "` action. It accepts: " + [...sessionActions].join(", ")
+        );
+      }
+    }
+  }
+
+  // Every command in the dispatcher is documented somewhere, so a new one
+  // cannot ship with no way for a reader to find it.
+  const documented = new Set();
+  for (const doc of COMMAND_DOCS) {
+    for (const use of commandsIn(fs.readFileSync(path.join(REPO_ROOT, doc), "utf8"))) {
+      documented.add(use.command);
+    }
+  }
+  for (const command of commands) {
+    assert.ok(documented.has(command), "`lahe " + command + "` is routed but no doc shows it being run");
+  }
+
+  assert.ok(checked >= 20, "the docs really are the corpus here, not one stray line: " + checked);
+});
+
+test("the clone line in the docs matches the repository in package.json", () => {
+  // A rename that leaves a dead clone URL in the quickstart is the one doc bug
+  // a reader hits before anything else works.
+  const pkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, "package.json"), "utf8"));
+  const repository = String(pkg.repository && pkg.repository.url)
+    .replace(/^git\+/, "")
+    .replace(/\.git$/, "");
+  assert.match(repository, /^https:\/\/github\.com\//, "package.json names an https clone URL");
+
+  for (const doc of ["README.md", "AGENTS.md", path.join("docs", "INSTALL.md")]) {
+    const text = fs.readFileSync(path.join(REPO_ROOT, doc), "utf8");
+    const clones = text.match(/git clone\s+(\S+)/g) || [];
+    assert.ok(clones.length > 0, doc + " shows how to clone the repository");
+    for (const line of clones) {
+      const url = line.split(/\s+/)[2].replace(/\.git$/, "");
+      assert.equal(url, repository, doc + " clones " + url + ", but package.json says " + repository);
+    }
+  }
 });

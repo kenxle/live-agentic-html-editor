@@ -36,6 +36,22 @@ var USAGE = [
   "Run `lahe <command> --help` for a command's own options."
 ].join("\n");
 
+// Every public command, in the order the usage text lists them. Dispatch reads
+// this map, so the routed commands and the advertised commands are one list
+// rather than two that can drift. Each entry loads its module only when the
+// command runs, which keeps startup to the one command being used. A test reads
+// COMMAND_NAMES to check that every `lahe <command>` in the docs is real.
+var COMMANDS = {
+  serve: function () { return require("./commands/serve.js"); },
+  review: function () { return require("./commands/review.js"); },
+  session: function () { return require("./commands/session.js"); },
+  add: function () { return require("./commands/add.js"); },
+  status: function () { return require("./commands/status.js"); },
+  monitor: function () { return require("./commands/monitor.js"); }
+};
+
+var COMMAND_NAMES = Object.keys(COMMANDS);
+
 /**
  * @param {string[]} argv everything after the program name
  * @returns {Promise<number>} the process exit code
@@ -50,15 +66,10 @@ async function main(argv) {
     return command ? protocol.CLI_EXIT.OK : protocol.CLI_EXIT.BAD_USAGE;
   }
 
-  if (command === "serve") return require("./commands/serve.js").run(rest);
-  if (command === "review") return require("./commands/review.js").run(rest);
-  if (command === "session") return require("./commands/session.js").run(rest);
-  if (command === "add") return require("./commands/add.js").run(rest);
-  if (command === "status") return require("./commands/status.js").run(rest);
-  if (command === "monitor") return require("./commands/monitor.js").run(rest);
+  if (Object.prototype.hasOwnProperty.call(COMMANDS, command)) return COMMANDS[command]().run(rest);
 
   process.stderr.write("lahe: unknown command " + JSON.stringify(command) + "\n\n" + USAGE + "\n");
   return protocol.CLI_EXIT.BAD_USAGE;
 }
 
-module.exports = { USAGE: USAGE, main: main };
+module.exports = { USAGE: USAGE, COMMANDS: COMMANDS, COMMAND_NAMES: COMMAND_NAMES, main: main };

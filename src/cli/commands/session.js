@@ -18,6 +18,9 @@ var projection = require("../../service/projection.js");
 var eventLog = require("../../service/log.js");
 
 var BIN = path.join(__dirname, "..", "..", "..", "bin", "lahe.js");
+// Every action `lahe session` accepts. parse() validates against this list, so
+// a test can read the real actions instead of restating them.
+var ACTIONS = ["list", "close", "reopen", "takeover"];
 var USAGE = [
   "usage: lahe session <list|close|reopen|takeover> [session-id] [--port <n>] [--state-dir <path>] [--json]",
   "",
@@ -60,8 +63,8 @@ function parse(argv) {
     if (out.port !== null) return { error: "list takes no --port" };
     return out;
   }
-  if (out.action !== "close" && out.action !== "reopen" && out.action !== "takeover") {
-    return { error: "expected list, close, reopen, or takeover" };
+  if (ACTIONS.indexOf(out.action) === -1) {
+    return { error: "expected " + ACTIONS.slice(0, -1).join(", ") + ", or " + ACTIONS[ACTIONS.length - 1] };
   }
   if (out.json) return { error: "--json is only for `lahe session list`" };
   if (!protocol.isSafeId(out.id)) return { error: "session id must match " + String(protocol.SAFE_ID) };
@@ -339,6 +342,7 @@ async function run(argv, options) {
 
 module.exports = {
   USAGE: USAGE,
+  ACTIONS: ACTIONS,
   TAKEOVER_HINT: TAKEOVER_HINT,
   parse: parse,
   collect: collect,
