@@ -729,6 +729,136 @@ test.describe("3A: an agent answers by appending one line", () => {
     }
   });
 
+  // Found in live review, 2026-08-20: a Done card's history read as one run-on
+  // line ("Reviewer noteAug 20, 8:32 PMWe moved from trainer to coach...") and
+  // the follow-up textarea sat on top of its own label.
+  //
+  // The MARKUP was right the whole time, which is why every structural
+  // assertion in this file passed while the rail looked broken. The Done tab's
+  // stylesheet used to be appended INSIDE the first node that file put on a
+  // card, and on a card with a question that node is the question block.
+  // Answering the question removes the block, the sheet goes with it, and the
+  // module's one-shot flag still says "installed". So this test reads COMPUTED
+  // style and measured geometry, the two things a missing sheet cannot fake.
+  test("a Done card's thread and follow-up keep their styling after the question that carried the sheet is gone, and through remounts", async ({
+    page
+  }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      await commentOnSelection(page, "p.lede", "We moved from trainer to coach.");
+      const item = (await itemsIn(page))[0];
+      await waitForItemInLog(helper, item.id);
+
+      // A question. Its block is where the stylesheet used to live.
+      appendReply(helper, "replies-claude.jsonl", {
+        item: item.id,
+        rev: 1,
+        status: "question",
+        agent: "claude",
+        text: "Every instance, or only the headings?"
+      });
+      await pollPage(page, (id) => window.__lahe.handle.doneTab().questionIds().indexOf(id) !== -1, item.id, {
+        message: "the question to be drawn on the card"
+      });
+
+      // Answering it removes that block, and took the sheet with it.
+      await page.evaluate((id) => {
+        window.__lahe.handle.doneTab().question(id).querySelector(".lahe-ask-answer").click();
+      }, item.id);
+      await pollPage(
+        page,
+        (id) => {
+          const composer = window.__lahe.handle.doneTab().followup(id);
+          const input = composer && composer.querySelector("textarea");
+          return !!input && input.value === "";
+        },
+        item.id,
+        { message: "the blank follow-up composer to open on the card" }
+      );
+      await page.evaluate((id) => {
+        const input = window.__lahe.handle.doneTab().followup(id).querySelector("textarea");
+        input.value = "Every instance.";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }));
+      }, item.id);
+      await pollPage(page, (id) => window.__lahe.itemById(id).rev >= 2, item.id, {
+        message: "the follow-up to open a second round"
+      });
+
+      // An answer to that follow-up, so the card lands in Done carrying a
+      // completed exchange: the shape the bug was reported on.
+      appendReply(helper, "replies-claude.jsonl", {
+        item: item.id,
+        rev: 2,
+        status: "handled",
+        agent: "claude",
+        text: "Trainer appears twice; both now read coach."
+      });
+      await pollPage(page, (id) => window.__lahe.itemById(id).state === "handled", item.id, {
+        message: "the handled reply to fold"
+      });
+      await page.evaluate(() => window.__lahe.rail.selectTab("done"));
+
+      // Two remounts, the way a morph takes the root out from under the rail.
+      // Two rather than one because one duplicated sheet is invisible and two
+      // is a pattern.
+      for (let pass = 0; pass < 2; pass += 1) {
+        await page.evaluate(() => document.getElementById(window.__lahe.rootId).remove());
+        await pollPage(page, () => document.querySelectorAll("#" + window.__lahe.rootId).length === 1, undefined, {
+          message: "the remount to put the root back"
+        });
+        await pollPage(page, (id) => !!window.__lahe.handle.doneTab().thread(id), item.id, {
+          message: "the thread to be drawn again after the remount"
+        });
+      }
+
+      const laidOut = await page.evaluate((id) => {
+        const done = window.__lahe.handle.doneTab();
+        const thread = done.thread(id);
+        const head = thread.querySelector(".lahe-thread-head");
+        const text = thread.querySelector(".lahe-thread-text");
+        const composer = done.followup(id);
+        const label = composer.querySelector(".lahe-followup-label");
+        const input = composer.querySelector("textarea");
+        return {
+          headDisplay: getComputedStyle(head).display,
+          textDisplay: getComputedStyle(text).display,
+          composerDisplay: getComputedStyle(composer).display,
+          composerDirection: getComputedStyle(composer).flexDirection,
+          headBottom: head.getBoundingClientRect().bottom,
+          textTop: text.getBoundingClientRect().top,
+          labelBottom: label.getBoundingClientRect().bottom,
+          inputTop: input.getBoundingClientRect().top,
+          sheets: thread.getRootNode().querySelectorAll("style[data-lahe-sheet='tab_done']").length,
+          words: text.textContent
+        };
+      }, item.id);
+
+      // The thread is the completed round, not the current one.
+      expect(laidOut.words).toContain("We moved from trainer to coach.");
+
+      // The label, the time and the turn's words are three separated things
+      // rather than one run-on line.
+      expect(laidOut.headDisplay, "the thread head is laid out as a flex row").toBe("flex");
+      expect(laidOut.textDisplay, "the turn's words are their own block").toBe("block");
+      expect(laidOut.textTop, "the words start below the head above them").toBeGreaterThanOrEqual(laidOut.headBottom);
+
+      // The follow-up field sits under its label rather than on top of it.
+      expect(laidOut.composerDisplay).toBe("flex");
+      expect(laidOut.composerDirection).toBe("column");
+      expect(laidOut.inputTop, "the follow-up field starts below its label").toBeGreaterThanOrEqual(
+        laidOut.labelBottom
+      );
+
+      // One sheet, not one per remount.
+      expect(laidOut.sheets, "two remounts leave one stylesheet in the rail's root").toBe(1);
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
   // --- R38 -----------------------------------------------------------------------
 
   test("a handled item is kept and reopenable, and reopening puts it back in front of the agent", async ({

@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.1.0+b2a679d00e6b
+ * version 0.1.0+7d9e0cb65bcb
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.1.0+b2a679d00e6b";
+  g.LAHE.version = "0.1.0+7d9e0cb65bcb";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -8514,7 +8514,12 @@
     function addSurfaceStyle(key, cssText) {
       var s = surface();
       if (!s.root) return null;
-      if (surfaceStyles[key]) return surfaceStyles[key];
+      // Connectedness, not a cache hit. A remembered element whose root was torn
+      // down and rebuilt is not in any tree, and returning it would leave the
+      // caller's rules with nothing behind them.
+      var known = surfaceStyles[key];
+      var knownRoot = known && typeof known.getRootNode === "function" ? known.getRootNode() : s.root;
+      if (known && known.isConnected !== false && knownRoot === s.root) return known;
       var el = doc.createElement("style");
       el.textContent = cssText;
       s.root.appendChild(el);
@@ -8813,6 +8818,11 @@
   // teaches the reviewer to stop reading the footer.
   var LIMIT_SEPARATE_STORAGE_NO_HELPER =
     "A second window in a separate browser profile cannot be detected.";
+
+  // How a tab module's sheet names itself inside the rail's closed root, so
+  // ensureStyleSheet can find the one it already put there instead of adding a
+  // second copy on every remount.
+  var SHEET_ATTR = "data-lahe-sheet";
 
   var CSS = [
     // all: initial stops every inheritable property of the host page (font,
@@ -9531,6 +9541,37 @@
 
     function isMounted() {
       return mounted;
+    }
+
+    /**
+     * Install a tab module's stylesheet in the rail's own closed root.
+     *
+     * A tab module used to carry its sheet inside the first node it put on a
+     * card. That node is removable: a question node goes when the question is
+     * answered, a row goes when the item leaves the pane, and the whole root
+     * goes on a remount. The sheet left with it and the module's one-shot flag
+     * still said "installed", so everything drawn afterwards came out with no
+     * CSS and no error. The rail's shadow root outlives every card in it, so
+     * the sheet belongs here.
+     *
+     * Idempotent by key and by connectedness, so a remount replaces the sheet
+     * rather than stacking a second copy of it.
+     *
+     * @param {string} key   the module's name, one sheet per key
+     * @param {string} css   the rules
+     * @returns {Element|null} the style element, or null with no rail on screen
+     */
+    function ensureStyleSheet(key, css) {
+      if (!doc || !dom || !dom.shadow || !key) return null;
+      var found = dom.shadow.querySelector("style[" + SHEET_ATTR + "='" + key + "']");
+      if (found && found.isConnected) return found;
+      if (found && found.parentNode) found.parentNode.removeChild(found);
+      var style = doc.createElement("style");
+      style.setAttribute(SHEET_ATTR, key);
+      markers.markChrome(style);
+      style.textContent = css;
+      dom.shadow.appendChild(style);
+      return style;
     }
 
     /**
@@ -11021,9 +11062,11 @@
       agentLine: agentLine,
       agentLineInfo: agentLineInfo,
       LIMIT_SEPARATE_STORAGE_NO_HELPER: LIMIT_SEPARATE_STORAGE_NO_HELPER,
+      SHEET_ATTR: SHEET_ATTR,
       mount: mount,
       unmount: unmount,
       isMounted: isMounted,
+      ensureStyleSheet: ensureStyleSheet,
       refreshScheme: refreshScheme,
       setReview: setReview,
       collapse: collapse,
@@ -11091,6 +11134,7 @@
     AGENT_STATE: AGENT_STATE,
     AGENT_TEXT: AGENT_TEXT,
     LIMIT_SEPARATE_STORAGE_NO_HELPER: LIMIT_SEPARATE_STORAGE_NO_HELPER,
+    SHEET_ATTR: SHEET_ATTR,
     timestampLabel: timestampLabel,
     paneForItem: paneForItem,
     createRail: createRail,
@@ -11295,11 +11339,11 @@
   // full-ink prose where a hint list should be, and two unstyled buttons run
   // together into "RewordDelete" under the reviewer's own sentence.
   //
-  // So the hosted path has its own sheet, injected into the rail's root the way
-  // 3A's Done tab injects its own (by appending it inside the first node this
-  // file attaches). It is small on purpose: the rail already owns the card, the
-  // quote, the state chip and the button register (`.cardact`), and this file
-  // adds only the three things it actually draws.
+  // So the hosted path has its own sheet, installed in the rail's own closed
+  // root through the rail's ensureStyleSheet. It is small on purpose: the rail
+  // already owns the card, the quote, the state chip and the button register
+  // (`.cardact`), and this file adds only the three things it actually draws.
+  var HOSTED_SHEET_KEY = "tab_active";
   var HOSTED_STYLE = [
     ".lahe-rail-foot{display:flex;flex-direction:column;gap:9px;padding:2px 0 0}",
     ".lahe-rail-footlabel{font-size:10px;font-weight:600;letter-spacing:.08em;",
@@ -11379,7 +11423,8 @@
     var noteHandle = null;
     var collapsed = false;
     var mounted = false;
-    var hostedStyleAttached = false;
+    // The sheet itself, not a boolean. See ensureHostedStyle.
+    var hostedStyleNode = null;
     var unsubscribe = null;
     // id -> row node. The reason there is no rebuild path.
     var rows = Object.create(null);
@@ -11500,13 +11545,30 @@
       return openNoteBox();
     }
 
-    /** The hosted stylesheet, once, inside the rail's own closed root. */
+    /**
+     * The hosted stylesheet, once, inside the rail's own closed root.
+     *
+     * Connectedness, not a boolean, and the rail's root rather than the foot.
+     * The sheet used to ride inside the footer this file builds; a footer that
+     * is removed on its own takes the sheet with it while a flag set once still
+     * says "installed", and every `.lahe-rail-*` element after that draws naked.
+     *
+     * `node` is the fallback host for a rail with no ensureStyleSheet on it
+     * (a stub in a unit test).
+     */
     function ensureHostedStyle(node) {
-      if (!hosted || hostedStyleAttached || !doc || !node) return;
+      if (!hosted || !doc) return;
+      if (hostedStyleNode && hostedStyleNode.isConnected) return;
+      if (rail && typeof rail.ensureStyleSheet === "function") {
+        hostedStyleNode = rail.ensureStyleSheet(HOSTED_SHEET_KEY, HOSTED_STYLE);
+        if (hostedStyleNode) return;
+      }
+      if (!node) return;
       var style = doc.createElement("style");
+      style.setAttribute("data-lahe-sheet", HOSTED_SHEET_KEY);
       style.textContent = HOSTED_STYLE;
       node.appendChild(style);
-      hostedStyleAttached = true;
+      hostedStyleNode = style;
     }
 
     // Every gesture, from the one gesture table (R43), rendered as keycaps
@@ -11567,6 +11629,9 @@
     function refresh() {
       if (!mounted && !listEl) return handle();
       if (!listEl && !hosted) return handle();
+      // Every paint, not only the mount that built the foot: the sheet lives in
+      // the rail's root, and a remount throws that root away.
+      ensureHostedStyle(footEl);
       var items = comments.outstanding().filter(function (item) {
         // The Active thread carries comments and notes only. Hand edits live in
         // the Edits tab (R32: neither buries the other); rendering a comment row
@@ -11815,9 +11880,9 @@
       noteHandle = null;
       rows = Object.create(null);
       mounted = false;
-      // The sheet went with the foot it was appended inside, so the next mount
-      // has to put it back or the rail's rows come back naked.
-      hostedStyleAttached = false;
+      // The sheet lives in the rail's root now, which a remount throws away, so
+      // the next mount asks for it again rather than trusting a stale handle.
+      hostedStyleNode = null;
     }
 
     function isMounted() {
@@ -12071,9 +12136,12 @@
   // A constant, so the test asserts the sentence the reviewer sees.
   var STALE_NOTICE = "answered an older version of this, so it is still open. Nothing was lost.";
 
-  // Injected once, into the rail's closed shadow root, by appending it inside
-  // the first node this file attaches to a card. The rail's own stylesheet is
-  // 1B's and is not edited; these rules add the two things this file draws.
+  // The name this file's sheet answers to inside the rail's closed root.
+  var SHEET_KEY = "tab_done";
+
+  // Injected once, into the rail's closed shadow root, through the rail's own
+  // ensureStyleSheet. The rail's own stylesheet is 1B's and is not edited;
+  // these rules add the things this file draws.
   var STYLE = [
     "." + ROW_CLASS + "{display:flex;flex-direction:column;gap:8px}",
     "." + ROW_CLASS + " .lahe-done-said{font-size:13.5px;line-height:1.5;color:var(--ink);",
@@ -12160,7 +12228,8 @@
     if (!reviewId) throw new TypeError("createDoneTab: a review id is required; storage is keyed by it");
 
     var mounted = false;
-    var styleAttached = false;
+    // The sheet itself, not a boolean. See ensureStyle.
+    var styleNode = null;
     // id -> row node, and id -> question node. Created once, updated in place,
     // removed only when the item leaves the state that drew them. The rail's
     // own law, applied to this file's nodes.
@@ -12196,13 +12265,33 @@
       return node;
     }
 
-    /** The one stylesheet this file adds, inside the rail's own closed root. */
+    /**
+     * The one stylesheet this file adds, inside the rail's own closed root.
+     *
+     * Connectedness, not a boolean, and the rail's root rather than a card.
+     * The sheet used to ride inside the first node this file attached, which
+     * was usually the question block. Answering the question removes that
+     * block, so the sheet went with it while the old flag still said
+     * "installed": the thread and the follow-up composer drawn a moment later
+     * came out with no CSS and no error, which is why the history read as one
+     * run-on line and the textarea sat on top of its own label.
+     *
+     * `node` is the fallback host for a rail that is not on screen (a headless
+     * stub in a unit test). A real rail takes the sheet into its shadow root.
+     */
     function ensureStyle(node) {
-      if (styleAttached || !doc || !node) return;
+      if (!doc) return;
+      if (styleNode && styleNode.isConnected) return;
+      if (rail && typeof rail.ensureStyleSheet === "function") {
+        styleNode = rail.ensureStyleSheet(SHEET_KEY, STYLE);
+        if (styleNode) return;
+      }
+      if (!node) return;
       var style = doc.createElement("style");
+      style.setAttribute("data-lahe-sheet", SHEET_KEY);
       style.textContent = STYLE;
       node.appendChild(style);
-      styleAttached = true;
+      styleNode = style;
     }
 
     function itemsNow() {
@@ -12406,6 +12495,9 @@
         paintUnseen();
         return api;
       }
+      // Every paint, not only the paints that build a node. A remount throws the
+      // rail's root away, and the sheet is in that root.
+      ensureStyle(null);
       var seen = Object.create(null);
 
       itemsNow().forEach(function (item) {
@@ -13109,7 +13201,7 @@
       composers = Object.create(null);
       follows = Object.create(null);
       reopens = Object.create(null);
-      styleAttached = false;
+      styleNode = null;
       mounted = false;
       return true;
     }
@@ -22237,7 +22329,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.1.0+b2a679d00e6b";
+  var VERSION = "0.1.0+7d9e0cb65bcb";
 
   var protocol = ns.protocol;
   var record = ns.record;

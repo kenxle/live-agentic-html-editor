@@ -192,11 +192,11 @@
   // full-ink prose where a hint list should be, and two unstyled buttons run
   // together into "RewordDelete" under the reviewer's own sentence.
   //
-  // So the hosted path has its own sheet, injected into the rail's root the way
-  // 3A's Done tab injects its own (by appending it inside the first node this
-  // file attaches). It is small on purpose: the rail already owns the card, the
-  // quote, the state chip and the button register (`.cardact`), and this file
-  // adds only the three things it actually draws.
+  // So the hosted path has its own sheet, installed in the rail's own closed
+  // root through the rail's ensureStyleSheet. It is small on purpose: the rail
+  // already owns the card, the quote, the state chip and the button register
+  // (`.cardact`), and this file adds only the three things it actually draws.
+  var HOSTED_SHEET_KEY = "tab_active";
   var HOSTED_STYLE = [
     ".lahe-rail-foot{display:flex;flex-direction:column;gap:9px;padding:2px 0 0}",
     ".lahe-rail-footlabel{font-size:10px;font-weight:600;letter-spacing:.08em;",
@@ -276,7 +276,8 @@
     var noteHandle = null;
     var collapsed = false;
     var mounted = false;
-    var hostedStyleAttached = false;
+    // The sheet itself, not a boolean. See ensureHostedStyle.
+    var hostedStyleNode = null;
     var unsubscribe = null;
     // id -> row node. The reason there is no rebuild path.
     var rows = Object.create(null);
@@ -397,13 +398,30 @@
       return openNoteBox();
     }
 
-    /** The hosted stylesheet, once, inside the rail's own closed root. */
+    /**
+     * The hosted stylesheet, once, inside the rail's own closed root.
+     *
+     * Connectedness, not a boolean, and the rail's root rather than the foot.
+     * The sheet used to ride inside the footer this file builds; a footer that
+     * is removed on its own takes the sheet with it while a flag set once still
+     * says "installed", and every `.lahe-rail-*` element after that draws naked.
+     *
+     * `node` is the fallback host for a rail with no ensureStyleSheet on it
+     * (a stub in a unit test).
+     */
     function ensureHostedStyle(node) {
-      if (!hosted || hostedStyleAttached || !doc || !node) return;
+      if (!hosted || !doc) return;
+      if (hostedStyleNode && hostedStyleNode.isConnected) return;
+      if (rail && typeof rail.ensureStyleSheet === "function") {
+        hostedStyleNode = rail.ensureStyleSheet(HOSTED_SHEET_KEY, HOSTED_STYLE);
+        if (hostedStyleNode) return;
+      }
+      if (!node) return;
       var style = doc.createElement("style");
+      style.setAttribute("data-lahe-sheet", HOSTED_SHEET_KEY);
       style.textContent = HOSTED_STYLE;
       node.appendChild(style);
-      hostedStyleAttached = true;
+      hostedStyleNode = style;
     }
 
     // Every gesture, from the one gesture table (R43), rendered as keycaps
@@ -464,6 +482,9 @@
     function refresh() {
       if (!mounted && !listEl) return handle();
       if (!listEl && !hosted) return handle();
+      // Every paint, not only the mount that built the foot: the sheet lives in
+      // the rail's root, and a remount throws that root away.
+      ensureHostedStyle(footEl);
       var items = comments.outstanding().filter(function (item) {
         // The Active thread carries comments and notes only. Hand edits live in
         // the Edits tab (R32: neither buries the other); rendering a comment row
@@ -712,9 +733,9 @@
       noteHandle = null;
       rows = Object.create(null);
       mounted = false;
-      // The sheet went with the foot it was appended inside, so the next mount
-      // has to put it back or the rail's rows come back naked.
-      hostedStyleAttached = false;
+      // The sheet lives in the rail's root now, which a remount throws away, so
+      // the next mount asks for it again rather than trusting a stale handle.
+      hostedStyleNode = null;
     }
 
     function isMounted() {

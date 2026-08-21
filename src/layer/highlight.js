@@ -470,7 +470,12 @@
     function addSurfaceStyle(key, cssText) {
       var s = surface();
       if (!s.root) return null;
-      if (surfaceStyles[key]) return surfaceStyles[key];
+      // Connectedness, not a cache hit. A remembered element whose root was torn
+      // down and rebuilt is not in any tree, and returning it would leave the
+      // caller's rules with nothing behind them.
+      var known = surfaceStyles[key];
+      var knownRoot = known && typeof known.getRootNode === "function" ? known.getRootNode() : s.root;
+      if (known && known.isConnected !== false && knownRoot === s.root) return known;
       var el = doc.createElement("style");
       el.textContent = cssText;
       s.root.appendChild(el);

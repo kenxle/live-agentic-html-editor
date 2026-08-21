@@ -234,6 +234,11 @@
   var LIMIT_SEPARATE_STORAGE_NO_HELPER =
     "A second window in a separate browser profile cannot be detected.";
 
+  // How a tab module's sheet names itself inside the rail's closed root, so
+  // ensureStyleSheet can find the one it already put there instead of adding a
+  // second copy on every remount.
+  var SHEET_ATTR = "data-lahe-sheet";
+
   var CSS = [
     // all: initial stops every inheritable property of the host page (font,
     // color, line-height, letter-spacing) from reaching the rail. A closed
@@ -951,6 +956,37 @@
 
     function isMounted() {
       return mounted;
+    }
+
+    /**
+     * Install a tab module's stylesheet in the rail's own closed root.
+     *
+     * A tab module used to carry its sheet inside the first node it put on a
+     * card. That node is removable: a question node goes when the question is
+     * answered, a row goes when the item leaves the pane, and the whole root
+     * goes on a remount. The sheet left with it and the module's one-shot flag
+     * still said "installed", so everything drawn afterwards came out with no
+     * CSS and no error. The rail's shadow root outlives every card in it, so
+     * the sheet belongs here.
+     *
+     * Idempotent by key and by connectedness, so a remount replaces the sheet
+     * rather than stacking a second copy of it.
+     *
+     * @param {string} key   the module's name, one sheet per key
+     * @param {string} css   the rules
+     * @returns {Element|null} the style element, or null with no rail on screen
+     */
+    function ensureStyleSheet(key, css) {
+      if (!doc || !dom || !dom.shadow || !key) return null;
+      var found = dom.shadow.querySelector("style[" + SHEET_ATTR + "='" + key + "']");
+      if (found && found.isConnected) return found;
+      if (found && found.parentNode) found.parentNode.removeChild(found);
+      var style = doc.createElement("style");
+      style.setAttribute(SHEET_ATTR, key);
+      markers.markChrome(style);
+      style.textContent = css;
+      dom.shadow.appendChild(style);
+      return style;
     }
 
     /**
@@ -2441,9 +2477,11 @@
       agentLine: agentLine,
       agentLineInfo: agentLineInfo,
       LIMIT_SEPARATE_STORAGE_NO_HELPER: LIMIT_SEPARATE_STORAGE_NO_HELPER,
+      SHEET_ATTR: SHEET_ATTR,
       mount: mount,
       unmount: unmount,
       isMounted: isMounted,
+      ensureStyleSheet: ensureStyleSheet,
       refreshScheme: refreshScheme,
       setReview: setReview,
       collapse: collapse,
@@ -2511,6 +2549,7 @@
     AGENT_STATE: AGENT_STATE,
     AGENT_TEXT: AGENT_TEXT,
     LIMIT_SEPARATE_STORAGE_NO_HELPER: LIMIT_SEPARATE_STORAGE_NO_HELPER,
+    SHEET_ATTR: SHEET_ATTR,
     timestampLabel: timestampLabel,
     paneForItem: paneForItem,
     createRail: createRail,
