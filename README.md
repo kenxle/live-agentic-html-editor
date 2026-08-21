@@ -33,7 +33,7 @@ No matter how many files were used to create the HTML page, Lahe knows how to ed
 
 **Working with the source**
 
-- **Many source files, one page to review.** A page built from templates, includes, or partials is reviewed as a single built page. The agent edits the underlying file.
+- **Many source files, one page to review.** A page built from templates, includes, or partials is reviewed as a single built page. The agent edits the underlying files.
 - **Markdown or HTML.** A `.md` file (or multiple) is rendered for editing, diagrams included. Your prompt is assembled from multiple underlying modular files? No worries, live edit the rendered output as a single page and let your agent edit the underlying template files.
 
 **Many reviews, many agents**
