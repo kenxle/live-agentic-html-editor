@@ -13,7 +13,7 @@ once, and after that a plain sentence works:
 
 | Command | What it does |
 | --- | --- |
-| `lahe review path/to/page.html` | Start a review and isolated agent session: writes the script line, starts or reuses its static server and the shared helper, then prints the URL plus the wake, monitor, drain, and close commands |
+| `lahe review path/to/page.html` | Start a review and isolated agent session: starts or reuses its static server and the shared helper, then prints one URL plus the wake, monitor, drain, and close commands. It writes NOTHING into the page's folder: the server puts the script line into each response instead |
 | `lahe review another.html --session <id>` | Add a later document to the same agent workstream without receiving another agent's comments |
 | `lahe add path/to/project --origin http://localhost:3000` | Dev-server variant: edits nothing, prints a commented snippet that you must wrap in your framework's development-only conditional |
 | `lahe add ... --new` | Mint a fresh review even though the page already carries one |
@@ -84,12 +84,15 @@ item's age when neither is true.
 
 **If the page is build output**, an agent should rebuild before it reports an
 item handled: `handled` is supposed to mean your page shows the change. It does
-not have to re-run `lahe add` afterwards. A rebuild strips the script line out
-of the built page, and a running helper puts it back: it is already watching
-that file, so when the file returns without the line, the helper writes the same
-line back (same review, same token) and refreshes the fallback copy beside the
-page. `lahe status` says `script line re-injected after a rebuild` when that
-happened. Re-run `add` when no helper is up, when the page is served from a new
+not have to re-run `lahe add` afterwards, and on the served path there is nothing
+for a rebuild to strip: the script line lives in the response, not in the file,
+so a rebuild that rewrites the whole page cannot take the rail with it. The
+on-disk line still exists for a page opened from disk or added with plain `lahe
+add`, and there a running helper puts a stripped line back: it is already
+watching that file, so when the file returns without the line, the helper writes
+the same line back (same review, same token) and refreshes the fallback copy
+beside the page. `lahe status` says which of the two is carrying your page.
+Re-run `add` when no helper is up, when the page is served from a new
 origin, or to record a `--source` path. You do not have to reload: the page
 updates itself. The helper watches
 the file the review was added at, and when a rebuild lands, your page reloads

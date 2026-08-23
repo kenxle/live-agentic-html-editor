@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.1.0+f36965f2f245
+ * version 0.1.0+7d67039ab78e
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.1.0+f36965f2f245";
+  g.LAHE.version = "0.1.0+7d67039ab78e";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -8915,6 +8915,13 @@
 // as the library's, holding everything the library draws. The page's CSS cannot
 // reach into it and its CSS cannot reach the page.
 //
+// Print: the whole shadow surface (the rail, the boxes, the pick outline, the
+// tab panes, all of it) is one host, so hiding it for print is one `:host`
+// rule scoped to `@media print`, added inside the shadow root when the surface
+// is built. The wash the highlight rules above paint is scoped the other way,
+// to `@media not print`, for the same reason: a printed page is the document
+// changing hands, not the document plus what a reviewer marked up on it.
+//
 // Dual-environment module. See docs/CONTRACTS.md, "How a shared module loads".
 (function (root, factory) {
   "use strict";
@@ -8970,6 +8977,13 @@
   // one host 2D's remount contract re-creates.
   var SURFACE_ID = markers.OVERLAY_ROOT_ID;
 
+  // Hides the whole surface for print. Lives inside the surface's own closed
+  // root and reads :host, which from in there means "the element this shadow
+  // root belongs to": the one div at SURFACE_ID, so the rail, the comment
+  // boxes, the pick-mode outline and everything else the library ever draws
+  // goes with it, without naming any of them.
+  var PRINT_HOST_STYLE_TEXT = ["@media print {", "  :host { display: none !important; }", "}"].join("\n");
+
   // Highlight colors, as light a touch as a highlight can be and still read.
   // Written with color-mix-free plain rgba so a page-level stylesheet cannot
   // depend on anything the host page defines.
@@ -8980,7 +8994,17 @@
   // an amber pill in the rail inches away are two languages for one colour, and
   // the reviewer has to learn which is which. So the wash is the same indigo the
   // rail's accent is, and it reads as ours rather than as a warning.
+  // Wrapped in one `@media not print` condition rather than left bare: a
+  // printed page is the document changing hands, and a reviewer's wash over
+  // someone else's sentence does not belong in what gets handed over. Printing
+  // the page is also the moment the wash would be least useful even to the
+  // reviewer, since nothing on paper is clickable back to the comment it marks.
+  // Wrapping is deliberate over deleting the rules outright: under screen media
+  // the three rules are unchanged, and this is still the one page-level
+  // stylesheet holding only namespaced highlight rules (D8), just scoped to
+  // when they should paint.
   var STYLE_TEXT = [
+    "@media not print {",
     "::highlight(" + NAME.COMMENT + ") {",
     "  background-color: rgba(60, 86, 165, 0.15);",
     "  color: inherit;",
@@ -8996,6 +9020,7 @@
     "::highlight(" + NAME.EMPHASIS + ") {",
     "  background-color: rgba(60, 86, 165, 0.38);",
     "  color: inherit;",
+    "}",
     "}"
   ].join("\n");
 
@@ -9311,6 +9336,17 @@
       (doc.body || doc.documentElement).appendChild(host);
       surfaceHost = host;
       surfaceRoot = root;
+      // Print: everything the library draws is a descendant of this one host,
+      // so hiding it for print is one rule against :host, from inside its own
+      // closed root rather than as a second page-level stylesheet (D8 allows
+      // exactly one, spent on the highlight rules). !important beats nothing:
+      // the host's own inline style (above) never sets `display`, so there is
+      // no inline value for this rule to lose to.
+      if (root) {
+        var printStyle = doc.createElement("style");
+        printStyle.textContent = PRINT_HOST_STYLE_TEXT;
+        root.appendChild(printStyle);
+      }
       // Stamped on the host, so every stylesheet inside the closed root selects
       // its dark rules with :host([data-lahe-scheme='dark']) instead of a media
       // query. The page decides; see schemeForPage.
@@ -9403,6 +9439,7 @@
     SURFACE_ID: SURFACE_ID,
     SCHEME_ATTR: SCHEME_ATTR,
     STYLE_TEXT: STYLE_TEXT,
+    PRINT_HOST_STYLE_TEXT: PRINT_HOST_STYLE_TEXT,
     EMPHASIS_MS: EMPHASIS_MS,
     EMPHASIS_KEY: EMPHASIS_KEY,
     schemeForPage: schemeForPage,
@@ -23232,7 +23269,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.1.0+f36965f2f245";
+  var VERSION = "0.1.0+7d67039ab78e";
 
   var protocol = ns.protocol;
   var record = ns.record;
