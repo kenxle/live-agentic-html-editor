@@ -66,6 +66,12 @@
 // browser and no jsdom, while test/browser/anchor_engine.spec.js runs the same
 // bar against Chromium on the real fixture pages.
 //
+// One function asks a sixth, and only for the agent's benefit, never for a
+// match: openingTagOf reads a node's live `attributes` list to serialize its
+// opening tag. A node that has no such list is asked for a named set of
+// attributes with the same getAttribute as everything else here, so the five
+// questions still buy the whole engine on a simulated node.
+//
 // Dual-environment module. See docs/CONTRACTS.md, "How a shared module loads".
 (function (root, factory) {
   "use strict";
