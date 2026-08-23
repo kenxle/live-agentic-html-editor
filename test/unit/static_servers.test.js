@@ -192,6 +192,62 @@ test("injection still matches after restartAll, which re-derives root from meta 
   assert.equal(scriptLine.reviewAlreadyInFile(res.body), f.review.id, "the restarted server still injects the tag");
 });
 
+// THE LIBRARY COMES FROM THIS SERVER NOW.
+//
+// `add` used to drop a copy of the built bundle beside the reviewed page so the
+// script line's onerror had something relative to load with the helper down.
+// That folder is usually a git checkout, `git add -A` committed the bundle and
+// the tagged page together, and the deployed site then brought the review rail
+// up for every visitor. Nothing is written beside the page any more, so this
+// route is what keeps the helper-is-down case working: the server that answered
+// the request for the page answers for the library too.
+test("the static server publishes the built library at its own reserved route", async (t) => {
+  const f = injectFixture();
+  const server = await staticServers.start({ dir: f.state, sessionId: "s_inject_library", root: f.root });
+  t.after(async () => { await staticServers.stopAll(f.state, "s_inject_library"); });
+
+  const res = await request(server.meta, staticServers.LIBRARY_PATH);
+  assert.equal(res.status, 200);
+  assert.match(res.headers["content-type"], /^text\/javascript/);
+  assert.equal(
+    res.body,
+    fs.readFileSync(path.join(__dirname, "..", "..", "dist", "lahe-layer.js"), "utf8"),
+    "byte for byte the bundle this clone built"
+  );
+  assert.equal(
+    fs.existsSync(path.join(f.root, "lahe-layer.js")),
+    false,
+    "and no copy of it was written into the reviewed page's own folder"
+  );
+});
+
+test("the injected tag loads the library from this server and keeps the helper as the fallback", async (t) => {
+  const f = injectFixture();
+  const server = await staticServers.start({ dir: f.state, sessionId: "s_inject_src", root: f.root });
+  t.after(async () => { await staticServers.stopAll(f.state, "s_inject_src"); });
+
+  const res = await request(server.meta, "/page.html");
+  const src = /<script src="([^"]+)"/.exec(res.body);
+  assert.ok(src, "the injected tag is there:\n" + res.body);
+  assert.equal(
+    src[1],
+    staticServers.LIBRARY_PATH,
+    "a root-absolute path, so it resolves back to this server whatever host name the reviewer typed"
+  );
+
+  const fallback = /data-lahe-fallback="([^"]+)"/.exec(res.body);
+  assert.ok(fallback, "and it still carries a fallback");
+  assert.match(
+    fallback[1],
+    /^http:\/\/127\.0\.0\.1:\d+\/lahe-layer\.js$/,
+    "the helper's own URL, not a relative sibling name nothing writes any more"
+  );
+
+  // The relative form is the one that shipped to a deployed site and loaded the
+  // rail for every visitor. It must not be what an injected page carries.
+  assert.equal(fallback[1].indexOf("http://"), 0, "absolute, so it can only ever mean this machine's helper");
+});
+
 test("a non-target HTML file in the same folder is served untouched", async (t) => {
   const f = injectFixture();
   const otherHtml = "<!doctype html>\n<html>\n<body>\n<p>not part of any review</p>\n</body>\n</html>\n";

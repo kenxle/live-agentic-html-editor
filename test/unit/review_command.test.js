@@ -164,6 +164,65 @@ test("lahe review on a plain static file prints exactly one openable URL and no 
   }
 });
 
+// THE REVIEWED PAGE'S OWN FOLDER IS NOT THIS TOOL'S TO WRITE IN.
+//
+// `lahe review` used to put two files there: the script line into the page, and
+// a copy of the built library beside it. That folder is very often a git
+// checkout, so an ordinary `git add -A` committed both, and this repo's own
+// tree carried four tagged HTML files and two committed bundles because of it.
+// The tag is the dangerous half: its onerror names the fallback by a RELATIVE
+// path, so once both files ship to a deployed site the localhost src fails, the
+// sibling bundle loads, and the review rail comes up for every visitor.
+//
+// `lahe review` owns the server that answers for the page, so the line goes in
+// the response instead and the library comes off that server's own reserved
+// route. A plain `lahe add` has no server to inject for it and keeps writing
+// both halves, which is what the second half of this test pins.
+test("lahe review writes nothing into the reviewed page's folder, and a plain add still does", async () => {
+  const root = tempDir("lahe-review-clean-");
+  const state = path.join(tempDir("lahe-review-clean-state-"), "state");
+  const target = path.join(root, "report.html");
+  const onDisk = "<!doctype html>\n<html><body><h1>Report</h1></body></html>\n";
+  fs.writeFileSync(target, onDisk);
+  const sibling = path.join(root, "lahe-layer.js");
+  const port = await freePort();
+
+  const run = runReview([target, "--state-dir", state, "--port", String(port)]);
+  assert.equal(run.code, 0, run.stdout + run.stderr);
+  const sessionId = run.stdout.match(/^\s*session\s+(s_[a-f0-9]+)/m)[1];
+  const reviewId = run.stdout.match(/^\s*review\s+(r[a-f0-9]+)/m)[1];
+
+  try {
+    assert.equal(fs.readFileSync(target, "utf8"), onDisk, "the page on disk is byte for byte what it was");
+    assert.equal(fs.existsSync(sibling), false, "and no copy of the library was left beside it");
+    assert.equal(fs.readdirSync(root).join(","), "report.html", "the folder holds exactly what it held");
+
+    // Nothing is lost by that: the rail arrives with the page, from the server
+    // that answered the request, and it names that same server for the library.
+    const openUrl = run.stdout.match(/^\s*open\s+(http:\/\/\S+)/m)[1];
+    const served = await (await fetch(openUrl)).text();
+    assert.ok(served.indexOf('data-lahe-review="' + reviewId + '"') !== -1, "the response carries the tag:\n" + served);
+    assert.ok(served.indexOf('src="/.lahe-library/lahe-layer.js"') !== -1, "and loads the library from that server");
+    assert.equal(served.indexOf('data-lahe-fallback="lahe-layer.js"'), -1, "nothing names a sibling file that is not there");
+
+    // The advanced command, run directly, has no server of ours behind it. Both
+    // halves are written, exactly as they always were.
+    const added = execFileSync(
+      process.execPath,
+      [BIN, "add", target, "--state-dir", state, "--port", String(port), "--session", sessionId],
+      { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8" }
+    );
+    assert.match(added, /The script line is in report\.html/);
+    assert.ok(
+      fs.readFileSync(target, "utf8").indexOf('data-lahe-review="' + reviewId + '"') !== -1,
+      "a plain add writes the line into the file"
+    );
+    assert.equal(fs.existsSync(sibling), true, "and copies the library beside the page");
+  } finally {
+    closeSession(sessionId, state, port);
+  }
+});
+
 test("lahe review on a Markdown file records the source, and an agent reads it as known", async () => {
   const root = tempDir("lahe-review-md-");
   const state = path.join(tempDir("lahe-review-md-state-"), "state");

@@ -761,6 +761,49 @@ test("--remove takes the script line out and leaves everything else in the page 
   }
 });
 
+// --remove is the remediation command for a page that is already carrying both
+// halves, and the bundle beside it is the more dangerous one: the line's onerror
+// names it by a RELATIVE path, so a page and a bundle that ship to a deployed
+// site together bring the review rail up for every visitor. Leaving it there
+// with "delete it whenever you like" left the hazard where it was.
+test("--remove takes the fallback copy of the library out too", async () => {
+  const work = await aWorkspace();
+  const sibling = path.join(work.dir, "lahe-layer.js");
+  try {
+    const run = work.add();
+    assert.equal(run.code, 0, run.stdout + run.stderr);
+    assert.equal(fs.existsSync(sibling), true, "add put the fallback copy beside the page");
+
+    const removed = runAdd([work.page, "--remove"]);
+    assert.equal(removed.code, 0, removed.stdout + removed.stderr);
+    assert.equal(fs.existsSync(sibling), false, "and --remove took it back out");
+    assert.match(removed.stdout, /Removed .*lahe-layer\.js/, "and said which file it removed");
+  } finally {
+    await work.stop();
+  }
+});
+
+test("--remove leaves a file named lahe-layer.js that is not the built library alone", async () => {
+  const work = await aWorkspace();
+  const sibling = path.join(work.dir, "lahe-layer.js");
+  try {
+    const run = work.add();
+    assert.equal(run.code, 0, run.stdout + run.stderr);
+
+    // Somebody's own file that happens to have this name. Nothing --remove was
+    // asked to do justifies deleting it.
+    const mine = "// my own bundle, which happens to be called this\n";
+    fs.writeFileSync(sibling, mine);
+
+    const removed = runAdd([work.page, "--remove"]);
+    assert.equal(removed.code, 0, removed.stdout + removed.stderr);
+    assert.equal(fs.readFileSync(sibling, "utf8"), mine, "the file is untouched");
+    assert.match(removed.stdout, /left alone/, "and --remove says it left it there");
+  } finally {
+    await work.stop();
+  }
+});
+
 // The fallback form put an onerror attribute on the line, and EXISTING_TAG is
 // what finds the line again. It is one regex behind place, replace and remove,
 // so all three are walked here on the real pinned form.
