@@ -76,6 +76,58 @@ ad hoc script rather than a project build, re-run
 `lahe review path/to/file.html --session <agent-session-id>` right after the
 script writes, before you tell them to look.
 
+## Which kind of review is this? Find your row before you run anything
+
+The command is nearly always `lahe review <target>`. What changes by row is where
+your edits go and what `handled` costs you. Picking the wrong row is how an agent
+edits generated HTML that the next build throws away.
+
+| What your human is looking at | Open it with | Where your edits go | What `handled` needs |
+| --- | --- | --- | --- |
+| A Markdown file, on its own | `lahe review path/to/file.md` | the `.md` itself | rerun the same `lahe review` command, then check the rendered page shows it |
+| HTML that IS the source: a hand-written one-pager, a mockup | `lahe review path/to/page.html` | that HTML file | the change is in the file and on their screen |
+| HTML that is BUILD OUTPUT | `lahe review path/to/page.html --source path/to/generator` | the generator, never the page | rerun the build, grep the built HTML for the change, then reply |
+| A document built from several sources: many `.md`, templates, citations | run the project's real build first, then `lahe review path/to/build/report.html --source path/to/build-entrypoint` | the source fragment the item points at | the canonical build, rerun and verified |
+| Your own app running in dev | `lahe review path/to/project --origin http://localhost:3000` | your app's code | the change is live in the running app |
+| A page with images, CSS or fonts beside it | as its row above | as its row above | see "assets" below, this one has a trap |
+| A page whose own stack hot-reloads it | as its row above | as its row above | nothing extra, the two reload mechanisms do not fight |
+
+**More than one file is not a separate row.** One review spans pages: run
+`lahe review` again with the same `--session <id>`. Each page shows the reviewer
+only its own items, while `review.json` and `lahe status` show them all.
+
+**The assets trap.** `lahe review page.html` roots its server at the page's OWN
+folder. An asset beside the page loads. An asset ABOVE it does not:
+
+```
+page/index.html  ->  <img src="local.css">        200
+page/index.html  ->  <img src="../assets/x.png">  404
+```
+
+Opened from disk that same page looks perfect, because the browser resolves the
+path on the filesystem with no root to escape. So this is the one case where
+`file://` works and serving does not, and the reviewer sees broken images on a
+page you told them was fine. Before you hand the link over, load it yourself and
+check the assets resolve. If they live above the page, move them under it or put
+the page where they are.
+
+**Your app in dev edits nothing.** That row is the only one where LAHE does not
+write or serve anything. It prints one script line with a comment, and the
+comment is NOT a guard. Wrap it in the framework's real development-only
+conditional before it goes anywhere near a layout template.
+
+### Before it leaves the building
+
+This applies to every row, and it is the step people skip. When the page is about
+to become something else, a PDF, a deploy, an email, an attachment:
+
+```sh
+lahe add path/to/page.html --remove   # takes the script line back out
+lahe session close <agent-session-id> # stops the server and the helper
+```
+
+For the dev-server row, delete the line you pasted. Nobody else will.
+
 ## Step 1: install (once per machine)
 
 Requires Node 18+ (`node --version`). There is no install step: the tool has no

@@ -59,6 +59,33 @@ three logo options on a page, a chart to look at, or a draft to read, that is a
 review. Serve it. Never hand over a page you opened from disk because you
 created it a moment ago and a server felt like ceremony.
 
+**Find your row before you run anything.** The command barely changes. What
+changes is where your edits go, and picking wrong is how an agent edits generated
+HTML that the next build throws away.
+
+| What they are looking at | Open it with | Your edits go to |
+| --- | --- | --- |
+| a Markdown file | `lahe review file.md` | the `.md`, then rerun the same command |
+| HTML that IS the source | `lahe review page.html` | that HTML file |
+| HTML that is build output | `lahe review page.html --source <generator>` | the generator, never the page |
+| a doc built from many sources | run the real build, then review its output with `--source` | the source fragment |
+| their app in dev | `lahe review <project> --origin http://localhost:3000` | the app's code |
+
+More pages is not a new row: rerun `lahe review` with the same `--session`.
+
+Two traps worth knowing before you hand the link over:
+
+- **Assets above the page do not load.** The server is rooted at the page's own
+  folder, so `../assets/x.png` is a 404 even though it works fine opened from
+  disk. Load the page yourself and check the images before you hand it over.
+- **The dev-server row edits nothing.** It prints a script line with a comment,
+  and the comment is not a guard. Wrap it in the framework's real
+  development-only conditional before it goes near a layout.
+
+**When it becomes a deliverable**, a PDF, a deploy, an email: run
+`lahe add path/to/page.html --remove`, then `lahe session close <id>`. For the
+dev-server row, delete the line that was pasted.
+
 **Hand back exactly one link: the `open` line, verbatim.** Not a file path, not
 the bare server root, not two options. If you already opened the file from disk
 before starting the review, tell them to close that tab. A reviewer with two
