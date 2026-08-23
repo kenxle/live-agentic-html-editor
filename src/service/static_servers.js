@@ -145,8 +145,12 @@ async function start(options) {
   // symlink (macOS: /var/... -> /private/var/...), those two disagree, so the
   // pre-realpath root travels alongside it, for matching a request's file back
   // to a review's recorded target path (see logicalCandidate in runServer).
-  var logicalRoot = path.resolve(options.root);
-  var root = fs.realpathSync(logicalRoot);
+  // restartAll passes the ORIGINAL logicalRoot back in (read off this server's
+  // own meta.json), because `meta.root` it also reads is already realpathed and
+  // resolving it again is a no-op: without this a restart would quietly lose
+  // the pre-realpath identity and, on a symlinked temp dir, injection with it.
+  var logicalRoot = options.logicalRoot ? path.resolve(options.logicalRoot) : path.resolve(options.root);
+  var root = fs.realpathSync(path.resolve(options.root));
   var id = serverId(root);
   var file = stateDir.staticServerPath(dir, sessionId, id);
   var existing = readJson(file);
@@ -202,10 +206,12 @@ async function stopAll(dir, sessionId) {
 }
 
 async function restartAll(dir, sessionId) {
-  var roots = list(dir, sessionId).map(function (meta) { return meta.root; });
+  var entries = list(dir, sessionId).map(function (meta) {
+    return { root: meta.root, logicalRoot: typeof meta.logical_root === "string" ? meta.logical_root : null };
+  });
   var started = 0;
-  for (var i = 0; i < roots.length; i += 1) {
-    var result = await start({ dir: dir, sessionId: sessionId, root: roots[i] });
+  for (var i = 0; i < entries.length; i += 1) {
+    var result = await start({ dir: dir, sessionId: sessionId, root: entries[i].root, logicalRoot: entries[i].logicalRoot });
     if (result.started) started += 1;
   }
   return started;
@@ -465,6 +471,7 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
       session_id: sessionId,
       instance: instance,
       root: root,
+      logical_root: logicalRoot,
       host: HOST,
       port: server.address().port,
       pid: process.pid,

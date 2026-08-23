@@ -175,6 +175,23 @@ test("a file that already carries this review's tag is served with exactly one, 
   assert.equal(res.body, onDiskBefore, "an already-tagged page is served byte for byte unchanged");
 });
 
+test("injection still matches after restartAll, which re-derives root from meta rather than the original call", async (t) => {
+  const f = injectFixture();
+  const first = await staticServers.start({ dir: f.state, sessionId: "s_inject_restart", root: f.root });
+  await staticServers.stopAll(f.state, "s_inject_restart");
+  assert.equal(await staticServers.isExactServer(first.meta), false, "stopped before the restart");
+
+  const restarted = await staticServers.restartAll(f.state, "s_inject_restart");
+  t.after(async () => { await staticServers.stopAll(f.state, "s_inject_restart"); });
+  assert.equal(restarted, 1);
+
+  const servers = staticServers.list(f.state, "s_inject_restart").filter((m) => !m.stopped_at);
+  assert.equal(servers.length, 1);
+  const res = await request(servers[0], "/page.html");
+  assert.equal(res.status, 200);
+  assert.equal(scriptLine.reviewAlreadyInFile(res.body), f.review.id, "the restarted server still injects the tag");
+});
+
 test("a non-target HTML file in the same folder is served untouched", async (t) => {
   const f = injectFixture();
   const otherHtml = "<!doctype html>\n<html>\n<body>\n<p>not part of any review</p>\n</body>\n</html>\n";
