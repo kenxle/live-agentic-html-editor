@@ -28,10 +28,16 @@
 //
 // ::highlight() rules only work from a stylesheet in the page's own document; a
 // shadow root cannot provide them. So the library adds exactly one page-level
-// stylesheet, containing only its own namespaced highlight rules, marked as the
-// library's, and removed on teardown. That is the only page-level stylesheet
-// the library ever adds, and ranked test 18 asserts the count rather than
-// asserting zero.
+// stylesheet, marked as the library's, and removed on teardown. That is the
+// only page-level stylesheet the library ever adds, and ranked test 18 asserts
+// the count rather than asserting zero.
+//
+// It holds the namespaced highlight rules and, since 2026-08-23, two more:
+// what <not-bold> and <not-italic> mean. They are here for the same reason the
+// highlight rules are, which is that a page-level rule is the only place they
+// can work from, and they are safe here for a reason of their own: they can
+// only ever match an element the library itself put on the page at the
+// reviewer's request. The reasoning is beside them, at STYLE_TEXT.
 //
 // The highlight names are namespaced (`lahe-`) so a page using the API itself
 // cannot collide with ours, and ours cannot quietly overwrite theirs.
@@ -55,11 +61,11 @@
   var browser = typeof window !== "undefined" && !!window.document;
   if (browser) {
     root.LAHE = root.LAHE || {};
-    root.LAHE.highlight = factory(root.LAHE.markers);
+    root.LAHE.highlight = factory(root.LAHE.markers, root.LAHE.normalize);
   } else {
-    module.exports = factory(require("../shared/markers.js"));
+    module.exports = factory(require("../shared/markers.js"), require("../shared/normalize.js"));
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (markers) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, normalize) {
   "use strict";
 
   // The namespace. Every name the library registers starts with this, so a page
@@ -148,7 +154,24 @@
     "  background-color: rgba(60, 86, 165, 0.38);",
     "  color: inherit;",
     "}",
-    "}"
+    "}",
+    // D8's exception, second half, added 2026-08-23.
+    //
+    // These two rules are the only thing in this file that is not a highlight,
+    // and they are here because they are the same question: a page-level rule
+    // is the only place they can work from. HTML has no element that means "not
+    // bold", so a reviewer taking bold off a phrase that a page stylesheet made
+    // bold has nothing to say it with. The layer writes <not-bold> (see the
+    // mint note in normalize.js) and these rules are what make it true on the
+    // page. Without them the reviewer presses B, a record appears in the rail,
+    // and the words in front of them do not change.
+    //
+    // D8's guarantee is intact: the page still renders exactly as it does
+    // without the library, because these can only match an element the library
+    // itself put there at the reviewer's request. They go with the sheet on
+    // teardown, like everything else here.
+    normalize.NOT_BOLD_TAG + " { font-weight: normal; }",
+    normalize.NOT_ITALIC_TAG + " { font-style: normal; }"
   ].join("\n");
 
   // ---------------------------------------------------------------------------

@@ -321,6 +321,60 @@
     return null;
   }
 
+  // ---------------------------------------------------------------------------
+  // What pressing B or I means
+  // ---------------------------------------------------------------------------
+  //
+  // The same shape as the break above, for the same reason. A formatting button
+  // is one button doing two opposite things, and which one it is doing is
+  // decided by what the reviewer is looking at, never by the engine:
+  //
+  //   the words are not bold yet   the reviewer is asking for bold
+  //   the words already look bold  the reviewer is asking for it to come off,
+  //                                and it does not matter whether they look
+  //                                bold because of a <strong> or because of a
+  //                                rule in the page's stylesheet
+  //
+  // That second row is the whole reason this exists. Left to the engine, taking
+  // bold off text a stylesheet made bold produced a style attribute the tool
+  // cannot keep, and taking italic off text a stylesheet made italic produced
+  // nothing at all in Firefox. Measured in all three engines on 2026-08-23:
+  //
+  //   Chromium, WebKit  <span style="font-weight: normal">, both formats
+  //   Firefox           the same for bold, and for italic no change whatever:
+  //                     the click did not happen
+  //
+  // The layer reads the intent here and then writes the markup itself, so all
+  // three record the same thing (src/layer/editing.js, FORMAT_SHAPE).
+  var FORMAT = {
+    APPLY: "apply",
+    REMOVE: "remove"
+  };
+
+  // The closed list R24 allows for v1. Named here because this file is where
+  // the tool says what a gesture means, and a command outside the list is not a
+  // gesture this tool has.
+  var FORMAT_COMMANDS = ["bold", "italic"];
+
+  /**
+   * Which way a formatting command is meant to go, or null when the command is
+   * not one of the two this tool has.
+   *
+   * Pure over a plain descriptor, like everything else in this file, so the
+   * rule is unit-testable with no browser.
+   *
+   * @param {Object} input
+   *   command  "bold" or "italic"
+   *   active   true when the selected words already carry that format, however
+   *            they came to carry it
+   * @returns {(string|null)} a FORMAT value, or null
+   */
+  function formatIntentFor(input) {
+    var e = input || {};
+    if (FORMAT_COMMANDS.indexOf(e.command) === -1) return null;
+    return e.active === true ? FORMAT.REMOVE : FORMAT.APPLY;
+  }
+
   // KeyboardEvent.key is lowercase unless Shift is held, and it is the layout's
   // character. Comparing case-insensitively is what makes Cmd-Shift-C work.
   function isKey(key, letter) {
@@ -355,9 +409,12 @@
   var api = {
     GESTURE: GESTURE,
     BREAK: BREAK,
+    FORMAT: FORMAT,
+    FORMAT_COMMANDS: FORMAT_COMMANDS,
     TABLE: TABLE,
     gestureFor: gestureFor,
     breakIntentFor: breakIntentFor,
+    formatIntentFor: formatIntentFor,
     isScrollbarPress: isScrollbarPress,
     hintFor: hintFor,
     hintLines: hintLines,

@@ -200,7 +200,9 @@
   function tagCounts(html) {
     var counts = Object.create(null);
     var reduced = normalize.structureOf(String(html || ""));
-    var re = /<([a-z0-9]+)>/g;
+    // The hyphen is not decoration: two of the four tags the structural view
+    // can hold are the reset tags, and their names carry one.
+    var re = /<([a-z0-9-]+)>/g;
     var found = re.exec(reduced);
     while (found) {
       counts[found[1]] = (counts[found[1]] || 0) + 1;
@@ -208,6 +210,12 @@
     }
     return counts;
   }
+
+  // What the reset tags are called on a card. Ken's surface reads in words
+  // wherever the markup is the tool's own rather than the page author's.
+  var RESET_PHRASE = {};
+  RESET_PHRASE[normalize.NOT_BOLD_TAG] = { off: "took the bold off", back: "put the bold back" };
+  RESET_PHRASE[normalize.NOT_ITALIC_TAG] = { off: "took the italic off", back: "put the italic back" };
 
   function structuralSummary(beforeHtml, afterHtml) {
     var before = tagCounts(beforeHtml);
@@ -221,16 +229,26 @@
     });
     var added = [];
     var removed = [];
+    var resets = [];
     Object.keys(names)
       .sort()
       .forEach(function (name) {
         var delta = (after[name] || 0) - (before[name] || 0);
+        if (delta === 0) return;
+        // The two reset tags are the tool's own coinage, minted because HTML
+        // has no element that means "not bold". The reviewer never typed one
+        // and should not have to read one, so those two are said in words.
+        if (RESET_PHRASE[name]) {
+          resets.push(delta > 0 ? RESET_PHRASE[name].off : RESET_PHRASE[name].back);
+          return;
+        }
         if (delta > 0) added.push("<" + name + ">" + (delta > 1 ? " x" + delta : ""));
         if (delta < 0) removed.push("<" + name + ">" + (delta < -1 ? " x" + -delta : ""));
       });
     var parts = [];
     if (added.length) parts.push("added " + added.join(" "));
     if (removed.length) parts.push("removed " + removed.join(" "));
+    for (var r = 0; r < resets.length; r += 1) parts.push(resets[r]);
     // Same tags, different arrangement. Saying "the markup changed" is the
     // honest answer; naming a tag that did not change would not be.
     if (!parts.length) return "the markup changed";

@@ -72,3 +72,21 @@ test("the structural summary reads the structural view, so a wrapper the compari
     "removed <strong> x2"
   );
 });
+
+test("taking a format off is said in words, because the reviewer never typed the tag", () => {
+  // The reset tags are the tool's own coinage, minted because HTML has no
+  // element that means "not bold". The rail is the reviewer's surface, so it
+  // says what happened rather than showing them a tag they did not write.
+  assert.equal(
+    tabEdits.structuralSummary("Runners come back too fast.", "Runners come back <not-bold>too fast</not-bold>."),
+    "took the bold off"
+  );
+  assert.equal(
+    tabEdits.structuralSummary("Runners come back <not-bold>too fast</not-bold>.", "Runners come back too fast."),
+    "put the bold back"
+  );
+  assert.equal(
+    tabEdits.structuralSummary("Warm up <em>slowly</em>.", "Warm up <not-italic>slowly</not-italic>."),
+    "removed <em>, took the italic off"
+  );
+});
