@@ -23,6 +23,59 @@ or reasoning work. Other providers should recommend the analogous lightweight
 model. The report happens once per LAHE session, not on every monitor wakeup,
 and does not switch models without the human's request.
 
+## The normal path, and the four ways agents break it
+
+Read this section even if you read nothing else. Everything below it is detail.
+These four rules are the ones agents have actually broken in live sessions, and
+each one cost a reviewer their work.
+
+```
+  lahe review <target>          you run this. it serves the page and prints one URL
+          |
+          v
+  hand over the `open` line     one link. verbatim. never a path
+          |
+          v
+  they comment and edit         you are woken; you drain
+          |
+          v
+  edit source, rebuild          verify the change is in the built HTML
+          |
+          v
+  append your reply line        only now. handled means it is on their screen
+          |
+          `--------------------> back to drain, until it prints nothing
+```
+
+**1. Serve it. Every time.** `lahe review <target>` is the command for every
+case. That includes an HTML file you generated thirty seconds ago in a scratch
+directory: three logo options on a page, a chart to look at, a draft email. If
+it is worth their eyes, it is worth serving. Never hand someone a page you
+opened from disk just because you made it a moment ago and a server felt like
+ceremony. Serving is one command and it is the difference between a review that
+works and one that half works.
+
+**2. Hand back exactly one link: the `open` line, verbatim.** Not a file path,
+not the bare server root, not two options for them to choose from. If you
+already opened the file from disk before you started the review, say so and tell
+them to close that tab. A reviewer with two tabs open on one document is a
+reviewer whose comments are about to split in half.
+
+**3. Rebuild before you reply, and verify.** `handled` means the reviewer's page
+now shows the change. Edit the source, rebuild, check the change is really in
+the built HTML, and only then append your reply line. Never tell them to reload;
+the page does that itself.
+
+**4. `file://` works, and it is the fallback, not the normal path.** It is there
+for when a server genuinely cannot run. What is different about it is worth
+knowing: on the served path the script line is put into the page as it is served,
+so no rebuild of yours can strip it. On `file://` the line lives in the file on
+disk, so a rebuild that overwrites the file takes the rail with it, and the
+repair only lands when a page with a live layer is polling. If your rebuild is an
+ad hoc script rather than a project build, re-run
+`lahe review path/to/file.html --session <agent-session-id>` right after the
+script writes, before you tell them to look.
+
 ## Step 1: install (once per machine)
 
 Requires Node 18+ (`node --version`). There is no install step: the tool has no

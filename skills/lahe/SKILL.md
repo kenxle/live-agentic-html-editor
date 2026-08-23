@@ -1,6 +1,6 @@
 ---
 name: lahe
-description: Open HTML, Markdown, generated documents, or a locally running page for live review with the live-agentic-html-editor. Use when someone says LAHE, live agentic editor, live review, comments module, review this page or document in the browser, says "claim the lahe session", "take over the lahe session", or "lahe sessions", or asks the agent to act on comments and direct edits arriving from a LAHE review.
+description: Open HTML, Markdown, generated documents, or a locally running page for live review with the live-agentic-html-editor. Use when someone says LAHE, live agentic editor, live review, comments module, review this page or document in the browser, says "claim the lahe session", "take over the lahe session", or "lahe sessions", or asks the agent to act on comments and direct edits arriving from a LAHE review. Also use whenever someone asks for something to be put on a page for them to look at, comment on, or choose between (logo or design options, mockups, charts, a draft document, a generated report), even if they never say LAHE: that is a review, and it should be served rather than handed over as a file.
 ---
 
 <!-- lahe canonical skill: managed by the live-agentic-html-editor repository -->
@@ -53,6 +53,52 @@ Run the public entrypoint on the target the user named:
 ```sh
 lahe review <target>
 ```
+
+**Run it for everything, including a page you just made.** If someone asks for
+three logo options on a page, a chart to look at, or a draft to read, that is a
+review. Serve it. Never hand over a page you opened from disk because you
+created it a moment ago and a server felt like ceremony.
+
+**Hand back exactly one link: the `open` line, verbatim.** Not a file path, not
+the bare server root, not two options. If you already opened the file from disk
+before starting the review, tell them to close that tab. A reviewer with two
+tabs open on one document is a reviewer whose comments are about to split in
+half, and that has happened.
+
+```mermaid
+flowchart TD
+    A["lahe review &lt;target&gt;"] --> B["one URL printed on the open line"]
+    B --> C["hand it over verbatim"]
+    C --> D["they comment and edit"]
+    D --> E["you are woken; run the drain command"]
+    E --> F["edit the source"]
+    F --> G["rebuild"]
+    G --> H["verify the change is in the built HTML"]
+    H --> I["append one reply line"]
+    I --> E
+```
+
+The served path and the `file://` fallback are not the same shape, and the
+difference is what breaks reviews:
+
+```mermaid
+flowchart LR
+    subgraph served["served, the normal path"]
+        S1["you rewrite the page"] --> S2["server puts the script line into the page as it serves it"]
+        S2 --> S3["rail is there. always."]
+    end
+    subgraph disk["the file fallback"]
+        F1["you rewrite the page"] --> F2["the line lived in the file, so your rewrite took it"]
+        F2 --> F3["repair lands only if a page with a live layer is polling"]
+        F3 --> F4["reviewer hard-reloads in the gap and the page stays dead"]
+    end
+```
+
+`file://` keeps working and is the right answer when a server genuinely cannot
+run. It is a fallback, not the normal path. On it, when your rebuild is an ad hoc
+script rather than a project build, re-run
+`lahe review path/to/file.html --session <agent-session-id>` right after the
+script writes, before you tell them to look.
 
 Use the exact `open`, `wake`, `monitor`, `drain`, and `close` values it prints.
 Do not invent a
