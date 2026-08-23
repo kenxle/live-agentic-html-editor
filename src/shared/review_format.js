@@ -262,21 +262,50 @@
     "Do not go looking for it blind; ask the reviewer if you cannot place it.";
 
   // ---------------------------------------------------------------------------
-  // Grouping by page (D6, and the plan's Q2)
+  // Grouping by page (D6, the plan's Q2, and record.samePage's file:// rule)
   // ---------------------------------------------------------------------------
   //
-  // One group per ORIGIN PLUS PATHNAME, keyed by pathname, ordered by first
-  // visit. Two dev servers both serving /dashboard are two groups. Query
-  // strings and fragments already collapsed away in record.pageFrom. A file
-  // review is one group named by the file's basename.
+  // One group per ORIGIN PLUS PATHNAME, ordered by first visit, with ONE
+  // exception: record.samePage's own file:// rule (src/shared/record.js, "Does
+  // this record belong to the page in front of us?"). The browser layer has
+  // always read every record through that rule, so a file:// visit and a
+  // served visit of the SAME document never split apart on the reviewer's own
+  // page. review.json grouped by the raw key alone, with no such exception, so
+  // the same two visits split into two separate page groups here even though
+  // the browser layer never showed the reviewer a split: `lahe status` showed
+  // two three-item pages for one document, and each view showed the reviewer
+  // only its own half (Ken, live, 2026-08-18). This groups the same way the
+  // browser layer already does: the exact key first, and samePage's
+  // document-tail comparison for anything that does not match one.
+  //
+  // Two dev servers both serving /dashboard are still two groups; samePage
+  // never merges two served origins, only a file:// one against either kind.
+  // Query strings and fragments already collapsed away in record.pageFrom.
+
+  function knownHint(hint) {
+    return !!(hint && hint.known === true && hint.path);
+  }
 
   function pageGroups(items) {
     var byKey = {};
     var order = [];
     items.forEach(function (it, index) {
       var key = record.pageKey(it);
-      if (!Object.prototype.hasOwnProperty.call(byKey, key)) {
-        byKey[key] = {
+      var group = byKey[key] || null;
+      if (!group) {
+        // No exact match: this may still be another visit of a document
+        // already in a group, over file:// where the other visit was served
+        // or vice versa. Scan for that one exception rather than minting a
+        // second group for the same document.
+        for (var i = 0; i < order.length; i += 1) {
+          if (record.samePage(it, order[i])) {
+            group = order[i];
+            break;
+          }
+        }
+      }
+      if (!group) {
+        group = {
           key: key,
           origin: it[record.FIELD.PAGE_ORIGIN],
           path: it[record.FIELD.PAGE_PATH],
@@ -284,13 +313,34 @@
           first_seq: typeof it[record.FIELD.PAGE_SEQ] === "number" ? it[record.FIELD.PAGE_SEQ] : null,
           arrival: index,
           hint: it[record.FIELD.SOURCE_HINT] || null,
+          // Whether ANY item folded into this group arrived over file://. The
+          // group's displayed origin below can move on to a served one, and
+          // this is how that does not erase the fact that part of the review's
+          // traffic was the file:// fallback (lahe status reads this).
+          file_origin_seen: it[record.FIELD.PAGE_ORIGIN] === record.FILE_ORIGIN,
           items: []
         };
-        order.push(byKey[key]);
+        order.push(group);
+      } else {
+        if (it[record.FIELD.PAGE_ORIGIN] === record.FILE_ORIGIN) group.file_origin_seen = true;
+        // THE SERVED ORIGIN IS THE CANONICAL DISPLAY. A group minted from a
+        // file:// visit that a served visit later joins switches its displayed
+        // origin and path to the served one: that is the real, reachable
+        // address for the same document, and a later file:// visit still
+        // matches it (samePage's rule 3 fires whenever either side is file://,
+        // so the served pathname on the group is still a valid comparison).
+        if (group.origin === record.FILE_ORIGIN && it[record.FIELD.PAGE_ORIGIN] !== record.FILE_ORIGIN) {
+          group.origin = it[record.FIELD.PAGE_ORIGIN];
+          group.path = it[record.FIELD.PAGE_PATH];
+        }
       }
-      var group = byKey[key];
+      byKey[key] = group;
       if (!group.title && it[record.FIELD.PAGE_TITLE]) group.title = it[record.FIELD.PAGE_TITLE];
-      if (!group.hint && it[record.FIELD.SOURCE_HINT]) group.hint = it[record.FIELD.SOURCE_HINT];
+      // A known hint never loses to an unknown one (D6): once a group has a
+      // hint recognized as known, a later item with no hint, or one that is
+      // not recognized as known, leaves it standing rather than clobbering it.
+      var itHint = it[record.FIELD.SOURCE_HINT] || null;
+      if (itHint && !knownHint(group.hint)) group.hint = itHint;
       var seq = it[record.FIELD.PAGE_SEQ];
       if (typeof seq === "number" && (group.first_seq === null || seq < group.first_seq)) group.first_seq = seq;
       group.items.push(it);
@@ -305,6 +355,11 @@
       if (b.first_seq === null) return -1;
       if (a.first_seq !== b.first_seq) return a.first_seq - b.first_seq;
       return a.arrival - b.arrival;
+    });
+    // The key travels with whatever origin and path the group ended up
+    // displaying, not the one it happened to be minted from.
+    order.forEach(function (g) {
+      g.key = record.pageKeyFor(g);
     });
     return order;
   }
@@ -426,7 +481,16 @@
           // an agent reads it as a label. Bounded like every other page-derived
           // field, with the marker visible (NEW-4).
           title: boundData(g.title, CONTEXT_MAX),
-          source_hint: sourceHint(g.hint),
+          // A page's own hint wins when it has one; otherwise this falls back
+          // to the review-wide hint `add --source` (or `review`'s own
+          // Markdown --source) recorded, so a known source is not reported as
+          // unknown merely because no item on this page ever carried it itself
+          // (see projection.js's reviewSourceHint).
+          source_hint: sourceHint(g.hint || review.source_hint || null),
+          // lahe status reads this to say when a page connected over file://
+          // rather than (or in addition to) the served origin above, so a
+          // half-configured review is visible instead of silent.
+          file_origin_seen: !!g.file_origin_seen,
           items: g.items.map(projectItem)
         };
       })

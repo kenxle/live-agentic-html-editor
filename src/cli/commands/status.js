@@ -539,7 +539,18 @@ async function run(argv, options) {
     }
 
     var pages = ((projection.pages || []).map(function (page) {
-      return page.path || page.key;
+      var label = page.path || page.key;
+      // Say when a page connected over file:// rather than (or as well as)
+      // its served origin, so a half-configured review is visible here
+      // instead of silent: a reviewer only ever opening the fallback link, or
+      // a served link and the fallback both landing on one document, are both
+      // worth a human noticing.
+      if (page.origin === record.FILE_ORIGIN) {
+        label += "  (file://, no server: opened from disk)";
+      } else if (page.file_origin_seen) {
+        label += "  (also opened via file:// at least once)";
+      }
+      return label;
     }));
     lines.push("review " + id + (helperUp ? "" : "  (helper not answering for this review)"));
     lines.push("  page      " + (pages.join(", ") || "none yet"));

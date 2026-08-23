@@ -196,6 +196,38 @@ function reviewTimes(events) {
 }
 
 /**
+ * The most recent source hint `add --source` (or `review`'s own Markdown
+ * --source) recorded for this review, or null.
+ *
+ * `page.visited` is the one event in the closed vocabulary that carries page
+ * facts (docs/CONTRACTS.md), and it carries `source_hint` as a plain path
+ * string. It rides the log reliably (add.js's own write, and the held-review
+ * write in routes.js both append it), but nothing folded it into review.json:
+ * every item read `source_hint: {known: false, ...}` even on a review where
+ * `--source` had been recorded, and the contract text told the agent not to
+ * trust the file it was reading about (Ken, 2026-08-18). This is review-wide,
+ * not per page: `page.visited` carries no origin of its own, and one review is
+ * almost always one document, so last-write-wins is the same rule
+ * `reviews.recordPaths` already uses for the same field on disk.
+ *
+ * @param {object[]} events every event for one review, in seq order
+ * @returns {{known: true, path: string}|null}
+ */
+function reviewSourceHint(events) {
+  var path = null;
+  (events || []).forEach(function (event) {
+    if (
+      event[protocol.EVENT_FIELD.EVENT] === EVENT.PAGE_VISITED &&
+      typeof event.source_hint === "string" &&
+      event.source_hint
+    ) {
+      path = event.source_hint;
+    }
+  });
+  return path ? { known: true, path: path } : null;
+}
+
+/**
  * The whole `review.json` body for one review.
  *
  * The route adds `seq`; nothing else is added anywhere, so what an agent reads
@@ -214,7 +246,8 @@ function project(reviewId, events, options) {
     ended_at: times.ended_at,
     agent_session_id: times.agent_session_id,
     generated_at: opts.generated_at || undefined,
-    items: actionableItems(itemsFrom(events, { onDropped: opts.onDropped }))
+    items: actionableItems(itemsFrom(events, { onDropped: opts.onDropped })),
+    source_hint: reviewSourceHint(events)
   });
 }
 
@@ -413,6 +446,7 @@ module.exports = {
   itemsFrom: itemsFrom,
   actionableItems: actionableItems,
   reviewTimes: reviewTimes,
+  reviewSourceHint: reviewSourceHint,
   project: project,
   stringify: stringify,
   regenerate: regenerate,
