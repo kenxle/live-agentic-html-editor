@@ -633,10 +633,9 @@ test.describe("the rail as a shipping surface", () => {
   // The reviewer was left with a ghost card they could do nothing to.
   //
   // The scenario that found it was an undo on a HANDLED edit, which no longer
-  // happens: a handled record is the record that a fix landed (R38), the agent
-  // has already changed the source, and lifecycle.canDelete refuses it. So the
-  // ghost card is asserted on the undo that does still run, and the handled card
-  // is asserted to keep both of its buttons in the test below.
+  // drops anything: that record is kept (R38) and the undo mints a take-back
+  // instead. So the ghost card is asserted on the undo that does drop a record,
+  // and the handled card gets its own test below.
 
   test("undoing an unhandled hand edit leaves no ghost card and no orphaned buttons", async ({ page }) => {
     const { app, helper, token } = await startBoth();
@@ -688,16 +687,16 @@ test.describe("the rail as a shipping surface", () => {
     }
   });
 
-  // --- F5e: the handled card keeps both its buttons ---------------------------
+  // --- F5e: undoing a HANDLED hand edit ---------------------------------------
   //
-  // Undo on a handled hand edit used to remove the record. The page reverted,
-  // the row went, and nothing told the helper, so review.json kept listing an
-  // edit the reviewer had taken back and the source kept the change the agent
-  // had already written into it. It is refused now, and the button says so
-  // rather than sitting there live: the reviewer's decision on a handled card is
-  // Reopen, which is the button beside it.
+  // The reviewer takes back a change the agent already made. On the rail that is
+  // two things at once: the handled card stays, because it is the record that a
+  // fix landed and its Reopen is still a live decision, and a NEW row appears
+  // for the take-back, which is the ask to remove the change from the source.
+  // Undo used to drop the handled record instead, which left the source holding
+  // a change nobody wanted and nothing anywhere saying so.
 
-  test("a handled hand edit's Undo is quiet, so the Reopen beside it cannot be stranded", async ({ page }) => {
+  test("undoing a handled hand edit keeps its card and adds the row that asks for the source back", async ({ page }) => {
     const { app, helper, token } = await startBoth();
     try {
       await bootedPage(page, app, helper, token);
@@ -712,17 +711,20 @@ test.describe("the rail as a shipping surface", () => {
       const before = await page.evaluate((id) => {
         const node = window.__lahe.rail.cardNode(id);
         const undo = node.querySelector('[data-lahe-act="undo"]');
-        return { visible: undo.getClientRects().length > 0, disabled: undo.disabled, title: undo.title };
+        return { visible: undo.getClientRects().length > 0, disabled: undo.disabled };
       }, item.id);
-      expect(before.visible, "the button is still there, next to Reopen").toBe(true);
-      expect(before.disabled, "and it is quiet, because the agent already changed the source").toBe(true);
-      expect(before.title, "carrying the reason the reviewer reads").toMatch(/already handled/);
+      expect(before.visible, "the button is there, next to Reopen").toBe(true);
+      expect(before.disabled, "and it is live: undo is the reviewer acting on their own review").toBe(false);
 
-      // Pressed anyway. A disabled button does nothing, and the card is whole.
+      // The reviewer's own gesture, on the handled card.
       await page.evaluate((id) => {
         const node = window.__lahe.rail.cardNode(id);
         node.querySelector('[data-lahe-act="undo"]').click();
       }, item.id);
+
+      await pollPage(page, (id) => window.__lahe.items().some((i) => i.reverts === id), item.id, {
+        message: "the take-back to be recorded"
+      });
 
       const after = await page.evaluate(
         (a) => {
@@ -731,10 +733,21 @@ test.describe("the rail as a shipping surface", () => {
           const reopen = node
             ? Array.from(node.querySelectorAll(".cardact")).filter((b) => b.textContent === "Reopen issue")[0]
             : null;
+          const strays = node
+            ? Array.from(node.querySelectorAll("button"))
+                .filter((b) => b.getClientRects().length > 0)
+                .map((b) => b.textContent)
+            : [];
+          const take = window.__lahe.items().filter((i) => i.reverts === a.id)[0];
+          const takeNode = take ? window.__lahe.rail.cardNode(take.id) : null;
           return {
             held: !!window.__lahe.itemById(a.id),
             card: !!window.__lahe.rail.getCard(a.id),
             reopenVisible: visible(reopen),
+            strays: strays,
+            notice: node ? node.textContent : "",
+            takeState: take ? take.state : null,
+            takeRow: !!(takeNode && takeNode.querySelector("[data-lahe-edit-row]")),
             pageText: document.querySelector(a.selector).textContent
           };
         },
@@ -743,8 +756,16 @@ test.describe("the rail as a shipping surface", () => {
 
       expect(after.held, "the record that says a fix landed is kept (R38)").toBe(true);
       expect(after.card, "and so is its card").toBe(true);
-      expect(after.reopenVisible, "with the one decision this card does offer").toBe(true);
-      expect(after.pageText.indexOf(TAIL), "the page still reads as the agent left it").toBeGreaterThan(-1);
+      expect(after.reopenVisible, "with Reopen still on it").toBe(true);
+      expect(after.strays.length > 0, "its buttons are not stranded on a card with no record").toBe(true);
+      expect(after.notice, "and the card says what the reviewer just did").toContain("You took this back");
+
+      // The new work, with a row of its own.
+      expect(after.takeState, "the take-back is ready work").toBe("ready");
+      expect(after.takeRow, "and it has its own before-and-after row").toBe(true);
+
+      // The page went back, which is what the reviewer pressed the button for.
+      expect(after.pageText.indexOf(TAIL), "the reviewer's words came off the page").toBe(-1);
     } finally {
       await helper.stop().catch(() => {});
       await app.close();

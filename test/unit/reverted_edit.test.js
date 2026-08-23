@@ -113,6 +113,32 @@ test("the id list picks out only the reverted items", () => {
   assert.deepEqual(onlyBefore, [reverted[record.FIELD.ID]]);
 });
 
+test("a take-back is not drift: an item another record reverts is left alone", () => {
+  // The page looks IDENTICAL in both cases: the reviewer's wording gone, the
+  // text it replaced back. The difference is in the log, and it is the whole
+  // reason this list function exists rather than the single-item check alone.
+  const takenBack = handledEdit();
+  const drifted = handledEdit();
+  const pageText = page(BEFORE);
+
+  // Nothing says anyone asked, so it is drift and it reopens.
+  assert.deepEqual(replay.revertedHandledEditIds([drifted], pageText), [drifted[record.FIELD.ID]]);
+
+  // The reviewer pressed Undo, which mints a record naming what it took back.
+  // Reopening now would ask the agent to reapply the exact change the reviewer
+  // had just withdrawn, while the revert record beside it asks for the opposite.
+  const revert = record.revertOf(takenBack);
+  assert.deepEqual(replay.revertedHandledEditIds([takenBack, revert], pageText), []);
+
+  // And the check itself is untouched: it still says what it sees.
+  assert.equal(replay.isRevertedHandledEdit(takenBack, pageText), true);
+
+  // One item's take-back does not cover another's drift.
+  assert.deepEqual(replay.revertedHandledEditIds([takenBack, revert, drifted], pageText), [
+    drifted[record.FIELD.ID]
+  ]);
+});
+
 test("the note the reopened item carries names the check and asks for the change back", () => {
   assert.equal(
     replay.REVERTED_EDIT_NOTE,

@@ -1,5 +1,5 @@
-// An undo the reviewer presses has to reach the helper, and a handled edit has
-// to refuse to be undone at all.
+// An undo the reviewer presses has to reach the helper, and on a handled edit it
+// has to reach the source file.
 //
 // The bug this file exists for, found on 2026-08-23: undo reverted the region,
 // dropped the record from browser storage, and told nobody. review.json still
@@ -14,16 +14,20 @@
 // per-review token, a real projection on disk, and the agent's whole API (one
 // appended JSONL line).
 //
-// Two claims, and they are opposite halves of the same rule:
+// Three claims, and they are the same rule read at three states:
 //
 //   an unhandled edit    undo reverts the page, drops the record, and the item
-//                        leaves review.json. Nobody is asked to do it.
-//   a handled edit       undo refuses. The agent already changed the SOURCE, so
-//                        reverting the block here would change this page and
-//                        nothing else, the next rebuild would bring the change
-//                        back, and the record that says a fix landed would be
-//                        gone (R38). lifecycle.canDelete says the same thing,
-//                        and this is the first production code to ask it.
+//                        leaves review.json. Nothing landed in the source, so
+//                        nobody is asked for anything.
+//   a handled edit       undo reverts the page and mints WORK: a ready item
+//                        carrying `reverts`, asking for the change to come back
+//                        out of the source. Without it the next rebuild puts the
+//                        change back and the reviewer's undo quietly expires.
+//                        The handled record is kept (R38), because it is the
+//                        only place the applied wording is written down.
+//   the page check       must not read that undo as the page having lost an
+//                        applied fix. On the page the two are identical; in the
+//                        log they are not, and the log is what decides.
 
 "use strict";
 
@@ -78,7 +82,7 @@ function labelled(output, label) {
   return match ? match[1] : null;
 }
 
-test.describe("an undo reaches the helper, and a handled edit is not undone", () => {
+test.describe("an undo reaches the helper, and reaches the source file", () => {
   let world = null;
 
   test.beforeAll(async () => {
@@ -241,7 +245,7 @@ test.describe("an undo reaches the helper, and a handled edit is not undone", ()
     expect(projectedItem(after, item.id), "the agent is not asked to apply an edit that was taken back").toBe(null);
   });
 
-  test("a handled edit is not undone here: the agent already changed the source", async ({ page }) => {
+  test("undoing a handled edit asks the agent to take it out of the source", async ({ page }) => {
     reset();
     await booted(page);
 
@@ -260,47 +264,104 @@ test.describe("an undo reaches the helper, and a handled edit is not undone", ()
       { message: "the reply to fold onto the card through the poll loop", timeoutMs: 20000 }
     );
 
-    // The row still lists the edit, and its Undo now says why it cannot run.
-    // The rail lives in a closed shadow root, so the card node is the way in.
-    const undoButton = (id) => {
-      const node = window.__lahe.rail.cardNode(id);
-      const root = node ? node.getRootNode() : null;
-      const found =
-        root && root.querySelector
-          ? root.querySelector('[data-lahe-edit-row="' + id + '"] [data-lahe-act="undo"]')
-          : null;
-      return found ? { disabled: !!found.disabled, title: found.title } : null;
-    };
-    await pollPage(
-      page,
-      (id) => {
-        const node = window.__lahe.rail.cardNode(id);
-        const root = node ? node.getRootNode() : null;
-        const found =
-          root && root.querySelector
-            ? root.querySelector('[data-lahe-edit-row="' + id + '"] [data-lahe-act="undo"]')
-            : null;
-        return !!found && found.disabled === true;
-      },
-      item.id,
-      { message: "the Undo button on the handled row to go quiet", timeoutMs: 20000 }
-    );
-    const button = await page.evaluate(undoButton, item.id);
-    expect(button.title, "the button says why, rather than offering a press that only ever fails").toMatch(
-      /already handled/
-    );
-
-    // Pressed anyway (the console is a reviewer's path too), it refuses without
-    // touching the page.
+    // The reviewer changes their mind about a change that is already in the
+    // file. The button is live on a handled row, the same as on any other: this
+    // is the call it makes.
     const result = await page.evaluate((id) => window.__lahe.handle.editing.undo(id), item.id);
-    expect(result.reverted).toBe(false);
-    expect(result.reason).toMatch(/already handled/);
-    expect(await blockText(page), "the block still reads as the agent left it").toBe(EDITED);
+    expect(result.reverted, result.reason || "undo ran on a handled hand edit").toBe(true);
+    expect(result.revert, "and it named the work it made").toBeTruthy();
 
-    // And the record that says a fix landed is still in both stores (R38).
-    expect(await page.evaluate((id) => !!window.__lahe.itemById(id), item.id)).toBe(true);
+    // Their page goes back, as it does for any undo.
+    expect(await blockText(page)).toBe(ORIGINAL);
+
+    // The handled record is KEPT (R38): it is the only place the applied wording
+    // is written down, and it is the record of what actually happened.
+    const handled = await page.evaluate((id) => window.__lahe.itemById(id), item.id);
+    expect(handled, "the handled record stands").toBeTruthy();
+    expect(handled.state).toBe("handled");
+
+    // THE POINT OF ALL OF IT. The agent is asked to take the change out of the
+    // source, or the next rebuild puts it back on the page and the reviewer's
+    // undo quietly expires.
+    const takeBack = await pollUntil(
+      () => {
+        const parsed = projection();
+        if (!parsed) return null;
+        let found = null;
+        parsed.pages.forEach((pg) => {
+          pg.items.forEach((it) => {
+            if (it.reverts === item.id) found = it;
+          });
+        });
+        return found;
+      },
+      { message: "the take-back to reach review.json", timeoutMs: 20000 }
+    );
+
+    expect(takeBack.state, "it is work, not history").toBe("ready");
+    expect(takeBack.before, "what the source says now").toBe(EDITED);
+    expect(takeBack.after_full, "and what it should say again").toBe(ORIGINAL);
+    expect(takeBack.reverts).toBe(item.id);
+    expect(takeBack.change, "in words, in the intent channel").toMatch(/Remove it from the source/);
+    expect(takeBack.id).not.toBe(item.id);
+
+    // The handled item is still in the file, still handled, so the agent can see
+    // what it is being asked to undo.
     const projected = projectedItem(projection(), item.id);
     expect(projected, "a handled item is kept, not deleted").toBeTruthy();
     expect(projected.state).toBe("handled");
+
+    // And the contract, which is the only thing an agent is guaranteed to read,
+    // says what a reverts field means.
+    const contract = projection().contract.join("\n");
+    expect(contract).toContain("An item with a reverts field is a take-back");
+  });
+
+  test("the page check does not ask for the change back after the reviewer took it back", async ({ page }) => {
+    reset();
+    await booted(page);
+
+    const item = await editAndCommit(page);
+    await inReviewJson(item.id);
+    appendReply({ item: item.id, rev: item.rev, status: "handled", agent: "claude" });
+    await pollPage(
+      page,
+      (id) => {
+        const found = window.__lahe.itemById(id);
+        return !!found && found.state === "handled";
+      },
+      item.id,
+      { message: "the reply to fold onto the card", timeoutMs: 20000 }
+    );
+    const result = await page.evaluate((id) => window.__lahe.handle.editing.undo(id), item.id);
+    expect(result.reverted).toBe(true);
+
+    // A fresh load, which is when the page check runs. The page reads exactly
+    // like drift: the reviewer's wording gone, the text it replaced back. The
+    // only thing that says otherwise is the take-back record sitting beside it.
+    await booted(page);
+    await pollPage(page, () => window.__lahe.counters.revertChecks > 0, undefined, {
+      message: "the page check to run on this load",
+      timeoutMs: 20000
+    });
+
+    const after = await page.evaluate((id) => {
+      const found = window.__lahe.itemById(id);
+      return {
+        state: found ? found.state : null,
+        note: found ? found.note : null,
+        reopens: window.__lahe.counters.revertReopens
+      };
+    }, item.id);
+
+    expect(after.state, "the item the reviewer withdrew is not put back in front of the agent").toBe("handled");
+    expect(after.reopens, "nothing was reopened").toBe(0);
+    expect(String(after.note || ""), "and nobody was asked to reapply it").not.toMatch(/Reopened by the page check/);
+
+    // The take-back is still the standing ask, and it is the only one.
+    const items = await page.evaluate(() => window.__lahe.items());
+    const asks = items.filter((it) => it.state === "ready");
+    expect(asks).toHaveLength(1);
+    expect(asks[0].reverts).toBe(item.id);
   });
 });

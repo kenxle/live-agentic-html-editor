@@ -465,6 +465,13 @@ Inside the review folder:
   `after_full` text. If a sweep would change or remove a handled edit's after
   text, apply the rest of the sweep, leave that one spot alone, and reply
   `question` naming the conflict.
+
+  An item carrying a `reverts` field is a take-back, and it is the one thing
+  that cancels the paragraph above. The reviewer undid a change you had already
+  made: `reverts` names the handled item they undid, `before` is what the source
+  says now, and `after_full` is what it should say again. Take the change out of
+  the source so the next rebuild does not bring it back. The item it names stops
+  being a handled edit you protect from a sweep, and it is never work to redo.
   While the review is open you are an orchestrator first. Your job is the loop:
   drain, dispatch, reply. If an item needs long or exploratory work (debugging,
   a refactor, anything past a few minutes), hand it to a background subagent
@@ -540,13 +547,26 @@ that window yourself: run `lahe review path/to/file.html --session
 reviewer to look. It is idempotent against the same path and confirms the tag
 landed instead of hoping the watcher wins the race.
 
-**A handled hand edit that gets undone reopens itself.** Every time the page
-loads, the tool checks the reviewer's handled hand edits against the page: if
-the reviewer's wording is gone and the text it replaced is back, the change was
-reverted, so the item goes back to ready with a tool-written note saying why and
-you are woken for it like any other work. That is the safety net under the sweep
-rule above, not a replacement for it. Do the check yourself before you sweep,
-because an item that comes back this way is a change you made and then undid.
+**A handled hand edit the reviewer undoes becomes work: take it out of the
+file.** Undo is a button on every hand edit, handled ones included. When they
+press it on a change you already applied, their page goes back to the original
+wording and a new ready item arrives carrying `reverts`, the id of the handled
+item they took back. Its `before` is your wording, the one the source still
+holds, and its `after_full` is what the passage should say again. Remove the
+change from the source and reply to the new item the way you would any other.
+The handled item stays in the file as the record of what happened; do not redo
+it.
+
+**A handled hand edit that the PAGE loses reopens itself.** That is a different
+thing from the paragraph above, and the tool tells them apart by whether the
+reviewer asked. Every time the page loads it checks handled hand edits against
+the page: if your wording is gone and the text it replaced is back, and nothing
+in the file says the reviewer took it back, the change was lost rather than
+withdrawn, so the item goes back to ready with a tool-written note saying why
+and you are woken for it like any other work. That is the safety net under the
+sweep rule above, not a replacement for it. Do the check yourself before you
+sweep, because an item that comes back this way is a change you made and then
+undid.
 
 Re-running `lahe add path/to/built/page.html` is still harmless, and it is still
 the thing to run in three cases: no helper is up, the page is served from a new

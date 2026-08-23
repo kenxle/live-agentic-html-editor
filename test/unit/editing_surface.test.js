@@ -247,20 +247,23 @@ test("undoing a record that does not exist says so rather than reporting success
 });
 
 // ---------------------------------------------------------------------------
-// Undo is a DELETION, so it obeys the deletion rule and it reaches the helper
+// What an undo leaves behind
 // ---------------------------------------------------------------------------
 //
-// The bug both halves come from: undo removed the record from browser storage
+// The bug all of this comes from: undo removed the record from browser storage
 // and told nobody. review.json still listed it as ready work, so the agent
 // applied an edit the reviewer had taken back.
 //
-// The page half of undo (revert the region, put the caret in it) is a browser
-// test. What is here is the two decisions that need no page: which records may
-// be undone, and what the helper is told when one is.
+// Undo itself always runs, on every state. What changes is what it leaves: a
+// record nothing landed for is dropped from both stores, and a HANDLED one is
+// kept while the undo mints the work of taking the change back out of the
+// source. The page half (revert the region, put the caret in it) is a browser
+// test; what is here is what needs no page.
 
 const storeModule = require("../../src/layer/store.js");
 const syncModule = require("../../src/layer/sync.js");
 const protocol = require("../../src/shared/protocol.js");
+const lifecycle = require("../../src/shared/lifecycle.js");
 
 const REVIEW = "review-undo";
 
@@ -294,38 +297,35 @@ function deletes(store) {
   return store.pendingEvents(REVIEW).filter((event) => event.event === protocol.EVENT.ITEM_DELETED);
 }
 
-test("undo is a deletion, so it asks the one rule for deletions", () => {
-  // lifecycle.canDelete, called for the first time by production code. Undo used
-  // to remove any record it was handed, which made the rule a comment.
-  assert.equal(editing.canUndo(handEdit(record.STATE.DRAFT)).ok, true);
-  assert.equal(editing.canUndo(handEdit(record.STATE.READY)).ok, true);
-  assert.equal(editing.canUndo(handEdit(record.STATE.HANDLED)).ok, false);
-  assert.equal(editing.canUndo(handEdit(record.STATE.NOT_HANDLED)).ok, false);
-  assert.equal(editing.canUndo(null).ok, false);
-  // Each no reads as itself, because the row prints the reason and the button
-  // wears it as its title.
-  assert.equal(editing.canUndo(handEdit(record.STATE.HANDLED)).reason, editing.UNDO_REFUSAL.HANDLED);
-  assert.equal(editing.canUndo(handEdit(record.STATE.NOT_HANDLED)).reason, editing.UNDO_REFUSAL.ANSWERED);
+test("which states an undo drops the record for, and the one it does not", () => {
+  // lifecycle.canDelete, called for the first time by production code, and read
+  // as a BRANCH rather than as a refusal: undo runs either way.
+  const R = lifecycle.ACTOR.REVIEWER;
+  assert.equal(lifecycle.canDelete(record.STATE.DRAFT, R), true, "nothing landed, so nothing is left behind");
+  assert.equal(lifecycle.canDelete(record.STATE.READY, R), true);
+  assert.equal(lifecycle.canDelete(record.STATE.NOT_HANDLED, R), true, "the agent said it did not do it");
+  // The one no. The source carries the change, so the undo mints the work of
+  // removing it instead of dropping the record that says it is there.
+  assert.equal(lifecycle.canDelete(record.STATE.HANDLED, R), false);
 });
 
-test("a handled hand edit is not undone: the page keeps it, the record keeps it, and nothing is deleted", (t) => {
+test("undoing the same handled edit twice does not ask for the change to be removed twice", (t) => {
   const { store, sync, surface } = undoHarness();
   t.after(() => sync.stop());
 
   const item = handEdit(record.STATE.HANDLED);
   store.write(REVIEW, item);
   sync.recordItem(item);
+  // The take-back the first undo made. The record it names is still there, so
+  // the row is still pressable, and a second press must not queue a second ask.
+  store.write(REVIEW, record.revertOf(item));
 
   const got = surface.undo(item.id);
-  assert.equal(got.reverted, false, "the agent already changed the source; reverting here would change this page only");
-  assert.equal(got.reason, editing.UNDO_REFUSAL.HANDLED);
-  assert.equal(got.kind, record.KIND.EDIT);
-
-  // The record that says a fix landed is still there (R38), and the helper was
-  // told nothing. A delete here would drop the item out of review.json, which is
-  // the history the reviewer never deletes.
-  assert.ok(store.readItem(REVIEW, item.id), "the handled record stands");
-  assert.equal(deletes(store).length, 0);
+  assert.equal(got.reverted, false);
+  assert.equal(got.reason, editing.UNDO_ALREADY_TAKEN_BACK);
+  assert.equal(got.revert, null);
+  assert.ok(store.readItem(REVIEW, item.id), "and the handled record is still the record that a fix landed");
+  assert.equal(deletes(store).length, 0, "a handled record is never deleted from the helper");
 });
 
 test("a record the reviewer takes back is taken back from the helper too", (t) => {
@@ -335,7 +335,8 @@ test("a record the reviewer takes back is taken back from the helper too", (t) =
   // retire() is undo's own seam, minus the write to the page: both drop the
   // record, and both go through the one removal path. The page half of undo
   // needs a real region, so it is asserted in the browser
-  // (test/browser/undo_reaches_helper.spec.js).
+  // (test/browser/undo_reaches_helper.spec.js), and so is the take-back a
+  // handled edit mints.
   const item = handEdit(record.STATE.READY);
   store.write(REVIEW, item);
   sync.recordItem(item);

@@ -79,6 +79,10 @@
     PAGE_SEQ: "page_seq",
     SOURCE_HINT: "source_hint",
 
+    // The id of the handled item this record takes back, when it is a revert
+    // (see revertOf). Null on every ordinary record.
+    REVERTS: "reverts",
+
     // What the agent said, folded from its reply line.
     REPLY: "reply",
 
@@ -528,6 +532,7 @@
     item[FIELD.PAGE_TITLE] = src.page_title || page.title || null;
     item[FIELD.PAGE_SEQ] = typeof src.page_seq === "number" ? src.page_seq : typeof page.seq === "number" ? page.seq : null;
     item[FIELD.SOURCE_HINT] = src.source_hint || page.source_hint || null;
+    item[FIELD.REVERTS] = typeof src.reverts === "string" && src.reverts ? src.reverts : null;
     item[FIELD.REPLY] = src.reply || null;
     item[FIELD.THREAD] = Array.isArray(src.thread) ? src.thread.slice() : [];
     item[FIELD.CREATED_AT] = at;
@@ -796,6 +801,107 @@
     return words || "Edited this block.";
   }
 
+  // ---------------------------------------------------------------------------
+  // Taking a handled change back (R28, R38)
+  // ---------------------------------------------------------------------------
+  //
+  // The reviewer undoes a hand edit the agent already applied. Their page goes
+  // back to the original wording, and that leaves the SOURCE holding a change
+  // nobody wants any more: the next rebuild would put it back on the page, and
+  // the agent would never hear that it was taken back.
+  //
+  // So an undo of a handled edit mints work. The record it makes is an ordinary
+  // outstanding hand edit pointing the other way: what the source says now is
+  // its `before`, what it should say again is its `after`. Everything already
+  // built reads it without a special case. Replay compares it against the page
+  // and finds it already applied (the reviewer's undo did that half). The Edits
+  // tab draws it as a before-and-after row. The agent applies it the way it
+  // applies any edit, and the result is the change coming out of the file.
+  //
+  // WHY NOT A NEW KIND. `kind` decides how a record COMPARES and how a row
+  // reads, and a revert compares exactly like the edit it undoes: a format-only
+  // revert has to compare on structure, or its identical before and after text
+  // make it a silent no-op. `reverts` carries the one thing kind cannot, which
+  // is WHICH handled item this takes back, and it carries it as an id so the
+  // agent can find that item in the same file rather than being told about it
+  // in prose.
+  //
+  // WHY THE HANDLED RECORD IS KEPT. It is the record that a fix landed (R38),
+  // and it is the only place the applied wording is written down. It also stops
+  // the page check reopening it: replay.revertedHandledEditIds skips an item
+  // that another record reverts, so the reviewer's deliberate take-back is not
+  // read as the page having lost an applied fix.
+
+  var REVERT_EDIT = "Undo: the reviewer took this change back. Remove it from the source, so the passage reads as it did before.";
+  var REVERT_DELETE = "Undo: the reviewer put this block back. Restore it in the source; it should not have been deleted.";
+  var REVERT_FORMAT = "Undo: the reviewer took this formatting change back. Put the markup back the way the source had it.";
+
+  function revertChangeText(kind) {
+    if (kind === KIND.DELETE) return REVERT_DELETE;
+    if (kind === KIND.FORMAT_ONLY) return REVERT_FORMAT;
+    return REVERT_EDIT;
+  }
+
+  /**
+   * The work an undo of a handled hand edit makes: put the source back.
+   *
+   * Pure. The caller supplies the region and context, because those are read off
+   * the live page and this file never touches a DOM.
+   *
+   * @param {Object} item the HANDLED record the reviewer just undid
+   * @param {{region?: Object, context?: Object, created_at?: string}} [extra]
+   * @returns {Object} a new ready record whose before/after point the other way
+   */
+  function revertOf(item, extra) {
+    var src = extra || {};
+    // A delete has no `after` text: what the source holds now is nothing, and
+    // what it should hold again is the block. Everything else is the swap.
+    var isDelete = item[FIELD.KIND] === KIND.DELETE;
+    var before = isDelete ? "" : item[FIELD.AFTER];
+    var beforeHtml = isDelete ? "" : item[FIELD.AFTER_HTML];
+    return newItem({
+      // A reverted delete is an EDIT: it puts words back, and comparing it as a
+      // delete would make it idempotent by absence, which is the opposite of
+      // what it asks for.
+      kind: isDelete ? KIND.EDIT : item[FIELD.KIND],
+      state: STATE.READY,
+      change: revertChangeText(item[FIELD.KIND]),
+      before: typeof before === "string" ? before : "",
+      after: typeof item[FIELD.BEFORE] === "string" ? item[FIELD.BEFORE] : "",
+      before_html: typeof beforeHtml === "string" ? beforeHtml : null,
+      after_html: typeof item[FIELD.BEFORE_HTML] === "string" ? item[FIELD.BEFORE_HTML] : null,
+      reverts: item[FIELD.ID],
+      region: src.region || null,
+      context: src.context || null,
+      page_origin: item[FIELD.PAGE_ORIGIN],
+      page_path: item[FIELD.PAGE_PATH],
+      page_title: item[FIELD.PAGE_TITLE],
+      page_seq: item[FIELD.PAGE_SEQ],
+      source_hint: item[FIELD.SOURCE_HINT],
+      created_at: src.created_at
+    });
+  }
+
+  /** Is this record a take-back rather than a fresh change? */
+  function isRevert(item) {
+    return !!item && typeof item[FIELD.REVERTS] === "string" && !!item[FIELD.REVERTS];
+  }
+
+  /**
+   * The ids these records take back, as a lookup.
+   *
+   * One pass, so a caller with a list never has to write the scan itself and
+   * two callers cannot disagree about what "taken back" means.
+   */
+  function takenBackIds(items) {
+    var out = {};
+    var list = Array.isArray(items) ? items : [];
+    for (var i = 0; i < list.length; i += 1) {
+      if (isRevert(list[i])) out[list[i][FIELD.REVERTS]] = true;
+    }
+    return out;
+  }
+
   // Which pair of fields a record compares on. A format-only record's whole
   // difference is in the markup, so comparing its `after` (identical to its
   // `before` by construction) would make the branch a silent no-op.
@@ -928,6 +1034,13 @@
     acceptPageText: acceptPageText,
     changedSpan: changedSpan,
     editChangeText: editChangeText,
+    REVERT_EDIT: REVERT_EDIT,
+    REVERT_DELETE: REVERT_DELETE,
+    REVERT_FORMAT: REVERT_FORMAT,
+    revertChangeText: revertChangeText,
+    revertOf: revertOf,
+    isRevert: isRevert,
+    takenBackIds: takenBackIds,
     BREAK_ADDED_PARAGRAPH: BREAK_ADDED_PARAGRAPH,
     BREAK_ADDED_LINE: BREAK_ADDED_LINE,
     BREAK_REMOVED: BREAK_REMOVED,

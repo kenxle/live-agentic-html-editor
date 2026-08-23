@@ -289,17 +289,6 @@
         },
         onContinued: function () {
           tab.refresh();
-          // And the Edits tab: a REOPENED hand edit is the reviewer's own work
-          // again, so its row's Undo comes back to life with it.
-          editsTab.repaintRows();
-        },
-        // A fold moves an item's state, and a hand edit's row is drawn by the
-        // Edits tab rather than by this one. An edit the agent has handled is
-        // not undone from the rail any more (editing.canUndo: the source
-        // already carries the change), so the row's Undo has to go quiet as the
-        // reply lands, not at the next unrelated refresh.
-        onItemsChanged: function () {
-          editsTab.repaintRows();
         },
         isReadOnly: function () {
           return readOnlyActive;
@@ -576,6 +565,9 @@
 
     merge();
 
+    // Ken's copy, on the card the reviewer just took back.
+    var TOOK_BACK_NOTICE = "You took this back. The agent is asked to remove it from the source.";
+
     editing.onChange(function (item) {
       // No sync call here: editing posts through the sync it was handed, on the
       // same act that wrote the record, and posts the delete on the act that
@@ -594,6 +586,14 @@
       var still = scopedStore.readItem(reviewId, id);
       if (still) rail.upsertCard(still);
       else rail.removeCard(id);
+      // A TAKE-BACK arrives as a new record, and the card it takes back says so.
+      // Undoing a handled hand edit keeps that record (R38) and mints the work
+      // of removing the change from the source, so the Done card would otherwise
+      // sit there reading "I made this change" with no sign the reviewer had
+      // just undone it and a new row appearing elsewhere for no visible reason.
+      if (record.isRevert(item)) {
+        rail.setCardNotice(item[record.FIELD.REVERTS], TOOK_BACK_NOTICE);
+      }
       // And the Done tab has to hear about it. A HANDLED hand edit's Reopen
       // button lives in the Edits row's footer, so when undo drops that row the
       // button goes with it and the Done row is left on a card with no controls

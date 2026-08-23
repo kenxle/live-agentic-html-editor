@@ -661,11 +661,29 @@
     return pageKey.indexOf(beforeKey) !== -1;
   }
 
-  /** The ids of every item in `items` the check says was reverted. */
+  /**
+   * The ids of every item in `items` the check says was reverted BY THE PAGE.
+   *
+   * The one thing the single-item check cannot see, and the reason this takes
+   * the whole list: A REVIEWER'S OWN UNDO LOOKS IDENTICAL TO PAGE DRIFT. Both
+   * leave the reviewer's wording gone and the text it replaced back. The
+   * difference is not on the page at all, it is in the log: an undo of a handled
+   * edit mints a revert record naming the item it took back (record.revertOf),
+   * and drift mints nothing.
+   *
+   * So an item another record reverts is skipped. Reopening it would tell the
+   * agent to reapply the exact change the reviewer had just deliberately taken
+   * back, while the revert record sitting beside it asks for the opposite. The
+   * drift check itself is untouched and still does its job for the case it was
+   * built for: a rebuild that quietly dropped an applied fix, where nobody asked
+   * for anything.
+   */
   function revertedHandledEditIds(items, pageText) {
     var list = Array.isArray(items) ? items : [];
+    var takenBack = record.takenBackIds(list);
     var out = [];
     for (var i = 0; i < list.length; i += 1) {
+      if (takenBack[list[i][record.FIELD.ID]]) continue;
       if (isRevertedHandledEdit(list[i], pageText)) out.push(list[i][record.FIELD.ID]);
     }
     return out;

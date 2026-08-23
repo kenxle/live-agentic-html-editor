@@ -54,12 +54,12 @@
 // under the before-and-after. An undo that quietly does nothing teaches the
 // reviewer not to trust the button.
 //
-// Not every row can be undone. editing.canUndo is the rule (it is
-// lifecycle.canDelete, because undo IS a deletion), and a row it refuses draws
-// its button disabled carrying the refusal as its title, rather than offering a
-// press that will only ever fail. A handled hand edit is the case that reaches a
-// reviewer: the agent has already changed the source, so taking it back here
-// would change this page and nothing else.
+// EVERY row can be undone, handled ones included. Undo is the reviewer acting on
+// their own review, and an edit the agent has already applied is the case that
+// most needs taking back: the undo mints the work of removing it from the source
+// (editing.undo, record.revertOf), so the row that appears next is the one
+// asking for that. The button is disabled for one reason only, which is that
+// there is no editing surface on the page to run it.
 //
 // ---------------------------------------------------------------------------
 // The export seam
@@ -453,28 +453,6 @@
       return api;
     }
 
-    /**
-     * Repaint the rows against the records as they stand, and touch nothing else.
-     *
-     * The narrow half of refresh(), for a change that alters what a row may DO
-     * rather than which rows exist: an agent's reply landing on a hand edit
-     * takes its Undo away (editing.canUndo), and a reopen gives it back.
-     *
-     * It is not refresh() because refresh also upserts each card and stamps the
-     * Edits pane's inline flex order on it. A hand edit the agent answered has
-     * migrated to the Done pane, which orders by reply time, and re-stamping the
-     * Edits order there puts the cards back in the wrong sequence
-     * (test/browser/edits_tab.spec.js).
-     */
-    function repaintRows() {
-      if (!mounted || !doc || !host) return api;
-      handEdits().forEach(function (item) {
-        var row = rows[item[record.FIELD.ID]];
-        if (row) updateRow(row, item);
-      });
-      return api;
-    }
-
     function buildRow(item) {
       var row = el("div", ROW_CLASS);
       row.setAttribute(ROW_ATTR, item[record.FIELD.ID]);
@@ -512,7 +490,7 @@
       });
       foot.appendChild(undoBtn);
       row.appendChild(foot);
-      paintUndoButton(undoBtn, item);
+      paintUndoButton(undoBtn);
       return row;
     }
 
@@ -526,27 +504,11 @@
       return null;
     }
 
-    /**
-     * The button says what this row can actually do.
-     *
-     * Two different noes, and each reads as itself. There may be no editing
-     * surface on the page at all (the tab still lists rows without one), and the
-     * record may be one the lifecycle does not let the reviewer take back, which
-     * a handled hand edit is: editing.canUndo owns that rule and the sentence
-     * for it. A live button over either no is how a reviewer learns not to trust
-     * the button.
-     */
-    function paintUndoButton(button, item) {
+    function paintUndoButton(button) {
       if (!button) return button;
-      var surface = editingSurface();
-      if (!surface) {
-        button.disabled = true;
-        button.title = UNDO_MISSING_TITLE;
-        return button;
-      }
-      var allowed = typeof surface.canUndo === "function" ? surface.canUndo(item) : { ok: true, reason: null };
-      button.disabled = !allowed.ok;
-      button.title = allowed.ok ? UNDO_TITLE : String(allowed.reason || UNDO_TITLE);
+      var available = !!editingSurface();
+      button.disabled = !available;
+      button.title = available ? UNDO_TITLE : UNDO_MISSING_TITLE;
       return button;
     }
 
@@ -603,7 +565,7 @@
       after.setAttribute("data-empty", text.emptyAfter ? "true" : "false");
       row.querySelector("." + ROW_CLASS + "__structure").textContent = text.structure;
       row.querySelector("." + ROW_CLASS + "__said").textContent = item[record.FIELD.CHANGE] || "";
-      paintUndoButton(row.querySelector("[data-lahe-act='undo']"), item);
+      paintUndoButton(row.querySelector("[data-lahe-act='undo']"));
       return row;
     }
 
@@ -685,7 +647,6 @@
         return mounted;
       },
       refresh: refresh,
-      repaintRows: repaintRows,
       rowCount: function () {
         return Object.keys(rows).length;
       },

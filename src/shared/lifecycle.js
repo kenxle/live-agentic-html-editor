@@ -105,11 +105,22 @@
     }
   ];
 
-  // Deletion is reachable from draft and ready only. A handled item is kept as
-  // the record that a fix landed (R38), so the only way out of handled is
-  // reopening it. The reviewer deletes their own outstanding work, never the
-  // history.
-  var DELETABLE_FROM = [STATE.DRAFT, STATE.READY];
+  // Deletion is reachable from every state EXCEPT handled. A handled item is
+  // kept as the record that a fix landed (R38), and the agent has already
+  // changed the source, so dropping the record would leave that change in the
+  // file with nothing left saying it is there. The reviewer takes a handled
+  // change back a different way: undo mints a REVERT record asking the agent to
+  // remove it from the source (record.revertOf), and the handled record stays
+  // as the history of what happened.
+  //
+  // not_handled IS deletable, and the phrase under this rule is why: the
+  // reviewer deletes their own OUTSTANDING work, never the history, and
+  // record.isOutstanding counts ready and not_handled alike. An agent that
+  // replied not_handled changed nothing in the source, so a reviewer dropping
+  // it costs nobody anything. (The architecture's state diagram draws the
+  // delete arrow from draft and ready only, which is the abbreviation this
+  // corrects, not a third rule.)
+  var DELETABLE_FROM = [STATE.DRAFT, STATE.READY, STATE.NOT_HANDLED];
 
   // Terminal for the rail's Active tab, not for the record: a handled item
   // moves to the Done tab and is never removed.
