@@ -158,10 +158,23 @@ test.describe("R28 in the rail: every hand edit has its own Undo", () => {
 
     // Five replay passes. A retired record must not come back to life and
     // re-delete the block the reviewer just undid.
-    const before = await page.evaluate(() => window.__laheEdits.replayCounters());
-    const after = await page.evaluate(() => window.__laheEdits.replay(5));
-    expect(after.passes - before.passes, "five replay passes really ran").toBe(5);
-    expect(after.regionsWritten - before.regionsWritten, "and they wrote nothing").toBe(0);
+    // Both counter reads and the five passes happen inside ONE evaluate. The
+    // page runs replay passes of its own, so with a separate evaluate for the
+    // baseline, one of those can land in the gap and the delta reads six passes
+    // where the test drove five. That is the harness racing itself, not a claim
+    // about the product, and it failed a lane at random depending on which
+    // engine got there first. replay() is synchronous, so once this function
+    // starts nothing can interleave.
+    const ran = await page.evaluate(() => {
+      const start = window.__laheEdits.replayCounters();
+      const end = window.__laheEdits.replay(5);
+      return {
+        passes: end.passes - start.passes,
+        regionsWritten: end.regionsWritten - start.regionsWritten
+      };
+    });
+    expect(ran.passes, "five replay passes really ran").toBe(5);
+    expect(ran.regionsWritten, "and they wrote nothing").toBe(0);
     expect(await page.evaluate(() => window.__laheEdits.blockExists("gone")), "the block stayed").toBe(true);
   });
 
