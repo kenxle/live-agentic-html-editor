@@ -114,21 +114,31 @@ not stage it. The orchestrator rebuilds and commits it once at each checkpoint.
 **The page fields are not optional.** Without them `review.json` cannot be grouped by page. The
 group key is `record.pageKey(item)`, which is **origin plus pathname**, never pathname alone: two dev
 servers both serving `/dashboard` must not collapse into one section. A `file://` review carries
-`file` as its origin and the file's basename as its path.
+`file` as its origin and the document's parent directory plus its basename as its path (enough to
+tell two same-named documents in two folders apart).
 
-**A review MAY span pages, and the browser layer only ever acts on its own.** `record.samePage(item,
-page)` is that filter, and the layer reads every record through it: replay and anchoring, the rail's
-Active, Done and Edits lists, the count pill, and the highlights. Foreign records are FILTERED, never
-deleted, acknowledged or re-posted: they are another page's outstanding work. `review.json` and
-`lahe status` still show every page.
+**A review MAY span pages, and both the browser layer and `review.json` act on the SAME filter.**
+`record.samePage(item, page)` is that filter. The browser layer reads every record through it: replay
+and anchoring, the rail's Active, Done and Edits lists, the count pill, and the highlights. Foreign
+records are FILTERED, never deleted, acknowledged or re-posted: they are another page's outstanding
+work. `review.json`'s own page grouping (`review_format.pageGroups`) reads every item through the
+same filter, for the same reason: without it, one document visited both as `file://` and over http
+split into two page groups there even though the browser layer never showed the reviewer a split
+(Ken, live, 2026-08-18: `lahe status` showed two three-item pages for one document, and each view
+showed the reviewer only its own half). `lahe status` still shows every page.
 
 The rule is `pageKey` plus one exception for `file://`. The SAME document is legitimately visited both
-as `file://` (origin `file`, basename as path) and over http (the server's origin, a full pathname),
-and those two keys can never be equal, so when either side carries the `file` origin the comparison
-falls back to BASENAMES. That keeps one document's items together and keeps two different documents
-apart, at the accepted cost that two same-named documents match when one of them came off disk: a
-`file://` record never stored anything finer than a basename, and hiding the reviewer's own items on
-the document in front of them is the worse of the two failures.
+as `file://` (origin `file`, parent directory plus basename as path) and over http (the server's
+origin, a full pathname), and those two keys can never be equal, so when either side carries the
+`file` origin the comparison falls back to the DOCUMENT TAIL: the last N path segments, N being
+however many the shorter side has (`src/shared/record.js`, `samePage`, around line 300). That keeps
+one document's items together and keeps two different documents apart, at the accepted cost that two
+documents whose last two segments agree match when one of them came off disk (`/a/docs/index.html`
+and `/b/docs/index.html`, both opened from disk): a deeper tail would trade that away for leaking more
+of the reviewer's disk into a group heading, and hiding the reviewer's own items on the document in
+front of them is the worse of the two failures. `review.json`'s merged group displays the served
+origin once one joins (the reachable address), and carries `file_origin_seen: true` on that page so
+`lahe status` can still say a file:// visit happened even after the display moves on from it.
 
 **The applied-`after` history.** `record.priorAfters(item)` returns every `after` this record has had
 that is not its current one. That is exactly what replay's branch three compares against. A record
@@ -413,10 +423,11 @@ One file per review, in `reviews/<review-id>/` beside `events.jsonl` and the rep
 Top level: `schema`, **`contract`**, `generated_at`, `review`, `field_classes`, `intent_fields`,
 `counts`, `pages`.
 
-**Grouping (the plan's Q2):** one group per **origin plus pathname**, keyed by pathname, ordered by
-**first visit** (`page_seq`), with the page title and the optional source hint on the group's header.
-Query strings and fragments collapse away. Two dev servers both serving `/dashboard` are two groups.
-A `file://` review is one group named by the file's basename.
+**Grouping (the plan's Q2):** one group per **origin plus pathname**, ordered by **first visit**
+(`page_seq`), with the page title and the optional source hint on the group's header. Query strings
+and fragments collapse away. Two dev servers both serving `/dashboard` are two groups. The one
+exception is `record.samePage`'s file:// rule, described above: a `file://` visit and a served visit
+of the same document merge into one group rather than splitting in two.
 
 **The field classification is D12's, and it is the reverse of the archived draft's.** The intent
 channel is exactly `note` and `change`, carried **verbatim and never truncated**. Everything that

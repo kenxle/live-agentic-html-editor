@@ -690,6 +690,13 @@ test("a static file registering only null says how to review it over a server", 
     assert.match(run.stdout, /registered for null only/i);
     assert.match(run.stdout, /--origin/, "and names the flag that fixes it before it bites");
 
+    // Bare `add` keeps file:// working, but it reads as the fallback rather
+    // than the default: `lahe review` is the ordinary path, named here, and
+    // file:// is labelled as the fallback rather than "Open it".
+    assert.match(run.stdout, /Fallback: file:\/\//, "file:// is labelled as the fallback, not the default");
+    assert.doesNotMatch(run.stdout, /Open it:\s*file:\/\//, "file:// no longer reads as the primary instruction");
+    assert.match(run.stdout, /lahe review /, "and the ordinary, served path is named");
+
     // With a served origin registered, the served URL leads and file:// is the
     // fallback, because reviewing over a local server is the ordinary way.
     const served = work.add(["--origin", "http://127.0.0.1:8000"]);

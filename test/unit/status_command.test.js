@@ -114,6 +114,49 @@ test("status prints a per-review summary and the items that are waiting", async 
   assert.equal(run.stdout.indexOf("half a thought"), -1, "a draft is never listed as something to act on");
 });
 
+test("status says when a page connected over file:// rather than a served origin", async () => {
+  const dir = tempState();
+  const fileItem = record.newItem({
+    kind: record.KIND.COMMENT,
+    state: record.STATE.READY,
+    note: "opened straight off disk",
+    page_origin: record.FILE_ORIGIN,
+    page_path: "report.html",
+    page_seq: 1
+  });
+  seed(dir, "rev1", [fileItem]);
+
+  const run = await runStatus([], dir);
+  assert.equal(run.code, protocol.CLI_EXIT.OK, run.stderr);
+  assert.match(run.stdout, /report\.html {2}\(file:\/\/, no server: opened from disk\)/);
+});
+
+test("status names a file:// visit even once a served visit becomes the page's canonical origin", async () => {
+  const dir = tempState();
+  const fileItem = record.newItem({
+    kind: record.KIND.COMMENT,
+    state: record.STATE.READY,
+    note: "opened off disk first",
+    page_origin: record.FILE_ORIGIN,
+    page_path: "preview/report.html",
+    page_seq: 1
+  });
+  const servedItem = record.newItem({
+    kind: record.KIND.COMMENT,
+    state: record.STATE.READY,
+    note: "then opened through the server",
+    page_origin: "http://127.0.0.1:8000",
+    page_path: "/report.html",
+    page_seq: 2
+  });
+  seed(dir, "rev1", [fileItem, servedItem]);
+
+  const run = await runStatus([], dir);
+  assert.equal(run.code, protocol.CLI_EXIT.OK, run.stderr);
+  assert.match(run.stdout, /\/report\.html {2}\(also opened via file:\/\/ at least once\)/);
+  assert.match(run.stdout, /2 total/, "one merged page, both items counted");
+});
+
 test("with no helper up, liveness is unknown rather than a stale number", async () => {
   const dir = tempState();
   seed(dir, "rev1", [anItem("one comment", record.STATE.READY)]);

@@ -420,6 +420,84 @@ test("an unknown source hint says so plainly rather than letting an agent edit t
 });
 
 // ---------------------------------------------------------------------------
+// The file:// merge (record.samePage, and the split it fixes)
+// ---------------------------------------------------------------------------
+//
+// One document reviewed both as file:// and over http used to split into two
+// page groups here (the raw key differs on every axis), even though the
+// browser layer already reads every record through record.samePage and never
+// showed the reviewer a split. `lahe status` showed two three-item pages for
+// one document, and each view showed the reviewer only its own half (Ken,
+// live, 2026-08-18).
+
+test("a file visit and a served visit of the same document merge into one page group", () => {
+  const fileItem = anEdit({
+    page_origin: record.FILE_ORIGIN,
+    page_path: "preview/index.html",
+    page_title: "Report",
+    page_seq: 1
+  });
+  const servedItem = anEdit({
+    page_origin: "http://127.0.0.1:59331",
+    page_path: "/index.html",
+    page_title: "Report",
+    page_seq: 2
+  });
+  const json = rf.projectReview(reviewWith([fileItem, servedItem], null));
+  assert.equal(json.pages.length, 1, "one document, one page group, not two");
+  assert.equal(json.pages[0].items.length, 2, "both visits' items land on the one group");
+  assert.equal(json.pages[0].origin, "http://127.0.0.1:59331", "the served origin displays as canonical");
+  assert.equal(json.pages[0].path, "/index.html");
+  assert.equal(json.pages[0].key, "http://127.0.0.1:59331|/index.html");
+  assert.equal(json.pages[0].file_origin_seen, true, "lahe status can still say a file:// visit happened");
+});
+
+test("the merge works whichever visit arrived first", () => {
+  const fileItem = anEdit({ page_origin: record.FILE_ORIGIN, page_path: "preview/index.html", page_seq: 2 });
+  const servedItem = anEdit({ page_origin: "http://127.0.0.1:59331", page_path: "/index.html", page_seq: 1 });
+  const json = rf.projectReview(reviewWith([servedItem, fileItem], null));
+  assert.equal(json.pages.length, 1);
+  assert.equal(json.pages[0].items.length, 2);
+});
+
+test("a page never visited over file:// carries file_origin_seen false", () => {
+  const json = rf.projectReview(reviewWith([anEdit({ page_origin: "http://localhost:3000", page_path: "/" })], null));
+  assert.equal(json.pages[0].file_origin_seen, false);
+});
+
+test("a merge never loses a known source hint to an unknown one", () => {
+  const fileItem = anEdit({ page_origin: record.FILE_ORIGIN, page_path: "preview/index.html", page_seq: 1 });
+  fileItem[record.FIELD.SOURCE_HINT] = { known: true, path: "docs/report.md" };
+  const servedItem = anEdit({ page_origin: "http://127.0.0.1:59331", page_path: "/index.html", page_seq: 2 });
+  const json = rf.projectReview(reviewWith([fileItem, servedItem], undefined));
+  assert.equal(json.pages.length, 1);
+  assert.equal(json.pages[0].source_hint.known, true);
+  assert.equal(json.pages[0].source_hint.path, "docs/report.md");
+});
+
+// ---------------------------------------------------------------------------
+// The review-wide source hint fallback (`add --source`, via page.visited)
+// ---------------------------------------------------------------------------
+
+test("a page with no item-level hint falls back to the review-wide source hint", () => {
+  const item = anEdit({ page_origin: record.FILE_ORIGIN, page_path: "guide.html" });
+  const review = reviewWith([item], null);
+  review.source_hint = { known: true, path: "docs/guide.md" };
+  const json = rf.projectReview(review);
+  assert.equal(json.pages[0].source_hint.known, true);
+  assert.equal(json.pages[0].source_hint.path, "docs/guide.md");
+});
+
+test("an item-level hint still wins over the review-wide fallback", () => {
+  const item = anEdit({ page_origin: record.FILE_ORIGIN, page_path: "guide.html" });
+  item[record.FIELD.SOURCE_HINT] = { known: true, path: "docs/from-item.md" };
+  const review = reviewWith([item], undefined);
+  review.source_hint = { known: true, path: "docs/from-review.md" };
+  const json = rf.projectReview(review);
+  assert.equal(json.pages[0].source_hint.path, "docs/from-item.md");
+});
+
+// ---------------------------------------------------------------------------
 // The rest of the format
 // ---------------------------------------------------------------------------
 

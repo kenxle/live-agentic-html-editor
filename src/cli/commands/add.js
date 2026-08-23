@@ -167,7 +167,23 @@ var USAGE = [
 
 function parseArgs(argv) {
   var list = argv || [];
-  var options = { target: null, isNew: false, remove: false, origins: [], source: null, review: null, session: null };
+  var options = {
+    target: null,
+    isNew: false,
+    remove: false,
+    origins: [],
+    source: null,
+    review: null,
+    session: null,
+    // Internal only, never in USAGE: `lahe review` sets this on the argv it
+    // hands to `add` when it already owns and printed the served URL itself
+    // (its own "server"/"open" lines). It tells this command to hold back the
+    // "Open it" / "Fallback: file://" block below, which is otherwise a second,
+    // less confident URL competing with the one `review` already printed. A
+    // reviewer who is handed both pastes both, and the same document forks
+    // into two page identities (observed 2026-08-18).
+    underReview: false
+  };
   var index = 0;
 
   function takeValue(name, inline) {
@@ -190,7 +206,9 @@ function parseArgs(argv) {
       }
 
       if (name === "--help" || name === "-h") return { ok: false, help: true, message: USAGE };
-      if (name === "--new") {
+      if (name === "--under-review") {
+        options.underReview = true;
+      } else if (name === "--new") {
         options.isNew = true;
       } else if (name === "--remove") {
         options.remove = true;
@@ -1186,7 +1204,14 @@ async function run(argv) {
     var servedOrigins = origins.filter(function (origin) {
       return origin !== FILE_ORIGIN;
     });
-    if (servedOrigins.length > 0) {
+    if (servedOrigins.length > 0 && options.underReview) {
+      // `lahe review` started this server itself, already knows the exact path
+      // under it, and already printed its own unhedged "open" line below this
+      // output. Printing "Open it: likely ..." plus "Fallback: file://..." here
+      // too handed a reviewer three URLs for one document; they pasted two of
+      // them and the same page forked into two page identities (observed
+      // 2026-08-18). Say nothing here and let the caller's one line stand.
+    } else if (servedOrigins.length > 0) {
       say("  Open it:  likely " + servedOrigins[0] + "/" + path.basename(target));
       say("            (whatever your local server publishes this file at)");
       say("  Fallback: file://" + target + ", which works because " + FILE_ORIGIN + " is registered too.");
@@ -1196,10 +1221,16 @@ async function run(argv) {
       // a local server and the browser sends that server's origin instead, the
       // helper refuses every request from it, and the page used to say the
       // helper was unreachable, which blames the wrong thing entirely.
-      say("  Open it:  file://" + target);
+      //
+      // file:// is the FALLBACK here too, said that way on purpose: `lahe
+      // review` is the ordinary path (it starts a server and prints one URL),
+      // and this bare `add` run is the advanced command that skipped it.
+      say("  Fallback: file://" + target + "  (works with no server at all; the ordinary path is below)");
       say();
       say("  This review is registered for " + FILE_ORIGIN + " only, which is what a page opened from disk sends.");
-      say("  Reviewing over a local server is the ordinary way, and it needs that server's origin:");
+      say("  For the ordinary path, let this tool serve the page and print one URL to open:");
+      say("    lahe review " + options.target);
+      say("  Or register your own server's origin here:");
       say("    lahe add " + options.target + " --origin <origin>   (for example http://127.0.0.1:8000)");
     }
   } else {
