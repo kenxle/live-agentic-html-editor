@@ -245,8 +245,9 @@
       response:
         "{events: [event...], seq, target_mtime, agent_liveness}; target_mtime is the requesting page's ISO mtime, " +
         "or null when its retained target cannot be identified or the file is missing. agent_liveness is " +
-        "{state, monitor_at, activity_at, unanswered, oldest_unanswered_at}: whether an agent is actually listening, " +
-        "read off the owning session's monitor heartbeat and activity stamp rather than taken from anything the agent said"
+        "{state, unanswered, oldest_unanswered_at, last_reply_at, listening, monitor_at, activity_at}: how long it " +
+        "has been since the agent answered, read off the review's own replies and the owning session's files rather " +
+        "than taken from anything the agent said"
     },
     {
       name: "window.claim",
@@ -999,25 +1000,154 @@
   // heartbeat window.
   MONITOR.ACTIVITY_FRESH_MS = 180000;
 
+  // ---------------------------------------------------------------------------
+  // What the rail is allowed to say about an agent
+  // ---------------------------------------------------------------------------
+  //
+  // SILENCE ONLY MATTERS WHEN SOMETHING IS WAITING. That is the whole rule, and
+  // getting it wrong in either direction is what this section is for.
+  //
+  // A review with every item answered and an agent sitting quietly on it is the
+  // NORMAL, HEALTHY, MOST COMMON state of a review. The reviewer opens one
+  // document, works it, and leaves three others answered and idle for a day. A
+  // rail that says anything at all about the agent there is crying wolf on
+  // nearly every session they have open, and a rail that cries wolf is a rail
+  // nobody reads by the third comment. So: nothing unanswered, nothing said.
+  // Not "watching", not "idle", not "ok".
+  //
+  // The states below therefore only exist while an item is waiting, and what
+  // they report is HOW LONG IT HAS BEEN WAITING. That number is always
+  // knowable, it is about the reviewer's own work, and nothing can fake it.
+  //
+  // The old states (watching / working / unattended) described our plumbing
+  // instead: they told a reviewer whether a monitor process had checked in,
+  // which is not something they can act on and not something they asked. A
+  // reviewer was told "monitoring is active" in a chat while seven items sat
+  // unanswered, and the rail's own answer to that was another sentence about
+  // monitors.
   var AGENT_LIVENESS = {
     STATE: {
-      // A monitor heartbeat is fresh for the current handoff rev.
-      WATCHING: "watching",
-      // No fresh heartbeat, but there is unanswered work and the session ran a
-      // lahe command recently: an agent is mid-batch.
+      // Items are waiting, and the agent has run a lahe command or landed a
+      // reply in the last few minutes. It is mid-task, which is not alarming
+      // however long the item has been in the queue behind it.
       WORKING: "working",
-      // Unanswered work and neither of the above. Nobody is listening.
-      UNATTENDED: "unattended",
-      // Nothing is waiting and nobody is watching. Not a problem, so not loud.
+      // Items are waiting and nothing has come back for a while.
+      WAITING: "waiting",
+      // Items are waiting, nothing has come back, and the machine can see that
+      // nothing is listening: no process holds this session's wake feed open, no
+      // live monitor, no lahe command in minutes. A different next move for the
+      // reviewer, so a different state.
+      NO_AGENT: "no_agent",
+      // NOTHING IS WAITING. Says nothing at all, and this is the state a healthy
+      // review spends most of its life in.
       NONE: "none"
     },
     FIELD: {
       STATE: "state",
-      MONITOR_AT: "monitor_at",
-      ACTIVITY_AT: "activity_at",
       UNANSWERED: "unanswered",
-      OLDEST_UNANSWERED_AT: "oldest_unanswered_at"
-    }
+      OLDEST_UNANSWERED_AT: "oldest_unanswered_at",
+      // When the newest reply on this review landed, or null if none ever has.
+      // It is evidence of an agent doing something recently, and it is what
+      // `lahe session list` shows a human. It is never on the reviewer's line by
+      // itself: an old reply on a fully answered review is not news.
+      LAST_REPLY_AT: "last_reply_at",
+      // true, false, or NULL FOR CANNOT TELL. Null is a real answer and it is
+      // the answer on any host where the machine cannot be asked. It never
+      // produces a claim in either direction; the line falls back to the wait.
+      LISTENING: "listening",
+      MONITOR_AT: "monitor_at",
+      ACTIVITY_AT: "activity_at"
+    },
+    // THE WORDS, SPELLED ONCE, HERE. They used to be hand-copied into the layer,
+    // which is two spellings of one wire value: rename a state and the rail
+    // silently stopped recognising it, which looks exactly like a healthy rail
+    // with nothing to say. `{age}` is how long the oldest unanswered item has
+    // waited, filled in by whoever draws the line off its own clock, so a helper
+    // repeating an unchanged payload cannot freeze a number that is growing.
+    //
+    // They are in a reviewer's words, not ours. No monitors, no heartbeats, no
+    // wake feeds: none of that is the reviewer's problem, and naming it in front
+    // of them asks them to care about our plumbing.
+    //
+    // `none` is deliberately absent: a state with no words draws nothing.
+    TEXT: {
+      working: "agent is working, {age}",
+      waiting: "nothing back yet, {age}",
+      no_agent: "nobody has picked this up, {age}"
+    },
+    // THE QUIET INDICATOR, which is what the line wears the rest of the time.
+    //
+    // It is a convenience rather than an alarm, and it exists because there are
+    // two moments a reviewer actually looks: at the start ("will my comments
+    // reach the agent, did this set up correctly?") and after a break ("did
+    // anything die while I was away?"). Both are the same question, is the chain
+    // intact, and both deserve a glanceable answer rather than a blank space.
+    //
+    // Two words, no punctuation, no verb: it must never look like it wants
+    // reading. `null` when the machine cannot be asked, because a shrug is not a
+    // status and inventing either answer would be worse than silence.
+    CONNECTION: {
+      connected: "agent connected",
+      absent: "no agent connected"
+    },
+    // THE HOVER TEXT, assembled from these in order by whoever draws the line.
+    //
+    // This is where everything the tool actually knows about the connection
+    // goes: whether the helper is answering, whether an agent has this review
+    // open, when it last replied, and where the work is being kept. The line
+    // itself stays short; a reviewer who is curious, or worried, hovers.
+    //
+    // Still no monitors, no heartbeats and no wake feeds. "Has this review open"
+    // is what the machine can actually see (a process holding this session's
+    // feed open) said in words that mean something to the person reading them.
+    DETAIL: {
+      helper_up: "The helper is answering this page, so comments and edits reach it as you make them.",
+      helper_down: "The helper is not answering right now, so your work is being kept in this browser until it is.",
+      agent_connected: "An agent has this review open.",
+      agent_absent: "No agent has this review open.",
+      agent_unknown: "Whether an agent has this review open cannot be checked on this computer.",
+      replied: "The agent last replied {reply} ago.",
+      never_replied: "The agent has not replied on this review yet.",
+      waiting: "Your oldest unanswered item has been waiting {age}.",
+      stored: "Your comments and edits are stored in this browser and in the helper's log on disk.",
+      save: "Save a copy writes them to a file you can hand to an agent yourself; the menu also has Copy review."
+    },
+    // WHEN THE LINE STARTS SPEAKING, counted from the moment the reviewer
+    // submitted, not from anything about a process.
+    //
+    // Thirty seconds, because that is where a person who has just typed
+    // something starts wondering whether it went anywhere. Not minutes: they are
+    // sitting there. Not instant either, because an agent that has had a comment
+    // for five seconds is reading it and a stopwatch started that fast is noise
+    // on every single comment.
+    //
+    // THE CLOCK STARTS ON SUBMITTED WORK ONLY. A draft the reviewer is still
+    // typing is waiting on nobody: drafts are invisible to agents everywhere
+    // else in this design (`record.isUnansweredReady` requires READY), and they
+    // are invisible to this clock for the same reason.
+    QUIET_MS: 30000,
+    // A lahe command or a landed reply this recent is an agent mid-task. It is
+    // the difference the reviewer actually asked for: "waiting 10m and nothing
+    // has happened" is worth knowing, "waiting 10m while the agent works" is
+    // not alarming.
+    ACTIVE_MS: 180000,
+    // Past this, a wait with nothing happening is loud. Nothing the machine can
+    // see about listeners buys quiet here: a file tail can be armed all
+    // afternoon over an agent that stopped reading.
+    STALE_MS: 600000,
+    // The label on the way out, shown beside the line whenever it speaks. What
+    // actually worries a reviewer who has had no answer is not whether an agent
+    // is alive, it is whether they are about to lose what they just wrote. The
+    // work is already in two places (this browser and the helper's log), and
+    // this is the third: their own copy, one click from the moment they start
+    // wondering rather than three clicks into a menu.
+    SAVE_LABEL: "Save a copy",
+    // How recently a lahe command must have run for the machine to count as
+    // having somebody on it. Wider than ACTIVE_MS on purpose, and only ever used
+    // to WITHHOLD the "no agent connected" wording: an exit-on-work monitor is
+    // gone the moment work arrives, so an agent can be mid-edit with nothing
+    // holding the feed open and no heartbeat.
+    RECENT_COMMAND_MS: 600000
   };
 
   return {

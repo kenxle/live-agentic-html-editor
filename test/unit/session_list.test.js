@@ -132,22 +132,31 @@ test("list sorts open sessions first, then newest activity first", async () => {
   assert.deepEqual(rows.map((row) => row.id), ["s_newer", "s_older", "s_gone"]);
 });
 
-test("the watcher column reports watching, a heartbeat age, or nobody", async () => {
+test("the watcher column reports listening, nobody, or that it could not tell", async () => {
+  // THE OPERATOR'S COLUMN, not the reviewer's line. Here the plumbing is the
+  // point: this is how a human finds the session whose agent wandered off. The
+  // rail says how long it has been since a reply and never mentions watchers.
   const dir = tempState();
   const sessions = agentSessionsModule.createStore({ dir });
   sessions.create({ id: "s_watched" });
-  sessions.create({ id: "s_stale" });
   sessions.create({ id: "s_none" });
   const nowMs = Date.parse("2026-08-20T12:00:00.000Z");
-  sessions.writeMonitor("s_watched", { pid: 4242, handoff_rev: 0, at: "2026-08-20T11:59:55.000Z" });
-  sessions.writeMonitor("s_stale", { pid: 4243, handoff_rev: 0, at: "2026-08-20T11:50:00.000Z" });
+  // A heartbeat with a pid that really exists, so the pid check passes.
+  sessions.writeMonitor("s_watched", { pid: process.pid, handoff_rev: 0, at: "2026-08-20T11:59:55.000Z" });
 
   const rows = sessionCommand.collect({ dir, nowMs });
   const by = {};
   rows.forEach((row) => { by[row.id] = row; });
-  assert.equal(sessionCommand.watcherText(by.s_watched, nowMs), "watching");
-  assert.equal(sessionCommand.watcherText(by.s_stale, nowMs), "last heartbeat 10m ago");
-  assert.equal(sessionCommand.watcherText(by.s_none, nowMs), "no watcher");
+  assert.equal(sessionCommand.watcherText(by.s_watched, nowMs), "listening");
+  // Nothing holds the feed open and there is no heartbeat. The probe has not
+  // been warmed in this process, so the honest word is that we cannot tell.
+  assert.equal(sessionCommand.watcherText(by.s_none, nowMs), "watcher unknown");
+
+  // A heartbeat whose process is gone is not a watcher, however fresh it is.
+  sessions.writeMonitor("s_none", { pid: 424242, handoff_rev: 0, at: "2026-08-20T11:59:55.000Z" });
+  const refreshed = sessionCommand.collect({ dir, nowMs });
+  const gone = refreshed.filter((row) => row.id === "s_none")[0];
+  assert.notEqual(sessionCommand.watcherText(gone, nowMs), "listening");
 });
 
 test("--json prints one object per session and one summary line", async () => {
@@ -173,11 +182,18 @@ test("--json prints one object per session and one summary line", async () => {
   assert.equal(first.handoff_rev, 0);
   assert.equal(first.reviews, 1);
   assert.equal(first.unanswered_ready, 1);
-  assert.equal(
-    first.liveness[protocol.AGENT_LIVENESS.FIELD.STATE],
-    protocol.AGENT_LIVENESS.STATE.UNATTENDED,
-    "work with nobody watching is unattended, the same word the rail uses"
+  // Work nobody has answered, in a state directory nothing on this machine is
+  // watching. Either word is honest: `no_agent` where the machine can be asked
+  // whether anything holds the wake feed open (the CLI warms that probe before
+  // it reads), and `waiting` where it cannot be asked at all.
+  assert.ok(
+    [protocol.AGENT_LIVENESS.STATE.WAITING, protocol.AGENT_LIVENESS.STATE.NO_AGENT].indexOf(
+      first.liveness[protocol.AGENT_LIVENESS.FIELD.STATE]
+    ) !== -1,
+    "unanswered work is waiting, or waiting on nobody"
   );
+  assert.notEqual(first.liveness[protocol.AGENT_LIVENESS.FIELD.LISTENING], true);
+  assert.equal(first.liveness[protocol.AGENT_LIVENESS.FIELD.LAST_REPLY_AT], null);
 
   const summary = lines[2];
   assert.deepEqual(summary, { sessions: 2, open: 1, unanswered_ready: 1, state_dir: dir });

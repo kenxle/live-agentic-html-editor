@@ -47,7 +47,7 @@ No matter how many files were used to create the HTML page, Lahe knows how to ed
 
 - **Local server, hot updates.** The agent lands a change and the page updates itself.
 - **Smart reloads wait for you.** A reload holds while you are typing a comment or mid-edit, then swaps the page and puts your outstanding work in when you're in between comments.
-- **Live status.** The rail says whether an agent is watching, working, or gone.
+- **Live status.** The rail shows at a glance that your agent is connected, and when feedback goes unanswered it says how long and offers to export it.
 - **Unread answers are pointed out.** The agent flags replies you should actually read, so a routine confirmation stays quiet and a real answer does not.
 
 **No lost work!**

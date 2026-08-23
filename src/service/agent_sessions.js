@@ -11,6 +11,16 @@ var fs = require("node:fs");
 var protocol = require("../shared/protocol.js");
 var stateDir = require("./state_dir.js");
 var wakeFeed = require("./wake_feed.js");
+var watchersModule = require("./watchers.js");
+
+// One probe per process, made on first use. It is a cache in front of a
+// subprocess, so a second one would be a second subprocess per session per TTL
+// for the same answer. A store can be handed its own for a test.
+var sharedWatchers = null;
+function defaultWatchers() {
+  if (!sharedWatchers) sharedWatchers = watchersModule.createWatchers();
+  return sharedWatchers;
+}
 
 var SCHEMA = 1;
 var LEGACY_ID = "legacy";
@@ -42,59 +52,106 @@ function pidAlive(pid) {
 }
 
 /**
- * The four liveness states, computed from files rather than from claims.
+ * What the rail may say about the agent, computed from the machine rather than
+ * from anything an agent claimed.
  *
- * WATCHING   a monitor heartbeat for THIS handoff rev, younger than three of
- *            its loops. A heartbeat carrying an older rev is a pre-takeover
- *            monitor that has not noticed yet, and it must never make the rail
- *            say the new agent is watching.
- * WORKING    unanswered work, no fresh heartbeat, and the session ran a lahe
- *            command recently. This is the mid-batch case: the agent is editing
- *            and rebuilding, not polling. It exists so the rail stops showing a
- *            false red at exactly the moment the agent is doing the work.
- * UNATTENDED unanswered work and neither of the above. Nobody is listening, and
- *            the oldest item's age says how long that has been true.
- * NONE       nothing waiting and nobody watching. Not a problem, so not loud.
+ * NOTHING WAITING, NOTHING SAID. A review with every item answered and an agent
+ * sitting quietly on it is the healthy, ordinary state of a review: the reviewer
+ * has three other documents open and has not got to them yet. Saying anything
+ * about the agent there would be an alarm on nearly every session on the
+ * machine. `none` is that case, and it is most of the life of most reviews.
+ *
+ * The other three only exist while an item is waiting, and what they report is
+ * HOW LONG IT HAS WAITED:
+ *
+ * WORKING   the agent ran a lahe command or landed a reply in the last few
+ *           minutes. It is mid-task, and the wait is not alarming.
+ * WAITING   nothing has come back for a while.
+ * NO_AGENT  the same, plus the machine can SEE that nothing is listening: no
+ *           process holds this session's wake feed open, no live monitor, and no
+ *           lahe command in minutes. A different next move for the reviewer.
+ *
+ * THREE THINGS COUNT AS LISTENING, and every one of them is read off this
+ * machine:
+ *
+ *   1. Something holds the session's wake feed open. That is the host that arms
+ *      `tail -n 0 -f wake.log`, which is the wake channel we want and which used
+ *      to be invisible here. `null` from the probe means CANNOT TELL and never
+ *      becomes "nobody".
+ *   2. A monitor heartbeat that is fresh, carries THIS handoff rev, AND whose
+ *      pid still exists. The pid check is new: a killed monitor's heartbeat used
+ *      to read as live for its whole freshness window.
+ *   3. A lahe command in the last few minutes, which is the exit-on-work monitor
+ *      case: it is gone while the agent works the batch it printed.
+ *
+ * LISTENING ONLY EVER WITHHOLDS AN ACCUSATION. It decides between "nothing back
+ * yet" and "no agent connected", and it can never make a wait quieter or
+ * shorter. An armed tail over an agent that stopped reading is still an item
+ * nobody answered, because the wait is measured from the reviewer's item.
  *
  * @param {{session?: object, monitor?: object, activity?: object,
- *          unanswered?: number, oldestUnansweredAt?: string|null,
- *          nowMs?: number}} input
+ *          listening?: boolean|null, unanswered?: number,
+ *          oldestUnansweredAt?: string|null, lastReplyAt?: string|null,
+ *          nowMs?: number, pidAlive?: function}} input
  */
 function livenessFrom(input) {
   var spec = input || {};
   var nowMs = typeof spec.nowMs === "number" ? spec.nowMs : Date.now();
   var rev = handoffRev(spec.session);
+  var alive = typeof spec.pidAlive === "function" ? spec.pidAlive : pidAlive;
   var monitor = spec.monitor || null;
   var activity = spec.activity || null;
   var unanswered = Number.isInteger(spec.unanswered) && spec.unanswered > 0 ? spec.unanswered : 0;
+  var states = protocol.AGENT_LIVENESS.STATE;
 
   var monitorAt = null;
+  var monitorPid = null;
   if (monitor && typeof monitor[protocol.MONITOR.HEARTBEAT_FIELD.AT] === "string") {
     var monitorRev = monitor[protocol.MONITOR.HEARTBEAT_FIELD.HANDOFF_REV];
     if (Number.isInteger(monitorRev) && monitorRev === rev) {
       monitorAt = monitor[protocol.MONITOR.HEARTBEAT_FIELD.AT];
+      monitorPid = monitor[protocol.MONITOR.HEARTBEAT_FIELD.PID];
     }
   }
   var activityAt = activity && typeof activity[protocol.MONITOR.ACTIVITY_FIELD.AT] === "string"
     ? activity[protocol.MONITOR.ACTIVITY_FIELD.AT]
     : null;
 
-  var monitorFresh = withinMs(monitorAt, nowMs, protocol.MONITOR.HEARTBEAT_FRESH_MS);
-  var activityFresh = withinMs(activityAt, nowMs, protocol.MONITOR.ACTIVITY_FRESH_MS);
+  var monitorLive =
+    withinMs(monitorAt, nowMs, protocol.MONITOR.HEARTBEAT_FRESH_MS) && alive(monitorPid);
+  var commandRecently = withinMs(activityAt, nowMs, protocol.AGENT_LIVENESS.RECENT_COMMAND_MS);
+  var watcher = spec.listening === true ? true : spec.listening === false ? false : null;
+
+  var listening;
+  if (watcher === true || monitorLive || commandRecently) listening = true;
+  else if (watcher === false) listening = false;
+  else listening = null;
+
+  var oldestAt = typeof spec.oldestUnansweredAt === "string" && spec.oldestUnansweredAt
+    ? spec.oldestUnansweredAt
+    : null;
+  var lastReplyAt = typeof spec.lastReplyAt === "string" && spec.lastReplyAt ? spec.lastReplyAt : null;
+  // Mid-task: something the AGENT did, in the last few minutes. A drain stamps
+  // activity.json and a folded reply stamps it too, so this is the agent's own
+  // footprints rather than a process that happens to be running.
+  var active =
+    withinMs(activityAt, nowMs, protocol.AGENT_LIVENESS.ACTIVE_MS) ||
+    withinMs(lastReplyAt, nowMs, protocol.AGENT_LIVENESS.ACTIVE_MS);
 
   var state;
-  if (monitorFresh) state = protocol.AGENT_LIVENESS.STATE.WATCHING;
-  else if (unanswered > 0 && activityFresh) state = protocol.AGENT_LIVENESS.STATE.WORKING;
-  else if (unanswered > 0) state = protocol.AGENT_LIVENESS.STATE.UNATTENDED;
-  else state = protocol.AGENT_LIVENESS.STATE.NONE;
+  if (unanswered === 0) state = states.NONE;
+  else if (active) state = states.WORKING;
+  else if (listening === false) state = states.NO_AGENT;
+  else state = states.WAITING;
 
   var out = {};
   out[protocol.AGENT_LIVENESS.FIELD.STATE] = state;
+  out[protocol.AGENT_LIVENESS.FIELD.UNANSWERED] = unanswered;
+  out[protocol.AGENT_LIVENESS.FIELD.OLDEST_UNANSWERED_AT] = oldestAt;
+  out[protocol.AGENT_LIVENESS.FIELD.LAST_REPLY_AT] = lastReplyAt;
+  out[protocol.AGENT_LIVENESS.FIELD.LISTENING] = listening;
   out[protocol.AGENT_LIVENESS.FIELD.MONITOR_AT] = monitorAt;
   out[protocol.AGENT_LIVENESS.FIELD.ACTIVITY_AT] = activityAt;
-  out[protocol.AGENT_LIVENESS.FIELD.UNANSWERED] = unanswered;
-  out[protocol.AGENT_LIVENESS.FIELD.OLDEST_UNANSWERED_AT] =
-    typeof spec.oldestUnansweredAt === "string" && spec.oldestUnansweredAt ? spec.oldestUnansweredAt : null;
   return out;
 }
 
@@ -149,6 +206,9 @@ function createStore(options) {
   if (!opts.dir) throw new Error("agent_sessions.createStore: dir is required");
   var dir = opts.dir;
   var now = typeof opts.now === "function" ? opts.now : function () { return new Date().toISOString(); };
+  // Whatever can answer "is something holding this session's wake feed open?".
+  // A test passes its own rather than spawning anything.
+  var watchers = opts.watchers || null;
 
   function read(id) {
     if (id === LEGACY_ID) return { schema: SCHEMA, id: LEGACY_ID, created_at: null, closed_at: null, synthetic: true };
@@ -340,10 +400,52 @@ function createStore(options) {
   }
 
   /**
+   * Is anything holding this session's wake feed open?
+   *
+   * true, false, or null for cannot tell. It is the LAST answer rather than a
+   * fresh one: asking schedules the next look, and the reply poll runs about
+   * once a second per open page, which is not a rate to spawn a subprocess at.
+   */
+  function watchingFeed(id) {
+    var probe = watchers || defaultWatchers();
+    if (!probe || typeof probe.listening !== "function") return null;
+    try {
+      return probe.listening(stateDir.wakeLogPath(dir, id));
+    } catch (err) {
+      return null;
+    }
+  }
+
+  /**
+   * Ask the machine now, and wait for the answer.
+   *
+   * The rail never does this: it polls once a second and takes the last answer.
+   * A CLI does, because it exits in a few milliseconds and the last answer in a
+   * process that has only just started is "cannot tell", which would print
+   * "watcher unknown" for every session on every run.
+   *
+   * @param {string[]} ids
+   * @returns {Promise}
+   */
+  function warmWatching(ids) {
+    var probe = watchers || defaultWatchers();
+    if (!probe || typeof probe.refresh !== "function") return Promise.resolve([]);
+    return Promise.all((ids || []).map(function (id) {
+      try {
+        return probe.refresh(stateDir.wakeLogPath(dir, id));
+      } catch (err) {
+        return null;
+      }
+    }));
+  }
+
+  /**
    * The liveness object the rail reads, for one session.
    *
    * @param {string} id
-   * @param {{unanswered?: number, oldestUnansweredAt?: string|null, nowMs?: number}} [work]
+   * @param {{unanswered?: number, oldestUnansweredAt?: string|null,
+   *          lastReplyAt?: string|null, listening?: boolean|null,
+   *          nowMs?: number}} [work]
    */
   function liveness(id, work) {
     var w = work || {};
@@ -357,8 +459,10 @@ function createStore(options) {
       session: session,
       monitor: readMonitor(id),
       activity: readActivity(id),
+      listening: w.listening === undefined ? watchingFeed(id) : w.listening,
       unanswered: w.unanswered,
       oldestUnansweredAt: w.oldestUnansweredAt,
+      lastReplyAt: w.lastReplyAt,
       nowMs: w.nowMs
     });
   }
@@ -379,6 +483,8 @@ function createStore(options) {
     clearMonitor: clearMonitor,
     readActivity: readActivity,
     touchActivity: touchActivity,
+    watchingFeed: watchingFeed,
+    warmWatching: warmWatching,
     liveness: liveness
   };
 }
