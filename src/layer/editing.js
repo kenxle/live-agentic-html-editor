@@ -463,6 +463,7 @@
         before = { text: item[record.FIELD.BEFORE], html: item[record.FIELD.BEFORE_HTML] };
       } else {
         before = capture(block);
+        var editRegion = regionFor(block);
         item = record.newItem({
           kind: record.KIND.EDIT,
           state: record.STATE.DRAFT,
@@ -473,8 +474,8 @@
           page_title: pageField("title"),
           page_seq: pageField("seq"),
           source_hint: pageField("source_hint"),
-          region: regionFor(block),
-          context: contextFor(block)
+          region: editRegion,
+          context: contextFor(block, editRegion)
         });
         // The draft exists the moment edit state does, so the first keystroke
         // is not the first durable thing. It is removed again if the reviewer
@@ -793,6 +794,7 @@
           state: record.STATE.READY
         });
       } else {
+        var deleteRegion = regionFor(el);
         item = record.newItem({
           kind: record.KIND.DELETE,
           state: record.STATE.READY,
@@ -804,8 +806,8 @@
           page_title: pageField("title"),
           page_seq: pageField("seq"),
           source_hint: pageField("source_hint"),
-          region: regionFor(el),
-          context: contextFor(el)
+          region: deleteRegion,
+          context: contextFor(el, deleteRegion)
         });
       }
 
@@ -1035,32 +1037,18 @@
         range.selectNodeContents(element);
       }
       region.ref = anchor.mint({ element: element, range: range, root: doc });
+      // A mint that failed is stamped lost here, at the moment it fails. Stored
+      // without the stamp, the item read as healthy while its anchor pointed at
+      // nothing, which is what made the original bug silent.
+      region.lost = regions.lostFromMint(region.ref);
       try {
-        regions.pinLabel(region, descriptorFor(element));
+        regions.pinLabel(region, anchor.descriptorFor(element, doc));
       } catch (err) {
         // A label is a display convenience. A region with a reference and no
         // label is still a usable record.
         region.label = null;
       }
       return region;
-    }
-
-    function descriptorFor(element) {
-      var ordinal = 1;
-      var sibling = element.previousElementSibling;
-      while (sibling) {
-        if (sibling.tagName === element.tagName) ordinal += 1;
-        sibling = sibling.previousElementSibling;
-      }
-      return {
-        authorName: element.getAttribute ? element.getAttribute(regions.AUTHOR_ATTR) : null,
-        id: element.id || null,
-        ariaLabel: element.getAttribute ? element.getAttribute("aria-label") : null,
-        heading: headingTextFor(element),
-        ordinal: ordinal,
-        tag: String(element.tagName || "").toLowerCase(),
-        text: element.textContent || null
-      };
     }
 
     function headingTextFor(element) {
@@ -1074,11 +1062,19 @@
       return parent && doc && parent !== doc.body ? headingTextFor(parent) : null;
     }
 
-    function contextFor(element) {
+    function contextFor(element, region) {
       var context = record.emptyContext();
       if (!element) return context;
       context.element = element.tagName;
       context.heading = headingTextFor(element);
+      // The anchor's own context ring, carried into the two fields the
+      // projection has always had room for and nobody ever filled.
+      var ref = region && region.ref;
+      if (ref) {
+        if (typeof ref.prefix === "string") context.prefix = ref.prefix;
+        if (typeof ref.suffix === "string") context.suffix = ref.suffix;
+      }
+      context.subject = anchor.subjectFor(element, doc);
       return context;
     }
 

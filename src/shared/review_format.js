@@ -113,6 +113,7 @@
     BEFORE_HTML: "before_html",
     AFTER_HTML: "after_html",
     REGION_LABEL: "region_label",
+    SUBJECT: "subject",
     THREAD: "thread"
   };
 
@@ -127,7 +128,8 @@
     PROJECTED.CONTEXT,
     PROJECTED.BEFORE_HTML,
     PROJECTED.AFTER_HTML,
-    PROJECTED.REGION_LABEL
+    PROJECTED.REGION_LABEL,
+    PROJECTED.SUBJECT
   ];
 
   // The classification travels with the file, so an agent sees the rule as
@@ -149,6 +151,12 @@
     before_html: record.CLASS_DATA,
     after_html: record.CLASS_DATA,
     region_label: record.CLASS_DATA,
+    // What the element the reviewer pointed at says about itself: its tag, its
+    // src, its alt, its opening tag, and the page text beside it. All of it was
+    // read off the page, so it is data and it is bounded, exactly like `quote`.
+    // An alt attribute is a place someone can write a sentence, and a sentence
+    // in a data field is page content, never an instruction (D6).
+    subject: record.CLASS_DATA,
     // the page-group header fields, all page-controlled
     title: record.CLASS_DATA,
     origin: record.CLASS_DATA,
@@ -415,6 +423,21 @@
       heading: boundData(ctx.heading, CONTEXT_MAX),
       element: boundData(ctx.element, CONTEXT_MAX)
     };
+    // What the subject IS, when the record was made on a whole element. Null
+    // for a passage of text, which has its words in `quote` already.
+    var subject = ctx.subject;
+    out[PROJECTED.SUBJECT] = subject
+      ? {
+          tag: boundData(subject.tag, CONTEXT_MAX),
+          src: boundData(subject.src, CONTEXT_MAX),
+          alt: boundData(subject.alt, CONTEXT_MAX),
+          // The opening tag only. Bounded on the longer limit because a data
+          // URI is a legitimate src and truncating it to 400 characters would
+          // hand the agent a tag that matches nothing in the source.
+          html: boundData(subject.html, BEFORE_MAX),
+          near: boundData(subject.near, CONTEXT_MAX)
+        }
+      : null;
     out[PROJECTED.BEFORE_HTML] = boundData(it[F.BEFORE_HTML], BEFORE_MAX);
     out[PROJECTED.AFTER_HTML] = boundData(it[F.AFTER_HTML], BEFORE_MAX);
     out[PROJECTED.REGION_LABEL] = boundData((it[F.REGION] && it[F.REGION].label) || null, CONTEXT_MAX);
@@ -612,6 +635,12 @@
     }
     if (it[F.CHANGE]) {
       lines.push("  Change (the reviewer's words)" + (it[F.UPDATED_AT] ? " [" + it[F.UPDATED_AT] + "]" : "") + ": " + it[F.CHANGE]);
+    }
+    // For a record made on a whole element, what that element is. Copy and
+    // Export reach an agent with no review.json in front of them (R10), and
+    // "the image" is not an answer when there are three of them.
+    if (ctx.subject && ctx.subject.html) {
+      lines.push("  The element (page markup): " + boundData(ctx.subject.html, BEFORE_MAX));
     }
     if (ctx.quote) lines.push("  Quoted from the page: " + wrapped(boundData(ctx.quote, BEFORE_MAX)));
     if (typeof it[F.BEFORE] === "string") lines.push("  Before (page text): " + wrapped(boundData(it[F.BEFORE], BEFORE_MAX)));

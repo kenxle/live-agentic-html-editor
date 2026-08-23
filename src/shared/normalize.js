@@ -925,6 +925,10 @@
     textOf: textOf,
     equalsInMode: equalsInMode,
     isSafeUrlValue: isSafeUrlValue,
+    // Exported so the anchor engine can serialize an element's opening tag for
+    // the agent with the same escaping cleanMarkup uses, rather than spelling a
+    // second one.
+    escapeAttrValue: escapeAttrValue,
     canonicalTarget: canonicalTarget,
     isLoopbackHost: isLoopbackHost,
     targetSlug: targetSlug,

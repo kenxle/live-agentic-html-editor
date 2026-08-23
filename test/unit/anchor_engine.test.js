@@ -452,3 +452,173 @@ test("resolve survives a caller with no document at all", () => {
   assert.equal(verdict.bound, false);
   assert.equal(verdict.element, null);
 });
+
+// ---------------------------------------------------------------------------
+// The element anchor: a region with no text (D9, RF19)
+// ---------------------------------------------------------------------------
+//
+// The reviewer's bug, as a fixture. Three images in a row, each in its own
+// wrapper, under one heading. Every one of them minted an empty probe, stored
+// the failure as though it were a reference, and labelled itself "img 1".
+
+const regions = require("../../src/shared/regions.js");
+
+/** A heading, then a row of images, each in its own wrapper. Returns {root, images}. */
+function imageRow(specs) {
+  const root = el("body");
+  append(root, el("h2", { text: "1. Wordmark on its ink rectangle" }));
+  const row = append(root, el("div"));
+  const images = specs.map(function (spec) {
+    const wrapper = append(row, el("div"));
+    return append(wrapper, el("img", { attrs: spec }));
+  });
+  return { root: root, images: images };
+}
+
+function labelOf(element, root) {
+  return regions.labelFor(anchor.descriptorFor(element, root)).label;
+}
+
+test("an image mints from its src, because the src is what the image IS", () => {
+  const page = imageRow([{ src: "logo-square-b@2x.png", alt: "Square badge, 70% fill" }]);
+  const ref = anchor.mint({ element: page.images[0], root: page.root });
+
+  assert.equal(ref.ok, true, "an image is anchorable: " + JSON.stringify(ref.failure));
+  assert.equal(ref.probe_kind, anchor.PROBE.ELEMENT, "no text, so the probe is the element signature");
+  assert.match(ref.probe, /logo-square-b@2x\.png/, "the signature carries the src the author wrote");
+  assert.equal(regions.lostFromMint(ref), null, "a reference that minted is not lost");
+
+  const verdict = anchor.resolve(ref, page.root);
+  assert.equal(verdict.bound, true, "and it finds the same image again: " + verdict.reason);
+  assert.equal(verdict.element, page.images[0]);
+});
+
+test("three sibling images mint three distinct references and three distinct labels", () => {
+  const page = imageRow([
+    { src: "logo-square-a@2x.png", alt: "Square badge, 40% fill" },
+    { src: "logo-square-b@2x.png", alt: "Square badge, 70% fill" },
+    { src: "logo-square-c@2x.png", alt: "Square badge, full" }
+  ]);
+
+  const refs = page.images.map(function (img) {
+    return anchor.mint({ element: img, root: page.root });
+  });
+  refs.forEach(function (ref, i) {
+    assert.equal(ref.ok, true, "image " + i + " should mint: " + JSON.stringify(ref.failure));
+  });
+
+  // Each one resolves to ITS OWN image. This is the reviewer's failure: he
+  // pointed at the middle one and his agent could not tell which he meant.
+  page.images.forEach(function (img, i) {
+    const verdict = anchor.resolve(refs[i], page.root);
+    assert.equal(verdict.bound, true, "image " + i + " resolves: " + verdict.reason);
+    assert.equal(verdict.element, img, "image " + i + " resolved to a DIFFERENT image");
+  });
+
+  const labels = page.images.map(function (img) {
+    return labelOf(img, page.root);
+  });
+  assert.deepEqual(labels, [
+    "img logo-square-a@2x.png",
+    "img logo-square-b@2x.png",
+    "img logo-square-c@2x.png"
+  ]);
+  assert.equal(new Set(labels).size, 3, "three cards in the rail must not read identically");
+});
+
+test("wrapped images are still counted 1, 2, 3 through the heading's section", () => {
+  const page = imageRow([{ src: "a.png" }, { src: "b.png" }, { src: "c.png" }]);
+  const ordinals = page.images.map(function (img) {
+    return anchor.ordinalInSection(img, page.root);
+  });
+  // Counted among immediate siblings, which is what both callers used to do,
+  // every one of these is 1: each image is an only child of its own wrapper.
+  assert.deepEqual(ordinals, [1, 2, 3]);
+});
+
+test("two images sharing one src are ambiguous, exactly like two identical list items", () => {
+  const page = imageRow([
+    { src: "logo-square-b@2x.png", alt: "Square badge" },
+    { src: "logo-square-b@2x.png", alt: "Square badge" }
+  ]);
+  const ref = anchor.mint({ element: page.images[1], root: page.root });
+
+  assert.equal(ref.ok, false, "a page cannot tell these two apart, and neither may we");
+  assert.equal(ref.failure.failureCode, "ANCHOR_AMBIGUOUS");
+  const lost = regions.lostFromMint(ref);
+  assert.equal(lost.code, "ANCHOR_AMBIGUOUS", "and the failure is stamped, not swallowed");
+});
+
+test("a failed mint is stamped lost, so no item can read as healthy with a dead anchor", () => {
+  // An image with nothing identifying about it: no src, no alt, no srcset.
+  const root = el("body");
+  append(root, el("p", { text: "Some words before." }));
+  const orphan = append(root, el("img", { attrs: {} }));
+
+  const ref = anchor.mint({ element: orphan, root: root });
+  assert.equal(ref.ok, false);
+  assert.equal(ref.failure.reason, anchor.MINT_FAILURE.EMPTY_PROBE);
+
+  const lost = regions.lostFromMint(ref);
+  assert.equal(lost.code, "ANCHOR_NO_TEXT_MATCH");
+  assert.equal(typeof lost.at, "string", "the stamp says when the anchor died");
+  // The exact shape the record stores, so a reader of review.json sees it.
+  const region = { ref: ref, label: null, lost: regions.lostFromMint(ref) };
+  assert.notEqual(region.lost, null, "the record that started this bug said lost: null here");
+});
+
+test("an svg is reachable by its own title, and its text still never joins the page's prose", () => {
+  const root = el("body");
+  const para = append(root, el("p", { text: "Read the chart." }));
+  const graphic = append(root, el("svg", { attrs: { "aria-label": null } }));
+  append(graphic, el("title", { text: "Revenue by quarter" }));
+  append(graphic, el("text", { text: "Q1" }));
+
+  const ref = anchor.mint({ element: graphic, root: root });
+  assert.equal(ref.ok, true, "pick mode hands these over, so the engine has to reach them: " + JSON.stringify(ref.failure));
+  assert.equal(ref.probe_kind, anchor.PROBE.ELEMENT);
+  assert.match(ref.probe, /Revenue by quarter/);
+
+  const verdict = anchor.resolve(ref, root);
+  assert.equal(verdict.bound, true);
+  assert.equal(verdict.element, graphic);
+
+  // And the text walk still refuses to enter it: a probe minted on the
+  // paragraph must not pick up "Q1" or the chart's title.
+  const textRef = anchor.mint({ element: para, root: root });
+  assert.equal(textRef.probe_kind, anchor.PROBE.TEXT);
+  assert.equal(textRef.probe, "Read the chart.");
+  assert.equal(textRef.suffix.indexOf("Revenue"), -1, "an svg's title is not the page's prose");
+});
+
+test("the subject carries what the element is: the raw src, the alt, and the opening tag", () => {
+  const root = el("body");
+  const figure = append(root, el("figure"));
+  const image = append(figure, el("img", { attrs: { src: "logo-square-b@2x.png", alt: "Square badge, 70% fill", width: "400" } }));
+  append(figure, el("figcaption", { text: "B, 70% fill" }));
+
+  const subject = anchor.subjectFor(image, root);
+  assert.equal(subject.tag, "img");
+  assert.equal(subject.src, "logo-square-b@2x.png", "the attribute as the author wrote it, not a resolved URL");
+  assert.equal(subject.alt, "Square badge, 70% fill");
+  assert.match(subject.html, /^<img /, "the opening tag only");
+  assert.equal(subject.html.indexOf("</"), -1, "never the subtree");
+  assert.match(subject.html, /src="logo-square-b@2x\.png"/);
+  assert.equal(subject.near, "B, 70% fill", "the caption is what a person would say to point at it");
+});
+
+test("the opening tag never carries the library's own attributes", () => {
+  const root = el("body");
+  const image = append(root, el("img", { attrs: { src: "a.png", "data-lahe": "chrome", "data-lahe-protected": "1" } }));
+  const html = anchor.openingTagOf(image);
+  assert.equal(html.indexOf("data-lahe"), -1, "nothing the library added reaches a record (R23, R33)");
+  assert.match(html, /src="a\.png"/);
+});
+
+test("an attribute value cannot break out of the opening tag it is quoted in", () => {
+  const root = el("body");
+  const image = append(root, el("img", { attrs: { src: "a.png", alt: '"><script>alert(1)</script>' } }));
+  const html = anchor.openingTagOf(image);
+  assert.equal(html.indexOf("<script"), -1, "the value is escaped, so it stays a value");
+  assert.match(html, /&quot;/);
+});
