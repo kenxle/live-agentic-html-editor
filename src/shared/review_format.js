@@ -572,6 +572,12 @@
     if (it[F.CHANGE]) {
       lines.push("  Change (the reviewer's words)" + (it[F.UPDATED_AT] ? " [" + it[F.UPDATED_AT] + "]" : "") + ": " + it[F.CHANGE]);
     }
+    // For a record made on a whole element, what that element is. Copy and
+    // Export reach an agent with no review.json in front of them (R10), and
+    // "the image" is not an answer when there are three of them.
+    if (ctx.subject && ctx.subject.html) {
+      lines.push("  The element (page markup): " + boundData(ctx.subject.html, BEFORE_MAX));
+    }
     if (ctx.quote) lines.push("  Quoted from the page: " + wrapped(boundData(ctx.quote, BEFORE_MAX)));
     if (typeof it[F.BEFORE] === "string") lines.push("  Before (page text): " + wrapped(boundData(it[F.BEFORE], BEFORE_MAX)));
     if (typeof it[F.AFTER] === "string") {

@@ -569,3 +569,10 @@ test("subject text is bounded like every other data field", () => {
   assert.match(projected.subject.src, /bounded here/, "and the bound is visible in the value");
   assert.match(projected.subject.html, /bounded here/);
 });
+
+test("the text export names the element too, because it reaches an agent with no review.json", () => {
+  const text = rf.renderText(reviewWith([anImageComment()], null));
+  assert.match(text, /The element \(page markup\): <img /);
+  assert.match(text, /logo-square-b@2x\.png/);
+  assert.match(text, /Where: img logo-square-b@2x\.png/, "the label names it too, rather than 'img 1'");
+});
