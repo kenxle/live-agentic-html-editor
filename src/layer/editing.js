@@ -25,7 +25,9 @@
 //   Delete block          its own record kind, which reads as a deletion rather
 //                         than as an empty edit (R27)
 //   undo                  reverts THAT record's region to its `before` and
-//                         retires the record, touching nothing else (R28)
+//                         retires the record, in the browser AND in the
+//                         helper's copy, touching no other record (R28). A
+//                         handled edit is not undone: see canUndo
 //
 // ---------------------------------------------------------------------------
 // Five rules this file must not lose
@@ -107,6 +109,7 @@
       root.LAHE.markers,
       root.LAHE.normalize,
       root.LAHE.record,
+      root.LAHE.lifecycle,
       root.LAHE.regions,
       root.LAHE.epoch,
       root.LAHE.gestures,
@@ -127,6 +130,7 @@
       require("../shared/markers.js"),
       require("../shared/normalize.js"),
       require("../shared/record.js"),
+      require("../shared/lifecycle.js"),
       require("../shared/regions.js"),
       require("../shared/epoch.js"),
       require("../shared/gestures.js"),
@@ -145,6 +149,7 @@
   markers,
   normalize,
   record,
+  lifecycle,
   regions,
   epoch,
   gestures,
@@ -382,6 +387,64 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Which records may be undone (R28, R38)
+  // ---------------------------------------------------------------------------
+  //
+  // Undo DELETES a record: the region goes back to its `before` and the record
+  // is retired, in the browser and in the helper's copy. So the rule for it is
+  // the rule for a deletion, lifecycle.canDelete, and not a second opinion
+  // spelled out here. This is the one production caller of it.
+  //
+  // The state it refuses that a reviewer can really reach is HANDLED, and
+  // refusing there is the honest answer rather than a missing button:
+  //
+  //  1. A handled record is the record that a fix landed (R38). The reviewer
+  //     deletes their own outstanding work, never the history.
+  //  2. The agent has already changed the SOURCE. Reverting the block here
+  //     changes this page and nothing else, so the next rebuild brings the
+  //     change back and nothing has told the agent anything. The button would
+  //     be a lie that looks like it worked.
+  //  3. Reverting the page while the record stays handled turns the take-back
+  //     into its opposite. replay.isRevertedHandledEdit reads exactly that
+  //     shape (the reviewer's wording gone, the text it replaced back) as the
+  //     PAGE having dropped an applied fix, and reopens the item carrying
+  //     REVERTED_EDIT_NOTE: "Reapply it, or reply not_handled saying why". The
+  //     reviewer takes an edit back and the agent is asked to redo it.
+  //
+  // A reviewer who wants a handled change put back says so in a comment on the
+  // passage. Giving them a real take-back (an item that asks the agent to
+  // revert the source) is a design change with no record kind behind it yet,
+  // written up as RF18 in the audit, not something to improvise here.
+  //
+  // NOT_HANDLED is refused for the same reason the table refuses it: the
+  // architecture states "Deletion is reachable only from draft and ready on
+  // purpose". The agent has answered, and the answer lives on the card.
+  var UNDO_REFUSAL = {
+    HANDLED:
+      "This edit is already handled: the agent changed the source, so undoing it here would change this page only. " +
+      "Ask for it to be put back in a comment.",
+    ANSWERED: "The agent has answered this edit. It is part of the conversation on its card now, so it is not undone from here.",
+    MISSING: "there is no record to undo"
+  };
+
+  /**
+   * May this record be undone, and if not, what does the reviewer read?
+   *
+   * Pure, so the row that draws the button and the surface that does the work
+   * cannot disagree about which edits are undoable.
+   *
+   * @param {Object} item the record as stored
+   * @returns {{ok: boolean, reason: (string|null)}}
+   */
+  function canUndo(item) {
+    if (!item) return { ok: false, reason: UNDO_REFUSAL.MISSING };
+    var state = item[record.FIELD.STATE];
+    if (lifecycle.canDelete(state, lifecycle.ACTOR.REVIEWER)) return { ok: true, reason: null };
+    if (state === record.STATE.HANDLED) return { ok: false, reason: UNDO_REFUSAL.HANDLED };
+    return { ok: false, reason: UNDO_REFUSAL.ANSWERED };
+  }
+
+  // ---------------------------------------------------------------------------
   // The surface
   // ---------------------------------------------------------------------------
 
@@ -442,6 +505,24 @@
 
     function emit(item, event) {
       for (var i = 0; i < changeListeners.length; i += 1) changeListeners[i](item, event);
+    }
+
+    /**
+     * The one REMOVAL path, and the mirror of persist().
+     *
+     * The reviewer took their own record back. The browser dropped it, so the
+     * helper's copy goes too: an item left in review.json after the browser
+     * dropped it is work the agent would do that nobody is asking for. That is
+     * the same rule the comment surface's delete already follows
+     * (src/layer/index.js, comments.onChange on "removed"), reached here by the
+     * sync this surface was handed rather than by a second delete path.
+     *
+     * sync posts nothing for an item it never sent (a draft undone before its
+     * first flush), so the log stays honest either way.
+     */
+    function unpersist(item) {
+      if (sync && typeof sync.deleteItem === "function") return sync.deleteItem(item);
+      return null;
     }
 
     // The one write path. Storage first, synchronously, then everyone else.
@@ -1106,6 +1187,12 @@
       var item = store.readItem(requireReview(), itemId);
       if (!item) return { reverted: false, kind: null, reason: "no record " + String(itemId) };
 
+      // The lifecycle gate, BEFORE the page moves. A refusal that reverted the
+      // block first would leave the reviewer looking at a page that disagrees
+      // with every store in the system.
+      var allowed = canUndo(item);
+      if (!allowed.ok) return { reverted: false, kind: item[record.FIELD.KIND], reason: allowed.reason };
+
       if (session && session.itemId === itemId) {
         // Undoing the record the reviewer is inside. Edit state goes first, and
         // it goes without committing: the undo is the decision.
@@ -1133,6 +1220,7 @@
       }
 
       store.remove(requireReview(), itemId);
+      unpersist(item);
       forget(itemId);
       delete deleted[itemId];
       selection.placeCaretAtStart(restored.element);
@@ -1168,6 +1256,7 @@
       }
 
       store.remove(requireReview(), itemId);
+      unpersist(item);
       forget(itemId);
       delete deleted[itemId];
       emit(item, "undone");
@@ -1735,6 +1824,7 @@
       commit: commit,
       deleteBlock: deleteBlock,
       format: format,
+      canUndo: canUndo,
       undo: undo,
       retire: retire,
       capture: capture,
@@ -1769,6 +1859,8 @@
     breakMarkup: breakMarkup,
     capture: capture,
     kindFor: kindFor,
+    UNDO_REFUSAL: UNDO_REFUSAL,
+    canUndo: canUndo,
     createEditing: createEditing
   };
 });

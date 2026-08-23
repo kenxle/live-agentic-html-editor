@@ -289,6 +289,11 @@
     var comments = opts.comments || null;
     var sync = opts.sync || null;
     var onContinued = typeof opts.onContinued === "function" ? opts.onContinued : function () {};
+    // A reply that folds moves an item's STATE, and this tab is not the only
+    // surface drawing that item: a hand edit's row lives in the Edits tab, and
+    // what that row may do changes with the state (editing.canUndo). Told once,
+    // here, so the two halves of one handled card cannot disagree.
+    var onItemsChanged = typeof opts.onItemsChanged === "function" ? opts.onItemsChanged : function () {};
     var isReadOnly = typeof opts.isReadOnly === "function" ? opts.isReadOnly : function () { return false; };
     var doc = Object.prototype.hasOwnProperty.call(opts, "document")
       ? opts.document
@@ -699,12 +704,17 @@
     /**
      * Put Reopen where the reviewer's other decision about this item already is.
      *
-     * Reopen and Undo are one decision surface: keep the agent's change, or take
-     * it back. On a hand-edit card they were at opposite ends, Reopen at the top
-     * in this row and Undo at the bottom in the Edits row. Reopen moves into the
-     * Edits row's own footer, first, so the pair reads as one group at the foot
-     * of the card. Run on every paint because it is idempotent and it puts the
-     * button back after a remount rebuilt either row.
+     * Reopen and Undo are one decision surface: what the reviewer does about a
+     * change the agent answered. On a hand-edit card they were at opposite ends,
+     * Reopen at the top in this row and Undo at the bottom in the Edits row.
+     * Reopen moves into the Edits row's own footer, first, so the pair reads as
+     * one group at the foot of the card. Run on every paint because it is
+     * idempotent and it puts the button back after a remount rebuilt either row.
+     *
+     * On a HANDLED card only one of the pair is live. Undo draws disabled there
+     * (editing.canUndo, and the lifecycle rule under it: a handled record is the
+     * record that a fix landed, and the source already carries the change), so
+     * Reopen is the decision this card offers.
      *
      * Absent an Edits row (a comment card), Reopen stays in this row's own
      * footer, which is where it has always been.
@@ -1042,6 +1052,7 @@
         applied.push(foldedReply(event));
       });
       refresh();
+      onItemsChanged(applied);
       return applied.filter(Boolean);
     }
 

@@ -625,24 +625,29 @@ test.describe("the rail as a shipping surface", () => {
     }
   });
 
-  // --- F5d: undoing a HANDLED hand edit ---------------------------------------
+  // --- F5d: undoing a hand edit, and the card it leaves behind ----------------
   //
-  // Undo drops the Edits row, and the relocated Reopen lives INSIDE that row, so
-  // it went with it: the Done row was left on a card with no controls at all,
-  // and boot's own change handler put the card back that the store had just
-  // removed. The reviewer was left with a ghost card they could do nothing to.
+  // Undo drops the Edits row, and a relocated Reopen would live INSIDE that row,
+  // so it went with it: the row's card was left with no controls at all, and
+  // boot's own change handler put the card back that the store had just removed.
+  // The reviewer was left with a ghost card they could do nothing to.
+  //
+  // The scenario that found it was an undo on a HANDLED edit, which no longer
+  // happens: a handled record is the record that a fix landed (R38), the agent
+  // has already changed the source, and lifecycle.canDelete refuses it. So the
+  // ghost card is asserted on the undo that does still run, and the handled card
+  // is asserted to keep both of its buttons in the test below.
 
-  test("undoing a handled hand edit leaves no ghost card and no orphaned buttons", async ({ page }) => {
+  test("undoing an unhandled hand edit leaves no ghost card and no orphaned buttons", async ({ page }) => {
     const { app, helper, token } = await startBoth();
     try {
       await bootedPage(page, app, helper, token);
       const TAIL = " Say that out loud in the app.";
       const item = await handEditOn(page, REGION.rest, TAIL);
-      await fold(page, item, { status: "handled", agent: "claude", reason: "Rewrote it.", files: [] }, "handled");
-      await pollPage(page, (id) => window.__lahe.rail.getCard(id).pane === "done", item.id, {
-        message: "the card to move to the Done pane"
+      await pollPage(page, (id) => !!window.__lahe.rail.getCard(id), item.id, {
+        message: "the hand edit to get its row"
       });
-      await page.evaluate(() => window.__lahe.rail.selectTab("done"));
+      await page.evaluate(() => window.__lahe.rail.selectTab("edits"));
 
       // The reviewer's own gesture: the Undo button on the card.
       await page.evaluate((id) => {
@@ -677,6 +682,69 @@ test.describe("the rail as a shipping surface", () => {
       expect(after.node, "and there is no ghost card node left on screen").toBe(false);
       expect(after.strays, "so there are no buttons stranded on it").toEqual([]);
       expect(after.pageText.indexOf(TAIL), "and the reviewer's words came back off the page").toBe(-1);
+    } finally {
+      await helper.stop().catch(() => {});
+      await app.close();
+    }
+  });
+
+  // --- F5e: the handled card keeps both its buttons ---------------------------
+  //
+  // Undo on a handled hand edit used to remove the record. The page reverted,
+  // the row went, and nothing told the helper, so review.json kept listing an
+  // edit the reviewer had taken back and the source kept the change the agent
+  // had already written into it. It is refused now, and the button says so
+  // rather than sitting there live: the reviewer's decision on a handled card is
+  // Reopen, which is the button beside it.
+
+  test("a handled hand edit's Undo is quiet, so the Reopen beside it cannot be stranded", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      const TAIL = " Say that out loud in the app.";
+      const item = await handEditOn(page, REGION.rest, TAIL);
+      await fold(page, item, { status: "handled", agent: "claude", reason: "Rewrote it.", files: [] }, "handled");
+      await pollPage(page, (id) => window.__lahe.rail.getCard(id).pane === "done", item.id, {
+        message: "the card to move to the Done pane"
+      });
+      await page.evaluate(() => window.__lahe.rail.selectTab("done"));
+
+      const before = await page.evaluate((id) => {
+        const node = window.__lahe.rail.cardNode(id);
+        const undo = node.querySelector('[data-lahe-act="undo"]');
+        return { visible: undo.getClientRects().length > 0, disabled: undo.disabled, title: undo.title };
+      }, item.id);
+      expect(before.visible, "the button is still there, next to Reopen").toBe(true);
+      expect(before.disabled, "and it is quiet, because the agent already changed the source").toBe(true);
+      expect(before.title, "carrying the reason the reviewer reads").toMatch(/already handled/);
+
+      // Pressed anyway. A disabled button does nothing, and the card is whole.
+      await page.evaluate((id) => {
+        const node = window.__lahe.rail.cardNode(id);
+        node.querySelector('[data-lahe-act="undo"]').click();
+      }, item.id);
+
+      const after = await page.evaluate(
+        (a) => {
+          const node = window.__lahe.rail.cardNode(a.id);
+          const visible = (el) => !!el && el.getClientRects().length > 0;
+          const reopen = node
+            ? Array.from(node.querySelectorAll(".cardact")).filter((b) => b.textContent === "Reopen issue")[0]
+            : null;
+          return {
+            held: !!window.__lahe.itemById(a.id),
+            card: !!window.__lahe.rail.getCard(a.id),
+            reopenVisible: visible(reopen),
+            pageText: document.querySelector(a.selector).textContent
+          };
+        },
+        { id: item.id, selector: REGION.rest }
+      );
+
+      expect(after.held, "the record that says a fix landed is kept (R38)").toBe(true);
+      expect(after.card, "and so is its card").toBe(true);
+      expect(after.reopenVisible, "with the one decision this card does offer").toBe(true);
+      expect(after.pageText.indexOf(TAIL), "the page still reads as the agent left it").toBeGreaterThan(-1);
     } finally {
       await helper.stop().catch(() => {});
       await app.close();

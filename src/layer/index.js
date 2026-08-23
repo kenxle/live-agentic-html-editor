@@ -289,6 +289,17 @@
         },
         onContinued: function () {
           tab.refresh();
+          // And the Edits tab: a REOPENED hand edit is the reviewer's own work
+          // again, so its row's Undo comes back to life with it.
+          editsTab.repaintRows();
+        },
+        // A fold moves an item's state, and a hand edit's row is drawn by the
+        // Edits tab rather than by this one. An edit the agent has handled is
+        // not undone from the rail any more (editing.canUndo: the source
+        // already carries the change), so the row's Undo has to go quiet as the
+        // reply lands, not at the next unrelated refresh.
+        onItemsChanged: function () {
+          editsTab.repaintRows();
         },
         isReadOnly: function () {
           return readOnlyActive;
@@ -567,7 +578,8 @@
 
     editing.onChange(function (item) {
       // No sync call here: editing posts through the sync it was handed, on the
-      // same act that wrote the record. And NO replay pass here either. The pass
+      // same act that wrote the record, and posts the delete on the act that
+      // removes one (its unpersist, reached from undo and retire). And NO replay pass here either. The pass
       // that follows a commit comes out of protect.release(), once, through the
       // ordinary scheduler; a second one scheduled from this callback would run
       // against the same page for no reason and would hide a regression in the
