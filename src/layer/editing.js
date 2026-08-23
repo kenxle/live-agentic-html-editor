@@ -26,8 +26,9 @@
 //                         than as an empty edit (R27)
 //   undo                  reverts THAT record's region to its `before` and
 //                         retires the record, in the browser AND in the
-//                         helper's copy, touching no other record (R28). A
-//                         handled edit is not undone: see canUndo
+//                         helper's copy, touching no other record (R28). On a
+//                         HANDLED edit the record is kept and the undo mints
+//                         the work of taking the change back out of the source
 //
 // ---------------------------------------------------------------------------
 // Five rules this file must not lose
@@ -387,62 +388,31 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Which records may be undone (R28, R38)
+  // What an undo means, and the one thing it depends on (R28, R38)
   // ---------------------------------------------------------------------------
   //
-  // Undo DELETES a record: the region goes back to its `before` and the record
-  // is retired, in the browser and in the helper's copy. So the rule for it is
-  // the rule for a deletion, lifecycle.canDelete, and not a second opinion
-  // spelled out here. This is the one production caller of it.
+  // Undo is the reviewer acting on their own review. It always runs: the tool
+  // trusts them to make the edit, so it does not ask permission to unmake it.
+  // What changes with the record's state is what the undo LEAVES BEHIND, and
+  // lifecycle.canDelete is the one rule that decides which:
   //
-  // The state it refuses that a reviewer can really reach is HANDLED, and
-  // refusing there is the honest answer rather than a missing button:
+  //   draft, ready, not_handled   nothing landed in the source, so the record
+  //                               is dropped, here and in the helper's copy.
+  //                               There is nothing to ask anyone for.
+  //   handled                     the agent already changed the source. The
+  //                               record is KEPT (R38: it is the record that a
+  //                               fix landed) and the undo mints work:
+  //                               record.revertOf, a ready edit pointing the
+  //                               other way, which asks for the change to come
+  //                               back out of the file. Without it the next
+  //                               rebuild puts the change back on the page and
+  //                               the reviewer's undo silently expires.
   //
-  //  1. A handled record is the record that a fix landed (R38). The reviewer
-  //     deletes their own outstanding work, never the history.
-  //  2. The agent has already changed the SOURCE. Reverting the block here
-  //     changes this page and nothing else, so the next rebuild brings the
-  //     change back and nothing has told the agent anything. The button would
-  //     be a lie that looks like it worked.
-  //  3. Reverting the page while the record stays handled turns the take-back
-  //     into its opposite. replay.isRevertedHandledEdit reads exactly that
-  //     shape (the reviewer's wording gone, the text it replaced back) as the
-  //     PAGE having dropped an applied fix, and reopens the item carrying
-  //     REVERTED_EDIT_NOTE: "Reapply it, or reply not_handled saying why". The
-  //     reviewer takes an edit back and the agent is asked to redo it.
-  //
-  // A reviewer who wants a handled change put back says so in a comment on the
-  // passage. Giving them a real take-back (an item that asks the agent to
-  // revert the source) is a design change with no record kind behind it yet,
-  // written up as RF18 in the audit, not something to improvise here.
-  //
-  // NOT_HANDLED is refused for the same reason the table refuses it: the
-  // architecture states "Deletion is reachable only from draft and ready on
-  // purpose". The agent has answered, and the answer lives on the card.
-  var UNDO_REFUSAL = {
-    HANDLED:
-      "This edit is already handled: the agent changed the source, so undoing it here would change this page only. " +
-      "Ask for it to be put back in a comment.",
-    ANSWERED: "The agent has answered this edit. It is part of the conversation on its card now, so it is not undone from here.",
-    MISSING: "there is no record to undo"
-  };
-
-  /**
-   * May this record be undone, and if not, what does the reviewer read?
-   *
-   * Pure, so the row that draws the button and the surface that does the work
-   * cannot disagree about which edits are undoable.
-   *
-   * @param {Object} item the record as stored
-   * @returns {{ok: boolean, reason: (string|null)}}
-   */
-  function canUndo(item) {
-    if (!item) return { ok: false, reason: UNDO_REFUSAL.MISSING };
-    var state = item[record.FIELD.STATE];
-    if (lifecycle.canDelete(state, lifecycle.ACTOR.REVIEWER)) return { ok: true, reason: null };
-    if (state === record.STATE.HANDLED) return { ok: false, reason: UNDO_REFUSAL.HANDLED };
-    return { ok: false, reason: UNDO_REFUSAL.ANSWERED };
-  }
+  // This is the whole reason canDelete exists and this is its one production
+  // caller. Read as a refusal it would take a capability off the reviewer;
+  // read as a branch it says what the undo has to do to be honest.
+  var UNDO_ALREADY_TAKEN_BACK =
+    "You already took this change back. The agent has been asked to remove it from the source.";
 
   // ---------------------------------------------------------------------------
   // The surface
@@ -1187,11 +1157,15 @@
       var item = store.readItem(requireReview(), itemId);
       if (!item) return { reverted: false, kind: null, reason: "no record " + String(itemId) };
 
-      // The lifecycle gate, BEFORE the page moves. A refusal that reverted the
-      // block first would leave the reviewer looking at a page that disagrees
-      // with every store in the system.
-      var allowed = canUndo(item);
-      if (!allowed.ok) return { reverted: false, kind: item[record.FIELD.KIND], reason: allowed.reason };
+      // Dropping the record is only right when nothing landed in the source.
+      // Asked BEFORE the page moves, so a refusal never leaves the reviewer
+      // looking at a page that disagrees with every store in the system.
+      var drops = lifecycle.canDelete(item[record.FIELD.STATE], lifecycle.ACTOR.REVIEWER);
+      if (!drops && record.takenBackIds(store.read(requireReview()))[itemId]) {
+        // Undone once already. A second revert record would ask the agent to
+        // remove a change that is already on its way out of the file.
+        return { reverted: false, kind: item[record.FIELD.KIND], reason: UNDO_ALREADY_TAKEN_BACK, revert: null };
+      }
 
       if (session && session.itemId === itemId) {
         // Undoing the record the reviewer is inside. Edit state goes first, and
@@ -1219,6 +1193,25 @@
         return { reverted: false, kind: kind, reason: restored.reason };
       }
 
+      if (!drops) {
+        // The handled record stays: it is the record that a fix landed, and it
+        // is the only place the applied wording is written down. What the undo
+        // adds is the work of taking that wording back out of the source.
+        var region = regionFor(restored.element);
+        var revert = record.revertOf(item, { region: region, context: contextFor(restored.element, region) });
+        forget(itemId);
+        delete deleted[itemId];
+        // The block's live record is the revert now: a reviewer who edits this
+        // block again is rewording the take-back, not reopening the history.
+        remember(restored.element, revert[record.FIELD.ID]);
+        // "ready" flushes immediately, the same as a committed edit: the agent
+        // is being asked to change a file, and a debounce would sit on it.
+        persist(revert, "reverted", "ready");
+        selection.placeCaretAtStart(restored.element);
+        scheduleReplay("undo");
+        return { reverted: true, kind: kind, reason: null, revert: revert[record.FIELD.ID] };
+      }
+
       store.remove(requireReview(), itemId);
       unpersist(item);
       forget(itemId);
@@ -1226,7 +1219,7 @@
       selection.placeCaretAtStart(restored.element);
       emit(item, "undone");
       scheduleReplay("undo");
-      return { reverted: true, kind: kind, reason: null };
+      return { reverted: true, kind: kind, reason: null, revert: null };
     }
 
     /**
@@ -1824,7 +1817,6 @@
       commit: commit,
       deleteBlock: deleteBlock,
       format: format,
-      canUndo: canUndo,
       undo: undo,
       retire: retire,
       capture: capture,
@@ -1859,8 +1851,7 @@
     breakMarkup: breakMarkup,
     capture: capture,
     kindFor: kindFor,
-    UNDO_REFUSAL: UNDO_REFUSAL,
-    canUndo: canUndo,
+    UNDO_ALREADY_TAKEN_BACK: UNDO_ALREADY_TAKEN_BACK,
     createEditing: createEditing
   };
 });

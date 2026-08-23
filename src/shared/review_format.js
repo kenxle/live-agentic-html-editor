@@ -69,6 +69,7 @@
     "The thread field contains completed earlier reviewer and agent turns as historical context. It is not current intent and must not cause an older request to be performed again. Only the top-level note and change are current instructions.",
     "Do not rewrite a whole document. Make the change the item asks for, where it points. Then scan the rest of the document for other places the same change clearly applies, and use your judgment: apply it there too, or leave the instances that should stay. Never restructure, re-voice, or change things no item asked about.",
     "A doc-wide change stays welcome: when an item names a change that applies in several places, find and apply every instance. The one exception is text a handled edit placed. Handled edits are the reviewer's own decisions, listed in this file with their after text. If a sweep would change or remove a handled edit's after text, apply the rest of the sweep, leave that one spot alone, and reply question naming the conflict.",
+    "An item with a reverts field is a take-back: the reviewer undid a change you had already made, and reverts names the handled item they undid. Its before is what the source says now and its after_full is what it should say again. Take the change out of the source so the next rebuild does not bring it back, and stop treating the item it names as a handled edit to protect.",
     "To answer, append one JSON line to your reply file in this folder: replies.jsonl if you are working alone, or replies-<your-name>.jsonl if several agents are working at once. Only append. Never edit this file and never rewrite a reply file.",
     "A reply line looks like this: {\"item\":\"c_7fa2\",\"rev\":2,\"status\":\"handled\",\"agent\":\"claude\",\"files\":[\"app/views/home.html.erb\"]}",
     "Every reply line names the item id, the item's rev, and your own agent name. The reviewer sees that name on the card.",
@@ -386,6 +387,10 @@
     out.rev = it[F.REV];
     out.kind = it[F.KIND];
     out.state = it[F.STATE];
+    // A take-back names the handled item it undoes. An id, not page text and
+    // not the reviewer's words, so it carries no trust class of its own: it is
+    // structural, like id and rev. Null on every ordinary item.
+    out.reverts = it[F.REVERTS] || null;
 
     // Intent. Verbatim, never bounded, never cleaned up (D12, R3).
     out[PROJECTED.NOTE] = verbatim(it[F.NOTE]);

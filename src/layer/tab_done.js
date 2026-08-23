@@ -289,11 +289,6 @@
     var comments = opts.comments || null;
     var sync = opts.sync || null;
     var onContinued = typeof opts.onContinued === "function" ? opts.onContinued : function () {};
-    // A reply that folds moves an item's STATE, and this tab is not the only
-    // surface drawing that item: a hand edit's row lives in the Edits tab, and
-    // what that row may do changes with the state (editing.canUndo). Told once,
-    // here, so the two halves of one handled card cannot disagree.
-    var onItemsChanged = typeof opts.onItemsChanged === "function" ? opts.onItemsChanged : function () {};
     var isReadOnly = typeof opts.isReadOnly === "function" ? opts.isReadOnly : function () { return false; };
     var doc = Object.prototype.hasOwnProperty.call(opts, "document")
       ? opts.document
@@ -711,10 +706,10 @@
      * one group at the foot of the card. Run on every paint because it is
      * idempotent and it puts the button back after a remount rebuilt either row.
      *
-     * On a HANDLED card only one of the pair is live. Undo draws disabled there
-     * (editing.canUndo, and the lifecycle rule under it: a handled record is the
-     * record that a fix landed, and the source already carries the change), so
-     * Reopen is the decision this card offers.
+     * Both are live on a HANDLED card, and they are genuinely different
+     * answers. Reopen says the fix did not land, do it again. Undo says the fix
+     * landed and the reviewer does not want it: the page goes back and the agent
+     * is asked to take the change out of the source (editing.undo).
      *
      * Absent an Edits row (a comment card), Reopen stays in this row's own
      * footer, which is where it has always been.
@@ -1052,7 +1047,6 @@
         applied.push(foldedReply(event));
       });
       refresh();
-      onItemsChanged(applied);
       return applied.filter(Boolean);
     }
 

@@ -392,8 +392,81 @@ test("a handled item cannot be deleted, because it is the record that a fix land
   const R = lifecycle.ACTOR.REVIEWER;
   assert.equal(lifecycle.canDelete(record.STATE.DRAFT, R), true);
   assert.equal(lifecycle.canDelete(record.STATE.READY, R), true);
+  // The agent replied that it did NOT make the change, so nothing landed in the
+  // source and the item is still the reviewer's own outstanding work. Dropping
+  // it costs nobody anything, which is what the rule under DELETABLE_FROM says.
+  assert.equal(lifecycle.canDelete(record.STATE.NOT_HANDLED, R), true);
+  assert.equal(record.isOutstanding({ state: record.STATE.NOT_HANDLED }), true, "and the codebase already calls it that");
+  // Handled is the one no, and it is not a refusal to the reviewer: undo still
+  // runs on a handled edit, and instead of dropping the record it mints the work
+  // of taking the change back out of the source (record.revertOf).
   assert.equal(lifecycle.canDelete(record.STATE.HANDLED, R), false);
   assert.equal(lifecycle.canDelete(record.STATE.READY, lifecycle.ACTOR.AGENT), false);
+});
+
+// ---------------------------------------------------------------------------
+// Taking a handled change back (R28, R38)
+// ---------------------------------------------------------------------------
+
+test("a take-back is an ordinary outstanding edit pointing the other way", () => {
+  const handled = anItem({ state: record.STATE.HANDLED });
+  const revert = record.revertOf(handled);
+
+  // What the source says now, and what it should say again. The swap is the
+  // whole record: an agent applies it exactly as it applies any edit, and the
+  // result is the change coming back out of the file.
+  assert.equal(revert[record.FIELD.BEFORE], handled[record.FIELD.AFTER]);
+  assert.equal(revert[record.FIELD.AFTER], handled[record.FIELD.BEFORE]);
+  assert.equal(revert[record.FIELD.STATE], record.STATE.READY, "it is work, not history");
+  assert.equal(revert[record.FIELD.KIND], record.KIND.EDIT);
+  assert.equal(revert[record.FIELD.REVERTS], handled[record.FIELD.ID], "and it names what it takes back");
+  assert.equal(record.isRevert(revert), true);
+  assert.equal(record.isRevert(handled), false);
+  assert.equal(revert[record.FIELD.CHANGE], record.REVERT_EDIT);
+  assert.notEqual(revert[record.FIELD.ID], handled[record.FIELD.ID], "a new item, so the handled record is kept");
+  // It lands on the same page group, or the agent reads it under a page nobody
+  // was looking at.
+  assert.equal(revert[record.FIELD.PAGE_ORIGIN], handled[record.FIELD.PAGE_ORIGIN]);
+  assert.equal(revert[record.FIELD.PAGE_PATH], handled[record.FIELD.PAGE_PATH]);
+});
+
+test("a reverted delete asks for the block back, and a reverted format change compares on markup", () => {
+  // A delete has no after text: what the source holds now is nothing. As a
+  // delete it would be idempotent by absence, which is the opposite of the ask,
+  // so the take-back is an edit that puts the words back.
+  const deleted = anItem({ kind: record.KIND.DELETE, state: record.STATE.HANDLED, before: "The whole block.", after: null });
+  const back = record.revertOf(deleted);
+  assert.equal(back[record.FIELD.KIND], record.KIND.EDIT);
+  assert.equal(back[record.FIELD.BEFORE], "");
+  assert.equal(back[record.FIELD.AFTER], "The whole block.");
+  assert.equal(back[record.FIELD.CHANGE], record.REVERT_DELETE);
+
+  // A format-only record's before and after text are identical by construction,
+  // so a take-back that changed kind would compare equal and do nothing at all.
+  const formatted = anItem({
+    kind: record.KIND.FORMAT_ONLY,
+    state: record.STATE.HANDLED,
+    before: "Warm up first.",
+    after: "Warm up first.",
+    before_html: "<p>Warm up first.</p>",
+    after_html: "<p>Warm up <strong>first</strong>.</p>"
+  });
+  const plain = record.revertOf(formatted);
+  assert.equal(plain[record.FIELD.KIND], record.KIND.FORMAT_ONLY);
+  assert.equal(plain[record.FIELD.BEFORE_HTML], formatted[record.FIELD.AFTER_HTML]);
+  assert.equal(plain[record.FIELD.AFTER_HTML], formatted[record.FIELD.BEFORE_HTML]);
+  assert.deepEqual(record.comparisonFields(plain), { before: "before_html", after: "after_html" });
+  assert.equal(plain[record.FIELD.CHANGE], record.REVERT_FORMAT);
+});
+
+test("takenBackIds is the one definition of what a review has already withdrawn", () => {
+  const handled = anItem({ state: record.STATE.HANDLED });
+  const other = anItem({ state: record.STATE.HANDLED });
+  const map = record.takenBackIds([handled, other, record.revertOf(handled)]);
+  assert.equal(map[handled[record.FIELD.ID]], true);
+  assert.equal(map[other[record.FIELD.ID]], undefined);
+  assert.deepEqual(record.takenBackIds([]), {});
+  assert.deepEqual(record.takenBackIds(null), {});
 });
 
 test("an illegal transition throws rather than being ignored", () => {
