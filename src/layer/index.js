@@ -845,6 +845,14 @@
     // ran, so those passages come back bare. Replay defers a lost verdict
     // across that window (replay.SETTLE_MS); this paints again once it closes,
     // which is the moment the anchors resolve against the finished page.
+    //
+    // What the first paint can no longer do is wash the whole document. On a
+    // half-drawn page the passage's own block does not exist yet, so the
+    // innermost element holding its words can be a container holding the whole
+    // page; painting that container is what "everything is highlighted" was.
+    // comments.repaint now paints the reviewer's own words rather than the
+    // resolved element, and declines a whole-element paint that is far larger
+    // than the region. See "What a repaint is allowed to cover" in comments.js.
     if (typeof win.setTimeout === "function") {
       win.setTimeout(function () {
         // A torn-down library paints nothing: teardown drops `current`.

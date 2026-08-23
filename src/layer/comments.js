@@ -187,6 +187,160 @@
   }
 
   // ---------------------------------------------------------------------------
+  // What a repaint is allowed to cover
+  // ---------------------------------------------------------------------------
+  //
+  // Reported by Ken on 2026-08-23: "sometimes the page will refresh and
+  // everything is highlighted. it usually goes away after a bit."
+  //
+  // Both halves were the same bug. A repaint resolved the record's reference and
+  // painted the WHOLE resolved element, and the anchor engine is allowed to
+  // bind to an element that merely CONTAINS the region's text. That tolerance is
+  // right and R16 depends on it: an agent that rewraps a paragraph must not cost
+  // the reviewer their comment. It also means that on a page which has not
+  // finished drawing itself, the innermost element holding the passage can be a
+  // container holding the whole document, because the passage's own block does
+  // not exist yet. One container, every record bound to it, every character on
+  // the page washed. Two seconds later the settle-window repaint found the real
+  // blocks and it cleared, which is the "goes away after a bit".
+  //
+  // So the binding rule and the PAINTING rule are not the same rule. Binding a
+  // little too wide is recoverable: replay still writes the right characters and
+  // the next pass corrects the record. Painting a little too wide is not: the
+  // wash is the reviewer's map of what they have already looked at, and a map
+  // that covers everything is worse than no map. The cost of declining to paint
+  // is that a highlight arrives a moment later, which is a cost worth paying
+  // every time.
+  //
+  // uniqueness.isEligible and the engine's matchKind are UNTOUCHED. Narrowing
+  // those to fix a paint would break rewrapped-region binding, which is R16.
+  //
+  // The rule, in priority order:
+  //
+  //   1. A region with no text (an image, an SVG, a chart: R17) paints its whole
+  //      element. Its probe is a content signature built from the element's own
+  //      attributes, so an ancestor practically never matches it, and there is
+  //      no text to narrow to anyway.
+  //   2. Otherwise, if the reviewer's own words are found EXACTLY ONCE inside the
+  //      resolved element, paint exactly those characters. This is two fixes in
+  //      one: it is the proof that the bind landed on the reviewed passage, and
+  //      it is why commenting on three words in a long paragraph no longer comes
+  //      back after a reload as the whole paragraph tinted. Exactly once, not the
+  //      first of several, for the same reason uniqueness.selectUnique fails
+  //      closed on a tie: two places match and we cannot tell which is the one.
+  //   3. Otherwise the words moved or were reworded, so fall back to the whole
+  //      element, but only while that element is not much bigger than the region
+  //      the reference was minted from.
+  //   4. Otherwise paint nothing. The record, the card, and the agent's copy are
+  //      all untouched; only the wash waits.
+
+  // How much bigger than the minted region a whole-element paint may be.
+  //
+  // Why 2, and what it costs. A legitimate CONTAINS bind is INCREMENTAL: the
+  // agent added a sentence to the paragraph, or a footnote marker rode along, so
+  // the element grew by some words. The failure this refuses is CATEGORICAL: an
+  // unrendered container holds the whole document, which is not twice a passage
+  // but twenty or two hundred times it. Any threshold between the two fixes the
+  // bug, so the number is chosen to be the least clever one that cannot fail a
+  // region nobody edited (an untouched region matches EXACTLY, at a ratio of 1)
+  // and needs no retuning as documents get longer. When 2 is too tight, the
+  // passage simply goes unpainted on this pass and the settle-window repaint
+  // tries again; the worst case is a missing wash, never a wrong one.
+  var PAINT_MAX_TEXT_RATIO = 2;
+
+  // Zero-width characters that carry no position for a reader. JS \s already
+  // covers the unicode spaces and the BOM, so these are what is left.
+  var PAINT_INVISIBLES = "\u200b\u200c\u200d\u2060";
+
+  /**
+   * The one collapsing rule, applied to BOTH sides of every comparison here: the
+   * reviewer's stored quote and the text under the resolved element. Two
+   * spellings of "the same words" is how a quote stops matching the page it was
+   * taken from.
+   *
+   * Deliberately NOT normalize.normalizeText: that runs an NFC pass, and NFC can
+   * change a string's LENGTH. Every character kept here has to keep pointing at a
+   * place in the document, because the painted range is built from those places.
+   *
+   * @param {string} input
+   * @param {number} [stopAt] when given, stop the moment the collapsed character
+   *   at that index has been emitted, and report where in `input` it came from
+   * @returns {{text: string, at: number}} `at` is -1 when stopAt was not reached
+   */
+  function collapseWalk(input, stopAt) {
+    var raw = input === null || input === undefined ? "" : String(input);
+    var want = typeof stopAt === "number" ? stopAt : -1;
+    var text = "";
+    var lastWasSpace = true;
+    for (var i = 0; i < raw.length; i += 1) {
+      var ch = raw.charAt(i);
+      if (PAINT_INVISIBLES.indexOf(ch) !== -1) continue;
+      if (/\s/.test(ch)) {
+        if (lastWasSpace) continue;
+        lastWasSpace = true;
+        text += " ";
+      } else {
+        lastWasSpace = false;
+        text += ch;
+      }
+      if (want >= 0 && text.length - 1 === want) return { text: text, at: i };
+    }
+    // A leading space is never emitted and a trailing one is dropped, so the
+    // result is trimmed without a second rule saying so.
+    if (text.slice(-1) === " ") text = text.slice(0, -1);
+    return { text: text, at: -1 };
+  }
+
+  /** The collapsed text alone. */
+  function collapseForMatch(input) {
+    return collapseWalk(input, -1).text;
+  }
+
+  /**
+   * Where in `raw` the collapsed character at `index` came from.
+   *
+   * This is what lets a paint be narrowed to the reviewer's own words without
+   * keeping a position for every character of the page in memory: the collapsed
+   * text is searched, and only the two characters at the ends of the match are
+   * ever mapped back. `index` must come from a search of collapseForMatch(raw),
+   * which is the only thing that guarantees it names a character that exists.
+   *
+   * @returns {number} the index in `raw`, or -1
+   */
+  function rawIndexOfCollapsed(raw, index) {
+    if (typeof index !== "number" || index < 0) return -1;
+    return collapseWalk(raw, index).at;
+  }
+
+  /**
+   * Where `needle` sits in `haystack`, but only when it sits in exactly one
+   * place. Two matches is not a near miss, it is an unanswerable question.
+   *
+   * @returns {number} the index, or -1 for none and for more than one
+   */
+  function soleIndexOf(haystack, needle) {
+    if (!haystack || !needle) return -1;
+    var first = haystack.indexOf(needle);
+    if (first === -1) return -1;
+    if (haystack.indexOf(needle, first + 1) !== -1) return -1;
+    return first;
+  }
+
+  /**
+   * May a whole-element paint cover this much? See PAINT_MAX_TEXT_RATIO.
+   *
+   * @param {string} probe the reference's minted text
+   * @param {string} elementText the text under the element it resolved to
+   * @returns {boolean}
+   */
+  function paintableSize(probe, elementText) {
+    var want = collapseForMatch(probe);
+    var have = collapseForMatch(elementText);
+    if (!want || !have) return false;
+    return have.length <= want.length * PAINT_MAX_TEXT_RATIO;
+  }
+
+  // ---------------------------------------------------------------------------
   // The selection popover
   // ---------------------------------------------------------------------------
   //
@@ -2237,6 +2391,10 @@
      * An anchor that no longer binds is an honest miss: nothing is painted and
      * the caller is told so, which is the same answer replay gives.
      *
+     * A bind that lands on something far larger than the region is an honest
+     * miss too, and it is the one this used to get wrong. See "What a repaint is
+     * allowed to cover" at the top of this file.
+     *
      * @returns {boolean} true when the item is painted now
      */
     function repaint(id) {
@@ -2248,10 +2406,124 @@
       if (!ref) return false;
       var verdict = anchor.resolve(ref, doc);
       if (!verdict || !verdict.element) return false;
-      var range = doc.createRange();
-      range.selectNodeContents(verdict.element);
+      var range = paintRangeFor(verdict.element, ref, item);
+      if (!range) return false;
       highlights.paint(id, range, highlightModule.NAME.COMMENT);
       return true;
+    }
+
+    /** The element's contents, end to end: what every repaint used to paint. */
+    function wholeContentsOf(element) {
+      var range = doc.createRange();
+      range.selectNodeContents(element);
+      return range;
+    }
+
+    /**
+     * The reviewed text under an element, kept so that any character of it can be
+     * pointed back at the place in the document it came from.
+     *
+     * The walk skips what the anchor engine's text walk skips (script, style,
+     * svg, and the library's own chrome), so the text measured here is the text
+     * the reference was matched against rather than a second opinion about it.
+     *
+     * One entry per TEXT NODE, not per character: on a page that has not drawn
+     * itself yet this runs over a container holding the whole document, and a
+     * position for every character of that is a lot of memory to build and throw
+     * away on every boot.
+     *
+     * Nothing is inserted between two text nodes, not even for a block boundary.
+     * A quote that runs across one is then unfindable and falls back to the
+     * whole element, which is the honest answer: painting across a boundary that
+     * may not be where it was is exactly the guess this file stopped making.
+     *
+     * @returns {{raw: string, text: string, segments: Array}}
+     */
+    function textScanOf(element) {
+      var raw = "";
+      var segments = [];
+      collect(element);
+      return { raw: raw, text: collapseForMatch(raw), segments: segments };
+
+      function collect(node) {
+        var kids = node.childNodes || [];
+        for (var i = 0; i < kids.length; i += 1) {
+          var kid = kids[i];
+          if (kid.nodeType === 3) {
+            var data = String(kid.nodeValue || "");
+            if (!data) continue;
+            segments.push({ node: kid, start: raw.length, length: data.length });
+            raw += data;
+          } else if (kid.nodeType === 1 && !isPaintSkipped(kid)) {
+            collect(kid);
+          }
+        }
+      }
+    }
+
+    /** A node the paint walk reads past: no reviewable prose in it, or it is ours. */
+    function isPaintSkipped(node) {
+      if (!node || node.nodeType !== 1) return true;
+      var tag = String(node.tagName || "").toLowerCase();
+      if (Object.prototype.hasOwnProperty.call(anchor.SKIP_TAGS, tag)) return true;
+      return !!(markers && typeof markers.isToolNode === "function" && markers.isToolNode(node));
+    }
+
+    /** The text node and offset a raw index names, or null. */
+    function positionAt(segments, rawIndex) {
+      for (var i = 0; i < segments.length; i += 1) {
+        var segment = segments[i];
+        if (rawIndex >= segment.start && rawIndex < segment.start + segment.length) {
+          return { node: segment.node, offset: rawIndex - segment.start };
+        }
+      }
+      return null;
+    }
+
+    /**
+     * The range this item's paint may cover inside the element it resolved to,
+     * or null when nothing may be painted yet.
+     *
+     * The four rules are stated once, at the top of this file. This is them.
+     */
+    function paintRangeFor(element, ref, item) {
+      // 1. A region with no text: its whole element, as before.
+      if (ref.probe_kind === anchor.PROBE.ELEMENT) return wholeContentsOf(element);
+
+      var scan = textScanOf(element);
+      var context = item[record.FIELD.CONTEXT];
+      var quote = collapseForMatch(context && context.quote ? context.quote : "");
+
+      // 2. The reviewer's own words, in exactly one place.
+      if (quote) {
+        var at = soleIndexOf(scan.text, quote);
+        if (at !== -1) {
+          var narrowed = rangeOver(scan, at, quote.length);
+          if (narrowed) return narrowed;
+        }
+      }
+
+      // 3. The words are not findable, so the whole element, while it is close
+      //    enough in size to the region the reference was minted from.
+      if (!paintableSize(ref.probe, scan.text)) return null;
+      return wholeContentsOf(element);
+    }
+
+    /** A live range over `length` characters of a scan, starting at `start`. */
+    function rangeOver(scan, start, length) {
+      var first = positionAt(scan.segments, rawIndexOfCollapsed(scan.raw, start));
+      var last = positionAt(scan.segments, rawIndexOfCollapsed(scan.raw, start + length - 1));
+      if (!first || !last) return null;
+      var range = doc.createRange();
+      try {
+        range.setStart(first.node, first.offset);
+        range.setEnd(last.node, last.offset + 1);
+      } catch (err) {
+        // The document moved under the walk. Nothing is painted, and the settle
+        // window's repaint asks again.
+        return null;
+      }
+      return range;
     }
 
     function items() {
@@ -2523,6 +2795,14 @@
     SHRINK_BAND: SHRINK_BAND,
     growthFor: growthFor,
     dragTo: dragTo,
+    // The paint rule's pure half. Exported so test/unit/comments_surface.test.js
+    // can hold its boundary without a browser: the DOM half is
+    // test/browser/late_render_highlights.spec.js.
+    PAINT_MAX_TEXT_RATIO: PAINT_MAX_TEXT_RATIO,
+    collapseForMatch: collapseForMatch,
+    rawIndexOfCollapsed: rawIndexOfCollapsed,
+    soleIndexOf: soleIndexOf,
+    paintableSize: paintableSize,
     createComments: createComments
   };
 });
