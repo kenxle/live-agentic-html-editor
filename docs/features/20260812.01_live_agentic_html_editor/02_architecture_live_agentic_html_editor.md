@@ -121,7 +121,12 @@ Everything the reviewer produces is a record:
 - **Delete**, **format-only change**, and **untethered note** are their own kinds (R27, R31, R18).
   Formatting is a closed list: **bold and italic**, nothing else in v1 (the brief's "basic formatting
   only"; anything richer is a request to the agent). The structural comparison in replay is defined
-  against exactly that list.
+  against exactly that list. **Amended 2026-08-23:** each of the two formats has an off as well as an
+  on, so the vocabulary is four tags, `strong` and `em` plus `not-bold` and `not-italic`. The second
+  pair had to be minted because HTML has none: taking bold off words a page stylesheet made bold gets a
+  style attribute out of every engine, the tool keeps none, and without a tag for the gesture it
+  compared equal to nothing happening and was thrown away in silence (Ken, 2026-08-23). See D8 for the
+  two rules that make the reset render.
 
 Every record names the **page** it was made on (its path and title, plus the source hint when one was
 given), which is what lets one review span a whole dev-server walk and still project grouped by page.
@@ -365,9 +370,21 @@ Chrome, Edge, Safari, and Firefox all have it (R42's stated reason).
 
 All library UI (rail, boxes, chips, hints) lives in a closed shadow root with its own styles, so the
 page's CSS cannot restyle the library and the library's CSS cannot touch the page. One named
-exception, because the highlight API requires it: the library adds a single page-level stylesheet
-containing only its own namespaced highlight rules, and nothing else, ever. The page renders exactly
-as it does without the library, to the pixel, except painted highlights and the fixed rail.
+exception, because the highlight API requires it: the library adds a single page-level stylesheet, and
+it holds its own namespaced highlight rules and nothing that can match the page's own markup. The page
+renders exactly as it does without the library, to the pixel, except painted highlights and the fixed
+rail.
+
+**Amended 2026-08-23.** That sheet now holds two more rules, `not-bold { font-weight: normal }` and
+`not-italic { font-style: normal }`, and the guarantee above is why they are allowed to be there. A
+reviewer who takes bold off a phrase that the page's own stylesheet made bold is asking for something
+HTML has no element for, so every engine writes a style attribute, which is the one thing the tool
+never puts on a reviewed element. The layer writes `<not-bold>` instead (D4's formatting vocabulary),
+and these two rules are the only place that tag can be given its meaning, because a shadow root cannot
+style the page. They match nothing a page author wrote: the only elements with those names are ones the
+library itself put there at the reviewer's request, so the page still renders exactly as it does
+without the library. Without them the reviewer presses B, a record appears in the rail, and the words in
+front of them do not change.
 
 ### D9: Anchors match by uniqueness, not confidence
 

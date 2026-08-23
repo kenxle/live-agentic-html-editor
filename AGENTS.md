@@ -222,6 +222,15 @@ and the reviewer watches their break disappear. Write a blank line between the
 two paragraphs, or the format's own hard-break form for a line break, and check
 the rebuilt page really shows it before replying `handled`.
 
+Formatting the reviewer changed reaches you as `<strong>` and `<em>` in
+`after_html`. There is one more pair. When the reviewer took bold or italic OFF
+words that a page stylesheet makes bold or italic, HTML has no tag that says
+so, and the only thing a browser can write for it is a style attribute this tool
+never keeps. The record marks that run `<not-bold>` or `<not-italic>` instead.
+Read those two tags as the reviewer saying those words should not be bold or
+italic, make that true in the source the way the source says it, and never copy
+the tag itself into the source.
+
 Links in a Markdown source are source-true: never rewrite an on-disk link to
 make the browser page work. The renderer translates local links when it builds
 the page, so fix a broken link only if it is wrong on disk too. A link out of

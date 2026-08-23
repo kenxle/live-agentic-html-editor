@@ -254,7 +254,10 @@ test("the two comparison modes agree on a both-equal pair", () => {
 });
 
 test("the structure mode is defined against bold and italic and nothing else in v1", () => {
-  assert.deepEqual(n.STRUCTURAL_TAGS, ["em", "strong"]);
+  // Four names, two formats. The reset tags are the other half of the same
+  // vocabulary: <strong> says these words are bold and <not-bold> says these
+  // words are deliberately not.
+  assert.deepEqual(n.STRUCTURAL_TAGS, ["em", "strong", "not-bold", "not-italic"]);
   // A tag outside the closed list is not a structural difference.
   assert.equal(
     n.equalsInMode(n.MODE.STRUCTURE, "<p>a <span class=x>b</span> c</p>", "<p>a b c</p>"),
@@ -263,6 +266,73 @@ test("the structure mode is defined against bold and italic and nothing else in 
   // Bold and italic are, in both spellings.
   assert.equal(n.equalsInMode(n.MODE.STRUCTURE, "<p>a <b>b</b> c</p>", "<p>a <strong>b</strong> c</p>"), true);
   assert.equal(n.equalsInMode(n.MODE.STRUCTURE, "<p>a <b>b</b> c</p>", "<p>a <em>b</em> c</p>"), false);
+});
+
+// Ken, 2026-08-23: "simply changing the bolding on a word or phrase doesn't
+// seem to be captured as an edit."
+//
+// It was captured when the bold was a tag, because taking the tag off is a
+// structural difference. It was not captured when the bold came from the page's
+// own stylesheet: HTML has no tag for "not bold", so every engine writes
+// <span style="font-weight: normal">, the style attribute is dropped here on
+// the way into the record, and what is left is a bare span, which is not a
+// structural difference. The reviewer's change compared equal to no change and
+// was thrown away in silence.
+//
+// A reviewed report is full of text that is bold through a stylesheet, so this
+// is the common case rather than the exotic one.
+test("the reset a stylesheet-bold word needs is a tag, because a style attribute cannot survive", () => {
+  const plain = "Runners come back too fast after a layoff.";
+  const unbolded = 'Runners come back <span style="font-weight: normal;">too fast</span> after a layoff.';
+
+  // What the record carries: the marker, and no style attribute anywhere.
+  assert.equal(n.cleanMarkup(unbolded), "Runners come back <not-bold>too fast</not-bold> after a layoff.");
+  assert.ok(n.cleanMarkup(unbolded).indexOf("style=") === -1);
+
+  // The words did not change, so a text comparison sees nothing. That is why
+  // the record is format-only and compares on structure.
+  assert.equal(n.equalsInMode(n.MODE.TEXT, n.blockText(plain), n.blockText(unbolded)), true);
+  // And the structural comparison, which is the one that decides, sees it.
+  assert.equal(n.equalsInMode(n.MODE.STRUCTURE, plain, unbolded), false);
+  assert.equal(n.structureOf(unbolded), "Runners come back <not-bold>too fast</not-bold> after a layoff.");
+});
+
+test("italic has the same reset, and both resets can sit on one element", () => {
+  assert.equal(n.cleanMarkup('<span style="font-style: normal;">x</span>'), "<not-italic>x</not-italic>");
+  assert.equal(
+    n.cleanMarkup('<span style="font-weight:normal;font-style:normal">x</span>'),
+    "<not-bold><not-italic>x</not-italic></not-bold>"
+  );
+  // A style attribute that says the OPPOSITE is not a reset. It is dropped the
+  // way every style attribute is, because <strong> is how bold is said.
+  assert.equal(n.cleanMarkup('<span style="font-weight: bold;">x</span>'), "<span>x</span>");
+  // A numeric weight below 600 means the same thing as `normal`.
+  assert.equal(n.cleanMarkup('<span style="font-weight:400">x</span>'), "<not-bold>x</not-bold>");
+  assert.equal(n.cleanMarkup('<span style="font-weight:700">x</span>'), "<span>x</span>");
+});
+
+test("a reset on an element that says something else keeps that element, inside the marker", () => {
+  // The page author's own markup is never thrown away: their class survives,
+  // their style attribute does not, and the marker wraps what is left.
+  assert.equal(
+    n.cleanMarkup('<span class="k" style="font-weight:normal">x</span>'),
+    '<not-bold><span class="k">x</span></not-bold>'
+  );
+  assert.equal(
+    n.cleanMarkup('<em style="font-weight:normal">x</em>'),
+    "<not-bold><em>x</em></not-bold>"
+  );
+  // Nesting closes in the right order, and the result reserializes unchanged.
+  const once = n.cleanMarkup('<span style="font-weight:normal">a<b>b</b>c</span>');
+  assert.equal(once, "<not-bold>a<strong>b</strong>c</not-bold>");
+  assert.equal(n.cleanMarkup(once), once, "cleanMarkup is idempotent over its own output");
+});
+
+test("a reset marker reads as no words of its own", () => {
+  // The text side must not change: the marker is emphasis, and emphasis is not
+  // a break and not a word. Otherwise an un-bold would read as a text edit.
+  assert.equal(n.blockText("a <not-bold>b</not-bold> c"), "a b c");
+  assert.equal(n.textOf("a <not-bold>b</not-bold> c"), "a b c");
 });
 
 test("the structure mode tells apart which words carry the emphasis", () => {

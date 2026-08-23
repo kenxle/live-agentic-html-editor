@@ -101,6 +101,37 @@
     blockExists: function (id) {
       return !!document.getElementById(id);
     },
+    // What the reviewer actually SEES. A formatting change that lands in a
+    // record and not on the page is half a feature, and the reset tags render
+    // through a rule in the library's own page-level stylesheet, so this is the
+    // only way to tell the rule arrived.
+    computed: function (selector, property) {
+      var el = document.querySelector(selector);
+      return el ? window.getComputedStyle(el)[property] : null;
+    },
+
+    // Selects a phrase inside a block, which is what the formatting commands
+    // act on. Walks text nodes, so it finds the phrase whether or not the page
+    // author already wrapped part of it in a tag.
+    selectPhrase: function (id, phrase) {
+      var block = document.getElementById(id);
+      if (!block) return false;
+      var walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, null);
+      var node = null;
+      while ((node = walker.nextNode())) {
+        var at = node.data.indexOf(phrase);
+        if (at === -1) continue;
+        var range = document.createRange();
+        range.setStart(node, at);
+        range.setEnd(node, at + phrase.length);
+        var selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        return true;
+      }
+      return false;
+    },
+
     blockAttrs: function (id) {
       var el = document.getElementById(id);
       if (!el) return null;

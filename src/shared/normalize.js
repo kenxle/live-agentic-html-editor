@@ -148,6 +148,88 @@
 
   var RENAME_TAGS = { b: "strong", i: "em" };
 
+  // ---------------------------------------------------------------------------
+  // The two tags this tool had to mint, and why
+  // ---------------------------------------------------------------------------
+  //
+  // HTML has no element that means "not bold". A reviewer who selects a phrase
+  // that is bold through the PAGE'S OWN CSS and presses B is asking for exactly
+  // that, and all three engines answer it the same way: they write
+  // <span style="font-weight: normal">, because a style attribute is the only
+  // thing that can say it. Measured with styleWithCSS off in Chromium, Firefox
+  // and WebKit on 2026-08-23, byte for byte identical in all three.
+  //
+  // The tool cannot keep that span. A style attribute is dropped here on the
+  // way into every record, so the record came back as a bare <span>, structureOf
+  // dropped that too, and the reviewer's change compared equal to no change at
+  // all. The un-bold was thrown away in silence, which is what Ken reported on
+  // 2026-08-23: "changing the bolding on a word doesn't seem to be captured".
+  // It is the common case, not an exotic one: a reviewed report is full of text
+  // that is bold through a stylesheet rather than through a tag.
+  //
+  // So the reset gets a tag of its own, and the style attribute still never
+  // survives. The names are hyphenated because a hyphen is what makes a custom
+  // element name, which the HTML spec guarantees will never be given a meaning
+  // of its own, and because they read for what they are in the markup an agent
+  // is handed:
+  //
+  //   Runners come back <not-bold>too fast</not-bold> after a layoff.
+  //
+  // The trade, stated: a page that ships its own <not-bold> element gets the
+  // library's one rule for it (font-weight: normal, see highlight.js), which is
+  // what its own name claims anyway. Namespacing them would remove that risk
+  // and put lahe- branding in front of every agent that reads a record, which
+  // is the thing R23 and R33 are about.
+  var NOT_BOLD_TAG = "not-bold";
+  var NOT_ITALIC_TAG = "not-italic";
+
+  // Which reset each command writes. The layer reads this rather than spelling
+  // the tag names again (D9: one vocabulary, in one file).
+  var RESET_TAGS = { bold: NOT_BOLD_TAG, italic: NOT_ITALIC_TAG };
+
+  // font-weight values that mean "not bold". `lighter` is relative and can in
+  // principle land on 600 under a 900 parent; it is in here because a reviewer
+  // never types it and an engine only emits it meaning less.
+  var NOT_BOLD_WEIGHTS = {
+    normal: 1, lighter: 1, "100": 1, "200": 1, "300": 1, "400": 1, "500": 1
+  };
+
+  // One declaration out of a style attribute, lowercased and trimmed, or "".
+  function declarationOf(style, property) {
+    var parts = String(style).split(";");
+    var found = "";
+    for (var i = 0; i < parts.length; i += 1) {
+      var colon = parts[i].indexOf(":");
+      if (colon === -1) continue;
+      if (parts[i].slice(0, colon).trim().toLowerCase() !== property) continue;
+      found = parts[i].slice(colon + 1).trim().toLowerCase();
+    }
+    return found;
+  }
+
+  function isNotBoldWeight(value) {
+    return !!value && hasOwn(NOT_BOLD_WEIGHTS, String(value).trim().toLowerCase());
+  }
+
+  function isNotItalicStyle(value) {
+    return String(value).trim().toLowerCase() === "normal";
+  }
+
+  // The reset tags a start tag's style attribute states, outermost first. The
+  // style attribute itself is dropped by cleanAttrs either way; this is the one
+  // thing in it the tool reads before it goes.
+  function resetTagsFor(attrs) {
+    var out = [];
+    var style = "";
+    for (var i = 0; i < attrs.length; i += 1) {
+      if (attrs[i].name === "style") style = attrs[i].value;
+    }
+    if (!style) return out;
+    if (isNotBoldWeight(declarationOf(style, "font-weight"))) out.push(NOT_BOLD_TAG);
+    if (isNotItalicStyle(declarationOf(style, "font-style"))) out.push(NOT_ITALIC_TAG);
+    return out;
+  }
+
   var PRESERVE_WS_TAGS = { pre: 1, textarea: 1 };
 
   var URL_ATTRS = {
@@ -297,6 +379,14 @@
     return kept;
   }
 
+  // The end tags for one stack entry, innermost first, so a span that opened as
+  // <not-bold><span class="x"> closes as </span></not-bold>.
+  function closeTags(entry) {
+    var out = "";
+    for (var i = entry.emitNames.length - 1; i >= 0; i -= 1) out += "</" + entry.emitNames[i] + ">";
+    return out;
+  }
+
   function serializeStartTag(name, attrs) {
     var out = "<" + name;
     for (var k = 0; k < attrs.length; k += 1) {
@@ -373,7 +463,7 @@
           var entry = stack[p];
           if (entry.action === "drop") dropDepth -= 1;
           if (entry.preserve) preDepth -= 1;
-          if (entry.action === "keep" && dropDepth === 0) out.push("</" + entry.emitName + ">");
+          if (entry.action === "keep" && dropDepth === 0) out.push(closeTags(entry));
         }
         stack.length = found;
         continue;
@@ -409,19 +499,29 @@
         continue;
       }
 
+      // One element can become several: a span whose only job was to say "not
+      // bold" becomes <not-bold>, and one that says something else as well
+      // keeps its own tag inside the marker. Only the innermost name carries
+      // the attributes, because a marker never has any.
+      var keptAttrs = cleanAttrs(tag.attrs);
+      var emitNames = action === "keep" ? resetTagsFor(tag.attrs) : [];
+      if (!emitNames.length || keptAttrs.length || tag.name !== "span") emitNames.push(emitName);
+
       if (action === "drop") dropDepth += 1;
       var preserve = action === "keep" && Object.prototype.hasOwnProperty.call(PRESERVE_WS_TAGS, tag.name);
       if (preserve) preDepth += 1;
       if (action === "keep" && dropDepth === 0) {
-        out.push(serializeStartTag(emitName, cleanAttrs(tag.attrs)));
+        for (var e = 0; e < emitNames.length; e += 1) {
+          out.push(e === emitNames.length - 1 ? serializeStartTag(emitNames[e], keptAttrs) : "<" + emitNames[e] + ">");
+        }
       }
-      stack.push({ name: tag.name, emitName: emitName, action: action, preserve: preserve });
+      stack.push({ name: tag.name, emitNames: emitNames, action: action, preserve: preserve });
     }
 
     // Close anything the source left open, so the output is well formed.
     for (var q = stack.length - 1; q >= 0; q -= 1) {
       if (stack[q].action === "drop") dropDepth -= 1;
-      if (stack[q].action === "keep" && dropDepth === 0) out.push("</" + stack[q].emitName + ">");
+      if (stack[q].action === "keep" && dropDepth === 0) out.push(closeTags(stack[q]));
     }
 
     return out.join("").trim();
@@ -624,7 +724,13 @@
   // ===, which is the same comparison the text mode makes. Every downstream
   // caller asks equalsInMode and never picks a comparison of its own.
 
-  var STRUCTURAL_TAGS = ["em", "strong"];
+  // Four names, still a closed list of two formats. The two reset tags are the
+  // other half of the same vocabulary: <strong> says these words are bold and
+  // <not-bold> says these words are deliberately not, which is the only way a
+  // structural comparison can see a reviewer un-bolding text the page's own
+  // stylesheet made bold. Without them that gesture compares equal to nothing
+  // happening (see the mint note beside RESET_TAGS).
+  var STRUCTURAL_TAGS = ["em", "strong", NOT_BOLD_TAG, NOT_ITALIC_TAG];
 
   var MODE = { TEXT: "text", STRUCTURE: "structure" };
   var MODES = [MODE.TEXT, MODE.STRUCTURE];
@@ -917,6 +1023,11 @@
     blockText: blockText,
     blockTextFromNode: blockTextFromNode,
     STRUCTURAL_TAGS: STRUCTURAL_TAGS,
+    NOT_BOLD_TAG: NOT_BOLD_TAG,
+    NOT_ITALIC_TAG: NOT_ITALIC_TAG,
+    RESET_TAGS: RESET_TAGS,
+    isNotBoldWeight: isNotBoldWeight,
+    isNotItalicStyle: isNotItalicStyle,
     MODE: MODE,
     MODES: MODES,
     modeFor: modeFor,

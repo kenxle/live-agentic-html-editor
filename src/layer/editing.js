@@ -20,8 +20,9 @@
 //                         is durable in browser storage whether or not the
 //                         keepalive post makes it (R1: navigation cannot be a
 //                         losing move)
-//   Bold / Italic         the two formatting commands R24 allows. A
-//                         formatting-only change is still a change (R31)
+//   Bold / Italic         the two formatting commands R24 allows, each of them
+//                         going both ways. A formatting-only change is still a
+//                         change (R31), including taking a format OFF
 //   Delete block          its own record kind, which reads as a deletion rather
 //                         than as an empty edit (R27)
 //   undo                  reverts THAT record's region to its `before` and
@@ -87,6 +88,16 @@
 //    false) once per document, so tags are emitted rather than style
 //    attributes. R35 forbids the tool writing a style attribute onto a reviewed
 //    element, and styleWithCSS true would do exactly that on every bold.
+//
+// AMENDED 2026-08-23, and the amendment is the same one Enter got. The layer
+// now says WHICH WAY the button is going before the engine touches anything
+// (gestures.formatIntentFor), and writes the reset itself. styleWithCSS off is
+// not enough on its own: it decides how bold is APPLIED, and there is no tag
+// for the other direction, so taking bold off words a page stylesheet made bold
+// got a style attribute out of all three engines anyway. The record could keep
+// none of it and the change was thrown away in silence (Ken, 2026-08-23). What
+// the engine is still trusted with is the tag surgery it was chosen for; what
+// it no longer decides is what the gesture meant. See FORMAT_SHAPE.
 //
 // What changed from the file this reworks: its Chromium-only reasoning (the
 // tool ships on three engines now) and its entry gesture. Click-to-edit is
@@ -299,6 +310,47 @@
    */
   function breakShapeFor(intent) {
     return Object.prototype.hasOwnProperty.call(BREAK_SHAPE, intent) ? BREAK_SHAPE[intent] : null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // The formatting the reviewer asked for
+  // ---------------------------------------------------------------------------
+  //
+  // gestures.formatIntentFor says WHICH WAY the B or I button is going. This
+  // says what that is spelled as, and it is the same move the break shapes
+  // above make: the vocabulary is the normalizer's, so the record reads back
+  // through the one comparison that decides whether anything changed.
+  //
+  //   apply   <strong> or <em>, which is what execCommand emits anyway once
+  //           styleWithCSS is off, so the engine still does the hard part
+  //           (splitting a selection that starts inside a tag and ends outside)
+  //   remove  <not-bold> or <not-italic> when the words would still look bold
+  //           or italic after the tags come off, because the page's own
+  //           stylesheet says so. HTML has no tag for that and every engine
+  //           reaches for a style attribute, which is the one thing R35 forbids
+  //           the tool putting on a reviewed element. The reset tags are the
+  //           normalizer's answer; see the mint note in normalize.js.
+  //
+  // A removal that has a tag to take off needs no marker at all: taking the
+  // <strong> away IS the change, and the structural comparison sees it.
+  var FORMAT_SHAPE = { bold: {}, italic: {} };
+  FORMAT_SHAPE.bold[gestures.FORMAT.APPLY] = "strong";
+  FORMAT_SHAPE.bold[gestures.FORMAT.REMOVE] = normalize.RESET_TAGS.bold;
+  FORMAT_SHAPE.italic[gestures.FORMAT.APPLY] = "em";
+  FORMAT_SHAPE.italic[gestures.FORMAT.REMOVE] = normalize.RESET_TAGS.italic;
+
+  /**
+   * The tag one formatting gesture writes, or null when the pair is not one
+   * this tool has.
+   *
+   * @param {string} command one of COMMANDS
+   * @param {string} intent a gestures.FORMAT value
+   * @returns {(string|null)}
+   */
+  function formatShapeFor(command, intent) {
+    var shape = Object.prototype.hasOwnProperty.call(FORMAT_SHAPE, command) ? FORMAT_SHAPE[command] : null;
+    if (!shape) return null;
+    return Object.prototype.hasOwnProperty.call(shape, intent) ? shape[intent] : null;
   }
 
   /**
@@ -542,6 +594,20 @@
     function bootCommands() {
       if (booted || !doc || typeof doc.execCommand !== "function") return false;
       booted = true;
+      // The library's one page-level stylesheet says what <not-bold> means, and
+      // it is otherwise only installed the first time a comment is painted. A
+      // reviewer who un-bolds something before commenting on anything would
+      // then get a record and no visible change, so it is asked for here, where
+      // the first formatting command in this document goes through.
+      if (highlights && typeof highlights.ensureStylesheet === "function") {
+        try {
+          highlights.ensureStylesheet();
+        } catch (err) {
+          // An engine without the Highlight API fails loud on paint, not here:
+          // a missing rule costs the reset its rendering and nothing else.
+          void err;
+        }
+      }
       BOOT_COMMANDS.forEach(function (row) {
         try {
           doc.execCommand(row.command, false, row.value);
@@ -1150,8 +1216,23 @@
      * optional: execCommand mutates the DOM, and an unwrapped mutation
      * schedules a replay pass that then sees its own change.
      *
+     * THE BUG THIS WAS REWORKED FOR. A reviewer selected a phrase that is bold
+     * through the page's own stylesheet and pressed B. Every engine wrote
+     * <span style="font-weight: normal">, cleanMarkup dropped the style
+     * attribute on the way into the record, the leftover bare span is not a
+     * structural difference, and the commit compared equal to its own before.
+     * The page changed under the reviewer's cursor and no row appeared in the
+     * rail (Ken, 2026-08-23). Widening the comparison to keep the style
+     * attribute is not available: replay would then write one back onto the
+     * reviewer's page, which is what R35 exists to prevent.
+     *
+     * So the layer says which way the button is going and writes the markup
+     * itself, exactly as it now does for Enter. What the engine is still
+     * trusted with is the tag surgery it was chosen for: splitting a selection
+     * that starts inside a <strong> and ends outside it.
+     *
      * @param {string} command one of COMMANDS
-     * @returns {Object} {command, applied}
+     * @returns {Object} {command, applied, intent}
      */
     function format(command, value) {
       if (!Object.prototype.hasOwnProperty.call(COMMANDS, command)) {
@@ -1161,14 +1242,297 @@
         return { command: command, applied: false, reason: "no execCommand in this environment" };
       }
       bootCommands();
+      // Read BEFORE anything moves: after the command has run, "is it bold" is
+      // a question about the result rather than about what the reviewer meant.
+      var intent = gestures.formatIntentFor({ command: command, active: commandActive(command) });
       var applied = epoch.write("editing.format:" + command, function () {
-        return doc.execCommand(command, false, value === undefined ? null : value);
+        if (intent === gestures.FORMAT.REMOVE) return removeFormat(command, value);
+        return applyFormat(command, value);
       });
       // A formatting change is a change, so it is captured the same way a
       // keystroke is: the record's markup moves, its text does not, and the
       // commit reads that as kind format_only.
       captureTyping();
-      return { command: command, applied: applied === true };
+      return { command: command, applied: applied === true, intent: intent };
+    }
+
+    /**
+     * Does the selection already carry this format?
+     *
+     * queryCommandState answers off the COMPUTED style, so it says yes for text
+     * that is bold through a <strong> and for text that is bold through a rule
+     * in the page's stylesheet. That is the right question: the reviewer is
+     * looking at the words, not at the markup. Measured true in all three
+     * engines for both, on 2026-08-23.
+     */
+    function commandActive(command) {
+      if (!doc || typeof doc.queryCommandState !== "function") return false;
+      try {
+        return doc.queryCommandState(command) === true;
+      } catch (err) {
+        // Some engines throw rather than answer when there is no selection to
+        // ask about. No selection is not "already formatted".
+        return false;
+      }
+    }
+
+    /**
+     * Bold, on words that are not bold yet.
+     *
+     * A reset the reviewer put there earlier is them having said these words
+     * are NOT bold. Asking for bold again is them taking that back, and taking
+     * it back is the whole change: the words go straight back to inheriting
+     * whatever the page says, and the markup returns to what it was before the
+     * un-bold. So bold, un-bold, bold leaves no record, which is right, because
+     * nothing about the document is different.
+     *
+     * Only when there is no marker to take back does the engine get the job.
+     * It is still the right tool for it: a selection that starts inside a
+     * <strong> and ends outside it is the case this file kept execCommand for.
+     *
+     * @returns {boolean} true when the block changed
+     */
+    function applyFormat(command, value) {
+      if (unwrapResets(command)) return true;
+      return doc.execCommand(command, false, value === undefined ? null : value) === true;
+    }
+
+    /**
+     * Removes every reset marker for this command that the selection touches.
+     *
+     * @returns {boolean} true when one was there
+     */
+    function unwrapResets(command) {
+      var tag = formatShapeFor(command, gestures.FORMAT.REMOVE);
+      var block = session && session.block;
+      if (!tag || !block || typeof block.querySelectorAll !== "function") return false;
+      var range = selectionRange(block);
+      if (!range) return false;
+      var found = block.querySelectorAll(tag);
+      var changed = false;
+      for (var i = found.length - 1; i >= 0; i -= 1) {
+        if (!coversContents(range, found[i])) continue;
+        if (unwrap(found[i])) changed = true;
+      }
+      return changed;
+    }
+
+    /**
+     * Does the selection cover ALL of this element's words?
+     *
+     * All of them, deliberately. Taking the marker out is taking back a
+     * statement about the whole run, so it is only the right answer when the
+     * reviewer selected the whole run. A selection of half a marked phrase
+     * falls through to the engine instead, which nests the emphasis inside the
+     * marker, and that reads correctly both ways: the marked run is still not
+     * bold, and the half inside it now is.
+     */
+    function coversContents(range, el) {
+      if (typeof range.compareBoundaryPoints !== "function") return false;
+      var contents = doc.createRange();
+      contents.selectNodeContents(el);
+      // Down to the same kind of boundary a selection has, which is a position
+      // inside a text node. selectNodeContents leaves the boundary on the
+      // element, and "before the first child" sorts BEFORE "at character 0 of
+      // that child", so an untouched comparison reports a selection of exactly
+      // these words as not covering them.
+      var first = edgeNode(el, "firstChild");
+      var last = edgeNode(el, "lastChild");
+      if (first) contents.setStart(first, 0);
+      if (last) contents.setEnd(last, endOffsetOf(last));
+      try {
+        return (
+          range.compareBoundaryPoints(range.START_TO_START, contents) <= 0 &&
+          range.compareBoundaryPoints(range.END_TO_END, contents) >= 0
+        );
+      } catch (err) {
+        // Two ranges in different documents cannot be compared. Neither can be
+        // this one and a marker in the block the session is open on.
+        return false;
+      }
+    }
+
+    // The deepest first or last descendant, so a boundary can be put where a
+    // selection would put one.
+    function edgeNode(el, which) {
+      var node = el;
+      while (node && node[which]) node = node[which];
+      return node === el ? null : node;
+    }
+
+    function endOffsetOf(node) {
+      if (node.nodeType === 3 || node.nodeType === 4) return String(node.nodeValue || "").length;
+      return node.childNodes ? node.childNodes.length : 0;
+    }
+
+    // The reviewer's selection, when it is inside the block. Null otherwise:
+    // a command with nothing selected has nothing to act on.
+    function selectionRange(block) {
+      if (!win || typeof win.getSelection !== "function") return null;
+      var sel = win.getSelection();
+      if (!sel || sel.rangeCount === 0) return null;
+      var range = sel.getRangeAt(0);
+      var inside = range.commonAncestorContainer;
+      if (inside !== block && !(typeof block.contains === "function" && block.contains(inside))) return null;
+      return range;
+    }
+
+    /**
+     * Bold, on words that already look bold. Whatever the engine reached for,
+     * the page and the record get this tool's one spelling.
+     *
+     * Two things have to be true when this returns, and the engines leave
+     * neither of them true on their own:
+     *
+     *  1. No style attribute is on the reviewed element (R35). Chromium,
+     *     Firefox and WebKit all write one here, because HTML has no tag that
+     *     means "not bold".
+     *  2. Something in the markup SAYS the words are not bold, or the commit
+     *     compares equal to its own before and the reviewer's change is thrown
+     *     away. Firefox writes nothing at all when it is italic that has to
+     *     come off text a stylesheet made italic, so the marker is the only
+     *     thing that records that gesture at all.
+     *
+     * @returns {boolean} true when the block changed
+     */
+    function removeFormat(command, value) {
+      // Whose style attribute is whose. A page author may already have written
+      // one of these on their own markup, and this tool does not rewrite markup
+      // nobody touched; taking the list first is what tells the engine's new
+      // ones from theirs, exactly rather than by guessing.
+      var authors = resetStyled(command);
+      var ran = doc.execCommand(command, false, value === undefined ? null : value) === true;
+      var converted = convertResets(command, authors);
+      if (converted) return true;
+      // Nothing to convert: either the engine took a tag off (a real change the
+      // structural comparison can already see) or it did nothing. Either way,
+      // if the words STILL look bold, the page's stylesheet is what is doing it
+      // and only the marker can say otherwise.
+      if (!commandActive(command)) return ran;
+      return wrapSelection(command) || ran;
+    }
+
+    /**
+     * The engine's <span style="font-weight: normal"> becomes <not-bold>.
+     *
+     * The declaration is read off the element and then removed, so the page
+     * never keeps a style attribute this tool's command caused. A span that
+     * said nothing else is replaced outright; one that carries a class of the
+     * page author's own keeps its tag inside the marker, because nothing here
+     * is allowed to throw away the page's markup.
+     *
+     * @returns {number} how many elements were converted
+     */
+    function convertResets(command, skip) {
+      var tag = formatShapeFor(command, gestures.FORMAT.REMOVE);
+      var block = session && session.block;
+      if (!tag) return 0;
+      var styled = resetStyled(command);
+      var property = command === COMMANDS.bold ? "font-weight" : "font-style";
+      var converted = 0;
+      var last = null;
+      for (var i = 0; i < styled.length; i += 1) {
+        var el = styled[i];
+        if (skip && skip.indexOf(el) !== -1) continue;
+        el.style.removeProperty(property);
+        if (!String(el.getAttribute("style") || "").trim()) el.removeAttribute("style");
+        var marker = doc.createElement(tag);
+        el.parentNode.insertBefore(marker, el);
+        if (el.tagName.toLowerCase() === "span" && el.attributes.length === 0) {
+          while (el.firstChild) marker.appendChild(el.firstChild);
+          el.parentNode.removeChild(el);
+        } else {
+          marker.appendChild(el);
+        }
+        converted += 1;
+        last = marker;
+      }
+      // Moving nodes leaves the selection where the engine put it in some
+      // engines and collapses it in others. The words the reviewer just changed
+      // are what they expect to still be selected.
+      if (last) selectContents(last);
+      return converted;
+    }
+
+    // Every element in the block whose own style attribute says this format is
+    // off, in document order.
+    function resetStyled(command) {
+      var block = session && session.block;
+      if (!block || typeof block.querySelectorAll !== "function") return [];
+      var styled = block.querySelectorAll("[style]");
+      var out = [];
+      for (var i = 0; i < styled.length; i += 1) {
+        if (declaresReset(styled[i], command)) out.push(styled[i]);
+      }
+      return out;
+    }
+
+    // Does this element's own style attribute say the format is off?
+    function declaresReset(el, command) {
+      if (!el || !el.style) return false;
+      if (command === COMMANDS.bold) return normalize.isNotBoldWeight(el.style.fontWeight);
+      return normalize.isNotItalicStyle(el.style.fontStyle);
+    }
+
+    /**
+     * Wraps the selection in the reset tag. The last resort, and the only thing
+     * that records the gesture when the engine declined to do anything.
+     *
+     * extractContents rather than surroundContents: a selection that starts
+     * inside an <em> and ends outside it is not surroundable, and it is exactly
+     * the selection execCommand was kept for. It is the same technique the
+     * paragraph break above uses.
+     *
+     * @returns {boolean} true when the block changed
+     */
+    function wrapSelection(command) {
+      var tag = formatShapeFor(command, gestures.FORMAT.REMOVE);
+      var block = session && session.block;
+      if (!tag || !block || !doc) return false;
+      var range = selectionRange(block);
+      if (!range || range.collapsed) return false;
+      // Already marked, by a conversion a moment ago or by an earlier gesture.
+      // A second marker around the first would change nothing and read as
+      // noise in the markup the agent is handed.
+      if (closestTag(range.commonAncestorContainer, tag, block)) return false;
+      var marker = doc.createElement(tag);
+      marker.appendChild(range.extractContents());
+      range.insertNode(marker);
+      selectContents(marker);
+      return true;
+    }
+
+    // The nearest ancestor with this tag name, stopping at the region's edge.
+    function closestTag(node, tag, block) {
+      var el = node && node.nodeType === 1 ? node : node ? node.parentNode : null;
+      while (el) {
+        if (typeof el.tagName === "string" && el.tagName.toLowerCase() === tag) return el;
+        if (el === block) return null;
+        el = el.parentNode;
+      }
+      return null;
+    }
+
+    // The element's children take its place. Returns false when there was
+    // nothing to unwrap.
+    function unwrap(el) {
+      if (!el || !el.parentNode) return false;
+      var parent = el.parentNode;
+      while (el.firstChild) parent.insertBefore(el.firstChild, el);
+      parent.removeChild(el);
+      if (typeof parent.normalize === "function") parent.normalize();
+      return true;
+    }
+
+    function selectContents(el) {
+      if (!win || !doc || typeof win.getSelection !== "function") return false;
+      var sel = win.getSelection();
+      if (!sel) return false;
+      var range = doc.createRange();
+      range.selectNodeContents(el);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      return true;
     }
 
     // ------------------------------------------------------------------------
@@ -1857,6 +2221,8 @@
     BREAK_SHAPE: BREAK_SHAPE,
     breakShapeFor: breakShapeFor,
     breakMarkup: breakMarkup,
+    FORMAT_SHAPE: FORMAT_SHAPE,
+    formatShapeFor: formatShapeFor,
     capture: capture,
     kindFor: kindFor,
     UNDO_REFUSAL: UNDO_REFUSAL,

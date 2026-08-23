@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Formatting Fixture</title>
+  <style>
+    body { font: 16px/1.6 system-ui, sans-serif; max-width: 46rem; margin: 2rem auto; color: #1c1c1c; }
+    h1 { font-size: 2rem; margin: 0 0 1rem; }
+    p { margin: 0 0 1rem; }
+    /* The whole point of this fixture. A reviewed report is full of text that
+       is bold or italic through a rule like these rather than through a tag,
+       and taking that formatting off was the gesture the tool used to lose. */
+    .lead { font-weight: 700; }
+    .aside { font-style: italic; }
+  </style>
+</head>
+<body>
+  <!--
+    The formatting fixture: the four ways a phrase can be bold or italic, or
+    not, in one page.
+
+      #plain      nothing on it. Bold has to be added.
+      #tagbold    bold through a <strong>. Taking it off is taking a tag off,
+                  which is a structural change the tool always recorded.
+      #cssbold    bold through the page's own stylesheet. There is no tag to
+                  take off, and this is the case Ken reported on 2026-08-23:
+                  the page changed and no record was made.
+      #cssitalic  the same for italic, which Firefox declines to change at all.
+
+    Separate from editing-doc.html on purpose: that fixture's blocks are
+    counted and ordinal-matched by other specs, so adding to it would change
+    what they measure.
+
+    Served from the REPO ROOT, so /dist/lahe-layer.js is reachable beside it.
+  -->
+  <h1 id="title">Steady Pace: a training brief</h1>
+
+  <p id="plain">Runners come back too fast after a layoff.</p>
+  <p id="tagbold">Runners come back <strong>too fast</strong> after a layoff.</p>
+  <p id="cssbold" class="lead">Runners come back too fast after a layoff.</p>
+  <p id="cssitalic" class="aside">Runners come back too fast after a layoff.</p>
+
+  <script src="/dist/lahe-layer.js"></script>
+  <script src="/test/fixtures/assets/editing-boot.js"></script>
+</body>
+</html>

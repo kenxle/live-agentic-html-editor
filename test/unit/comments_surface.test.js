@@ -12,6 +12,7 @@ const assert = require("node:assert/strict");
 
 const record = require("../../src/shared/record.js");
 const gestures = require("../../src/shared/gestures.js");
+const normalize = require("../../src/shared/normalize.js");
 const commentsModule = require("../../src/layer/comments.js");
 const highlightModule = require("../../src/layer/highlight.js");
 const storeModule = require("../../src/layer/store.js");
@@ -36,13 +37,29 @@ test("every highlight name is namespaced, so a page using the API itself cannot 
   highlightModule.NAMES.forEach(function (name) {
     assert.equal(name.indexOf(highlightModule.PREFIX), 0, name + " is not namespaced");
   });
-  // The page-level stylesheet contains highlight rules and nothing else, all
-  // of them scoped to screen: printing hands the document over, not the
-  // document plus a reviewer's wash on top of it (see highlight.js).
-  var text = highlightModule.STYLE_TEXT.trim();
-  assert.match(text, /^@media not print \{/, "the highlight rules are screen-only");
-  assert.equal(text.slice(-1), "}", "the media block is closed");
-  var inner = text.slice(text.indexOf("{") + 1, text.lastIndexOf("}"));
+  // The page-level stylesheet holds two things and nothing else: the highlight
+  // rules, all of them scoped to screen because printing hands the document
+  // over rather than the document plus a reviewer's wash on top of it, and the
+  // two rules that say what the reset tags mean (see highlight.js).
+  var lines = highlightModule.STYLE_TEXT.trim().split("\n");
+
+  // The reset rules are deliberately NOT inside the media block. A wash is an
+  // annotation and does not print; text the reviewer took the bold off is the
+  // document itself, and it prints the way they left it.
+  assert.deepEqual(
+    lines.slice(-2).map(function (line) {
+      return line.trim();
+    }),
+    [
+      normalize.NOT_BOLD_TAG + " { font-weight: normal; }",
+      normalize.NOT_ITALIC_TAG + " { font-style: normal; }"
+    ]
+  );
+
+  var media = lines.slice(0, -2).join("\n").trim();
+  assert.match(media, /^@media not print \{/, "the highlight rules are screen-only");
+  assert.equal(media.slice(-1), "}", "the media block is closed");
+  var inner = media.slice(media.indexOf("{") + 1, media.lastIndexOf("}"));
   inner
     .split("}")
     .map(function (chunk) {
@@ -52,6 +69,7 @@ test("every highlight name is namespaced, so a page using the API itself cannot 
     .forEach(function (chunk) {
       assert.match(chunk, /^::highlight\(lahe-/);
     });
+
 });
 
 test("the surface hides for print as one rule against its own host", () => {

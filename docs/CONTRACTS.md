@@ -231,8 +231,23 @@ that looks like a working branch. `record.priorAfters(item, field)` takes the sa
 history serves both modes.
 
 **Formatting is a closed list: bold and italic, nothing else in v1** (`normalize.STRUCTURAL_TAGS`).
-`cleanMarkup` renames `b` to `strong` and `i` to `em` first, so the comparator only ever sees two tag
-names, and a framework reserializing a span or adding a wrapper class is not a format change.
+`cleanMarkup` renames `b` to `strong` and `i` to `em` first, so the comparator only ever sees
+canonical tag names, and a framework reserializing a span or adding a wrapper class is not a format
+change.
+
+The list holds **four** names for those two formats, because each format has an off as well as an on:
+
+- `strong` and `em`: these words are bold, these words are italic.
+- `not-bold` and `not-italic`: these words are deliberately not.
+
+The second pair had to be minted. HTML has no element that means "not bold", so a reviewer taking bold
+off a phrase a page stylesheet made bold gets `<span style="font-weight: normal">` out of every engine,
+and a style attribute reaches neither a record nor a reviewed element. Without a tag for it that gesture
+compared equal to nothing happening and was thrown away in silence (Ken, 2026-08-23). `cleanMarkup`
+folds the engines' span into the marker on the way into every record, `editing.FORMAT_SHAPE` is what
+writes it onto the page, and two rules in the library's one page-level stylesheet are what make it
+render (D8). The names are hyphenated because that is what makes a custom element name, which the HTML
+spec guarantees will never be given a meaning of its own.
 
 ---
 
@@ -482,6 +497,7 @@ copy in `test/unit/review_format.test.js`:
   "Do not use a native model timer, a forever daemon, a global monitor, or a parser pipeline.",
   "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and the rail comes back on its own if a rebuild leaves it out.",
   "A break the reviewer typed is part of the edit: a blank line in the after text is a paragraph break, and a single newline is a line break. Markdown does not read a single newline as a new paragraph, so write a blank line between the two paragraphs in the source, or the format's own hard-break form for a line break, then rebuild and check the page really shows the break.",
+  "Bold and italic the reviewer changed reach you as <strong> and <em> in after_html. When they took bold or italic OFF words that a page stylesheet makes bold or italic, HTML has no tag that says so, so the record marks that run <not-bold> or <not-italic>. Those two tags are the reviewer saying those words should not be bold or italic: make that true in the source the way the source says it, and never copy the tag itself into the source.",
   "Links in a Markdown source are source-true: never rewrite an on-disk link to make the browser page work. The renderer translates local links when it builds the page, so fix a broken link only if it is wrong on disk too.",
   "The only way to say you handled an item is to append a reply line."
 ]

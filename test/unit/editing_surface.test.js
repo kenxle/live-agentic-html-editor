@@ -14,6 +14,7 @@ const assert = require("node:assert/strict");
 const editing = require("../../src/layer/editing.js");
 const record = require("../../src/shared/record.js");
 const gestures = require("../../src/shared/gestures.js");
+const normalize = require("../../src/shared/normalize.js");
 
 // capture() reads exactly two properties, so a plain object stands in for an
 // element here without pretending to be one.
@@ -117,6 +118,9 @@ test("re-indented markup with the same words is not a change at all", () => {
 
 test("the formatting commands are closed to the two R24 allows for v1", () => {
   assert.deepEqual(Object.keys(editing.COMMANDS).sort(), ["bold", "italic"]);
+  // The gesture table names the same two. Two spellings of one closed list is
+  // how a command ends up with a button and no meaning.
+  assert.deepEqual(gestures.FORMAT_COMMANDS.slice().sort(), Object.keys(editing.COMMANDS).sort());
   const surface = editing.createEditing({ document: null, reviewId: "r1" });
   assert.throws(
     () => surface.format("insertHorizontalRule"),
@@ -130,6 +134,62 @@ test("styleWithCSS is off at boot, because R35 forbids writing a style attribute
   assert.equal(boot.length, 1);
   assert.equal(boot[0].value, false);
 });
+
+// Ken, 2026-08-23: "simply changing the bolding on a word or phrase doesn't
+// seem to be captured as an edit." Applying bold worked. Taking it OFF text
+// that a page stylesheet made bold was thrown away, because the only thing an
+// engine can write for that is a style attribute, and a style attribute never
+// reaches a record. These are the two halves of the fix, decided here so the
+// browser tests are checking the mechanism rather than the rule.
+test("which way the button is going is decided by what the reviewer is looking at", () => {
+  // Not bold yet: the press means make it bold.
+  assert.equal(gestures.formatIntentFor({ command: "bold", active: false }), gestures.FORMAT.APPLY);
+  // Already bold, however it came to be bold: the press means take it off.
+  assert.equal(gestures.formatIntentFor({ command: "bold", active: true }), gestures.FORMAT.REMOVE);
+  assert.equal(gestures.formatIntentFor({ command: "italic", active: true }), gestures.FORMAT.REMOVE);
+  // A command outside the closed list is not a gesture this tool has.
+  assert.equal(gestures.formatIntentFor({ command: "underline", active: true }), null);
+  assert.equal(gestures.formatIntentFor({}), null);
+});
+
+test("what each formatting gesture writes, so all three engines record one thing", () => {
+  assert.equal(editing.formatShapeFor("bold", gestures.FORMAT.APPLY), "strong");
+  assert.equal(editing.formatShapeFor("italic", gestures.FORMAT.APPLY), "em");
+  // The two tags the tool had to mint, taken from the normalizer rather than
+  // spelled a second time here.
+  assert.equal(editing.formatShapeFor("bold", gestures.FORMAT.REMOVE), normalize.NOT_BOLD_TAG);
+  assert.equal(editing.formatShapeFor("italic", gestures.FORMAT.REMOVE), normalize.NOT_ITALIC_TAG);
+  assert.equal(editing.formatShapeFor("underline", gestures.FORMAT.APPLY), null);
+  // And the structural comparison knows all four, or a record carrying a reset
+  // would compare equal to the block it came from.
+  assert.ok(normalize.STRUCTURAL_TAGS.indexOf(normalize.NOT_BOLD_TAG) !== -1);
+  assert.ok(normalize.STRUCTURAL_TAGS.indexOf(normalize.NOT_ITALIC_TAG) !== -1);
+});
+
+test("taking bold off stylesheet-bold text is a change, and it is format-only", () => {
+  const words = "Runners come back too fast after a layoff.";
+  const before = captured(words, words);
+  // What the layer leaves behind: the marker, never a style attribute.
+  const after = captured(words, "Runners come back <not-bold>too fast</not-bold> after a layoff.");
+
+  const got = editing.kindFor(before, after);
+  assert.equal(got.changed, true, "this is the report: it used to come back false");
+  assert.equal(got.kind, record.KIND.FORMAT_ONLY, "the words are the same, so it compares on structure");
+  assert.equal(after.text, words, "and the reviewer's words are untouched");
+  assert.ok(after.html.indexOf("style=") === -1);
+});
+
+test("the engine's own spelling of the same gesture lands as the same record", () => {
+  // Belt and braces: even if a formatting command somewhere emits the span the
+  // three engines emit today, the capture canonicalizes it, so no record can
+  // carry a style attribute and none can be lost for want of a tag.
+  const words = "Runners come back too fast after a layoff.";
+  const engineWrote = 'Runners come back <span style="font-weight: normal;">too fast</span> after a layoff.';
+  const after = captured(words, engineWrote);
+  assert.equal(after.html, "Runners come back <not-bold>too fast</not-bold> after a layoff.");
+  assert.equal(editing.kindFor(captured(words, words), after).kind, record.KIND.FORMAT_ONLY);
+});
+
 
 test("the editable surface has the platform's rewriting turned off", () => {
   const attrs = editing.EDITABLE_ATTRS;
