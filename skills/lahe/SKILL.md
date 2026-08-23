@@ -83,15 +83,18 @@ difference is what breaks reviews:
 
 ```mermaid
 flowchart LR
-    subgraph served["served, the normal path"]
-        S1["you rewrite the page"] --> S2["server puts the script line into the page as it serves it"]
-        S2 --> S3["rail is there. always."]
+    subgraph served["SERVED: the normal path"]
+        direction TB
+        S1["you rewrite the page"] --> S2["the server puts the script line into the page as it serves it"]
+        S2 --> S3["the rail is there, every time"]
     end
-    subgraph disk["the file fallback"]
+    subgraph disk["file:// : the fallback"]
+        direction TB
         F1["you rewrite the page"] --> F2["the line lived in the file, so your rewrite took it"]
-        F2 --> F3["repair lands only if a page with a live layer is polling"]
-        F3 --> F4["reviewer hard-reloads in the gap and the page stays dead"]
+        F2 --> F3["the repair lands only if a page with a live layer is polling"]
+        F3 --> F4["they hard-reload in that gap and the page stays dead"]
     end
+    served ~~~ disk
 ```
 
 `file://` keeps working and is the right answer when a server genuinely cannot
