@@ -16,6 +16,24 @@
 //   then it reverts    replay wrote an edit back with element.textContent,
 //                      which flattens the block to one line on the next pass.
 //
+// A third bug, found on 2026-08-23 running this file on all three engines: the
+// first test failed in Firefox and had always failed there. Nothing above was
+// wrong. The layer simply never said what Enter meant, so each engine decided,
+// and no two decide the same way. Measured with the same keystroke in the same
+// bare `<p contenteditable>`, no library involved:
+//
+//   Enter        Chromium and WebKit write a nested block, Firefox writes a
+//                <br>. So a Firefox reviewer's "new paragraph" was recorded as
+//                a line break.
+//   Shift-Enter  Chromium and Firefox write a <br>, WebKit writes a nested
+//                block. So a WebKit reviewer's "new line" was recorded as a
+//                paragraph break.
+//
+// The fix is upstream of the normalizer, which is right and stays as it is: the
+// layer now cancels the engine's own insertion on beforeinput and writes the
+// break itself (src/layer/editing.js, gestures.breakIntentFor). Both gestures
+// are tested here because both were wrong, each in a different browser.
+//
 // Nothing here is simulated: it is the real `lahe review` walk, so the session,
 // the helper, the static server, the injected script line and the reply file
 // are the real ones, and the "agent" splits the source file the way an agent
@@ -42,6 +60,8 @@ const SECOND = "Most of them know it while they are doing it.";
 const ONE_PARAGRAPH = FIRST + " " + SECOND;
 // What the reviewer means by pressing Enter in front of "Most": two paragraphs.
 const SPLIT = FIRST + "\n\n" + SECOND;
+// And by Shift-Enter: one new line inside the same paragraph.
+const LINE_SPLIT = FIRST + "\n" + SECOND;
 const TAIL = "A second thought, typed after the break.";
 
 function docHtml(body, scriptLine) {
@@ -177,8 +197,8 @@ test.describe("a paragraph break the reviewer types is kept", () => {
     }
   }
 
-  /** Cmd-Shift-E, caret where the reviewer put it, Enter, Esc. */
-  async function breakAt(page, offset, typed) {
+  /** Cmd-Shift-E, caret where the reviewer put it, the break key, Esc. */
+  async function breakAt(page, offset, typed, key) {
     await claim(page);
     await placeCaret(page, { selector: "#p", offset: 0 });
     await page.keyboard.press("ControlOrMeta+Shift+KeyE");
@@ -186,7 +206,7 @@ test.describe("a paragraph break the reviewer types is kept", () => {
       message: "Cmd-Shift-E to put #p into edit state"
     });
     await placeCaret(page, { selector: "#p", offset: offset });
-    await page.keyboard.press("Enter");
+    await page.keyboard.press(key || "Enter");
     if (typed) await page.keyboard.type(typed, { delay: 5 });
     await page.keyboard.press("Escape");
     await pollPage(page, () => window.__lahe.isEditing() === false, undefined, {
@@ -239,6 +259,28 @@ test.describe("a paragraph break the reviewer types is kept", () => {
     expect(projected.after_full).toBe(SPLIT);
     // The contract tells the agent what a blank line means in a Markdown source.
     expect(reviewJson.contract.join("\n")).toContain("A break the reviewer typed is part of the edit");
+  });
+
+  test("Shift-Enter in the middle of a paragraph is recorded as a line break", async ({ page }) => {
+    reset();
+    await page.goto(world.open);
+    await booted(page);
+
+    // The other half of the distinction, and the half WebKit got wrong: it
+    // reports Shift-Enter with the same inputType as a bare Enter and wrote a
+    // nested block for it, so "one new line" reached the agent as "two
+    // paragraphs". A Markdown source treats those as different documents.
+    await breakAt(page, ONE_PARAGRAPH.indexOf(SECOND), null, "Shift+Enter");
+
+    const list = await items(page);
+    expect(list, "the line break is one record").toHaveLength(1);
+    const item = list[0];
+    expect(item.kind).toBe("edit");
+    expect(item.after).toBe(LINE_SPLIT);
+    expect(item.after.includes("\n\n"), "a line break is NOT a blank line").toBe(false);
+    expect(item.change).toBe(record.BREAK_ADDED_LINE);
+    // And the page reads back the same way through the one normalizer.
+    expect(await pageBlockText(page, "#split")).toBe(LINE_SPLIT);
   });
 
   test("the break is still there after the passes that used to flatten it", async ({ page }) => {

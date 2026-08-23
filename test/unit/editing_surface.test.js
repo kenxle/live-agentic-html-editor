@@ -185,3 +185,100 @@ test("undoing a record that does not exist says so rather than reporting success
   assert.equal(got.reverted, false);
   assert.match(got.reason, /no record/);
 });
+
+// ---------------------------------------------------------------------------
+// What Enter means, and what it writes
+// ---------------------------------------------------------------------------
+//
+// The layer decides both, because the engines do not agree. Measured on
+// 2026-08-23 with the same keystroke in the same bare `<p contenteditable>`:
+// Enter writes a nested block in Chromium and WebKit and a <br> in Firefox, and
+// Shift-Enter writes a <br> in Chromium and Firefox and a nested block in
+// WebKit. Read back through the normalizer, that is the reviewer's "new
+// paragraph" reaching the agent as a line break in one browser and their "new
+// line" reaching it as a paragraph break in another.
+//
+// The browser half is test/browser/paragraph_break.spec.js, which drives the
+// real keystroke in all three engines. What is here is the decision.
+
+test("Enter is a paragraph break and Shift-Enter is a line break, in every engine", () => {
+  assert.equal(gestures.breakIntentFor({ inputType: "insertParagraph" }), gestures.BREAK.PARAGRAPH);
+  assert.equal(gestures.breakIntentFor({ inputType: "insertLineBreak" }), gestures.BREAK.LINE);
+
+  // THE WEBKIT QUIRK. WebKit reports Shift-Enter as `insertParagraph`, the same
+  // value it reports for a bare Enter, so inputType alone cannot tell the two
+  // gestures apart. The Shift state of the keydown that produced it can.
+  assert.equal(
+    gestures.breakIntentFor({ inputType: "insertParagraph", shiftKey: true }),
+    gestures.BREAK.LINE,
+    "Shift-Enter is a line break even when the engine calls it insertParagraph"
+  );
+  // Shift on the other spelling changes nothing: it already says line break.
+  assert.equal(gestures.breakIntentFor({ inputType: "insertLineBreak", shiftKey: true }), gestures.BREAK.LINE);
+});
+
+test("nothing but a break is intercepted: ordinary typing stays the engine's", () => {
+  assert.equal(gestures.breakIntentFor({ inputType: "insertText" }), null);
+  assert.equal(gestures.breakIntentFor({ inputType: "deleteContentBackward" }), null);
+  assert.equal(gestures.breakIntentFor({ inputType: "insertFromPaste" }), null);
+  assert.equal(gestures.breakIntentFor({ inputType: "insertCompositionText" }), null);
+  assert.equal(gestures.breakIntentFor({}), null);
+  assert.equal(gestures.breakIntentFor(null), null);
+});
+
+test("the markup each break writes reads back through the normalizer as that break", () => {
+  const normalize = require("../../src/shared/normalize.js");
+  const HEAD = "Runners come back too fast after a layoff. ";
+  const TAIL = "Most of them know it while they are doing it.";
+
+  // A paragraph break is a real block boundary, so the blank line comes off the
+  // STRUCTURE rather than off a newline count.
+  const para = editing.breakMarkup(gestures.BREAK.PARAGRAPH, HEAD, TAIL);
+  assert.equal(editing.breakShapeFor(gestures.BREAK.PARAGRAPH).tag, "p");
+  assert.equal(normalize.blockText(para), HEAD.trim() + "\n\n" + TAIL);
+
+  const line = editing.breakMarkup(gestures.BREAK.LINE, HEAD, TAIL);
+  assert.equal(editing.breakShapeFor(gestures.BREAK.LINE).tag, "br");
+  assert.equal(normalize.blockText(line), HEAD.trim() + "\n" + TAIL);
+
+  // Through the path a record actually takes: cleanMarkup first, because that
+  // is what capture() runs before it reads the text.
+  assert.equal(normalize.blockText(normalize.cleanMarkup(para)), HEAD.trim() + "\n\n" + TAIL);
+  assert.equal(normalize.blockText(normalize.cleanMarkup(line)), HEAD.trim() + "\n" + TAIL);
+
+  assert.equal(editing.breakShapeFor("something else"), null);
+});
+
+test("each break is a change, and the change line names the one the reviewer typed", () => {
+  const HEAD = "Runners come back too fast after a layoff. ";
+  const TAIL = "Most of them know it while they are doing it.";
+  const before = captured(HEAD + TAIL, "<p>" + HEAD + TAIL + "</p>");
+
+  const para = captured(HEAD + TAIL, "<p>" + editing.breakMarkup(gestures.BREAK.PARAGRAPH, HEAD, TAIL) + "</p>");
+  const paraVerdict = editing.kindFor(before, para);
+  assert.equal(paraVerdict.changed, true);
+  assert.equal(
+    record.editChangeText(paraVerdict.kind, before.text, para.text),
+    record.BREAK_ADDED_PARAGRAPH
+  );
+
+  const line = captured(HEAD + TAIL, "<p>" + editing.breakMarkup(gestures.BREAK.LINE, HEAD, TAIL) + "</p>");
+  const lineVerdict = editing.kindFor(before, line);
+  assert.equal(lineVerdict.changed, true);
+  assert.equal(record.editChangeText(lineVerdict.kind, before.text, line.text), record.BREAK_ADDED_LINE);
+});
+
+test("a break with nothing after it is not a change to the document", () => {
+  // Enter at the end of a block. The empty tail carries a <br> so the reviewer
+  // has a line to be on, and the padding <br> a line break leaves at the end of
+  // a block is the same story. Neither is a second paragraph, so neither is an
+  // edit: recording one would put a row in the rail and a line in the agent's
+  // queue for a change that does not exist.
+  const WORDS = "Runners come back too fast after a layoff.";
+  const before = captured(WORDS, "<p>" + WORDS + "</p>");
+  const trailingPara = captured(WORDS, "<p>" + WORDS + "<p><br></p></p>");
+  const trailingLine = captured(WORDS, "<p>" + WORDS + "<br><br></p>");
+
+  assert.equal(editing.kindFor(before, trailingPara).changed, false);
+  assert.equal(editing.kindFor(before, trailingLine).changed, false);
+});

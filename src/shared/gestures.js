@@ -267,6 +267,60 @@
     return false;
   }
 
+  // ---------------------------------------------------------------------------
+  // What Enter means inside a block that is in edit state
+  // ---------------------------------------------------------------------------
+  //
+  // Enter is NOT a library shortcut, which is why it has no row in the table
+  // above and no hint on the rail: it is typing. But the record has to say
+  // which break the reviewer typed, and left to itself no two engines agree.
+  // Measured on 2026-08-23, the same keystroke in the same bare
+  // `<p contenteditable>`:
+  //
+  //   Enter        Chromium and WebKit write a nested block, Firefox writes a
+  //                <br>. Read back through the normalizer that is a paragraph
+  //                break in two engines and a line break in the third, so a
+  //                Firefox reviewer's "new paragraph" reached the agent as a
+  //                line break.
+  //   Shift-Enter  Chromium and Firefox write a <br>. WebKit writes a nested
+  //                block, so a WebKit reviewer's "new line" reached the agent
+  //                as a paragraph break.
+  //
+  // So the layer says what the key meant instead of asking the engine. It reads
+  // the intent here, cancels the engine's own insertion, and writes the break
+  // itself (src/layer/editing.js).
+  //
+  // ONE ENGINE QUIRK THIS FUNCTION EXISTS TO ABSORB: `inputType` alone is not
+  // enough. WebKit reports Shift-Enter as `insertParagraph`, the same value it
+  // reports for a bare Enter, so the two gestures are indistinguishable from
+  // the input event. The Shift state of the Enter keydown that produced it is
+  // the tie-breaker, and it is the caller's to supply because a beforeinput
+  // event does not carry one.
+  var BREAK = {
+    PARAGRAPH: "paragraph",
+    LINE: "line"
+  };
+
+  /**
+   * Which break an input event is asking for, or null when it is not a break.
+   *
+   * Pure over a plain descriptor, like everything else in this file, so the
+   * rule is unit-testable with no browser.
+   *
+   * @param {Object} input
+   *   inputType  the InputEvent.inputType value
+   *   shiftKey   true when the Enter keydown that produced it held Shift
+   * @returns {(string|null)} a BREAK value, or null
+   */
+  function breakIntentFor(input) {
+    var e = input || {};
+    if (e.inputType === "insertLineBreak") return BREAK.LINE;
+    if (e.inputType === "insertParagraph") {
+      return e.shiftKey === true ? BREAK.LINE : BREAK.PARAGRAPH;
+    }
+    return null;
+  }
+
   // KeyboardEvent.key is lowercase unless Shift is held, and it is the layout's
   // character. Comparing case-insensitively is what makes Cmd-Shift-C work.
   function isKey(key, letter) {
@@ -300,8 +354,10 @@
 
   var api = {
     GESTURE: GESTURE,
+    BREAK: BREAK,
     TABLE: TABLE,
     gestureFor: gestureFor,
+    breakIntentFor: breakIntentFor,
     isScrollbarPress: isScrollbarPress,
     hintFor: hintFor,
     hintLines: hintLines,
