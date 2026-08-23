@@ -388,6 +388,20 @@ refreshes the fallback copy beside the page. The reviewer's page reloads onto
 the healed file and the rail is there. `lahe status` says
 `script line re-injected after a rebuild, Ns ago` when that happened.
 
+**A rebuild driven by an ad hoc script (not a real project build) heals the
+same way, but do not rely on the timing.** Some reviews are not a project with
+its own build command: an agent that regenerates one artifact by running a
+throwaway script (render a template, dump a report, compose an email) and
+writing the raw output straight over the served file is doing a "rebuild" too,
+just outside any watched pipeline. The watcher still repairs it, but a human
+looking at the page in the window between the overwrite and the repair can see
+the rail vanish, especially across several overwrites in quick succession. When
+your own rebuild step is a script like this rather than a project build, close
+that window yourself: run `lahe review path/to/file.html --session
+<agent-session-id>` again right after the script writes, before you tell the
+reviewer to look. It is idempotent against the same path and confirms the tag
+landed instead of hoping the watcher wins the race.
+
 **A handled hand edit that gets undone reopens itself.** Every time the page
 loads, the tool checks the reviewer's handled hand edits against the page: if
 the reviewer's wording is gone and the text it replaced is back, the change was

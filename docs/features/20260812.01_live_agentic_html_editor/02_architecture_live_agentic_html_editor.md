@@ -373,8 +373,10 @@ as it does without the library, to the pixel, except painted highlights and the 
 
 The mechanism, concretely. When a record is made, the library stores the normalized text of its
 region plus a ring of context around it: the normalized text of the neighboring blocks and the
-nearest heading. It also records what the page's own source says about the element: an existing id
-or classes, the tag, the position under its parent. Those source-authored signals survive repaints,
+nearest heading. It also records what the page's own source says about the element: the tag and the
+position under its parent. (An earlier draft of this decision also named an existing id or the
+element's classes. Those were never built, and the element anchor below supersedes that promise
+with something more specific.) Those source-authored signals survive repaints,
 because every render rebuilds them from the source, so they serve as tie-breakers when text alone
 matches twice. To find the region again (at replay, or for the agent via the record's fields), the
 library searches the page for the text. One hit is a match. More than one hit brings in the
@@ -395,6 +397,50 @@ in D7), because that tag only has to live as long as the edit.
 One shared normalizer is used everywhere text is compared (recording, replay, anchoring): two
 normalizers that disagree is how a replay engine ends up fighting the reviewer's own cursor, so this
 is a single module by design, not convention.
+
+#### The element anchor: a region with no text
+
+Everything above assumes the region has words in it. Some regions do not:
+
+- an image
+- a diagram or chart
+- an icon button
+- an SVG
+
+R17 (comment on a whole element) exists for exactly those, and until this amendment they got
+nothing. The engine required text, found none, and stored a reference that had already failed
+without telling anyone it had. A reviewer who clicked one of three images and said "I like this one"
+reached their agent as the bare tag name `IMG` plus a display label that read identically for all
+three. The agent guessed, and guessed wrong. This is RF19 from the architecture review, and this
+section is its resolution.
+
+The governing rule does not change: content places a write, and structure only corroborates. What
+changes is what counts as content. An image's `src` is not where it sits on the page; it is what the
+image IS. So for a region with no text, the engine mints a CONTENT SIGNATURE from the attributes
+that identify the element rather than locate it:
+
+- `img`: the `src` attribute as the page author wrote it, plus `alt` and `srcset`
+- `svg`: its own `<title>`, its `<desc>`, and the text nodes inside it
+- anything else with no text: `aria-label`, `id`, `href`, `value`
+
+That signature then goes through the same machinery text does, with no exceptions carved for it. It
+widens through whole sibling elements until it resolves to one element or the containing block runs
+out, and then it fails honestly rather than binding to a guess. Two images sharing one `src` on one
+page are ambiguous in exactly the way two identical list items are ambiguous, and they fail the same
+way.
+
+Three consequences follow, and they are requirements, not implementation notes:
+
+1. **A failed mint is reported.** A reference that did not mint is stamped lost at the moment it
+   fails. An item whose anchor never bound must never read as healthy, which is what made the
+   original bug silent.
+2. **The subject reaches the agent.** The element's identifying attributes and its opening tag are
+   projected into `review.json` as page data, under D6's trust rules: the same fencing as `quote`
+   and `before`, because it is text off the page and never an instruction.
+3. **The display label prefers a name over a position.** An ordinal computed from same-tag siblings
+   collides whenever each element sits in its own wrapper, which is the ordinary way a page lays out
+   a row of images. A label built from the filename in `src` does not collide, and it is what a
+   person would say out loud. The label is still display only, and identity is still the reference.
 
 ### D10: The rail
 

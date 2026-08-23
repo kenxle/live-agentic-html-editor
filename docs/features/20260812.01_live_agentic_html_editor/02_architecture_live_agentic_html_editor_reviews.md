@@ -689,6 +689,13 @@ element case.
 Fix: state the element anchor: tag plus attributes that identify content (`src`, `alt`, the SVG's text
 nodes) plus surrounding text context, with the same uniqueness-or-fail rule.
 
+**RESOLVED 2026-08-23.** Folded into D9 as "The element anchor: a region with no text", after the gap
+reached a reviewer: three images in a row, a comment on one of them, and the agent could not tell
+which. Every image comment in that review had stored a reference that failed to mint, with nothing
+saying so. D9 now states the content signature, the uniqueness-or-fail rule it runs under, and the
+three consequences (a failed mint is stamped lost, the subject is projected to the agent as fenced
+page data, and the display label prefers a filename over a colliding ordinal).
+
 ### RF20. The cross-browser claim is untested, and it contradicts the repo
 
 D1 and the Alternatives entry reject Chromium-only and assert Chrome, Edge, Safari, and Firefox all
