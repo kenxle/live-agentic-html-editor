@@ -359,3 +359,86 @@ test("a dragged box is kept whole on screen", () => {
   assert.equal(offEnd.left + box.width, 1280 - commentsModule.BOX_EDGE);
   assert.equal(offEnd.top + box.height, 800 - commentsModule.BOX_EDGE);
 });
+
+// ---------------------------------------------------------------------------
+// What a repaint is allowed to cover
+// ---------------------------------------------------------------------------
+//
+// Ken, 2026-08-23: "sometimes the page will refresh and everything is
+// highlighted. it usually goes away after a bit."
+//
+// The browser half is test/browser/late_render_highlights.spec.js, which loads a
+// page that draws itself after load and watches the paint THROUGHOUT the load.
+// What is here is the rule's own arithmetic, at its boundary.
+
+test("the paint rule collapses both sides of every comparison the same way", () => {
+  // One rule, or a quote stops matching the page it was taken from.
+  assert.equal(commentsModule.collapseForMatch("  the third   week \n was  "), "the third week was");
+  assert.equal(commentsModule.collapseForMatch("the third\tweek"), "the third week");
+  // Zero-width characters carry no position for a reader and are dropped.
+  assert.equal(commentsModule.collapseForMatch("the​third week"), "thethird week");
+  assert.equal(commentsModule.collapseForMatch(null), "");
+});
+
+test("the reviewer's words are located only when exactly one place holds them", () => {
+  const page = "one two three two one";
+  assert.equal(commentsModule.soleIndexOf(page, "three"), 8);
+  // Twice is not a near miss: it is a question nobody can answer, and it fails
+  // closed exactly the way uniqueness.selectUnique fails on a tie.
+  assert.equal(commentsModule.soleIndexOf(page, "two"), -1);
+  assert.equal(commentsModule.soleIndexOf(page, "four"), -1);
+  assert.equal(commentsModule.soleIndexOf("", "two"), -1);
+  assert.equal(commentsModule.soleIndexOf(page, ""), -1);
+});
+
+test("a whole-element paint stops at twice the region it was minted from", () => {
+  const ratio = commentsModule.PAINT_MAX_TEXT_RATIO;
+  assert.equal(ratio, 2, "the number is a decision, not a knob: see comments.js");
+
+  const probe = "abcd";
+  // An untouched region matches exactly. Ratio 1, always painted.
+  assert.equal(commentsModule.paintableSize(probe, probe), true);
+  // The agent grew the paragraph. Still the region, still painted: this is the
+  // R16 tolerance the paint rule must not take away.
+  assert.equal(commentsModule.paintableSize(probe, "abcd efg"), true);
+  // Exactly twice is the boundary, and the boundary is included.
+  assert.equal(commentsModule.paintableSize(probe, "abcdefgh"), true);
+  // One character past it is refused. Nothing is painted and the settle-window
+  // repaint asks again.
+  assert.equal(commentsModule.paintableSize(probe, "abcdefghi"), false);
+
+  // The failure this exists for: an unrendered container holding the whole
+  // document, which is not twice a passage but many times it.
+  const passage = "The third week is where a comeback stops being about willpower.";
+  const document = ["Coming back from a layoff", passage, "Everything else on this page holds still."].join(" ");
+  assert.equal(commentsModule.paintableSize(passage, document), false);
+
+  // Whitespace is not size. The same words laid out over several lines are the
+  // same region, and measuring them raw would refuse a paint that is correct.
+  assert.equal(commentsModule.paintableSize(probe, "\n    abcd\n  "), true);
+
+  // Nothing to measure is not a licence to paint.
+  assert.equal(commentsModule.paintableSize("", "abcd"), false);
+  assert.equal(commentsModule.paintableSize(probe, ""), false);
+});
+
+test("a character of the collapsed text can be pointed back at where it came from", () => {
+  // This is what lets the paint be narrowed to the reviewer's own words without
+  // holding a position for every character of the page: only the two characters
+  // at the ends of the match are ever mapped back.
+  const raw = "\n   The third\n   week  \n";
+  const text = commentsModule.collapseForMatch(raw);
+  assert.equal(text, "The third week");
+
+  const at = text.indexOf("week");
+  assert.equal(raw.charAt(commentsModule.rawIndexOfCollapsed(raw, at)), "w");
+  assert.equal(raw.charAt(commentsModule.rawIndexOfCollapsed(raw, at + 3)), "k");
+  // The first character survives the leading whitespace being dropped.
+  assert.equal(raw.charAt(commentsModule.rawIndexOfCollapsed(raw, 0)), "T");
+  // A space in the collapsed text points at the first character of the run it
+  // stands for, which is inside the document and therefore paintable.
+  assert.equal(/\s/.test(raw.charAt(commentsModule.rawIndexOfCollapsed(raw, 9))), true);
+  // Past the end is not a place.
+  assert.equal(commentsModule.rawIndexOfCollapsed(raw, text.length + 5), -1);
+  assert.equal(commentsModule.rawIndexOfCollapsed(raw, -1), -1);
+});
