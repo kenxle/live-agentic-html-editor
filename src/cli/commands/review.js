@@ -141,6 +141,11 @@ async function run(argv) {
         }
       }
       list.push("--origin", "http://" + staticServer.meta.host + ":" + staticServer.meta.port);
+      // This command owns the server, knows the exact path under it, and
+      // prints its own "server"/"open" lines below. `--under-review` tells
+      // `add` to hold back its own "Open it"/"Fallback: file://" block so the
+      // reviewer is handed exactly one URL, not three (see add.js).
+      list.push("--under-review");
     }
   } catch (err) {
     if (createdSession) store.close(sessionId);
