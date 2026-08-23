@@ -115,12 +115,14 @@ test.describe("a paragraph break the reviewer types is kept", () => {
     expect(session, "`lahe review` printed the agent session id").toBeTruthy();
     expect(open, "`lahe review` printed the URL its own server publishes the page at").toBeTruthy();
 
-    // The WHOLE tag, not its first line: the walk writes it across several
-    // lines, and a rebuild that puts half of it back leaves a page that never
-    // boots the layer.
-    const injected = fs.readFileSync(pagePath, "utf8");
-    const scriptLine = /<script[^>]*lahe-layer\.js[\s\S]*?<\/script>/.exec(injected);
-    expect(scriptLine, "the walk wrote the library's script line into the page").toBeTruthy();
+    // THE TAG IS NEVER IN THE FILE. `lahe review` owns the server that answers
+    // for this page, so the line goes into the response and the reviewer's own
+    // folder keeps no review id and no token. The rebuilds below write the
+    // document and nothing else, which is what an ad hoc render script does.
+    expect(
+      fs.readFileSync(pagePath, "utf8").indexOf("data-lahe-review"),
+      "the walk left the page on disk alone"
+    ).toBe(-1);
 
     world = {
       root: root,
@@ -130,7 +132,6 @@ test.describe("a paragraph break the reviewer types is kept", () => {
       session: session,
       review: review,
       open: open,
-      scriptLine: scriptLine[0],
       reviewDir: path.join(stateDir, "reviews", review)
     };
   });
@@ -151,7 +152,7 @@ test.describe("a paragraph break the reviewer types is kept", () => {
 
   /** A build: the source is rewritten and the page reloads itself off it. */
   function rebuild(body) {
-    fs.writeFileSync(world.pagePath, docHtml(body, world.scriptLine));
+    fs.writeFileSync(world.pagePath, docHtml(body, ""));
     const later = new Date(Date.now() + 10000);
     fs.utimesSync(world.pagePath, later, later);
   }

@@ -109,11 +109,15 @@ test.describe("a handled hand edit that was reverted reopens itself", () => {
     expect(review, "`lahe review` printed the review id").toBeTruthy();
     expect(open, "`lahe review` printed the URL its own server publishes the page at").toBeTruthy();
 
-    // The script line the walk wrote into the page. Every rebuild below keeps
-    // it, the way a real build that knows about the tool would.
-    const injected = fs.readFileSync(pagePath, "utf8");
-    const scriptLine = /^.*lahe-layer\.js.*$/m.exec(injected);
-    expect(scriptLine, "the walk wrote the library's script line into the page").toBeTruthy();
+    // NOTHING WAS WRITTEN INTO THE PAGE, and the rebuilds below put nothing
+    // back. `lahe review` owns the server that answers for this file, so the
+    // script line goes into the response and the reviewer's own folder keeps
+    // no review id and no token. A rebuild here is what an ad hoc script does:
+    // it writes the document and knows nothing about this tool.
+    expect(
+      fs.readFileSync(pagePath, "utf8").indexOf("data-lahe-review"),
+      "the walk left the page on disk alone"
+    ).toBe(-1);
 
     world = {
       root: root,
@@ -123,7 +127,6 @@ test.describe("a handled hand edit that was reverted reopens itself", () => {
       session: session,
       review: review,
       open: open,
-      scriptLine: scriptLine[0],
       reviewDir: path.join(stateDir, "reviews", review),
       wakeLog: path.join(stateDir, "agent-sessions", session, "wake.log")
     };
@@ -155,7 +158,7 @@ test.describe("a handled hand edit that was reverted reopens itself", () => {
 
   /** A build: the source is rewritten, and the page reloads itself off it. */
   function rebuild(p, q) {
-    fs.writeFileSync(world.pagePath, docHtml(p, q, world.scriptLine));
+    fs.writeFileSync(world.pagePath, docHtml(p, q, ""));
     // The mtime is the reload signal, and a coarse-timestamp filesystem can
     // give two quick writes the same one.
     const later = new Date(Date.now() + 10000);
