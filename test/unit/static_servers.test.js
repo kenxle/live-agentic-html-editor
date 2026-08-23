@@ -8,6 +8,10 @@ const os = require("node:os");
 const path = require("node:path");
 
 const staticServers = require("../../src/service/static_servers.js");
+const logModule = require("../../src/service/log.js");
+const reviewsModule = require("../../src/service/reviews.js");
+const protocol = require("../../src/shared/protocol.js");
+const scriptLine = require("../../src/shared/script_line.js");
 
 function tempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -101,4 +105,103 @@ test("one agent session can own static reviews in different project roots", asyn
   assert.equal(await staticServers.stopAll(state, "s_many"), 2);
   assert.equal(await staticServers.isExactServer(first.meta), false);
   assert.equal(await staticServers.isExactServer(second.meta), false);
+});
+
+// ---------------------------------------------------------------------------
+// Serve-time injection.
+//
+// heal.js only repairs a page something is already polling. If the reviewer's
+// tab is closed, or they reload in the gap between an agent overwriting the
+// file and the next poll, nothing was ever polling and nothing repairs it.
+// This is the second, stronger path: the server that answers the request puts
+// the tag in the RESPONSE, so even the very first load after an overwrite
+// carries the rail.
+
+const PAGE_WITHOUT_LINE = "<!doctype html>\n<html>\n<body>\n<h1>hello</h1>\n</body>\n</html>\n";
+
+/** A review recording `root/page.html` as its target, and a server rooted there. */
+function injectFixture(options) {
+  const opts = options || {};
+  const root = tempDir("lahe-static-inject-root-");
+  const state = path.join(tempDir("lahe-static-inject-state-"), "state");
+  const page = path.join(root, opts.filename || "page.html");
+  fs.writeFileSync(page, opts.html === undefined ? PAGE_WITHOUT_LINE : opts.html);
+  const log = logModule.createEventLog({ dir: state });
+  const reviews = reviewsModule.createReviews({ dir: state, log: log });
+  const review = reviews.create({ id: opts.reviewId || "r_inject", origins: ["null"], target_path: page });
+  return { root: root, state: state, page: page, review: review };
+}
+
+test("a target file whose on-disk tag was stripped is served carrying the tag", async (t) => {
+  const f = injectFixture();
+  const server = await staticServers.start({ dir: f.state, sessionId: "s_inject_missing", root: f.root });
+  t.after(async () => { await staticServers.stopAll(f.state, "s_inject_missing"); });
+
+  const res = await request(server.meta, "/page.html");
+  assert.equal(res.status, 200);
+  assert.equal(scriptLine.reviewAlreadyInFile(res.body), f.review.id, "the served page now carries this review's tag");
+  assert.ok(res.body.indexOf(f.review.token) !== -1, "and it is this review's own token");
+  assert.equal(
+    Number(res.headers["content-length"]),
+    Buffer.byteLength(res.body, "utf8"),
+    "content-length was recalculated for the injected body"
+  );
+  assert.match(res.body, /<h1>hello<\/h1>/, "the page's own content survives the injection");
+  assert.equal(
+    fs.readFileSync(f.page, "utf8").indexOf("data-lahe-review"),
+    -1,
+    "the static server stayed read-only: the file on disk is untouched"
+  );
+});
+
+test("a file that already carries this review's tag is served with exactly one, not two", async (t) => {
+  const f = injectFixture();
+  const tag = protocol.scriptTag({
+    src: "http://" + protocol.DEFAULT_HOST + ":" + protocol.DEFAULT_PORT + protocol.route("library.get").path,
+    review: f.review.id,
+    token: f.review.token,
+    helper: "http://" + protocol.DEFAULT_HOST + ":" + protocol.DEFAULT_PORT
+  });
+  fs.writeFileSync(f.page, scriptLine.placeScriptLine(PAGE_WITHOUT_LINE, tag).html);
+  const onDiskBefore = fs.readFileSync(f.page, "utf8");
+
+  const server = await staticServers.start({ dir: f.state, sessionId: "s_inject_present", root: f.root });
+  t.after(async () => { await staticServers.stopAll(f.state, "s_inject_present"); });
+
+  const res = await request(server.meta, "/page.html");
+  assert.equal(res.status, 200);
+  const occurrences = (res.body.match(/data-lahe-review="/g) || []).length;
+  assert.equal(occurrences, 1, "the tag was not injected a second time");
+  assert.equal(res.body, onDiskBefore, "an already-tagged page is served byte for byte unchanged");
+});
+
+test("injection still matches after restartAll, which re-derives root from meta rather than the original call", async (t) => {
+  const f = injectFixture();
+  const first = await staticServers.start({ dir: f.state, sessionId: "s_inject_restart", root: f.root });
+  await staticServers.stopAll(f.state, "s_inject_restart");
+  assert.equal(await staticServers.isExactServer(first.meta), false, "stopped before the restart");
+
+  const restarted = await staticServers.restartAll(f.state, "s_inject_restart");
+  t.after(async () => { await staticServers.stopAll(f.state, "s_inject_restart"); });
+  assert.equal(restarted, 1);
+
+  const servers = staticServers.list(f.state, "s_inject_restart").filter((m) => !m.stopped_at);
+  assert.equal(servers.length, 1);
+  const res = await request(servers[0], "/page.html");
+  assert.equal(res.status, 200);
+  assert.equal(scriptLine.reviewAlreadyInFile(res.body), f.review.id, "the restarted server still injects the tag");
+});
+
+test("a non-target HTML file in the same folder is served untouched", async (t) => {
+  const f = injectFixture();
+  const otherHtml = "<!doctype html>\n<html>\n<body>\n<p>not part of any review</p>\n</body>\n</html>\n";
+  fs.writeFileSync(path.join(f.root, "other.html"), otherHtml);
+
+  const server = await staticServers.start({ dir: f.state, sessionId: "s_inject_other", root: f.root });
+  t.after(async () => { await staticServers.stopAll(f.state, "s_inject_other"); });
+
+  const res = await request(server.meta, "/other.html");
+  assert.equal(res.status, 200);
+  assert.equal(res.body, otherHtml, "a file no review recorded as a target is served exactly as it is on disk");
+  assert.equal(res.body.indexOf("data-lahe-review"), -1);
 });

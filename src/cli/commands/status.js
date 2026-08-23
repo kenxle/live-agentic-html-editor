@@ -40,6 +40,7 @@
 "use strict";
 
 var fs = require("node:fs");
+var path = require("node:path");
 
 var protocol = require("../../shared/protocol.js");
 var record = require("../../shared/record.js");
@@ -48,6 +49,8 @@ var logModule = require("../../service/log.js");
 var projectionModule = require("../../service/projection.js");
 var agentSessionsModule = require("../../service/agent_sessions.js");
 var reviewFormat = require("../../shared/review_format.js");
+var healModule = require("../../service/heal.js");
+var staticServersModule = require("../../service/static_servers.js");
 
 // Shared CLI codes. OK means status completed, whether or not it found an item.
 var EXIT = protocol.CLI_EXIT;
@@ -228,6 +231,70 @@ function healLine(liveness, nowMs) {
   return "script line re-injected after a rebuild, " + when;
 }
 
+/**
+ * Which mechanism is carrying this review's page: the static server injecting
+ * the tag into every response ("injected"), or the on-disk line alone
+ * ("on_disk", the file:// fallback and the only thing a dev-server review
+ * ever has).
+ *
+ * "injected" only when a static server this session owns is actually
+ * answering, rooted at the target's own directory: a page it could not
+ * possibly be reachable at gains a reviewer nothing to know it is "injected".
+ * Everything else, including a review whose static server has stopped, is
+ * "on_disk": that review is back on the race window heal.js has, the one this
+ * whole feature exists to close for the common case.
+ *
+ * @param {string} dir the state directory
+ * @param {string} agentSessionId the review's owning session (static servers
+ *   are leased per session, src/service/static_servers.js)
+ * @param {string[]} targetPaths the review's recorded target paths
+ * @returns {Promise<"injected"|"on_disk"|null>} null when nothing here applies
+ *   (a dev-server review, or a review with no recorded target at all)
+ */
+async function servedVia(dir, agentSessionId, targetPaths) {
+  var staticTargets = (targetPaths || []).filter(function (target) {
+    return typeof target === "string" && target && healModule.isStaticPage(target);
+  });
+  if (!staticTargets.length) return null;
+
+  var servers;
+  try {
+    servers = staticServersModule.list(dir, agentSessionId);
+  } catch (error) {
+    return "on_disk";
+  }
+  if (!servers.length) return "on_disk";
+
+  for (var i = 0; i < staticTargets.length; i += 1) {
+    var targetDir = path.dirname(staticTargets[i]);
+    var real = targetDir;
+    try {
+      real = fs.realpathSync(targetDir);
+    } catch (error) {
+      // The folder is gone; the plain path is still worth trying against a
+      // server started before it disappeared.
+    }
+    for (var j = 0; j < servers.length; j += 1) {
+      var server = servers[j];
+      if (server.stopped_at) continue;
+      if (server.root !== targetDir && server.root !== real) continue;
+      if (await staticServersModule.isExactServer(server)) return "injected";
+    }
+  }
+  return "on_disk";
+}
+
+/** The human line for `servedVia`'s answer, or null when nothing applies. */
+function servedViaLine(servedViaValue) {
+  if (servedViaValue === "injected") {
+    return "served: the static server injects the script line into every response, so a rebuild that drops it never breaks the page";
+  }
+  if (servedViaValue === "on_disk") {
+    return "served: the on-disk script line only (file:// review, or no static server is running); a rebuild between one poll and the next can drop the rail until something polls again";
+  }
+  return null;
+}
+
 // The label that goes in front of page-derived text (D12). `note` and `change`
 // are the reviewer's own words; `quote` is text copied off the reviewed page,
 // which review_format classes as data and the contract field calls "never an
@@ -302,6 +369,20 @@ function ownerOfReview(dir, reviewId) {
     return typeof parsed.agent_session_id === "string" ? parsed.agent_session_id : agentSessionsModule.LEGACY_ID;
   } catch (err) {
     return agentSessionsModule.LEGACY_ID;
+  }
+}
+
+/** Every path recorded as this review's target, straight off meta.json. */
+function targetPathsOfReview(dir, reviewId) {
+  try {
+    var parsed = JSON.parse(fs.readFileSync(stateDirModule.metaPath(dir, reviewId), "utf8"));
+    var out = Array.isArray(parsed.target_paths) ? parsed.target_paths.slice() : [];
+    if (typeof parsed.target_path === "string" && parsed.target_path && out.indexOf(parsed.target_path) === -1) {
+      out.push(parsed.target_path);
+    }
+    return out;
+  } catch (err) {
+    return [];
   }
 }
 
@@ -523,18 +604,20 @@ async function run(argv, options) {
     var counts = countsOf(items);
     var open = items.filter(isUnansweredReady);
     totalUnanswered += open.length;
+    var ownerSessionId = ownerOfReview(dir, id);
 
     var liveness = {
       helper_up: helperUp,
       page_last_seen_at: pageLastSeen,
       last_heal_at: lastHeal,
       last_item_at: lastItemAt(items),
-      drafts: draftCount
+      drafts: draftCount,
+      served_via: await servedVia(dir, ownerSessionId, targetPathsOfReview(dir, id))
     };
 
     if (args.json) {
       open.forEach(function (item) {
-        jsonItems.push(Object.assign({ review: id, agent_session_id: ownerOfReview(dir, id), liveness: liveness }, item));
+        jsonItems.push(Object.assign({ review: id, agent_session_id: ownerSessionId, liveness: liveness }, item));
       });
     }
 
@@ -578,6 +661,8 @@ async function run(argv, options) {
     );
     var healed = healLine(liveness, nowMs);
     if (healed) lines.push("            " + healed);
+    var served = servedViaLine(liveness.served_via);
+    if (served) lines.push("  " + served);
     if (open.length === 0) {
       lines.push("  nothing is waiting on you.");
     } else {
@@ -689,6 +774,8 @@ module.exports = {
   ago: ago,
   livenessLine: livenessLine,
   healLine: healLine,
+  servedVia: servedVia,
+  servedViaLine: servedViaLine,
   excerpt: excerpt,
   PAGE_TEXT_LABEL: PAGE_TEXT_LABEL,
   contractLine: contractLine,
@@ -697,5 +784,6 @@ module.exports = {
   // to "who owns this review" and one list of reviews with state on disk.
   reviewsOnDisk: reviewsOnDisk,
   ownerOfReview: ownerOfReview,
+  targetPathsOfReview: targetPathsOfReview,
   run: run
 };
