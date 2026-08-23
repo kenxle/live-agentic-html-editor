@@ -479,7 +479,7 @@ copy in `test/unit/review_format.test.js`:
   "lahe monitor exit codes: 0 means work is printed above, 5 means the agent session is closed, 6 means another agent took the session over. On 5 or 6, stop. Do not relaunch it.",
   "LAHE ACTION REQUIRED means the output is an interrupt, not finished work. Continue the same turn and handle every item printed with it. Receiving an item is not handling it, and describing it is not handling it.",
   "Do not use a native model timer, a forever daemon, a global monitor, or a parser pipeline.",
-  "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and a running helper puts the script line back when the rebuild strips it out.",
+  "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and the rail comes back on its own if a rebuild leaves it out.",
   "A break the reviewer typed is part of the edit: a blank line in the after text is a paragraph break, and a single newline is a line break. Markdown does not read a single newline as a new paragraph, so write a blank line between the two paragraphs in the source, or the format's own hard-break form for a line break, then rebuild and check the page really shows the break.",
   "Links in a Markdown source are source-true: never rewrite an on-disk link to make the browser page work. The renderer translates local links when it builds the page, so fix a broken link only if it is wrong on disk too.",
   "The only way to say you handled an item is to append a reply line."
@@ -512,19 +512,44 @@ first time that is another folder the library 404s). The helper serves those byt
 on the unauthenticated `library.get` route.
 
 **The fallback is D1's offline half, and it is not optional.** `data-lahe-fallback`
-names a copy of the built library sitting beside the page, by a relative path, and
-the inline `onerror` injects it when the primary `src` does not load. Without it a
-page opened while the helper is down loads no library at all: no rail, no honest
-unreachable status, no local capture, no export. That is R10 (there is always a way
-to take the work elsewhere, with nothing running), and the earlier claim that "a
-review with no helper records nothing anyway" was wrong: the library alone records
-into browser storage, says the helper is unreachable, and posts everything it held
-when the helper returns.
+names a second place to get the library from, and the inline `onerror` injects it when
+the primary `src` does not load. Without it a page opened while the helper is down
+loads no library at all: no rail, no honest unreachable status, no local capture, no
+export. That is R10 (there is always a way to take the work elsewhere, with nothing
+running), and the earlier claim that "a review with no helper records nothing anyway"
+was wrong: the library alone records into browser storage, says the helper is
+unreachable, and posts everything it held when the helper returns.
 
-`lahe add` writes the copy beside a static page and refreshes it on every run, so it
-tracks `dist/`. For a dev server the fallback path is a printed convention (`/lahe-layer.js`)
-the application has to serve. Under a strict development CSP the inline `onerror` can be
-refused; the primary `src` still loads there, so what is lost is the fallback, not the review.
+**WHICH TWO PLACES DEPENDS ON WHO WROTE THE LINE, and the served case is the reverse
+of the written one.**
+
+- The line above is the one `lahe add` writes into a file, and the one the helper
+  heals back into a rebuilt file. Primary: the helper. Fallback: a copy of the built
+  library beside the page, named relatively, refreshed on every `add` run so it
+  tracks `dist/`. For a dev server the fallback path is a printed convention
+  (`/lahe-layer.js`) the application has to serve.
+- The line a static review server injects into the RESPONSE
+  (`src/service/static_servers.js`) names its own reserved library route,
+  `/.lahe-library/lahe-layer.js`, as the primary, and the helper as the fallback.
+  Nothing relative to the page is named, because nothing is written beside the page.
+  A root-absolute path resolves back to the server that just answered the request,
+  whatever host name the reviewer typed, and that process is by definition up; the
+  helper is a separate process and is often down, which is why it is the fallback.
+
+**A SERVED REVIEW WRITES NOTHING INTO THE REVIEWER'S FOLDER.** `lahe review` owns the
+server for a static target, so it writes no script line into the file and copies no
+bundle beside it, and the healer stands down for any file a live static server is
+serving. The folder a reviewed page lives in is usually a git checkout: an ordinary
+`git add -A` committed both files, and because the written line's `onerror` names its
+fallback RELATIVELY, a page and a bundle that ship to a deployed site together bring
+the review rail up for every visitor. `lahe add` run directly and any `file://`
+review keep writing both halves, because they have no server to inject for them.
+`lahe add <page> --remove` is the remediation command: it takes the line out and
+removes a sibling `lahe-layer.js` that is byte-identical to what this clone builds,
+leaving a file of that name that is anything else alone.
+
+Under a strict development CSP the inline `onerror` can be refused; the primary `src`
+still loads there, so what is lost is the fallback, not the review.
 
 The fallback half is omitted when `protocol.scriptTag` is called without `fallback`,
 which is what a harness serving the bundle itself does. The injected script carries no
@@ -588,9 +613,11 @@ carries this review's script line, the helper writes the line back (`protocol.sc
 `src/shared/script_line.js`, the same module `lahe add` writes with) and refreshes the sibling
 `lahe-layer.js` fallback copy. The rules: a new mtime is examined only after it has stood still for one
 poll interval (a build writes in pieces), the write is a temp file renamed in the same directory, a file
-carrying a DIFFERENT review's line is logged and left alone, and the post-write mtime becomes the new
-baseline so the helper never re-examines its own write. That single mtime bump is what the page reloads
-on, so the rail comes back with no command run by anyone.
+carrying a DIFFERENT review's line is logged and left alone, a file a live static server is SERVING is
+not healed at all (its line goes into the response, so writing one would put a review id and a token
+into the reviewer's working tree for nothing), and the post-write mtime becomes the new baseline so the
+helper never re-examines its own write. That single mtime bump is what the page reloads on, so the rail
+comes back with no command run by anyone.
 
 `window.claim` body is `{review, window_id, session_secret?, takeover?}` (D5's one-session-per-review).
 A grant returns `{granted:true, since, heartbeat_seconds, took_over, session_secret}`; the
