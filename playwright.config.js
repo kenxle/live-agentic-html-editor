@@ -43,12 +43,20 @@ const ALL_PROJECTS = [
 //   --project=<name>        a builder debugging one lane by hand
 //
 // Without either, a bare `playwright test` is Chromium and nothing else.
-const askedForAll = !!process.env.LAHE_ALL_BROWSERS;
+// The argv sniff only works in the MAIN process. Playwright spawns each worker
+// with its own argv, which does not carry `--project`, so a worker re-evaluating
+// this file saw the Chromium-only list and answered
+// `Project "firefox" not found in the worker process` before the test body ran.
+// The lane looked broken and the failure named the harness rather than a claim.
+// Environment DOES reach a worker, so the main process records its decision
+// there and both sides read the same list.
 const askedForProject = process.argv.some(function (arg) {
   return arg === "--project" || arg.indexOf("--project=") === 0;
 });
+if (askedForProject) process.env.LAHE_ALL_BROWSERS = "1";
+const askedForAll = !!process.env.LAHE_ALL_BROWSERS;
 const projects =
-  askedForAll || askedForProject
+  askedForAll
     ? ALL_PROJECTS
     : ALL_PROJECTS.filter(function (project) {
         return project.name === DEFAULT_PROJECT;
