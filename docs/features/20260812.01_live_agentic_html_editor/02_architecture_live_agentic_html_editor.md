@@ -599,11 +599,31 @@ stateDiagram-v2
     handled --> ready: reviewer reopens (R38)
     draft --> [*]: reviewer deletes
     ready --> [*]: reviewer deletes
+    not_handled --> [*]: reviewer deletes
+    handled --> handled: reviewer undoes, which mints a take-back
 ```
 
-Deletion is reachable only from draft and ready on purpose: a handled item is kept as the record
-that a fix landed (R38, handled items are kept, not deleted), so the only way out of handled is
-reopening it. The reviewer deletes their own outstanding work, never the history.
+Deletion is reachable from the reviewer's own outstanding work, and from nowhere else. That is
+draft, ready, and not_handled: a declined edit landed nothing in the source, so it is still the
+reviewer's to take back. A handled item is different and is kept, because it is the record that a
+fix landed (R38). The reviewer deletes their own outstanding work, never the history.
+
+**Amended 2026-08-23.** `not_handled` was missing from that list, and the omission was never
+argued: the paragraph above it only ever justified excluding `handled`. A reviewer could not undo
+an edit their own agent had declined, which is the case where nothing landed anywhere and the take
+back is least consequential.
+
+The same amendment gives `handled` an answer that is not a refusal. Undoing a handled hand edit
+reverts the reviewer's page and mints a NEW outstanding record pointing the other way, carrying
+`reverts` with the id of the item it takes back, so the agent is asked to remove the change from
+the source rather than the reviewer being told they may not undo it. The handled record stays, so
+R38 holds and the history still says a fix landed.
+
+The reason this needed stating rather than being obvious: a deliberate undo and a page that lost
+an applied fix look identical in the DOM, and the page check reads that shape and asks the agent to
+REAPPLY. They differ only in the log, so the check skips an item that another record reverts. Undo
+is the reviewer acting on their own review, and the tool already trusts them to make the edit; it
+does not need permission to unmake it (Ken, 2026-08-23).
 
 A **database was considered** for the store (Ken raised it; someone he met built theirs on one) and
 set aside for v1. The real reasons, not safety: Node's built-in SQLite arrives in Node 22 and our
