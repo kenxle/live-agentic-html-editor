@@ -222,6 +222,11 @@ var NON_BUNDLE_FILES = [
     owner: "1A",
     why: "putting the script line back into a page a rebuild stripped it out of, on the same stat the reload trigger already does"
   },
+  {
+    path: "src/service/source_stamp.js",
+    owner: "1A",
+    why: "whether the helper that is running predates the code on disk. The shared long-lived helper holds its modules in memory, so this is the one check that catches a helper older than this clone"
+  },
   { path: "src/service/projection.js", owner: "3A", why: "the log projected into review.json and the reply state the library polls" },
   { path: "src/service/review_writer.js", owner: "3A", why: "the single writer of review.json, and the path-safety rules" },
   { path: "src/service/replies.js", owner: "3A", why: "reply file discovery, byte-offset reading, folding, the conflict rule" },

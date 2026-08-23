@@ -11,6 +11,7 @@ var protocol = require("../../shared/protocol.js");
 var stateDir = require("../../service/state_dir.js");
 var sessions = require("../../service/agent_sessions.js");
 var service = require("../../service/index.js");
+var sourceStamp = require("../../service/source_stamp.js");
 var staticServers = require("../../service/static_servers.js");
 
 var statusCommand = require("./status.js");
@@ -92,7 +93,22 @@ async function stopVerifiedHelper(dir) {
   return true;
 }
 
+/**
+ * Make sure a helper this clone can talk to is running, and leave a current one
+ * exactly where it is.
+ *
+ * Two things say the running one is behind: a lower service contract, which is
+ * hand-bumped and so only catches what somebody remembered to declare, and the
+ * mtimes of the code it loaded, which nobody has to remember (see
+ * src/service/source_stamp.js). Either one gets it stopped and started again;
+ * neither costs anything when the helper is current, because the source check
+ * only runs when one is answering.
+ *
+ * @returns {Promise<{started: boolean, stale: boolean}>} `started` is true when
+ *   this call put a new process there, whether or not it replaced one.
+ */
 async function startHelper(dir, port) {
+  var stale = false;
   var live = await service.probeHealth(protocol.DEFAULT_HOST, port);
   if (live) {
     var liveContract = Number.isInteger(live.service_contract) ? live.service_contract : 0;
@@ -102,7 +118,10 @@ async function startHelper(dir, port) {
         "; update this clone before changing the session"
       );
     }
-    if (liveContract === protocol.SERVICE_CONTRACT) return false;
+    if (liveContract === protocol.SERVICE_CONTRACT) {
+      stale = sourceStamp.helperPredatesSource(live.started_at).stale;
+      if (!stale) return { started: false, stale: false };
+    }
     if (!(await stopVerifiedHelper(dir))) {
       throw new Error("refusing to replace an older helper whose process identity cannot be verified");
     }
@@ -114,7 +133,7 @@ async function startHelper(dir, port) {
   child.unref();
   var started = await waitFor(function () { return service.probeHealth(protocol.DEFAULT_HOST, port); }, 10000);
   if (!started) throw new Error("the helper did not start within 10 seconds");
-  return true;
+  return { started: true, stale: stale };
 }
 
 // ---------------------------------------------------------------------------
@@ -317,12 +336,22 @@ async function run(argv, options) {
       var session = handedOff ? store.takeover(args.id) : store.reopen(args.id);
       var prior = readReady(dir);
       var port = args.port || (prior && prior.port) || protocol.DEFAULT_PORT;
-      var started = await startHelper(dir, port);
+      var helperRun = await startHelper(dir, port);
       var staticStarted = await staticServers.restartAll(dir, args.id);
+      var helperNote = "; shared helper already running";
+      if (helperRun.started) helperNote = helperRun.stale ? "; shared helper restarted" : "; shared helper started";
       var message =
         "agent session " + args.id + (handedOff ? " taken over explicitly" : " reopened") +
-          (started ? "; shared helper started" : "; shared helper already running") +
+          helperNote +
           (staticStarted ? "; static review server" + (staticStarted === 1 ? "" : "s") + " restarted" : "") + "\n";
+      // Never a silent bounce: a restart drops every open review page's
+      // connection for a moment, and the person watching that page is owed the
+      // reason.
+      if (helperRun.stale) {
+        message +=
+          "  helper    " + sourceStamp.REASON + ", so it was stopped and started again\n" +
+          "            any review page open right now goes unreachable for a moment and reconnects on its own\n";
+      }
       if (handedOff) {
         message +=
           "  handoff   " + session.handoff_rev + "  (older lahe monitor processes exit with " +

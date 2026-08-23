@@ -301,10 +301,22 @@ starts an independent workstream. Advanced `lahe add <page> --review <id>`
 re-attaches a page to a review by id inside its owning session.
 
 The helper may have been running since before this clone was updated. `review`
-checks an explicit service contract every time. It safely restarts a verified
-older helper before opening the page, preserving disk-backed review history and
-browser queues. It refuses to replace a newer helper with an older clone. This
-prevents a freshly rebuilt rail from talking to stale in-memory backend code.
+checks two things every time: the helper's service contract, and whether the
+helper started before this clone's code last changed. Either one gets a verified
+older helper stopped and started again before the page opens, and `review` says
+so in its output rather than bouncing it in silence. It refuses to replace a
+newer helper with an older clone. This is what prevents a freshly rebuilt rail
+from talking to stale in-memory backend code, and the second check is the one
+that catches a helper that has simply been up for days.
+
+A restart costs nothing durable:
+
+- Nothing in the state directory moves. The record is on disk and a restart does
+  not write to it.
+- The static server serving the reviewed page belongs to the agent session, not
+  to the helper, so the reviewer's URL keeps answering throughout.
+- An open page shows the helper unreachable for a moment, then reconnects on its
+  own and re-posts whatever it was holding.
 
 **A different document gets its own review.** `--review <id>` is for putting a
 page back on the review it already belonged to, usually after a rebuild. Do not

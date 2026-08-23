@@ -885,6 +885,36 @@ Mechanisms from the research that still have **no home in v2**, beyond the red f
 - **Helper/library version skew.** Human-review's `8bb9ce4` scar: an upgraded CLI against a stale
   running helper silently serves broken pieces. v2 has a built file copied into a host app and a
   helper started separately, which is the same shape, with no version gate.
+
+  **RESOLVED 2026-08-23.** It happened here first, which is how it got built. A merge changed the
+  `contract` array in `src/shared/review_format.js` while the helper had been running since
+  2026-08-21. The helper holds its modules in memory, so it kept writing the old 31-entry contract
+  into every `review.json` (32 entries after a restart, measured). The static servers are spawned per
+  review and so were current, which is exactly what hid it: injection worked and the page looked
+  right, and the only stale thing on the machine was the one file the agent reads.
+
+  The gate is deliberately NOT a version comparison. `package.json`'s version had not changed that
+  day and the hand-bumped `service_contract` had not either, so both numbers matched and a gate on
+  either would have reported everything fine. `src/service/source_stamp.js` compares the helper's own
+  `started_at` (already published on `/health`) against the newest mtime under `src/` and `vendor/`,
+  which is the code it loaded at boot. Nobody has to remember to bump a filesystem.
+
+  What that bought:
+
+  - `lahe add`, and so `lahe review`, stops a helper that predates the code and starts a fresh one
+    before doing its work. `lahe session reopen` and `lahe session takeover` do the same.
+  - A helper that is current is left strictly alone. The check runs only when one is answering, and
+    the walk is 63 files at 0.43ms, stopping at the first file newer than the helper.
+  - The restart is never silent. The output says the helper was older than the code, that it was
+    restarted, and that an open page goes unreachable for a moment and reconnects on its own.
+  - Nothing durable moves. Reviews and sessions and the event log are all on disk, the tokens survive,
+    and the page's static server belongs to the agent session rather than to the helper, so the
+    reviewer's URL keeps answering across the bounce.
+  - `lahe serve` says when the helper already answering is older than the code, and changes nothing:
+    replacing a shared helper belongs to the commands that are about to use it.
+
+  Pinned by `test/unit/helper_freshness.test.js`, including the assertion that a current helper keeps
+  its pid.
 - **How the agent is told where `review.md` lives.** Two of human-review's agent-pickup failures were
   in the instruction file, not the code: a wrong invocation written by the installer, and a filename
   the agent never found. R40/R41/R43 cover installing the library on the page; nothing covers writing

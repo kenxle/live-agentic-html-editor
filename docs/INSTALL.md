@@ -94,9 +94,12 @@ the cases with no server to inject for them: a plain `lahe add`, and any page
 opened from disk.
 
 A helper can outlive a repository update when reviews remain open. Every
-`review` therefore checks the running backend's service contract. A verified
-older helper is restarted onto the installed code without losing review history
-or browser-queued work. An older clone refuses to replace a newer helper.
+`review` therefore checks two things about the one that is running: its service
+contract, and whether it started before this clone's code last changed. Either
+one restarts a verified older helper onto the installed code, and the output
+says it happened. Nothing is lost by it: review history stays on disk, the page's
+own static server is not touched, and an open page reconnects by itself. An older
+clone refuses to replace a newer helper.
 
 For a static file, that one command also starts or reuses a read-only Node
 server rooted at the page's folder and registers its exact origin. Open the URL

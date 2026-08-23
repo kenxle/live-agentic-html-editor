@@ -83,6 +83,7 @@ var logModule = require("../../service/log.js");
 var reviewsModule = require("../../service/reviews.js");
 var agentSessionsModule = require("../../service/agent_sessions.js");
 var staticServersModule = require("../../service/static_servers.js");
+var sourceStamp = require("../../service/source_stamp.js");
 var service = require("../../service/index.js");
 
 var REPO_ROOT = path.join(__dirname, "..", "..", "..");
@@ -709,6 +710,25 @@ function tokenWarning(where) {
   ].join("\n");
 }
 
+/**
+ * What happened to the helper this run, in the words that go on the `helper`
+ * line. A restart because the helper predated this clone's code reads
+ * differently from a restart to teach it a review, and the reviewer whose page
+ * just blinked is owed the real reason.
+ *
+ * @param {{started: boolean, staleRestart: boolean, restarted: boolean, learned: boolean, handedToHelper: boolean}} state
+ */
+function helperNote(state) {
+  if (state.started) return "  (started just now)";
+  if (state.staleRestart) return "  (restarted: " + sourceStamp.REASON + ")";
+  if (state.restarted) return "  (restarted, so it knows this review)";
+  if (state.learned) return "  (already running, and it picked this review up without a restart)";
+  if (state.handedToHelper) {
+    return "  (already running and holding this review, so it did the writing itself: no bounce)";
+  }
+  return "  (already running)";
+}
+
 function commentedSnippet(tag) {
   return [
     "<!-- lahe setup note: this comment is not a development guard.",
@@ -986,6 +1006,7 @@ async function run(argv) {
   var learned = false;
   var handedToHelper = false;
   var restartReason = null;
+  var staleRestart = false;
 
   // A helper is intentionally shared across agent types, projects, and agent
   // sessions, which also means a maintainer can keep one alive across a code
@@ -993,9 +1014,23 @@ async function run(argv) {
   // its service and projection modules in memory. Without this fence that
   // creates a split product: today's rail talking to yesterday's backend.
   //
-  // An absent contract is the pre-fence helper and is safely older. A greater
-  // contract means this CLI came from an older clone; never bounce a newer
-  // shared helper backward, because another live session may depend on it.
+  // TWO THINGS SAY THE HELPER IS BEHIND, and only one of them is a number.
+  //
+  //  1. The service contract. An absent contract is the pre-fence helper and is
+  //     safely older. A greater contract means this CLI came from an older
+  //     clone; never bounce a newer shared helper backward, because another
+  //     live session may depend on it.
+  //  2. The files on disk. The contract is hand-bumped, so it catches the
+  //     changes somebody remembered to declare and nothing else. On 2026-08-23
+  //     the contract text in review_format.js changed, the number did not, and a
+  //     two-day-old helper kept writing the old contract into review.json while
+  //     everything a human could see looked right. src/service/source_stamp.js
+  //     compares the helper's own start instant to the newest mtime of the code
+  //     it loaded, which no one has to remember to bump.
+  //
+  // A helper that is current is left strictly alone: the check only runs when
+  // one is answering, and a restart drops every open page's connection for a
+  // moment.
   if (alive) {
     var liveContract = Number.isInteger(alive.service_contract) ? alive.service_contract : 0;
     if (liveContract > protocol.SERVICE_CONTRACT) {
@@ -1010,6 +1045,11 @@ async function run(argv) {
       restartReason =
         "the verified helper uses older service contract " + liveContract +
         "; this clone requires " + protocol.SERVICE_CONTRACT;
+    } else if (sourceStamp.helperPredatesSource(alive.started_at).stale) {
+      restartReason = sourceStamp.REASON;
+      staleRestart = true;
+    }
+    if (restartReason) {
       try {
         await stopHelper(Object.assign({ dir: dir }, ready || {}), host, port, alive);
         restarted = true;
@@ -1240,15 +1280,13 @@ async function run(argv) {
   say(
     "  helper    " +
       helperOrigin +
-      (started
-        ? "  (started just now)"
-        : restarted
-          ? "  (restarted, so it knows this review)"
-          : learned
-            ? "  (already running, and it picked this review up without a restart)"
-            : handedToHelper
-              ? "  (already running and holding this review, so it did the writing itself: no bounce)"
-              : "  (already running)")
+      helperNote({
+        started: started,
+        staleRestart: staleRestart,
+        restarted: restarted,
+        learned: learned,
+        handedToHelper: handedToHelper
+      })
   );
   say("  origin    " + originNote);
   if (options.source) say("  source    " + options.source);
@@ -1340,10 +1378,18 @@ async function run(argv) {
     say("  A different origin is one more add away: lahe add " + options.target + " --origin <origin>");
   }
 
+  // A restart is never silent. It drops the connection under every review page
+  // that is open, and the reviewer watching their status line change is owed the
+  // reason in plain words rather than a mystery blink.
   if (restarted) {
     say();
-    if (restartReason) say("  " + restartReason.charAt(0).toUpperCase() + restartReason.slice(1) + ", so it was started again.");
-    say("  The helper was already running and was started again so it holds this review.");
+    if (staleRestart) {
+      say("  " + sourceStamp.reasonSentence(", so it was stopped and started again."));
+      say("  Any review page open right now goes unreachable for a moment and reconnects on its own.");
+    } else {
+      if (restartReason) say("  " + restartReason.charAt(0).toUpperCase() + restartReason.slice(1) + ", so it was started again.");
+      say("  The helper was already running and was started again so it holds this review.");
+    }
     say("  Nothing was lost: the log is append-only, tokens survive a restart, and any page still");
     say("  open re-posts what it was holding as soon as it reconnects.");
   }

@@ -18,6 +18,7 @@
 
 var protocol = require("../../shared/protocol.js");
 var service = require("../../service/index.js");
+var sourceStamp = require("../../service/source_stamp.js");
 
 var USAGE = [
   "usage: lahe serve [--port <n>] [--state-dir <path>] [--review <id>] [--origin <origin>]",
@@ -123,6 +124,16 @@ async function run(argv) {
             already.api +
             "). Nothing to do.\n"
         );
+        // Say it, do not act on it. `serve` starts the helper; deciding to
+        // replace a shared one belongs to the commands that are about to use it
+        // (`lahe review` and `lahe session`), which do it with the reviewer told
+        // why. Staying quiet here is how a two-day-old helper goes unnoticed.
+        if (sourceStamp.helperPredatesSource(already.started_at).stale) {
+          process.stdout.write(
+            "  " + sourceStamp.reasonSentence(".") + "\n" +
+              "  The next `lahe review` replaces it and says so.\n"
+          );
+        }
         return 0;
       }
       process.stderr.write(
