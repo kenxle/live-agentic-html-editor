@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.1.0+70d070f278f9
+ * version 0.1.0+15170b9fbef0
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.1.0+70d070f278f9";
+  g.LAHE.version = "0.1.0+15170b9fbef0";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -3612,6 +3612,60 @@
     return false;
   }
 
+  // ---------------------------------------------------------------------------
+  // What Enter means inside a block that is in edit state
+  // ---------------------------------------------------------------------------
+  //
+  // Enter is NOT a library shortcut, which is why it has no row in the table
+  // above and no hint on the rail: it is typing. But the record has to say
+  // which break the reviewer typed, and left to itself no two engines agree.
+  // Measured on 2026-08-23, the same keystroke in the same bare
+  // `<p contenteditable>`:
+  //
+  //   Enter        Chromium and WebKit write a nested block, Firefox writes a
+  //                <br>. Read back through the normalizer that is a paragraph
+  //                break in two engines and a line break in the third, so a
+  //                Firefox reviewer's "new paragraph" reached the agent as a
+  //                line break.
+  //   Shift-Enter  Chromium and Firefox write a <br>. WebKit writes a nested
+  //                block, so a WebKit reviewer's "new line" reached the agent
+  //                as a paragraph break.
+  //
+  // So the layer says what the key meant instead of asking the engine. It reads
+  // the intent here, cancels the engine's own insertion, and writes the break
+  // itself (src/layer/editing.js).
+  //
+  // ONE ENGINE QUIRK THIS FUNCTION EXISTS TO ABSORB: `inputType` alone is not
+  // enough. WebKit reports Shift-Enter as `insertParagraph`, the same value it
+  // reports for a bare Enter, so the two gestures are indistinguishable from
+  // the input event. The Shift state of the Enter keydown that produced it is
+  // the tie-breaker, and it is the caller's to supply because a beforeinput
+  // event does not carry one.
+  var BREAK = {
+    PARAGRAPH: "paragraph",
+    LINE: "line"
+  };
+
+  /**
+   * Which break an input event is asking for, or null when it is not a break.
+   *
+   * Pure over a plain descriptor, like everything else in this file, so the
+   * rule is unit-testable with no browser.
+   *
+   * @param {Object} input
+   *   inputType  the InputEvent.inputType value
+   *   shiftKey   true when the Enter keydown that produced it held Shift
+   * @returns {(string|null)} a BREAK value, or null
+   */
+  function breakIntentFor(input) {
+    var e = input || {};
+    if (e.inputType === "insertLineBreak") return BREAK.LINE;
+    if (e.inputType === "insertParagraph") {
+      return e.shiftKey === true ? BREAK.LINE : BREAK.PARAGRAPH;
+    }
+    return null;
+  }
+
   // KeyboardEvent.key is lowercase unless Shift is held, and it is the layout's
   // character. Comparing case-insensitively is what makes Cmd-Shift-C work.
   function isKey(key, letter) {
@@ -3645,8 +3699,10 @@
 
   var api = {
     GESTURE: GESTURE,
+    BREAK: BREAK,
     TABLE: TABLE,
     gestureFor: gestureFor,
+    breakIntentFor: breakIntentFor,
     isScrollbarPress: isScrollbarPress,
     hintFor: hintFor,
     hintLines: hintLines,
@@ -19832,6 +19888,62 @@
   ].join("\n");
 
   // ---------------------------------------------------------------------------
+  // The break the reviewer typed
+  // ---------------------------------------------------------------------------
+  //
+  // gestures.breakIntentFor says WHICH break Enter meant. This says what that
+  // break is spelled as in the block, and it is the whole reason the three
+  // engines now record the same thing: the layer cancels the engine's own
+  // insertion and writes this shape instead.
+  //
+  // The vocabulary is the normalizer's, not a new one (D9's one normalizer):
+  //
+  //   paragraph  a real block boundary, so blockTextFromNode reads a blank
+  //              line off the STRUCTURE rather than off a newline count. <p>
+  //              because BOOT_COMMANDS already decided that Enter makes a
+  //              paragraph and not a div.
+  //   line       a <br>, which is the one tag the normalizer reads as a single
+  //              newline.
+  //
+  // Both shapes were measured byte-for-byte identical in Chromium, Firefox and
+  // WebKit on 2026-08-23, typed into and left alone, which is what the engines
+  // themselves are not.
+  var BREAK_SHAPE = {};
+  BREAK_SHAPE[gestures.BREAK.PARAGRAPH] = { tag: "p", text: normalize.PARAGRAPH_BREAK };
+  BREAK_SHAPE[gestures.BREAK.LINE] = { tag: "br", text: normalize.LINE_BREAK };
+
+  /**
+   * The markup shape one break writes, or null when the intent is not a break.
+   *
+   * @param {string} intent a gestures.BREAK value
+   * @returns {({tag: string, text: string}|null)}
+   */
+  function breakShapeFor(intent) {
+    return Object.prototype.hasOwnProperty.call(BREAK_SHAPE, intent) ? BREAK_SHAPE[intent] : null;
+  }
+
+  /**
+   * The markup a break leaves behind, spelled once so the unit test reads the
+   * same shape the DOM insertion below builds. Splitting `head` from `tail`
+   * with this intent has to read back through the normalizer as
+   * head + shape.text + tail, and that round trip is the actual contract: it is
+   * what puts the blank line in the record the agent reads.
+   *
+   * @param {string} intent a gestures.BREAK value
+   * @param {string} head the words before the caret
+   * @param {string} tail the words after it
+   * @returns {string}
+   */
+  function breakMarkup(intent, head, tail) {
+    var shape = breakShapeFor(intent);
+    var before = String(head === undefined || head === null ? "" : head);
+    var after = String(tail === undefined || tail === null ? "" : tail);
+    if (!shape) return before + after;
+    if (shape.tag === "br") return before + "<br>" + after;
+    return before + "<" + shape.tag + ">" + after + "</" + shape.tag + ">";
+  }
+
+  // ---------------------------------------------------------------------------
   // Capture
   // ---------------------------------------------------------------------------
 
@@ -20059,6 +20171,10 @@
         itemId: item[record.FIELD.ID],
         before: before,
         composing: false,
+        // The last key seen while this block was open. onBeforeInput reads it
+        // because an input event carries no modifier state and WebKit reports
+        // Shift-Enter with the same inputType as a bare Enter.
+        lastKey: null,
         wasNew: !existing,
         startedAt: Date.now()
       };
@@ -20139,6 +20255,10 @@
 
     function bindBlock(block) {
       unbindBlock();
+      // beforeinput comes FIRST because it is the only one of these that can
+      // still say no. The break the reviewer typed is written by this file, not
+      // by the engine: see onBeforeInput.
+      blockHandles.push(listeners.on(block, "beforeinput", onBeforeInput, false, LISTENER_GROUP));
       blockHandles.push(listeners.on(block, "input", onInput, false, LISTENER_GROUP));
       blockHandles.push(listeners.on(block, "compositionstart", onCompositionStart, false, LISTENER_GROUP));
       blockHandles.push(listeners.on(block, "compositionend", onCompositionEnd, false, LISTENER_GROUP));
@@ -20169,6 +20289,170 @@
       // compositionend, which is one event away.
       if (!session || session.composing) return;
       captureTyping();
+    }
+
+    /**
+     * Enter, before the engine gets it.
+     *
+     * THE BUG THIS EXISTS FOR. A reviewer put a paragraph into edit state, put
+     * the caret mid-sentence and pressed Enter meaning "new paragraph". The
+     * record said line break. Not always: only in Firefox. A <p> cannot legally
+     * contain a <p>, so every engine improvises, and they improvise differently
+     * (the measurements are in gestures.breakIntentFor). Left alone, which
+     * break reached the agent depended on which browser the reviewer opened.
+     *
+     * The normalizer is not the place to paper over this. A nested block really
+     * is a paragraph break and a <br> really is a line break, and the contract,
+     * AGENTS.md and the Markdown writing rules all lean on that holding. What
+     * was missing was upstream: the layer never said what Enter meant, so each
+     * engine decided. It says so here.
+     *
+     * Nothing else is intercepted. Every other inputType is the engine's, the
+     * way typing has always been.
+     */
+    function onBeforeInput(event) {
+      // Mid-composition the IME owns the block, and Enter there is the IME
+      // accepting a candidate rather than the reviewer asking for a break.
+      if (!session || session.composing) return;
+      var intent = gestures.breakIntentFor({
+        inputType: event.inputType,
+        // WebKit calls Shift-Enter `insertParagraph` too, so the input event
+        // cannot tell the two apart on its own. The Enter keydown that produced
+        // it can, and onKeydown parked it on the session one event ago.
+        shiftKey: !!(session.lastKey && session.lastKey.key === "Enter" && session.lastKey.shiftKey)
+      });
+      if (!intent) return;
+      if (typeof event.preventDefault === "function") event.preventDefault();
+      if (!insertBreak(intent)) return;
+      // TWO THINGS THE ENGINE'S OWN `input` EVENT WOULD HAVE DONE, AND CANNOT
+      // NOW: cancelling beforeinput cancels the input event with it.
+      //
+      //  1. Protection's layer three snapshots the block on every input and
+      //     keyup, which is what keeps its mutation observer from reading the
+      //     reviewer's own typing as a repaint and restoring it away. Without
+      //     this line the break goes in, the observer fires one microtask
+      //     later, and layer three writes the unbroken paragraph back over it.
+      //     Synchronously, and before the capture, for that ordering.
+      //  2. The record is written on every keystroke (R1: every keystroke is
+      //     durable). Without this the break is on the page and in no record.
+      if (protect && typeof protect.snapshot === "function") protect.snapshot(session.block);
+      captureTyping();
+    }
+
+    /**
+     * Writes one break into the open block and leaves the caret after it.
+     *
+     * @param {string} intent a gestures.BREAK value
+     * @returns {boolean} true when the block changed
+     */
+    function insertBreak(intent) {
+      var shape = breakShapeFor(intent);
+      if (!shape || !session || !win || !doc) return false;
+      if (typeof win.getSelection !== "function" || typeof doc.createRange !== "function") return false;
+      var sel = win.getSelection();
+      if (!sel || sel.rangeCount === 0) return false;
+      var range = sel.getRangeAt(0);
+      var block = session.block;
+      var inside = range.commonAncestorContainer;
+      if (inside !== block && !(typeof block.contains === "function" && block.contains(inside))) return false;
+
+      range.deleteContents();
+      var caret = shape.tag === "br" ? writeLineBreak(range, block) : writeParagraphBreak(range, block, shape.tag);
+      if (!caret) return false;
+      sel.removeAllRanges();
+      sel.addRange(caret);
+      return true;
+    }
+
+    /**
+     * A line break: one <br>, plus the padding <br> the engines all insist on.
+     *
+     * A <br> that ends a block has no line of its own to sit on, so every
+     * engine writes a second one behind it and eats that second one again on
+     * the next character typed. Doing the same thing here is what makes the
+     * reviewer's new line visible at all, and it costs nothing in the record:
+     * a trailing break normalizes away.
+     */
+    function writeLineBreak(range, block) {
+      var br = doc.createElement("br");
+      range.insertNode(br);
+      if (atEndOfBlock(br, block)) {
+        br.parentNode.insertBefore(doc.createElement("br"), br.nextSibling);
+      }
+      var caret = doc.createRange();
+      caret.setStartAfter(br);
+      caret.collapse(true);
+      return caret;
+    }
+
+    /**
+     * A paragraph break: the words from the caret to the end of the block the
+     * caret is in move into a new block of their own.
+     *
+     * The block the caret is in, not the region: a second Enter inside a
+     * paragraph this file already split has to split THAT paragraph, or every
+     * break nests one level deeper than the last.
+     *
+     * An empty side gets a <br> for the same reason writeLineBreak does: an
+     * empty block is not a line the caret can be on. It normalizes away too, so
+     * an Enter with nothing typed after it is still not a change to the
+     * document.
+     */
+    function writeParagraphBreak(range, block, tag) {
+      var container = nearestBlockIn(range.startContainer, block);
+      var tail = doc.createElement(tag);
+      var rest = doc.createRange();
+      rest.setStart(range.startContainer, range.startOffset);
+      rest.setEnd(container, container.childNodes.length);
+      tail.appendChild(rest.extractContents());
+      if (!hasAnyContent(tail)) tail.appendChild(doc.createElement("br"));
+      if (!hasAnyContent(container)) container.appendChild(doc.createElement("br"));
+      if (container === block) block.appendChild(tail);
+      else container.parentNode.insertBefore(tail, container.nextSibling);
+      var caret = doc.createRange();
+      caret.setStart(tail, 0);
+      caret.collapse(true);
+      return caret;
+    }
+
+    // The nearest block-level element the node sits in, stopping at the region.
+    // The tag vocabulary is the normalizer's, because the normalizer is what
+    // reads the result back as a paragraph break (D9's one normalizer).
+    function nearestBlockIn(node, region) {
+      var el = node && node.nodeType === 1 ? node : node ? node.parentNode : null;
+      while (el && el !== region) {
+        var tag = typeof el.tagName === "string" ? el.tagName.toLowerCase() : "";
+        if (Object.prototype.hasOwnProperty.call(normalize.BLOCK_TAGS, tag)) return el;
+        el = el.parentNode;
+      }
+      return region;
+    }
+
+    // Is there anything after this node, anywhere up to the region's edge?
+    // An empty text node is not anything: inserting into the middle of a text
+    // node splits it and leaves one behind.
+    function atEndOfBlock(node, block) {
+      var walk = node;
+      while (walk && walk !== block) {
+        for (var sib = walk.nextSibling; sib; sib = sib.nextSibling) {
+          if (isContentNode(sib)) return false;
+        }
+        walk = walk.parentNode;
+      }
+      return true;
+    }
+
+    function hasAnyContent(el) {
+      for (var child = el.firstChild; child; child = child.nextSibling) {
+        if (isContentNode(child)) return true;
+      }
+      return false;
+    }
+
+    function isContentNode(node) {
+      if (!node) return false;
+      if (node.nodeType === 3 || node.nodeType === 4) return String(node.nodeValue || "") !== "";
+      return node.nodeType === 1;
     }
 
     // Every keystroke, synchronously, before anything else. The revision does
@@ -20942,6 +21226,10 @@
 
     function onKeydown(event) {
       if (markers.isInsideOverlay(event.target)) return;
+      // Parked for onBeforeInput, which fires next and cannot see the modifiers
+      // that produced it. Every key, not only Enter, so a stale Shift from an
+      // earlier press cannot turn a later paragraph break into a line break.
+      if (session) session.lastKey = { key: event.key, shiftKey: event.shiftKey === true };
       var got = gestures.gestureFor(describe(event));
       if (got.gesture === gestures.GESTURE.EDIT_BLOCK) {
         if (got.preventDefault) event.preventDefault();
@@ -21102,6 +21390,9 @@
     LABEL_EDITING: LABEL_EDITING,
     HINT_FINISH: HINT_FINISH,
     TOOL_ATTR: markers.TOOL_ATTR,
+    BREAK_SHAPE: BREAK_SHAPE,
+    breakShapeFor: breakShapeFor,
+    breakMarkup: breakMarkup,
     capture: capture,
     kindFor: kindFor,
     createEditing: createEditing
@@ -23270,7 +23561,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.1.0+70d070f278f9";
+  var VERSION = "0.1.0+15170b9fbef0";
 
   var protocol = ns.protocol;
   var record = ns.record;
