@@ -36,8 +36,15 @@ test("every highlight name is namespaced, so a page using the API itself cannot 
   highlightModule.NAMES.forEach(function (name) {
     assert.equal(name.indexOf(highlightModule.PREFIX), 0, name + " is not namespaced");
   });
-  // The page-level stylesheet contains highlight rules and nothing else.
-  highlightModule.STYLE_TEXT.split("}")
+  // The page-level stylesheet contains highlight rules and nothing else, all
+  // of them scoped to screen: printing hands the document over, not the
+  // document plus a reviewer's wash on top of it (see highlight.js).
+  var text = highlightModule.STYLE_TEXT.trim();
+  assert.match(text, /^@media not print \{/, "the highlight rules are screen-only");
+  assert.equal(text.slice(-1), "}", "the media block is closed");
+  var inner = text.slice(text.indexOf("{") + 1, text.lastIndexOf("}"));
+  inner
+    .split("}")
     .map(function (chunk) {
       return chunk.trim();
     })
@@ -45,6 +52,12 @@ test("every highlight name is namespaced, so a page using the API itself cannot 
     .forEach(function (chunk) {
       assert.match(chunk, /^::highlight\(lahe-/);
     });
+});
+
+test("the surface hides for print as one rule against its own host", () => {
+  var text = highlightModule.PRINT_HOST_STYLE_TEXT.trim();
+  assert.match(text, /^@media print \{/);
+  assert.match(text, /:host\s*\{\s*display:\s*none\s*!important;?\s*\}/);
 });
 
 test("a browser with no Custom Highlight API fails loud rather than painting nothing", () => {

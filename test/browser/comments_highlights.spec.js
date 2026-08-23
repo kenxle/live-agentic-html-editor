@@ -130,23 +130,37 @@ function pageGeometry(page) {
 }
 
 // Every stylesheet in the page's own document, plus whether it is the library's
-// marked highlight sheet and what it contains.
+// marked highlight sheet and what it contains. The highlight rules are scoped
+// inside one `@media not print` grouping rule (they should not paint on a
+// printed page), so leaf rules are collected by descending into any grouping
+// rule rather than reading top-level cssText, and the grouping conditions seen
+// along the way are reported alongside them.
 function pageStylesheets(page) {
   return page.evaluate(function () {
     var out = [];
+    function collect(rule, leaves, conditions) {
+      if (rule.cssRules) {
+        if (rule.conditionText) conditions.push(rule.conditionText);
+        for (var k = 0; k < rule.cssRules.length; k += 1) collect(rule.cssRules[k], leaves, conditions);
+      } else {
+        leaves.push(rule.cssText);
+      }
+    }
     for (var i = 0; i < document.styleSheets.length; i += 1) {
       var sheet = document.styleSheets[i];
       var owner = sheet.ownerNode;
       var rules = [];
+      var mediaConditions = [];
       try {
-        for (var j = 0; j < sheet.cssRules.length; j += 1) rules.push(sheet.cssRules[j].cssText);
+        for (var j = 0; j < sheet.cssRules.length; j += 1) collect(sheet.cssRules[j], rules, mediaConditions);
       } catch (err) {
         rules.push("[unreadable] " + err.message);
       }
       out.push({
         marked: !!(owner && owner.getAttribute && owner.getAttribute("data-lahe-highlight") !== null),
         tool: !!(owner && owner.getAttribute && owner.getAttribute("data-lahe") !== null),
-        rules: rules
+        rules: rules,
+        mediaConditions: mediaConditions
       });
     }
     return {
@@ -611,6 +625,9 @@ test.describe("1D: comments, gestures, and highlights", () => {
           const added = layerSheets.sheets.filter((s) => s.tool);
           expect(added).toHaveLength(1);
           expect(added[0].marked).toBe(true);
+          // Screen-only: the wash these rules paint is not part of what a
+          // printed page hands over (see highlight.js's STYLE_TEXT comment).
+          expect(added[0].mediaConditions).toEqual(["not print"]);
           added[0].rules.forEach(function (rule) {
             expect(rule).toMatch(/^::highlight\(lahe-/);
           });
