@@ -80,10 +80,18 @@ Then, for any page you want to review:
 lahe review path/to/page.html
 ```
 
-`review` does the whole setup: it creates the agent session, writes the one script line into the page, drops
-a `lahe-layer.js` copy beside the page as the offline fallback (refreshed every
-run), mints that review's token, registers the page's origin, and **starts the
-helper if it is not already running**. It prints what it did and what to open.
+`review` does the whole setup: it creates the agent session, mints that review's
+token, registers the page's origin, and **starts the helper if it is not already
+running**. It prints what it did and the one URL to open.
+
+**It writes nothing into your page's folder.** The static server puts the script
+line into the page as it serves it, and publishes the library on its own route,
+so your file stays byte-identical and there is no `lahe-layer.js` sitting beside
+it. That matters because a page's folder is usually a git checkout, and a script
+line plus a bundle committed together will load the review rail on a deployed
+copy of the page. The on-disk line and the sibling library copy still exist for
+the cases with no server to inject for them: a plain `lahe add`, and any page
+opened from disk.
 
 A helper can outlive a repository update when reviews remain open. Every
 `review` therefore checks the running backend's service contract. A verified
@@ -188,11 +196,21 @@ node bin/lahe.js serve
 ## A note on the token
 
 The script line carries a per-review token, and the helper refuses any request
-that does not present it. That means a token ends up written into a file. If that
-file is in a repository, the token can be committed and shared with everyone who
-reads it. It is scoped to **one review**: a leak opens that review's feedback and
-nothing else, not your machine and not another review. `add` says so at the
-moment it writes.
+that does not present it.
+
+**On the served path the token never reaches your disk.** `lahe review` puts the
+line in the response, so nothing is written into your working tree and there is
+nothing to commit.
+
+The token does end up in a file on the two paths that have no server to inject
+for them: a plain `lahe add`, and a page opened from disk. If that file is in a
+repository the token can be committed and shared with everyone who reads it. It
+is scoped to **one review**: a leak opens that review's feedback and nothing
+else, not your machine and not another review. `add` says so at the moment it
+writes. The bigger risk there is not the token but the pair: the line's `onerror`
+loads `lahe-layer.js` by a relative path, so a page and its sibling bundle
+committed together will run the review rail on a deployed copy. Take both out
+with `lahe add path/to/page.html --remove` before the page ships.
 
 ## Removing it
 

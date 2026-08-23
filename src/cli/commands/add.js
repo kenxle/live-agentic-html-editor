@@ -82,6 +82,7 @@ var stateDirModule = require("../../service/state_dir.js");
 var logModule = require("../../service/log.js");
 var reviewsModule = require("../../service/reviews.js");
 var agentSessionsModule = require("../../service/agent_sessions.js");
+var staticServersModule = require("../../service/static_servers.js");
 var service = require("../../service/index.js");
 
 var REPO_ROOT = path.join(__dirname, "..", "..", "..");
@@ -167,7 +168,32 @@ var USAGE = [
 
 function parseArgs(argv) {
   var list = argv || [];
-  var options = { target: null, isNew: false, remove: false, origins: [], source: null, review: null, session: null };
+  var options = {
+    target: null,
+    isNew: false,
+    remove: false,
+    origins: [],
+    source: null,
+    review: null,
+    session: null,
+    // Internal only, never in USAGE: `lahe review` sets this on the argv it
+    // hands to `add` when it already owns and printed the served URL itself
+    // (its own "server"/"open" lines). It means one thing, said two ways.
+    //
+    // It tells this command to hold back the "Open it" / "Fallback: file://"
+    // block below, which is otherwise a second, less confident URL competing
+    // with the one `review` already printed. A reviewer who is handed both
+    // pastes both, and the same document forks into two page identities
+    // (observed 2026-08-18).
+    //
+    // And it means A SERVER OF OURS IS ANSWERING FOR THIS PAGE, so nothing is
+    // written into the reviewer's own folder: no script line into the file, no
+    // copy of the bundle beside it. The server puts the line into the response
+    // and serves the bundle from its own reserved route
+    // (src/service/static_servers.js). `review` only ever sets this flag in the
+    // same block where it starts that server, so the two facts arrive together.
+    underReview: false
+  };
   var index = 0;
 
   function takeValue(name, inline) {
@@ -190,7 +216,9 @@ function parseArgs(argv) {
       }
 
       if (name === "--help" || name === "-h") return { ok: false, help: true, message: USAGE };
-      if (name === "--new") {
+      if (name === "--under-review") {
+        options.underReview = true;
+      } else if (name === "--new") {
         options.isNew = true;
       } else if (name === "--remove") {
         options.remove = true;
@@ -708,6 +736,15 @@ function reviewsRootOrPhrase(explicit) {
   }
 }
 
+/** Do two files hold exactly the same bytes? */
+function sameBytes(a, b) {
+  try {
+    return Buffer.compare(fs.readFileSync(a), fs.readFileSync(b)) === 0;
+  } catch (err) {
+    return false;
+  }
+}
+
 function classify(targetPath) {
   var stat = fs.statSync(targetPath);
   if (stat.isDirectory()) return "dev-server";
@@ -765,17 +802,51 @@ async function run(argv) {
       return EXIT.OK;
     }
     fs.writeFileSync(target, stripped.html);
+
+    // THE SIBLING BUNDLE GOES TOO. `--remove` is the command someone runs to
+    // get this tool back out of their working tree, and leaving the bundle
+    // there ("delete it whenever you like") left the more dangerous half
+    // behind: the script line's onerror names it by a RELATIVE path, so a page
+    // and a bundle that ship to a deployed site together bring the review rail
+    // up for every visitor.
+    //
+    // Only a byte-identical copy of the library this clone builds is removed.
+    // A file of that name that is anything else is somebody's own, and nothing
+    // this command was asked to do justifies deleting it.
+    var siblingLine = null;
+    var sibling = path.join(path.dirname(target), BUNDLE_BASENAME);
+    if (fs.existsSync(sibling)) {
+      if (!fs.existsSync(BUNDLE)) {
+        siblingLine =
+          "  " + BUNDLE_BASENAME + " sits beside the page, and this clone has no built library to compare it" +
+          "\n  against, so it was left alone.";
+      } else if (!sameBytes(sibling, BUNDLE)) {
+        siblingLine =
+          "  " + BUNDLE_BASENAME + " sits beside the page but is not the library this clone builds, so it is" +
+          "\n  somebody else's file and was left alone.";
+      } else {
+        try {
+          fs.unlinkSync(sibling);
+          siblingLine = "  Removed " + sibling + ", the fallback copy of the library, byte for byte the built one.";
+        } catch (err) {
+          siblingLine = "  " + BUNDLE_BASENAME + " sits beside the page and could not be removed (" + err.message + ").";
+        }
+      }
+    }
+
     process.stdout.write(
       [
         "lahe add --remove: " + target,
         "",
-        "  Took out the script line for review " + stripped.review + ", and nothing else.",
-        "  " + BUNDLE_BASENAME + " may still sit beside the page as the fallback copy. Nothing loads it now;",
-        "  delete it whenever you like.",
-        "  That review's history is still in " + (reviewsRootOrPhrase(options.stateDir) + "."),
-        "  Stop the helper and delete that directory to forget it. See `Removing it` in the README.",
-        ""
-      ].join("\n")
+        "  Took out the script line for review " + stripped.review + "."
+      ]
+        .concat(siblingLine ? [siblingLine] : [])
+        .concat([
+          "  That review's history is still in " + (reviewsRootOrPhrase(options.stateDir) + "."),
+          "  Stop the helper and delete that directory to forget it. See `Removing it` in the README.",
+          ""
+        ])
+        .join("\n")
     );
     return EXIT.OK;
   }
@@ -1125,10 +1196,22 @@ async function run(argv) {
 
   // --- the line --------------------------------------------------------------
   //
+  // NOTHING IS WRITTEN INTO THE REVIEWER'S FOLDER WHEN A SERVER OF OURS IS
+  // ANSWERING FOR THE PAGE. `lahe review` starts that server and sets
+  // --under-review; the server puts the script line into the response and
+  // serves the library from its own reserved route, so the file on disk keeps
+  // no tag, no review id, no token, and no bundle sits beside it. The folder a
+  // reviewed page lives in is usually a git checkout, and `git add -A` used to
+  // commit both halves; the relative onerror then loaded the rail for every
+  // visitor to the deployed site.
+  //
+  // The two cases with no server to inject for them keep both halves exactly as
+  // they were: a plain `lahe add`, and any file:// review.
+  var servedInjection = kind === "static" && options.underReview;
   // The copy beside the page is written BEFORE the line that names it, so a
   // page loaded the instant after `add` prints has both halves.
   var librarySrc = libraryUrl(helperOrigin);
-  var beside = kind === "static" ? copyLibraryBeside(target) : null;
+  var beside = kind === "static" && !servedInjection ? copyLibraryBeside(target) : null;
   var fallbackSrc = beside ? beside.src : DEV_FALLBACK_SRC;
   var tag = protocol.scriptTag({
     src: librarySrc,
@@ -1147,8 +1230,13 @@ async function run(argv) {
   // review.json: the state directory is derived from environment this command
   // resolved and the agent did not.
   say("  folder    " + stateDirModule.reviewDir(dir, review.id));
-  say("  library   " + librarySrc);
-  say("  fallback  " + fallbackSrc + (beside ? "  (copied beside the page, refreshed every run)" : "  (your app serves this)"));
+  say("  library   " + (servedInjection ? staticServersModule.LIBRARY_PATH : librarySrc));
+  say(
+    "  fallback  " +
+      (servedInjection
+        ? librarySrc + "  (the helper; the page's own server serves the library first)"
+        : fallbackSrc + (beside ? "  (copied beside the page, refreshed every run)" : "  (your app serves this)"))
+  );
   say(
     "  helper    " +
       helperOrigin +
@@ -1166,7 +1254,18 @@ async function run(argv) {
   if (options.source) say("  source    " + options.source);
   say();
 
-  if (kind === "static") {
+  if (servedInjection) {
+    say("  Nothing was written into " + path.basename(target) + ". The script line goes into the response,");
+    say("  put there by the server this review already owns, so no review id and no token land in your folder.");
+    say("  That same server publishes the library at " + staticServersModule.LIBRARY_PATH + ", so no copy of it");
+    say("  sits beside the page either, and the page still opens with the helper down.");
+    if (carried) {
+      say();
+      say("  This page still carries a script line on disk from an earlier run. It was left exactly as it is.");
+      say("  Take it out with: lahe add " + options.target + " --remove");
+    }
+    say();
+  } else if (kind === "static") {
     var placed = reuseId || carried ? replaceScriptLine(page, tag) : placeScriptLine(page, tag);
     if (!placed) placed = placeScriptLine(page, tag);
     fs.writeFileSync(target, placed.html);
@@ -1196,10 +1295,16 @@ async function run(argv) {
       // a local server and the browser sends that server's origin instead, the
       // helper refuses every request from it, and the page used to say the
       // helper was unreachable, which blames the wrong thing entirely.
-      say("  Open it:  file://" + target);
+      //
+      // file:// is the FALLBACK here too, said that way on purpose: `lahe
+      // review` is the ordinary path (it starts a server and prints one URL),
+      // and this bare `add` run is the advanced command that skipped it.
+      say("  Fallback: file://" + target + "  (works with no server at all; the ordinary path is below)");
       say();
       say("  This review is registered for " + FILE_ORIGIN + " only, which is what a page opened from disk sends.");
-      say("  Reviewing over a local server is the ordinary way, and it needs that server's origin:");
+      say("  For the ordinary path, let this tool serve the page and print one URL to open:");
+      say("    lahe review " + options.target);
+      say("  Or register your own server's origin here:");
       say("    lahe add " + options.target + " --origin <origin>   (for example http://127.0.0.1:8000)");
     }
   } else {

@@ -189,6 +189,7 @@
     "context.suffix": CLASS_DATA,
     "context.heading": CLASS_DATA,
     "context.element": CLASS_DATA,
+    "context.subject": CLASS_DATA,
     "region.label": CLASS_DATA,
     // The page's own words, kept so replay knows which page states the reviewer
     // has already answered. Data, and emphatically not intent.
@@ -479,8 +480,14 @@
     return list;
   }
 
+  // `subject` is what the region IS, for a record made on a whole element:
+  // {tag, src, alt, html, near}, or null when the record was made on a passage
+  // of text. `element` beside it is only the tag name, which is what an agent
+  // used to get for an image: three of them on a page read identically and the
+  // agent had to guess which one the reviewer meant. Every field of it is text
+  // off the page, so it is DATA, classified below with the rest.
   function emptyContext() {
-    return { quote: null, prefix: null, suffix: null, heading: null, element: null };
+    return { quote: null, prefix: null, suffix: null, heading: null, element: null, subject: null };
   }
 
   // Creates a record with every field present. Every field present always is

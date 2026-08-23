@@ -23,6 +23,114 @@ or reasoning work. Other providers should recommend the analogous lightweight
 model. The report happens once per LAHE session, not on every monitor wakeup,
 and does not switch models without the human's request.
 
+## The normal path, and the four ways agents break it
+
+Read this section even if you read nothing else. Everything below it is detail.
+These four rules are the ones agents have actually broken in live sessions, and
+each one cost a reviewer their work.
+
+```
+  lahe review <target>          you run this. it serves the page and prints one URL
+          |
+          v
+  hand over the `open` line     one link. verbatim. never a path
+          |
+          v
+  they comment and edit         you are woken; you drain
+          |
+          v
+  edit source, rebuild          verify the change is in the built HTML
+          |
+          v
+  append your reply line        only now. handled means it is on their screen
+          |
+          `--------------------> back to drain, until it prints nothing
+```
+
+**1. Serve it. Every time.** `lahe review <target>` is the command for every
+case. That includes an HTML file you generated thirty seconds ago in a scratch
+directory: three logo options on a page, a chart to look at, a draft email. If
+it is worth their eyes, it is worth serving. Never hand someone a page you
+opened from disk just because you made it a moment ago and a server felt like
+ceremony. Serving is one command and it is the difference between a review that
+works and one that half works.
+
+**2. Hand back exactly one link: the `open` line, verbatim.** Not a file path,
+not the bare server root, not two options for them to choose from. If you
+already opened the file from disk before you started the review, say so and tell
+them to close that tab. A reviewer with two tabs open on one document is a
+reviewer whose comments are about to split in half.
+
+**3. Rebuild before you reply, and verify.** `handled` means the reviewer's page
+now shows the change. Edit the source, rebuild, check the change is really in
+the built HTML, and only then append your reply line. Never tell them to reload;
+the page does that itself.
+
+**4. `file://` works, and it is the fallback, not the normal path.** It is there
+for when a server genuinely cannot run. What is different about it is worth
+knowing: on the served path the script line is put into the page as it is served,
+so no rebuild of yours can strip it, and nothing at all is written into your
+human's folder. On `file://` the line lives in the file on disk, along with a
+copy of the library beside it, so a rebuild that overwrites the file takes the
+rail with it, and the repair only lands when a page with a live layer is polling.
+If your rebuild is an ad hoc script rather than a project build, re-run
+`lahe review path/to/file.html --session <agent-session-id>` right after the
+script writes, before you tell them to look. Both files stay in that folder until
+someone takes them out, so `lahe add <page> --remove` is worth running when a
+`file://` review is finished.
+
+## Which kind of review is this? Find your row before you run anything
+
+The command is nearly always `lahe review <target>`. What changes by row is where
+your edits go and what `handled` costs you. Picking the wrong row is how an agent
+edits generated HTML that the next build throws away.
+
+| What your human is looking at | Open it with | Where your edits go | What `handled` needs |
+| --- | --- | --- | --- |
+| A Markdown file, on its own | `lahe review path/to/file.md` | the `.md` itself | rerun the same `lahe review` command, then check the rendered page shows it |
+| HTML that IS the source: a hand-written one-pager, a mockup | `lahe review path/to/page.html` | that HTML file | the change is in the file and on their screen |
+| HTML that is BUILD OUTPUT | `lahe review path/to/page.html --source path/to/generator` | the generator, never the page | rerun the build, grep the built HTML for the change, then reply |
+| A document built from several sources: many `.md`, templates, citations | run the project's real build first, then `lahe review path/to/build/report.html --source path/to/build-entrypoint` | the source fragment the item points at | the canonical build, rerun and verified |
+| Your own app running in dev | `lahe review path/to/project --origin http://localhost:3000` | your app's code | the change is live in the running app |
+| A page with images, CSS or fonts beside it | as its row above | as its row above | see "assets" below, this one has a trap |
+| A page whose own stack hot-reloads it | as its row above | as its row above | nothing extra, the two reload mechanisms do not fight |
+
+**More than one file is not a separate row.** One review spans pages: run
+`lahe review` again with the same `--session <id>`. Each page shows the reviewer
+only its own items, while `review.json` and `lahe status` show them all.
+
+**The assets trap.** `lahe review page.html` roots its server at the page's OWN
+folder. An asset beside the page loads. An asset ABOVE it does not:
+
+```
+page/index.html  ->  <img src="local.css">        200
+page/index.html  ->  <img src="../assets/x.png">  404
+```
+
+Opened from disk that same page looks perfect, because the browser resolves the
+path on the filesystem with no root to escape. So this is the one case where
+`file://` works and serving does not, and the reviewer sees broken images on a
+page you told them was fine. Before you hand the link over, load it yourself and
+check the assets resolve. If they live above the page, move them under it or put
+the page where they are.
+
+**Your app in dev edits nothing.** That row is the only one where LAHE does not
+write or serve anything. It prints one script line with a comment, and the
+comment is NOT a guard. Wrap it in the framework's real development-only
+conditional before it goes anywhere near a layout template.
+
+### Before it leaves the building
+
+This applies to every row, and it is the step people skip. When the page is about
+to become something else, a PDF, a deploy, an email, an attachment:
+
+```sh
+lahe add path/to/page.html --remove   # takes the script line back out
+lahe session close <agent-session-id> # stops the server and the helper
+```
+
+For the dev-server row, delete the line you pasted. Nobody else will.
+
 ## Step 1: install (once per machine)
 
 Requires Node 18+ (`node --version`). There is no install step: the tool has no
@@ -73,11 +181,17 @@ lahe review path/to/page.html
 `review` starts or reuses a read-only Node server rooted at the page's own
 folder, chooses an available loopback port, registers that exact origin, and
 prints the exact URL. The server belongs to this agent session, so `session
-close` stops it and `session reopen` restores it. The script line loads the
-library from the helper, and `review` also drops a `lahe-layer.js` copy in that
-same folder as the fallback, so a page opened while the helper is down still
-gets the rail, an honest unreachable status, and everything kept in the browser
-until the helper is back.
+close` stops it and `session reopen` restores it.
+
+**Nothing is written into your human's folder.** The script line goes into the
+response, not into the file, and the library comes off that same server's own
+route, so no review id, no token, and no copy of the library land next to their
+page. That matters because the folder is usually a git checkout: both files used
+to be committed by an ordinary `git add -A`, and a deployed copy of the pair
+brought the review rail up for every visitor to the live site. The page still
+opens with the helper down, and still gives the rail, an honest unreachable
+status, and everything kept in the browser until the helper is back: the server
+that answered the request for the page answers for the library too.
 
 For Markdown, pass the source file directly. Do not run Pandoc, hand-write an
 HTML wrapper, start a separate Python server, or translate the blocks yourself:
@@ -154,9 +268,10 @@ file that becomes a second source to maintain.
 run a server. `add` always registers the `null` origin a page opened from disk
 sends, so the fallback keeps working.
 
-Either way, `review` creates an agent session, writes one script line into the
-page, mints the review and token, starts the helper if needed, and prints what to
-open plus the exact monitor and close commands.
+Either way, `review` creates an agent session, puts the script line on the page
+(in the response when it serves the page, in the file itself for `file://`),
+mints the review and token, starts the helper if needed, and prints what to open
+plus the exact monitor and close commands.
 Tell your human to open exactly what you handed them.
 
 **The origin is the trap to avoid when using advanced `add` or an external
@@ -380,13 +495,29 @@ grep -n "the new wording" path/to/built/page.html
 # 4. only now append your reply line
 ```
 
-**The rebuild no longer needs a `lahe add` after it.** A rebuild strips the
-script line out of the built page, and with a helper running that is repaired
-for you: the helper is already watching that file, and when it comes back
-without the line, it writes the same line back (same review, same token) and
-refreshes the fallback copy beside the page. The reviewer's page reloads onto
-the healed file and the rail is there. `lahe status` says
-`script line re-injected after a rebuild, Ns ago` when that happened.
+**The rebuild no longer needs a `lahe add` after it.** On the served path there
+is nothing to repair: the line is not in the file, so a rebuild cannot strip it,
+and the next load carries the rail whatever the build wrote. On `file://`, where
+the line does live in the file, a helper that is running repairs it for you: it
+is already watching that file, and when it comes back without the line, it writes
+the same line back (same review, same token) and refreshes the fallback copy
+beside the page. The reviewer's page reloads onto the healed file and the rail is
+there. `lahe status` says `script line re-injected after a rebuild, Ns ago` when
+that happened.
+
+**A rebuild driven by an ad hoc script (not a real project build) heals the
+same way, but do not rely on the timing.** Some reviews are not a project with
+its own build command: an agent that regenerates one artifact by running a
+throwaway script (render a template, dump a report, compose an email) and
+writing the raw output straight over the served file is doing a "rebuild" too,
+just outside any watched pipeline. The watcher still repairs it, but a human
+looking at the page in the window between the overwrite and the repair can see
+the rail vanish, especially across several overwrites in quick succession. When
+your own rebuild step is a script like this rather than a project build, close
+that window yourself: run `lahe review path/to/file.html --session
+<agent-session-id>` again right after the script writes, before you tell the
+reviewer to look. It is idempotent against the same path and confirms the tag
+landed instead of hoping the watcher wins the race.
 
 **A handled hand edit that gets undone reopens itself.** Every time the page
 loads, the tool checks the reviewer's handled hand edits against the page: if
@@ -572,9 +703,14 @@ each show only their own items (see "One review MAY span pages" above).
 
 ## Step 5: take it back out when they are done
 
-`lahe add path/to/page.html --remove` deletes the script line from the page and
-changes nothing else (for a dev server, delete the line you pasted). Stop the
-agent session with the printed `lahe session close <id>` command. It stops that
+`lahe add path/to/page.html --remove` takes this tool back out of a folder: it
+deletes the script line from the page, and removes a `lahe-layer.js` beside it
+when that file is byte-identical to the library this clone builds (anything else
+of that name is somebody's own file and is left alone). A served review put
+neither there, so there is usually nothing for it to do; a `file://` review put
+both there, and this is what takes them out. For a dev server, delete the line
+you pasted. Stop the agent session with the printed `lahe session close <id>`
+command. It stops that
 session's static review servers, and closing the last open session stops the
 shared helper automatically. An application dev server remains yours. Deleting the state
 directory forgets every review and its history, so

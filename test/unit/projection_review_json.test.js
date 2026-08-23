@@ -429,6 +429,50 @@ test("the projection groups by page in first-visit order", () => {
   assert.ok(projected.pages[0].source_hint.instruction.length > 0, "every page says what it knows about its source");
 });
 
+// A `page.visited` event carries the source hint `add --source` (or `review`'s
+// own Markdown --source) recorded. Nothing folded it into review.json before:
+// every item read `source_hint: {known: false, ...}` even on a review where
+// `--source` had been recorded on disk, and the instruction told the agent not
+// to trust the file it was reading about (Ken, 2026-08-18).
+test("a page.visited event's source_hint reaches review.json as a known source, review-wide", () => {
+  const { log } = setup();
+  log.append(REVIEW, [
+    protocol.newEvent({
+      event: protocol.EVENT.PAGE_VISITED,
+      event_id: eventId(),
+      review: REVIEW,
+      page_path: "guide.html",
+      page_seq: 1,
+      source_hint: "docs/guide.md"
+    })
+  ]);
+  post(log, itemOf({ page_origin: record.FILE_ORIGIN, page_path: "guide.html", note: "tighten this" }));
+
+  const projected = projectOf(log);
+  assert.equal(projected.pages.length, 1);
+  assert.equal(projected.pages[0].source_hint.known, true, "the recorded --source reaches the agent as known");
+  assert.equal(projected.pages[0].source_hint.path, "docs/guide.md");
+});
+
+test("the last page.visited event wins, matching the last-write-wins rule recordPaths already uses", () => {
+  const { log } = setup();
+  [["docs/old.md", 1], ["docs/new.md", 2]].forEach(([hint, n]) => {
+    log.append(REVIEW, [
+      protocol.newEvent({
+        event: protocol.EVENT.PAGE_VISITED,
+        event_id: eventId(),
+        review: REVIEW,
+        page_path: "guide.html",
+        page_seq: n,
+        source_hint: hint
+      })
+    ]);
+  });
+  post(log, itemOf({ page_origin: record.FILE_ORIGIN, page_path: "guide.html" }));
+
+  assert.equal(projectOf(log).pages[0].source_hint.path, "docs/new.md");
+});
+
 // --- the writer ---------------------------------------------------------------
 
 test("the writer is atomic, owner-only, and refuses a symlinked destination", () => {

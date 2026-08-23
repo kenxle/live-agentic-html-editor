@@ -47,11 +47,19 @@
   //   authorName:  the value of data-review-region, or null
   //   id:          the element's id, or null
   //   ariaLabel:   the element's aria-label, or null
+  //   name:        a name the element carries in its own content, such as the
+  //                filename in an image's src or an svg's <title>, or null
   //   heading:     text of the nearest preceding heading, or null
-  //   ordinal:     1-based position among same-tag siblings under that heading
+  //   ordinal:     1-based position among same-tag elements IN THAT HEADING'S
+  //                SECTION, in document order
   //   tag:         lowercase tag name
   //   text:        the region's own text, used only for the last resort
   // }
+  //
+  // On the ordinal: it is counted through the section, not among immediate
+  // siblings, because a row of images is ordinarily written with each image in
+  // its own wrapper. Counted among siblings, all three are "img 1", and three
+  // cards in the rail read identically. That is a real bug a reviewer hit.
   var LABEL_SOURCES = [
     {
       name: "author_attribute",
@@ -72,6 +80,14 @@
       why: "an accessible name is a human-written name for the same thing",
       get: function (d) {
         return d.ariaLabel;
+      }
+    },
+    {
+      name: "element_name",
+      why: "a name the element carries itself, such as an image's filename, which is what a person says out loud and which does not collide the way a position does",
+      get: function (d) {
+        if (!d.name) return null;
+        return d.tag ? d.tag + " " + d.name : d.name;
       }
     },
     {
@@ -156,6 +172,21 @@
     return { code: code, reason: reason || null, at: new Date().toISOString() };
   }
 
+  // A reference the anchor engine refused to mint, as that same lost state.
+  //
+  // Here rather than in each caller because both the comment surface and the
+  // edit recorder have to stamp it, and a caller that forgets is the bug this
+  // exists to close: the reference had already failed, `lost` stayed null, and
+  // review.json told the agent the item was healthy. The failure code is the
+  // engine's own, so the reviewer's card and the agent's file say the same
+  // thing. A reference with no `ok` at all is treated as failed, because a
+  // caller who cannot say the mint worked has not shown that it did.
+  function lostFromMint(ref) {
+    if (ref && ref.ok === true) return null;
+    var failure = (ref && ref.failure) || {};
+    return lostState(failure.failureCode || "ANCHOR_NO_TEXT_MATCH", failure.reason || null);
+  }
+
   return {
     AUTHOR_ATTR: AUTHOR_ATTR,
     LABEL_MAX: LABEL_MAX,
@@ -164,6 +195,7 @@
     pinLabel: pinLabel,
     sameRegion: sameRegion,
     lostState: lostState,
+    lostFromMint: lostFromMint,
     // Stated as a value so a test can assert it and a reader cannot miss it.
     IDENTITY_IS_THE_REFERENCE_NOT_THE_LABEL: true,
     LABELS_MAY_COLLIDE: true

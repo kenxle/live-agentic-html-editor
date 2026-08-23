@@ -52,6 +52,7 @@ var protocol = require("../shared/protocol.js");
 var elapsed = require("../shared/elapsed.js");
 var stateDir = require("./state_dir.js");
 var healModule = require("./heal.js");
+var staticServersModule = require("./static_servers.js");
 
 var TOKEN_BYTES = 32;
 
@@ -641,7 +642,10 @@ function createReviews(options) {
         path: target,
         review: review.id,
         token: review.token,
-        helperOrigin: helperOrigin()
+        helperOrigin: helperOrigin(),
+        servedBy: function () {
+          return servedByStaticServer(review, target);
+        }
       });
       byPath[target] = at;
       if (at && (!newest || at > newest)) newest = at;
@@ -652,6 +656,26 @@ function createReviews(options) {
     // instead of making one page reload for another page's write.
     if (!selected) return paths.length === 1 ? newest : null;
     return byPath[selected] || null;
+  }
+
+  /**
+   * Is this page's script line already going into every response?
+   *
+   * A review `lahe review` owns the server for gets its tag injected at serve
+   * time, and the file on disk is left alone: that is what keeps a review id
+   * and a per-review token out of the reviewer's working tree. The healer asks
+   * this before it writes anything.
+   *
+   * Fails soft toward healing. A page missing its rail is a review the reviewer
+   * cannot use; a redundant tag on disk is untidy. Given a doubtful answer,
+   * take the untidy one.
+   */
+  function servedByStaticServer(review, target) {
+    try {
+      return staticServersModule.servesPath(dir, review.agent_session_id, target);
+    } catch (error) {
+      return false;
+    }
   }
 
   /**

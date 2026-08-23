@@ -9,13 +9,32 @@ var http = require("node:http");
 var path = require("node:path");
 
 var protocol = require("../shared/protocol.js");
+var scriptLine = require("../shared/script_line.js");
 var markdown = require("./markdown.js");
 var markdownLinks = require("./markdown_links.js");
 var stateDir = require("./state_dir.js");
+var heal = require("./heal.js");
+var logModule = require("./log.js");
 
 var SCHEMA = 1;
 var HOST = protocol.DEFAULT_HOST;
 var HEALTH_PREFIX = "/.lahe-static-health/";
+
+// The library, served by this server rather than copied into the reviewed
+// page's own folder.
+//
+// WHY THIS EXISTS. `add` used to drop a copy of the built bundle beside the
+// page so the script line's onerror had something relative to load when the
+// helper was down. The page's folder is very often a git checkout, so `git add
+// -A` committed the bundle, and a deployed copy of that site then loaded the
+// review rail for every visitor. This server already answers every request for
+// the page, so it is the thing that can hand the browser the library too, out
+// of the clone, with nothing written into the reviewer's tree.
+//
+// The prefix follows HEALTH_PREFIX and the /.lahe-source/ mounts: a dotted,
+// tool-named path segment no ordinary document folder has.
+var LIBRARY_PREFIX = "/.lahe-library/";
+var LIBRARY_PATH = LIBRARY_PREFIX + heal.BUNDLE_BASENAME;
 
 var MIME = {
   ".css": "text/css; charset=utf-8",
@@ -135,6 +154,18 @@ async function registerMount(dir, sessionId, meta, prefix, rootInput) {
 async function start(options) {
   var dir = options.dir;
   var sessionId = options.sessionId;
+  // `add`/`review` record a review's target_path with a plain path.resolve, never
+  // a realpath (src/cli/commands/add.js). This server's OWN root is realpathed,
+  // deliberately, so the symlink-escape check below has one real directory to
+  // compare against. On a machine where the OS temp directory is itself a
+  // symlink (macOS: /var/... -> /private/var/...), those two disagree, so the
+  // pre-realpath root travels alongside it, for matching a request's file back
+  // to a review's recorded target path (see logicalCandidate in runServer).
+  // restartAll passes the ORIGINAL logicalRoot back in (read off this server's
+  // own meta.json), because `meta.root` it also reads is already realpathed and
+  // resolving it again is a no-op: without this a restart would quietly lose
+  // the pre-realpath identity and, on a symlinked temp dir, injection with it.
+  var logicalRoot = options.logicalRoot ? path.resolve(options.logicalRoot) : path.resolve(options.root);
   var root = fs.realpathSync(path.resolve(options.root));
   var id = serverId(root);
   var file = stateDir.staticServerPath(dir, sessionId, id);
@@ -146,10 +177,11 @@ async function start(options) {
 
   stateDir.ensureStaticServersRoot(dir, sessionId);
   var instance = crypto.randomBytes(16).toString("hex");
-  var child = childProcess.spawn(process.execPath, [__filename, "--serve", file, sessionId, id, instance, root], {
-    detached: true,
-    stdio: "ignore"
-  });
+  var child = childProcess.spawn(
+    process.execPath,
+    [__filename, "--serve", file, sessionId, id, instance, root, dir, logicalRoot],
+    { detached: true, stdio: "ignore" }
+  );
   child.unref();
 
   var meta = await waitFor(async function () {
@@ -190,10 +222,12 @@ async function stopAll(dir, sessionId) {
 }
 
 async function restartAll(dir, sessionId) {
-  var roots = list(dir, sessionId).map(function (meta) { return meta.root; });
+  var entries = list(dir, sessionId).map(function (meta) {
+    return { root: meta.root, logicalRoot: typeof meta.logical_root === "string" ? meta.logical_root : null };
+  });
   var started = 0;
-  for (var i = 0; i < roots.length; i += 1) {
-    var result = await start({ dir: dir, sessionId: sessionId, root: roots[i] });
+  for (var i = 0; i < entries.length; i += 1) {
+    var result = await start({ dir: dir, sessionId: sessionId, root: entries[i].root, logicalRoot: entries[i].logicalRoot });
     if (result.started) started += 1;
   }
   return started;
@@ -208,8 +242,174 @@ function send(res, status, body, type) {
   res.end(body);
 }
 
-function runServer(file, sessionId, id, instance, rootInput) {
+// ---------------------------------------------------------------------------
+// Serve-time injection.
+//
+// WHY THIS EXISTS. The script line is normally healed by heal.js, but that only
+// runs when a live page polls the helper (reviews.targetMtime, called from
+// replies.poll). If the reviewer's tab is closed, or they hard-reload in the
+// window between an agent overwriting the file and the next poll, the freshly
+// loaded page has no library at all: nothing is polling, so nothing repairs it.
+// This server sees every request for the page before the browser does, so it
+// can put the tag in the RESPONSE without ever touching the file on disk.
+//
+// For a served review this is now the ONLY path, not a second one. `lahe
+// review` writes no tag into the page and copies no bundle beside it, and the
+// healer stands down for any file this server is serving (heal.js rule 5),
+// because a review id and a per-review token written into a folder that is
+// usually a git checkout get committed by an ordinary `git add -A`. The on-disk
+// line and the sibling copy remain exactly as they were for the cases with no
+// server to inject for them: a plain `lahe add`, and any file:// review.
+//
+// Matching a request to a review reads the same recorded target paths
+// reviews.recordPaths writes to meta.json (src/service/reviews.js), read
+// straight off disk: this server is a separate process from the helper that
+// holds reviews in memory, so disk is the only thing they share.
+
+/**
+ * The review that recorded `filePath` (or one of `filePaths`) as a target, or
+ * null. Newest review wins on the rare path collision, matching
+ * add.js's reviewMatchingPath.
+ *
+ * @param {string} dir the state directory
+ * @param {string[]} filePaths candidate absolute paths for the same request
+ *   (the resolved path and, when it differs, its realpath)
+ * @returns {{review: string, token: string}|null}
+ */
+function findReviewForTarget(dir, filePaths) {
+  var root;
+  try {
+    root = stateDir.reviewsRoot(dir);
+  } catch (err) {
+    return null;
+  }
+  if (!fs.existsSync(root)) return null;
+  var entries;
+  try {
+    entries = fs.readdirSync(root, { withFileTypes: true });
+  } catch (err) {
+    return null;
+  }
+  var best = null;
+  entries.forEach(function (entry) {
+    if (!entry.isDirectory() || !protocol.isSafeId(entry.name)) return;
+    var meta = readJson(stateDir.metaPath(dir, entry.name));
+    if (!meta || typeof meta.token !== "string") return;
+    var targets = Array.isArray(meta.target_paths) ? meta.target_paths.slice() : [];
+    if (typeof meta.target_path === "string" && meta.target_path && targets.indexOf(meta.target_path) === -1) {
+      targets.push(meta.target_path);
+    }
+    var matches = filePaths.some(function (candidate) { return targets.indexOf(candidate) !== -1; });
+    if (!matches) return;
+    var at = typeof meta.created_at === "string" ? meta.created_at : "";
+    if (!best || at > best.at) best = { review: entry.name, token: meta.token, at: at };
+  });
+  return best ? { review: best.review, token: best.token } : null;
+}
+
+/** The helper's own origin, read fresh off service.json so a custom `--port` is honored. */
+function currentHelperOrigin(dir) {
+  var ready = readJson(stateDir.readyPath(dir));
+  var port = ready && typeof ready.port === "number" ? ready.port : protocol.DEFAULT_PORT;
+  return "http://" + protocol.DEFAULT_HOST + ":" + port;
+}
+
+/**
+ * `html`, with `match`'s script tag put back if it is missing, or `null` when
+ * nothing needs to change (the tag is already this review's, or a DIFFERENT
+ * review's tag is present and is left alone on purpose, exactly as heal.js
+ * does).
+ *
+ * @param {string} dir the state directory
+ * @param {{review: string, token: string}} match the review this file targets
+ * @param {string} target the path named in the log line for the foreign-tag case
+ * @param {string} html the file's current bytes
+ * @returns {string|null}
+ */
+function injectForMatch(dir, match, target, html) {
+  var carried = scriptLine.reviewAlreadyInFile(html);
+  if (carried === match.review) return null;
+  if (carried) {
+    try {
+      logModule.createEventLog({ dir: dir }).helperLog(
+        "review " + match.review + ": not injecting at serve time into " + target +
+          ", it carries review " + carried + " now, so it was re-attached somewhere else on purpose"
+      );
+    } catch (err) {
+      // Diagnostic only; a page that cannot log must still be served.
+    }
+    return null;
+  }
+  var helperOrigin = currentHelperOrigin(dir);
+  // THE LIBRARY COMES FROM THIS SERVER, and the helper is the fallback.
+  //
+  // That is the reverse of what `add` writes into a file, on purpose. `add`'s
+  // line has to resolve from wherever a page opened from disk sits, so it names
+  // the helper absolutely and falls back to a sibling copy. This line is only
+  // ever produced by this server, so a root-absolute path resolves back here
+  // whatever host name the reviewer typed, and here is the process that just
+  // answered the request: it cannot be down. The helper is a separate process
+  // and often is down, which is exactly why it is the fallback and not the src.
+  //
+  // Nothing relative to the page is named, so no copy of the bundle has to be
+  // written into the reviewer's folder for this line to work.
+  var tag = protocol.scriptTag({
+    src: LIBRARY_PATH,
+    review: match.review,
+    token: match.token,
+    helper: helperOrigin,
+    fallback: helperOrigin + protocol.route("library.get").path
+  });
+  return scriptLine.placeScriptLine(html, tag).html;
+}
+
+/**
+ * Is one of this session's static servers serving `filePath` right now?
+ *
+ * The helper asks this before healing a stripped script line back INTO a file:
+ * when the answer is yes the tag is already going into every response, so
+ * writing it to disk would put a review token into the reviewer's own working
+ * tree for nothing (src/service/heal.js).
+ *
+ * Sync and cheap on purpose: this runs behind the reply poll, once a second per
+ * reviewed page. `lahe status` asks a stronger version of the same question in
+ * servedVia (src/cli/commands/status.js), with a real health probe over HTTP,
+ * because it runs once and a human is reading the answer. Here a live pid and
+ * an unstopped lease are enough.
+ *
+ * @param {string} dir the state directory
+ * @param {string} sessionId the agent session the review belongs to
+ * @param {string} filePath an absolute path to the reviewed file
+ * @returns {boolean} false for anything unreadable, so a doubtful answer heals
+ *   rather than leaving a page without its rail
+ */
+function servesPath(dir, sessionId, filePath) {
+  if (typeof dir !== "string" || typeof sessionId !== "string" || typeof filePath !== "string") return false;
+  var entries;
+  try { entries = list(dir, sessionId); } catch (err) { return false; }
+  var target = path.resolve(filePath);
+  var realTarget = target;
+  try { realTarget = fs.realpathSync(target); } catch (err) { /* the plain path still answers */ }
+  return entries.some(function (meta) {
+    if (meta.stopped_at) return false;
+    if (typeof meta.pid !== "number") return false;
+    try { process.kill(meta.pid, 0); } catch (err) { return false; }
+    var roots = [meta.root, meta.logical_root];
+    if (meta.mounts && typeof meta.mounts === "object") {
+      Object.keys(meta.mounts).forEach(function (prefix) { roots.push(meta.mounts[prefix]); });
+    }
+    return roots.some(function (base) {
+      if (typeof base !== "string" || !base) return false;
+      return [target, realTarget].some(function (candidate) {
+        return candidate === base || candidate.indexOf(base + path.sep) === 0;
+      });
+    });
+  });
+}
+
+function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInput) {
   var root = fs.realpathSync(rootInput);
+  var logicalRoot = typeof logicalRootInput === "string" && logicalRootInput ? logicalRootInput : root;
   var prior = readJson(file);
   var mounts = prior && prior.root === root && prior.mounts && typeof prior.mounts === "object" ? prior.mounts : {};
   var autoMounts = prior && prior.root === root && Array.isArray(prior.auto_mounts) ? prior.auto_mounts.slice() : [];
@@ -261,6 +461,24 @@ function runServer(file, sessionId, id, instance, rootInput) {
     if (req.method === "HEAD") return res.end();
     res.end(body);
   }
+  // The built bundle, streamed straight out of the clone. Read-only like
+  // everything else here, and unauthenticated like the helper's own
+  // library.get: these are public bytes with no review data and no token in
+  // them.
+  function sendLibrary(req, res) {
+    var stat;
+    try { stat = fs.statSync(heal.BUNDLE); }
+    catch (err) { return send(res, 404, "the built library is not in this clone\n"); }
+    res.writeHead(200, {
+      "cache-control": "no-store",
+      "content-length": stat.size,
+      "content-type": MIME[".js"],
+      "x-content-type-options": "nosniff"
+    });
+    if (req.method === "HEAD") return res.end();
+    fs.createReadStream(heal.BUNDLE).on("error", function () { res.destroy(); }).pipe(res);
+  }
+
   var startedAt = new Date().toISOString();
   var server = http.createServer(function (req, res) {
     var pathname;
@@ -276,6 +494,10 @@ function runServer(file, sessionId, id, instance, rootInput) {
       }), "application/json; charset=utf-8");
     }
     if (req.method !== "GET" && req.method !== "HEAD") return send(res, 405, "method not allowed\n");
+    // The reserved library route, answered before anything under the served
+    // root is looked at, so a folder that happens to be named for it cannot
+    // shadow the one file every injected page depends on.
+    if (pathname === LIBRARY_PATH) return sendLibrary(req, res);
     var servingRoot = root;
     var relative = pathname.replace(/^\/+/, "");
     Object.keys(mounts).some(function (prefix) {
@@ -304,6 +526,35 @@ function runServer(file, sessionId, id, instance, rootInput) {
       try { stat = fs.statSync(candidate); } catch (missing) { return send(res, 404, "not found\n"); }
     }
     if (markdown.isMarkdown(candidate)) return renderMarkdown(candidate, req, res);
+    if (heal.isStaticPage(candidate)) {
+      var filePaths = [candidate];
+      if (real && real !== candidate) filePaths.push(real);
+      // Only for the unmounted root: a review's target_path was recorded
+      // against the pre-realpath root (see start()'s logicalRoot comment), and
+      // a mount's directory has no such second identity to fall back to.
+      if (servingRoot === root && logicalRoot !== root) {
+        var logicalCandidate = path.resolve(logicalRoot, path.relative(servingRoot, candidate));
+        if (filePaths.indexOf(logicalCandidate) === -1) filePaths.push(logicalCandidate);
+      }
+      var match = findReviewForTarget(dir, filePaths);
+      if (match) {
+        var html;
+        try { html = fs.readFileSync(candidate, "utf8"); } catch (err) { html = null; }
+        if (html !== null) {
+          var injected = injectForMatch(dir, match, candidate, html);
+          var outHtml = injected !== null ? injected : html;
+          var body = Buffer.from(outHtml, "utf8");
+          res.writeHead(200, {
+            "cache-control": "no-store",
+            "content-length": body.length,
+            "content-type": "text/html; charset=utf-8",
+            "x-content-type-options": "nosniff"
+          });
+          if (req.method === "HEAD") return res.end();
+          return res.end(body);
+        }
+      }
+    }
     res.writeHead(200, {
       "cache-control": "no-store",
       "content-length": stat.size,
@@ -320,6 +571,7 @@ function runServer(file, sessionId, id, instance, rootInput) {
       session_id: sessionId,
       instance: instance,
       root: root,
+      logical_root: logicalRoot,
       host: HOST,
       port: server.address().port,
       pid: process.pid,
@@ -336,12 +588,22 @@ function runServer(file, sessionId, id, instance, rootInput) {
 }
 
 if (require.main === module) {
-  if (process.argv[2] !== "--serve" || process.argv.length < 8) process.exit(2);
-  runServer(process.argv[3], process.argv[4], process.argv[5], process.argv[6], process.argv[7]);
+  if (process.argv[2] !== "--serve" || process.argv.length < 10) process.exit(2);
+  runServer(
+    process.argv[3],
+    process.argv[4],
+    process.argv[5],
+    process.argv[6],
+    process.argv[7],
+    process.argv[8],
+    process.argv[9]
+  );
 }
 
 module.exports = {
   SCHEMA: SCHEMA,
+  LIBRARY_PATH: LIBRARY_PATH,
+  servesPath: servesPath,
   serverId: serverId,
   isExactServer: isExactServer,
   list: list,

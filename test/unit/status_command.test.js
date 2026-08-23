@@ -22,6 +22,7 @@ const status = require("../../src/cli/commands/status.js");
 const reviewFormat = require("../../src/shared/review_format.js");
 const reviewsModule = require("../../src/service/reviews.js");
 const agentSessionsModule = require("../../src/service/agent_sessions.js");
+const staticServersModule = require("../../src/service/static_servers.js");
 
 function tempState() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "lahe-status-"));
@@ -112,6 +113,49 @@ test("status prints a per-review summary and the items that are waiting", async 
   // The draft is COUNTED and named, and never listed as work.
   assert.match(run.stdout, /drafts    1/);
   assert.equal(run.stdout.indexOf("half a thought"), -1, "a draft is never listed as something to act on");
+});
+
+test("status says when a page connected over file:// rather than a served origin", async () => {
+  const dir = tempState();
+  const fileItem = record.newItem({
+    kind: record.KIND.COMMENT,
+    state: record.STATE.READY,
+    note: "opened straight off disk",
+    page_origin: record.FILE_ORIGIN,
+    page_path: "report.html",
+    page_seq: 1
+  });
+  seed(dir, "rev1", [fileItem]);
+
+  const run = await runStatus([], dir);
+  assert.equal(run.code, protocol.CLI_EXIT.OK, run.stderr);
+  assert.match(run.stdout, /report\.html {2}\(file:\/\/, no server: opened from disk\)/);
+});
+
+test("status names a file:// visit even once a served visit becomes the page's canonical origin", async () => {
+  const dir = tempState();
+  const fileItem = record.newItem({
+    kind: record.KIND.COMMENT,
+    state: record.STATE.READY,
+    note: "opened off disk first",
+    page_origin: record.FILE_ORIGIN,
+    page_path: "preview/report.html",
+    page_seq: 1
+  });
+  const servedItem = record.newItem({
+    kind: record.KIND.COMMENT,
+    state: record.STATE.READY,
+    note: "then opened through the server",
+    page_origin: "http://127.0.0.1:8000",
+    page_path: "/report.html",
+    page_seq: 2
+  });
+  seed(dir, "rev1", [fileItem, servedItem]);
+
+  const run = await runStatus([], dir);
+  assert.equal(run.code, protocol.CLI_EXIT.OK, run.stderr);
+  assert.match(run.stdout, /\/report\.html {2}\(also opened via file:\/\/ at least once\)/);
+  assert.match(run.stdout, /2 total/, "one merged page, both items counted");
 });
 
 test("with no helper up, liveness is unknown rather than a stale number", async () => {
@@ -441,4 +485,74 @@ test("a drain records that the session ran a command, so the rail can tell worki
   await runStatus(["--session", "s_touch", "--json", "--quiet"], dir);
   const activity = sessions.readActivity("s_touch");
   assert.ok(activity && activity.at, "the drain left a timestamp behind");
+});
+
+// ---------------------------------------------------------------------------
+// Which mechanism is carrying the page (serve-time injection vs. the on-disk
+// line): the fix for the race window that dropped the rail twice in live use.
+// ---------------------------------------------------------------------------
+
+test("servedViaLine says nothing for a review with no static-page target at all", () => {
+  assert.equal(status.servedViaLine(null), null);
+});
+
+test("servedViaLine names the two mechanisms in words a reviewer reads", () => {
+  assert.match(status.servedViaLine("injected"), /static server injects/);
+  assert.match(status.servedViaLine("on_disk"), /on-disk script line only/);
+});
+
+test("servedVia is null for a review with no recorded target (a dev-server review)", async () => {
+  const dir = tempState();
+  assert.equal(await status.servedVia(dir, "s1", []), null);
+  assert.equal(await status.servedVia(dir, "s1", ["/some/project/dir"]), null, "a directory target is a dev server, not a static page");
+});
+
+test("servedVia is on_disk when the target is a static page but nothing is serving it", async () => {
+  const dir = tempState();
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-status-served-"));
+  const page = path.join(work, "page.html");
+  fs.writeFileSync(page, "<html></html>");
+  assert.equal(await status.servedVia(dir, "s1", [page]), "on_disk");
+});
+
+test("servedVia is injected only while this session's static server is actually answering, rooted at the page's own folder", async (t) => {
+  const dir = tempState();
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-status-served-"));
+  const page = path.join(work, "page.html");
+  fs.writeFileSync(page, "<html></html>");
+
+  assert.equal(await status.servedVia(dir, "s_served", [page]), "on_disk", "no server yet: on the on-disk line alone");
+
+  const server = await staticServersModule.start({ dir, sessionId: "s_served", root: work });
+  t.after(async () => { await staticServersModule.stopAll(dir, "s_served"); });
+  assert.equal(await status.servedVia(dir, "s_served", [page]), "injected");
+
+  // A server leased to a DIFFERENT session cannot carry this one's page: a
+  // static server is a per-session lease (src/service/static_servers.js).
+  assert.equal(await status.servedVia(dir, "s_other_session", [page]), "on_disk");
+
+  await staticServersModule.stopOne(dir, "s_served", server.meta);
+  assert.equal(await status.servedVia(dir, "s_served", [page]), "on_disk", "a stopped server is back on the on-disk line");
+});
+
+test("the printed status names the mechanism for a static review with a live server", async (t) => {
+  const dir = tempState();
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-status-served-"));
+  const page = path.join(work, "page.html");
+  fs.writeFileSync(page, "<html></html>");
+
+  const log = logModule.createEventLog({ dir });
+  const reviews = reviewsModule.createReviews({ dir, log });
+  reviews.create({ id: "r_served", origins: ["null"], target_path: page, agent_session_id: "s_served" });
+
+  const server = await staticServersModule.start({ dir, sessionId: "s_served", root: work });
+  t.after(async () => { await staticServersModule.stopAll(dir, "s_served"); });
+
+  const run = await runStatus([], dir);
+  assert.equal(run.code, protocol.CLI_EXIT.OK, run.stderr);
+  assert.match(run.stdout, /the static server injects the script line into every response/);
+
+  await staticServersModule.stopOne(dir, "s_served", server.meta);
+  const stopped = await runStatus([], dir);
+  assert.match(stopped.stdout, /the on-disk script line only/);
 });
