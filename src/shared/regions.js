@@ -172,6 +172,21 @@
     return { code: code, reason: reason || null, at: new Date().toISOString() };
   }
 
+  // A reference the anchor engine refused to mint, as that same lost state.
+  //
+  // Here rather than in each caller because both the comment surface and the
+  // edit recorder have to stamp it, and a caller that forgets is the bug this
+  // exists to close: the reference had already failed, `lost` stayed null, and
+  // review.json told the agent the item was healthy. The failure code is the
+  // engine's own, so the reviewer's card and the agent's file say the same
+  // thing. A reference with no `ok` at all is treated as failed, because a
+  // caller who cannot say the mint worked has not shown that it did.
+  function lostFromMint(ref) {
+    if (ref && ref.ok === true) return null;
+    var failure = (ref && ref.failure) || {};
+    return lostState(failure.failureCode || "ANCHOR_NO_TEXT_MATCH", failure.reason || null);
+  }
+
   return {
     AUTHOR_ATTR: AUTHOR_ATTR,
     LABEL_MAX: LABEL_MAX,
@@ -180,6 +195,7 @@
     pinLabel: pinLabel,
     sameRegion: sameRegion,
     lostState: lostState,
+    lostFromMint: lostFromMint,
     // Stated as a value so a test can assert it and a reader cannot miss it.
     IDENTITY_IS_THE_REFERENCE_NOT_THE_LABEL: true,
     LABELS_MAY_COLLIDE: true

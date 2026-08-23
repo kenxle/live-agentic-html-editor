@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Brand marks</title>
+  <style>
+    body { font: 16px/1.5 system-ui, sans-serif; margin: 2rem; }
+    .row { display: flex; gap: 1.5rem; }
+    .mark { border: 1px solid #d8dee8; padding: 0.75rem; }
+    .mark p { margin: 0.5rem 0 0; font-size: 0.9rem; }
+    figure { margin: 2rem 0 0; }
+  </style>
+</head>
+<body>
+  <!--
+    The reviewer's page, reduced to what broke.
+
+    Three images in a row, each in its OWN wrapper, all under one heading. That
+    wrapping is the whole bug: an ordinal counted among immediate siblings makes
+    every one of them "img 1", so three cards in the rail read identically, and
+    the tag name IMG was all the agent ever got. He clicked the middle one, said
+    he liked it, and his agent picked the wrong image.
+  -->
+  <h2 id="wordmark-heading">1. Wordmark on its ink rectangle</h2>
+
+  <div class="row" id="mark-row">
+    <div class="mark">
+      <img src="assets/logo-square-a@2x.svg" alt="Square badge, 40% fill" width="120" height="120" />
+      <p>A, 40% fill</p>
+    </div>
+    <div class="mark">
+      <img src="assets/logo-square-b@2x.svg" alt="Square badge, 70% fill" width="120" height="120" />
+      <p>B, 70% fill</p>
+    </div>
+    <div class="mark">
+      <img src="assets/logo-square-c@2x.svg" alt="Square badge, full" width="120" height="120" />
+      <p>C, full ink</p>
+    </div>
+  </div>
+
+  <h2 id="flow-heading">2. The stage flow</h2>
+
+  <div class="diagram" id="flow">
+    <svg width="320" height="90" role="img" aria-label="Three stage flow">
+      <title>Three stage flow</title>
+      <rect x="4" y="20" width="90" height="44" fill="#fff" stroke="#4a6fa5"></rect>
+      <text x="20" y="47" font-size="13">Assess</text>
+      <rect x="114" y="20" width="90" height="44" fill="#fff" stroke="#4a6fa5"></rect>
+      <text x="132" y="47" font-size="13">Build</text>
+      <rect x="224" y="20" width="90" height="44" fill="#fff" stroke="#4a6fa5"></rect>
+      <text x="243" y="47" font-size="13">Taper</text>
+    </svg>
+  </div>
+
+  <h2 id="chart-heading">3. The scratch chart</h2>
+
+  <!--
+    A canvas with nothing on it that says what it is: no aria-label, no id, no
+    title. There is no honest anchor for this, and the point of the fixture is
+    that the tool says so rather than pretending.
+  -->
+  <div id="chart-holder">
+    <canvas width="200" height="80"></canvas>
+  </div>
+</body>
+</html>

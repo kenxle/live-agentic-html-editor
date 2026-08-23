@@ -421,8 +421,15 @@ A `file://` review is one group named by the file's basename.
 **The field classification is D12's, and it is the reverse of the archived draft's.** The intent
 channel is exactly `note` and `change`, carried **verbatim and never truncated**. Everything that
 came off the page rides in data-named fields and **may be bounded**: `quote`, `before`, `after_full`,
-`context`, plus `before_html`, `after_html` and `region_label`. The record's `after` is projected as
-**`after_full`**, which is the name the contract field uses and therefore the name an agent reads.
+`context`, plus `before_html`, `after_html`, `region_label` and `subject`. The record's `after` is
+projected as **`after_full`**, which is the name the contract field uses and therefore the name an
+agent reads.
+
+**`subject`** is what the reviewer pointed at, when they pointed at a whole element rather than at a
+passage of text (D9, the element anchor). It is `{tag, src, alt, html, near}`, and it is null for a
+comment on text. `src` is the attribute **as the page author wrote it**, not the resolved absolute
+URL, because the source file is what the agent edits. `html` is the **opening tag only**. All of it
+is text off the page, so it is data and it is bounded, exactly like `quote`.
 `BEFORE_MAX` (2000), `CONTEXT_MAX` (400) and `TRUNCATION_MARKER` are named constants, and the bound
 is **visible in the value**, so an agent cannot mistake a cut-off passage for the whole passage.
 

@@ -629,7 +629,12 @@
     // Text first, always. A region with words in it is anchored by its words,
     // and the signature path is what happens when there are none, never a
     // second opinion about a region that has some.
-    ref.probe = textOf(element);
+    // An <svg> or a <canvas> takes the signature path even when there are
+    // characters inside it. That text is not the page's prose, the text walk
+    // refuses to enter it, and a probe the search can never reach is a
+    // reference that fails on its first resolve. Its inner text is not thrown
+    // away: the signature carries it.
+    ref.probe = isElementOnly(element) ? "" : textOf(element);
     ref.probe_kind = PROBE.TEXT;
     if (!ref.probe) {
       ref.probe = signatureOf(element);

@@ -1040,7 +1040,7 @@
       // A mint that failed is stamped lost here, at the moment it fails. Stored
       // without the stamp, the item read as healthy while its anchor pointed at
       // nothing, which is what made the original bug silent.
-      region.lost = lostFromMint(region.ref);
+      region.lost = regions.lostFromMint(region.ref);
       try {
         regions.pinLabel(region, anchor.descriptorFor(element, doc));
       } catch (err) {
@@ -1049,14 +1049,6 @@
         region.label = null;
       }
       return region;
-    }
-
-    // The engine's failure, as the lost state the payload carries (R17). Same
-    // codes the reviewer's card shows, because they come from the same mint.
-    function lostFromMint(ref) {
-      if (ref && ref.ok === true) return null;
-      var failure = (ref && ref.failure) || {};
-      return regions.lostState(failure.failureCode || "ANCHOR_NO_TEXT_MATCH", failure.reason || null);
     }
 
     function headingTextFor(element) {

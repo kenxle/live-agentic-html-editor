@@ -1736,7 +1736,7 @@
       var region = record.emptyRegion();
       if (!element) return region;
       region.ref = anchor.mint({ element: element, range: range, root: doc });
-      region.lost = lostFromMint(region.ref);
+      region.lost = regions.lostFromMint(region.ref);
       try {
         regions.pinLabel(region, anchor.descriptorFor(element, doc));
       } catch (err) {
@@ -1746,15 +1746,6 @@
         region.label = null;
       }
       return region;
-    }
-
-    // The failure the engine reported, as the lost state the payload carries
-    // (R17). The code is the engine's own: the reviewer and the agent are told
-    // the same reason the mint gave, not a second guess made here.
-    function lostFromMint(ref) {
-      if (ref && ref.ok === true) return null;
-      var failure = (ref && ref.failure) || {};
-      return regions.lostState(failure.failureCode || "ANCHOR_NO_TEXT_MATCH", failure.reason || null);
     }
 
     // ------------------------------------------------------------------------

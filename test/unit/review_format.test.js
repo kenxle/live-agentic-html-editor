@@ -493,3 +493,79 @@ test("projectReview fails loud on a review it cannot group", () => {
   assert.throws(() => rf.projectReview(null), /review/);
   assert.throws(() => rf.projectReview({ id: "r", items: "nope" }), /items/);
 });
+
+// ---------------------------------------------------------------------------
+// The subject: what the reviewer pointed at, when it was a whole element
+// ---------------------------------------------------------------------------
+
+function anImageComment(overrides) {
+  return record.newItem(
+    Object.assign(
+      {
+        kind: record.KIND.COMMENT,
+        state: record.STATE.READY,
+        page_origin: record.FILE_ORIGIN,
+        page_path: "brand.html",
+        page_title: "Brand sheet",
+        page_seq: 1,
+        note: "I like this one",
+        context: {
+          quote: null,
+          prefix: "1. Wordmark on its ink rectangle",
+          suffix: "2. Wordmark reversed",
+          heading: "1. Wordmark on its ink rectangle",
+          element: "IMG",
+          subject: {
+            tag: "img",
+            src: "logo-square-b@2x.png",
+            alt: "Square badge, 70% fill",
+            html: '<img src="logo-square-b@2x.png" alt="Square badge, 70% fill" width="400">',
+            near: "B, 70% fill"
+          }
+        },
+        region: { ref: { id: "ref_img_b", ok: true }, label: "img logo-square-b@2x.png", lost: null }
+      },
+      overrides || {}
+    )
+  );
+}
+
+test("subject is registered in field_classes as DATA, like quote and before", () => {
+  const json = rf.projectReview(reviewWith([anImageComment()], null));
+  assert.equal(json.field_classes.subject, record.CLASS_DATA);
+  // An alt attribute is a place a page author can write a sentence, and a
+  // sentence in a data field is page content, never an instruction (D6).
+  assert.notEqual(json.field_classes.subject, record.CLASS_INSTRUCTION);
+  assert.ok(rf.DATA_FIELDS.indexOf("subject") !== -1, "subject is a data-named carrier");
+});
+
+test("the agent is told which image it was: the src, the alt, and the opening tag", () => {
+  const projected = rf.projectReview(reviewWith([anImageComment()], null)).pages[0].items[0];
+  assert.equal(projected.subject.tag, "img");
+  assert.equal(projected.subject.src, "logo-square-b@2x.png");
+  assert.equal(projected.subject.alt, "Square badge, 70% fill");
+  assert.match(projected.subject.html, /^<img /);
+  assert.equal(projected.subject.html.indexOf("</"), -1, "the opening tag only");
+  assert.equal(projected.subject.near, "B, 70% fill");
+  // The two locating fields that were null in every recorded item.
+  assert.equal(projected.context.prefix, "1. Wordmark on its ink rectangle");
+  assert.equal(projected.context.suffix, "2. Wordmark reversed");
+});
+
+test("an item made on a passage of text has no subject, and says so", () => {
+  const projected = rf.projectReview(reviewWith([anEdit()], null)).pages[0].items[0];
+  assert.equal(projected.subject, null, "the field is present and null, never absent");
+});
+
+test("subject text is bounded like every other data field", () => {
+  const long = "x".repeat(5000);
+  const item = anImageComment({
+    context: Object.assign({}, anImageComment()[record.FIELD.CONTEXT], {
+      subject: { tag: "img", src: long, alt: long, html: "<img src=\"" + long + "\">", near: long }
+    })
+  });
+  const projected = rf.projectReview(reviewWith([item], null)).pages[0].items[0];
+  assert.ok(projected.subject.src.length < 5000, "a data field is boundable");
+  assert.match(projected.subject.src, /bounded here/, "and the bound is visible in the value");
+  assert.match(projected.subject.html, /bounded here/);
+});
