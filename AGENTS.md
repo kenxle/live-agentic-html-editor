@@ -69,12 +69,15 @@ the page does that itself.
 **4. `file://` works, and it is the fallback, not the normal path.** It is there
 for when a server genuinely cannot run. What is different about it is worth
 knowing: on the served path the script line is put into the page as it is served,
-so no rebuild of yours can strip it. On `file://` the line lives in the file on
-disk, so a rebuild that overwrites the file takes the rail with it, and the
-repair only lands when a page with a live layer is polling. If your rebuild is an
-ad hoc script rather than a project build, re-run
+so no rebuild of yours can strip it, and nothing at all is written into your
+human's folder. On `file://` the line lives in the file on disk, along with a
+copy of the library beside it, so a rebuild that overwrites the file takes the
+rail with it, and the repair only lands when a page with a live layer is polling.
+If your rebuild is an ad hoc script rather than a project build, re-run
 `lahe review path/to/file.html --session <agent-session-id>` right after the
-script writes, before you tell them to look.
+script writes, before you tell them to look. Both files stay in that folder until
+someone takes them out, so `lahe add <page> --remove` is worth running when a
+`file://` review is finished.
 
 ## Which kind of review is this? Find your row before you run anything
 
@@ -178,11 +181,17 @@ lahe review path/to/page.html
 `review` starts or reuses a read-only Node server rooted at the page's own
 folder, chooses an available loopback port, registers that exact origin, and
 prints the exact URL. The server belongs to this agent session, so `session
-close` stops it and `session reopen` restores it. The script line loads the
-library from the helper, and `review` also drops a `lahe-layer.js` copy in that
-same folder as the fallback, so a page opened while the helper is down still
-gets the rail, an honest unreachable status, and everything kept in the browser
-until the helper is back.
+close` stops it and `session reopen` restores it.
+
+**Nothing is written into your human's folder.** The script line goes into the
+response, not into the file, and the library comes off that same server's own
+route, so no review id, no token, and no copy of the library land next to their
+page. That matters because the folder is usually a git checkout: both files used
+to be committed by an ordinary `git add -A`, and a deployed copy of the pair
+brought the review rail up for every visitor to the live site. The page still
+opens with the helper down, and still gives the rail, an honest unreachable
+status, and everything kept in the browser until the helper is back: the server
+that answered the request for the page answers for the library too.
 
 For Markdown, pass the source file directly. Do not run Pandoc, hand-write an
 HTML wrapper, start a separate Python server, or translate the blocks yourself:
@@ -259,9 +268,10 @@ file that becomes a second source to maintain.
 run a server. `add` always registers the `null` origin a page opened from disk
 sends, so the fallback keeps working.
 
-Either way, `review` creates an agent session, writes one script line into the
-page, mints the review and token, starts the helper if needed, and prints what to
-open plus the exact monitor and close commands.
+Either way, `review` creates an agent session, puts the script line on the page
+(in the response when it serves the page, in the file itself for `file://`),
+mints the review and token, starts the helper if needed, and prints what to open
+plus the exact monitor and close commands.
 Tell your human to open exactly what you handed them.
 
 **The origin is the trap to avoid when using advanced `add` or an external
@@ -485,13 +495,15 @@ grep -n "the new wording" path/to/built/page.html
 # 4. only now append your reply line
 ```
 
-**The rebuild no longer needs a `lahe add` after it.** A rebuild strips the
-script line out of the built page, and with a helper running that is repaired
-for you: the helper is already watching that file, and when it comes back
-without the line, it writes the same line back (same review, same token) and
-refreshes the fallback copy beside the page. The reviewer's page reloads onto
-the healed file and the rail is there. `lahe status` says
-`script line re-injected after a rebuild, Ns ago` when that happened.
+**The rebuild no longer needs a `lahe add` after it.** On the served path there
+is nothing to repair: the line is not in the file, so a rebuild cannot strip it,
+and the next load carries the rail whatever the build wrote. On `file://`, where
+the line does live in the file, a helper that is running repairs it for you: it
+is already watching that file, and when it comes back without the line, it writes
+the same line back (same review, same token) and refreshes the fallback copy
+beside the page. The reviewer's page reloads onto the healed file and the rail is
+there. `lahe status` says `script line re-injected after a rebuild, Ns ago` when
+that happened.
 
 **A rebuild driven by an ad hoc script (not a real project build) heals the
 same way, but do not rely on the timing.** Some reviews are not a project with
@@ -691,9 +703,14 @@ each show only their own items (see "One review MAY span pages" above).
 
 ## Step 5: take it back out when they are done
 
-`lahe add path/to/page.html --remove` deletes the script line from the page and
-changes nothing else (for a dev server, delete the line you pasted). Stop the
-agent session with the printed `lahe session close <id>` command. It stops that
+`lahe add path/to/page.html --remove` takes this tool back out of a folder: it
+deletes the script line from the page, and removes a `lahe-layer.js` beside it
+when that file is byte-identical to the library this clone builds (anything else
+of that name is somebody's own file and is left alone). A served review put
+neither there, so there is usually nothing for it to do; a `file://` review put
+both there, and this is what takes them out. For a dev server, delete the line
+you pasted. Stop the agent session with the printed `lahe session close <id>`
+command. It stops that
 session's static review servers, and closing the last open session stops the
 shared helper automatically. An application dev server remains yours. Deleting the state
 directory forgets every review and its history, so

@@ -20,6 +20,22 @@ var SCHEMA = 1;
 var HOST = protocol.DEFAULT_HOST;
 var HEALTH_PREFIX = "/.lahe-static-health/";
 
+// The library, served by this server rather than copied into the reviewed
+// page's own folder.
+//
+// WHY THIS EXISTS. `add` used to drop a copy of the built bundle beside the
+// page so the script line's onerror had something relative to load when the
+// helper was down. The page's folder is very often a git checkout, so `git add
+// -A` committed the bundle, and a deployed copy of that site then loaded the
+// review rail for every visitor. This server already answers every request for
+// the page, so it is the thing that can hand the browser the library too, out
+// of the clone, with nothing written into the reviewer's tree.
+//
+// The prefix follows HEALTH_PREFIX and the /.lahe-source/ mounts: a dotted,
+// tool-named path segment no ordinary document folder has.
+var LIBRARY_PREFIX = "/.lahe-library/";
+var LIBRARY_PATH = LIBRARY_PREFIX + heal.BUNDLE_BASENAME;
+
 var MIME = {
   ".css": "text/css; charset=utf-8",
   ".gif": "image/gif",
@@ -235,9 +251,15 @@ function send(res, status, body, type) {
 // window between an agent overwriting the file and the next poll, the freshly
 // loaded page has no library at all: nothing is polling, so nothing repairs it.
 // This server sees every request for the page before the browser does, so it
-// can put the tag in the RESPONSE without ever touching the file on disk. The
-// on-disk healer and the fallback copy stay exactly as they are; this is a
-// second, stronger path for the served case, not a replacement.
+// can put the tag in the RESPONSE without ever touching the file on disk.
+//
+// For a served review this is now the ONLY path, not a second one. `lahe
+// review` writes no tag into the page and copies no bundle beside it, and the
+// healer stands down for any file this server is serving (heal.js rule 5),
+// because a review id and a per-review token written into a folder that is
+// usually a git checkout get committed by an ordinary `git add -A`. The on-disk
+// line and the sibling copy remain exactly as they were for the cases with no
+// server to inject for them: a plain `lahe add`, and any file:// review.
 //
 // Matching a request to a review reads the same recorded target paths
 // reviews.recordPaths writes to meta.json (src/service/reviews.js), read
@@ -319,14 +341,70 @@ function injectForMatch(dir, match, target, html) {
     return null;
   }
   var helperOrigin = currentHelperOrigin(dir);
+  // THE LIBRARY COMES FROM THIS SERVER, and the helper is the fallback.
+  //
+  // That is the reverse of what `add` writes into a file, on purpose. `add`'s
+  // line has to resolve from wherever a page opened from disk sits, so it names
+  // the helper absolutely and falls back to a sibling copy. This line is only
+  // ever produced by this server, so a root-absolute path resolves back here
+  // whatever host name the reviewer typed, and here is the process that just
+  // answered the request: it cannot be down. The helper is a separate process
+  // and often is down, which is exactly why it is the fallback and not the src.
+  //
+  // Nothing relative to the page is named, so no copy of the bundle has to be
+  // written into the reviewer's folder for this line to work.
   var tag = protocol.scriptTag({
-    src: helperOrigin + protocol.route("library.get").path,
+    src: LIBRARY_PATH,
     review: match.review,
     token: match.token,
     helper: helperOrigin,
-    fallback: heal.BUNDLE_BASENAME
+    fallback: helperOrigin + protocol.route("library.get").path
   });
   return scriptLine.placeScriptLine(html, tag).html;
+}
+
+/**
+ * Is one of this session's static servers serving `filePath` right now?
+ *
+ * The helper asks this before healing a stripped script line back INTO a file:
+ * when the answer is yes the tag is already going into every response, so
+ * writing it to disk would put a review token into the reviewer's own working
+ * tree for nothing (src/service/heal.js).
+ *
+ * Sync and cheap on purpose: this runs behind the reply poll, once a second per
+ * reviewed page. `lahe status` asks a stronger version of the same question in
+ * servedVia (src/cli/commands/status.js), with a real health probe over HTTP,
+ * because it runs once and a human is reading the answer. Here a live pid and
+ * an unstopped lease are enough.
+ *
+ * @param {string} dir the state directory
+ * @param {string} sessionId the agent session the review belongs to
+ * @param {string} filePath an absolute path to the reviewed file
+ * @returns {boolean} false for anything unreadable, so a doubtful answer heals
+ *   rather than leaving a page without its rail
+ */
+function servesPath(dir, sessionId, filePath) {
+  if (typeof dir !== "string" || typeof sessionId !== "string" || typeof filePath !== "string") return false;
+  var entries;
+  try { entries = list(dir, sessionId); } catch (err) { return false; }
+  var target = path.resolve(filePath);
+  var realTarget = target;
+  try { realTarget = fs.realpathSync(target); } catch (err) { /* the plain path still answers */ }
+  return entries.some(function (meta) {
+    if (meta.stopped_at) return false;
+    if (typeof meta.pid !== "number") return false;
+    try { process.kill(meta.pid, 0); } catch (err) { return false; }
+    var roots = [meta.root, meta.logical_root];
+    if (meta.mounts && typeof meta.mounts === "object") {
+      Object.keys(meta.mounts).forEach(function (prefix) { roots.push(meta.mounts[prefix]); });
+    }
+    return roots.some(function (base) {
+      if (typeof base !== "string" || !base) return false;
+      return [target, realTarget].some(function (candidate) {
+        return candidate === base || candidate.indexOf(base + path.sep) === 0;
+      });
+    });
+  });
 }
 
 function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInput) {
@@ -383,6 +461,24 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
     if (req.method === "HEAD") return res.end();
     res.end(body);
   }
+  // The built bundle, streamed straight out of the clone. Read-only like
+  // everything else here, and unauthenticated like the helper's own
+  // library.get: these are public bytes with no review data and no token in
+  // them.
+  function sendLibrary(req, res) {
+    var stat;
+    try { stat = fs.statSync(heal.BUNDLE); }
+    catch (err) { return send(res, 404, "the built library is not in this clone\n"); }
+    res.writeHead(200, {
+      "cache-control": "no-store",
+      "content-length": stat.size,
+      "content-type": MIME[".js"],
+      "x-content-type-options": "nosniff"
+    });
+    if (req.method === "HEAD") return res.end();
+    fs.createReadStream(heal.BUNDLE).on("error", function () { res.destroy(); }).pipe(res);
+  }
+
   var startedAt = new Date().toISOString();
   var server = http.createServer(function (req, res) {
     var pathname;
@@ -398,6 +494,10 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
       }), "application/json; charset=utf-8");
     }
     if (req.method !== "GET" && req.method !== "HEAD") return send(res, 405, "method not allowed\n");
+    // The reserved library route, answered before anything under the served
+    // root is looked at, so a folder that happens to be named for it cannot
+    // shadow the one file every injected page depends on.
+    if (pathname === LIBRARY_PATH) return sendLibrary(req, res);
     var servingRoot = root;
     var relative = pathname.replace(/^\/+/, "");
     Object.keys(mounts).some(function (prefix) {
@@ -502,6 +602,8 @@ if (require.main === module) {
 
 module.exports = {
   SCHEMA: SCHEMA,
+  LIBRARY_PATH: LIBRARY_PATH,
+  servesPath: servesPath,
   serverId: serverId,
   isExactServer: isExactServer,
   list: list,

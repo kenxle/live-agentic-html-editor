@@ -25,6 +25,7 @@ const reviewsModule = require("../../src/service/reviews.js");
 const protocol = require("../../src/shared/protocol.js");
 const scriptLine = require("../../src/shared/script_line.js");
 const heal = require("../../src/service/heal.js");
+const staticServers = require("../../src/service/static_servers.js");
 
 function tempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "lahe-heal-"));
@@ -181,4 +182,85 @@ test("the heal is reported to lahe status through review.read", () => {
   const line = status.healLine({ last_heal_at: new Date(Date.now() - 4000).toISOString() }, Date.now());
   assert.match(line, /script line re-injected after a rebuild, 4s ago/);
   assert.equal(status.healLine({ last_heal_at: null }), null, "a review that never needed one says nothing");
+});
+
+// RULE 5: A PAGE SOMETHING IS SERVING IS NOT HEALED AT ALL.
+//
+// `lahe review` owns a static server for the page, and that server puts the
+// script line into every response (src/service/static_servers.js). Writing the
+// line into the file here would put a review id and a per-review token into the
+// reviewer's own working tree, which is usually a git checkout: `git add -A`
+// commits both, and because the line's onerror names its fallback by a RELATIVE
+// path, a page and a bundle deployed together bring the review rail up for
+// every visitor of the live site. That is the whole reason nothing is written
+// beside the page any more, and healing would have put it straight back.
+test("a page a live static server is serving is not healed, and loses nothing by it", async (t) => {
+  const state = path.join(tempDir(), "state");
+  const work = tempDir();
+  const page = path.join(work, "page.html");
+  fs.writeFileSync(page, BUILT_WITHOUT_LINE);
+
+  const log = logModule.createEventLog({ dir: state });
+  const clock = { at: 10000 };
+  const reviews = reviewsModule.createReviews({ dir: state, log: log, now: () => clock.at });
+  reviews.create({ id: "r1", origins: ["null"], target_path: page, agent_session_id: "s_served" });
+
+  const server = await staticServers.start({ dir: state, sessionId: "s_served", root: work });
+  t.after(async () => { await staticServers.stopAll(state, "s_served"); });
+
+  reviews.targetMtime("r1");
+  clock.at += 2000;
+  const mtime = reviews.targetMtime("r1");
+
+  assert.ok(mtime, "the reload trigger still reports the file's mtime, which is what R36 rides");
+  assert.equal(
+    fs.readFileSync(page, "utf8"),
+    BUILT_WITHOUT_LINE,
+    "the reviewer's own file is byte for byte what their build wrote"
+  );
+  assert.equal(
+    fs.existsSync(path.join(work, "lahe-layer.js")),
+    false,
+    "and no copy of the bundle was left beside it either"
+  );
+
+  // Nothing is lost: the rail arrives with the page, from the server.
+  const res = await fetch("http://" + server.meta.host + ":" + server.meta.port + "/page.html");
+  const body = await res.text();
+  assert.equal(scriptLine.reviewAlreadyInFile(body), "r1", "the served response carries the line the file does not");
+});
+
+test("the same page stops being served, and the healer takes it back over", async (t) => {
+  const state = path.join(tempDir(), "state");
+  const work = tempDir();
+  const page = path.join(work, "page.html");
+  fs.writeFileSync(page, BUILT_WITHOUT_LINE);
+
+  const log = logModule.createEventLog({ dir: state });
+  const clock = { at: 10000 };
+  const reviews = reviewsModule.createReviews({ dir: state, log: log, now: () => clock.at });
+  reviews.create({ id: "r1", origins: ["null"], target_path: page, agent_session_id: "s_stops" });
+
+  await staticServers.start({ dir: state, sessionId: "s_stops", root: work });
+  t.after(async () => { await staticServers.stopAll(state, "s_stops"); });
+  reviews.targetMtime("r1");
+  clock.at += 2000;
+  reviews.targetMtime("r1");
+  assert.equal(fs.readFileSync(page, "utf8"), BUILT_WITHOUT_LINE, "nothing written while it was served");
+
+  // The session closed, so the injecting server is gone. A file:// reader is
+  // all the reviewer has left, and the on-disk line is the only thing that
+  // carries the rail there.
+  await staticServers.stopAll(state, "s_stops");
+  fs.writeFileSync(page, BUILT_WITHOUT_LINE + "<!-- rebuilt -->\n");
+  clock.at += 2000;
+  reviews.targetMtime("r1");
+  clock.at += 2000;
+  reviews.targetMtime("r1");
+
+  assert.equal(
+    scriptLine.reviewAlreadyInFile(fs.readFileSync(page, "utf8")),
+    "r1",
+    "with nothing serving it, the healer is back on the file"
+  );
 });
