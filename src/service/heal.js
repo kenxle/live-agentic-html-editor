@@ -28,6 +28,11 @@
 //     suppressed. What is suppressed is re-examining it: the post-write mtime is
 //     recorded as the new baseline, so the next poll sees a settled file and
 //     reads nothing.
+//  5. A PAGE THAT IS BEING SERVED IS NOT HEALED AT ALL. Its script line goes
+//     into the HTTP response instead (src/service/static_servers.js), so
+//     writing one into the file would put a review id and a per-review token
+//     into the reviewer's own working tree for no gain. See the rule where it
+//     is applied, in consider().
 //
 // Everything here fails soft. This runs underneath a route the reviewer's page
 // depends on, and a page that cannot poll is worse than a page missing its rail.
@@ -112,7 +117,10 @@ function createHealer(options) {
   /**
    * Look at one recorded target path, healing it if a rebuild stripped the line.
    *
-   * @param {{path: string, review: string, token: string, helperOrigin: string}} input
+   * @param {{path: string, review: string, token: string, helperOrigin: string,
+   *   servedBy?: () => boolean}} input `servedBy` answers whether a static
+   *   server is already injecting this page's script line into every response,
+   *   in which case nothing is written to disk (rule 5).
    * @returns {string|null} the file's mtime as an ISO string AFTER any heal, or
    *   null when the path is not a regular file (a dev-server target, or a file
    *   the build deleted). Callers use it exactly as they used a plain stat.
@@ -143,6 +151,20 @@ function createHealer(options) {
       return iso;
     }
     if (clock() - state.firstSeenAt < STABLE_MS) return iso;
+
+    // 5. A SERVED PAGE'S LINE LIVES IN THE RESPONSE, NOT IN THE FILE. When one
+    //    of this session's static servers is serving this file, it puts the tag
+    //    into every response on the way out (src/service/static_servers.js), so
+    //    writing the tag here would gain the reviewer nothing and cost them a
+    //    review id and a per-review token sitting in their own working tree.
+    //    That tree is usually a git checkout, `git add -A` commits both, and a
+    //    deployed copy of the page then loads the review rail for every
+    //    visitor. Asked before the file is read, because a served page never
+    //    needs its contents looked at at all.
+    if (typeof spec.servedBy === "function" && spec.servedBy()) {
+      state.settledMtimeMs = stat.mtimeMs;
+      return iso;
+    }
 
     var html;
     try {
