@@ -784,6 +784,18 @@
       if (src.quote) context.quote = src.quote;
       if (src.element && src.element.tagName) context.element = src.element.tagName;
       if (src.heading) context.heading = src.heading;
+      // The two fields every reader assumed were already filled and never were:
+      // null in every item of every review on this machine. They are the
+      // anchor's own context ring, which is what a reader would guess they are.
+      var mintedRef = src.region && src.region.ref;
+      if (mintedRef) {
+        if (typeof mintedRef.prefix === "string") context.prefix = mintedRef.prefix;
+        if (typeof mintedRef.suffix === "string") context.suffix = mintedRef.suffix;
+      }
+      // What the element IS, when the reviewer pointed at a whole one.
+      if (src.element && src.element.nodeType === 1) {
+        context.subject = anchor.subjectFor(src.element, doc);
+      }
 
       var item = record.newItem({
         kind: kind,
@@ -1685,6 +1697,23 @@
       return el && el.nodeType === 1 ? el : null;
     }
 
+    // What pick mode is really pointing at. A click inside an <svg> lands on a
+    // <path> or a <g>, and the region the reviewer means is the whole graphic,
+    // which is also the element the anchor engine can find again by its
+    // signature. Without this the pick recorded an inner node the engine never
+    // reaches, which looked like it worked and was not.
+    function elementForPick(node) {
+      var el = blockOf(node);
+      if (!el) return null;
+      var current = el;
+      var outermostSvg = null;
+      while (current && current.nodeType === 1) {
+        if (String(current.tagName || "").toLowerCase() === "svg") outermostSvg = current;
+        current = current.parentElement;
+      }
+      return outermostSvg || el;
+    }
+
     function headingTextFor(element) {
       if (!element) return null;
       var el = element.previousElementSibling;
@@ -1698,12 +1727,18 @@
 
     // Mints the durable reference through 1C's engine and pins a display label
     // once. The label is display only; identity is the reference.
+    //
+    // A MINT THAT FAILED IS STAMPED LOST HERE. It used to be stored as though
+    // it had worked: `ref.ok` was false, `lost` was null, and review.json told
+    // the agent the item was healthy while its anchor pointed at nothing. An
+    // item whose anchor never bound must never read as healthy.
     function regionFor(element, range) {
       var region = record.emptyRegion();
       if (!element) return region;
       region.ref = anchor.mint({ element: element, range: range, root: doc });
+      region.lost = lostFromMint(region.ref);
       try {
-        regions.pinLabel(region, descriptorFor(element));
+        regions.pinLabel(region, anchor.descriptorFor(element, doc));
       } catch (err) {
         // A label is a display convenience. A region with a reference and no
         // label is still a usable record, so this is the one place a failure is
@@ -1713,23 +1748,13 @@
       return region;
     }
 
-    function descriptorFor(element) {
-      var tag = String(element.tagName || "").toLowerCase();
-      var ordinal = 1;
-      var sibling = element.previousElementSibling;
-      while (sibling) {
-        if (sibling.tagName === element.tagName) ordinal += 1;
-        sibling = sibling.previousElementSibling;
-      }
-      return {
-        authorName: element.getAttribute ? element.getAttribute(regions.AUTHOR_ATTR) : null,
-        id: element.id || null,
-        ariaLabel: element.getAttribute ? element.getAttribute("aria-label") : null,
-        heading: headingTextFor(element),
-        ordinal: ordinal,
-        tag: tag,
-        text: element.textContent || null
-      };
+    // The failure the engine reported, as the lost state the payload carries
+    // (R17). The code is the engine's own: the reviewer and the agent are told
+    // the same reason the mint gave, not a second guess made here.
+    function lostFromMint(ref) {
+      if (ref && ref.ok === true) return null;
+      var failure = (ref && ref.failure) || {};
+      return regions.lostState(failure.failureCode || "ANCHOR_NO_TEXT_MATCH", failure.reason || null);
     }
 
     // ------------------------------------------------------------------------
@@ -2411,7 +2436,7 @@
 
     function onMouseMove(event) {
       if (!pick.active) return;
-      var el = blockOf(event.target);
+      var el = elementForPick(event.target);
       if (!el || markers.isInsideOverlay(el)) return;
       if (el === doc.documentElement || el === doc.body) {
         pick.element = null;
@@ -2430,7 +2455,7 @@
       // deliberately by a keystroke one moment earlier.
       if (got.preventDefault) event.preventDefault();
       event.stopPropagation();
-      var element = pick.element || blockOf(event.target);
+      var element = pick.element || elementForPick(event.target);
       exitPickMode();
       if (element) commentOnElement(element, {});
     }

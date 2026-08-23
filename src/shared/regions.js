@@ -47,11 +47,19 @@
   //   authorName:  the value of data-review-region, or null
   //   id:          the element's id, or null
   //   ariaLabel:   the element's aria-label, or null
+  //   name:        a name the element carries in its own content, such as the
+  //                filename in an image's src or an svg's <title>, or null
   //   heading:     text of the nearest preceding heading, or null
-  //   ordinal:     1-based position among same-tag siblings under that heading
+  //   ordinal:     1-based position among same-tag elements IN THAT HEADING'S
+  //                SECTION, in document order
   //   tag:         lowercase tag name
   //   text:        the region's own text, used only for the last resort
   // }
+  //
+  // On the ordinal: it is counted through the section, not among immediate
+  // siblings, because a row of images is ordinarily written with each image in
+  // its own wrapper. Counted among siblings, all three are "img 1", and three
+  // cards in the rail read identically. That is a real bug a reviewer hit.
   var LABEL_SOURCES = [
     {
       name: "author_attribute",
@@ -72,6 +80,14 @@
       why: "an accessible name is a human-written name for the same thing",
       get: function (d) {
         return d.ariaLabel;
+      }
+    },
+    {
+      name: "element_name",
+      why: "a name the element carries itself, such as an image's filename, which is what a person says out loud and which does not collide the way a position does",
+      get: function (d) {
+        if (!d.name) return null;
+        return d.tag ? d.tag + " " + d.name : d.name;
       }
     },
     {

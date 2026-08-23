@@ -22,6 +22,18 @@
 //    "it used to be here" instead of "no idea". The predicate refuses to write
 //    to it, which is the point.
 //
+// 1a. CONTENT PLACES A WRITE, AND AN IMAGE HAS CONTENT TOO. Some regions have
+//    no words in them: an image, a chart, an icon button, an SVG. R17 exists for
+//    exactly those, and the rule above does not bend for them. What widens is
+//    what counts as content. An image's `src` is not where the image sits; it is
+//    what the image IS, so for a region with no text the engine mints a CONTENT
+//    SIGNATURE out of the attributes that identify the element (D9, "The element
+//    anchor: a region with no text"). The signature then goes through this same
+//    file with no exception carved for it: the same widening by whole siblings,
+//    the same uniqueness predicate, the same honest failure when the containing
+//    block runs out. Two images sharing one `src` are ambiguous in exactly the
+//    way two identical list items are ambiguous, and they fail the same way.
+//
 // 2. THE INNERMOST ELEMENT HOLDING THE TEXT IS THE CANDIDATE. Every ancestor of
 //    a match also contains the text. They are the same text seen from further
 //    out, not rival regions, so an element with a matching descendant is not a
@@ -79,6 +91,16 @@
     meta: 1, title: 1, iframe: 1, object: 1, embed: 1, svg: 1, canvas: 1
   };
 
+  // Two of those tags are skipped for TEXT and reachable for a SIGNATURE. An
+  // <svg> label or a <canvas> holds no prose, so its inner text must never join
+  // the page's text and place a write. But a reviewer can point at one, pick
+  // mode hands one over, and recorded reviews contain them. Skipping them in
+  // both worlds is what produced the silent third state this amendment removes:
+  // the pick appeared to work and the engine could never find the element
+  // again. The signature walk treats these as candidate LEAVES: their own
+  // signature is compared, and the walk does not descend into them.
+  var ELEMENT_ONLY_TAGS = { svg: 1, canvas: 1 };
+
   // Why mint refuses. Named, because "mint returned null" tells the reviewer
   // nothing and the card has to say something true.
   var MINT_FAILURE = {
@@ -97,12 +119,40 @@
 
   var HEADING_TAGS = { h1: 1, h2: 1, h3: 1, h4: 1, h5: 1, h6: 1 };
 
+  // What the probe is made of. Two values, and no third: either the region's
+  // words, or, when it has none, the signature of the element itself. It is
+  // stored on the reference so resolve() a week later knows which question to
+  // ask each candidate. A reference minted before this existed carries no
+  // probe_kind, and reads as TEXT, which is what it was.
+  var PROBE = {
+    TEXT: "text",
+    ELEMENT: "element"
+  };
+
+  // The attributes that say what an element IS rather than where it sits, per
+  // tag. Order matters: it is the order they are written into the signature, so
+  // two elements are compared field by field in the same order every time.
+  var SIGNATURE_ATTRS = {
+    img: ["src", "alt", "srcset"]
+  };
+
+  // For every other element with no text. `id` and `href` are here as CONTENT
+  // (this element's own name, this link's own destination), not as position.
+  var GENERIC_SIGNATURE_ATTRS = ["aria-label", "id", "href", "value"];
+
+  // The tags whose inner <title> and <desc> are the element's own name rather
+  // than page prose. Only svg today; the list exists so the reason is written
+  // down rather than living in an `if`.
+  var DESCRIBED_BY_CHILD_TAGS = { svg: 1 };
+
   // The reference shape. Every field is named here so the record module's
   // region.ref has a documented interior.
   //
   //   id        stable, minted once at first touch, never recomputed
-  //   probe     the region's normalized text at mint time. The only signal
+  //   probe     the region's content at mint time: its normalized text, or,
+  //             when it has none, its element signature. The only signal
   //             allowed to place a write
+  //   probe_kind which of the two the probe is, PROBE.TEXT or PROBE.ELEMENT
   //   prefix    the normalized text of the whole sibling elements before the
   //             region, nearest last, at the widening depth that made it unique
   //   suffix    the same after the region, nearest first
@@ -120,6 +170,7 @@
     return {
       id: null,
       probe: null,
+      probe_kind: PROBE.TEXT,
       prefix: null,
       suffix: null,
       path: null,
@@ -195,6 +246,80 @@
     return false;
   }
 
+  // Skipped by the text walk, reachable by the signature walk. Never ours: the
+  // library's own chrome stays invisible to both.
+  function isElementOnly(node) {
+    if (!isElement(node)) return false;
+    if (markers && typeof markers.isToolNode === "function" && markers.isToolNode(node)) return false;
+    return Object.prototype.hasOwnProperty.call(ELEMENT_ONLY_TAGS, tagOf(node));
+  }
+
+  // -------------------------------------------------------------------------
+  // The content signature: what an element IS, for a region with no text
+  // -------------------------------------------------------------------------
+
+  // The node's text with nothing skipped. Used only for the parts of a
+  // signature that live in a tag the prose walk refuses to read, an <svg>'s own
+  // <title> being the case that matters.
+  function rawTextOf(node) {
+    if (!node) return "";
+    return normalize.normalizeText(normalize.blockTextFromNode(node, {}));
+  }
+
+  // The first descendant with this tag, in document order. Reads through
+  // skipped tags on purpose: <title> is one of them.
+  function firstDescendantOfTag(node, tag) {
+    var kids = elementChildren(node);
+    for (var i = 0; i < kids.length; i += 1) {
+      if (tagOf(kids[i]) === tag) return kids[i];
+      var deeper = firstDescendantOfTag(kids[i], tag);
+      if (deeper) return deeper;
+    }
+    return null;
+  }
+
+  function signatureAttrNamesFor(tag) {
+    if (Object.prototype.hasOwnProperty.call(SIGNATURE_ATTRS, tag)) return SIGNATURE_ATTRS[tag];
+    return GENERIC_SIGNATURE_ATTRS;
+  }
+
+  /**
+   * The element's content signature, or "" when the element says nothing about
+   * itself. An empty signature is an honest EMPTY_PROBE failure, not something
+   * to paper over with position.
+   *
+   * The value is field-delimited, so a longer value in one field can never read
+   * as a whole other element's signature: "img|src=a.png|alt=|srcset=" is not a
+   * substring of "img|src=a.png|alt=Square|srcset=".
+   */
+  function signatureOf(node) {
+    if (!isElement(node)) return "";
+    var tag = tagOf(node);
+    var names = signatureAttrNamesFor(tag);
+    var parts = [];
+    var said = false;
+    var i;
+    for (i = 0; i < names.length; i += 1) {
+      var value = normalize.normalizeText(attrOf(node, names[i]) || "");
+      if (value) said = true;
+      parts.push(names[i] + "=" + value);
+    }
+    if (Object.prototype.hasOwnProperty.call(DESCRIBED_BY_CHILD_TAGS, tag)) {
+      var described = ["title", "desc"];
+      for (i = 0; i < described.length; i += 1) {
+        var child = firstDescendantOfTag(node, described[i]);
+        var childText = child ? rawTextOf(child) : "";
+        if (childText) said = true;
+        parts.push(described[i] + "=" + childText);
+      }
+      var inner = rawTextOf(node);
+      if (inner) said = true;
+      parts.push("text=" + inner);
+    }
+    if (!said) return "";
+    return tag + "|" + parts.join("|");
+  }
+
   // The subtree to search. Accepts an element, a document, or nothing.
   function scopeOf(root, element) {
     if (isElement(root)) return root;
@@ -217,11 +342,15 @@
   // Context: whole siblings, read from the nearest ancestor that has any
   // -------------------------------------------------------------------------
 
+  // A node is always in its own sibling list, even when it is a tag the text
+  // walk skips. Every caller below finds the node's position in this list, and
+  // an <svg> the reviewer picked would otherwise be missing from it, which reads
+  // as "this element is nowhere" and empties its context.
   function siblingsOf(node) {
     var parent = parentOf(node);
     if (!parent) return [];
     return elementChildren(parent).filter(function (child) {
-      return !isSkipped(child);
+      return child === node || !isSkipped(child);
     });
   }
 
@@ -352,6 +481,51 @@
     return false;
   }
 
+  /**
+   * The same walk for signatures. Two differences, both forced by what a
+   * signature is:
+   *
+   *   - an <svg> or a <canvas> is a candidate leaf. The text walk refuses to
+   *     enter one; this walk compares its signature and does not descend.
+   *   - the innermost rule still holds. An ancestor's signature is built from
+   *     its OWN attributes, so it almost never matches a descendant's, but when
+   *     it somehow does, the inner element is the region, exactly as with text.
+   */
+  function findSignatureMatches(node, probe, out) {
+    var matchedBelow = false;
+    var kids = elementChildren(node);
+    for (var i = 0; i < kids.length; i += 1) {
+      var kid = kids[i];
+      if (isElementOnly(kid)) {
+        if (matchKind(signatureOf(kid), probe)) {
+          out.push(kid);
+          matchedBelow = true;
+        }
+        continue;
+      }
+      if (isSkipped(kid)) continue;
+      if (findSignatureMatches(kid, probe, out)) matchedBelow = true;
+    }
+    if (matchedBelow) return true;
+    if (!isElement(node)) return false;
+    if (matchKind(signatureOf(node), probe)) {
+      out.push(node);
+      return true;
+    }
+    return false;
+  }
+
+  function probeKindOf(ref) {
+    return ref && ref.probe_kind === PROBE.ELEMENT ? PROBE.ELEMENT : PROBE.TEXT;
+  }
+
+  // What this candidate says about itself, in whichever content the reference
+  // was minted from. One function, so the walk, the match kind on the
+  // descriptor, and mint's own check cannot drift apart.
+  function contentOf(node, kind) {
+    return kind === PROBE.ELEMENT ? signatureOf(node) : textOf(node);
+  }
+
   /** Elements the page author named with the same region attribute. */
   function findByAuthorAttr(node, value, out) {
     var kids = elementChildren(node);
@@ -369,11 +543,16 @@
    */
   function candidatesFor(ref, scope) {
     var probe = typeof ref.probe === "string" ? normalize.normalizeText(ref.probe) : "";
+    var kind = probeKindOf(ref);
     var out = [];
     if (!isElement(scope) || !probe) return out;
 
     var nodes = [];
-    findMatches(scope, probe, nodes);
+    if (kind === PROBE.ELEMENT) {
+      findSignatureMatches(scope, probe, nodes);
+    } else {
+      findMatches(scope, probe, nodes);
+    }
 
     if (!nodes.length) {
       // The text is gone. If the author named the region, say where it used to
@@ -399,7 +578,7 @@
       var context = foundContextFor(node, scope, ref);
       out.push({
         key: node,
-        match: matchKind(textOf(node), probe),
+        match: matchKind(contentOf(node, kind), probe),
         prefix: context.prefix,
         suffix: context.suffix,
         structure: typeof ref.path === "string" && ref.path === pathOf(node, scope),
@@ -447,7 +626,19 @@
 
     if (!element) return mintFailure(ref, MINT_FAILURE.NO_ELEMENT);
 
+    // Text first, always. A region with words in it is anchored by its words,
+    // and the signature path is what happens when there are none, never a
+    // second opinion about a region that has some.
     ref.probe = textOf(element);
+    ref.probe_kind = PROBE.TEXT;
+    if (!ref.probe) {
+      ref.probe = signatureOf(element);
+      ref.probe_kind = PROBE.ELEMENT;
+    }
+    // No words and nothing that says what this element is. An <img> with no
+    // src, no alt and no srcset really is unidentifiable, and saying so is the
+    // whole fix: the old code said it too, and then stored the failure as
+    // though it were a reference.
     if (!ref.probe) return mintFailure(ref, MINT_FAILURE.EMPTY_PROBE);
 
     var scope = scopeOf(input.root, element);
@@ -513,10 +704,189 @@
     return verdict;
   }
 
+  // -------------------------------------------------------------------------
+  // What the agent is told about the element, and what the rail calls it
+  // -------------------------------------------------------------------------
+  //
+  // Both live here because both are read off a node with the same five
+  // questions the engine already asks, and because comments.js and editing.js
+  // each used to compute their own descriptor. Two copies of a rule is how the
+  // rail and the Edits tab end up naming the same image differently.
+
+  // How much page text rides along as the locating hint. This is a hint, not a
+  // passage: the projection bounds it again, and a whole paragraph in a record
+  // field the agent never reads as content is just weight on the wire.
+  var NEAR_MAX = 160;
+
+  // The attribute names read off a node that has no live `attributes` list.
+  // The simulated DOM the unit tests run the engine over answers getAttribute
+  // and nothing else, and keeping the engine to the questions it already asks
+  // is what keeps jsdom out of this repo.
+  var COMMON_ATTRS = [
+    "id", "class", "src", "srcset", "alt", "href", "title", "value", "type",
+    "name", "role", "width", "height", "aria-label", regions.AUTHOR_ATTR
+  ];
+
+  function attrPairsOf(node) {
+    var pairs = [];
+    var seen = {};
+    var i;
+    var live = node && node.attributes;
+    if (live && typeof live.length === "number") {
+      for (i = 0; i < live.length; i += 1) {
+        var attr = live[i];
+        if (!attr || typeof attr.name !== "string") continue;
+        pairs.push({ name: attr.name, value: typeof attr.value === "string" ? attr.value : "" });
+      }
+      return pairs;
+    }
+    for (i = 0; i < COMMON_ATTRS.length; i += 1) {
+      var name = COMMON_ATTRS[i];
+      if (Object.prototype.hasOwnProperty.call(seen, name)) continue;
+      seen[name] = true;
+      var value = attrOf(node, name);
+      if (typeof value === "string") pairs.push({ name: name, value: value });
+    }
+    return pairs;
+  }
+
+  /**
+   * The element's OPENING TAG, as the page has it, with the library's own
+   * attributes left out. Not the subtree: an agent needs to recognize the
+   * element in its source, and a whole <svg> body is a wall of path data.
+   */
+  function openingTagOf(node) {
+    if (!isElement(node)) return null;
+    var out = "<" + tagOf(node);
+    var pairs = attrPairsOf(node);
+    for (var i = 0; i < pairs.length; i += 1) {
+      if (markers && typeof markers.isToolAttrName === "function" && markers.isToolAttrName(pairs[i].name)) continue;
+      out += " " + pairs[i].name + "=\"" + normalize.escapeAttrValue(pairs[i].value) + "\"";
+    }
+    return out + ">";
+  }
+
+  // The nearest page text around the element: the sibling after it if that one
+  // has words, else the sibling before it. For an image in a figure, that is
+  // its caption, which is what a person would say to point at it.
+  function nearTextOf(node, scope) {
+    var texts = contextTextsOf(node, scope);
+    var i;
+    for (i = 0; i < texts.after.length; i += 1) {
+      if (texts.after[i]) return texts.after[i].slice(0, NEAR_MAX);
+    }
+    for (i = texts.before.length - 1; i >= 0; i -= 1) {
+      if (texts.before[i]) return texts.before[i].slice(0, NEAR_MAX);
+    }
+    return null;
+  }
+
+  // The file's own name out of a URL, with the query and the fragment gone. The
+  // reviewer said "the second one"; "logo-square-b@2x.png" is the closest thing
+  // on the page to a name they would recognize.
+  function fileNameOf(value) {
+    if (typeof value !== "string" || !value) return null;
+    var cut = value.split("#")[0].split("?")[0];
+    var parts = cut.split("/");
+    var last = parts[parts.length - 1] || "";
+    return last ? normalize.normalizeText(last) : null;
+  }
+
+  // A NAME for this element, when it has one in its own content. Never a
+  // position: that is what ordinals are for, and what collided.
+  function contentNameOf(node) {
+    if (!isElement(node)) return null;
+    var tag = tagOf(node);
+    if (tag === "img") return fileNameOf(attrOf(node, "src")) || normalize.normalizeText(attrOf(node, "alt") || "") || null;
+    if (Object.prototype.hasOwnProperty.call(DESCRIBED_BY_CHILD_TAGS, tag)) {
+      var titleNode = firstDescendantOfTag(node, "title");
+      var title = titleNode ? rawTextOf(titleNode) : "";
+      return title || null;
+    }
+    return null;
+  }
+
+  /**
+   * The element's 1-based position among same-tag elements IN ITS HEADING'S
+   * SECTION, in document order.
+   *
+   * Counting same-tag `previousElementSibling`s, which is what both callers
+   * used to do, is only right when the elements are siblings. Three images each
+   * in their own wrapper are not siblings, so all three counted as one, and the
+   * reviewer's three cards all read "img 1".
+   */
+  function ordinalInSection(node, scope) {
+    if (!isElement(node) || !isElement(scope)) return 1;
+    var tag = tagOf(node);
+    var heading = headingOf(node, scope);
+    var found = [];
+    (function collect(current) {
+      var kids = elementChildren(current);
+      for (var i = 0; i < kids.length; i += 1) {
+        var kid = kids[i];
+        var reachable = isElementOnly(kid) || !isSkipped(kid);
+        if (!reachable) continue;
+        if (tagOf(kid) === tag && headingOf(kid, scope) === heading) found.push(kid);
+        if (!isElementOnly(kid)) collect(kid);
+      }
+    })(scope);
+    var at = found.indexOf(node);
+    return at === -1 ? 1 : at + 1;
+  }
+
+  /**
+   * The descriptor regions.labelFor turns into a display label. Pure page
+   * reading: the label rules themselves live in src/shared/regions.js, and this
+   * never decides anything about identity.
+   */
+  function descriptorFor(element, root) {
+    if (!isElement(element)) throw new TypeError("descriptorFor expects an element");
+    var scope = scopeOf(root, element);
+    return {
+      authorName: attrOf(element, regions.AUTHOR_ATTR),
+      id: attrOf(element, "id"),
+      ariaLabel: attrOf(element, "aria-label"),
+      name: contentNameOf(element),
+      heading: headingOf(element, scope),
+      ordinal: ordinalInSection(element, scope),
+      tag: tagOf(element),
+      text: textOf(element) || null
+    };
+  }
+
+  /**
+   * What the agent is handed about the element the reviewer pointed at: what it
+   * is, not only that it was an IMG.
+   *
+   * Every field is page text and travels as DATA (D6, D12). `src` is the raw
+   * attribute, exactly as the page author wrote it, because that is what the
+   * agent will find in the source; the resolved absolute URL changes with
+   * whatever origin served the page.
+   */
+  function subjectFor(element, root) {
+    if (!isElement(element)) return null;
+    var scope = scopeOf(root, element);
+    return {
+      tag: tagOf(element),
+      src: attrOf(element, "src"),
+      alt: attrOf(element, "alt"),
+      html: openingTagOf(element),
+      near: nearTextOf(element, scope)
+    };
+  }
+
   return {
     MINT_FAILURE: MINT_FAILURE,
     MINT_FAILURE_CODE: MINT_FAILURE_CODE,
     SKIP_TAGS: SKIP_TAGS,
+    ELEMENT_ONLY_TAGS: ELEMENT_ONLY_TAGS,
+    PROBE: PROBE,
+    NEAR_MAX: NEAR_MAX,
+    signatureOf: signatureOf,
+    subjectFor: subjectFor,
+    descriptorFor: descriptorFor,
+    openingTagOf: openingTagOf,
+    ordinalInSection: ordinalInSection,
     emptyRef: emptyRef,
     mint: mint,
     resolve: resolve,
