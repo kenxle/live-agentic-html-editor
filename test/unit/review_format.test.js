@@ -56,6 +56,7 @@ const CONTRACT_VERBATIM = [
   "Any other host: run lahe monitor --session <agent-session-id> in the foreground, after telling the human it owns the chat until work arrives.",
   "lahe monitor exit codes: 0 means work is printed above, 5 means the agent session is closed, 6 means another agent took the session over. On 5 or 6, stop. Do not relaunch it.",
   "LAHE ACTION REQUIRED means the output is an interrupt, not finished work. Continue the same turn and handle every item printed with it. Receiving an item is not handling it, and describing it is not handling it.",
+    "The reviewer's rail counts from the moment they submit an item to the moment your reply lands. Thirty seconds in it starts saying nothing has come back, and after ten minutes it goes loud and offers them a button to export their feedback and take it to another agent. Having a wake channel armed does not keep that line calm, and neither does a message in a chat they cannot see: only a reply line does.",
   "Do not use a native model timer, a forever daemon, a global monitor, or a parser pipeline.",
   "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and the rail comes back on its own if a rebuild leaves it out.",
   "A break the reviewer typed is part of the edit: a blank line in the after text is a paragraph break, and a single newline is a line break. Markdown does not read a single newline as a new paragraph, so write a blank line between the two paragraphs in the source, or the format's own hard-break form for a line break, then rebuild and check the page really shows the break.",
@@ -129,7 +130,7 @@ test("review.json names no acknowledge command, because there is none", () => {
 
 test("the contract is exported as the module's own constant and is frozen text", () => {
   assert.deepEqual(rf.CONTRACT, CONTRACT_VERBATIM);
-  assert.equal(rf.CONTRACT.length, 34);
+  assert.equal(rf.CONTRACT.length, 35);
 });
 
 // ---------------------------------------------------------------------------

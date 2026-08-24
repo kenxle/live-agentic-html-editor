@@ -455,7 +455,8 @@ function workCacheFor(deps) {
 }
 
 /**
- * How many ready items nobody has answered, and the oldest one's timestamp.
+ * How many ready items nobody has answered, the oldest one's timestamp, and
+ * when the newest reply on this review landed.
  *
  * READY AND UNANSWERED IS RECORD.JS'S DEFINITION, not a second one spelled in
  * raw strings here. The rail's count and `lahe status`'s item list have to be
@@ -467,7 +468,7 @@ function workCacheFor(deps) {
  * updated_at is when it last became something an agent has to answer.
  */
 function unansweredWork(request, deps) {
-  var out = { unanswered: 0, oldest: null };
+  var out = { unanswered: 0, oldest: null, lastReplyAt: null };
   if (!deps.projection || typeof deps.projection.project !== "function") return out;
 
   var cache = workCacheFor(deps);
@@ -488,6 +489,15 @@ function unansweredWork(request, deps) {
   }
   ((projected && projected.pages) || []).forEach(function (page) {
     (page.items || []).forEach(function (item) {
+      // WHEN THE AGENT LAST SAID ANYTHING ON THIS REVIEW, over every item rather
+      // than only the waiting ones: this is the number the rail turns into
+      // "agent replied 40s ago", and an answered item is exactly where a reply
+      // lives. The thread carries the older rounds, so a long exchange does not
+      // lose its most recent reply to an archive.
+      noteReplyTime(out, item[record.FIELD.REPLY]);
+      (item[record.FIELD.THREAD] || []).forEach(function (round) {
+        noteReplyTime(out, round && round.agent);
+      });
       if (!record.isUnansweredReady(item)) return;
       out.unanswered += 1;
       var at = item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || null;
@@ -503,6 +513,12 @@ function unansweredWork(request, deps) {
  *   Resolving it once per request is deliberate: it was being read twice on
  *   every poll, once to stamp activity and once for this.
  */
+function noteReplyTime(out, reply) {
+  var at = reply && typeof reply.at === "string" ? reply.at : null;
+  if (!at) return;
+  if (!out.lastReplyAt || at > out.lastReplyAt) out.lastReplyAt = at;
+}
+
 function agentLiveness(request, deps, owner) {
   if (!deps.agentSessions || typeof deps.agentSessions.liveness !== "function") return null;
   var work = unansweredWork(request, deps);
@@ -512,17 +528,29 @@ function agentLiveness(request, deps, owner) {
   if (!owner) return livenessNone(work);
   return deps.agentSessions.liveness(owner, {
     unanswered: work.unanswered,
-    oldestUnansweredAt: work.oldest
+    oldestUnansweredAt: work.oldest,
+    lastReplyAt: work.lastReplyAt
   });
 }
 
+/**
+ * The answer for a review with no agent session: the same shape, and no claim.
+ *
+ * It still carries the counts and the times, because the reviewer's own work is
+ * their own work whoever owns it. It just never says "no agent listening": a
+ * review reached some other way has no session to be missing from.
+ */
 function livenessNone(work) {
   var out = {};
-  out[protocol.AGENT_LIVENESS.FIELD.STATE] = protocol.AGENT_LIVENESS.STATE.NONE;
-  out[protocol.AGENT_LIVENESS.FIELD.MONITOR_AT] = null;
-  out[protocol.AGENT_LIVENESS.FIELD.ACTIVITY_AT] = null;
+  out[protocol.AGENT_LIVENESS.FIELD.STATE] = work.unanswered > 0
+    ? protocol.AGENT_LIVENESS.STATE.WAITING
+    : protocol.AGENT_LIVENESS.STATE.NONE;
   out[protocol.AGENT_LIVENESS.FIELD.UNANSWERED] = work.unanswered;
   out[protocol.AGENT_LIVENESS.FIELD.OLDEST_UNANSWERED_AT] = work.oldest;
+  out[protocol.AGENT_LIVENESS.FIELD.LAST_REPLY_AT] = work.lastReplyAt;
+  out[protocol.AGENT_LIVENESS.FIELD.LISTENING] = null;
+  out[protocol.AGENT_LIVENESS.FIELD.MONITOR_AT] = null;
+  out[protocol.AGENT_LIVENESS.FIELD.ACTIVITY_AT] = null;
   return out;
 }
 

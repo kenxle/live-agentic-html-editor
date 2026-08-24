@@ -402,7 +402,12 @@
     // it went ahead or was deferred for a busy reviewer. It is what a test waits
     // on to assert that a reload did not happen, instead of sleeping and hoping.
     var reloadChecks = 0;
+    // The replies this page has been handed, newest last, for the browser
+    // harness to assert on. It drives NO status: a reply having arrived at some
+    // point is not evidence about now. Capped so a long review does not grow it
+    // without end.
     var repliesSeen = [];
+    var REPLIES_KEPT = 50;
     var seenItems = Object.create(null);
     var lock = { checked: false, acquired: null, holder: null, reason: null, unchecked: false };
     var counters = { posts: 0, postsFailed: 0, polls: 0, acknowledged: 0, timeouts: 0 };
@@ -420,6 +425,16 @@
     // the helper has acknowledged everything this browser holds: while anything
     // is still queued, the honest word is kept-locally, whatever the last
     // request happened to return.
+    //
+    // THIS LINE SAYS NOTHING ABOUT AGENTS, and that is a fix rather than an
+    // omission. It used to promote itself to "Stored · agent reading" as soon as
+    // one reply had ever arrived, off a `repliesSeen` list that only ever grew.
+    // Nothing aged it out, so the first reply of a session pinned that sentence
+    // to the rail for the rest of the session, and it sat directly above a
+    // liveness line reading "No agent watching · oldest item 6m" (Ken, live,
+    // 2026-08-23). The liveness line is ground truth from files the helper
+    // writes; this one is a claim by a page that has no way to know. There is
+    // one line about agents on this rail now, and this is not it.
 
     function setStatus(next) {
       if (next === status) return status;
@@ -436,7 +451,6 @@
       if (pending === 0 && (deliveredOnce || helperReachable === true)) {
         // Nothing is queued and the helper is there. Everything durable IS
         // stored, whether this page ever had anything of its own to post.
-        if (repliesSeen.length > 0) return setStatus(overlay.STATUS.AGENT_CONNECTED);
         return setStatus(overlay.STATUS.STORED);
       }
       // Queued and in flight with nothing wrong: HOLD the current reading
@@ -843,7 +857,7 @@
           noteTargetMtime(result.body && result.body.target_mtime);
           noteAgentLiveness(result.body && result.body.agent_liveness);
           if (events.length) {
-            repliesSeen = repliesSeen.concat(events);
+            repliesSeen = repliesSeen.concat(events).slice(-REPLIES_KEPT);
             onReplies(events);
           }
           recomputeStatus();

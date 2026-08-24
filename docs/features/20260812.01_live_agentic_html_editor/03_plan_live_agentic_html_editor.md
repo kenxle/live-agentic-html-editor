@@ -604,7 +604,7 @@ stylesheet is 1D's file, not 1B's.
 
 A fixed rail with three tabs (Active, Edits, Done), a dismissible failure chip list, and a persistent
 one-line status that states plainly what is happening to the reviewer's typing: kept locally, stored, or
-agent connected (R12, the reviewer always knows what is happening to their typing). **Copy and export are
+agent listening (R12, the reviewer always knows what is happening to their typing). **Copy and export are
 always visible**, not only when nothing is connected, because when something is wrong is exactly when the
 reviewer cannot tell (Ken's call at the wireframe). The keyboard hints are readable, not fine print. The
 collapsed pill never overlaps the open rail.

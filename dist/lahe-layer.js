@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.1.0+ad1811ecb543
+ * version 0.1.0+4e0856f7438d
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.1.0+ad1811ecb543";
+  g.LAHE.version = "0.1.0+4e0856f7438d";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -4469,8 +4469,9 @@
       response:
         "{events: [event...], seq, target_mtime, agent_liveness}; target_mtime is the requesting page's ISO mtime, " +
         "or null when its retained target cannot be identified or the file is missing. agent_liveness is " +
-        "{state, monitor_at, activity_at, unanswered, oldest_unanswered_at}: whether an agent is actually listening, " +
-        "read off the owning session's monitor heartbeat and activity stamp rather than taken from anything the agent said"
+        "{state, unanswered, oldest_unanswered_at, last_reply_at, listening, monitor_at, activity_at}: how long it " +
+        "has been since the agent answered, read off the review's own replies and the owning session's files rather " +
+        "than taken from anything the agent said"
     },
     {
       name: "window.claim",
@@ -5223,25 +5224,154 @@
   // heartbeat window.
   MONITOR.ACTIVITY_FRESH_MS = 180000;
 
+  // ---------------------------------------------------------------------------
+  // What the rail is allowed to say about an agent
+  // ---------------------------------------------------------------------------
+  //
+  // SILENCE ONLY MATTERS WHEN SOMETHING IS WAITING. That is the whole rule, and
+  // getting it wrong in either direction is what this section is for.
+  //
+  // A review with every item answered and an agent sitting quietly on it is the
+  // NORMAL, HEALTHY, MOST COMMON state of a review. The reviewer opens one
+  // document, works it, and leaves three others answered and idle for a day. A
+  // rail that says anything at all about the agent there is crying wolf on
+  // nearly every session they have open, and a rail that cries wolf is a rail
+  // nobody reads by the third comment. So: nothing unanswered, nothing said.
+  // Not "watching", not "idle", not "ok".
+  //
+  // The states below therefore only exist while an item is waiting, and what
+  // they report is HOW LONG IT HAS BEEN WAITING. That number is always
+  // knowable, it is about the reviewer's own work, and nothing can fake it.
+  //
+  // The old states (watching / working / unattended) described our plumbing
+  // instead: they told a reviewer whether a monitor process had checked in,
+  // which is not something they can act on and not something they asked. A
+  // reviewer was told "monitoring is active" in a chat while seven items sat
+  // unanswered, and the rail's own answer to that was another sentence about
+  // monitors.
   var AGENT_LIVENESS = {
     STATE: {
-      // A monitor heartbeat is fresh for the current handoff rev.
-      WATCHING: "watching",
-      // No fresh heartbeat, but there is unanswered work and the session ran a
-      // lahe command recently: an agent is mid-batch.
+      // Items are waiting, and the agent has run a lahe command or landed a
+      // reply in the last few minutes. It is mid-task, which is not alarming
+      // however long the item has been in the queue behind it.
       WORKING: "working",
-      // Unanswered work and neither of the above. Nobody is listening.
-      UNATTENDED: "unattended",
-      // Nothing is waiting and nobody is watching. Not a problem, so not loud.
+      // Items are waiting and nothing has come back for a while.
+      WAITING: "waiting",
+      // Items are waiting, nothing has come back, and the machine can see that
+      // nothing is listening: no process holds this session's wake feed open, no
+      // live monitor, no lahe command in minutes. A different next move for the
+      // reviewer, so a different state.
+      NO_AGENT: "no_agent",
+      // NOTHING IS WAITING. Says nothing at all, and this is the state a healthy
+      // review spends most of its life in.
       NONE: "none"
     },
     FIELD: {
       STATE: "state",
-      MONITOR_AT: "monitor_at",
-      ACTIVITY_AT: "activity_at",
       UNANSWERED: "unanswered",
-      OLDEST_UNANSWERED_AT: "oldest_unanswered_at"
-    }
+      OLDEST_UNANSWERED_AT: "oldest_unanswered_at",
+      // When the newest reply on this review landed, or null if none ever has.
+      // It is evidence of an agent doing something recently, and it is what
+      // `lahe session list` shows a human. It is never on the reviewer's line by
+      // itself: an old reply on a fully answered review is not news.
+      LAST_REPLY_AT: "last_reply_at",
+      // true, false, or NULL FOR CANNOT TELL. Null is a real answer and it is
+      // the answer on any host where the machine cannot be asked. It never
+      // produces a claim in either direction; the line falls back to the wait.
+      LISTENING: "listening",
+      MONITOR_AT: "monitor_at",
+      ACTIVITY_AT: "activity_at"
+    },
+    // THE WORDS, SPELLED ONCE, HERE. They used to be hand-copied into the layer,
+    // which is two spellings of one wire value: rename a state and the rail
+    // silently stopped recognising it, which looks exactly like a healthy rail
+    // with nothing to say. `{age}` is how long the oldest unanswered item has
+    // waited, filled in by whoever draws the line off its own clock, so a helper
+    // repeating an unchanged payload cannot freeze a number that is growing.
+    //
+    // They are in a reviewer's words, not ours. No monitors, no heartbeats, no
+    // wake feeds: none of that is the reviewer's problem, and naming it in front
+    // of them asks them to care about our plumbing.
+    //
+    // `none` is deliberately absent: a state with no words draws nothing.
+    TEXT: {
+      working: "agent is working, {age}",
+      waiting: "nothing back yet, {age}",
+      no_agent: "nobody has picked this up, {age}"
+    },
+    // THE QUIET INDICATOR, which is what the line wears the rest of the time.
+    //
+    // It is a convenience rather than an alarm, and it exists because there are
+    // two moments a reviewer actually looks: at the start ("will my comments
+    // reach the agent, did this set up correctly?") and after a break ("did
+    // anything die while I was away?"). Both are the same question, is the chain
+    // intact, and both deserve a glanceable answer rather than a blank space.
+    //
+    // Two words, no punctuation, no verb: it must never look like it wants
+    // reading. `null` when the machine cannot be asked, because a shrug is not a
+    // status and inventing either answer would be worse than silence.
+    CONNECTION: {
+      connected: "agent listening",
+      absent: "no agent listening"
+    },
+    // THE HOVER TEXT, assembled from these in order by whoever draws the line.
+    //
+    // This is where everything the tool actually knows about the connection
+    // goes: whether the helper is answering, whether an agent has this review
+    // open, when it last replied, and where the work is being kept. The line
+    // itself stays short; a reviewer who is curious, or worried, hovers.
+    //
+    // Still no monitors, no heartbeats and no wake feeds. "Has this review open"
+    // is what the machine can actually see (a process holding this session's
+    // feed open) said in words that mean something to the person reading them.
+    DETAIL: {
+      helper_up: "The helper is answering this page, so comments and edits reach it as you make them.",
+      helper_down: "The helper is not answering right now, so your work is being kept in this browser until it is.",
+      agent_connected: "An agent has this review open.",
+      agent_absent: "No agent has this review open.",
+      agent_unknown: "Whether an agent has this review open cannot be checked on this computer.",
+      replied: "The agent last replied {reply} ago.",
+      never_replied: "The agent has not replied on this review yet.",
+      waiting: "Your oldest unanswered item has been waiting {age}.",
+      stored: "Your comments and edits are stored in this browser and in the helper's log on disk.",
+      save: "Save a copy writes them to a file you can hand to an agent yourself; the menu also has Copy review."
+    },
+    // WHEN THE LINE STARTS SPEAKING, counted from the moment the reviewer
+    // submitted, not from anything about a process.
+    //
+    // Thirty seconds, because that is where a person who has just typed
+    // something starts wondering whether it went anywhere. Not minutes: they are
+    // sitting there. Not instant either, because an agent that has had a comment
+    // for five seconds is reading it and a stopwatch started that fast is noise
+    // on every single comment.
+    //
+    // THE CLOCK STARTS ON SUBMITTED WORK ONLY. A draft the reviewer is still
+    // typing is waiting on nobody: drafts are invisible to agents everywhere
+    // else in this design (`record.isUnansweredReady` requires READY), and they
+    // are invisible to this clock for the same reason.
+    QUIET_MS: 30000,
+    // A lahe command or a landed reply this recent is an agent mid-task. It is
+    // the difference the reviewer actually asked for: "waiting 10m and nothing
+    // has happened" is worth knowing, "waiting 10m while the agent works" is
+    // not alarming.
+    ACTIVE_MS: 180000,
+    // Past this, a wait with nothing happening is loud. Nothing the machine can
+    // see about listeners buys quiet here: a file tail can be armed all
+    // afternoon over an agent that stopped reading.
+    STALE_MS: 600000,
+    // The label on the way out, shown beside the line whenever it speaks. What
+    // actually worries a reviewer who has had no answer is not whether an agent
+    // is alive, it is whether they are about to lose what they just wrote. The
+    // work is already in two places (this browser and the helper's log), and
+    // this is the third: their own copy, one click from the moment they start
+    // wondering rather than three clicks into a menu.
+    SAVE_LABEL: "Save a copy",
+    // How recently a lahe command must have run for the machine to count as
+    // having somebody on it. Wider than ACTIVE_MS on purpose, and only ever used
+    // to WITHHOLD the "no agent listening" wording: an exit-on-work monitor is
+    // gone the moment work arrives, so an agent can be mid-edit with nothing
+    // holding the feed open and no heartbeat.
+    RECENT_COMMAND_MS: 600000
   };
 
   return {
@@ -5411,6 +5541,7 @@
     "Any other host: run lahe monitor --session <agent-session-id> in the foreground, after telling the human it owns the chat until work arrives.",
     "lahe monitor exit codes: 0 means work is printed above, 5 means the agent session is closed, 6 means another agent took the session over. On 5 or 6, stop. Do not relaunch it.",
     "LAHE ACTION REQUIRED means the output is an interrupt, not finished work. Continue the same turn and handle every item printed with it. Receiving an item is not handling it, and describing it is not handling it.",
+    "The reviewer's rail counts from the moment they submit an item to the moment your reply lands. Thirty seconds in it starts saying nothing has come back, and after ten minutes it goes loud and offers them a button to export their feedback and take it to another agent. Having a wake channel armed does not keep that line calm, and neither does a message in a chat they cannot see: only a reply line does.",
     "Do not use a native model timer, a forever daemon, a global monitor, or a parser pipeline.",
     "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and the rail comes back on its own if a rebuild leaves it out.",
     "A break the reviewer typed is part of the edit: a blank line in the after text is a paragraph break, and a single newline is a line break. Markdown does not read a single newline as a new paragraph, so write a blank line between the two paragraphs in the source, or the format's own hard-break form for a line break, then rebuild and check the page really shows the break.",
@@ -9898,7 +10029,7 @@
 //                                line. Stays until dismissed (R11)
 //   setStatusLine(state)         one line, always on screen, saying plainly
 //                                what is happening to the reviewer's typing
-//                                (R12): kept locally, stored, agent connected
+//                                (R12): kept locally, stored, agent listening
 //
 // Dual-environment module. See docs/CONTRACTS.md, "How a shared module loads".
 (function (root, factory) {
@@ -9962,8 +10093,16 @@
     // asserting one before a single request has failed is an invention (the
     // status line lied on every freshly loaded page; walkers, 2026-08-14).
     KEPT_UNCONFIRMED: "kept_unconfirmed",
+    // STORED IS ABOUT STORAGE, and that is all this state machine decides. There
+    // used to be a fourth state, `agent_connected`, which read "Stored · agent
+    // reading" the moment the first reply of the session arrived. It never aged
+    // out, so it kept saying an agent was reading for the rest of the session,
+    // sitting directly above a second line that read "No agent watching · oldest
+    // item 6m" (Ken, live, 2026-08-23). The page cannot know whether an agent is
+    // reading; the helper can, from the machine. So the storage half stops here,
+    // and the agent half is added by the one renderer below, from the helper's
+    // answer.
     STORED: "stored",
-    AGENT_CONNECTED: "agent_connected",
     // R36: the agent rebuilt the page and the library is about to reload it.
     // A moment long, and it exists so the reload is something the reviewer was
     // told about rather than something that happened to them.
@@ -9973,7 +10112,6 @@
     kept_locally: "Kept in this browser. Nothing is lost; it will be stored when the helper is back.",
     kept_unconfirmed: "Kept in this browser. It is stored the moment the helper confirms it.",
     stored: "Stored.",
-    agent_connected: "Stored, and an agent is reading.",
     page_reloading: "Page updated. Reloading, your comments and edits come with it."
   };
   // The short form, for the one line that is always on screen. The long form
@@ -9983,45 +10121,47 @@
     kept_locally: "Kept in this browser",
     kept_unconfirmed: "Kept in this browser",
     stored: "Stored",
-    agent_connected: "Stored · agent reading",
     page_reloading: "Page updated. Reloading..."
   };
 
-  // Is an agent listening right now? This is GROUND TRUTH from the helper (a
-  // monitor heartbeat, a session activity stamp), never something an agent said
-  // about itself. A reviewer used to be told "monitoring is active" in a chat
-  // while seven items sat unanswered, and nothing on screen could contradict it.
+  // Has anything come back from the agent? GROUND TRUTH FROM THE HELPER, which
+  // reads it off the machine: the replies on this review, and whether anything
+  // on this computer is holding the session's wake feed open. Never something an
+  // agent said about itself. A reviewer used to be told "monitoring is active"
+  // in a chat while seven items sat unanswered, and nothing on screen could
+  // contradict it.
   //
-  // Four states, and only one of them is loud. Watching and working are the
-  // healthy readings; a rail that shouts in a healthy state is a rail nobody
-  // reads by the third comment. `none` renders nothing at all, because "no
-  // agent is watching and nothing is waiting" is not news.
+  // IT IS HALF OF ONE LINE, not a line of its own. The rail had two, and they
+  // contradicted each other in front of the reviewer: "Stored · agent reading"
+  // over "No agent watching · oldest item 6m", both at once, while an agent was
+  // demonstrably replying. One line cannot disagree with itself.
   //
-  // The strings come from protocol.js, which is already above this file in the
-  // bundle. They were hand-copied here, which is two spellings of one wire
-  // value: rename a state on the helper and the rail silently stops recognising
-  // it, which looks exactly like a healthy rail with nothing to say.
+  // WHAT IT SAYS IS AN ELAPSED TIME, in a reviewer's words. Either the agent
+  // answered and it says how long ago, or work is waiting and it says how long
+  // it has waited. It never mentions monitors, heartbeats or wake feeds: that is
+  // our plumbing, and a reviewer cannot do anything with it.
+  //
+  // THE WORDS COME FROM protocol.js, which is already above this file in the
+  // bundle. They used to be hand-copied here, which is two spellings of one wire
+  // value: rename a state on the helper and the rail silently stopped
+  // recognising it, which looks exactly like a healthy rail with nothing to say.
   var AGENT_STATE = protocol.AGENT_LIVENESS.STATE;
   var AGENT_FIELD = protocol.AGENT_LIVENESS.FIELD;
-  // How often the agent line re-reads its own clock. Only the unattended line
-  // carries an age, and it is the one line that goes stale on its own: the
-  // helper can send the same payload for minutes while "oldest item 1m" quietly
-  // becomes a lie. 30 seconds is well inside the units the line prints.
+  // How often the line re-reads its own clock. The number on it is the one thing
+  // on the rail that goes stale by itself: the helper repeats the same payload
+  // for as long as nothing changes, while "nothing back yet, 1m" quietly becomes
+  // a lie. 30 seconds is well inside the units the line prints, and it is what
+  // makes a quiet line start speaking and a calm one go loud with no word from
+  // the helper at all.
   var AGENT_AGE_TICK_MS = 30000;
-  // Keyed by the protocol's own strings. `none` is deliberately absent from
-  // both: a state with no text renders nothing, which is what "nothing is
-  // waiting and nobody is watching" deserves.
-  var AGENT_TEXT = {};
-  AGENT_TEXT[AGENT_STATE.WATCHING] = "Agent watching";
-  AGENT_TEXT[AGENT_STATE.WORKING] = "Agent working";
-  AGENT_TEXT[AGENT_STATE.UNATTENDED] = "No agent watching";
-
-  var AGENT_TITLE = {};
-  AGENT_TITLE[AGENT_STATE.WATCHING] = "An agent's monitor checked in within the last minute.";
-  AGENT_TITLE[AGENT_STATE.WORKING] =
-    "No monitor is checked in, but this agent session ran a lahe command in the last few minutes.";
-  AGENT_TITLE[AGENT_STATE.UNATTENDED] =
-    "Nothing is listening: no monitor has checked in and no agent command has run. Your items are waiting.";
+  var AGENT_TEXT = protocol.AGENT_LIVENESS.TEXT;
+  var AGENT_CONNECTION = protocol.AGENT_LIVENESS.CONNECTION;
+  var AGENT_DETAIL = protocol.AGENT_LIVENESS.DETAIL;
+  // Under AGENT_QUIET_MS the line says nothing about a wait; past
+  // AGENT_STALE_MS it is loud about one. Both live in protocol.js beside the
+  // states, for the same reason the words do.
+  var AGENT_QUIET_MS = protocol.AGENT_LIVENESS.QUIET_MS;
+  var AGENT_STALE_MS = protocol.AGENT_LIVENESS.STALE_MS;
 
   var STATE_LABEL = {
     draft: "Draft",
@@ -10288,34 +10428,35 @@
     ".chip__x:hover{background:rgba(0,0,0,.06);color:var(--ink)}",
     ".chip__count{font-variant-numeric:tabular-nums;color:var(--ink-faint);font-size:11px}",
 
-    ".status{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink-soft)}",
+    // THE ONE STATUS LINE: is the work stored, and has anything come back. Two
+    // rows here used to answer those separately and could contradict each other
+    // in front of the reviewer. Calm by default, because the healthy reading is
+    // most of the reviewer's session and a rail that shouts through it is a rail
+    // nobody reads by the third comment.
+    ".statusline{display:flex;align-items:center;gap:8px}",
+    ".status{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink-soft);flex:1;min-width:0}",
+    // The way out, in the rail's quiet register rather than as a call to action:
+    // it is reassurance, not an instruction. It only exists while the line is
+    // saying nothing has come back.
+    ".statusline__save{flex:none;font-size:11.5px;padding:2px 8px;border-radius:6px;",
+    "border:1px solid var(--line);background:var(--paper);color:var(--ink-soft);cursor:pointer}",
+    ".statusline__save:hover{background:var(--surface);color:var(--ink)}",
     ".status__dot{width:6px;height:6px;border-radius:50%;background:var(--ink-faint);flex:none}",
     ".status[data-status='stored'] .status__dot{background:var(--good)}",
-    ".status[data-status='agent_connected'] .status__dot{background:var(--accent)}",
     ".status[data-status='kept_locally'] .status__dot{background:var(--warn)}",
+    ".status[data-agent='working'] .status__dot{background:var(--accent)}",
+    // The quiet indicator is a dot's worth of difference, not a colour change
+    // anyone has to decode: connected keeps the stored green, nobody connected
+    // goes grey. Grey is not an alarm; nothing is waiting.
+    ".status[data-agent='absent'] .status__dot{background:var(--ink-faint)}",
+    // LOUD IS THE WAIT'S DOING. Last, so it wins over the calm rules above it:
+    // an item nobody has answered in ten minutes, or one the machine can see
+    // nothing has picked up, is the one thing on this line worth interrupting
+    // for.
+    ".status[data-loud='true']{color:var(--warn-ink,var(--ink));font-weight:600}",
+    ".status[data-loud='true'] .status__dot{background:var(--warn)}",
     ".status__text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
 
-    // The agent line: is anybody actually listening? It sits under the status
-    // line because it answers the second half of the same question. Watching and
-    // working are CALM (a dot and quiet text): they are the healthy states and a
-    // rail that shouts in them teaches the reviewer to stop reading it. Only
-    // unattended is loud, because only unattended is a problem the reviewer can
-    // act on.
-    // `watch`, not `agent`: .agent is already the agent-reply block INSIDE a
-    // card, and reusing it here hid every reply on every card behind this
-    // row's display rule.
-    //
-    // Hidden until the helper has said something, and hidden again in the
-    // `none` state. The row always holds its dot and its span, so the hiding
-    // rule is the data attribute rather than :empty.
-    ".watch{display:none;align-items:center;gap:7px;font-size:12px;color:var(--ink-soft)}",
-    ".watch[data-agent='watching'],.watch[data-agent='working'],.watch[data-agent='unattended']{display:flex}",
-    ".watch__dot{width:6px;height:6px;border-radius:50%;background:var(--ink-faint);flex:none}",
-    ".watch[data-agent='watching'] .watch__dot{background:var(--good)}",
-    ".watch[data-agent='working'] .watch__dot{background:var(--accent)}",
-    ".watch[data-agent='unattended']{color:var(--warn-ink,var(--ink));font-weight:600}",
-    ".watch[data-agent='unattended'] .watch__dot{background:var(--warn)}",
-    ".watch__text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
     ".limit{font-size:11.5px;color:var(--ink-faint);line-height:1.4}",
     ".limit:empty{display:none}",
 
@@ -10656,20 +10797,32 @@
       refusal.appendChild(refusalBtn);
       foot.appendChild(refusal);
 
+      // ONE ROW. There used to be a second one under it with its own claim about
+      // agents, and the two contradicted each other in front of the reviewer
+      // (Ken, live, 2026-08-23). Whether the work is stored and what the agent
+      // has done with it are one sentence, because they are one question.
+      var statusLineWrap = el("div", "statusline");
       var statusRow = el("div", "status");
       statusRow.setAttribute("role", "status");
-      statusRow.appendChild(el("span", "status__dot"));
+      var statusDot = el("span", "status__dot");
+      statusRow.appendChild(statusDot);
       var statusText = el("span", "status__text", "Kept in this browser");
       statusRow.appendChild(statusText);
-      foot.appendChild(statusRow);
-
-      var agentRow = el("div", "watch");
-      agentRow.setAttribute("role", "status");
-      var agentDot = el("span", "watch__dot");
-      var agentText = el("span", "watch__text", "");
-      agentRow.appendChild(agentDot);
-      agentRow.appendChild(agentText);
-      foot.appendChild(agentRow);
+      statusLineWrap.appendChild(statusRow);
+      // THE WAY OUT, BESIDE THE LINE THAT WORRIES THEM. What actually worries a
+      // reviewer who has had no answer is not whether an agent is alive, it is
+      // whether they are about to lose what they just wrote. It sits OUTSIDE the
+      // role="status" row on purpose: a live region announces its text every
+      // time it changes, and a button inside one gets read out with it.
+      var saveBtn = el("button", "statusline__save", protocol.AGENT_LIVENESS.SAVE_LABEL);
+      saveBtn.setAttribute("type", "button");
+      saveBtn.hidden = true;
+      saveBtn.title = "Save your comments and edits to a file you keep";
+      saveBtn.addEventListener("click", function () {
+        runAction("export");
+      });
+      statusLineWrap.appendChild(saveBtn);
+      foot.appendChild(statusLineWrap);
 
       var limit = el("div", "limit");
       foot.appendChild(limit);
@@ -10720,11 +10873,11 @@
         newmarks: newmarks,
         panes: paneNodes,
         chipList: chipList,
+        foot: foot,
         statusRow: statusRow,
+        saveBtn: saveBtn,
         statusText: statusText,
-        agentRow: agentRow,
-        agentDot: agentDot,
-        agentText: agentText,
+        statusDot: statusDot,
         limit: limit,
         refusal: refusal,
         refusalReason: refusalReason,
@@ -11736,49 +11889,173 @@
       return Math.round(seconds / 86400) + "d";
     }
 
+    /** Milliseconds since a timestamp on the liveness object, or null. */
+    function sinceMs(field, atMs) {
+      var iso = agentLiveness ? agentLiveness[field] : null;
+      if (typeof iso !== "string" || !iso) return null;
+      var then = Date.parse(iso);
+      if (Number.isNaN(then)) return null;
+      return Math.max(0, (typeof atMs === "number" ? atMs : now()) - then);
+    }
+
+    /**
+     * The agent half of the status line: a quiet indicator most of the time, and
+     * one escalation when the reviewer's feedback has gone unanswered.
+     *
+     * THE QUIET HALF is a convenience, and it is deliberately two words with no
+     * verb in them. A reviewer looks at it twice: when they start ("will my
+     * comments actually reach the agent?") and when they come back from a break
+     * ("did anything die while I was away?"). Both are the same question, is the
+     * chain intact, so it gets a glanceable answer and nothing more. Everything
+     * else the tool knows about the connection is in the hover text.
+     *
+     * THE ESCALATION is the part that matters, and its job is to hand the
+     * reviewer a way OUT rather than to diagnose anything. Feedback that has sat
+     * unanswered past QUIET_MS gets: what has happened (nothing), how long, and
+     * the export path right there beside it, because the reviewer's real problem
+     * at that moment is getting their work to an agent some other way.
+     *
+     * THE NUMBER IS COMPUTED HERE, on every paint, from the timestamp. The
+     * helper repeats an unchanged payload for as long as nothing changes, so a
+     * number baked in by the helper would sit there saying 1m an hour later.
+     */
     function agentLine() {
       var state = getAgentState();
-      // Two different silences, one behaviour, and the reason is worth saying:
-      // `none` is a state we know and deliberately draw nothing for, and an
-      // unfamiliar string is a helper newer than this page. Guessing at the
-      // second one would put an invented sentence on the rail, so both render
-      // nothing.
-      if (!state || !Object.prototype.hasOwnProperty.call(AGENT_TEXT, state)) return null;
-      var text = AGENT_TEXT[state];
-      // The age is only on the loud state, and only there because it is what
-      // makes the reviewer's next move obvious: five minutes is a busy agent,
-      // forty is a dead one. It is computed HERE, on every paint, so the slow
-      // tick below can keep it honest without the helper saying anything new.
-      if (state === AGENT_STATE.UNATTENDED) {
-        var age = agentAge(agentLiveness[AGENT_FIELD.OLDEST_UNANSWERED_AT]);
-        if (age) text += " · oldest item " + age;
+      var waitedMs = sinceMs(AGENT_FIELD.OLDEST_UNANSWERED_AT);
+      // Speaking: something the reviewer submitted has gone unanswered long
+      // enough to be worth saying. A state we do not recognise never speaks: it
+      // comes off the wire, and a rail that invents a sentence for an unfamiliar
+      // string is worse than a rail that stays quiet.
+      var speaking =
+        !!state &&
+        Object.prototype.hasOwnProperty.call(AGENT_TEXT, state) &&
+        waitedMs !== null &&
+        waitedMs >= AGENT_QUIET_MS;
+      if (speaking) {
+        return {
+          state: state,
+          text: fillAge(AGENT_TEXT[state], waitedMs),
+          // LOUD IS THE WAIT'S DOING, and only where the wait means something is
+          // wrong. An agent that is mid-task stays calm however long the queue
+          // behind it has grown, because the wait is explained. Nothing coming
+          // back for ten minutes is not, and neither is nobody having picked it
+          // up: a file tail can be armed all afternoon over an agent that
+          // stopped reading, so no amount of listening buys quiet here.
+          loud:
+            state !== AGENT_STATE.WORKING &&
+            (waitedMs >= AGENT_STALE_MS || state === AGENT_STATE.NO_AGENT),
+          speaking: true,
+          waitedMs: waitedMs
+        };
       }
-      return { state: state, text: text };
+      // Quiet: the connection, in two words, or nothing at all when the machine
+      // cannot be asked. A shrug is not a status.
+      var listening = agentLiveness ? agentLiveness[AGENT_FIELD.LISTENING] : null;
+      if (listening !== true && listening !== false) return null;
+      return {
+        state: listening ? "connected" : "absent",
+        text: listening ? AGENT_CONNECTION.connected : AGENT_CONNECTION.absent,
+        loud: false,
+        speaking: false,
+        waitedMs: waitedMs
+      };
+    }
+
+    /**
+     * The hover text: everything the tool actually knows about the connection.
+     *
+     * Assembled rather than picked, so a reviewer who is curious or worried gets
+     * the whole picture in one place while the line itself stays short. The
+     * order is the order someone would ask: is the helper there, is an agent on
+     * this, when did it last say anything, how long has my thing been sitting,
+     * and where is my work.
+     */
+    function statusTitle(line) {
+      var parts = [];
+      parts.push(status === STATUS.STORED ? AGENT_DETAIL.helper_up : AGENT_DETAIL.helper_down);
+      if (status === STATUS.STORED) {
+        var listening = agentLiveness ? agentLiveness[AGENT_FIELD.LISTENING] : null;
+        if (listening === true) parts.push(AGENT_DETAIL.agent_connected);
+        else if (listening === false) parts.push(AGENT_DETAIL.agent_absent);
+        else parts.push(AGENT_DETAIL.agent_unknown);
+
+        var repliedMs = sinceMs(AGENT_FIELD.LAST_REPLY_AT);
+        parts.push(
+          repliedMs === null
+            ? AGENT_DETAIL.never_replied
+            : AGENT_DETAIL.replied.replace("{reply}", ageLabel(repliedMs))
+        );
+
+        var waitedMs = sinceMs(AGENT_FIELD.OLDEST_UNANSWERED_AT);
+        if (waitedMs !== null) parts.push(fillAge(AGENT_DETAIL.waiting, waitedMs));
+      }
+      parts.push(AGENT_DETAIL.stored);
+      if (line && line.speaking) parts.push(AGENT_DETAIL.save);
+      return parts.join(" ");
+    }
+
+    /** "40s", "6m", "2h". The rail's units, not a clock. */
+    function ageLabel(ms) {
+      var seconds = Math.max(0, Math.round(ms / 1000));
+      if (seconds < 60) return seconds + "s";
+      if (seconds < 3600) return Math.round(seconds / 60) + "m";
+      if (seconds < 86400) return Math.round(seconds / 3600) + "h";
+      return Math.round(seconds / 86400) + "d";
+    }
+
+    function fillAge(template, ms) {
+      return String(template).replace("{age}", ageLabel(ms));
+    }
+
+    /**
+     * ONE LINE, and this is where the two halves become it.
+     *
+     * Storage first, because a reviewer whose work is not stored yet does not
+     * need to hear about agents: nothing has reached one. Then the agent half,
+     * which is only ever added to "Stored", because that is the only state in
+     * which an agent could have had the work at all.
+     */
+    function statusLine() {
+      var storage = status ? STATUS_SHORT[status] : "Kept in this browser";
+      // The agent half only rides a line that says the work IS stored. A
+      // reviewer whose work has not reached the helper does not need to hear
+      // about agents: nothing has reached one.
+      var agent = status === STATUS.STORED ? agentLine() : null;
+      return {
+        status: status,
+        agentState: agent ? agent.state : null,
+        // The way out is offered exactly when the line says nothing has come
+        // back. That is the moment the reviewer's problem stops being "is an
+        // agent alive" and becomes "how do I get this to one myself".
+        save: agent && agent.speaking ? protocol.AGENT_LIVENESS.SAVE_LABEL : null,
+        text: agent ? storage + " · " + agent.text : storage,
+        title: statusTitle(agent),
+        loud: !!(agent && agent.loud),
+        speaking: !!(agent && agent.speaking),
+        agedMs: agent ? agent.waitedMs : null
+      };
     }
 
     function renderAgent() {
       armAgentAgeTick();
-      if (!dom) return;
-      var line = agentLine();
-      dom.agentRow.setAttribute("data-agent", line ? line.state : "");
-      dom.agentText.textContent = line ? line.text : "";
-      dom.agentRow.title = line && AGENT_TITLE[line.state] ? AGENT_TITLE[line.state] : "";
+      renderStatus();
     }
 
     /**
      * The one timer this file owns, and it runs only while it has to.
      *
      * The helper sends the same payload for as long as nothing changes, so
-     * "oldest item 1m" would sit there saying 1m an hour later. This re-reads
-     * the clock on the only line that has one in it. It is armed by the
-     * unattended state and disarmed by anything else, so a watching rail, a
-     * working rail and an unmounted rail all hold no timer at all.
+     * "nothing back yet, 1m" would sit there saying 1m an hour later. This
+     * re-reads the clock.
+     *
+     * It is armed by THERE BEING AN ELAPSED TIME ON THE LINE, in any state. That
+     * is what lets a calm line go loud on its own, and what lets a quiet one
+     * start speaking: an item that crosses two minutes has to start saying so,
+     * and one that crosses ten has to go loud, without one further word from the
+     * helper. A line with no clock in it, and an unmounted rail, hold no timer.
      */
     function armAgentAgeTick() {
-      var needed =
-        mounted &&
-        getAgentState() === AGENT_STATE.UNATTENDED &&
-        !!(agentLiveness && agentLiveness[AGENT_FIELD.OLDEST_UNANSWERED_AT]);
+      var needed = mounted && waitingSoon();
       if (needed === !!agentAgeTimer) return agentAgeTimer;
       if (!needed) {
         if (timers) timers.clearInterval(agentAgeTimer);
@@ -11787,31 +12064,62 @@
       }
       if (!timers) return null;
       agentAgeTimer = timers.setInterval(function () {
-        if (!dom) return;
-        var line = agentLine();
-        dom.agentText.textContent = line ? line.text : "";
+        renderStatus();
+        armAgentAgeTick();
       }, AGENT_AGE_TICK_MS);
       return agentAgeTimer;
     }
 
     /**
-     * Self-report for the closed root: what the agent line actually renders.
+     * Is there an unanswered item whose age the line is counting?
+     *
+     * The timer has to be running BEFORE the line has anything to say, or the
+     * moment a wait crosses the threshold would arrive with nothing to notice it
+     * and the line would sit on the quiet indicator until the helper next
+     * changed its mind. A rail with nothing waiting, and an unmounted rail, hold
+     * no timer at all.
+     */
+    function waitingSoon() {
+      var state = getAgentState();
+      if (!state || !Object.prototype.hasOwnProperty.call(AGENT_TEXT, state)) return false;
+      return sinceMs(AGENT_FIELD.OLDEST_UNANSWERED_AT) !== null;
+    }
+
+    /**
+     * How many status rows the FOOTER actually paints.
+     *
+     * The shadow root is closed, so this is the only way a test can hold the
+     * footer to ONE line. It counts role="status" rows, which is also what a
+     * screen reader announces: two of them was two announcements that could
+     * disagree with each other. Scoped to the footer, because a card's own
+     * notice is a status too and is nobody's contradiction.
+     */
+    function statusRowCount() {
+      if (!dom || !dom.foot) return 0;
+      return dom.foot.querySelectorAll('[role="status"]').length;
+    }
+
+    /**
+     * Self-report for the closed root: what the one status line actually renders.
      *
      * The shadow root is closed, so a browser test cannot query it. It reads
      * COMPUTED style rather than the attribute, because "the state is set" was
      * true the whole time the row could have been display:none, and the whole
      * point of the line is that a reviewer sees it.
      */
-    function agentLineInfo() {
+    function statusLineInfo() {
       if (!dom) return { present: false };
-      var view = dom.agentRow.ownerDocument ? dom.agentRow.ownerDocument.defaultView : null;
-      var computed = view ? view.getComputedStyle(dom.agentRow) : null;
-      var dotComputed = view ? view.getComputedStyle(dom.agentDot) : null;
+      var view = dom.statusRow.ownerDocument ? dom.statusRow.ownerDocument.defaultView : null;
+      var computed = view ? view.getComputedStyle(dom.statusRow) : null;
+      var dotComputed = view ? view.getComputedStyle(dom.statusDot) : null;
       return {
         present: true,
-        state: dom.agentRow.getAttribute("data-agent") || "",
-        text: dom.agentText.textContent || "",
-        title: dom.agentRow.title || "",
+        status: dom.statusRow.getAttribute("data-status") || "",
+        agentState: dom.statusRow.getAttribute("data-agent") || "",
+        loud: dom.statusRow.getAttribute("data-loud") === "true",
+        save: dom.saveBtn.hidden ? null : dom.saveBtn.textContent || "",
+        text: dom.statusText.textContent || "",
+        title: dom.statusRow.title || "",
         display: computed ? computed.display : null,
         visible: !!computed && computed.display !== "none",
         weight: computed ? computed.fontWeight : null,
@@ -11895,14 +12203,20 @@
 
     function renderStatus() {
       if (!dom) return;
+      var line = statusLine();
       dom.statusRow.setAttribute("data-status", status || "");
-      dom.statusText.textContent = status ? STATUS_SHORT[status] : "Kept in this browser";
-      dom.statusRow.title = status ? STATUS_TEXT[status] : "";
+      dom.statusRow.setAttribute("data-agent", line.agentState || "");
+      dom.statusRow.setAttribute("data-loud", line.loud ? "true" : "");
+      dom.statusText.textContent = line.text;
+      dom.statusRow.title = line.title;
+      // Shown exactly while the line has something to say about a wait, which is
+      // the moment the reviewer starts wondering whether their work is safe.
+      dom.saveBtn.hidden = !line.save;
       // ONLY IN THE STATE IT DESCRIBES. The limit is about there being no helper
       // to see across two storage buckets, so it is on screen exactly while the
-      // rail is saying nothing reached a helper. Under "Stored · agent reading"
-      // it was a permanent sentence contradicting the line above it, and a
-      // caveat that is always on screen is a caveat nobody reads.
+      // rail is saying nothing reached a helper. Under "Stored" it was a
+      // permanent sentence contradicting the line above it, and a caveat that is
+      // always on screen is a caveat nobody reads.
       var showLimit = !status || status === STATUS.KEPT_LOCALLY || status === STATUS.KEPT_UNCONFIRMED;
       dom.limit.textContent = showLimit && limitText ? limitText : "";
     }
@@ -12304,7 +12618,16 @@
       setAgentLiveness: setAgentLiveness,
       agentState: getAgentState,
       agentLine: agentLine,
-      agentLineInfo: agentLineInfo,
+      statusLine: statusLine,
+      statusLineInfo: statusLineInfo,
+      statusRowCount: statusRowCount,
+      // The closed root hides the button from a test the same way it hides
+      // everything else, so pressing it is a seam rather than a query.
+      clickSave: function () {
+        if (!dom || dom.saveBtn.hidden) return null;
+        dom.saveBtn.click();
+        return true;
+      },
       LIMIT_SEPARATE_STORAGE_NO_HELPER: LIMIT_SEPARATE_STORAGE_NO_HELPER,
       SHEET_ATTR: SHEET_ATTR,
       mount: mount,
@@ -16308,7 +16631,12 @@
     // it went ahead or was deferred for a busy reviewer. It is what a test waits
     // on to assert that a reload did not happen, instead of sleeping and hoping.
     var reloadChecks = 0;
+    // The replies this page has been handed, newest last, for the browser
+    // harness to assert on. It drives NO status: a reply having arrived at some
+    // point is not evidence about now. Capped so a long review does not grow it
+    // without end.
     var repliesSeen = [];
+    var REPLIES_KEPT = 50;
     var seenItems = Object.create(null);
     var lock = { checked: false, acquired: null, holder: null, reason: null, unchecked: false };
     var counters = { posts: 0, postsFailed: 0, polls: 0, acknowledged: 0, timeouts: 0 };
@@ -16326,6 +16654,16 @@
     // the helper has acknowledged everything this browser holds: while anything
     // is still queued, the honest word is kept-locally, whatever the last
     // request happened to return.
+    //
+    // THIS LINE SAYS NOTHING ABOUT AGENTS, and that is a fix rather than an
+    // omission. It used to promote itself to "Stored · agent reading" as soon as
+    // one reply had ever arrived, off a `repliesSeen` list that only ever grew.
+    // Nothing aged it out, so the first reply of a session pinned that sentence
+    // to the rail for the rest of the session, and it sat directly above a
+    // liveness line reading "No agent watching · oldest item 6m" (Ken, live,
+    // 2026-08-23). The liveness line is ground truth from files the helper
+    // writes; this one is a claim by a page that has no way to know. There is
+    // one line about agents on this rail now, and this is not it.
 
     function setStatus(next) {
       if (next === status) return status;
@@ -16342,7 +16680,6 @@
       if (pending === 0 && (deliveredOnce || helperReachable === true)) {
         // Nothing is queued and the helper is there. Everything durable IS
         // stored, whether this page ever had anything of its own to post.
-        if (repliesSeen.length > 0) return setStatus(overlay.STATUS.AGENT_CONNECTED);
         return setStatus(overlay.STATUS.STORED);
       }
       // Queued and in flight with nothing wrong: HOLD the current reading
@@ -16749,7 +17086,7 @@
           noteTargetMtime(result.body && result.body.target_mtime);
           noteAgentLiveness(result.body && result.body.agent_liveness);
           if (events.length) {
-            repliesSeen = repliesSeen.concat(events);
+            repliesSeen = repliesSeen.concat(events).slice(-REPLIES_KEPT);
             onReplies(events);
           }
           recomputeStatus();
@@ -24659,7 +24996,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.1.0+ad1811ecb543";
+  var VERSION = "0.1.0+4e0856f7438d";
 
   var protocol = ns.protocol;
   var record = ns.record;

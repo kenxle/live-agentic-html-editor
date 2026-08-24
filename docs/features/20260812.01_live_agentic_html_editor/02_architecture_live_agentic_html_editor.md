@@ -484,7 +484,7 @@ How the rail behaves:
   of agent detection.
 - **Cards update in place.** The rail never rebuilds itself under a focused text box.
 - **Errors are dismissible chips** (R11), and a persistent one-line status says plainly what is
-  happening to the reviewer's typing: kept locally, stored, or agent connected (R12).
+  happening to the reviewer's typing: kept locally, stored, or agent listening (R12).
 - **The keyboard hints are readable**, not fine print, and the collapsed pill never overlaps the
   open rail's content.
 

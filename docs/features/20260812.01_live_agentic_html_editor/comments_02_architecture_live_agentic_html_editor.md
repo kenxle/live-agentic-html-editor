@@ -290,7 +290,7 @@ yes to the principle. what is the mechanism? since we can edit dom properties, s
 > in place; the rail never rebuilds itself under a focused text box.
 > Errors are chips on the rail, each dismissible (R11), and a persistent
 > one-line status states plainly what is happening to the reviewer's
-> typing: kept locally, stored, or agent connected (R12). The collapsed
+> typing: kept locally, stored, or agent listening (R12). The collapsed
 > pill never overlaps the open rail's content, a nit inherited from the
 > current module and fixed there too.
 

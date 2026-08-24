@@ -80,6 +80,16 @@
 
   rail.mount();
 
+  // Mirrors the real boot (src/layer/index.js): Copy and Export are wired
+  // through the rail's action seam. The harness counts them instead of writing a
+  // file, so a test can assert that the line's own way out runs the same export
+  // the menu runs.
+  var exportRuns = 0;
+  rail.onAction("export", function () {
+    exportRuns += 1;
+    return true;
+  });
+
   // What the library does on load: everything browser storage holds for this
   // review comes back as a card, drafts included.
   store.read(reviewId).forEach(function (item) {
@@ -264,8 +274,17 @@
     // The rendered agent line, through the rail's own self-report: the shadow
     // root is closed, so a test cannot query it. Reports COMPUTED style, so a
     // pass cannot mean "the attribute is set on an invisible row".
-    agentLine: function () {
-      return rail.agentLineInfo();
+    statusLine: function () {
+      return rail.statusLineInfo();
+    },
+    statusRows: function () {
+      return rail.statusRowCount();
+    },
+    clickSave: function () {
+      return rail.clickSave();
+    },
+    exports: function () {
+      return exportRuns;
     },
     setAgentLiveness: function (liveness) {
       return rail.setAgentLiveness(liveness);

@@ -383,7 +383,8 @@ lahe session list
 
 It is read-only. It prints every agent session on the machine, open ones first,
 with each session's handoff revision, how many reviews it owns, how many items
-are still waiting on an agent, and whether a monitor is watching it. If more
+are still waiting on an agent, whether anything on the machine is listening to
+it, and when its agent last replied. If more
 than one session is open, confirm with the human which id or ids they mean,
 then run `lahe session takeover <id>`. Never search your host's own sessions
 for this, and never guess an id.
@@ -715,11 +716,19 @@ an item handled. Stop your wake tail or monitor when you run
 `lahe session close <id>`; the close appends a `closed` line to the feed and any
 running monitor exits with code 5.
 
-The reviewer's rail shows which of these is true, from files rather than from
-anything an agent claims: **watching** (a monitor heartbeat is fresh), **working**
-(unanswered items and a recent `lahe` command from this session), or **no agent
-watching** with the oldest item's age. If your human says the rail reads "no agent
-watching," your wake channel is not armed.
+The reviewer's rail carries one line about all of this, and it is drawn from the
+machine rather than from anything you claim. While their work is answered it is a
+quiet "Stored · agent listening": something on the computer has this session's
+wake feed open, which is you. Thirty seconds after they submit something you have
+not answered, it starts counting: "Stored · nothing back yet, 45s", or "Stored ·
+agent is working, 5m" if you have run a `lahe` command in the last few minutes.
+Past ten minutes it goes loud and offers them a button to export their feedback
+and take it to some other agent.
+
+Two things follow for you. Your wake channel being armed buys you nothing on that
+line once something is waiting: it counts from their item to your reply, so the
+only way to keep it calm is to answer. And if your human says the rail reads "no
+agent listening", your wake channel is not armed at all.
 
 Older historical plans may mention `lahe wait`. It was retired and removed
 because it watched only one review behind a cursor. It is not a command to run;

@@ -158,7 +158,7 @@ fix        Add a ranked test: two reply files answer the same id at the same rev
 ```
 severity   important
 kind       defect
-where      plan 1B ("a persistent one-line status ... kept locally, stored, or agent connected", R12);
+where      plan 1B ("a persistent one-line status ... kept locally, stored, or agent listening", R12);
            test list has #17 (CSP versus helper-down) and nothing else
 what       #17 tests that two failure states are named distinctly. No test asserts the status line is
            TRUE: that it flips to kept-locally when the helper dies and back to stored when it returns

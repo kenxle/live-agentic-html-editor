@@ -22,7 +22,7 @@ once, and after that a plain sentence works:
 | `lahe add ... --review <id>` | Re-attach this page to a review that already exists, by id |
 | `lahe status [--session <id>] [--review <id>] [--json]` | What is open right now. Agent monitors must name their session; plain global status is only a human diagnostic |
 | `lahe monitor --session <id>` | Poll locally without model wakeups, print unanswered session work, and exit |
-| `lahe session list [--json]` | Read-only: every agent session on this machine, open ones first, with its handoff revision, reviews owned, unanswered items, and whether a monitor is watching. This is how you find a session id |
+| `lahe session list [--json]` | Read-only: every agent session on this machine, open ones first, with its handoff revision, reviews owned, unanswered items, whether anything is listening to it, and when the agent last replied. This is how you find a session id |
 | `lahe session close <id>` | Close an agent workstream, stop its static servers, and keep all review history. The final close also stops the shared helper |
 | `lahe session reopen <id>` | Reopen the workstream and restart its helper and static servers |
 | `lahe session takeover <id>` | Explicitly hand an existing workstream to a new agent, fence its older monitors, and print catch-up commands |
@@ -76,11 +76,32 @@ Monitor exit codes tell a host what to do next: `0` work is printed, `4` bad
 usage or a live monitor already holds the session, `5` the session is closed, and
 `6` another agent took it over. On `5` or `6`, stop relaunching.
 
-**The rail says whether an agent is actually listening**, from files rather than
-from anything the agent claims. It reads *watching* when a monitor heartbeat is
-fresh, *agent working* when there are unanswered items and this session ran a
-`lahe` command in the last few minutes, and *no agent watching* with the oldest
-item's age when neither is true.
+**The rail carries one line, and it does two jobs.** Most of the time it is a
+quiet indicator that the chain is intact: `Stored · agent listening`, or `Stored ·
+no agent listening` when nothing on this computer has the review open. That is
+the answer to the only question a reviewer asks at the start and after a break.
+Hovering it gives the detail: whether the helper is answering, whether an agent
+has the review open, when the agent last replied, and where the work is stored.
+
+When something they submitted has gone unanswered for more than 30 seconds, the
+line speaks: `Stored · nothing back yet, 45s`, `Stored · agent is working, 5m`
+when the agent has run commands in the last few minutes, or `Stored · nobody has
+picked this up, 7m` when nothing has the review open. A **Save a copy** button
+appears beside it, running the same export as the rail menu, because the point of
+that message is to hand the reviewer a way to get their feedback to an agent
+another way. It goes loud past ten minutes whatever the machine can see: a file
+tail can be armed all afternoon over an agent that stopped reading.
+
+The reviewer is never told about monitors, heartbeats or wake feeds. That is our
+plumbing, and it is not something they can act on. `lahe session list` is where
+that view lives instead.
+
+How the helper knows an agent is there: `<state-dir>/agent-sessions/<id>/wake.log`
+is our file, created for exactly one purpose, and nothing else on the machine has
+any reason to hold it open, so a process holding it open is an agent watching that
+session. The helper asks with `lsof`, cached for 15 seconds and off the poll path.
+A machine that cannot answer says so, and the line falls back to the wait, which
+is always knowable.
 
 **If the page is build output**, an agent should rebuild before it reports an
 item handled: `handled` is supposed to mean your page shows the change. It does

@@ -306,7 +306,7 @@ Every file has a `_dark.png` twin captured under an emulated dark preference.
 | `06_status_kept_locally.png` | Status line, kept-locally: amber dot, plain sentence. |
 | `07_failure_chip.png` | A dismissible failure chip with its remedy, above the status line. |
 | `08_status_stored.png` | Status line, stored: green dot. |
-| `09_status_agent_connected.png` | Status line, agent connected: accent dot, "Stored · agent reading". |
+| `09_status_agent_connected.png` | Status line, agent listening: accent dot, "Stored · agent reading". |
 | `10_done_tab.png` | A handled item with its agent reply and Reopen, and the three-way duplication on one card (F5). |
 | `11_edit_frame.png` | Cmd-Shift-E editing: the accent frame and the B / I / Delete block / Esc bar, with the comment box colliding into it (F9). |
 | `12_edits_tab.png` | Edit, formatting-only and deletion rows plus the export bar: the most finished pane in the product. |

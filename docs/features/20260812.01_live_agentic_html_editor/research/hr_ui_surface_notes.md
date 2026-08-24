@@ -478,8 +478,8 @@ The same feedback-only treatment applies to two other cases the user will hit:
 | Nothing selected, no comments | Dashed empty box: *"Select text or click an element to comment on it."* |
 | Comments exist, none selected | Cards with no left bar; no highlight is brightened. |
 | No edits yet | The whole `YOUR EDITS` section, including the save line, is absent. |
-| No agent connected, before sending | Send still works. Nothing warns you in advance. |
-| No agent connected, after sending | Handoff card with the exact copy-paste prompt and a Copy button. Send is disabled and reads `Sent — agent is not listening`. |
+| No agent listening, before sending | Send still works. Nothing warns you in advance. |
+| No agent listening, after sending | Handoff card with the exact copy-paste prompt and a Copy button. Send is disabled and reads `Sent — agent is not listening`. |
 | Agent working | Amber dot, *"Feedback delivered — page reloads when fixes land."* |
 | Agent rewrote blocks you had edited | Toast: *"Agent rewrote 3 blocks you had edited."* The agent's version wins. |
 | Comment anchor no longer findable | Grey `orphaned` badge on the card. It still sends. |

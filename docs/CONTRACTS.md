@@ -505,6 +505,7 @@ copy in `test/unit/review_format.test.js`:
   "Any other host: run lahe monitor --session <agent-session-id> in the foreground, after telling the human it owns the chat until work arrives.",
   "lahe monitor exit codes: 0 means work is printed above, 5 means the agent session is closed, 6 means another agent took the session over. On 5 or 6, stop. Do not relaunch it.",
   "LAHE ACTION REQUIRED means the output is an interrupt, not finished work. Continue the same turn and handle every item printed with it. Receiving an item is not handling it, and describing it is not handling it.",
+  "The reviewer's rail counts from the moment they submit an item to the moment your reply lands. Thirty seconds in it starts saying nothing has come back, and after ten minutes it goes loud and offers them a button to export their feedback and take it to another agent. Having a wake channel armed does not keep that line calm, and neither does a message in a chat they cannot see: only a reply line does.",
   "Do not use a native model timer, a forever daemon, a global monitor, or a parser pipeline.",
   "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and the rail comes back on its own if a rebuild leaves it out.",
   "A break the reviewer typed is part of the edit: a blank line in the after text is a paragraph break, and a single newline is a line break. Markdown does not read a single newline as a new paragraph, so write a blank line between the two paragraphs in the source, or the format's own hard-break form for a line break, then rebuild and check the page really shows the break.",
@@ -732,7 +733,7 @@ The one read path, and the one keep-up loop. Before it, every agent hand-rolled 
   field on `session.json`, so it can never race a takeover's write. Two reads deliberately do not
   stamp it: the monitor's own idle polls (an internal `suppressActivityTouch` option it passes) and a
   plain read with no `--quiet`, which is an audit rather than a drain. Both used to, which kept the
-  rail saying "agent working" while nobody was home and delayed the unattended alarm indefinitely.
+  rail saying an agent was working while nobody was home and delayed the alarm indefinitely.
   The service side still stamps it when a reply fold accepts a line, because an appended reply is the
   agent working by definition.
 - **Exit codes:** `0` completed (even with zero items), `2` nothing readable, `3` unknown review, `4` bad
@@ -789,33 +790,95 @@ so a host that wakes an agent on task completion pays no model tokens for a quie
 
 ### Agent liveness on the rail
 
+**One line, and it does two jobs.** The rail used to carry two: a status line that latched to
+"Stored · agent reading" the first time any reply arrived and never aged out, and a liveness line
+underneath it. The reviewer saw "Stored · agent reading" over "No agent watching · oldest item 6m" at
+the same moment, while an agent was answering him (Ken, live, 2026-08-23). One line cannot disagree
+with itself, so the footer paints exactly one `role="status"` row.
+
+| Situation | The line reads | Loud | Save a copy |
+| --- | --- | --- | --- |
+| Nothing waiting, an agent has the review open | `Stored · agent listening` | no | no |
+| Nothing waiting, nothing has it open | `Stored · no agent listening` | no | no |
+| Nothing waiting, cannot be checked | `Stored` | no | no |
+| Waiting past 30s, the agent ran a command in the last 3m | `Stored · agent is working, 5m` | no | yes |
+| Waiting past 30s, nothing happening | `Stored · nothing back yet, 45s` | past 10m | yes |
+| Waiting past 30s, nothing has the review open | `Stored · nobody has picked this up, 7m` | yes | yes |
+| The helper is not answering | `Kept in this browser` | - | no |
+
+**The quiet indicator is a convenience, not an alarm.** Two words, no verb, never loud. It exists
+because a reviewer looks at this twice: when they start ("will my comments reach the agent, did this
+set up right?") and when they come back from a break ("did anything die while I was away?"). Both are
+the same question, is the chain intact, and it gets a glanceable answer and nothing more.
+
+**The escalation's job is to hand over the exit.** What worries a reviewer who has had no answer is
+not whether an agent is alive, it is whether they are about to lose what they wrote. So the line says
+what happened (nothing) and how long, and a **Save a copy** button appears beside it running the same
+export as the rail menu. That button sits OUTSIDE the `role="status"` row, because a live region
+announces its text on every change and a button inside gets read out with it.
+
+**The hover text carries everything known about the connection**, assembled from
+`AGENT_LIVENESS.DETAIL` in the order someone would ask: whether the helper is answering, whether an
+agent has this review open, when the agent last replied, how long the oldest item has waited, where
+the work is stored, and (while it speaks) what Save a copy does. The line stays short; hover is where
+a curious or worried person gets the picture.
+
+**Never, anywhere the reviewer reads:** monitor, heartbeat, wake feed, watching, unattended. Those
+are our plumbing. A unit test asserts none of those words appears in `TEXT`, `CONNECTION`, `DETAIL`
+or `SAVE_LABEL`.
+
 `replies.poll` answers with an `agent_liveness` object (`protocol.AGENT_LIVENESS`), resolved
-server-side from the review to its owning agent session. Fields: `state`, `monitor_at`, `activity_at`,
-`unanswered`, `oldest_unanswered_at`.
+server-side from the review to its owning agent session. Fields: `state`, `unanswered`,
+`oldest_unanswered_at`, `last_reply_at`, `listening`, `monitor_at`, `activity_at`.
 
-| State | When | On the rail |
-| --- | --- | --- |
-| `watching` | A monitor heartbeat for the CURRENT `handoff_rev`, younger than 45s (three 15s loops) | Calm |
-| `working` | Unanswered items and session activity younger than 180s | Calm, "agent working" |
-| `unattended` | Unanswered items and neither of the above | Loud, with the oldest item's age |
-| `none` | Nothing waiting | Nothing |
+| State | When |
+| --- | --- |
+| `working` | Unanswered items, and a `lahe` command or a folded reply within `ACTIVE_MS` (3m) |
+| `waiting` | Unanswered items, nothing recent |
+| `no_agent` | Unanswered items, nothing recent, and `listening` is FALSE |
+| `none` | Nothing unanswered. The healthy, ordinary state of a review |
 
-A heartbeat whose `handoff_rev` differs from the session's current one is IGNORED for the state: a
-pre-takeover monitor that has not exited yet must never make the rail claim the new agent is watching.
+Thresholds live in `protocol.AGENT_LIVENESS`: `QUIET_MS` 30s (when the line starts speaking, counted
+from the reviewer's submit), `ACTIVE_MS` 3m, `STALE_MS` 10m (loud), `RECENT_COMMAND_MS` 10m.
+
+**`listening` is read off the machine, and the wake feed is why the inference is sound.**
+`<state-dir>/agent-sessions/<id>/wake.log` is our file, created for exactly one purpose, and nothing
+else on the computer has any reason to hold it open. So a process holding it open IS an agent
+watching this session. `src/service/watchers.js` asks with `lsof -t -- <path>`, cached for 15 seconds
+and refreshed off the poll path, so the reply poll (about one per second per open page) never waits
+on a subprocess. A machine with no `lsof` answers `null`, which means CANNOT TELL and is asked only
+once; null never becomes "nobody". Two other facts also count as listening: a monitor heartbeat for
+the CURRENT `handoff_rev`, younger than 45s, **whose pid still exists**; and a `lahe` command within
+`RECENT_COMMAND_MS`, which covers the exit-on-work monitor being gone while its agent works the batch
+it printed.
+
+**Listening never buys quiet.** It only decides between "nothing back yet" and "nobody has picked
+this up", which are different next moves for the reviewer. A tail can be armed all afternoon over an
+agent that stopped reading, so the wait is measured from the reviewer's item and goes loud at
+`STALE_MS` whatever the machine can see.
 
 `unanswered` and `oldest_unanswered_at` come from `record.isUnansweredReady`, the same predicate
 `lahe status` lists items with, computed once per log position (a projection is a pure function of
 the log, so its `seq` is a complete cache key) rather than by re-reading the log on every poll. The
 age is `updated_at` first and `created_at` only as a fallback: an item reopened a minute ago is a
-minute of unanswered work, not the four hours since the reviewer first wrote it.
+minute of unanswered work, not the four hours since the reviewer first wrote it. **Drafts never start
+the clock**: `isUnansweredReady` requires READY, so an item the reviewer is still typing is waiting on
+nobody. `last_reply_at` is the newest folded reply on the review, current exchange or archived thread
+round.
 
-On the rail, the liveness reaches the overlay whenever any of those five fields changes, not only
-when `state` does, and the unattended line recomputes its age on every paint plus a 30-second tick of
-its own. Both exist because "oldest item 1m" used to sit there saying 1m an hour later.
+The words themselves live in `protocol.AGENT_LIVENESS.TEXT`, `.CONNECTION`, `.DETAIL` and
+`.SAVE_LABEL`, with `{age}` and `{reply}` filled in by the layer. They used to be hand-copied into
+`overlay.js`, which is two spellings of one wire value: rename a state and the rail silently stopped
+recognising it, which looks exactly like a healthy rail with nothing to say.
 
-Every field comes from a file the helper, the monitor, or a `lahe` command wrote. None of it is
-anything an agent said about itself, which is the whole point: a chat claiming "monitoring is active"
-sat over seven unanswered items.
+On the rail, the liveness reaches the overlay whenever any field changes, not only when `state` does,
+and the line recomputes its own elapsed time on every paint plus a 30-second tick. That tick runs
+whenever an item is waiting at all, including one that has not crossed 30 seconds yet: the line has to
+start speaking, and later go loud, with the helper repeating an unchanged payload.
+
+Every field comes from a file the helper or a `lahe` command wrote, or from the kernel's own answer
+about open files. None of it is anything an agent said about itself, which is the whole point: a chat
+claiming "monitoring is active" sat over seven unanswered items.
 
 ### Agent-session and static-server lifecycle
 

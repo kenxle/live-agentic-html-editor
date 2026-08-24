@@ -245,13 +245,27 @@ function collect(input) {
   return rows;
 }
 
-/** Watching, or how long ago the last heartbeat was, or nobody. */
+/**
+ * Whether anything on this machine is listening to this session, and when the
+ * agent last answered.
+ *
+ * THIS IS THE OPERATOR'S VIEW, not the reviewer's. The reviewer's rail says how
+ * long it has been since a reply and never mentions watchers, because a watcher
+ * is our plumbing and not something they can act on. Here the plumbing is
+ * exactly the point: this column is how a human finds the session whose agent
+ * wandered off.
+ *
+ * `listening` is a merged verdict over three facts the helper reads off the
+ * machine: something holds the session's wake feed open, a monitor heartbeat is
+ * fresh and its pid still exists, or a lahe command ran recently. Null means the
+ * machine could not be asked, which prints as unknown rather than as nobody.
+ */
 function watcherText(row, nowMs) {
-  var state = row.liveness[protocol.AGENT_LIVENESS.FIELD.STATE];
-  if (state === protocol.AGENT_LIVENESS.STATE.WATCHING) return "watching";
-  var at = row.liveness[protocol.AGENT_LIVENESS.FIELD.MONITOR_AT];
-  var when = at ? statusCommand.ago(at, nowMs) : null;
-  return when ? "last heartbeat " + when : "no watcher";
+  var listening = row.liveness[protocol.AGENT_LIVENESS.FIELD.LISTENING];
+  var replyAt = row.liveness[protocol.AGENT_LIVENESS.FIELD.LAST_REPLY_AT];
+  var word = listening === true ? "listening" : listening === false ? "no watcher" : "watcher unknown";
+  var replied = replyAt ? statusCommand.ago(replyAt, nowMs) : null;
+  return replied ? word + ", replied " + replied : word;
 }
 
 function listLine(row, nowMs) {
@@ -268,13 +282,21 @@ function listLine(row, nowMs) {
 
 var TAKEOVER_HINT = "claim one with: lahe session takeover <id> (requires the human's explicit request)";
 
-function runList(args, opts) {
+async function runList(args, opts) {
   var out = opts.stdout;
   var err = opts.stderr;
   var nowMs = typeof opts.now === "number" ? opts.now : Date.now();
   var dir;
   try { dir = args.stateDir ? stateDir.stateDir({ dir: args.stateDir }) : stateDir.stateDir(); }
   catch (error) { err("lahe session: " + error.message + "\n"); return 1; }
+
+  // Ask the machine who is listening BEFORE reading the rows. This process is
+  // about to exit, so the rail's take-the-last-answer rule would leave every
+  // session reading "watcher unknown".
+  try {
+    var store = sessions.createStore({ dir: dir });
+    await store.warmWatching(store.openSessions().map(function (session) { return session.id; }));
+  } catch (error) { /* an unwarmed probe prints unknown, which is honest */ }
 
   var rows;
   try { rows = collect({ dir: dir, nowMs: nowMs }); }
