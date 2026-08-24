@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.1.0+022e59dea44a
+ * version 0.1.0+75347a84d033
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.1.0+022e59dea44a";
+  g.LAHE.version = "0.1.0+75347a84d033";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -5337,7 +5337,7 @@
       never_replied: "The agent has not replied on this review yet.",
       waiting: "Your oldest unanswered item has been waiting {age}.",
       stored: "Your comments and edits are stored in this browser and in the helper's log on disk.",
-      save: "Save a copy writes them to a file you can hand to an agent yourself; the menu also has Copy review."
+      save: "You can get your own copy any time: use Copy review or Export review to file in the menu."
     },
     // WHEN THE LINE STARTS SPEAKING, counted from the moment the reviewer
     // submitted, not from anything about a process.
@@ -5362,13 +5362,6 @@
     // see about listeners buys quiet here: a file tail can be armed all
     // afternoon over an agent that stopped reading.
     STALE_MS: 600000,
-    // The label on the way out, shown beside the line whenever it speaks. What
-    // actually worries a reviewer who has had no answer is not whether an agent
-    // is alive, it is whether they are about to lose what they just wrote. The
-    // work is already in two places (this browser and the helper's log), and
-    // this is the third: their own copy, one click from the moment they start
-    // wondering rather than three clicks into a menu.
-    SAVE_LABEL: "Save a copy",
     // How recently a lahe command must have run for the machine to count as
     // having somebody on it. Wider than ACTIVE_MS on purpose, and only ever used
     // to WITHHOLD the "no agent listening" wording: an exit-on-work monitor is
@@ -10455,7 +10448,7 @@
 
     // --- footer -------------------------------------------------------------
     ".foot{border-top:1px solid var(--line-soft);background:var(--paper);",
-    "padding:10px 12px 11px;display:flex;flex-direction:column;gap:9px}",
+    "padding:10px 12px 11px;display:flex;align-items:stretch;gap:10px}",
     ".chips{display:flex;flex-direction:column;gap:6px}",
     ".chips:empty{display:none}",
     ".chip{display:flex;align-items:flex-start;gap:8px;font-size:12px;line-height:1.4;",
@@ -10484,12 +10477,6 @@
     // nobody reads by the third comment.
     ".statusline{display:flex;align-items:center;gap:8px}",
     ".status{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink-soft);flex:1;min-width:0}",
-    // The way out, in the rail's quiet register rather than as a call to action:
-    // it is reassurance, not an instruction. It only exists while the line is
-    // saying nothing has come back.
-    ".statusline__save{flex:none;font-size:11.5px;padding:2px 8px;border-radius:6px;",
-    "border:1px solid var(--line);background:var(--paper);color:var(--ink-soft);cursor:pointer}",
-    ".statusline__save:hover{background:var(--surface);color:var(--ink)}",
     ".status__dot{width:6px;height:6px;border-radius:50%;background:var(--ink-faint);flex:none}",
     ".status[data-status='stored'] .status__dot{background:var(--good)}",
     ".status[data-status='kept_locally'] .status__dot{background:var(--warn)}",
@@ -10559,11 +10546,16 @@
     // reviewer looking for the way out should not have to open a menu to find
     // it. The row keeps the hints on flex:1 so they wrap exactly as they did,
     // and the button is a narrow strip beside them, spanning both hint rows.
-    // Its register is the status line's Save a copy, deliberately: quiet, and
-    // never readable as a submit button under the reviewer's own words.
-    ".footrow{display:flex;align-items:stretch;gap:10px}",
-    ".footrow .hints{flex:1;min-width:0}",
-    ".endbtn{flex:none;width:34px;display:flex;align-items:center;justify-content:center;",
+    // Its register is deliberately quiet, and never readable as a submit
+    // button under the reviewer's own words.
+    // The door is as tall as the whole bottom bar, not just the hints. Ken asked
+    // for that and it is also what makes it read as a way OUT rather than one more
+    // control in a row of them: it is the full height of the thing it closes.
+    // .foot is the row now and .footmain is the column that used to be .foot, so
+    // everything the footer stacks keeps stacking and the door sits beside all of
+    // it. align-items:stretch is what gives the button its height.
+    ".footmain{flex:1;min-width:0;display:flex;flex-direction:column;gap:9px}",
+    ".endbtn{flex:none;width:38px;display:flex;align-items:center;justify-content:center;",
     "border:1px solid var(--line);border-radius:7px;background:var(--paper);color:var(--ink-soft);cursor:pointer}",
     ".endbtn:hover{background:var(--surface);color:var(--ink)}",
     ".endbtn[disabled]{opacity:.55;cursor:default}",
@@ -10606,9 +10598,9 @@
   // The words live here with the rest of the rail's words, so a test can read
   // them without a browser and nothing spells them twice.
   //
-  // The register is the status line's Save a copy, not a submit button. Ending
-  // a review is a deliberate act, and the rail's job at that moment is to say
-  // what is still unfinished, not to hurry the reviewer through it.
+  // The register is quiet, not a submit button. Ending a review is a
+  // deliberate act, and the rail's job at that moment is to say what is
+  // still unfinished, not to hurry the reviewer through it.
   var END_REVIEW = {
     // Both the tooltip and the accessible name, deliberately the same sentence.
     LABEL: "End this review and perform cleanup",
@@ -10638,14 +10630,23 @@
   // differently on every platform; this is the rail's own stroke weight and
   // the rail's own colour, and it is the one piece of iconography in the
   // footer, so it has to say what it is with no label beside it.
+  // Heroicons 2.2.0 `arrow-right-start-on-rectangle`, MIT, vendored under
+  // vendor/heroicons with its licence and the file the path came from. It is the
+  // set's own exit glyph: a doorway with an arrow leaving through it.
+  //
+  // The path is inlined rather than loaded, because the library is one built file
+  // with no runtime fetches, and it is a copy rather than a drawing so the next
+  // person can diff it against a newer Heroicons release. The stroke is left to
+  // the rail (currentColor, and the rail's own weight) instead of Heroicons'
+  // slate, so the door matches the footer it sits in.
+  var EXIT_ICON_PATH =
+    "M15.75 9V5.25C15.75 4.00736 14.7426 3 13.5 3L7.5 3C6.25736 3 5.25 4.00736 " +
+    "5.25 5.25L5.25 18.75C5.25 19.9926 6.25736 21 7.5 21H13.5C14.7426 21 15.75 " +
+    "19.9926 15.75 18.75V15M18.75 15L21.75 12M21.75 12L18.75 9M21.75 12L9 12";
   var END_ICON =
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" ' +
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" ' +
     'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
-    '<path d="M14 3h6v18h-6"/>' +
-    '<circle cx="6.6" cy="4.6" r="1.8" fill="currentColor" stroke="none"/>' +
-    '<path d="M7.8 8.4 5.2 11l1.5 3-1.9 4.9"/>' +
-    '<path d="M6.7 14 10.2 15.6l1.4 3.9"/>' +
-    '<path d="M7.8 8.4 11.2 9.9"/>' +
+    '<path d="' + EXIT_ICON_PATH + '"/>' +
     "</svg>";
 
   /**
@@ -10695,7 +10696,7 @@
   var HINTS = [
     { keys: ["⌘", "⇧", "C"], what: "comment" },
     { keys: ["⌘", "⇧", "E"], what: "edit" },
-    { keys: ["⌘", "⏎"], what: "done with this one" }
+    { keys: ["⌘", "⏎"], what: "send" }
   ];
 
   /**
@@ -10952,8 +10953,9 @@
       rail.appendChild(panes);
 
       var foot = el("div", "foot");
+      var footMain = el("div", "footmain");
       var chipList = el("div", "chips");
-      foot.appendChild(chipList);
+      footMain.appendChild(chipList);
 
       // The refusal panel (D5, finding 12). Hidden until this window is refused;
       // its button re-claims the review with a takeover.
@@ -10980,7 +10982,7 @@
       refusal.appendChild(refusalTitle);
       refusal.appendChild(refusalReason);
       refusal.appendChild(refusalBtn);
-      foot.appendChild(refusal);
+      footMain.appendChild(refusal);
 
       // ONE ROW. There used to be a second one under it with its own claim about
       // agents, and the two contradicted each other in front of the reviewer
@@ -10994,23 +10996,10 @@
       var statusText = el("span", "status__text", "Kept in this browser");
       statusRow.appendChild(statusText);
       statusLineWrap.appendChild(statusRow);
-      // THE WAY OUT, BESIDE THE LINE THAT WORRIES THEM. What actually worries a
-      // reviewer who has had no answer is not whether an agent is alive, it is
-      // whether they are about to lose what they just wrote. It sits OUTSIDE the
-      // role="status" row on purpose: a live region announces its text every
-      // time it changes, and a button inside one gets read out with it.
-      var saveBtn = el("button", "statusline__save", protocol.AGENT_LIVENESS.SAVE_LABEL);
-      saveBtn.setAttribute("type", "button");
-      saveBtn.hidden = true;
-      saveBtn.title = "Save your comments and edits to a file you keep";
-      saveBtn.addEventListener("click", function () {
-        runAction("export");
-      });
-      statusLineWrap.appendChild(saveBtn);
-      foot.appendChild(statusLineWrap);
+      footMain.appendChild(statusLineWrap);
 
       var limit = el("div", "limit");
-      foot.appendChild(limit);
+      footMain.appendChild(limit);
 
       // The confirm before the door, built once and hidden. It is not in the
       // menu and it is not a window.confirm: it is the rail saying what is
@@ -11047,7 +11036,7 @@
       endPanel.appendChild(endWhat);
       endPanel.appendChild(endKept);
       endPanel.appendChild(endActs);
-      foot.appendChild(endPanel);
+      footMain.appendChild(endPanel);
 
       // No action buttons here. Copy and Export moved into the head's menu
       // (D10, revised): they read as submit buttons under the reviewer's own
@@ -11067,7 +11056,6 @@
       // session, and it should be where the reviewer's eye already is when they
       // are done. Same title and accessible name, because an icon with no label
       // has to say the whole thing on hover and to a screen reader alike.
-      var footRow = el("div", "footrow");
       var endBtn = el("button", "endbtn");
       endBtn.setAttribute("type", "button");
       endBtn.setAttribute("aria-label", END_REVIEW.LABEL);
@@ -11076,9 +11064,9 @@
       endBtn.addEventListener("click", function () {
         askEndReview();
       });
-      footRow.appendChild(hints);
-      footRow.appendChild(endBtn);
-      foot.appendChild(footRow);
+      footMain.appendChild(hints);
+      foot.appendChild(footMain);
+      foot.appendChild(endBtn);
       rail.appendChild(foot);
 
       var pill = el("button", "pill");
@@ -11114,12 +11102,11 @@
         chipList: chipList,
         foot: foot,
         statusRow: statusRow,
-        saveBtn: saveBtn,
         statusText: statusText,
         statusDot: statusDot,
         limit: limit,
         hints: hints,
-        footRow: footRow,
+        footMain: footMain,
         endBtn: endBtn,
         endPanel: endPanel,
         endTitle: endTitle,
@@ -12280,10 +12267,6 @@
       return {
         status: status,
         agentState: agent ? agent.state : null,
-        // The way out is offered exactly when the line says nothing has come
-        // back. That is the moment the reviewer's problem stops being "is an
-        // agent alive" and becomes "how do I get this to one myself".
-        save: agent && agent.speaking ? protocol.AGENT_LIVENESS.SAVE_LABEL : null,
         text: agent ? storage + " · " + agent.text : storage,
         title: statusTitle(agent),
         loud: !!(agent && agent.loud),
@@ -12373,7 +12356,6 @@
         status: dom.statusRow.getAttribute("data-status") || "",
         agentState: dom.statusRow.getAttribute("data-agent") || "",
         loud: dom.statusRow.getAttribute("data-loud") === "true",
-        save: dom.saveBtn.hidden ? null : dom.saveBtn.textContent || "",
         text: dom.statusText.textContent || "",
         title: dom.statusRow.title || "",
         display: computed ? computed.display : null,
@@ -12623,9 +12605,6 @@
       dom.statusRow.setAttribute("data-loud", line.loud ? "true" : "");
       dom.statusText.textContent = line.text;
       dom.statusRow.title = line.title;
-      // Shown exactly while the line has something to say about a wait, which is
-      // the moment the reviewer starts wondering whether their work is safe.
-      dom.saveBtn.hidden = !line.save;
       // ONLY IN THE STATE IT DESCRIBES. The limit is about there being no helper
       // to see across two storage buckets, so it is on screen exactly while the
       // rail is saying nothing reached a helper. Under "Stored" it was a
@@ -13035,13 +13014,6 @@
       statusLine: statusLine,
       statusLineInfo: statusLineInfo,
       statusRowCount: statusRowCount,
-      // The closed root hides the button from a test the same way it hides
-      // everything else, so pressing it is a seam rather than a query.
-      clickSave: function () {
-        if (!dom || dom.saveBtn.hidden) return null;
-        dom.saveBtn.click();
-        return true;
-      },
       LIMIT_SEPARATE_STORAGE_NO_HELPER: LIMIT_SEPARATE_STORAGE_NO_HELPER,
       SHEET_ATTR: SHEET_ATTR,
       mount: mount,
@@ -25518,7 +25490,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.1.0+022e59dea44a";
+  var VERSION = "0.1.0+75347a84d033";
 
   var protocol = ns.protocol;
   var record = ns.record;

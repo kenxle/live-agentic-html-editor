@@ -23,17 +23,26 @@ no network access or a locked-down npm registry.
 `devDependencies` are fine and expected: they are the test harness
 (Playwright), not something the shipped tool needs at runtime.
 
-Two Markdown packages are vendored under `vendor/` rather than installed:
+Third-party files are vendored under `vendor/` rather than installed:
 
 - `vendor/marked/marked.cjs`: marked 15.0.12, MIT.
 - `vendor/mermaid/mermaid.tiny.js`: `@mermaid-js/tiny` 11.16.1, MIT.
+- `vendor/heroicons/arrow-right-start-on-rectangle.svg`: Heroicons 2.2.0, MIT.
 
 Each folder carries the upstream LICENSE and a README naming the package and
-version. `src/service/markdown.js` requires them by relative path. To take a
-newer version, copy the new file and its license over the old ones and update
-the README (for mermaid, also update `MERMAID_ASSET` in
+version. Never add any of them to `dependencies`.
+
+The two Markdown packages are loaded: `src/service/markdown.js` requires them by
+relative path. To take a newer version, copy the new file and its license over
+the old ones and update the README (for mermaid, also update `MERMAID_ASSET` in
 `src/service/markdown.js`, which names the version in the served filename).
-Never add either package to `dependencies`.
+
+The icon is copied, not loaded. The rail inlines its path data as
+`EXIT_ICON_PATH` in `src/layer/overlay.js`, so the vendored file is provenance:
+it is what the drawing came from, and it exists so the next person can diff it
+against a newer release instead of guessing whether the icon was hand-drawn. To
+take a newer version, copy the new file over it and copy its `d` attribute into
+`EXIT_ICON_PATH`.
 
 ## Node version
 
