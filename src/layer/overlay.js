@@ -613,9 +613,12 @@
     CANCEL: "Keep reviewing",
     CLOSE: "Close",
     WORKING: "Ending…",
-    ENDED: "Review ended.",
-    ENDED_WITH_LIST: "Review ended. Your hand edits are under Edits, and saved to a file.",
-    ENDED_NO_EDITS: "Review ended. You made no hand edits this session.",
+    // The heading already says "Review ended", so these do not repeat it. A panel
+    // whose first two words restate its own title reads as filler and costs the
+    // reviewer the one line that could have told them something (Ken, 2026-08-24).
+    ENDED: "Your work is saved.",
+    ENDED_WITH_LIST: "Your hand edits are under Edits, and saved to a file.",
+    ENDED_NO_EDITS: "You made no hand edits this session.",
     UNSENT:
       "Some of your typing had not reached the helper yet. It is kept in this browser and goes out on the next load.",
     FAILED: "The review was not ended: "
