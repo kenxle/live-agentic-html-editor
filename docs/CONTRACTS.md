@@ -447,7 +447,7 @@ of the same document merge into one group rather than splitting in two.
 **The field classification is D12's, and it is the reverse of the archived draft's.** The intent
 channel is exactly `note` and `change`, carried **verbatim and never truncated**. Everything that
 came off the page rides in data-named fields and **may be bounded**: `quote`, `before`, `after_full`,
-`context`, plus `before_html`, `after_html`, `region_label` and `subject`. The record's `after` is
+`context`, plus `before_html`, `after_html`, `region_label`, `subject` and `after_history`. The record's `after` is
 projected as **`after_full`**, which is the name the contract field uses and therefore the name an
 agent reads.
 
@@ -460,6 +460,15 @@ item carrying `reverts` is ordinary ready work whose `before` is what the source
 the result is the change coming back out of the file. `src/shared/record.js` mints it
 (`revertOf`), and `replay.revertedHandledEditIds` reads it to tell a reviewer's deliberate take-back
 from the page having lost an applied fix, which look identical on the page and different only here.
+
+**`after_history`** is every wording the item has committed, oldest first, each entry carrying the
+`rev` it was committed at and when. The entries are DECISIONS rather than keystrokes, because
+`record.bumpRev` appends one only when a committed wording actually moved. It is projected because it
+is the only field that tells a reviewer who reworded a sentence four times apart from one who got it
+right first time, which is exactly what R39's end-of-session list is read for. It is page text like
+`after_full`, so it is data and each wording is bounded at `BEFORE_MAX`; the count of entries is
+capped at `AFTER_HISTORY_MAX` (50) keeping the NEWEST, and the kept entries' own `rev` numbers are
+what makes a drop legible.
 
 **`subject`** is what the reviewer pointed at, when they pointed at a whole element rather than at a
 passage of text (D9, the element anchor). It is `{tag, src, alt, html, near}`, and it is null for a
@@ -605,6 +614,12 @@ Loopback is not a boundary, so the page proves itself on every request. The help
 | `replies.poll` | GET | `/lahe/v1/replies?review=&since=<seq>` | per-review token |
 | `window.claim` | POST | `/lahe/v1/window` | per-review token |
 | `review.end` | POST | `/lahe/v1/end` | per-review token |
+
+`review.end` is the reviewer choosing **End review** on the rail (D10). The library drains its outbox
+BEFORE it posts here, so the reviewer's last keystrokes are on the log ahead of the archive event; a
+review archived over unflushed typing loses the last thing they wrote. The answer's
+`outstanding_kept` counts items still in `ready`, read through the projection, and nothing is
+truncated: the archived review keeps every item it had.
 
 There is no `wait` route. It existed only for the retired `lahe wait` command and was removed with it;
 nothing in the library ever called it.

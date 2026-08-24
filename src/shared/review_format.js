@@ -118,6 +118,7 @@
     AFTER_HTML: "after_html",
     REGION_LABEL: "region_label",
     SUBJECT: "subject",
+    AFTER_HISTORY: "after_history",
     THREAD: "thread"
   };
 
@@ -133,15 +134,16 @@
     PROJECTED.BEFORE_HTML,
     PROJECTED.AFTER_HTML,
     PROJECTED.REGION_LABEL,
-    PROJECTED.SUBJECT
+    PROJECTED.SUBJECT,
+    PROJECTED.AFTER_HISTORY
   ];
 
   // The classification travels with the file, so an agent sees the rule as
   // structure and not only as prose. Every key here names a field the
   // projection ACTUALLY emits (NEW-4): the record's internal, dotted field names
-  // (`region.label`, `after_history`, `page_title`) are not what an agent reads,
-  // so listing them would describe fields that are not in the file. The two
-  // intent fields, then every data-named carrier the projection writes,
+  // (`region.label`, `page_title`) are not what an agent reads, so listing them
+  // would describe fields that are not in the file. The two intent fields, then
+  // every data-named carrier the projection writes,
   // including the page-group header fields the agent reads as labels.
   var PROJECTED_FIELD_CLASS = {
     // intent (D12): the reviewer's own words, verbatim, never bounded
@@ -161,6 +163,13 @@
     // An alt attribute is a place someone can write a sentence, and a sentence
     // in a data field is page content, never an instruction (D6).
     subject: record.CLASS_DATA,
+    // Every wording this item has committed, in order, with the rev it was
+    // committed at. It is page text like `after_full` is, so it is data and it
+    // is bounded the same way. It earns its place because it is the one field
+    // that tells a reviewer who reworded a sentence four times apart from one
+    // who got it right first time, which is exactly the pattern R39's
+    // end-of-session list exists to surface.
+    after_history: record.CLASS_DATA,
     // the page-group header fields, all page-controlled
     title: record.CLASS_DATA,
     origin: record.CLASS_DATA,
@@ -198,6 +207,12 @@
   // to be a short list of strings. The count is capped and each entry is bounded
   // (finding 24).
   var REPLY_FILES_MAX = 100;
+  // after_history grows by one entry per rewording, so a long session on one
+  // sentence is legitimately long. The newest entries are the ones worth
+  // reading (the last one is the wording that stands), so the cap keeps the
+  // tail. The kept entries carry their own revs, so a history that starts at
+  // rev 40 on an item at rev 61 says on its face that older ones were dropped.
+  var AFTER_HISTORY_MAX = 50;
 
   // The bound is VISIBLE in the value: an agent that reads a bounded field has
   // to be able to tell it was bounded, or it will treat a cut-off passage as
@@ -232,6 +247,32 @@
     for (var i = 0; i < files.length && out.length < REPLY_FILES_MAX; i += 1) {
       if (typeof files[i] === "string") out.push(boundData(files[i], CONTEXT_MAX));
     }
+    return out;
+  }
+
+  /**
+   * Every wording this record has committed, in order, bounded like any other
+   * text that came off the page.
+   *
+   * The entries are DECISIONS, not keystrokes: `record.bumpRev` appends one
+   * only when a committed wording actually moved, so four entries mean the
+   * reviewer reworded this passage four times. That difference is invisible
+   * anywhere else in review.json, and it is the whole reason R39's list is
+   * worth keeping.
+   */
+  function boundHistory(history) {
+    if (!Array.isArray(history)) return [];
+    var kept = history.length > AFTER_HISTORY_MAX ? history.slice(history.length - AFTER_HISTORY_MAX) : history;
+    var out = [];
+    kept.forEach(function (entry) {
+      if (!entry || typeof entry !== "object") return;
+      out.push({
+        rev: typeof entry.rev === "number" ? entry.rev : null,
+        after: boundData(entry.after, BEFORE_MAX),
+        after_html: boundData(entry.after_html, BEFORE_MAX),
+        at: entry.at || null
+      });
+    });
     return out;
   }
 
@@ -449,6 +490,7 @@
     out[PROJECTED.BEFORE_HTML] = boundData(it[F.BEFORE_HTML], BEFORE_MAX);
     out[PROJECTED.AFTER_HTML] = boundData(it[F.AFTER_HTML], BEFORE_MAX);
     out[PROJECTED.REGION_LABEL] = boundData((it[F.REGION] && it[F.REGION].label) || null, CONTEXT_MAX);
+    out[PROJECTED.AFTER_HISTORY] = boundHistory(it[F.AFTER_HISTORY]);
 
     // A HANDLED ITEM HAS NO LOST ANCHOR. The fix an agent reported was expected
     // to rewrite the passage the item points at, so an anchor that no longer
@@ -689,6 +731,8 @@
     BEFORE_MAX: BEFORE_MAX,
     CONTEXT_MAX: CONTEXT_MAX,
     REPLY_FILES_MAX: REPLY_FILES_MAX,
+    AFTER_HISTORY_MAX: AFTER_HISTORY_MAX,
+    boundHistory: boundHistory,
     TRUNCATION_MARKER: TRUNCATION_MARKER,
     truncationMarker: truncationMarker,
     boundData: boundData,

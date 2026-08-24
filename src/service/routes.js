@@ -344,8 +344,19 @@ var HANDLERS = {
   // The reviewer chose End review on the rail. The review is archived, never
   // truncated: outstanding work stays in the log where it can still be read.
   "review.end": function (request, deps) {
+    if (!deps.projection || typeof deps.projection.itemsFrom !== "function") {
+      throw notImplemented("review.end", "3A");
+    }
     var ended = deps.reviews.endReview(request.review);
-    var outstanding = deps.log.read(request.review).length;
+    // WHAT IS STILL OPEN, not how big the log is. This counted every line in
+    // events.jsonl, so a ten-comment review reported hundreds and the number
+    // meant nothing to whoever read it. Ready items are the outstanding work by
+    // the projection's own vocabulary, the same one `lahe status` lists with.
+    // Drafts are deliberately not counted here: they reach no agent, so they
+    // are not work anybody kept.
+    var outstanding = deps.projection.itemsFrom(deps.log.read(request.review)).filter(function (item) {
+      return item.state === record.STATE.READY;
+    }).length;
     return { status: 200, body: { ended_at: ended.ended_at, outstanding_kept: outstanding } };
   }
 };

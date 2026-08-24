@@ -267,6 +267,9 @@
       mutating: true,
       why: "the reviewer chooses End review on the rail; the review is archived, never truncated",
       request: "{review}",
+      // outstanding_kept is how many items are still READY, counted through the
+      // projection. It used to be the length of the event log, which made a
+      // ten-comment review report hundreds.
       response: "{ended_at, outstanding_kept}"
     }
   ];
