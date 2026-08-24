@@ -489,6 +489,84 @@
     // sees.
     done.refresh();
 
+    // -------------------------------------------------------------------------
+    // End review (D10)
+    // -------------------------------------------------------------------------
+    //
+    // The rail holds the door and asks the question; this is where the answer
+    // meets the work. Three things happen in a fixed order, and the order is
+    // the whole correctness of it:
+    //
+    //   1. the outbox is drained, so the reviewer's last keystrokes reach the
+    //      helper BEFORE the archive event does. sync.endReview does this
+    //      itself, so no caller can forget it,
+    //   2. the archive event lands,
+    //   3. the hand-edit list is put in front of the reviewer.
+    //
+    // Step 3 is not decoration. R39's list exists so style-guide patterns can be
+    // spotted, and the Edits tab has held it all along; what it never had was
+    // the MOMENT. A permanently visible tab is one a reviewer stops seeing by
+    // the third comment, so the payoff happens at the close, which is when a
+    // session's worth of edits reads as a pattern rather than as a row.
+    rail.onAction("end", function () {
+      // The whole review, not this page's slice: ending ends every page of it,
+      // so the count has to be honest about the pages the reviewer is not
+      // looking at.
+      var counts = ns.overlay.endReviewCounts(store.read(reviewId));
+      return rail.promptEndReview({
+        unanswered: counts.unanswered,
+        drafts: counts.drafts,
+        run: function () {
+          return sync.endReview().then(function (result) {
+            var words = ns.overlay.END_REVIEW;
+            if (!result.ok) {
+              return { ok: false, message: words.FAILED + (result.reason || "the helper could not be reached") };
+            }
+            return surfaceHandEdits().then(function (surfaced) {
+              var message = surfaced.count === 0 ? words.ENDED_NO_EDITS : surfaced.saved ? words.ENDED_WITH_LIST : words.ENDED;
+              // Said out loud rather than assumed: anything still queued is in
+              // browser storage and goes out on the next load, which is not
+              // obvious to someone who just closed their review.
+              if (result.unsent) message += " " + words.UNSENT;
+              return {
+                ok: true,
+                message: message,
+                endedAt: result.endedAt,
+                outstandingKept: result.outstandingKept,
+                handEdits: surfaced.count,
+                saved: surfaced.saved
+              };
+            });
+          });
+        }
+      });
+    });
+
+    /**
+     * The closing step: the session's hand edits, in front of the reviewer.
+     *
+     * It reuses the Edits tab's own export seam rather than formatting a second
+     * list. Two lists of one thing is how the two of them start disagreeing.
+     */
+    function surfaceHandEdits() {
+      var count = editsTab && typeof editsTab.rowCount === "function" ? editsTab.rowCount() : 0;
+      rail.selectTab(ns.overlay.TAB.EDITS);
+      if (!count || !editsTab || typeof editsTab.exportList !== "function") {
+        return Promise.resolve({ count: count, saved: false });
+      }
+      return editsTab.exportList().then(
+        function (out) {
+          return { count: count, saved: !!(out && out.ok) };
+        },
+        function () {
+          // A file that would not save is not a reason to leave the review
+          // open: the list is on screen either way, and the message says which
+          // of the two happened.
+          return { count: count, saved: false };
+        }
+      );
+    }
+
     function makeEditsTab() {
       var made = ns.tabEdits.createEditsTab({
         store: scopedStore,

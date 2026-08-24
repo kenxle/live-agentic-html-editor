@@ -72,6 +72,13 @@
   // second into a status line the reviewer can read.
   var REQUEST_TIMEOUT_MS = 2000;
 
+  // How many times drainOutbox re-posts before it answers anyway. Each pass
+  // sends everything the store holds at that moment, so a second pass only
+  // exists for a keystroke that landed while the first was in flight. Three is
+  // a bound on a loop that must not spin, never a retry policy: retries are
+  // scheduleRetry's, and they keep going forever.
+  var DRAIN_ATTEMPTS = 3;
+
   // The library's own poll of the helper. A visible review stays responsive;
   // a hidden document needs only a low-frequency safety check because it polls
   // immediately when it becomes visible again. The cursor is
@@ -377,6 +384,10 @@
     var livenessTimer = null;
     var heartbeatMs = 10000;
     var flushing = false;
+    // The post that is in flight right now, so a caller who has to know the
+    // outbox is EMPTY (End review) can wait on it instead of being told `busy`
+    // and posting anyway. Resolved promises are harmless to hold.
+    var flushInFlight = null;
     var deliveredOnce = false;
     // True from pagehide/beforeunload until this document is shown again. A post
     // the browser cancels because the document is going away is NOT the helper
@@ -704,7 +715,7 @@
       var init = { method: "POST", body: body };
       if (fo.unload) init.keepalive = true;
 
-      return request("events.append", init).then(function (result) {
+      var posted = request("events.append", init).then(function (result) {
         flushing = false;
         if (result.ok) {
           var accepted = (result.body && result.body.accepted) || [];
@@ -760,6 +771,43 @@
         if (!fo.unload) scheduleRetry();
         return { sent: 0, remaining: pendingCount(), failed: true };
       });
+      flushInFlight = posted;
+      return posted;
+    }
+
+    /**
+     * Drain the outbox to EMPTY, and only then answer.
+     *
+     * `flush` is the typing path's version: it returns `busy` rather than
+     * queueing behind a post that is already going out, because nobody typing
+     * needs to wait. End review does need to wait. The reviewer's last
+     * keystrokes are still sitting behind the 750ms debounce when they reach
+     * for the door, and archiving the review out from under them loses the last
+     * thing they wrote (protocol.FLUSH names blur and navigation as immediate
+     * for the same reason).
+     *
+     * A post that fails stops the loop: the helper is not answering, so the end
+     * post is about to fail too and the caller reports that instead of spinning.
+     */
+    function drainOutbox(attempts) {
+      var left = typeof attempts === "number" ? attempts : DRAIN_ATTEMPTS;
+      // The debounce is about to be redundant, and a timer that fires mid-drain
+      // is one more post racing the archive.
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+        debounceTimer = null;
+      }
+      var settled = flushing && flushInFlight ? flushInFlight : Promise.resolve(null);
+      return settled
+        .then(function () {
+          return flush();
+        })
+        .then(function (result) {
+          var r = result || {};
+          if (!r.remaining || r.failed || r.refused || r.aborted) return r;
+          if (left <= 1) return r;
+          return drainOutbox(left - 1);
+        });
     }
 
     /**
@@ -1380,6 +1428,49 @@
       });
     }
 
+    /**
+     * End review (D10): the reviewer chose the door on the rail.
+     *
+     * The outbox is drained to empty FIRST. The reviewer's last keystrokes are
+     * ordinarily still behind the 750ms debounce at the moment they reach for
+     * the door, and a review archived over them loses the last thing they
+     * wrote. Everything else here is the ordinary mutating post: the route is
+     * declared mutating with a review token, so headersFor already sends what
+     * D11 checks.
+     *
+     * @returns {Promise<{ok: boolean, endedAt: ?string, outstandingKept: ?number, unsent: number, reason: ?string}>}
+     */
+    function endReview() {
+      return drainOutbox().then(function (drained) {
+        var unsent = (drained && drained.remaining) || 0;
+        return request("review.end", { method: "POST", body: JSON.stringify({ review: requireReview() }) }).then(
+          function (result) {
+            if (result.ok) {
+              markReachable();
+              var body = result.body || {};
+              return {
+                ok: true,
+                endedAt: body.ended_at || null,
+                outstandingKept: typeof body.outstanding_kept === "number" ? body.outstanding_kept : null,
+                // Nothing is lost when this is not zero: those events are in
+                // browser storage and the next load posts them. The caller says
+                // so rather than letting the reviewer assume everything landed.
+                unsent: unsent,
+                reason: null
+              };
+            }
+            return {
+              ok: false,
+              endedAt: null,
+              outstandingKept: null,
+              unsent: unsent,
+              reason: describe(result) || "the helper could not be reached"
+            };
+          }
+        );
+      });
+    }
+
     function startHeartbeat() {
       if (heartbeatTimer) return heartbeatTimer;
       // harness-allow-timer: the holder's heartbeat. The helper calls a holder
@@ -1514,8 +1605,10 @@
       deleteItem: deleteItem,
       eventFor: eventFor,
       flush: flush,
+      drainOutbox: drainOutbox,
       commitOnUnload: commitOnUnload,
       takeover: takeover,
+      endReview: endReview,
       isReadOnly: function () {
         return readOnly;
       },

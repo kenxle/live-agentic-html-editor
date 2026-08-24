@@ -246,10 +246,66 @@ test("field_classes names the fields the projection emits, and no stale ones", (
   // The emitted item field name, not the record's dotted internal name.
   assert.equal(fc.region_label, record.CLASS_DATA);
   assert.equal(Object.prototype.hasOwnProperty.call(fc, "region.label"), false, "the record's internal name is not emitted");
-  // Stale keys that name nothing in the file are gone.
-  assert.equal(Object.prototype.hasOwnProperty.call(fc, "after_history"), false, "after_history is not projected");
+  // after_history IS projected now, under exactly the name it is emitted with.
+  // It used to be listed here as a stale key naming nothing in the file; the
+  // fix was to emit it rather than to keep the classification honest about an
+  // absence, because it is the one field that tells a reviewer who reworded a
+  // sentence four times apart from one who got it right first time.
+  assert.equal(fc.after_history, record.CLASS_DATA, "after_history is projected, and it is data");
   assert.equal(Object.prototype.hasOwnProperty.call(fc, "page_title"), false, "emitted as title, not page_title");
   assert.equal(Object.prototype.hasOwnProperty.call(fc, "page_path"), false, "emitted as path, not page_path");
+});
+
+// ---------------------------------------------------------------------------
+// after_history: every wording, in order, bounded like the page text it is
+// ---------------------------------------------------------------------------
+
+test("a reworded item carries every wording it has had, with the rev it was committed at", () => {
+  let item = anEdit({ after: "first try" });
+  item = record.bumpRev(item, { after: "second try" });
+  item = record.bumpRev(item, { after: "third try" });
+
+  const p = rf.projectReview(reviewWith([item], null)).pages[0].items[0];
+  assert.equal(Array.isArray(p.after_history), true, "the field is in the file");
+  assert.deepEqual(
+    p.after_history.map((entry) => entry.after),
+    ["first try", "second try", "third try"],
+    "in order, oldest first, ending with the wording that stands"
+  );
+  assert.deepEqual(p.after_history.map((entry) => entry.rev), [1, 2, 3], "each entry names the rev it was committed at");
+  p.after_history.forEach((entry) => {
+    assert.equal(typeof entry.at === "string" && entry.at.length > 0, true, "and when");
+  });
+  // The difference this exists to make visible: an item that was right first
+  // time looks nothing like one that took four goes.
+  const once = rf.projectReview(reviewWith([anEdit()], null)).pages[0].items[0];
+  assert.equal(once.after_history.length, 1);
+});
+
+test("a wording in the history is bounded, and the bound is visible in the value", () => {
+  const huge = "H".repeat(rf.BEFORE_MAX + 500);
+  let item = anEdit({ after: huge });
+  item = record.bumpRev(item, { after: huge + " and more" });
+
+  const p = rf.projectReview(reviewWith([item], null)).pages[0].items[0];
+  p.after_history.forEach((entry) => {
+    assert.equal(entry.after.length < huge.length, true, "history is page text, so it is boundable");
+    assert.equal(entry.after.includes(rf.TRUNCATION_MARKER.split("{n}")[0]), true, "the bound says so in the value");
+  });
+});
+
+test("a runaway history is capped at the newest entries, which are the ones that read", () => {
+  const history = [];
+  for (let rev = 1; rev <= rf.AFTER_HISTORY_MAX + 12; rev += 1) {
+    history.push({ rev: rev, after: "wording " + rev, after_html: null, at: "2026-08-12T00:00:00.000Z" });
+  }
+  const bounded = rf.boundHistory(history);
+  assert.equal(bounded.length, rf.AFTER_HISTORY_MAX);
+  assert.equal(bounded[bounded.length - 1].after, "wording " + (rf.AFTER_HISTORY_MAX + 12), "the wording that stands is kept");
+  assert.equal(bounded[0].rev, 13, "the kept entries carry their own revs, so the drop is legible");
+  // Anything that is not an entry is dropped rather than riding through untyped.
+  assert.deepEqual(rf.boundHistory(null), []);
+  assert.deepEqual(rf.boundHistory([null, "nope", 7]), []);
 });
 
 // ---------------------------------------------------------------------------

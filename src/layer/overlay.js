@@ -519,12 +519,46 @@
     ".refusal__btn:hover{filter:brightness(1.06)}",
     ".refusal__btn[disabled]{opacity:.6;cursor:default}",
 
+    // The confirm before the door. There is no window.confirm anywhere in this
+    // library: a browser dialog is the page's chrome, not the rail's, and it
+    // cannot say what is unfinished. This can, which is the entire point of
+    // asking (D10: ending is a deliberate act, and the reviewer should know
+    // what they are ending on top of).
+    ".endpanel{display:none;flex-direction:column;gap:7px;padding:11px 12px;border-radius:var(--radius-sm);",
+    "background:var(--surface);border:1px solid var(--line);margin-bottom:2px}",
+    ".endpanel[data-shown='true']{display:flex}",
+    ".endpanel__title{font-size:12.5px;font-weight:700;color:var(--ink)}",
+    ".endpanel__what{font-size:11.5px;color:var(--ink-soft);line-height:1.45}",
+    ".endpanel__kept{font-size:11.5px;color:var(--ink-faint);line-height:1.45}",
+    ".endpanel__kept:empty{display:none}",
+    ".endpanel__acts{display:flex;align-items:center;gap:8px}",
+    ".endpanel__go,.endpanel__no{font-size:12px;font-weight:550;padding:5px 11px;border-radius:7px;",
+    "border:1px solid var(--line);background:var(--paper);color:var(--ink);cursor:pointer}",
+    ".endpanel__go:hover,.endpanel__no:hover{background:var(--sunken)}",
+    ".endpanel__go[disabled],.endpanel__no[disabled]{opacity:.6;cursor:default}",
+    ".endpanel__go[hidden],.endpanel__no[hidden]{display:none}",
+
     // The keyboard hints are readable, not fine print (D10).
     ".hints{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11.5px;color:var(--ink-soft)}",
     ".hint{display:flex;align-items:center;gap:5px}",
     "kbd{font-family:inherit;font-size:11px;font-weight:600;color:var(--ink);",
     "background:var(--sunken);border:1px solid var(--line);border-bottom-width:2px;",
     "border-radius:5px;padding:1px 5px;letter-spacing:.01em}",
+
+    // THE DOOR, BESIDE THE HINTS. Ending a review is the one control that
+    // closes the session, so it is standing UI rather than a menu item: a
+    // reviewer looking for the way out should not have to open a menu to find
+    // it. The row keeps the hints on flex:1 so they wrap exactly as they did,
+    // and the button is a narrow strip beside them, spanning both hint rows.
+    // Its register is the status line's Save a copy, deliberately: quiet, and
+    // never readable as a submit button under the reviewer's own words.
+    ".footrow{display:flex;align-items:stretch;gap:10px}",
+    ".footrow .hints{flex:1;min-width:0}",
+    ".endbtn{flex:none;width:34px;display:flex;align-items:center;justify-content:center;",
+    "border:1px solid var(--line);border-radius:7px;background:var(--paper);color:var(--ink-soft);cursor:pointer}",
+    ".endbtn:hover{background:var(--surface);color:var(--ink)}",
+    ".endbtn[disabled]{opacity:.55;cursor:default}",
+    ".endbtn svg{width:18px;height:18px;display:block}",
 
     // --- the collapsed pill --------------------------------------------------
     // It never overlaps the open rail because it only exists while the rail is
@@ -555,6 +589,96 @@
     { action: "copy", label: "Copy review" },
     { action: "export", label: "Export review to file" }
   ];
+
+  // ---------------------------------------------------------------------------
+  // The way out (D10: a review ends when the reviewer chooses End review)
+  // ---------------------------------------------------------------------------
+  //
+  // The words live here with the rest of the rail's words, so a test can read
+  // them without a browser and nothing spells them twice.
+  //
+  // The register is the status line's Save a copy, not a submit button. Ending
+  // a review is a deliberate act, and the rail's job at that moment is to say
+  // what is still unfinished, not to hurry the reviewer through it.
+  var END_REVIEW = {
+    // Both the tooltip and the accessible name, deliberately the same sentence.
+    LABEL: "End this review and perform cleanup",
+    TITLE: "End this review?",
+    ENDED_TITLE: "Review ended",
+    NOTHING_PENDING: "Nothing is waiting on an agent.",
+    // Always under the count, because the reviewer's real question at the door
+    // is whether ending costs them anything.
+    KEPT: "Your work is kept either way. Ending closes the review and shows your hand edits.",
+    CONFIRM: "End review",
+    CANCEL: "Keep reviewing",
+    CLOSE: "Close",
+    WORKING: "Ending…",
+    ENDED: "Review ended.",
+    ENDED_WITH_LIST: "Review ended. Your hand edits are under Edits, and saved to a file.",
+    ENDED_NO_EDITS: "Review ended. You made no hand edits this session.",
+    UNSENT:
+      "Some of your typing had not reached the helper yet. It is kept in this browser and goes out on the next load.",
+    FAILED: "The review was not ended: "
+  };
+
+  // The exit sign, drawn rather than typed: a figure stepping through a
+  // doorway. An emoji would be the page's font at the page's size and reads
+  // differently on every platform; this is the rail's own stroke weight and
+  // the rail's own colour, and it is the one piece of iconography in the
+  // footer, so it has to say what it is with no label beside it.
+  var END_ICON =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" ' +
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+    '<path d="M14 3h6v18h-6"/>' +
+    '<circle cx="6.6" cy="4.6" r="1.8" fill="currentColor" stroke="none"/>' +
+    '<path d="M7.8 8.4 5.2 11l1.5 3-1.9 4.9"/>' +
+    '<path d="M6.7 14 10.2 15.6l1.4 3.9"/>' +
+    '<path d="M7.8 8.4 11.2 9.9"/>' +
+    "</svg>";
+
+  /**
+   * What is unfinished, counted off the reviewer's own records.
+   *
+   * Two numbers, because they are two different problems. An UNANSWERED item is
+   * work an agent has not come back on. A DRAFT is worse in a quieter way: it
+   * is invisible to every agent (R7), so a review that ends with drafts in it
+   * ends with work nobody will ever see.
+   */
+  function endReviewCounts(items) {
+    var out = { unanswered: 0, drafts: 0 };
+    (items || []).forEach(function (item) {
+      if (!item) return;
+      if (item[record.FIELD.STATE] === record.STATE.DRAFT) out.drafts += 1;
+      else if (record.isUnansweredReady(item)) out.unanswered += 1;
+    });
+    return out;
+  }
+
+  function plural(n, one, many) {
+    return n === 1 ? one : many;
+  }
+
+  /** The one sentence the confirm panel leads with. Never silent about a count. */
+  function unfinishedSentence(counts) {
+    var c = counts || {};
+    var unanswered = c.unanswered || 0;
+    var drafts = c.drafts || 0;
+    var waiting =
+      unanswered +
+      " " +
+      plural(unanswered, "item is", "items are") +
+      " still waiting on an agent";
+    var unsent =
+      drafts +
+      " " +
+      plural(drafts, "draft has", "drafts have") +
+      " not been marked ready, so no agent has seen " +
+      plural(drafts, "it", "them");
+    if (unanswered && drafts) return waiting + ", and " + unsent + ".";
+    if (unanswered) return waiting + ".";
+    if (drafts) return unsent[0].toUpperCase() + unsent.slice(1) + ".";
+    return END_REVIEW.NOTHING_PENDING;
+  }
 
   var HINTS = [
     { keys: ["⌘", "⇧", "C"], what: "comment" },
@@ -642,6 +766,15 @@
     // telling them to press a button that no longer existed (first-real-use
     // finding, 2026-08-14). Mount re-applies it like every other piece of state.
     var refusalInfo = null;
+    // The end-review confirm. Deliberately NOT re-applied by mount, unlike the
+    // refusal above: a rebuild of the page mid-question is the reviewer being
+    // taken somewhere else, and a dialog that survives it is a dialog answering
+    // a question they can no longer see. The button that raises it is chrome and
+    // comes back with every mount.
+    var endPrompt = null;
+    var endResolve = null;
+    var endRun = null;
+    var endRunning = false;
     var actionHandlers = Object.create(null);
     // The head menu is OPEN or not, and open is a moment rather than a piece of
     // rail state: the button is chrome and comes back with every mount, the
@@ -867,6 +1000,43 @@
       var limit = el("div", "limit");
       foot.appendChild(limit);
 
+      // The confirm before the door, built once and hidden. It is not in the
+      // menu and it is not a window.confirm: it is the rail saying what is
+      // still unfinished, which is the only reason to ask at all.
+      var endPanel = el("div", "endpanel");
+      endPanel.setAttribute("role", "group");
+      endPanel.setAttribute("aria-label", END_REVIEW.TITLE);
+      endPanel.setAttribute("data-shown", "false");
+      var endTitle = el("div", "endpanel__title", END_REVIEW.TITLE);
+      var endWhat = el("div", "endpanel__what", "");
+      var endKept = el("div", "endpanel__kept", END_REVIEW.KEPT);
+      var endActs = el("div", "endpanel__acts");
+      var endGo = el("button", "endpanel__go", END_REVIEW.CONFIRM);
+      endGo.setAttribute("type", "button");
+      var endNo = el("button", "endpanel__no", END_REVIEW.CANCEL);
+      endNo.setAttribute("type", "button");
+      endGo.addEventListener("click", function () {
+        confirmEndReview(endRun);
+      });
+      endNo.addEventListener("click", function () {
+        // The same button is Close once the review has ended: nothing is left
+        // to cancel, so both readings do the same thing, which is put the panel
+        // away and answer whoever asked.
+        if (endRunning) return;
+        hideEndPanel();
+        settleEndPrompt({ confirmed: false, result: null });
+      });
+      endPanel.addEventListener("keydown", function (event) {
+        if (event.key === "Escape" && !endRunning) cancelEndReview();
+      });
+      endActs.appendChild(endGo);
+      endActs.appendChild(endNo);
+      endPanel.appendChild(endTitle);
+      endPanel.appendChild(endWhat);
+      endPanel.appendChild(endKept);
+      endPanel.appendChild(endActs);
+      foot.appendChild(endPanel);
+
       // No action buttons here. Copy and Export moved into the head's menu
       // (D10, revised): they read as submit buttons under the reviewer's own
       // words, and the footer's job is the status line and the hints.
@@ -879,7 +1049,24 @@
         row.appendChild(el("span", null, hint.what));
         hints.appendChild(row);
       });
-      foot.appendChild(hints);
+
+      // The hints keep the row and the door sits beside them. Ken asked for the
+      // way out here rather than in the menu: it is the control that closes the
+      // session, and it should be where the reviewer's eye already is when they
+      // are done. Same title and accessible name, because an icon with no label
+      // has to say the whole thing on hover and to a screen reader alike.
+      var footRow = el("div", "footrow");
+      var endBtn = el("button", "endbtn");
+      endBtn.setAttribute("type", "button");
+      endBtn.setAttribute("aria-label", END_REVIEW.LABEL);
+      endBtn.title = END_REVIEW.LABEL;
+      endBtn.innerHTML = END_ICON;
+      endBtn.addEventListener("click", function () {
+        askEndReview();
+      });
+      footRow.appendChild(hints);
+      footRow.appendChild(endBtn);
+      foot.appendChild(footRow);
       rail.appendChild(foot);
 
       var pill = el("button", "pill");
@@ -919,6 +1106,15 @@
         statusText: statusText,
         statusDot: statusDot,
         limit: limit,
+        hints: hints,
+        footRow: footRow,
+        endBtn: endBtn,
+        endPanel: endPanel,
+        endTitle: endTitle,
+        endWhat: endWhat,
+        endKept: endKept,
+        endGo: endGo,
+        endNo: endNo,
         refusal: refusal,
         refusalReason: refusalReason,
         refusalBtn: refusalBtn,
@@ -962,6 +1158,14 @@
       // Before the dom goes: the document-level listener the open menu installed
       // belongs to a menu that is about to stop existing.
       closeMenu(false);
+      // An unanswered end-review question goes with the rail that asked it, and
+      // whoever awaited it is told, rather than left holding a promise that can
+      // never settle now the panel is gone.
+      if (endPrompt) {
+        endRunning = false;
+        endRun = null;
+        settleEndPrompt({ confirmed: false, result: null });
+      }
       if (dom && dom.host && dom.host.parentNode) dom.host.parentNode.removeChild(dom.host);
       Object.keys(cards).forEach(function (id) {
         cards[id].node = null;
@@ -2241,6 +2445,164 @@
       };
     }
 
+    // -------------------------------------------------------------------------
+    // End review (D10): ask, then hand the click on
+    // -------------------------------------------------------------------------
+    //
+    // The rail owns the asking and the words; what ending DOES is boot's, wired
+    // through the same runAction seam Copy, Export and the takeover use. The
+    // panel's confirm button follows the failure chip's rule: an action that
+    // returns a promise disables its own control and says it is working, so a
+    // double press cannot post twice.
+
+    function askEndReview() {
+      if (endRunning) return null;
+      return runAction("end");
+    }
+
+    /**
+     * Ask before ending, and stay up while the ending runs.
+     *
+     * @param {{unanswered?: number, drafts?: number, run?: function(): Promise}} options
+     *   `run` is the work: it resolves to {ok, message}. The panel disables its
+     *   own buttons while it runs and then paints the message, so the reviewer
+     *   never watches a control they pressed do nothing.
+     * @returns {Promise<{confirmed: boolean, result: ?object}>}
+     */
+    function promptEndReview(options) {
+      var o = options || {};
+      if (!dom || !dom.endPanel) return Promise.resolve({ confirmed: false, result: null });
+      if (endPrompt) return endPrompt;
+
+      dom.endTitle.textContent = END_REVIEW.TITLE;
+      dom.endWhat.textContent = unfinishedSentence({ unanswered: o.unanswered || 0, drafts: o.drafts || 0 });
+      dom.endKept.textContent = END_REVIEW.KEPT;
+      dom.endGo.textContent = END_REVIEW.CONFIRM;
+      dom.endGo.hidden = false;
+      dom.endGo.disabled = false;
+      dom.endNo.textContent = END_REVIEW.CANCEL;
+      dom.endNo.disabled = false;
+      dom.endPanel.setAttribute("data-shown", "true");
+      // A question behind the collapsed pill is a question nobody answers.
+      setCollapsed(false, false);
+      // The keyboard lands on the way BACK, not on the door: this panel is a
+      // pause, and a confirm button under a stray Enter is not a pause.
+      dom.endNo.focus();
+
+      endRun = typeof o.run === "function" ? o.run : null;
+      endPrompt = new Promise(function (resolve) {
+        endResolve = resolve;
+      });
+      return endPrompt;
+    }
+
+    function settleEndPrompt(answer) {
+      var resolve = endResolve;
+      endPrompt = null;
+      endResolve = null;
+      if (resolve) resolve(answer);
+    }
+
+    function cancelEndReview() {
+      if (endRunning) return false;
+      hideEndPanel();
+      settleEndPrompt({ confirmed: false, result: null });
+      return true;
+    }
+
+    function hideEndPanel() {
+      if (!dom || !dom.endPanel) return false;
+      dom.endPanel.setAttribute("data-shown", "false");
+      setCollapsed(preferredCollapsed, false);
+      return true;
+    }
+
+    function confirmEndReview(run) {
+      if (!dom || endRunning) return null;
+      endRunning = true;
+      dom.endGo.disabled = true;
+      dom.endNo.disabled = true;
+      dom.endGo.textContent = END_REVIEW.WORKING;
+      var ran = typeof run === "function" ? run() : null;
+      var settled = ran && typeof ran.then === "function" ? ran : Promise.resolve(ran || { ok: true, message: END_REVIEW.ENDED });
+      return settled.then(paintEndResult, function (error) {
+        return paintEndResult({ ok: false, message: END_REVIEW.FAILED + String((error && error.message) || error) });
+      });
+    }
+
+    function paintEndResult(result) {
+      var r = result || {};
+      endRunning = false;
+      if (dom) {
+        dom.endTitle.textContent = r.ok === false ? END_REVIEW.TITLE : END_REVIEW.ENDED_TITLE;
+        dom.endWhat.textContent = r.message || (r.ok === false ? END_REVIEW.FAILED : END_REVIEW.ENDED);
+        // The second line was about what ending would cost; it has happened, so
+        // it has nothing left to say.
+        dom.endKept.textContent = "";
+        // A failure leaves the door pressable: the helper may be back in a
+        // second, and the reviewer should not have to hunt for the control
+        // again.
+        dom.endGo.hidden = r.ok !== false;
+        dom.endGo.disabled = false;
+        dom.endGo.textContent = END_REVIEW.CONFIRM;
+        dom.endNo.disabled = false;
+        dom.endNo.textContent = END_REVIEW.CLOSE;
+      }
+      settleEndPrompt({ confirmed: true, result: r });
+      return r;
+    }
+
+    /**
+     * The door and its panel, for a spec that cannot reach into a closed root.
+     * Geometry rather than flags where a flag could be true while the control
+     * is nowhere on screen.
+     */
+    function endInfo() {
+      if (!dom || !dom.endBtn) return { present: false };
+      var rect = dom.endBtn.getBoundingClientRect();
+      var hintsRect = dom.hints.getBoundingClientRect();
+      var panelRect = dom.endPanel.getBoundingClientRect();
+      return {
+        present: true,
+        label: dom.endBtn.getAttribute("aria-label"),
+        title: dom.endBtn.title,
+        text: (dom.endBtn.textContent || "").trim(),
+        icon: !!dom.endBtn.querySelector("svg"),
+        inMenu: dom.menuItems.some(function (node) {
+          return node.getAttribute("data-action") === "end";
+        }),
+        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height, right: rect.right, bottom: rect.bottom },
+        hintsRect: {
+          x: hintsRect.x,
+          y: hintsRect.y,
+          width: hintsRect.width,
+          height: hintsRect.height,
+          right: hintsRect.right,
+          bottom: hintsRect.bottom
+        },
+        running: endRunning,
+        panel: {
+          open: dom.endPanel.getAttribute("data-shown") === "true",
+          title: dom.endTitle.textContent || "",
+          what: dom.endWhat.textContent || "",
+          kept: dom.endKept.textContent || "",
+          rect: { x: panelRect.x, y: panelRect.y, width: panelRect.width, height: panelRect.height },
+          confirm: buttonReading(dom.endGo),
+          cancel: buttonReading(dom.endNo)
+        }
+      };
+    }
+
+    function buttonReading(node) {
+      var rect = node.getBoundingClientRect();
+      return {
+        label: (node.textContent || "").trim(),
+        disabled: !!node.disabled,
+        hidden: !!node.hidden,
+        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+      };
+    }
+
     function renderStatus() {
       if (!dom) return;
       var line = statusLine();
@@ -2716,6 +3078,18 @@
       onAction: onAction,
       menuInfo: menuInfo,
       menuIsOpen: menuIsOpen,
+      // End review (D10). promptEndReview is what boot calls once it knows what
+      // is unfinished; the door on the rail runs the registered "end" action,
+      // which is what calls it.
+      promptEndReview: promptEndReview,
+      cancelEndReview: cancelEndReview,
+      endInfo: endInfo,
+      // The door, pressed, for a caller with no on-screen geometry to click.
+      clickEnd: function () {
+        if (!dom || !dom.endBtn) return null;
+        dom.endBtn.click();
+        return true;
+      },
       openMenu: openMenu,
       closeMenu: closeMenu,
       showRefusal: showRefusal,
@@ -2741,6 +3115,9 @@
     AGENT_STATE: AGENT_STATE,
     AGENT_TEXT: AGENT_TEXT,
     LIMIT_SEPARATE_STORAGE_NO_HELPER: LIMIT_SEPARATE_STORAGE_NO_HELPER,
+    END_REVIEW: END_REVIEW,
+    endReviewCounts: endReviewCounts,
+    unfinishedSentence: unfinishedSentence,
     SHEET_ATTR: SHEET_ATTR,
     timestampLabel: timestampLabel,
     paneForItem: paneForItem,
