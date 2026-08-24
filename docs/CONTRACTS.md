@@ -813,36 +813,36 @@ underneath it. The reviewer saw "Stored · agent reading" over "No agent watchin
 the same moment, while an agent was answering him (Ken, live, 2026-08-23). One line cannot disagree
 with itself, so the footer paints exactly one `role="status"` row.
 
-| Situation | The line reads | Loud | Save a copy |
-| --- | --- | --- | --- |
-| Nothing waiting, an agent has the review open | `Stored · agent listening` | no | no |
-| Nothing waiting, nothing has it open | `Stored · no agent listening` | no | no |
-| Nothing waiting, cannot be checked | `Stored` | no | no |
-| Waiting past 30s, the agent ran a command in the last 3m | `Stored · agent is working, 5m` | no | yes |
-| Waiting past 30s, nothing happening | `Stored · nothing back yet, 45s` | past 10m | yes |
-| Waiting past 30s, nothing has the review open | `Stored · nobody has picked this up, 7m` | yes | yes |
-| The helper is not answering | `Kept in this browser` | - | no |
+| Situation | The line reads | Loud |
+| --- | --- | --- |
+| Nothing waiting, an agent has the review open | `Stored · agent listening` | no |
+| Nothing waiting, nothing has it open | `Stored · no agent listening` | no |
+| Nothing waiting, cannot be checked | `Stored` | no |
+| Waiting past 30s, the agent ran a command in the last 3m | `Stored · agent is working, 5m` | no |
+| Waiting past 30s, nothing happening | `Stored · nothing back yet, 45s` | past 10m |
+| Waiting past 30s, nothing has the review open | `Stored · nobody has picked this up, 7m` | yes |
+| The helper is not answering | `Kept in this browser` | - |
 
 **The quiet indicator is a convenience, not an alarm.** Two words, no verb, never loud. It exists
 because a reviewer looks at this twice: when they start ("will my comments reach the agent, did this
 set up right?") and when they come back from a break ("did anything die while I was away?"). Both are
 the same question, is the chain intact, and it gets a glanceable answer and nothing more.
 
-**The escalation's job is to hand over the exit.** What worries a reviewer who has had no answer is
+**The escalation's job is to say what happened.** What worries a reviewer who has had no answer is
 not whether an agent is alive, it is whether they are about to lose what they wrote. So the line says
-what happened (nothing) and how long, and a **Save a copy** button appears beside it running the same
-export as the rail menu. That button sits OUTSIDE the `role="status"` row, because a live region
-announces its text on every change and a button inside gets read out with it.
+what happened (nothing) and how long. The rail's head menu already carries **Copy review** and
+**Export review to file**, permanently available, so the reviewer's own copy is never more than a
+menu click away.
 
 **The hover text carries everything known about the connection**, assembled from
 `AGENT_LIVENESS.DETAIL` in the order someone would ask: whether the helper is answering, whether an
 agent has this review open, when the agent last replied, how long the oldest item has waited, where
-the work is stored, and (while it speaks) what Save a copy does. The line stays short; hover is where
-a curious or worried person gets the picture.
+the work is stored, and (while it speaks) a pointer to the menu's Copy review and Export review to
+file. The line stays short; hover is where a curious or worried person gets the picture.
 
 **Never, anywhere the reviewer reads:** monitor, heartbeat, wake feed, watching, unattended. Those
-are our plumbing. A unit test asserts none of those words appears in `TEXT`, `CONNECTION`, `DETAIL`
-or `SAVE_LABEL`.
+are our plumbing. A unit test asserts none of those words appears in `TEXT`, `CONNECTION`, or
+`DETAIL`.
 
 `replies.poll` answers with an `agent_liveness` object (`protocol.AGENT_LIVENESS`), resolved
 server-side from the review to its owning agent session. Fields: `state`, `unanswered`,
@@ -883,8 +883,8 @@ the clock**: `isUnansweredReady` requires READY, so an item the reviewer is stil
 nobody. `last_reply_at` is the newest folded reply on the review, current exchange or archived thread
 round.
 
-The words themselves live in `protocol.AGENT_LIVENESS.TEXT`, `.CONNECTION`, `.DETAIL` and
-`.SAVE_LABEL`, with `{age}` and `{reply}` filled in by the layer. They used to be hand-copied into
+The words themselves live in `protocol.AGENT_LIVENESS.TEXT`, `.CONNECTION` and `.DETAIL`, with
+`{age}` and `{reply}` filled in by the layer. They used to be hand-copied into
 `overlay.js`, which is two spellings of one wire value: rename a state and the rail silently stopped
 recognising it, which looks exactly like a healthy rail with nothing to say.
 

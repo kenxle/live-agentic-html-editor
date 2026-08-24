@@ -25,7 +25,7 @@
 //      makes a claim about one.
 //   3. When something HAS been waiting, the words are a reviewer's: how long,
 //      never a monitor or a heartbeat or a wake feed. And the reassurance comes
-//      with it: the work is stored, and a copy is one click away.
+//      with it: the work is stored.
 //   4. Two waiting readings, not one. "Nothing back yet" and "nobody has picked
 //      this up" are different next moves for the reviewer.
 
@@ -111,11 +111,10 @@ test.describe("the rail says whether anything has come back", () => {
       expect(quiet.visible).toBe(true);
       expect(quiet.text, "nothing waiting, and nothing known about a watcher").toBe("Stored");
       expect(quiet.loud).toBe(false);
-      expect(quiet.save, "and no escape hatch offered on a healthy review").toBeNull();
 
       // THE QUIET INDICATOR. Two words, answering the only question a reviewer
       // asks at the start and after a break: is the chain intact. It is never
-      // loud and never offers an escape hatch, because nothing is wrong.
+      // loud, because nothing is wrong.
       const connected = await page.evaluate(
         () =>
           window.__laheRail.setAgentLiveness({
@@ -128,7 +127,6 @@ test.describe("the rail says whether anything has come back", () => {
       );
       expect(connected.text).toBe("Stored · agent listening");
       expect(connected.loud).toBe(false);
-      expect(connected.save).toBeNull();
       expect(Number(connected.weight), "a working chain never demands attention").toBeLessThan(600);
       // The hover carries the detail: what the helper is doing, whether an agent
       // has the review open, and where the work is kept.
@@ -166,7 +164,6 @@ test.describe("the rail says whether anything has come back", () => {
       );
       expect(waiting.text).toBe("Stored · nothing back yet, 45s");
       expect(Number(waiting.weight), "45 seconds is information, not an alarm").toBeLessThan(600);
-      expect(waiting.save, "the way out arrives with the worry").toBe("Save a copy");
       expect(waiting.title).toContain("stored in this browser and in the helper's log on disk");
       // The reviewer is never told about our plumbing.
       ["monitor", "heartbeat", "wake feed", "watching", "unattended"].forEach((jargon) => {
@@ -224,9 +221,8 @@ test.describe("the rail says whether anything has come back", () => {
       expect(nobody.text).toBe("Stored · nobody has picked this up, 7m");
       expect(nobody.text).not.toBe(loud.text);
       expect(nobody.loud).toBe(true);
-      expect(nobody.save).toBe("Save a copy");
 
-      // Answered and quiet again: the storage half alone, and no escape hatch.
+      // Answered and quiet again: the storage half alone.
       const settled = await page.evaluate(
         () =>
           window.__laheRail.setAgentLiveness({
@@ -239,7 +235,6 @@ test.describe("the rail says whether anything has come back", () => {
       );
       expect(settled.text, "an answered review says nothing about agents").toBe("Stored");
       expect(settled.loud).toBe(false);
-      expect(settled.save).toBeNull();
     } finally {
       await helper.stop();
     }
@@ -307,7 +302,6 @@ test.describe("the rail says whether anything has come back", () => {
       const answered = await page.evaluate(() => window.__laheRail.statusLine());
       expect(answered.text, "everything answered, so nothing to say about agents").toBe("Stored");
       expect(answered.loud).toBe(false);
-      expect(answered.save, "and nothing to worry about, so no escape hatch").toBeNull();
       expect(await page.evaluate(() => window.__laheRail.replies().length)).toBeGreaterThan(0);
 
       // And now the agent goes quiet with a new item waiting. On the old rail
@@ -326,17 +320,9 @@ test.describe("the rail says whether anything has come back", () => {
       expect(quiet.text).toBe("Stored · nothing back yet, 6m");
       expect(quiet.text.toLowerCase()).not.toContain("reading");
 
-      expect(quiet.save, "and the way to keep a copy is right there").toBe("Save a copy");
-
       // One row, not two: the whole footer holds a single status line, which is
       // also a single announcement for a screen reader.
       expect(await page.evaluate(() => window.__laheRail.statusRows()), "one line").toBe(1);
-
-      // Pressing it runs the same export the menu runs, from the moment the
-      // reviewer starts wondering rather than three clicks into a menu.
-      const saved = await page.evaluate(() => window.__laheRail.clickSave());
-      expect(saved, "the button is really there and really pressed").toBe(true);
-      expect(await page.evaluate(() => window.__laheRail.exports()), "one export ran").toBe(1);
     } finally {
       await helper.stop();
     }

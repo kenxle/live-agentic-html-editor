@@ -86,11 +86,11 @@ has the review open, when the agent last replied, and where the work is stored.
 When something they submitted has gone unanswered for more than 30 seconds, the
 line speaks: `Stored · nothing back yet, 45s`, `Stored · agent is working, 5m`
 when the agent has run commands in the last few minutes, or `Stored · nobody has
-picked this up, 7m` when nothing has the review open. A **Save a copy** button
-appears beside it, running the same export as the rail menu, because the point of
-that message is to hand the reviewer a way to get their feedback to an agent
-another way. It goes loud past ten minutes whatever the machine can see: a file
-tail can be armed all afternoon over an agent that stopped reading.
+picked this up, 7m` when nothing has the review open. The rail's head menu
+already carries Copy review and Export review to file, permanently available, so
+the reviewer's own copy of their feedback is never more than a menu click away.
+The line goes loud past ten minutes whatever the machine can see: a file tail
+can be armed all afternoon over an agent that stopped reading.
 
 The reviewer is never told about monitors, heartbeats or wake feeds. That is our
 plumbing, and it is not something they can act on. `lahe session list` is where

@@ -475,12 +475,6 @@
     // nobody reads by the third comment.
     ".statusline{display:flex;align-items:center;gap:8px}",
     ".status{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink-soft);flex:1;min-width:0}",
-    // The way out, in the rail's quiet register rather than as a call to action:
-    // it is reassurance, not an instruction. It only exists while the line is
-    // saying nothing has come back.
-    ".statusline__save{flex:none;font-size:11.5px;padding:2px 8px;border-radius:6px;",
-    "border:1px solid var(--line);background:var(--paper);color:var(--ink-soft);cursor:pointer}",
-    ".statusline__save:hover{background:var(--surface);color:var(--ink)}",
     ".status__dot{width:6px;height:6px;border-radius:50%;background:var(--ink-faint);flex:none}",
     ".status[data-status='stored'] .status__dot{background:var(--good)}",
     ".status[data-status='kept_locally'] .status__dot{background:var(--warn)}",
@@ -550,8 +544,8 @@
     // reviewer looking for the way out should not have to open a menu to find
     // it. The row keeps the hints on flex:1 so they wrap exactly as they did,
     // and the button is a narrow strip beside them, spanning both hint rows.
-    // Its register is the status line's Save a copy, deliberately: quiet, and
-    // never readable as a submit button under the reviewer's own words.
+    // Its register is deliberately quiet, and never readable as a submit
+    // button under the reviewer's own words.
     ".footrow{display:flex;align-items:stretch;gap:10px}",
     ".footrow .hints{flex:1;min-width:0}",
     ".endbtn{flex:none;width:34px;display:flex;align-items:center;justify-content:center;",
@@ -597,9 +591,9 @@
   // The words live here with the rest of the rail's words, so a test can read
   // them without a browser and nothing spells them twice.
   //
-  // The register is the status line's Save a copy, not a submit button. Ending
-  // a review is a deliberate act, and the rail's job at that moment is to say
-  // what is still unfinished, not to hurry the reviewer through it.
+  // The register is quiet, not a submit button. Ending a review is a
+  // deliberate act, and the rail's job at that moment is to say what is
+  // still unfinished, not to hurry the reviewer through it.
   var END_REVIEW = {
     // Both the tooltip and the accessible name, deliberately the same sentence.
     LABEL: "End this review and perform cleanup",
@@ -985,19 +979,6 @@
       var statusText = el("span", "status__text", "Kept in this browser");
       statusRow.appendChild(statusText);
       statusLineWrap.appendChild(statusRow);
-      // THE WAY OUT, BESIDE THE LINE THAT WORRIES THEM. What actually worries a
-      // reviewer who has had no answer is not whether an agent is alive, it is
-      // whether they are about to lose what they just wrote. It sits OUTSIDE the
-      // role="status" row on purpose: a live region announces its text every
-      // time it changes, and a button inside one gets read out with it.
-      var saveBtn = el("button", "statusline__save", protocol.AGENT_LIVENESS.SAVE_LABEL);
-      saveBtn.setAttribute("type", "button");
-      saveBtn.hidden = true;
-      saveBtn.title = "Save your comments and edits to a file you keep";
-      saveBtn.addEventListener("click", function () {
-        runAction("export");
-      });
-      statusLineWrap.appendChild(saveBtn);
       foot.appendChild(statusLineWrap);
 
       var limit = el("div", "limit");
@@ -1105,7 +1086,6 @@
         chipList: chipList,
         foot: foot,
         statusRow: statusRow,
-        saveBtn: saveBtn,
         statusText: statusText,
         statusDot: statusDot,
         limit: limit,
@@ -2271,10 +2251,6 @@
       return {
         status: status,
         agentState: agent ? agent.state : null,
-        // The way out is offered exactly when the line says nothing has come
-        // back. That is the moment the reviewer's problem stops being "is an
-        // agent alive" and becomes "how do I get this to one myself".
-        save: agent && agent.speaking ? protocol.AGENT_LIVENESS.SAVE_LABEL : null,
         text: agent ? storage + " · " + agent.text : storage,
         title: statusTitle(agent),
         loud: !!(agent && agent.loud),
@@ -2364,7 +2340,6 @@
         status: dom.statusRow.getAttribute("data-status") || "",
         agentState: dom.statusRow.getAttribute("data-agent") || "",
         loud: dom.statusRow.getAttribute("data-loud") === "true",
-        save: dom.saveBtn.hidden ? null : dom.saveBtn.textContent || "",
         text: dom.statusText.textContent || "",
         title: dom.statusRow.title || "",
         display: computed ? computed.display : null,
@@ -2614,9 +2589,6 @@
       dom.statusRow.setAttribute("data-loud", line.loud ? "true" : "");
       dom.statusText.textContent = line.text;
       dom.statusRow.title = line.title;
-      // Shown exactly while the line has something to say about a wait, which is
-      // the moment the reviewer starts wondering whether their work is safe.
-      dom.saveBtn.hidden = !line.save;
       // ONLY IN THE STATE IT DESCRIBES. The limit is about there being no helper
       // to see across two storage buckets, so it is on screen exactly while the
       // rail is saying nothing reached a helper. Under "Stored" it was a
@@ -3026,13 +2998,6 @@
       statusLine: statusLine,
       statusLineInfo: statusLineInfo,
       statusRowCount: statusRowCount,
-      // The closed root hides the button from a test the same way it hides
-      // everything else, so pressing it is a seam rather than a query.
-      clickSave: function () {
-        if (!dom || dom.saveBtn.hidden) return null;
-        dom.saveBtn.click();
-        return true;
-      },
       LIMIT_SEPARATE_STORAGE_NO_HELPER: LIMIT_SEPARATE_STORAGE_NO_HELPER,
       SHEET_ATTR: SHEET_ATTR,
       mount: mount,

@@ -652,7 +652,6 @@ test("the rail's words are the protocol's, not a second hand-copied spelling", (
     .concat(Object.keys(LIVENESS.TEXT).map((state) => LIVENESS.TEXT[state]))
     .concat(Object.keys(LIVENESS.CONNECTION).map((key) => LIVENESS.CONNECTION[key]))
     .concat(Object.keys(LIVENESS.DETAIL).map((key) => LIVENESS.DETAIL[key]))
-    .concat([LIVENESS.SAVE_LABEL])
     .join(" ")
     .toLowerCase();
   ["monitor", "heartbeat", "wake", "watching", "unattended", "checked in", "liveness"].forEach((jargon) => {
@@ -671,7 +670,6 @@ test("the quiet indicator answers one question: is the chain intact", () => {
   rail.setAgentLiveness({ state: STATE.NONE, unanswered: 0, listening: true, last_reply_at: null });
   assert.equal(rail.statusLine().text, "Stored · agent listening");
   assert.equal(rail.statusLine().loud, false, "a working chain is never loud");
-  assert.equal(rail.statusLine().save, null, "and it is not an emergency, so no escape hatch");
 
   // Something died while they were away. Still not an alarm (nothing is
   // waiting), but it is the thing they came back to check.
@@ -704,14 +702,14 @@ test("the hover text carries everything the tool knows about the connection", ()
   assert.match(title, /last replied 4m ago\./);
   assert.match(title, /waiting 45s\./);
   assert.match(title, /stored in this browser and in the helper's log on disk/);
-  assert.match(title, /Save a copy/, "the way out is named where the detail is read");
+  assert.match(title, /get your own copy/, "the menu is pointed to where the detail is read");
 
   // Nothing known, nothing claimed.
   rail.setAgentLiveness({ state: STATE.NONE, unanswered: 0, listening: null, last_reply_at: null });
   const bare = rail.statusLine().title;
   assert.match(bare, /cannot be checked on this computer/);
   assert.match(bare, /has not replied on this review yet/);
-  assert.equal(/Save a copy/.test(bare), false, "the offer belongs to the moment it is needed");
+  assert.equal(/get your own copy/.test(bare), false, "the pointer to the menu belongs to the moment it is needed");
 
   // A helper that is not answering says so first, and says nothing about agents:
   // nothing has reached one.
@@ -863,37 +861,6 @@ test("the clock never starts on a draft the reviewer is still typing", () => {
   assert.equal(liveness.unanswered, 0);
   assert.equal(liveness.oldest_unanswered_at, null);
   assert.equal(liveness.state, STATE.NONE, "nobody is late for something nobody was given");
-});
-
-test("when the line speaks it also offers the way out, and only then", () => {
-  // The reassurance is the point, not the alarm. What worries a reviewer who has
-  // had no answer is whether they are about to lose what they just wrote, so the
-  // moment the line says nothing has come back, the way to keep a copy is beside
-  // it rather than three clicks into a menu.
-  const clock = Date.parse("2026-08-23T09:00:00.000Z");
-  const exported = [];
-  const rail = overlay.createRail({ document: null, now: () => clock });
-  rail.mount();
-  rail.onAction("export", () => {
-    exported.push(true);
-    return true;
-  });
-  rail.setStatusLine(overlay.STATUS.STORED);
-
-  rail.setAgentLiveness({ state: STATE.NONE, unanswered: 0, oldest_unanswered_at: null });
-  assert.equal(rail.statusLine().save, null, "a healthy review is not offered an escape hatch");
-
-  rail.setAgentLiveness({
-    state: STATE.WAITING,
-    unanswered: 1,
-    oldest_unanswered_at: new Date(clock - 45000).toISOString()
-  });
-  const line = rail.statusLine();
-  assert.equal(line.text, "Stored · nothing back yet, 45s");
-  assert.equal(line.save, protocol.AGENT_LIVENESS.SAVE_LABEL);
-  assert.match(line.title, /stored in this browser and in the helper's log on disk/);
-  assert.equal(exported.length, 0, "the offer is an offer; nothing runs until it is pressed");
-  rail.unmount();
 });
 
 test("the line ages on its own clock, with the helper saying nothing new", () => {

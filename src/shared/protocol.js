@@ -1113,7 +1113,7 @@
       never_replied: "The agent has not replied on this review yet.",
       waiting: "Your oldest unanswered item has been waiting {age}.",
       stored: "Your comments and edits are stored in this browser and in the helper's log on disk.",
-      save: "Save a copy writes them to a file you can hand to an agent yourself; the menu also has Copy review."
+      save: "You can get your own copy any time: use Copy review or Export review to file in the menu."
     },
     // WHEN THE LINE STARTS SPEAKING, counted from the moment the reviewer
     // submitted, not from anything about a process.
@@ -1138,13 +1138,6 @@
     // see about listeners buys quiet here: a file tail can be armed all
     // afternoon over an agent that stopped reading.
     STALE_MS: 600000,
-    // The label on the way out, shown beside the line whenever it speaks. What
-    // actually worries a reviewer who has had no answer is not whether an agent
-    // is alive, it is whether they are about to lose what they just wrote. The
-    // work is already in two places (this browser and the helper's log), and
-    // this is the third: their own copy, one click from the moment they start
-    // wondering rather than three clicks into a menu.
-    SAVE_LABEL: "Save a copy",
     // How recently a lahe command must have run for the machine to count as
     // having somebody on it. Wider than ACTIVE_MS on purpose, and only ever used
     // to WITHHOLD the "no agent listening" wording: an exit-on-work monitor is
