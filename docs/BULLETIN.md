@@ -81,6 +81,14 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
   agent-dependent setup step (hand-rolled http.server + --origin), which is
   where the whole origin-trap class came from. This is the biggest gap
   against the public-release bar.
+- [ ] LAHE-ci-gate-red-on-main @anyone (2026-08-24, surfaced by the weekly email
+  scan) -- **the `gate` workflow is failing on `main`.** Roughly 20 "Run failed:
+  gate" notifications landed between Aug 20 and Aug 23, on `main` and on
+  `feat/normal-path`. This blocks [[LAHE-cold-start-proving-run]] in practice:
+  the launch post tells people to clone the repo and hand it to their agent, and
+  the first thing a visitor sees on the repo page is a red badge. Find out
+  whether the gate itself is broken or it is catching something real, then fix
+  it before the post goes out.
 - [ ] LAHE-cold-start-proving-run @anyone -- the release gate: on a fresh
   state dir, walk a simulated stranger through ONLY the public README +
   AGENTS.md (no session knowledge): install -> review a doc -> comments ->
