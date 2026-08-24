@@ -751,7 +751,52 @@ page landed unseen while the agent said it was listening. Two rules stop that:
 A distinct deliverable is its own review, and pages that really do share a review
 each show only their own items (see "One review MAY span pages" above).
 
-## Step 5: take it back out when they are done
+## Step 5: the close
+
+The reviewer presses the exit button in the rail footer. The review is archived and
+you are woken like any other work. Run this routine, in this order, because stopping
+the servers first would leave you unable to read what you are meant to summarize.
+
+**1. Drain to empty.** Ending discards nothing. Unanswered items are still their
+outstanding requests: work them, or reply saying why not.
+
+**2. Write the hand-edit list beside the document they reviewed.** Every edit they
+made by hand, before and after. Put it next to the document, not in LAHE's state
+directory, which is not a place anyone reads. The list is the reason the close exists:
+patterns worth writing down can only be spotted in a list somebody sees.
+
+**3. Read those edits for voice.** They took your words and changed them to theirs.
+That is the most direct evidence of how they write that you will ever get. Two fields
+do the work for you:
+
+- `change` states what moved, minted when the edit was committed, so you do not need
+  to diff `before` against `after_full` yourself.
+- `after_history` holds every wording they committed and then replaced. Someone who
+  reworded a sentence four times was converging on something; the chain says what
+  they kept rejecting.
+
+**Propose rarely, and only a pattern.** One substitution is a typo. The same one five
+times is a rule nobody wrote down. Check the target document first, because it is
+detailed and hand-maintained and the common case is that the rule is already there.
+An edit they took back is negative evidence and supports nothing.
+
+Suggestions go to a proposals folder beside the voice document, never into the
+document itself. Those documents are the source of truth for how everything else gets
+written, and a review must not quietly rewrite them. In Ken's setup that folder is
+`context/personal/voice_proposals/` in the personal repo and it carries its own
+charter with the format, the routing between different voice documents, and the bar.
+Read the charter before writing a proposal.
+
+**4. Then clean up.** `lahe session close <agent-session-id>` stops this session's
+static review servers, and closing the last open session stops the shared helper.
+Take out anything the review put in a folder, per Step 6 below. For a dev server,
+delete the script line you pasted into the layout.
+
+**5. Say what you did.** A few lines: what you wrote, where it is, and what you are
+proposing about their voice. If nothing met the bar, say so. "Nothing worth a rule
+this time" is a real answer and a common one.
+
+## Step 6: take it back out when they are done
 
 `lahe add path/to/page.html --remove` takes this tool back out of a folder: it
 deletes the script line from the page, and removes a `lahe-layer.js` beside it

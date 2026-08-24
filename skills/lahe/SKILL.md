@@ -272,6 +272,48 @@ session closes while retaining review history. Stop this session's wake tail or
 background monitor at the same time. The close appends a `closed` line to the
 wake feed and any running monitor exits with code 5.
 
+## When the reviewer ends the review
+
+They press the exit button in the rail footer and the review is archived. You are
+woken like any other work. This is the close, and it has a routine.
+
+Do it in this order. The cleanup comes last, because stopping the servers first
+would leave you unable to read what you are meant to summarize.
+
+**1. Drain to empty first.** Ending does not discard anything. If items are still
+unanswered, work them or reply saying why not. An item nobody answered before the
+close is still the reviewer's outstanding request.
+
+**2. Write the hand-edit list where they will find it.** Every edit they made by
+hand, as before and after, next to the document they reviewed rather than inside
+LAHE's state directory. This is the point of the close: the list exists so patterns
+worth writing down can be spotted, and a list nobody reads spots nothing.
+
+**3. Look at those edits for voice.** They took the words you wrote and changed them
+to the words they wanted, which is the most direct evidence of voice you will ever
+get. Each edit already carries a `change` field stating what moved, so you do not
+need to diff anything. `after_history` carries every wording they committed and then
+replaced, which is them converging on what they actually meant.
+
+**Propose rarely, and only a pattern.** One substitution is a typo. The same
+substitution five times is a rule nobody has written down. Check the target document
+first: it is detailed and maintained by hand, so the common case is that the rule is
+already there. A take-back is negative evidence; an edit they undid supports nothing.
+
+Suggestions go to `context/personal/voice_proposals/` in the personal repo, which
+carries its own charter with the file format, the target-document routing, and the
+bar. **Read that charter before writing a proposal.** Never edit a voice document
+directly: those are the source of truth for how everything else gets written, and a
+review session must not quietly rewrite them.
+
+**4. Then clean up.** `lahe session close <agent-session-id>` stops this session's
+servers and, if it was the last one open, the shared helper. If a script line was
+pasted into an app layout for a dev-server review, take it back out.
+
+**5. Tell them what you did**, in a few lines: what you wrote, where it is, and what
+you are proposing about their voice, if anything. If nothing met the bar, say that
+plainly. "Nothing worth a rule this time" is a real and common answer.
+
 ## Reject stale workflows
 
 - Do not use `lahe add` for ordinary setup. It is an advanced compatibility
