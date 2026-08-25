@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.1.0+fda0569b255d
+ * version 0.1.0+5f09bd553943
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.1.0+fda0569b255d";
+  g.LAHE.version = "0.1.0+5f09bd553943";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -14343,11 +14343,9 @@
     var asks = Object.create(null);
     var threads = Object.create(null);
     var composers = Object.create(null);
-    var follows = Object.create(null);
     // id -> the Reopen button. Held separately from its row because on a
     // hand-edit card the button does not live in that row: it moves next to
     // Undo. Whoever removes the row still has to remove the button.
-    var reopens = Object.create(null);
     var counters = { folded: 0, refused: 0, rejected: 0, reopened: 0, questions: 0 };
     // id -> true for the replies the reviewer genuinely has not read. This is
     // what the tab badges count. The durable truth is in storage.
@@ -14657,17 +14655,9 @@
       return api;
     }
 
-    // The row and its Reopen button go together, even when they are not in the
-    // same place: on a hand-edit card the button was moved into the Edits row's
-    // footer, so removing the row alone would leave a Reopen next to Undo on an
-    // item that is no longer handled.
     function dropRow(id) {
       var row = rows[id];
       if (row && row.parentNode) row.parentNode.removeChild(row);
-      var reopen = reopens[id];
-      if (reopen && reopen.parentNode) reopen.parentNode.removeChild(reopen);
-      delete reopens[id];
-      delete follows[id];
       delete rows[id];
     }
 
@@ -14683,7 +14673,7 @@
     // A handled HAND EDIT was the same defect one layer down: the Edits row is
     // also on this card, and both rows printed the change summary, once above
     // the before-and-after and once below it. This row no longer says it (see
-    // saidBy), and its Reopen moves next to that row's Undo (see homeReopen),
+    // saidBy),
     // so a handled edit reads as one summary, the exact wording, and the two
     // things the reviewer can do about it.
     function buildRow(item) {
@@ -14691,24 +14681,24 @@
       row.setAttribute("data-lahe-item", item[record.FIELD.ID]);
       row.appendChild(el("div", "lahe-done-said", ""));
 
-      var foot = el("div", "cardacts");
-      var follow = el("button", "cardact", "Follow up");
-      follow.setAttribute("type", "button");
-      follow.addEventListener("click", function () {
-        focusComposer(item[record.FIELD.ID]);
-      });
-      follows[item[record.FIELD.ID]] = follow;
-      foot.appendChild(follow);
-
-      var reopen = el("button", "cardact cardact--quiet", "Reopen issue");
-      reopen.setAttribute("type", "button");
-      reopen.addEventListener("click", function () {
-        reopenItem(item[record.FIELD.ID]);
-      });
-      foot.appendChild(reopen);
-      reopens[item[record.FIELD.ID]] = reopen;
-      updateReopenAvailability(item[record.FIELD.ID]);
-      row.appendChild(foot);
+      // NO BUTTONS. Ken: "in a completed comment we have buttons for follow up
+      // and reopen and then below a text field to follow up. this all seems very
+      // redundant and cluttered ... reopening without a comment isn't useful,
+      // and the follow up button just focuses the existing follow up field."
+      //
+      // Both were true. Follow up called focusComposer on a composer that is
+      // drawn for every replied item anyway, so it moved the caret into a box
+      // already on screen. Reopen sent the same request back untouched, and it
+      // had to be DISABLED whenever the field held a draft, which is the tell:
+      // the two controls were alternatives, and the one with words is the one
+      // worth having.
+      //
+      // Reopening did not go away with the button. Sending from the field ends
+      // the handled state (continueItem sets READY and posts item.ready), so
+      // R38's handled -> ready transition is still here, now always carrying
+      // the reason it happened. The automatic reopen keeps its own path:
+      // index.js calls reopen() with a note when a handled hand edit is undone
+      // on the page.
       return row;
     }
 
@@ -14731,38 +14721,8 @@
       return note || change || item[record.FIELD.AFTER] || "";
     }
 
-    /**
-     * Put Reopen where the reviewer's other decision about this item already is.
-     *
-     * Reopen and Undo are one decision surface: what the reviewer does about a
-     * change the agent answered. On a hand-edit card they were at opposite ends,
-     * Reopen at the top in this row and Undo at the bottom in the Edits row.
-     * Reopen moves into the Edits row's own footer, first, so the pair reads as
-     * one group at the foot of the card. Run on every paint because it is
-     * idempotent and it puts the button back after a remount rebuilt either row.
-     *
-     * Both are live on a HANDLED card, and they are genuinely different
-     * answers. Reopen says the fix did not land, do it again. Undo says the fix
-     * landed and the reviewer does not want it: the page goes back and the agent
-     * is asked to take the change out of the source (editing.undo).
-     *
-     * Absent an Edits row (a comment card), Reopen stays in this row's own
-     * footer, which is where it has always been.
-     */
-    function homeReopen(row, item) {
-      var reopen = reopens[item[record.FIELD.ID]];
-      if (!reopen) return null;
-      var body = row.parentNode;
-      var edits = body ? body.querySelector("[data-lahe-edit-row] .cardacts") : null;
-      var home = edits || row.querySelector(".cardacts");
-      if (!home) return null;
-      if (reopen.parentNode !== home) home.insertBefore(reopen, home.firstChild);
-      return home;
-    }
-
     function updateRow(row, item) {
       row.querySelector(".lahe-done-said").textContent = saidBy(item);
-      homeReopen(row, item);
     }
 
     /**
@@ -14880,7 +14840,6 @@
         input.addEventListener("input", function () {
           if (isReadOnly()) return;
           store.writeFollowupDraft(reviewId, id, input.value);
-          updateReopenAvailability(id);
         });
         input.addEventListener("keydown", function (event) {
           if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
@@ -14906,19 +14865,7 @@
         var field = composers[id].querySelector("textarea");
         if (field && field !== field.getRootNode().activeElement && field.value !== saved) field.value = saved;
       }
-      updateReopenAvailability(id);
       return composers[id];
-    }
-
-    function updateReopenAvailability(id) {
-      var node = composers[id];
-      var input = node && node.querySelector("textarea");
-      var hasDraft = !!(input && input.value.trim());
-      if (reopens[id]) {
-        reopens[id].disabled = isReadOnly() || hasDraft;
-        reopens[id].title = hasDraft ? "Send or clear the follow-up draft before reopening this issue" : "";
-      }
-      if (follows[id]) follows[id].disabled = isReadOnly();
     }
 
     function focusComposer(id) {
@@ -14967,9 +14914,22 @@
       return next;
     }
 
+    /**
+     * The reviewer's answer to what the agent said, and now the only way a
+     * handled item goes back to ready by hand.
+     *
+     * THE TRANSITION IS ASSERTED, not assumed. It used to be enough for
+     * reopenItem alone to check this, because Reopen was the button that ended
+     * the handled state and a follow-up merely rode the same helper. With the
+     * button gone this is the manual path R38 travels, so a transition the
+     * lifecycle table forbids has to fail loudly here rather than leave the rail
+     * and the log disagreeing about what state the item is in.
+     */
     function submitFollowup(id, text) {
       var item = itemById(id);
       if (!item || !item[record.FIELD.REPLY] || !String(text || "").trim()) return item;
+      if (isReadOnly()) return item;
+      lifecycle.assertTransition(item[record.FIELD.STATE], record.STATE.READY, lifecycle.ACTOR.REVIEWER);
       return continueItem(item, record.followUp(item, String(text)), "Follow-up sent. It is back in front of the agent.");
     }
 
@@ -15237,7 +15197,6 @@
         time.removeAttribute("title");
       }
       node.querySelector(".lahe-ask-text").textContent = boundedText(reply.text || "");
-      updateReopenAvailability(id);
       markCard(id, true);
       return node;
     }
@@ -15304,8 +15263,6 @@
       asks = Object.create(null);
       threads = Object.create(null);
       composers = Object.create(null);
-      follows = Object.create(null);
-      reopens = Object.create(null);
       styleNode = null;
       mounted = false;
       return true;
@@ -15330,10 +15287,7 @@
           var send = composers[id].querySelector("button");
           if (input) input.disabled = isReadOnly();
           if (send) send.disabled = isReadOnly();
-          updateReopenAvailability(id);
         });
-        Object.keys(reopens).forEach(updateReopenAvailability);
-        Object.keys(asks).forEach(updateReopenAvailability);
       },
       followup: function (id) {
         return composers[id] || null;
@@ -25672,7 +25626,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.1.0+fda0569b255d";
+  var VERSION = "0.1.0+5f09bd553943";
 
   var protocol = ns.protocol;
   var record = ns.record;

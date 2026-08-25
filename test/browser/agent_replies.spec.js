@@ -914,16 +914,22 @@ test.describe("3A: an agent answers by appending one line", () => {
       ).toBe(privateDraft);
       expect(JSON.stringify(reviewJson(helper))).not.toContain(privateDraft);
 
+      // reopen() still refuses while a draft is sitting in the box, so the
+      // automatic revert-check reopen cannot land on top of words the reviewer
+      // has not sent. There is no Reopen button to disable any more: the
+      // reviewer's own way back is to send what they are typing.
       const blockedByDraft = await page.evaluate((id) => {
-        const done = window.__lahe.handle.doneTab();
         const before = window.__lahe.itemById(id);
-        const after = done.reopen(id);
-        const button = Array.from(window.__lahe.rail.cardNode(id).querySelectorAll("button")).find(
-          (candidate) => candidate.textContent === "Reopen issue"
-        );
-        return { beforeRev: before.rev, afterRev: after.rev, disabled: button && button.disabled };
+        const after = window.__lahe.handle.doneTab().reopen(id);
+        return {
+          beforeRev: before.rev,
+          afterRev: after.rev,
+          reopenButtons: Array.from(window.__lahe.rail.cardNode(id).querySelectorAll("button")).filter((b) =>
+            /reopen/i.test(b.textContent)
+          ).length
+        };
       }, item.id);
-      expect(blockedByDraft).toEqual({ beforeRev: item.rev, afterRev: item.rev, disabled: true });
+      expect(blockedByDraft).toEqual({ beforeRev: item.rev, afterRev: item.rev, reopenButtons: 0 });
 
       await page.evaluate((id) => {
         const input = window.__lahe.handle.doneTab().followup(id).querySelector("textarea");
@@ -1447,6 +1453,85 @@ test.describe("adding another message before the agent has answered", () => {
         },
         item.id,
         { message: "the merge box to go once the comment has been answered" }
+      );
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+});
+
+test.describe("the reviewer's way back from handled", () => {
+  // Ken: "in a completed comment we have buttons for follow up and reopen and
+  // then below a text field to follow up. this all seems very redundant and
+  // cluttered ... reopening without a comment isn't useful, and the follow up
+  // button just focuses the existing follow up field."
+  //
+  // Both buttons are gone, so the field is now the manual path R38 travels
+  // (handled goes back to ready at the reviewer's word). That transition is the
+  // thing worth a test, not the control that used to start it.
+
+  test("sending from the field is what reopens a handled item, with the reason attached", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      await commentOnSelection(page, "p.lede", "shorten this");
+      const item = (await itemsIn(page))[0];
+      await waitForItemInLog(helper, item.id);
+
+      appendReply(helper, "replies-claude.jsonl", {
+        item: item.id,
+        rev: 1,
+        status: "handled",
+        agent: "claude",
+        text: "Cut it to one line."
+      });
+      await pollPage(page, (id) => window.__lahe.itemById(id).state === "handled", item.id, {
+        message: "the item to retire into the Done tab"
+      });
+
+      const controls = await page.evaluate((id) => {
+        const node = window.__lahe.rail.cardNode(id);
+        return {
+          buttons: Array.from(node.querySelectorAll("button"))
+            .filter((b) => b.getClientRects().length > 0)
+            .map((b) => b.textContent),
+          hasField: !!node.querySelector(".lahe-followup textarea")
+        };
+      }, item.id);
+      expect(controls.hasField, "the box is there").toBe(true);
+      expect(
+        controls.buttons.filter((label) => /reopen/i.test(label)),
+        "and nothing offers a reopen with no words in it"
+      ).toEqual([]);
+
+      await page.evaluate((id) => {
+        const input = window.__lahe.handle.doneTab().followup(id).querySelector("textarea");
+        input.value = "It still runs to three lines.";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }));
+      }, item.id);
+
+      await pollPage(page, (id) => window.__lahe.itemById(id).state === "ready", item.id, {
+        message: "the item to go back in front of the agent"
+      });
+
+      const back = await page.evaluate((id) => window.__lahe.itemById(id), item.id);
+      expect(back.reply, "the answered round is closed").toBeNull();
+      expect(back.thread, "and archived rather than lost").toHaveLength(1);
+      expect(back.thread[0].agent.status).toBe("handled");
+      expect(back.note, "the reason travels with it, which a wordless reopen never carried").toBe(
+        "It still runs to three lines."
+      );
+      expect((await cardOf(page, item.id)).pane).toBe("active");
+
+      // And the helper agrees, so this is work the agent is actually woken for.
+      await pollUntil(
+        () => {
+          const projected = projectedItems(reviewJson(helper)).find((i) => i.id === item.id);
+          return projected && projected.state === "ready" ? projected : null;
+        },
+        { message: "the reopening to reach the file the agent reads" }
       );
     } finally {
       await helper.kill9();

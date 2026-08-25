@@ -153,6 +153,13 @@ async function clickCardButton(page, id, label) {
         (b.textContent || "").trim() === want
       );
       if (!button) return null;
+      // Scrolled into the rail's own view BEFORE it is measured. The press below
+      // is a real mouse click at these coordinates, which is the point (the
+      // card's click-to-jump handler has to get the chance to swallow it and
+      // not take it). A control below the fold is measured at a y the viewport
+      // does not contain, and the click then lands on the page instead, which
+      // reads as the handler silently doing nothing.
+      button.scrollIntoView({ block: "center" });
       const r = button.getBoundingClientRect();
       return { x: r.x, y: r.y, width: r.width, height: r.height };
     },
@@ -260,7 +267,7 @@ test.describe("clicking a card jumps to its place on the page", () => {
     }
   });
 
-  test("the Follow up button does its own job, and the page stays where it is", async ({ page }) => {
+  test("sending a follow-up does its own job, and the page stays where it is", async ({ page }) => {
     const { app, helper, token } = await startBoth();
     try {
       await bootedPage(page, app, helper, token);
@@ -280,22 +287,24 @@ test.describe("clicking a card jumps to its place on the page", () => {
       });
       await page.evaluate(() => window.__lahe.rail.selectTab("done"));
 
+      // The card used to carry a Follow up button whose whole job was focusing
+      // the box below it. It is gone, and the box's own send button is the
+      // control this test is about now: a real one, with words in the field.
+      await page.evaluate((id) => {
+        const input = window.__lahe.rail.cardNode(id).querySelector("textarea.lahe-followup-input");
+        input.value = "It still runs long.";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      }, item.id);
+
       await toTop(page);
       await clickCardButton(page, item.id, "Follow up");
 
       expect(await scrollY(page), "a press meant for a control is not a jump").toBe(0);
       expect(await emphasized(page)).toBe("");
-      // It did what it is for: the composer is open and focused.
-      await pollPage(
-        page,
-        (id) => {
-          const node = window.__lahe.rail.cardNode(id);
-          const box = node && node.querySelector("textarea.lahe-followup-input");
-          return !!box && box.getRootNode().activeElement === box;
-        },
-        item.id,
-        { message: "the follow-up composer to take the focus" }
-      );
+      // It did what it is for: the item is back in front of the agent.
+      await pollPage(page, (id) => window.__lahe.itemById(id).state === "ready", item.id, {
+        message: "the follow-up to put the item back in front of the agent"
+      });
     } finally {
       await helper.kill9();
       await app.close();

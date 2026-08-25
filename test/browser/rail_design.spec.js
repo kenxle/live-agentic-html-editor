@@ -440,7 +440,11 @@ test.describe("the rail as a shipping surface", () => {
           noteAttached: !!node.querySelector(".lahe-rail-note"),
           noteVisible: visible(node.querySelector(".lahe-rail-note")),
           deleteVisible: visible(node.querySelector('[data-lahe-act="delete"]')),
-          reopenVisible: visible(node.querySelector(".lahe-done-row .cardact"))
+          // The Done row carries no controls of its own any more. What the
+          // reviewer does about a handled item is type in the follow-up box,
+          // and that box is what has to be here.
+          doneRowActs: node.querySelectorAll(".lahe-done-row .cardact").length,
+          followupVisible: visible(node.querySelector(".lahe-followup textarea"))
         };
       }, item.id);
 
@@ -454,7 +458,8 @@ test.describe("the rail as a shipping surface", () => {
       expect(card.noteAttached, "the row is never withdrawn, so the note is still there").toBe(true);
       expect(card.noteVisible, "but rewording makes no sense on a handled item, so it is not drawn").toBe(false);
       expect(card.deleteVisible, "and neither does Delete").toBe(false);
-      expect(card.reopenVisible, "Done keeps Reopen").toBe(true);
+      expect(card.doneRowActs, "the Done row is a summary, not a button bar").toBe(0);
+      expect(card.followupVisible, "what Done keeps is the box to answer in").toBe(true);
     } finally {
       await helper.stop().catch(() => {});
       await app.close();
@@ -500,7 +505,7 @@ test.describe("the rail as a shipping surface", () => {
     return page.evaluate((sel) => window.__lahe.itemForElement(sel), selector);
   }
 
-  test("a handled hand edit says the change once and keeps Reopen and Undo together", async ({ page }) => {
+  test("a handled hand edit says the change once, and Undo is the only button on it", async ({ page }) => {
     const { app, helper, token } = await startBoth();
     try {
       await bootedPage(page, app, helper, token);
@@ -530,9 +535,6 @@ test.describe("the rail as a shipping surface", () => {
           walk(node);
           return out;
         };
-        const reopen = Array.from(node.querySelectorAll(".cardact")).filter(
-          (b) => b.textContent === "Reopen issue"
-        )[0];
         const undo = node.querySelector('[data-lahe-act="undo"]');
         return {
           text: visibleText(node),
@@ -542,12 +544,15 @@ test.describe("the rail as a shipping surface", () => {
           // The Done row is still ATTACHED, the rail's own law, and it draws
           // nothing on a hand-edit card because it has nothing left to say.
           doneSaidVisible: visible(node.querySelector(".lahe-done-said")),
-          reopenVisible: visible(reopen),
           undoVisible: visible(undo),
-          // The one thing this test is really about: one footer, both buttons.
-          sameFooter: !!reopen && !!undo && reopen.parentNode === undo.parentNode,
-          // Reopen reads first: keeping the change is the ordinary answer.
-          reopenFirst: !!reopen && reopen.parentNode.firstElementChild === reopen,
+          // Undo is the one button a handled hand edit carries. Reopen used to
+          // sit beside it, and this test existed to keep the pair together; the
+          // pair is gone, because saying "not done" with no words was never
+          // worth a permanent control. The words go in the follow-up box.
+          reopenAnywhere: Array.from(node.querySelectorAll("button")).some(
+            (b) => /reopen/i.test(b.textContent)
+          ),
+          followupVisible: visible(node.querySelector(".lahe-followup textarea")),
           // The summary heads the diff rather than trailing it.
           summaryBeforePair: (() => {
             const said = node.querySelector(".lahe-edits__said");
@@ -564,10 +569,9 @@ test.describe("the rail as a shipping surface", () => {
       expect(times(card.text, SAID), "what the agent said, once").toBe(1);
       expect(card.doneSaidVisible, "and the Done row does not say it a second time").toBe(false);
       expect(card.summaryBeforePair, "the summary heads the before-and-after").toBe(true);
-      expect(card.reopenVisible, "Reopen is on the card").toBe(true);
-      expect(card.undoVisible, "so is Undo").toBe(true);
-      expect(card.sameFooter, "and they are one button group, not two ends of a card").toBe(true);
-      expect(card.reopenFirst, "Reopen reads first").toBe(true);
+      expect(card.undoVisible, "Undo is on the card: the change landed and is not wanted").toBe(true);
+      expect(card.reopenAnywhere, "and nothing offers a wordless reopen any more").toBe(false);
+      expect(card.followupVisible, "saying it did not land is a message, and there is a box for it").toBe(true);
     } finally {
       await helper.stop().catch(() => {});
       await app.close();
@@ -583,7 +587,7 @@ test.describe("the rail as a shipping surface", () => {
   // card. Every test that saw the relocation had remounted the rail first, which
   // is the one thing the reviewer never does.
 
-  test("a handled hand edit already in storage keeps its two buttons together on a cold load", async ({ page }) => {
+  test("a handled hand edit already in storage comes back with Undo and its box on a cold load", async ({ page }) => {
     const { app, helper, token } = await startBoth();
     try {
       await bootedPage(page, app, helper, token);
@@ -607,18 +611,17 @@ test.describe("the rail as a shipping surface", () => {
       const card = await page.evaluate((id) => {
         const node = window.__lahe.rail.cardNode(id);
         const visible = (el) => !!el && el.getClientRects().length > 0;
-        const reopen = Array.from(node.querySelectorAll(".cardact")).filter((b) => b.textContent === "Reopen issue")[0];
         const undo = node.querySelector('[data-lahe-act="undo"]');
         return {
-          reopenVisible: visible(reopen),
           undoVisible: visible(undo),
-          sameFooter: !!reopen && !!undo && reopen.parentNode === undo.parentNode
+          followupVisible: visible(node.querySelector(".lahe-followup textarea")),
+          reopenAnywhere: Array.from(node.querySelectorAll("button")).some((b) => /reopen/i.test(b.textContent))
         };
       }, item.id);
 
-      expect(card.reopenVisible, "Reopen is on the card after a plain reload").toBe(true);
-      expect(card.undoVisible, "so is Undo").toBe(true);
-      expect(card.sameFooter, "and they are one group on the first paint the reviewer sees").toBe(true);
+      expect(card.undoVisible, "Undo is on the card after a plain reload").toBe(true);
+      expect(card.followupVisible, "and so is the box, on the first paint the reviewer sees").toBe(true);
+      expect(card.reopenAnywhere, "nothing brings a wordless reopen back on a cold load").toBe(false);
     } finally {
       await helper.stop().catch(() => {});
       await app.close();
@@ -730,9 +733,6 @@ test.describe("the rail as a shipping surface", () => {
         (a) => {
           const node = window.__lahe.rail.cardNode(a.id);
           const visible = (el) => !!el && el.getClientRects().length > 0;
-          const reopen = node
-            ? Array.from(node.querySelectorAll(".cardact")).filter((b) => b.textContent === "Reopen issue")[0]
-            : null;
           const strays = node
             ? Array.from(node.querySelectorAll("button"))
                 .filter((b) => b.getClientRects().length > 0)
@@ -743,7 +743,7 @@ test.describe("the rail as a shipping surface", () => {
           return {
             held: !!window.__lahe.itemById(a.id),
             card: !!window.__lahe.rail.getCard(a.id),
-            reopenVisible: visible(reopen),
+            followupVisible: visible(node ? node.querySelector(".lahe-followup textarea") : null),
             strays: strays,
             notice: node ? node.textContent : "",
             takeState: take ? take.state : null,
@@ -756,7 +756,7 @@ test.describe("the rail as a shipping surface", () => {
 
       expect(after.held, "the record that says a fix landed is kept (R38)").toBe(true);
       expect(after.card, "and so is its card").toBe(true);
-      expect(after.reopenVisible, "with Reopen still on it").toBe(true);
+      expect(after.followupVisible, "with the box to answer in still on it").toBe(true);
       expect(after.strays.length > 0, "its buttons are not stranded on a card with no record").toBe(true);
       expect(after.notice, "and the card says what the reviewer just did").toContain("You took this back");
 
