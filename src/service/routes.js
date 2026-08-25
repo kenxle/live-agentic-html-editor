@@ -341,6 +341,20 @@ var HANDLERS = {
     };
   },
 
+  // The holder's goodbye. It is deliberately forgiving: a release for a review
+  // nobody holds, or one carrying the wrong secret, is a no-op that answers 200
+  // rather than an error. This arrives from a page that is going away, often on
+  // a keepalive request nobody will ever read the answer to, so there is nothing
+  // useful to tell and nobody to tell it to. The `released` flag is the truth
+  // for whoever is listening.
+  "window.release": function (request, deps) {
+    var body = request.body || {};
+    var outcome = deps.reviews.releaseWindow(request.review, {
+      session_secret: typeof body.session_secret === "string" ? body.session_secret : undefined
+    });
+    return { status: 200, body: outcome };
+  },
+
   // The reviewer chose End review on the rail. The review is archived, never
   // truncated: outstanding work stays in the log where it can still be read.
   "review.end": function (request, deps) {

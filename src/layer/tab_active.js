@@ -263,7 +263,12 @@
     ".lahe-rail-add textarea::placeholder{color:var(--ink-faint)}",
     ".lahe-rail-add textarea:focus{outline:2px solid var(--accent);outline-offset:1px;",
     "background:var(--paper)}",
-    ".lahe-rail-add textarea:disabled{opacity:.55}"
+    ".lahe-rail-add textarea:disabled{opacity:.55}",
+    ".lahe-rail-addacts{display:flex;justify-content:flex-end}",
+    ".lahe-rail-send{font-size:11.5px;font-weight:600;padding:3px 10px;border-radius:6px;",
+    "border:1px solid var(--line);background:var(--paper);color:var(--ink-soft);cursor:pointer}",
+    ".lahe-rail-send:hover{background:var(--surface);color:var(--ink)}",
+    ".lahe-rail-send[disabled]{opacity:.55;cursor:default}"
   ].join("");
 
   function createActiveTab(options) {
@@ -651,15 +656,16 @@
       input.id = "lahe-add-" + id;
       input.setAttribute("rows", "1");
       input.setAttribute("aria-label", "Add another message to this comment");
-      // NO SEND BUTTON, and the placeholder teaches the gesture instead.
+      // A SEND BUTTON, because that is what a text input has. Ken: "a send
+      // button under a text input is a fine idea. that is convention."
       //
-      // The card keeps exactly one action, Delete, and a browser test states
-      // that as a promise. It is the same line the note itself is on: Ken, on
-      // the Reword button, "do we really need a button for 'reword'? before we
-      // could just edit a comment". A control that costs a permanent strip of
-      // the card has to earn it, and this one would only be repeating a gesture
-      // the footer already advertises on every screen.
-      input.setAttribute("placeholder", "Add another message, then " + sendKeys());
+      // It is not one of the card's actions and it is not in their row. Delete
+      // acts on the comment; this belongs to the box above it, the same way the
+      // follow-up composer's own send button belongs to its box. That is the
+      // line between a control worth removing and a control worth keeping: the
+      // ones taken off these cards today all sat in the action row repeating
+      // something already on screen.
+      input.setAttribute("placeholder", "Add another message");
       input.value = keepsDrafts() ? store.readFollowupDraft(reviewId, id) : "";
 
       function submit() {
@@ -691,7 +697,15 @@
         }
       });
 
+      var acts = el("div", "lahe-rail-addacts");
+      var send = el("button", "lahe-rail-send", "Send");
+      send.setAttribute("type", "button");
+      send.addEventListener("click", submit);
+      send.title = "Send this message (" + sendKeys() + ")";
+      acts.appendChild(send);
+
       box.appendChild(input);
+      box.appendChild(acts);
       return box;
     }
 
@@ -726,6 +740,8 @@
         add.hidden = !!item[record.FIELD.REPLY] || item[record.FIELD.STATE] !== record.STATE.READY;
         var field = add.querySelector("textarea");
         if (field) field.disabled = !!item[record.FIELD.REPLY];
+        var send = add.querySelector(".lahe-rail-send");
+        if (send) send.disabled = !!item[record.FIELD.REPLY];
       }
 
       var state = row.querySelector(".lahe-rail-state");

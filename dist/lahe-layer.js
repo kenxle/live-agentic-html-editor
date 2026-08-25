@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.1.0+5f09bd553943
+ * version 0.1.0+4809db0e0646
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.1.0+5f09bd553943";
+  g.LAHE.version = "0.1.0+4809db0e0646";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -4482,6 +4482,21 @@
       why: "D5's second-window refusal for windows that cannot see each other's storage, plus the takeover",
       request: "{review, window_id, session_secret?, takeover?}",
       response: "grant {granted:true, since, heartbeat_seconds, took_over, session_secret}; refusal {granted:false, since, heartbeat_seconds, reason} (no holder id, no secret)"
+    },
+    {
+      name: "window.release",
+      method: "POST",
+      path: BASE + "/window/release",
+      auth: AUTH.REVIEW_TOKEN,
+      mutating: true,
+      why:
+        "the holder saying goodbye on its way out, so a reload does not have to wait out " +
+        "the staleness clock against its own outgoing page and tell the reviewer their " +
+        "review is open in another window",
+      request: "{review, session_secret}",
+      // The secret is the proof, exactly as it is on a heartbeat: without it
+      // this would let any window that can name a review evict the real holder.
+      response: "{released}"
     },
     {
       name: "review.end",
@@ -13394,7 +13409,12 @@
     ".lahe-rail-add textarea::placeholder{color:var(--ink-faint)}",
     ".lahe-rail-add textarea:focus{outline:2px solid var(--accent);outline-offset:1px;",
     "background:var(--paper)}",
-    ".lahe-rail-add textarea:disabled{opacity:.55}"
+    ".lahe-rail-add textarea:disabled{opacity:.55}",
+    ".lahe-rail-addacts{display:flex;justify-content:flex-end}",
+    ".lahe-rail-send{font-size:11.5px;font-weight:600;padding:3px 10px;border-radius:6px;",
+    "border:1px solid var(--line);background:var(--paper);color:var(--ink-soft);cursor:pointer}",
+    ".lahe-rail-send:hover{background:var(--surface);color:var(--ink)}",
+    ".lahe-rail-send[disabled]{opacity:.55;cursor:default}"
   ].join("");
 
   function createActiveTab(options) {
@@ -13782,15 +13802,16 @@
       input.id = "lahe-add-" + id;
       input.setAttribute("rows", "1");
       input.setAttribute("aria-label", "Add another message to this comment");
-      // NO SEND BUTTON, and the placeholder teaches the gesture instead.
+      // A SEND BUTTON, because that is what a text input has. Ken: "a send
+      // button under a text input is a fine idea. that is convention."
       //
-      // The card keeps exactly one action, Delete, and a browser test states
-      // that as a promise. It is the same line the note itself is on: Ken, on
-      // the Reword button, "do we really need a button for 'reword'? before we
-      // could just edit a comment". A control that costs a permanent strip of
-      // the card has to earn it, and this one would only be repeating a gesture
-      // the footer already advertises on every screen.
-      input.setAttribute("placeholder", "Add another message, then " + sendKeys());
+      // It is not one of the card's actions and it is not in their row. Delete
+      // acts on the comment; this belongs to the box above it, the same way the
+      // follow-up composer's own send button belongs to its box. That is the
+      // line between a control worth removing and a control worth keeping: the
+      // ones taken off these cards today all sat in the action row repeating
+      // something already on screen.
+      input.setAttribute("placeholder", "Add another message");
       input.value = keepsDrafts() ? store.readFollowupDraft(reviewId, id) : "";
 
       function submit() {
@@ -13822,7 +13843,15 @@
         }
       });
 
+      var acts = el("div", "lahe-rail-addacts");
+      var send = el("button", "lahe-rail-send", "Send");
+      send.setAttribute("type", "button");
+      send.addEventListener("click", submit);
+      send.title = "Send this message (" + sendKeys() + ")";
+      acts.appendChild(send);
+
       box.appendChild(input);
+      box.appendChild(acts);
       return box;
     }
 
@@ -13857,6 +13886,8 @@
         add.hidden = !!item[record.FIELD.REPLY] || item[record.FIELD.STATE] !== record.STATE.READY;
         var field = add.querySelector("textarea");
         if (field) field.disabled = !!item[record.FIELD.REPLY];
+        var send = add.querySelector(".lahe-rail-send");
+        if (send) send.disabled = !!item[record.FIELD.REPLY];
       }
 
       var state = row.querySelector(".lahe-rail-state");
@@ -18039,6 +18070,38 @@
       // rejected fetch with no body, and that is NOT a refusal: locking a window
       // out on a check that never ran is the work-losing outcome D5 forbids.
       var refused = body.granted === false || code === "PROTO_SECOND_WINDOW";
+      // A REFUSED CLAIM IS STILL AN ANSWER, and it disproves two other chips.
+      //
+      // The helper replied with a body, so it is up; and this reply came back
+      // through CORS carrying a token the origin check and the auth check both
+      // let past, so neither the origin nor the token is the problem. Only the
+      // ok branch above cleared those, and a refused window has no ok branch:
+      // it stops its heartbeat and polls with claims that are answered and
+      // refused, over and over, so nothing ever ran markReachable again.
+      //
+      // What that looked like: the reviewer sat in front of a chip telling them
+      // to register an origin that was registered, while their agent worked
+      // normally (the agent reaches the helper through the CLI, where there is
+      // no origin check at all), and the sentence the chip offered them to hand
+      // to that agent was a fix for a problem they did not have. The window
+      // refusal underneath it was the real one, and it was saying so two chips
+      // away (Ken, live, 2026-08-25).
+      //
+      // Deliberately only on THIS refusal. A claim refused for the token or the
+      // origin is those chips being right, and clearing them would be the same
+      // mistake pointed the other way.
+      if (refused) {
+        if (helperReachable !== true) {
+          helperReachable = true;
+          onRecovered("HELPER_UNREACHABLE");
+        }
+        if (accessRefused) {
+          accessRefused = null;
+          onRecovered("SYNC_ORIGIN_NOT_ALLOWED");
+          onRecovered("SYNC_UNAUTHORIZED");
+        }
+        originDiagnosed = false;
+      }
       return { granted: false, refused: refused, body: body, error: result.error };
     }
 
@@ -18255,9 +18318,58 @@
       });
     }
 
+    /**
+     * Hand the review back on the way out.
+     *
+     * A window used to lose the review only by GOING QUIET, and the helper waited
+     * out STALE_AFTER_MS before believing it.
+     *
+     * NOT the same-tab reload, which was already fine: the page that comes back
+     * reads the outgoing page's secret out of storage and is recognized as the
+     * same holder (see loadPersistedSecret). The paths that were broken are the
+     * ones with no shared storage to inherit that secret through, and the one a
+     * reviewer actually meets is a served page whose ADDRESS CHANGES under them,
+     * because the server that served it restarted on a new port. Different
+     * origin, different storage, no secret: a stranger asking for a review that a
+     * page which no longer exists still holds, refused until the clock runs out
+     * (Ken, live, 2026-08-25).
+     *
+     * Keepalive, like the flush beside it: the document is going away and an
+     * ordinary fetch dies with it. The body is two short strings, so it is never
+     * near the keepalive size limit that the flush has to guard against.
+     *
+     * ONLY WITH THE SECRET. It is what proves this window is the holder, and the
+     * helper ignores a release without it. A window that never held the review
+     * has no secret and therefore says nothing here, which is right: it has
+     * nothing to give back.
+     */
+    function releaseOnUnload() {
+      if (!sessionSecret) return null;
+      if (readOnly) return null;
+      // THE BEAT STOPS FIRST. A heartbeat is a claim, and a claim that lands
+      // after the goodbye finds no holder and is granted: the page that just
+      // left takes the review back on its way out the door, and holds it for the
+      // full staleness clock because nothing is alive to beat for it again. The
+      // release then looks like it did nothing, which is how this was found.
+      stopHeartbeat();
+      stopLiveness();
+      var body = JSON.stringify({ review: requireReview(), session_secret: sessionSecret });
+      // The secret dies with the page either way. Dropping it here too means a
+      // bfcache restore re-claims from scratch rather than heartbeating with a
+      // secret the helper has already forgotten.
+      sessionSecret = null;
+      return request("window.release", { method: "POST", body: body, keepalive: true });
+    }
+
     function commitOnUnload() {
       unloading = true;
-      return flush({ unload: true });
+      var flushed = flush({ unload: true });
+      // AFTER the flush is started, not before. The reviewer's last keystrokes
+      // are the thing that must not be lost; the goodbye is a courtesy to the
+      // next window, and a release that beat the flush out the door would hand
+      // the review on while this page still had words to send.
+      releaseOnUnload();
+      return flushed;
     }
 
     // A page restored from the bfcache, or a beforeunload the reviewer cancelled,
@@ -25626,7 +25738,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.1.0+5f09bd553943";
+  var VERSION = "0.1.0+4809db0e0646";
 
   var protocol = ns.protocol;
   var record = ns.record;

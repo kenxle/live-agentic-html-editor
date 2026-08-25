@@ -1367,13 +1367,17 @@ test.describe("adding another message before the agent has answered", () => {
           there: !!add && !add.hidden,
           // The card keeps exactly one action, and this box does not spend a
           // second one on a gesture the footer already advertises.
-          buttonsOnCard: Array.from(card.querySelectorAll("button")).map((b) => b.textContent),
-          placeholder: add ? add.querySelector("textarea").getAttribute("placeholder") : null
+          buttonsOnCard: Array.from(card.querySelectorAll("button")).map((b) => b.textContent).sort(),
+          cardActs: Array.from(card.querySelectorAll("[data-lahe-act]")).map((b) =>
+            b.getAttribute("data-lahe-act")
+          )
         };
       }, item.id);
       expect(box.there, "a sent comment still has somewhere to type").toBe(true);
-      expect(box.buttonsOnCard, "and it adds no button to the card").toEqual(["Delete"]);
-      expect(box.placeholder, "the box teaches the gesture instead").toContain("Cmd-Enter");
+      // A box gets a send button, which is what a text input has. What it does
+      // not get is a place in the card's action row beside Delete.
+      expect(box.buttonsOnCard, "the box brings its own Send, and nothing else").toEqual(["Delete", "Send"]);
+      expect(box.cardActs, "the card still acts on the comment in exactly one way").toEqual(["delete"]);
 
       await page.evaluate((id) => {
         const input = window.__lahe.rail.cardNode(id).querySelector(".lahe-rail-add textarea");

@@ -321,6 +321,13 @@ test.describe("the note is the input: rewording without a button", () => {
         const pane = window.__lahe.rail.tabBody("active");
         return {
           onCard: Array.from(card.querySelectorAll("button")).map((b) => b.textContent),
+          // The card's ACTIONS, which is what this test is about: things that
+          // act on the comment, in its action row. A send button belonging to a
+          // text box is not one of them, any more than the follow-up composer's
+          // own send button on a Done card ever was.
+          onCardActs: Array.from(card.querySelectorAll("[data-lahe-act]")).map((b) =>
+            b.getAttribute("data-lahe-act")
+          ),
           rewordAct: !!card.querySelector("[data-lahe-act='reword']"),
           deleteAct: !!card.querySelector("[data-lahe-act='delete']"),
           paneReword: !!pane.querySelector("[data-lahe-act='reword']"),
@@ -331,7 +338,10 @@ test.describe("the note is the input: rewording without a button", () => {
       expect(buttons.rewordAct, "the button the note replaced is gone").toBe(false);
       expect(buttons.paneReword, "and it is not anywhere else in the Active tab").toBe(false);
       expect(buttons.paneRewordText, "not under another name either").toBe(false);
-      expect(buttons.onCard, "the card keeps exactly one action: Delete").toEqual(["Delete"]);
+      expect(buttons.onCardActs, "the card keeps exactly one action: Delete").toEqual(["delete"]);
+      // Everything else on the card belongs to a box rather than acting on the
+      // comment, and there is exactly one such box before an agent has answered.
+      expect(buttons.onCard.filter((label) => label !== "Delete"), "and one Send, for the box").toEqual(["Send"]);
       expect(buttons.deleteAct).toBe(true);
     } finally {
       await helper.kill9();

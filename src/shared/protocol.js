@@ -260,6 +260,21 @@
       response: "grant {granted:true, since, heartbeat_seconds, took_over, session_secret}; refusal {granted:false, since, heartbeat_seconds, reason} (no holder id, no secret)"
     },
     {
+      name: "window.release",
+      method: "POST",
+      path: BASE + "/window/release",
+      auth: AUTH.REVIEW_TOKEN,
+      mutating: true,
+      why:
+        "the holder saying goodbye on its way out, so a reload does not have to wait out " +
+        "the staleness clock against its own outgoing page and tell the reviewer their " +
+        "review is open in another window",
+      request: "{review, session_secret}",
+      // The secret is the proof, exactly as it is on a heartbeat: without it
+      // this would let any window that can name a review evict the real holder.
+      response: "{released}"
+    },
+    {
       name: "review.end",
       method: "POST",
       path: BASE + "/end",

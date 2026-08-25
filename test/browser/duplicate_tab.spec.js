@@ -87,6 +87,53 @@ test.describe("a duplicated tab does not inherit the review", () => {
     if (pages) await pages.close();
   });
 
+  // A WINDOW THAT LEAVES HANDS THE REVIEW BACK.
+  //
+  // Until this, a window lost a review only by GOING QUIET, and the helper waited
+  // out the staleness clock before believing it. A same-tab reload was already
+  // fine, because the page that comes back reads the outgoing page's session
+  // secret out of storage and is recognized as the same holder. What was not fine
+  // was every other way a page ends: navigating somewhere else, or the address
+  // changing under the reviewer because the server that served it restarted on a
+  // new port. There is no shared storage across those, so the new page asks as a
+  // stranger, and the review it is asking for is still held by a page that no
+  // longer exists (Ken, live, 2026-08-25).
+  //
+  // The second context is the point: no shared storage, so nothing but the
+  // release can free the review in time.
+  test("a window that navigates away frees the review at once, not in thirty seconds", async ({ page, browser }) => {
+    await page.goto(pages.origin + "/" + PAGE_FILE);
+    await booted(page);
+    await pollPage(page, () => window.__lahe.handle.sync.lockState().acquired === true, undefined, {
+      message: "the first page to take the review"
+    });
+
+    // It leaves. This is the reviewer clicking a link, or the address changing
+    // under them; either way the document goes and its goodbye goes with it.
+    await page.goto("about:blank");
+
+    const stranger = await browser.newContext();
+    try {
+      const next = await stranger.newPage();
+      await next.goto(pages.origin + "/" + PAGE_FILE);
+      await booted(next);
+      // The budget is the assertion. The goodbye is fire and forget, so the
+      // next window can ask before it lands and be refused once. What it must
+      // not do is wait out the staleness clock: this poll gives up long before
+      // the thirty seconds that a window going quiet would have cost, so it can
+      // only pass if the review was actually handed back.
+      await pollPage(next, () => window.__lahe.handle.sync.lockState().acquired === true, undefined, {
+        message: "the next window to be given the review"
+      });
+
+      const state = await claimState(next);
+      expect(state.acquired, "the review was handed back, so the next window has it").toBe(true);
+      expect(state.readOnly, "and it can actually review").toBe(false);
+    } finally {
+      await stranger.close();
+    }
+  });
+
   test("the copy is refused and goes read-only, and the original keeps the review", async ({ page }) => {
     await page.goto(pages.origin + "/" + PAGE_FILE);
     await booted(page);

@@ -268,3 +268,71 @@ test("a bundle missing at startup is still a loud failure", () => {
     /the built library is missing/
   );
 });
+
+// ---------------------------------------------------------------------------
+// The holder hands the review back on its way out
+// ---------------------------------------------------------------------------
+//
+// A window used to lose a review only by going quiet, and the helper waited out
+// the staleness clock before believing it. So a reload was a new window asking
+// for a review its own outgoing page still appeared to hold: refused, retrying,
+// for up to thirty seconds. The reviewer had one tab open and was told their
+// review was open in another window, every time a page they were reviewing
+// rebuilt underneath them (Ken, live, 2026-08-25).
+
+test("a released review is free immediately, with no wait for the staleness clock", () => {
+  const dir = tempDir();
+  const log = logModule.createEventLog({ dir: dir });
+  let now = Date.parse("2026-08-25T18:25:00.000Z");
+  const reviews = reviewsModule.createReviews({ dir: dir, log: log, now: () => now });
+  reviews.create({ id: "review-1", origins: ["null"] });
+
+  const holder = reviews.claimWindow("review-1", { window_id: "w1" });
+  assert.equal(holder.granted, true);
+
+  // The reload, one second later: far inside the window where the outgoing page
+  // still counts as alive.
+  now += 1000;
+  assert.equal(
+    reviews.claimWindow("review-1", { window_id: "w2" }).granted,
+    false,
+    "without a goodbye the next window is refused"
+  );
+
+  assert.deepEqual(reviews.releaseWindow("review-1", { session_secret: holder.session_secret }), {
+    released: true
+  });
+  assert.equal(
+    reviews.claimWindow("review-1", { window_id: "w2" }).granted,
+    true,
+    "and with one it is granted at once"
+  );
+});
+
+test("a release is refused without the holder's own secret, so it cannot evict anybody", () => {
+  // Without this the route is an eviction primitive: any window that can name a
+  // review could throw the real holder out of it, which is the outcome D5 exists
+  // to prevent.
+  const dir = tempDir();
+  const log = logModule.createEventLog({ dir: dir });
+  const reviews = reviewsModule.createReviews({ dir: dir, log: log });
+  reviews.create({ id: "review-1", origins: ["null"] });
+
+  const holder = reviews.claimWindow("review-1", { window_id: "w1" });
+
+  assert.deepEqual(reviews.releaseWindow("review-1", { session_secret: "not-the-secret" }), {
+    released: false
+  });
+  assert.deepEqual(reviews.releaseWindow("review-1", {}), { released: false }, "and none at all is not one");
+  assert.equal(
+    reviews.claimWindow("review-1", { window_id: "w2" }).granted,
+    false,
+    "the real holder still holds it"
+  );
+
+  // A release for a review nobody holds changes nothing and says so.
+  reviews.releaseWindow("review-1", { session_secret: holder.session_secret });
+  assert.deepEqual(reviews.releaseWindow("review-1", { session_secret: holder.session_secret }), {
+    released: false
+  });
+});

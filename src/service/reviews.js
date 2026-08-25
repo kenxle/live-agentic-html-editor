@@ -876,6 +876,35 @@ function createReviews(options) {
     return granted(sessions[reviewId], tookOver, null);
   }
 
+  /**
+   * The holder saying goodbye, so the next window does not have to wait it out.
+   *
+   * Until this existed a window only ever lost the review by GOING QUIET, and
+   * the helper waited STALE_AFTER_MS before believing it. A reload is a new
+   * window asking for a review the outgoing one still appears to hold, so it was
+   * refused, and it retried until the clock ran out. The reviewer, who had one
+   * tab open, was told their review was open in another window for half a minute
+   * every time a page they were reviewing rebuilt underneath them (Ken, live,
+   * 2026-08-25).
+   *
+   * THE SECRET IS THE PROOF, exactly as it is for the heartbeat. Without it this
+   * is an eviction primitive: any window that could name a review could throw
+   * the real holder out of it, which is the outcome D5 exists to prevent. A
+   * release with a wrong secret, or for a review nobody holds, changes nothing
+   * and says so.
+   *
+   * @returns {{released: boolean}} whether this call ended a holder's session
+   */
+  function releaseWindow(reviewId, request) {
+    var req = request || {};
+    var holder = sessions[reviewId] || null;
+    if (!holder) return { released: false };
+    if (!secretsMatch(holder.session_secret, req.session_secret)) return { released: false };
+    delete sessions[reviewId];
+    log.helperLog("review " + reviewId + ": window " + holder.window_id + " released it on the way out");
+    return { released: true };
+  }
+
   function granted(holder, tookOver, reason) {
     return {
       granted: true,
@@ -937,6 +966,7 @@ function createReviews(options) {
     config: config,
     writeReadyFile: writeReadyFile,
     claimWindow: claimWindow,
+    releaseWindow: releaseWindow,
     holderOf: holderOf,
     endReview: endReview
   };
