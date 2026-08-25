@@ -657,8 +657,16 @@ token burn the wake feed exists to eliminate.
 
 The wake feed is one append-only file per agent session. It gets one line when a
 ready item lands for a review this session owns, one line when the reviewer
-reopens an item you already answered, one line on takeover, and one line on
-close. Each new line means run the drain command. The Monitor stays armed
+reopens an item you already answered, one line when the reviewer ends such a
+review, one line on takeover, and one line on close. Each new line means run the
+drain command.
+
+Only `takeover` and `closed` mean stop. An `ended` line means the opposite: the
+reviewer is done, and their unanswered items are still their requests, so drain
+that review to empty and then run the close routine below. The drain says which
+review ended, under `ended_reviews` in the JSON summary, because an ended review
+has no ready items left and that is also what a review you have kept up with
+looks like. Do not read zero ready items as "still going": read the field. The Monitor stays armed
 for the whole session, so there is nothing to relaunch and nothing to remember,
 and an idle session costs no model turns at all.
 

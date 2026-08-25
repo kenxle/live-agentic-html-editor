@@ -31,6 +31,7 @@ const logModule = require("../../src/service/log.js");
 const reviewsModule = require("../../src/service/reviews.js");
 const projection = require("../../src/service/projection.js");
 const routes = require("../../src/service/routes.js");
+const wakeFeedModule = require("../../src/service/wake_feed.js");
 const protocol = require("../../src/shared/protocol.js");
 const record = require("../../src/shared/record.js");
 const overlay = require("../../src/layer/overlay.js");
@@ -120,12 +121,22 @@ function eventId() {
   return "evt_end_" + counter;
 }
 
-function fixture(reviewId) {
+function fixture(reviewId, options) {
+  const opts = options || {};
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-end-"));
   const log = logModule.createEventLog({ dir: dir });
   const reviews = reviewsModule.createReviews({ dir: dir, log: log });
-  reviews.create({ id: reviewId, origins: ["null"] });
-  return { dir, log, reviews, deps: { log: log, reviews: reviews, projection: projection } };
+  reviews.create(
+    Object.assign({ id: reviewId, origins: ["null"] }, opts.session ? { agent_session_id: opts.session } : {})
+  );
+  const deps = { log: log, reviews: reviews, projection: projection };
+  let wake = null;
+  if (opts.session) {
+    wake = wakeFeedModule.createWakeFeed({ dir: dir });
+    wake.ensure(opts.session);
+    deps.agentSessions = { wake: wake };
+  }
+  return { dir, log, reviews, wake, session: opts.session || null, deps };
 }
 
 function post(f, reviewId, item, type) {
@@ -310,4 +321,78 @@ test("a helper that cannot be reached is reported, not swallowed", async (t) => 
   assert.equal(result.ok, false, "the review was not ended");
   assert.equal(typeof result.reason, "string");
   assert.equal(result.reason.length > 0, true, "and the reviewer is told why");
+});
+
+// ---------------------------------------------------------------------------
+// The wake line: the half of the promise that was never built
+// ---------------------------------------------------------------------------
+//
+// The contract tells every agent that a reviewer "can end a review from the
+// page ... and you are woken with the rest of the work". Nothing wrote that
+// line. The route archived the review, review.json got its ended_at, and the
+// agent's only push channel stayed silent, so the reviewer pressed the door and
+// nobody came.
+//
+// What made it cost an afternoon rather than a minute is that the silence looks
+// exactly like health. An ended review has no ready items left, which is also
+// what a review the agent has kept up with looks like, so the agent that went
+// and checked by hand reported the review as still active and still listening.
+
+test("ending a review wakes the session that owns it", () => {
+  const REVIEW = "end-wake-review";
+  const SESSION = "s_endwake01";
+  const f = fixture(REVIEW, { session: SESSION });
+  post(f, REVIEW, itemOf({ note: "this paragraph is two paragraphs" }));
+
+  const before = f.wake.read(SESSION).length;
+  const result = end(f, REVIEW);
+  const lines = f.wake.read(SESSION);
+
+  assert.equal(result.body.woke, true, "the route reports that it woke somebody");
+  assert.equal(lines.length, before + 1, "exactly one line, for the one press");
+
+  const last = lines[lines.length - 1];
+  assert.equal(last[protocol.WAKE.FIELD.KIND], protocol.WAKE.KIND.ENDED);
+  assert.equal(last[protocol.WAKE.FIELD.REVIEW], REVIEW, "it names the review that ended");
+  assert.equal(last[protocol.WAKE.FIELD.ITEM], undefined, "and no item, because no one item ended");
+  assert.equal(
+    typeof last[protocol.WAKE.FIELD.DRAIN],
+    "string",
+    "it carries the drain command, like every other wake line"
+  );
+  assert.equal(
+    JSON.stringify(last).indexOf("two paragraphs"),
+    -1,
+    "a wake line is a pointer and never carries reviewer text"
+  );
+});
+
+test("pressing the door twice wakes the session once", () => {
+  const REVIEW = "end-wake-twice";
+  const SESSION = "s_endwake02";
+  const f = fixture(REVIEW, { session: SESSION });
+  post(f, REVIEW, itemOf());
+
+  end(f, REVIEW);
+  const afterFirst = f.wake.read(SESSION).length;
+  // A second press, or a retry after a dropped response, is the same review
+  // ending. The reviewer should not be able to spend an agent's turn twice.
+  const second = end(f, REVIEW);
+
+  assert.equal(f.wake.read(SESSION).length, afterFirst, "no second line");
+  assert.equal(second.body.woke, false, "and the route says so rather than claiming a wake");
+});
+
+test("a review with no owning session ends without a wake and without a throw", () => {
+  // Reviews minted before sessions existed carry the synthetic id "legacy",
+  // which has no directory and therefore no feed. Ending one is still a valid
+  // thing for a reviewer to do, and it must not fail on the way out.
+  const REVIEW = "end-wake-legacy";
+  const f = fixture(REVIEW);
+  post(f, REVIEW, itemOf());
+
+  const result = end(f, REVIEW);
+
+  assert.equal(typeof result.body.ended_at, "string", "the review still ends");
+  assert.equal(result.body.woke, false, "and reports plainly that nobody was woken");
 });

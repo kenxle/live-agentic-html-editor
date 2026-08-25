@@ -547,6 +547,7 @@ async function run(argv, options) {
 
   var lines = [];
   var jsonItems = [];
+  var endedReviews = [];
   var totalUnanswered = 0;
   var seenAny = false;
 
@@ -605,6 +606,22 @@ async function run(argv, options) {
     var open = items.filter(isUnansweredReady);
     totalUnanswered += open.length;
     var ownerSessionId = ownerOfReview(dir, id);
+    // THE REVIEWER IS DONE, AND ZERO READY DOES NOT SAY SO. An ended review
+    // drains to no ready items, which is exactly what a review the agent has
+    // kept up with looks like. Without this, the two are the same output and
+    // an agent reads "finished" as "quiet". It is carried here so it survives
+    // --quiet below, because the wake line's own drain command is --quiet.
+    var endedAt = projection && projection.review && projection.review.ended_at
+      ? projection.review.ended_at
+      : null;
+    if (endedAt) {
+      endedReviews.push({
+        review: id,
+        agent_session_id: ownerSessionId,
+        ended_at: endedAt,
+        unanswered_kept: open.length
+      });
+    }
 
     var liveness = {
       helper_up: helperUp,
@@ -648,6 +665,18 @@ async function run(argv, options) {
         counts[record.STATE.NOT_HANDLED] +
         " not handled"
     );
+    if (endedAt) {
+      // Said before the liveness lines, because it changes what they mean: a
+      // page that stopped being seen is the expected end of an ended review,
+      // not a page that went away mid-session.
+      lines.push(
+        "  ended     the reviewer ended this review at " + endedAt + "." +
+          (open.length > 0
+            ? " " + open.length + " item" + (open.length === 1 ? " is" : "s are") +
+              " still unanswered; ending kept them, so they are still their requests."
+            : "")
+      );
+    }
     if (draftCount > 0) {
       // Listed apart, and never in the work list or in --json: a draft is the
       // reviewer still writing. It is said out loud so an edit stuck in draft
@@ -664,7 +693,16 @@ async function run(argv, options) {
     var served = servedViaLine(liveness.served_via);
     if (served) lines.push("  " + served);
     if (open.length === 0) {
-      lines.push("  nothing is waiting on you.");
+      // "Nothing is waiting" is false for an ended review: the reviewer is done,
+      // and being done is itself the thing waiting on the agent. Printing the
+      // old line here put a flat contradiction two lines under the one that
+      // said the review had ended, and the reassuring half is the half a reader
+      // believes.
+      lines.push(
+        endedAt
+          ? "  no items are waiting, but the reviewer ended this review: run the end-of-review routine."
+          : "  nothing is waiting on you."
+      );
     } else {
       open.forEach(function (item) {
         lines.push(
@@ -721,7 +759,68 @@ async function run(argv, options) {
       });
     }
 
-    if (args.quiet && toPrint.length === 0) return EXIT.OK;
+    // An ended review is reported like an item: once per seen file, every time
+    // without one. Keyed with a literal "ended" where an item id and rev go, so
+    // it shares the file's one-key-per-line shape and cannot collide with an
+    // item (no item id is the word "ended").
+    var endedToReport = endedReviews;
+    if (args.seenFile) {
+      endedToReport = endedReviews.filter(function (entry) {
+        var key = String(args.session) + " " + String(entry.review) + " ended";
+        if (seen[key]) return false;
+        newlySeen.push(key);
+        return true;
+      });
+    }
+
+    // ONCE PER SESSION, FOR THE MONITOR ONLY. "The reviewer ended this review"
+    // is a state, not an event: unlike an unanswered item, which stops being
+    // reported the moment the agent answers it, ended_at never clears. A
+    // monitor that woke on it with no memory would wake on it again on every
+    // relaunch, forever, and every one of those relaunches costs a model turn
+    // for nothing.
+    //
+    // The mark is written only by `lahe monitor` (which sets this option), and
+    // never by an agent running the drain by hand: an agent that has just been
+    // woken has to be able to run the drain and find out why.
+    if (opts.markEndedDelivered && args.session && endedToReport.length > 0) {
+      var deliveredPath = stateDirModule.endedDeliveredPath(dir, args.session);
+      var delivered = Object.create(null);
+      try {
+        if (fs.existsSync(deliveredPath)) {
+          fs.readFileSync(deliveredPath, "utf8").split("\n").forEach(function (line) {
+            var trimmed = line.trim();
+            if (trimmed) delivered[trimmed] = true;
+          });
+        }
+      } catch (readErr) {
+        err("lahe status: could not read " + deliveredPath + ": " + readErr.message + "\n");
+        return EXIT.BAD_USAGE;
+      }
+      var freshlyEnded = endedToReport.filter(function (entry) { return !delivered[entry.review]; });
+      if (freshlyEnded.length > 0) {
+        try {
+          stateDirModule.ensureAgentSessionDir(dir, args.session);
+          fs.appendFileSync(
+            deliveredPath,
+            freshlyEnded.map(function (entry) { return entry.review; }).join("\n") + "\n",
+            { mode: stateDirModule.FILE_MODE }
+          );
+        } catch (writeErr) {
+          // LOUD, like the seen file's own failures. A dedupe that silently
+          // broke here does not go quiet, it nags forever, and the agent pays
+          // a turn for each one.
+          err("lahe status: could not write " + deliveredPath + ": " + writeErr.message + "\n");
+          return EXIT.BAD_USAGE;
+        }
+      }
+      endedToReport = freshlyEnded;
+    }
+
+    // NOT SILENT WHEN A REVIEW ENDED. --quiet exists so a watcher that wakes on
+    // nothing prints nothing, and the wake line's own drain command uses it. An
+    // ended review is something, so it has to get past this.
+    if (args.quiet && toPrint.length === 0 && endedToReport.length === 0) return EXIT.OK;
 
     // Line one is the contract and the field classes, before any page-derived
     // text reaches the reader.
@@ -733,6 +832,7 @@ async function run(argv, options) {
       JSON.stringify({
         reviews: ids.length,
         unanswered_ready: totalUnanswered,
+        ended_reviews: endedToReport,
         new_since_seen_file: args.seenFile ? toPrint.length : undefined,
         helper: helperOrigin,
         agent_session_id: args.session,

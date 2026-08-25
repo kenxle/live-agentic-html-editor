@@ -917,7 +917,23 @@
       // Another agent ran `lahe session takeover` on this session.
       TAKEOVER: "takeover",
       // The session was closed. Nothing more will be appended.
-      CLOSED: "closed"
+      CLOSED: "closed",
+      // The reviewer pressed End review on the rail, for a review this session
+      // owns. It carries a review and no item, because it is about the review
+      // rather than about one piece of work.
+      //
+      // IT IS NOT "STOP". An ended review's unanswered items are still the
+      // reviewer's requests, so the answer to this line is the same drain as
+      // any other, followed by the end-of-review routine in the contract. Only
+      // TAKEOVER and CLOSED mean stop.
+      //
+      // Without this line the feed had no way to say a review had ended, and
+      // the contract's promise that the reviewer "can end a review from the
+      // page ... and you are woken" was false. Worse than silent: an ended
+      // review drains to zero ready items, which is exactly what a review the
+      // agent has kept up with looks like, so the agent reads "finished" as
+      // "quiet" and waits.
+      ENDED: "ended"
     },
     FIELD: {
       AT: "at",

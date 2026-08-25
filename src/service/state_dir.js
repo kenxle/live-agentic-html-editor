@@ -245,6 +245,23 @@ function agentSessionPath(dir, sessionId) {
 }
 
 /**
+ * Which ended reviews this session's monitor has already woken the agent for.
+ *
+ * One review id per line, append-only. It exists because "the reviewer ended
+ * this review" is a state and not an event: unlike an unanswered item, which
+ * stops being reported the moment the agent answers it, ended_at is permanent.
+ * A monitor that woke on it with no memory would wake on it again on every
+ * relaunch, forever, and each of those relaunches costs a model turn for
+ * nothing. That is the exact no-op wake loop the wake feed was built to end.
+ *
+ * Only `lahe monitor` writes it. An agent running the drain by hand is always
+ * told, because an agent that just woke has to be able to find out why.
+ */
+function endedDeliveredPath(dir, sessionId) {
+  return resolveWithin(dir, [AGENT_SESSIONS_DIR, assertSafeReviewId(sessionId), "ended-delivered.log"]);
+}
+
+/**
  * The session's wake feed: append-only JSONL a host may `tail -f`.
  *
  * Not written through writeAtomic, and that is the point. An atomic replace
@@ -389,6 +406,7 @@ module.exports = {
   agentSessionsRoot: agentSessionsRoot,
   agentSessionDir: agentSessionDir,
   agentSessionPath: agentSessionPath,
+  endedDeliveredPath: endedDeliveredPath,
   wakeLogPath: wakeLogPath,
   monitorPath: monitorPath,
   activityPath: activityPath,

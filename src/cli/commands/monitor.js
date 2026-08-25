@@ -309,7 +309,12 @@ async function run(argv, options) {
       // the monitor ran and pushed the unattended alarm out of reach, which is
       // exactly the false comfort the liveness line exists to remove. The
       // heartbeat above is the honest signal for "a monitor is up".
-      suppressActivityTouch: true
+      suppressActivityTouch: true,
+      // ONCE, NOT ON EVERY RELAUNCH. An ended review is permanent state, so
+      // without this the monitor would surface it, exit, be relaunched, surface
+      // it again, and spend a model turn every time round. Only the monitor
+      // marks it: the agent's own drain always answers "why was I woken".
+      markEndedDelivered: true
     });
     var printed = stdout.join("");
     var errors = stderr.join("");

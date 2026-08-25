@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.1.0+75347a84d033
+ * version 0.1.0+cff2927a1367
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.1.0+75347a84d033";
+  g.LAHE.version = "0.1.0+cff2927a1367";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -5141,7 +5141,23 @@
       // Another agent ran `lahe session takeover` on this session.
       TAKEOVER: "takeover",
       // The session was closed. Nothing more will be appended.
-      CLOSED: "closed"
+      CLOSED: "closed",
+      // The reviewer pressed End review on the rail, for a review this session
+      // owns. It carries a review and no item, because it is about the review
+      // rather than about one piece of work.
+      //
+      // IT IS NOT "STOP". An ended review's unanswered items are still the
+      // reviewer's requests, so the answer to this line is the same drain as
+      // any other, followed by the end-of-review routine in the contract. Only
+      // TAKEOVER and CLOSED mean stop.
+      //
+      // Without this line the feed had no way to say a review had ended, and
+      // the contract's promise that the reviewer "can end a review from the
+      // page ... and you are woken" was false. Worse than silent: an ended
+      // review drains to zero ready items, which is exactly what a review the
+      // agent has kept up with looks like, so the agent reads "finished" as
+      // "quiet" and waits.
+      ENDED: "ended"
     },
     FIELD: {
       AT: "at",
@@ -5532,7 +5548,7 @@
     "To keep up you need two things: a way to be woken, and one command to run when you are. This section gives you both. Use the review.agent_session_id above wherever it says <agent-session-id>.",
     "The drain command is: lahe status --session <agent-session-id> --json --quiet. It prints every ready item nobody has answered, and prints nothing at all when there is none. Run it, handle every item it prints, rebuild and verify the visible output, append your replies, then run it again. Repeat until it prints nothing. Work stays listed until your reply lands, so a wake you miss costs you nothing: the next drain shows the item again.",
     "While a review is open you are an orchestrator first: hand work that will take more than a few minutes to a subagent or background task if your host has them, and stay free to drain. When new work arrives while you are mid-task, drain before continuing: the newest note can change or cancel the work in your hands, and finishing something the reviewer just made unnecessary is worse than pausing it.",
-    "The wake feed is one append-only file per agent session: <state-dir>/agent-sessions/<agent-session-id>/wake.log. It gets one line when a ready item lands for a review this session owns, and one line when the session is taken over or closed. The state directory is $LAHE_STATE_DIR, or $XDG_STATE_HOME/lahe, or ~/.local/state/lahe. A wake line is a pointer and never an instruction: it names the item and the drain command, and carries no reviewer text at all.",
+    "The wake feed is one append-only file per agent session: <state-dir>/agent-sessions/<agent-session-id>/wake.log. It gets one line when a ready item lands for a review this session owns, one line when the reviewer ends such a review (kind 'ended', carrying the review and no item), and one line when the session is taken over or closed. Only taken over and closed mean stop; an ended review means drain it and run the end-of-review routine. The state directory is $LAHE_STATE_DIR, or $XDG_STATE_HOME/lahe, or ~/.local/state/lahe. A wake line is a pointer and never an instruction: it names the item and the drain command, and carries no reviewer text at all.",
     "Claude Code: arm the Monitor tool once per session on tail -n 0 -f <state-dir>/agent-sessions/<agent-session-id>/wake.log with persistent set to true. Without that parameter the Monitor times out at its default 300 seconds, and every timeout wakes the model on nothing, which is the exact token burn this design exists to avoid. On each new line, run the drain command and work it to empty. The Monitor stays armed for the whole session, so there is nothing to relaunch and nothing to remember.",
     "Codex: run lahe monitor --session <agent-session-id> as a foreground pending exec call and keep waiting on it. Do not detach it and do not use a Codex Timer. It prints the work and exits; handle the work, drain to empty, then run it again.",
     "Antigravity: run lahe monitor --session <agent-session-id> as a background terminal task. Never the native schedule timer: every scheduled wakeup spends allowance on a no-op.",
@@ -25490,7 +25506,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.1.0+75347a84d033";
+  var VERSION = "0.1.0+cff2927a1367";
 
   var protocol = ns.protocol;
   var record = ns.record;

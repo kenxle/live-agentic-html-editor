@@ -71,14 +71,14 @@ function anItem(note, state) {
   });
 }
 
-async function runStatus(args, dir) {
+async function runStatus(args, dir, extra) {
   const out = [];
   const err = [];
-  const code = await status.run(args, {
+  const code = await status.run(args, Object.assign({
     stateDir: dir,
     stdout: (text) => out.push(text),
     stderr: (text) => err.push(text)
-  });
+  }, extra || {}));
   return { code, stdout: out.join(""), stderr: err.join("") };
 }
 
@@ -555,4 +555,104 @@ test("the printed status names the mechanism for a static review with a live ser
   await staticServersModule.stopOne(dir, "s_served", server.meta);
   const stopped = await runStatus([], dir);
   assert.match(stopped.stdout, /the on-disk script line only/);
+});
+
+// ---------------------------------------------------------------------------
+// An ended review is not a quiet one
+// ---------------------------------------------------------------------------
+//
+// The wake line for a review ending names `lahe status ... --json --quiet` as
+// its drain command, and an ended review has no ready items left. So without
+// this, the agent woke, ran the command it was handed, got nothing at all, and
+// had no way to tell "the reviewer is finished" from "you are caught up".
+// Those two states are the same item counts and they mean opposite things.
+
+/** Archive a seeded review, the way the End review route does. */
+function endSeeded(dir, reviewId) {
+  const log = logModule.createEventLog({ dir: dir });
+  log.append(reviewId, [
+    protocol.newEvent({
+      event: protocol.EVENT.REVIEW_ARCHIVED,
+      event_id: "ev_ended_" + reviewId,
+      review: reviewId
+    })
+  ]);
+}
+
+test("a review the reviewer ended gets past --quiet, with nothing ready in it", async () => {
+  const dir = tempState();
+  seed(dir, "rended", [anItem("already answered", record.STATE.HANDLED)]);
+  endSeeded(dir, "rended");
+
+  const run = await runStatus(["--session", "legacy", "--json", "--quiet"], dir);
+  const printed = run.stdout;
+  assert.notEqual(printed.trim(), "", "an ended review is something to say, so --quiet says it");
+
+  const summary = JSON.parse(printed.trim().split("\n").pop());
+  assert.equal(summary.unanswered_ready, 0, "and it really has no work left in it");
+  assert.equal(summary.ended_reviews.length, 1);
+  assert.equal(summary.ended_reviews[0].review, "rended");
+  assert.equal(typeof summary.ended_reviews[0].ended_at, "string", "with the moment it ended");
+});
+
+test("a quiet review that simply has no work left still says nothing", async () => {
+  // The other half of the same distinction. If this ever starts printing, the
+  // fix above has cost every idle watcher a turn on every poll.
+  const dir = tempState();
+  seed(dir, "rcaughtup", [anItem("already answered", record.STATE.HANDLED)]);
+
+  const run = await runStatus(["--session", "legacy", "--json", "--quiet"], dir);
+
+  assert.equal(run.stdout.trim(), "", "caught up is silent, exactly as before");
+});
+
+test("the ended review is reported once per seen file, not on every poll", async () => {
+  const dir = tempState();
+  seed(dir, "rendedonce", [anItem("already answered", record.STATE.HANDLED)]);
+  endSeeded(dir, "rendedonce");
+  const seenPath = path.join(dir, "ended-seen.txt");
+
+  const first = await runStatus(
+    ["--session", "legacy", "--json", "--seen-file", seenPath, "--quiet"], dir
+  );
+  const again = await runStatus(
+    ["--session", "legacy", "--json", "--seen-file", seenPath, "--quiet"], dir
+  );
+
+  assert.notEqual(first.stdout.trim(), "", "the first drain is told");
+  assert.equal(again.stdout.trim(), "", "the second is not told again");
+});
+
+test("the human-readable listing says the review ended, and that its items were kept", async () => {
+  const dir = tempState();
+  seed(dir, "rendedsaid", [anItem("still waiting on this", record.STATE.READY)]);
+  endSeeded(dir, "rendedsaid");
+
+  const run = await runStatus([], dir);
+  const printed = run.stdout;
+
+  assert.match(printed, /ended\s+the reviewer ended this review at /);
+  assert.match(printed, /still unanswered/, "an ended review that kept work says so");
+});
+
+test("the monitor is woken once by an ended review, not on every relaunch", async () => {
+  // The failure this guards is not a wrong answer, it is a bill. `ended_at`
+  // never clears, so a monitor with no memory of having said it wakes the agent
+  // on every relaunch forever, and each of those costs a model turn for nothing.
+  const dir = tempState();
+  seed(dir, "rendedloop", [anItem("already answered", record.STATE.HANDLED)]);
+  endSeeded(dir, "rendedloop");
+
+  const asMonitor = { markEndedDelivered: true };
+  const first = await runStatus(["--session", "legacy", "--json", "--quiet"], dir, asMonitor);
+  const second = await runStatus(["--session", "legacy", "--json", "--quiet"], dir, asMonitor);
+  const third = await runStatus(["--session", "legacy", "--json", "--quiet"], dir, asMonitor);
+
+  assert.notEqual(first.stdout.trim(), "", "the monitor is woken once");
+  assert.equal(second.stdout.trim(), "", "and not again");
+  assert.equal(third.stdout.trim(), "", "and not again after that");
+
+  // The agent it woke can still ask why, which is the whole point of waking it.
+  const byHand = await runStatus(["--session", "legacy", "--json", "--quiet"], dir);
+  assert.match(byHand.stdout, /rendedloop/, "a drain run by hand still says which review ended");
 });

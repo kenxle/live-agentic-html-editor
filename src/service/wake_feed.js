@@ -163,12 +163,46 @@ function createWakeFeed(options) {
     return write(sessionId, line);
   }
 
+  /**
+   * The reviewer ended a review this session owns.
+   *
+   * Review-scoped, not session-scoped, which is why it is not appendSessionEvent:
+   * a session can own several reviews and ending one says nothing about the rest.
+   * It carries the review and the drain command, and no item, because there is no
+   * one piece of work to point at.
+   *
+   * IDEMPOTENT PER REVIEW. Pressing the door twice, or a retry after a dropped
+   * response, must not append a second line. The seen-set that appendWork uses
+   * only tracks work lines, so this reads the feed for its own kind instead. The
+   * feed is short and this runs once per review in its lifetime.
+   *
+   * @returns {object|null} the line appended, or null when this review already
+   *   has one.
+   */
+  function appendReviewEnded(sessionId, reviewId) {
+    if (!sessionId || !reviewId) {
+      throw new Error("wake_feed.appendReviewEnded: session and review are both required");
+    }
+    var already = read(sessionId).some(function (line) {
+      return line[protocol.WAKE.FIELD.KIND] === protocol.WAKE.KIND.ENDED &&
+        line[protocol.WAKE.FIELD.REVIEW] === reviewId;
+    });
+    if (already) return null;
+    var line = {};
+    line[protocol.WAKE.FIELD.AT] = now();
+    line[protocol.WAKE.FIELD.KIND] = protocol.WAKE.KIND.ENDED;
+    line[protocol.WAKE.FIELD.REVIEW] = reviewId;
+    line[protocol.WAKE.FIELD.DRAIN] = protocol.drainCommand(sessionId, flagDir);
+    return write(sessionId, line);
+  }
+
   return {
     path: pathFor,
     ensure: ensure,
     read: read,
     appendWork: appendWork,
-    appendSessionEvent: appendSessionEvent
+    appendSessionEvent: appendSessionEvent,
+    appendReviewEnded: appendReviewEnded
   };
 }
 

@@ -347,7 +347,12 @@ var HANDLERS = {
     if (!deps.projection || typeof deps.projection.itemsFrom !== "function") {
       throw notImplemented("review.end", "3A");
     }
+    // BEFORE the archive, not after. endReview drops the review's holder record,
+    // and that record is where the owning agent session is named, so asking
+    // afterwards returns null and the wake line goes nowhere.
+    var owner = ownerSessionOf(request, deps);
     var ended = deps.reviews.endReview(request.review);
+    var woke = wakeOnReviewEnd(deps, request.review, owner);
     // WHAT IS STILL OPEN, not how big the log is. This counted every line in
     // events.jsonl, so a ten-comment review reported hundreds and the number
     // meant nothing to whoever read it. Ready items are the outstanding work by
@@ -357,7 +362,7 @@ var HANDLERS = {
     var outstanding = deps.projection.itemsFrom(deps.log.read(request.review)).filter(function (item) {
       return item.state === record.STATE.READY;
     }).length;
-    return { status: 200, body: { ended_at: ended.ended_at, outstanding_kept: outstanding } };
+    return { status: 200, body: { ended_at: ended.ended_at, outstanding_kept: outstanding, woke: woke } };
   }
 };
 
@@ -434,6 +439,37 @@ function appendWakeLines(request, deps, events, result) {
     }
   });
   return appended;
+}
+
+/**
+ * One wake line when the reviewer ends a review.
+ *
+ * The contract tells every agent that ending a review wakes it. Nothing wrote
+ * this line, so that sentence was false and the review ended in silence. The
+ * agent's own account of the failure is the clearest statement of it: the
+ * session still read as open and listening, the review drained to zero ready
+ * items, and zero ready is indistinguishable from an agent that is simply
+ * caught up.
+ *
+ * Same failure posture as appendWakeLines: a feed that cannot be written must
+ * not fail the reviewer's press. The archive is already durable in events.jsonl
+ * and ended_at is already in review.json; the wake is what makes them timely.
+ *
+ * @returns {boolean} whether a line was appended (false when the review has no
+ *   owning session, already had one, or the feed refused the write)
+ */
+function wakeOnReviewEnd(deps, reviewId, owner) {
+  if (!owner) return false;
+  if (!deps.agentSessions || typeof deps.agentSessions.wake !== "object" || !deps.agentSessions.wake) return false;
+  if (typeof deps.agentSessions.wake.appendReviewEnded !== "function") return false;
+  try {
+    return !!deps.agentSessions.wake.appendReviewEnded(owner, reviewId);
+  } catch (err) {
+    if (deps.log && typeof deps.log.helperLog === "function") {
+      deps.log.helperLog("review " + reviewId + ": could not append the end line to the wake feed: " + err.message);
+    }
+    return false;
+  }
 }
 
 /** A reply the agent appended is session activity; record it as such. */
