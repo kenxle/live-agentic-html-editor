@@ -44,9 +44,10 @@
 //               "an agent" is not who the reviewer is answering
 //   SIZE        the question is the largest text in the rail, one step above
 //               the reviewer's own words, which are otherwise the largest
-//   DEMAND      an Answer button that opens the box on this card. A question
-//               with nothing to press is a notification, and notifications get
-//               scrolled past
+//   BOX         the follow-up composer, already on the card: every replied item
+//               gets one. The block deliberately adds no button of its own,
+//               because the only thing one could do is focus a textarea the
+//               reviewer is already looking at
 //
 // Dual-environment module. See docs/CONTRACTS.md, "How a shared module loads".
 (function (root, factory) {
@@ -250,15 +251,10 @@
     // text in the rail. The question is a stop, not a line of chrome.
     "." + ASK_CLASS + " .lahe-ask-text{font-size:15px;line-height:1.45;color:var(--ink);",
     "overflow-wrap:anywhere;white-space:pre-wrap}",
-    "." + ASK_CLASS + " .lahe-ask-answer{align-self:flex-start;font-size:12px;font-weight:600;",
-    "padding:5px 12px;border-radius:8px;background:var(--accent);color:#fff}",
-    // The page picks the scheme, not the OS (highlight.js stamps the rail host).
-    ":host([data-lahe-scheme='dark']) ." + ASK_CLASS + " .lahe-ask-answer{color:#12151a}",
     // In dark the wash alone carries less separation from the card behind it, so
     // the block gets a hairline as well. Same relationship, drawn twice.
     ":host([data-lahe-scheme='dark']) ." + ASK_CLASS + "{",
     "border-top:1px solid rgba(147,167,234,.28);border-bottom:1px solid rgba(147,167,234,.28)}",
-    "." + ASK_CLASS + " .lahe-ask-answer:hover{filter:brightness(1.06)}",
     // The card carrying a question is pulled to the top of its pane and given
     // the accent border, so it is the first thing in the tab and reads as one
     // object with the block inside it.
@@ -884,10 +880,6 @@
         reopens[id].title = hasDraft ? "Send or clear the follow-up draft before reopening this issue" : "";
       }
       if (follows[id]) follows[id].disabled = isReadOnly();
-      if (asks[id]) {
-        var answer = asks[id].querySelector("button");
-        if (answer) answer.disabled = isReadOnly();
-      }
     }
 
     function focusComposer(id) {
@@ -1224,15 +1216,13 @@
 
       node.appendChild(el("p", "lahe-ask-text", ""));
 
-      // The demand. A question with nothing to press is a notification.
-      if (comments && typeof comments.reopen === "function") {
-        var answer = el("button", "lahe-ask-answer", "Answer");
-        answer.setAttribute("type", "button");
-        answer.addEventListener("click", function () {
-          focusComposer(id);
-        });
-        node.appendChild(answer);
-      }
+      // NO BUTTON HERE. There was an Answer button, on the theory that a
+      // question with nothing to press is a notification. It could never do
+      // anything: drawComposer runs for every item that has a reply, above,
+      // before the question is drawn, so the box to answer in is already on the
+      // card. Pressing Answer moved the caret into a textarea the reviewer was
+      // already looking at, which is no visible change at all, and it spent the
+      // most valuable strip in the block saying so.
       return node;
     }
 

@@ -645,7 +645,13 @@ test.describe("3A: an agent answers by appending one line", () => {
           ruleWidth: parseFloat(getComputedStyle(ask).borderLeftWidth),
           order: parseFloat(getComputedStyle(cardNode).order),
           marked: cardNode.getAttribute("data-lahe-asking"),
-          hasAnswer: !!ask.querySelector(".lahe-ask-answer"),
+          // The block deliberately carries no control of its own. The one it
+          // used to have could only focus a textarea already on the card.
+          buttonsInBlock: ask.querySelectorAll("button").length,
+          composerIsAlreadyThere: !!(
+            window.__lahe.handle.doneTab().followup(id) &&
+            window.__lahe.handle.doneTab().followup(id).querySelector("textarea")
+          ),
           bodyFontSize: parseFloat(getComputedStyle(said).fontSize),
           reviewerDatetime: cardNode.querySelector(".card__time").getAttribute("datetime"),
           agentDatetime: ask.querySelector(".lahe-ask-time").getAttribute("datetime"),
@@ -663,28 +669,29 @@ test.describe("3A: an agent answers by appending one line", () => {
       expect(drawn.text).toContain("<b>page</b>");
       expect(drawn.markupInside).toBe(0);
       // Loud, as geometry rather than as intent: bigger than the reviewer's own
-      // words, a rule of its own, first in its pane, and something to press.
+      // words, a rule of its own, and first in its pane.
       expect(drawn.fontSize).toBeGreaterThan(drawn.bodyFontSize);
       expect(drawn.ruleWidth).toBeGreaterThanOrEqual(3);
       expect(drawn.order).toBeLessThan(0);
       expect(drawn.marked).toBe("true");
-      expect(drawn.hasAnswer).toBe(true);
+      expect(drawn.buttonsInBlock, "the question block presses nothing of its own").toBe(0);
+      expect(
+        drawn.composerIsAlreadyThere,
+        "because the box to answer in is drawn for every replied item already"
+      ).toBe(true);
       expect(drawn.timesSaid, "the question appears once on the card").toBe(1);
       // The rendered time is the record's own timestamp, not a render-time clock.
       expect(drawn.reviewerDatetime).toBe(drawn.recordReviewerAt);
       expect(drawn.agentDatetime).toBe(drawn.recordAgentAt);
 
-      // Answering opens the blank continuation composer, not the original-note
-      // rewording box.
-      await page.evaluate((id) => {
-        window.__lahe.handle.doneTab().question(id).querySelector(".lahe-ask-answer").click();
-      }, item.id);
+      // The box the reviewer answers in is the blank continuation composer, not
+      // the original-note rewording box, and it is already open on the card.
       await pollPage(page, (id) => {
         const composer = window.__lahe.handle.doneTab().followup(id);
         const input = composer && composer.querySelector("textarea");
-        return !!input && input.getRootNode().activeElement === input && input.value === "";
+        return !!input && input.value === "";
       }, item.id, {
-        message: "the blank follow-up composer to open on the card"
+        message: "the blank follow-up composer on the card"
       });
 
       await page.evaluate((id) => {
@@ -763,9 +770,6 @@ test.describe("3A: an agent answers by appending one line", () => {
       });
 
       // Answering it removes that block, and took the sheet with it.
-      await page.evaluate((id) => {
-        window.__lahe.handle.doneTab().question(id).querySelector(".lahe-ask-answer").click();
-      }, item.id);
       await pollPage(
         page,
         (id) => {
