@@ -269,6 +269,8 @@
 
     function createTab() {
       var made = ns.tabActive.createActiveTab({
+        store: scopedStore,
+        reviewId: reviewId,
         comments: comments,
         overlay: rail,
         host: rail.tabBody(ns.overlay.TAB.ACTIVE)
@@ -384,6 +386,13 @@
         // 1B's poll loop brings folded replies and rejected lines back; 3A's
         // file decides what each one does to a card.
         done.applyReplies(events);
+        // The Active tab's rows depend on the reply too, and nothing else tells
+        // them it arrived. Two things on an outstanding row turn on "has this
+        // been answered yet": the note's own editability, and the box for adding
+        // another message. Both were reading a record from before the fold, so
+        // an answered comment kept offering an input that its own write path
+        // then refused, which is a control that looks live and does nothing.
+        if (tab && typeof tab.refresh === "function") tab.refresh();
       },
       // R36's reload, the two halves boot owns. Mid-work means an open edit
       // session or a comment box on screen: the reload waits for both, because a

@@ -2347,6 +2347,55 @@
     // The reviewer's own edits to their own comments
     // ------------------------------------------------------------------------
 
+    /**
+     * Add another message to a comment the agent has not answered yet.
+     *
+     * Ken: "once you have submitted a comment, before the agent has responded,
+     * we no longer have the text field to add another comment ... not being
+     * forced to wait for a response before leaving another comment."
+     *
+     * IT MERGES, IT DOES NOT MAKE A ROUND. A thread round is a COMPLETED
+     * exchange: record.completedRound throws without an agent reply, and
+     * thread[].agent is required by validateItem. Nothing has been answered
+     * here, so there is no exchange to preserve, and the honest shape is one
+     * request that grew. The reviewer sees their words extend; the agent reads
+     * one note with both points in the order they were written.
+     *
+     * THE AGENT DOES SEE IT, and that was the condition. This commits as an
+     * ordinary revision, so the chain is the same one a rewording already runs:
+     * bumpRev, then persist, then index.js hands it to sync.recordItem, which
+     * types a READY item as item.ready, which routes.js counts as a wake event
+     * and dedupes by (review, item, rev). The bumped rev is a key nobody has
+     * seen, so a wake line is appended and the agent drains the new words. An
+     * append that quietly rewrote rev 1 in place would reach an agent already
+     * working on rev 1 and nobody at all.
+     *
+     * Refused once an agent has replied: those words are an immutable completed
+     * turn, and continuation belongs in the follow-up composer, which is the
+     * same rule attachNoteEditor's focus handler enforces.
+     */
+    function appendToNote(id, text) {
+      var addition = String(text == null ? "" : text).trim();
+      if (!addition) return null;
+      var review = requireReview();
+      var current = store.readItem(review, id);
+      if (!current) return null;
+      if (current[record.FIELD.REPLY]) return null;
+      // A rewording session open on this note flushes the words it holds when it
+      // closes, and that flush would land on top of the append. Close it first,
+      // then re-read, so the append builds on whatever it committed.
+      if (open[id]) {
+        open[id].close();
+        current = store.readItem(review, id);
+        if (!current || current[record.FIELD.REPLY]) return null;
+      }
+      var existing = String(current[record.FIELD.NOTE] || "").trim();
+      var combined = existing ? existing + "\n\n" + addition : addition;
+      var next = record.bumpRev(current, { note: combined });
+      record.validateItem(next);
+      return persist(next, "reworded");
+    }
+
     function remove(id) {
       // The box goes FIRST, and it goes without committing. close() ends a
       // rewording session by writing the words back, so closing after the
@@ -2750,6 +2799,7 @@
       detachNoteEditor: detachNoteEditor,
       setNoteEditorEnabled: setNoteEditorEnabled,
       editInPlace: editInPlace,
+      appendToNote: appendToNote,
       noteEditor: noteEditor,
       remove: remove,
       unpaint: unpaint,

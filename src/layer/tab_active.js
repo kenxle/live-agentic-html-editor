@@ -246,7 +246,24 @@
     // F10: the note box is not in a .card__body, so it never picked up the
     // rail's resize:none and wore the browser's diagonal grabber. It is the one
     // place the rail looked like a form control instead of a surface.
-    ".lahe-rail-foot textarea{resize:none}"
+    ".lahe-rail-foot textarea{resize:none}",
+    // ADD ANOTHER MESSAGE, while the agent has not answered yet. Ken: "we
+    // should still be able to leave more comments in that thread, not being
+    // forced to wait for a response before leaving another comment."
+    //
+    // Quiet by default and only as tall as one line, because the note above it
+    // is the reviewer's actual comment and this must not compete with it. It
+    // grows when they click into it, which is the same bargain the note itself
+    // makes: the affordance is the surface, not a button beside it.
+    ".lahe-rail-add{display:flex;flex-direction:column;gap:6px}",
+    ".lahe-rail-add textarea{resize:none;width:100%;box-sizing:border-box;",
+    "font:inherit;font-size:12.5px;line-height:1.45;color:var(--ink);",
+    "background:var(--sunken);border:1px solid var(--line);border-radius:6px;",
+    "padding:5px 7px;transition:background 90ms ease}",
+    ".lahe-rail-add textarea::placeholder{color:var(--ink-faint)}",
+    ".lahe-rail-add textarea:focus{outline:2px solid var(--accent);outline-offset:1px;",
+    "background:var(--paper)}",
+    ".lahe-rail-add textarea:disabled{opacity:.55}"
   ].join("");
 
   function createActiveTab(options) {
@@ -260,6 +277,12 @@
       : null;
     var rail = opts.overlay || overlayModule.shared;
     var highlights = opts.highlights || comments.highlights || null;
+    // For the add-another-message box's draft only. Optional, because this file
+    // is mountable on its own with no rail and no storage (that is what makes
+    // 1D scoreable alone), and a missing store costs a draft rather than the
+    // feature: the box still sends, it just does not survive a reload.
+    var store = opts.store || null;
+    var reviewId = opts.reviewId || null;
     // The rail's Active pane, when 1B's rail is what this tab lives in. With a
     // host, this file draws the tab's CONTENTS and nothing else: no panel of
     // its own, no pill, no chrome. Without one it falls back to its own panel
@@ -577,7 +600,99 @@
       });
       foot.appendChild(del);
       row.appendChild(foot);
+
+      // The box for another message, under the row's own actions. It is drawn
+      // once with the row like everything else here, and shown or hidden by
+      // updateRow, because building it on demand would be this file rebuilding
+      // a row under a caret.
+      row.appendChild(buildAddBox(id));
       return row;
+    }
+
+    /**
+     * "Add another message", for a comment no agent has answered yet.
+     *
+     * The reviewer submitted a comment and then thought of something else. Until
+     * this existed the card had no input at all: the note above is a rewording
+     * surface, so using it meant editing the sentence they already sent rather
+     * than adding to it, and the follow-up composer only ever appears once a
+     * reply has landed.
+     *
+     * It APPENDS rather than opening a round. comments.appendToNote carries the
+     * reasoning and the guarantee that the agent is woken for it; the short
+     * version is that a thread round is a completed exchange and nothing here
+     * has been answered, so there is no exchange to keep.
+     */
+    /**
+     * How this rail spells the commit chord, from the one gesture table.
+     *
+     * Read rather than typed, so the placeholder cannot drift from the footer's
+     * own hints when the table changes. R43 is that every gesture is rendered
+     * from one table; a hard-coded chord here would be a second spelling of it.
+     */
+    function sendKeys() {
+      var row = null;
+      (gestures.TABLE || []).forEach(function (entry) {
+        if (!row && entry.gesture === gestures.GESTURE.MARK_READY) row = entry;
+      });
+      return (row && row.keys) || "Cmd-Enter";
+    }
+
+    function keepsDrafts() {
+      return !!(store && reviewId && typeof store.readFollowupDraft === "function");
+    }
+
+    function buildAddBox(id) {
+      var box = el("section", "lahe-rail-add");
+      box.setAttribute("data-lahe-add", id);
+      box.hidden = true;
+
+      var input = el("textarea", "");
+      input.id = "lahe-add-" + id;
+      input.setAttribute("rows", "1");
+      input.setAttribute("aria-label", "Add another message to this comment");
+      // NO SEND BUTTON, and the placeholder teaches the gesture instead.
+      //
+      // The card keeps exactly one action, Delete, and a browser test states
+      // that as a promise. It is the same line the note itself is on: Ken, on
+      // the Reword button, "do we really need a button for 'reword'? before we
+      // could just edit a comment". A control that costs a permanent strip of
+      // the card has to earn it, and this one would only be repeating a gesture
+      // the footer already advertises on every screen.
+      input.setAttribute("placeholder", "Add another message, then " + sendKeys());
+      input.value = keepsDrafts() ? store.readFollowupDraft(reviewId, id) : "";
+
+      function submit() {
+        var text = input.value;
+        if (!text.trim()) return;
+        // Storage first, then the box: appendToNote writes the record, and
+        // clearing the field before it committed would lose the words if the
+        // write refused.
+        var next = comments.appendToNote(id, text);
+        if (!next) return;
+        if (keepsDrafts()) {
+          try {
+            store.clearFollowupDraft(reviewId, id);
+          } catch (err) {
+            if (err && err.failure && rail && rail.failures) rail.failures.add(err.failure);
+          }
+        }
+        input.value = "";
+      }
+
+      input.addEventListener("input", function () {
+        if (keepsDrafts()) store.writeFollowupDraft(reviewId, id, input.value);
+      });
+      input.addEventListener("keydown", function (event) {
+        // The same commit gesture as every other box in the rail.
+        if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+          event.preventDefault();
+          submit();
+        }
+      });
+
+      box.appendChild(input);
+      return box;
     }
 
     function updateRow(row, item) {
@@ -601,6 +716,17 @@
       // the first letter the reviewer types.
       note.setAttribute("data-empty", text ? "false" : "true");
       comments.setNoteEditorEnabled(item[record.FIELD.ID], !item[record.FIELD.REPLY]);
+
+      // Only while the agent has not answered, and only once the comment has
+      // actually been sent. A draft is not waiting on anybody, so its own note
+      // is still the place to keep writing; an answered comment continues in the
+      // follow-up composer, where the completed exchange stays intact.
+      var add = row.querySelector(".lahe-rail-add");
+      if (add) {
+        add.hidden = !!item[record.FIELD.REPLY] || item[record.FIELD.STATE] !== record.STATE.READY;
+        var field = add.querySelector("textarea");
+        if (field) field.disabled = !!item[record.FIELD.REPLY];
+      }
 
       var state = row.querySelector(".lahe-rail-state");
       if (state) state.textContent = stateLabel(item);

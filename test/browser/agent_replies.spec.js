@@ -1332,3 +1332,125 @@ test.describe("3A: an agent answers by appending one line", () => {
   });
 
 });
+
+test.describe("adding another message before the agent has answered", () => {
+  // Ken: "once you have submitted a comment, before the agent has responded, we
+  // no longer have the text field to add another comment ... not being forced to
+  // wait for a response before leaving another comment."
+  //
+  // His one condition on the shape was "as long as the agent will see the
+  // change/new message", which is what the last two assertions are for: the
+  // append has to commit as a real revision, because that is what becomes an
+  // item.ready the wake feed has never seen and the agent is woken for. An
+  // append that quietly rewrote rev 1 in place would reach an agent already
+  // working on rev 1 and nobody at all.
+
+  test("a second message joins the comment, and reaches the helper as new work", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      await commentOnSelection(page, "p.lede", "Make this headline shorter.");
+      const item = (await itemsIn(page))[0];
+      await waitForItemInLog(helper, item.id);
+      expect(item.rev).toBe(1);
+
+      const box = await page.evaluate((id) => {
+        const card = window.__lahe.rail.cardNode(id);
+        const add = card.querySelector(".lahe-rail-add");
+        return {
+          there: !!add && !add.hidden,
+          // The card keeps exactly one action, and this box does not spend a
+          // second one on a gesture the footer already advertises.
+          buttonsOnCard: Array.from(card.querySelectorAll("button")).map((b) => b.textContent),
+          placeholder: add ? add.querySelector("textarea").getAttribute("placeholder") : null
+        };
+      }, item.id);
+      expect(box.there, "a sent comment still has somewhere to type").toBe(true);
+      expect(box.buttonsOnCard, "and it adds no button to the card").toEqual(["Delete"]);
+      expect(box.placeholder, "the box teaches the gesture instead").toContain("Cmd-Enter");
+
+      await page.evaluate((id) => {
+        const input = window.__lahe.rail.cardNode(id).querySelector(".lahe-rail-add textarea");
+        input.value = "Also, drop the subtitle entirely.";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }));
+      }, item.id);
+
+      await pollPage(page, (id) => window.__lahe.itemById(id).rev >= 2, item.id, {
+        message: "the append to commit a revision"
+      });
+
+      const after = await page.evaluate((id) => window.__lahe.itemById(id), item.id);
+      // Both points, in the order they were written, as one request. Nothing was
+      // answered, so there is no completed exchange to keep separate.
+      expect(after.note).toBe("Make this headline shorter.\n\nAlso, drop the subtitle entirely.");
+      expect(after.state).toBe("ready");
+      expect(after.reply).toBeNull();
+      expect(after.thread, "an unanswered comment opens no round").toEqual([]);
+
+      // The box empties, so the next message starts blank rather than resending.
+      const cleared = await page.evaluate(
+        (id) => window.__lahe.rail.cardNode(id).querySelector(".lahe-rail-add textarea").value,
+        item.id
+      );
+      expect(cleared).toBe("");
+
+      // THE CONDITION. A fresh item.ready at the new revision is what the wake
+      // feed keys on: routes.js counts item.ready as a wake event and dedupes by
+      // (review, item, rev), so a revision nobody has seen appends a wake line
+      // and the agent drains the new words.
+      const events = await pollUntil(
+        () => {
+          const lines = readEventLog(helper.stateDir, REVIEW);
+          const ready = lines.filter((e) => e.item === item.id && e.event === "item.ready");
+          return ready.some((e) => e.rev === after.rev) ? ready : null;
+        },
+        { message: "an item.ready at the appended revision to reach the helper" }
+      );
+      const latest = events.filter((e) => e.rev === after.rev);
+      expect(latest.length).toBeGreaterThan(0);
+      expect(latest[latest.length - 1].record.note).toContain("drop the subtitle entirely");
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
+  test("once the agent has answered, the box is gone and continuation is the follow-up composer", async ({ page }) => {
+    // The answered words are an immutable completed turn. Continuing there is
+    // what opens a round, and it has its own box on the card, so two inputs that
+    // mean different things must never be on screen at once.
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      await commentOnSelection(page, "p.lede", "Make this headline shorter.");
+      const item = (await itemsIn(page))[0];
+      await waitForItemInLog(helper, item.id);
+
+      appendReply(helper, "replies-claude.jsonl", {
+        item: item.id,
+        rev: 1,
+        status: "handled",
+        agent: "claude",
+        text: "Trimmed it."
+      });
+      await pollPage(page, (id) => window.__lahe.itemById(id).reply !== null, item.id, {
+        message: "the reply to fold onto the card"
+      });
+
+      await pollPage(
+        page,
+        (id) => {
+          const card = window.__lahe.rail.cardNode(id);
+          const add = card && card.querySelector(".lahe-rail-add");
+          return !add || add.hidden === true;
+        },
+        item.id,
+        { message: "the merge box to go once the comment has been answered" }
+      );
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+});
