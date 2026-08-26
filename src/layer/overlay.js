@@ -562,9 +562,19 @@
     // --- the collapsed pill --------------------------------------------------
     // It never overlaps the open rail because it only exists while the rail is
     // hidden. Two elements that are never on screen together cannot overlap.
+    // right/bottom are the DEFAULT corner, not the only one. A reviewer can drag
+    // the pill off it (see "Moving the pill out of the page's way"), and the
+    // inline offsets that lands write over these.
+    //
+    // touch-action:none is what makes that possible on the device that needs it.
+    // Without it the browser claims a finger drag as a scroll before the layer
+    // sees a second pointermove, so the pill cannot be moved on a phone at all,
+    // which is the only place anyone wanted to move it.
     ".pill{position:fixed;right:16px;bottom:16px;pointer-events:auto;display:flex;align-items:center;gap:8px;",
     "height:38px;padding:0 14px;border-radius:999px;background:var(--paper);color:var(--ink);",
-    "border:1px solid var(--line);box-shadow:var(--shadow);font-size:12.5px;font-weight:550}",
+    "border:1px solid var(--line);box-shadow:var(--shadow);font-size:12.5px;font-weight:550;",
+    "touch-action:none;-webkit-user-select:none;user-select:none;cursor:grab}",
+    ".pill[data-lahe-dragging]{cursor:grabbing;box-shadow:var(--shadow),0 0 0 1px var(--accent)}",
     ".pill[hidden]{display:none}",
     ".pill:hover{background:var(--surface)}",
     ".pill__dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}",
@@ -1076,13 +1086,114 @@
       var pillJewel = el("span", "pill__jewel");
       pillJewel.hidden = true;
       pill.appendChild(pillJewel);
-      pill.addEventListener("click", function () {
+      pill.addEventListener("click", function (event) {
+        // A drag ends with a click, because the pointer went down and up on the
+        // same button. Without this the reviewer moves the pill out of the way
+        // of the page's own bar and the rail opens on top of it for their
+        // trouble.
+        if (pillDrag && pillDrag.moved) {
+          event.preventDefault();
+          event.stopPropagation();
+          pillDrag = null;
+          return;
+        }
+        pillDrag = null;
         collapse(false);
+      });
+
+      // POINTER EVENTS, not mouse events. The reviewer who needs this is on a
+      // phone, reaching past their own thumb bar. One set of handlers covers the
+      // mouse and the finger, and setPointerCapture is what keeps the drag alive
+      // when the finger outruns the pill.
+      pill.addEventListener("pointerdown", function (event) {
+        if (event.button !== undefined && event.button !== 0) return;
+        var view = viewportOf(pill);
+        if (!view) return;
+        var rect = pill.getBoundingClientRect();
+        pillDrag = {
+          id: event.pointerId,
+          moved: false,
+          startX: event.clientX,
+          startY: event.clientY,
+          // Where inside the pill the finger landed, so it does not jump under
+          // the touch on the first move.
+          grabX: event.clientX - rect.left,
+          grabY: event.clientY - rect.top
+        };
+        if (typeof pill.setPointerCapture === "function") {
+          try { pill.setPointerCapture(event.pointerId); } catch (err) { /* not fatal */ }
+        }
+      });
+
+      pill.addEventListener("pointermove", function (event) {
+        if (!pillDrag || event.pointerId !== pillDrag.id) return;
+        if (!pillDrag.moved) {
+          var far =
+            Math.abs(event.clientX - pillDrag.startX) > PILL_DRAG_SLOP ||
+            Math.abs(event.clientY - pillDrag.startY) > PILL_DRAG_SLOP;
+          if (!far) return;
+          pillDrag.moved = true;
+          pill.setAttribute("data-lahe-dragging", "true");
+        }
+        var view = viewportOf(pill);
+        if (!view) return;
+        // Held under the finger while it moves, in plain left/top, and turned
+        // back into a corner and two offsets when it lands.
+        var left = event.clientX - pillDrag.grabX;
+        var top = event.clientY - pillDrag.grabY;
+        var w = pill.offsetWidth || 0;
+        var h = pill.offsetHeight || 0;
+        left = Math.min(Math.max(left, PILL_EDGE_GAP), Math.max(PILL_EDGE_GAP, view.w - w - PILL_EDGE_GAP));
+        top = Math.min(Math.max(top, PILL_EDGE_GAP), Math.max(PILL_EDGE_GAP, view.h - h - PILL_EDGE_GAP));
+        pill.style.left = left + "px";
+        pill.style.top = top + "px";
+        pill.style.right = "auto";
+        pill.style.bottom = "auto";
+        event.preventDefault();
+      });
+
+      function endPillDrag(event) {
+        if (!pillDrag || (event && event.pointerId !== pillDrag.id)) return;
+        pill.removeAttribute("data-lahe-dragging");
+        if (!pillDrag.moved) {
+          pillDrag = null;
+          return;
+        }
+        var view = viewportOf(pill);
+        if (view) {
+          pillSpot = spotFromRect(pill.getBoundingClientRect(), view);
+          applyPillSpot();
+          persistCollapsedPreference();
+        }
+        // Left set for the click handler that follows, and cleared there.
+      }
+
+      pill.addEventListener("pointerup", endPillDrag);
+      pill.addEventListener("pointercancel", function (event) {
+        endPillDrag(event);
+        pillDrag = null;
       });
 
       shadow.appendChild(rail);
       shadow.appendChild(pill);
       surfaceRoot.appendChild(host);
+
+      // A remembered offset outlives the viewport that produced it. Rotating a
+      // phone, or an address bar sliding away, changes what "24px from the
+      // bottom" reaches, so the spot is clamped again whenever the viewport
+      // moves. Nothing is persisted here: the clamp is a presentation of the
+      // reviewer's choice, not a new one made on their behalf.
+      var pillView = doc && doc.defaultView;
+      if (pillView && typeof pillView.addEventListener === "function") {
+        pillView.addEventListener("resize", function () {
+          if (pillSpot) applyPillSpot();
+        });
+        if (typeof pillView.addEventListener === "function") {
+          pillView.addEventListener("orientationchange", function () {
+            if (pillSpot) applyPillSpot();
+          });
+        }
+      }
 
       // A held pane move lands the moment focus leaves the card.
       shadow.addEventListener("focusout", function () {
@@ -1137,6 +1248,12 @@
       renderAgent();
       renderTabs();
       renderCollapsed();
+      // The pill exists now, so the reviewer's own arrangement can go back on it.
+      // Read here as well as in setReview because a rail built WITH a review id
+      // never goes through setReview at all, which is how the fixture and the
+      // library both make one.
+      pillSpot = readPillPreference();
+      applyPillSpot();
       if (mo.hidden) setCollapsed(true, false);
       if (refusalInfo) showRefusal(refusalInfo);
       return { rootId: markers.OVERLAY_ROOT_ID, remounted: false };
@@ -1234,12 +1351,14 @@
     function setReview(id) {
       reviewId = id;
       preferredCollapsed = readCollapsedPreference();
+      pillSpot = readPillPreference();
       collapsed = preferredCollapsed;
       loadChips();
       if (dom) {
         dom.rail.querySelector(".review").textContent = id || "";
         renderChips();
         renderCollapsed();
+        applyPillSpot();
         if (refusalInfo) setCollapsed(false, false);
       }
       return reviewId;
@@ -2907,11 +3026,101 @@
     function persistCollapsedPreference() {
       if (!reviewId || !store || typeof store.writeUiPreferences !== "function") return false;
       try {
-        store.writeUiPreferences(reviewId, { collapsed: preferredCollapsed });
+        // BOTH FIELDS, ALWAYS. The bucket is written whole, so writing one and
+        // omitting the other is how a reviewer collapses the rail and finds the
+        // pill back in the corner they dragged it out of.
+        store.writeUiPreferences(reviewId, { collapsed: preferredCollapsed, pill: pillSpot });
         return true;
       } catch (err) {
         return false;
       }
+    }
+
+    // -------------------------------------------------------------------------
+    // Moving the pill out of the page's way
+    // -------------------------------------------------------------------------
+    //
+    // The pill sits bottom-right because that is out of the way of most pages.
+    // It is not out of the way of ALL pages: Ken, on a site with its own bottom
+    // bar for thumb reach, "it's covering the buttons and i need to drag it to a
+    // different location". The tool is a guest on somebody else's page and it
+    // cannot know what is underneath it, so the reviewer moves it.
+    //
+    // A CORNER AND TWO OFFSETS, not a point. See store.readPillSpot: a phone
+    // rotates, an address bar slides away, a window gets dragged narrower, and a
+    // remembered x/y is off screen after any of them.
+
+    // How far a pointer travels before this is a drag rather than a press. Small
+    // enough that a deliberate move is recognized at once, large enough that a
+    // thumb tap, which never lands perfectly still, still opens the rail.
+    var PILL_DRAG_SLOP = 5;
+    var PILL_EDGE_GAP = 8;
+
+    var pillSpot = null;
+    var pillDrag = null;
+
+    function readPillPreference() {
+      if (!reviewId || !store || typeof store.readUiPreferences !== "function") return null;
+      try {
+        return store.readUiPreferences(reviewId).pill || null;
+      } catch (err) {
+        return null;
+      }
+    }
+
+    /** The viewport, asked of the document the rail is actually in. */
+    function viewportOf(node) {
+      var view = node && node.ownerDocument ? node.ownerDocument.defaultView : null;
+      if (!view) return null;
+      return { w: view.innerWidth, h: view.innerHeight };
+    }
+
+    /**
+     * Put the pill where the reviewer left it, clamped so it is always reachable.
+     *
+     * Clamped on every apply rather than only on drag: the offsets outlive the
+     * viewport that produced them, and a pill three quarters off a rotated phone
+     * is a pill the reviewer cannot drag back.
+     */
+    function applyPillSpot() {
+      var node = dom && dom.pill;
+      if (!node) return false;
+      if (!pillSpot) {
+        node.style.left = "";
+        node.style.top = "";
+        node.style.right = "";
+        node.style.bottom = "";
+        return false;
+      }
+      var view = viewportOf(node);
+      var size = { w: node.offsetWidth || 0, h: node.offsetHeight || 0 };
+      var maxX = view ? Math.max(0, view.w - size.w - PILL_EDGE_GAP) : pillSpot.x;
+      var maxY = view ? Math.max(0, view.h - size.h - PILL_EDGE_GAP) : pillSpot.y;
+      var x = Math.min(Math.max(pillSpot.x, PILL_EDGE_GAP), maxX);
+      var y = Math.min(Math.max(pillSpot.y, PILL_EDGE_GAP), maxY);
+      // "auto", not "". Clearing the inline value hands the side back to the
+      // stylesheet, and the stylesheet still says right:16px and bottom:16px.
+      // A pill with an inline left AND a stylesheet right has no free side to
+      // move on: it stretches between the two instead of going anywhere.
+      node.style.left = pillSpot.h === "left" ? x + "px" : "auto";
+      node.style.right = pillSpot.h === "right" ? x + "px" : "auto";
+      node.style.top = pillSpot.v === "top" ? y + "px" : "auto";
+      node.style.bottom = pillSpot.v === "bottom" ? y + "px" : "auto";
+      return true;
+    }
+
+    /** The nearest corner, and the distance to it, from a viewport rectangle. */
+    function spotFromRect(rect, view) {
+      var fromLeft = rect.left;
+      var fromRight = Math.max(0, view.w - rect.right);
+      var fromTop = rect.top;
+      var fromBottom = Math.max(0, view.h - rect.bottom);
+      return {
+        h: fromLeft <= fromRight ? "left" : "right",
+        x: Math.round(Math.max(0, Math.min(fromLeft, fromRight))),
+        v: fromTop <= fromBottom ? "top" : "bottom",
+        y: Math.round(Math.max(0, Math.min(fromTop, fromBottom)))
+      };
     }
 
     function setCollapsed(next, persist) {

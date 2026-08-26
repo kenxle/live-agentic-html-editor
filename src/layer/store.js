@@ -452,20 +452,43 @@
       return UI_PREFIX + reviewId;
     }
 
+    /**
+     * Where the reviewer put the collapsed pill, or null for its default corner.
+     *
+     * STORED AS A CORNER AND TWO OFFSETS, never as a point. A phone rotates, an
+     * address bar slides away, a window gets dragged narrower: a remembered x/y
+     * is off screen or in the middle of the page after any of those. An offset
+     * from the nearest corner survives all of them, which is the same reason the
+     * default is expressed as right/bottom rather than a position.
+     */
+    function readPillSpot(got) {
+      var spot = got && typeof got === "object" ? got.pill : null;
+      if (!spot || typeof spot !== "object") return null;
+      var h = spot.h === "left" ? "left" : spot.h === "right" ? "right" : null;
+      var v = spot.v === "top" ? "top" : spot.v === "bottom" ? "bottom" : null;
+      if (!h || !v) return null;
+      var x = Number(spot.x);
+      var y = Number(spot.y);
+      if (!isFinite(x) || !isFinite(y) || x < 0 || y < 0) return null;
+      return { h: h, x: x, v: v, y: y };
+    }
+
     function readUiPreferences(reviewId) {
       try {
         var raw = backing.getItem(uiKey(reviewId));
-        if (!raw) return { collapsed: false };
+        if (!raw) return { collapsed: false, pill: null };
         var got = JSON.parse(raw);
-        if (!got || typeof got !== "object") return { collapsed: false };
-        return { collapsed: got.collapsed === true };
+        if (!got || typeof got !== "object") return { collapsed: false, pill: null };
+        return { collapsed: got.collapsed === true, pill: readPillSpot(got) };
       } catch (err) {
-        return { collapsed: false };
+        return { collapsed: false, pill: null };
       }
     }
 
     function writeUiPreferences(reviewId, value) {
-      var next = { collapsed: !!(value && value.collapsed) };
+      // Whitelisted on the way in as well as on the way out: this bucket is
+      // chrome preference and nothing else ever belongs in it.
+      var next = { collapsed: !!(value && value.collapsed), pill: readPillSpot(value) };
       try {
         backing.setItem(uiKey(reviewId), JSON.stringify(next));
       } catch (err) {
