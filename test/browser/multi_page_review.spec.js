@@ -229,4 +229,50 @@ test.describe("one review, two pages", () => {
     expect(all.length, "and all 79 foreign records are still there, untouched").toBe(80);
     expect(all.filter((i) => i.note.indexOf("from the report") !== -1).length).toBe(78);
   });
+
+  // THE NAVIGATION THAT DOES NOT RELOAD.
+  //
+  // Everything above uses page.goto, which is a full load: a new document, a new
+  // boot, and the page identity read fresh on the way up. A Rails or Turbo site
+  // does not do that. It pushes a new URL onto history and swaps the body, and
+  // the library's document never goes away, so the page it thinks it is on is
+  // only as current as whatever re-reads it.
+  //
+  // Ken, walking a Rails app: "i'm currently walking through
+  // /coach/clients/start with lahe and the comments are going across pages."
+  // His records were stamped correctly, two distinct paths, so the writing half
+  // was right and the showing half was not.
+  test("a client-side navigation stops showing the page it left", async ({ page }) => {
+    await page.goto(pages.origin + "/" + PAGE_A);
+    await booted(page);
+    await commentOnBody(page, SAID_ON_A);
+    expect((await itemsOnThisPage(page)).length, "one item on page A").toBe(1);
+
+    // The Turbo navigation, in the two moves that matter: the URL changes and
+    // the body is replaced. No load event, no new document, no reboot.
+    await page.evaluate((href) => {
+      window.history.pushState({}, "", href);
+      const body = document.createElement("body");
+      const p = document.createElement("p");
+      p.id = "body";
+      p.textContent = "One page, one ask, and a number the reader can hold onto.";
+      const main = document.createElement("main");
+      main.appendChild(p);
+      body.appendChild(main);
+      document.documentElement.replaceChild(body, document.body);
+    }, "/" + PAGE_B);
+
+    await pollPage(page, () => window.__lahe.handle.page.path.indexOf("one-pager") !== -1, undefined, {
+      message: "the library to notice which page it is on now"
+    });
+
+    const onB = await itemsOnThisPage(page);
+    expect(onB, "page B shows none of page A's items").toEqual([]);
+    expect(await page.evaluate(() => window.__lahe.cardIds().length), "and the rail draws no cards").toBe(0);
+
+    // Page A's item is untouched: filtered, never deleted.
+    const all = await everyItemInTheReview(page);
+    expect(all.length, "page A's item is still in the review").toBe(1);
+    expect(all[0].note).toBe(SAID_ON_A);
+  });
 });

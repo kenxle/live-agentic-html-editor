@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.1.0+4809db0e0646
+ * version 0.1.0+6fb4296374a7
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.1.0+4809db0e0646";
+  g.LAHE.version = "0.1.0+6fb4296374a7";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -25738,7 +25738,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.1.0+4809db0e0646";
+  var VERSION = "0.1.0+6fb4296374a7";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -25865,12 +25865,45 @@
     // document may have become a different page. Everything downstream reads
     // `page` at call time: the scoped store's filter, comments.bind, and the
     // handle the tests read.
+    /**
+     * Re-read which page this is, and say whether it CHANGED.
+     *
+     * The boolean matters. Everything downstream reads `page` at call time, so a
+     * new page identity is enough to make the next read correct, and that is
+     * where this stopped. What it never did was tell anything that the reads
+     * already on screen were now wrong.
+     */
     function refreshPage() {
       var next = pageNow();
-      if (record.pageKeyFor(next) === record.pageKeyFor(page)) return page;
+      if (record.pageKeyFor(next) === record.pageKeyFor(page)) return false;
       page = next;
       if (handle) handle.page = page;
-      return page;
+      return true;
+    }
+
+    /**
+     * Drop what the page we just left had on screen.
+     *
+     * A FULL LOAD NEVER NEEDED THIS, which is why it was missing. A new document
+     * boots with an empty rail and fills it from the scoped store, so page A's
+     * cards are gone because nothing ever drew them. A client-side navigation
+     * (Turbo, and every Rails app does this) keeps the document: the URL changes,
+     * the body is swapped, and the rail is still holding every card it drew for
+     * the page that is no longer here.
+     *
+     * The scoped store was right the whole time and so were the records: they
+     * carry the path they were made on, and the next read filters correctly. It
+     * was only the rail that kept showing them, which is the half a reviewer
+     * actually looks at (Ken, live, 2026-08-25, walking a Rails app).
+     *
+     * Each tab drops its own rows for items it can no longer see, and dropping a
+     * row releases the card, so this is the tabs' own refresh and no new rule
+     * about what belongs on screen.
+     */
+    function forgetThePageWeLeft() {
+      if (tab && typeof tab.refresh === "function") tab.refresh();
+      if (done && typeof done.refresh === "function") done.refresh();
+      if (editsTab && typeof editsTab.refresh === "function") editsTab.refresh();
     }
 
     // -------------------------------------------------------------------------
@@ -26557,7 +26590,7 @@
         // The document may be a different page now (an SPA navigation is what
         // brought us here), so the page identity is re-read BEFORE anything is
         // bound to it: a record made after this stamps the page it was made on.
-        refreshPage();
+        var movedPages = refreshPage();
         // A remount must not resurrect the gestures in a refused window: Ken's
         // read-only tab re-armed Cmd-Shift-C on its first Turbo navigation and
         // opened comment boxes that could do nothing (first-real-use bug,
@@ -26566,6 +26599,9 @@
           comments.bind({ page: page });
           editing.bind({ page: page });
         }
+        // The rail is the one surface that survives a client-side navigation
+        // with its contents intact, so it is the one that has to be told.
+        if (movedPages) forgetThePageWeLeft();
         // The page that comes back from a navigation or a morph is not required
         // to have the background the page that left had, and the library wears
         // the PAGE's scheme rather than the OS's.
