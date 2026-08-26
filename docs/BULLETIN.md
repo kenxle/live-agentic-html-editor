@@ -5,6 +5,33 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
+- [ ] @anyone 2026-08-25 LAHE-project-setup-file -- **A pointer to a
+  per-project `.lahe-setup.md`, so an agent that works out how to wire LAHE into
+  a given repo can leave that knowledge for the next one.** Proposed wording for
+  AGENTS.md, near the wiring instructions: "Before wiring LAHE into an app, look
+  for `.lahe-setup.md` at that repo's root. If it exists, follow it. If it does
+  not and you work the setup out, write it there so the next agent does not have
+  to." Ship a stub template with it, since an empty file gets skipped: headings
+  for how a server is started here, where the review id and token go, what needs
+  restarting after, and gotchas.
+
+  WHY: three cold agents ran the full worktree-plus-LAHE lifecycle in the Steady
+  Thread repo on 2026-08-25, and each independently worked out the same
+  non-obvious step (the server must be restarted after the values are written,
+  because the env file is read once at boot) by getting an empty page first. That
+  knowledge died with each agent. Two of the three never opened the project's own
+  skill at all; both landed in the app's code comment instead, one by grepping the
+  tree for anything named lahe. So the pointer has to sit where LAHE's own docs
+  are read, and the content has to live with the project.
+
+  What varies per project is not the framework. Steady Thread is an ordinary Rails
+  monolith. It is the local conventions: how a server is started there (a worktree
+  script, not `rails s`), how it is restarted, and where that project chose to put
+  the two values. An agent that knows the framework cold still cannot guess those.
+
+  Keep machine-level setup separate from project-level. A single shared file mixes
+  one project's instructions into another's review.
+
 - [x] @claude 2026-08-20 LAHE-live-review-polish -- two days of Ken's live
   feedback, worked through the tool itself: composer auto-grow with a
   feedback-free measuring twin (no jitter), drag handle, Send and Delete
