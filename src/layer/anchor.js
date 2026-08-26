@@ -182,8 +182,85 @@
       path: null,
       heading: null,
       attr: null,
-      minted_at: null
+      minted_at: null,
+      // THE FINGERPRINT. Everything above describes the region by its WORDS and
+      // where they sat. These describe the element itself, in the terms the page
+      // author wrote, and they exist for the case the words cannot cover: the
+      // agent is about to rewrite the very text the anchor is made of.
+      //
+      // Ken, on a comment that lost its place: "we need some way to fingerprint
+      // an element. surrounding elements? a dom walk up through it's parents? a
+      // combo of class names, ids, dom parents?" That is what these are.
+      //
+      // They never place a write. See scoreAgainst.
+      fingerprint: null
     };
+  }
+
+  /**
+   * What the element says it is, in the author's own terms.
+   *
+   * PREFER WHAT THE AUTHOR WROTE OVER WHAT THE BUILD GENERATED. A class like
+   * st-door-card__pill is in somebody's template and survives every rebuild of
+   * it; an nth-child position is a fact about one render and is wrong the moment
+   * a sibling is inserted. So the chain here is tag plus classes, never indexes.
+   *
+   * `ordinal` is the one positional fact kept, and it is deliberately weak: it
+   * breaks ties between siblings that are otherwise identical, and on its own it
+   * says almost nothing.
+   */
+  function fingerprintOf(node, scope) {
+    if (!isElement(node)) return null;
+    var chain = [];
+    var hop = parentOf(node);
+    var levels = 0;
+    while (isElement(hop) && levels < FINGERPRINT_DEPTH) {
+      chain.push({ tag: tagOf(hop), classes: classesOf(hop) });
+      if (hop === scope) break;
+      hop = parentOf(hop);
+      levels += 1;
+    }
+    return {
+      tag: tagOf(node),
+      element_id: attrOf(node, "id") || null,
+      classes: classesOf(node),
+      chain: chain,
+      ordinal: ordinalOf(node)
+    };
+  }
+
+  // How far up the fingerprint walks. Deep enough that a card inside a grid
+  // inside a section is distinguishable from the same card elsewhere; shallow
+  // enough that a wrapper added at the top of the document does not shift every
+  // stored chain by one.
+  var FINGERPRINT_DEPTH = 4;
+
+  function classesOf(node) {
+    var raw = attrOf(node, "class");
+    if (typeof raw !== "string" || !raw) return [];
+    var out = [];
+    raw.split(/\s+/).forEach(function (token) {
+      if (!token) return;
+      // The library's own classes are never part of a page element's identity.
+      if (token.indexOf("lahe-") === 0) return;
+      if (out.indexOf(token) === -1) out.push(token);
+    });
+    return out;
+  }
+
+  /** Position among siblings carrying the same tag. 1-based, 0 when unknown. */
+  function ordinalOf(node) {
+    var parent = parentOf(node);
+    if (!isElement(parent)) return 0;
+    var kids = elementChildren(parent);
+    var tag = tagOf(node);
+    var seen = 0;
+    for (var i = 0; i < kids.length; i += 1) {
+      if (tagOf(kids[i]) !== tag) continue;
+      seen += 1;
+      if (kids[i] === node) return seen;
+    }
+    return 0;
   }
 
   // -------------------------------------------------------------------------
@@ -324,6 +401,25 @@
     }
     if (!said) return "";
     return tag + "|" + parts.join("|");
+  }
+
+  /**
+   * Every element under a scope that could be a region, in document order.
+   *
+   * The same exclusions the text walk makes: the library's own chrome is
+   * invisible, and a tag that holds no reviewable prose is not entered. It
+   * yields ancestors as well as leaves, because the element a comment points at
+   * is often a container (a card, a pill) rather than the innermost node.
+   */
+  function eachElement(scope, fn) {
+    if (!isElement(scope)) return;
+    var kids = elementChildren(scope);
+    for (var i = 0; i < kids.length; i += 1) {
+      var kid = kids[i];
+      if (isSkipped(kid) && !isElementOnly(kid)) continue;
+      fn(kid);
+      if (!isElementOnly(kid)) eachElement(kid, fn);
+    }
   }
 
   // The subtree to search. Accepts an element, a document, or nothing.
@@ -657,6 +753,10 @@
 
     ref.path = pathOf(element, scope);
     ref.heading = headingOf(element, scope);
+    // Minted for every reference, used by none of the code below. It is what
+    // src/layer/pointing.js reads when the words are gone and the reviewer still
+    // has to be shown where their comment went. Storing it is not scoring it.
+    ref.fingerprint = fingerprintOf(element, scope);
 
     var texts = contextTextsOf(element, scope);
     var maxDepth = Math.max(texts.before.length, texts.after.length);
@@ -906,6 +1006,16 @@
     candidatesFor: candidatesFor,
     contextTextsOf: contextTextsOf,
     pathOf: pathOf,
-    headingOf: headingOf
+    headingOf: headingOf,
+    // Read by src/layer/pointing.js, which asks the same questions of a node
+    // that this file does and must not grow its own second answer to any of
+    // them. Exported as readers, never as decisions: nothing here returns a
+    // verdict, and the write path does not call any of it.
+    AUTHOR_ATTR: regions.AUTHOR_ATTR,
+    attrOf: attrOf,
+    scopeOf: scopeOf,
+    fingerprintOf: fingerprintOf,
+    foundContextFor: foundContextFor,
+    eachElement: eachElement
   };
 });

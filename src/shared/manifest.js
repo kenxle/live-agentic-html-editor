@@ -129,6 +129,11 @@ var LAYER_FILES = [
     why: "mint and resolve. Pure, no DOM ownership"
   },
   {
+    path: "src/layer/pointing.js",
+    owner: "1C",
+    why: "where a comment points when its words are gone. Scored, and never reachable from a write"
+  },
+  {
     path: "src/layer/protect.js",
     owner: "2B",
     why: "the three protection layers: cooperative skip, pre-morph veto, snapshot and restore"
