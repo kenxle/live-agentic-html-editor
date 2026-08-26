@@ -25,8 +25,66 @@ The whole field converged on two answers, and they layer rather than compete:
   candidate for it.
 
 Proposed direction (last section): keep the fingerprint as the universal layer,
-add an agent-written `data-lahe-id` stamp as the durable layer, and make two
-upgrades to the fingerprint that the literature shows everyone else needed.
+add a `data-lahe-id` stamp as the durable layer, and make upgrades to the
+fingerprint that the literature shows everyone else needed.
+
+## LAHE's actual position: full edit control, and three jobs
+
+Most of the research below comes from tools that do NOT control the document:
+Playwright drives someone else's app, Optimizely rewrites someone else's page,
+Hypothesis annotates the open web. Families 1 through 3 below exist because
+those tools lack edit control. LAHE has it: the source is local, the browser
+DOM is ours through the layer, and every change that happens to either one is
+a change we made or recorded. So the value of the no-control research is its
+signal-quality lessons (which signals rot, position last, detect generated
+names), not its workflow. Our workflow options are wider.
+
+Against that, LAHE has three distinct jobs, and they are not the same problem:
+
+1. **Edit the right element.** The reviewer changed or commented on
+   something; the agent must hit the right element in the source. A DOM walk
+   up to body with ordinality plus text matching mostly covers this, and it
+   is the job the strict predicate (`uniqueness.js`) already does, with
+   refusal on ambiguity because a wrong write is destructive.
+2. **Point at the correct location after an edit.** A card, when clicked,
+   scrolls the reviewer to its part of the document. That re-find has to work
+   on a page whose text has since changed, and gets genuinely hard when the
+   target was deleted. This is the job `pointing.js` does, and it is the one
+   the annotation literature (fuzzy ladders, orphans, best guesses) speaks to
+   directly.
+3. **Queued edits, the job that is actually ours alone.** The reviewer edits
+   rapidly, so edit requests pile up in a queue. A dom-walk-plus-ordinal
+   fingerprint was correct when it was taken, but an earlier edit in the
+   queue deletes an item from the list before this one is applied, and now
+   the ordinals point at the wrong place. The fingerprint did not rot from
+   some foreign rebuild; it was invalidated by our own prior edit.
+
+Job 3 looks unique until you notice collaborative editors solved exactly it,
+because a collaborator's queued change hitting a shifted document is their
+everyday case. Two known answers:
+
+- **Rebase the reference through the known operations.** ProseMirror
+  [maps every stored position through each applied
+  step](https://prosemirror.net/docs/guide/#transform.mapping): apply an edit,
+  then update everything downstream of it. Operational transforms do the same
+  for concurrent edits. We can do this because every intervening change is an
+  edit we ourselves are applying: when edit N removes a list item, walk the
+  queue and fix the ordinals of every fingerprint behind it. No guessing
+  involved; it is bookkeeping, not matching.
+- **Assign identity at creation so there is nothing to rebase.**
+  CRDTs ([Yjs](https://github.com/yjs/yjs/blob/main/INTERNALS.md)) give every
+  inserted item a permanent id at insert time, and later operations reference
+  the id, never the position. Our version: the layer stamps `data-lahe-id`
+  onto the element in the live DOM the moment the reviewer touches it. Queue
+  entries then carry the id, and no amount of deleting, swapping, or
+  reordering ahead of them in the queue can move it. The layer owns the
+  browser DOM, so this costs no source write at click time; the agent writes
+  the stamp into the source when it applies the edit, which is what makes the
+  id durable across rebuilds too.
+
+The two compose: the click-time stamp solves job 3 inside a session, and the
+same stamp written into the source at apply time is the durable layer that
+jobs 1 and 2 lean on next session.
 
 ## The four families of fingerprinting
 
@@ -268,9 +326,9 @@ Note LAHE already honors this hierarchy: `AUTHOR_ATTR` (`data-review-region`)
 is the highest-weighted signal in `pointing.js` at 100. A stamped id would be
 a second attribute in that same top tier, ours instead of the author's.
 
-## Two upgrades to the fingerprint, regardless of stamping
+## Upgrades to the fingerprint, regardless of stamping
 
-These apply even if we never stamp anything, and both come straight from
+These apply even if we never stamp anything, and each comes straight from
 patterns that appeared independently across the sweeps.
 
 ### Detect machine-generated names before trusting them
@@ -287,7 +345,41 @@ deploy. A "does this look generated?" check (digit and case churn, the same
 heuristic Playwright uses) that discounts such names would make those weights
 honest on framework-built pages.
 
-### Fingerprint text by its rarest words, not its exact words
+### For elements with no words: describe the neighborhood, not the element
+
+The failure case: a reviewer clicks a chevron icon and says "make it bigger,"
+and the tool cannot tell which chevron. A wordless element among identical
+siblings is the identical-cards problem in miniature, and worse: there is no
+text of its own to fingerprint, and its tag and classes are shared with every
+sibling.
+
+The research has a consistent answer, and it is not to describe the element
+harder. It is to describe where the element lives:
+
+- [Similo](https://arxiv.org/abs/2208.00677), the strongest published element
+  re-locator, records 14 properties per element, and for wordless elements the
+  ones doing the work are **neighbor text** (the visible text nearest the
+  element), geometry (x/y location, width/height, shape), and attributes like
+  `alt`, `href`, and `src`.
+- [Playwright](https://github.com/microsoft/playwright/blob/main/packages/injected/src/selectorGenerator.ts)
+  does not try to make the icon itself unique. When the best selector matches
+  several elements, it searches for the nearest ancestor that IS
+  distinguishable and scopes through it: "the chevron inside the card titled
+  Pricing," not "the third chevron."
+
+What this means for our fingerprint: when the clicked element has no text, the
+decisive signals should come from its neighborhood. The enclosing card's
+heading or label, the enclosing link's `href`, the element's own `alt`,
+`aria-label`, or `src`. Our CHAIN signal walks parent classes already; this
+says the walk should also pick up the nearest text the reviewer can see,
+because that text is how the reviewer themselves knows which chevron they
+meant. And when the neighborhood is identical too, nothing in the literature
+does better than position: that is the refuse-or-stamp case.
+
+### For prose passages: fingerprint text by its rarest words
+
+This one applies only where the anchor has words, which is most of a document
+review and none of the chevron case above.
 
 The [Microsoft Research
 system](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-2001-107.pdf)
@@ -302,21 +394,29 @@ same idea: a 6-character key from the first letters of a paragraph's first and
 last words, compared with edit distance so edits degrade the key gradually
 instead of flipping it.
 
-This is a natural evolution of our PREFIX and SUFFIX signals, and it fits our
-exact motivating case: a comment on a passage the agent is about to rewrite.
+This is a natural evolution of our PREFIX and SUFFIX signals, and it fits the
+case that motivated `pointing.js`: a comment on a passage the agent is about
+to rewrite.
 
 ## What this suggests for LAHE
 
 A layered design, in order of trust:
 
-1. **The stamp** (new). A `data-lahe-id` the agent writes into the source the
-   first time it edits an element, folded into the review contract so every
-   agent knows to do it. Short random id, minted per element. On later
-   re-anchors it is decisive, same tier as `data-review-region`.
-2. **The fingerprint** (exists). Unchanged role: the universal layer for
-   elements never yet edited, and the fallback when a stamp is missing or was
-   stripped.
-3. **Refusal and orphans** (exists, could grow). Below the margin, no answer,
+1. **The stamp** (new). A `data-lahe-id`, minted by the layer in the live DOM
+   the moment the reviewer touches an element, so every queued edit carries
+   identity instead of position (job 3). The agent writes the same stamp into
+   the source when it applies the edit, folded into the review contract so
+   every agent knows to do it, which is what makes the id durable across
+   rebuilds. On later re-anchors it is decisive, same tier as
+   `data-review-region`.
+2. **Queue rebasing** (new, cheap). When an applied edit removes or moves
+   elements, update the ordinals and paths of every fingerprint still queued
+   behind it, ProseMirror-style. Bookkeeping over our own known edits, not
+   matching.
+3. **The fingerprint** (exists). Unchanged role: the universal layer for
+   elements never yet touched, and the fallback when a stamp is missing or
+   was stripped.
+4. **Refusal and orphans** (exists, could grow). Below the margin, no answer,
    as today. Possibly a visible best-guess tier for comments, per the MSR
    finding that users prefer an honest guess over silence and prefer silence
    over a confident wrong placement.
@@ -332,9 +432,11 @@ Open questions for review:
   path) the way Netlify did it? Opaque is simpler and survives content moving
   between files; structured lets an agent resolve the target with no lookup
   table.
-- When does stamping happen: at first edit of an element, or as a one-time
-  pass over the whole document at review setup? First-edit is minimal cruft;
-  setup-time means even the first comment on an element can bind to a stamp.
+- When does the stamp reach the source: at first edit of an element, or as a
+  one-time pass over the whole document at review setup? First-edit is
+  minimal cruft; setup-time means even the first comment on an element can
+  bind to a source-durable stamp. (The live-DOM stamp at click time happens
+  in either case; this question is only about when it gets written down.)
 - Do we stamp documents Ken owns only, or any reviewed document? The
   under-100-edits cruft argument holds for owned docs; for someone else's
   page it is more intrusive.
