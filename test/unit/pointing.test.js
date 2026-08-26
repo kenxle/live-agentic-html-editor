@@ -245,3 +245,76 @@ test("identical cards with nothing to tell them apart still fail, rather than gu
   assert.equal(ref.ok, false, "no ring separates them, so nothing is minted");
   assert.equal(ref.failure.failureCode, "ANCHOR_AMBIGUOUS");
 });
+
+// ---------------------------------------------------------------------------
+// The climb is unbounded, and it has to stay cheap
+// ---------------------------------------------------------------------------
+//
+// Widening now climbs to the top of the document, because any fixed number of
+// rings is a guess about somebody else's markup that fails on the page with one
+// more level than the guess (Ken: "hit dot parent until the parents are out,
+// until you make it all the way up to the body tag").
+//
+// Climbing is cheap. Sweeping sideways at every level was not: the first version
+// of this took thirty seconds on a wall of identical rows, and on a wider one it
+// did not finish at all. Three things fixed it, and each is easy to undo by
+// accident, so this guards the outcome rather than the mechanism.
+//
+// The bound is deliberately loose. It is here to catch a return to quadratic,
+// not to police milliseconds on somebody's laptop.
+
+function identicalWall(depth, breadth) {
+  if (depth === 0) {
+    const target = el("span", { attrs: { class: "decide" }, text: "Approve" });
+    return {
+      node: el("div", {
+        attrs: { class: "row" },
+        children: [target, el("span", { text: " / " }), el("span", { text: "Deny" })]
+      }),
+      targets: [target]
+    };
+  }
+  const kids = [];
+  let targets = [];
+  for (let i = 0; i < breadth; i += 1) {
+    const built = identicalWall(depth - 1, breadth);
+    kids.push(
+      el("section", {
+        attrs: { class: "group" },
+        children: [el("h3", { text: "the same label" }), built.node]
+      })
+    );
+    targets = targets.concat(built.targets);
+  }
+  return { node: el("div", { attrs: { class: "wrap" }, children: kids }), targets };
+}
+
+test("a page where nothing is distinguishable fails fast rather than never", () => {
+  // 625 identical leaves, four levels deep, and no text anywhere that tells any
+  // of them apart. Every ring is identical too, so no amount of widening can
+  // succeed and the only question is how long it takes to say so.
+  const wall = identicalWall(4, 5);
+  const body = el("body", { children: [el("main", { children: [wall.node] })] });
+  assert.equal(wall.targets.length, 625);
+
+  const started = Date.now();
+  const ref = anchor.mint({ element: wall.targets[312], root: body });
+  const spent = Date.now() - started;
+
+  assert.equal(ref.ok, false, "nothing distinguishes them, so nothing is minted");
+  assert.equal(ref.failure.failureCode, "ANCHOR_AMBIGUOUS");
+  assert.ok(spent < 8000, "and it reached that answer in " + spent + "ms, not in a quarter of a minute");
+});
+
+test("a page where something IS distinguishable stays fast, and climbs only as far as it must", () => {
+  const names = [];
+  for (let i = 0; i < 73; i += 1) names.push("lesson-" + i + ".md");
+  const wall = cardWall(names);
+
+  const started = Date.now();
+  const ref = anchor.mint({ element: wall.approves[39], root: wall.body });
+  const spent = Date.now() - started;
+
+  assert.equal(ref.ok, true);
+  assert.ok(spent < 2000, "the ordinary case is not slowed down by the pathological one (" + spent + "ms)");
+});

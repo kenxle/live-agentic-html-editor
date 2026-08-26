@@ -311,7 +311,39 @@
   // "Hello world." into the textContent "Helloworld.", the probe stops matching
   // the block it was minted on, and the item reports itself lost on a page the
   // reviewer is looking straight at.
+  /**
+   * A memo for textOf, live only for the duration of one mint.
+   *
+   * Reading an element's text means walking its whole subtree, and widening asks
+   * for the SAME siblings over and over: every candidate in a row of forty asks
+   * for all forty of its neighbours' texts, so the row is read forty times at
+   * every ring. That was most of what remained of a thirty second mint on a wall
+   * of 1600 identical rows.
+   *
+   * Scoped to a mint and cleared after it, because the DOM is only guaranteed
+   * still between the call and its return. Nothing outside mint ever sees it.
+   */
+  var textMemo = null;
+
+  function withTextMemo(run) {
+    var outer = textMemo;
+    textMemo = typeof WeakMap === "function" ? new WeakMap() : null;
+    try {
+      return run();
+    } finally {
+      textMemo = outer;
+    }
+  }
+
   function textOf(node) {
+    if (!node) return "";
+    if (textMemo && textMemo.has(node)) return textMemo.get(node);
+    var computed = textOfUncached(node);
+    if (textMemo) textMemo.set(node, computed);
+    return computed;
+  }
+
+  function textOfUncached(node) {
     if (!node) return "";
     // Skipped DESCENDANTS contribute nothing. The node itself is whatever the
     // caller handed over, and answering "" for it would turn a mint into an
@@ -481,17 +513,31 @@
    *
    * D9 says widening runs "until it resolves to one element or the containing
    * block runs out". Stopping at the first level with siblings is narrower than
-   * that, so this is the documented rule rather than a change to it. The bound
-   * is what keeps it honest: a reference that had to read the whole page to be
-   * unique is invalidated by any edit anywhere, so the climb stops well short of
-   * the document.
+   * that, so this is the documented rule rather than a change to it.
+   *
+   * IT CLIMBS TO THE TOP, and an earlier version of this stopped after three
+   * rings. Ken killed the bound, correctly: "there could be a lot of repetition
+   * that is arbitrarily nested ... hit dot parent until the parents are out,
+   * until you make it all the way up to the body tag. That to me seems like the
+   * only way to really guarantee that you have gotten past all of the nesting."
+   * Any fixed number is a guess about somebody else's markup, and it fails on
+   * the page with one more level than the guess.
+   *
+   * The old objection to climbing this far was that a reference which had to
+   * read half the page to be unique is invalidated by an edit anywhere in that
+   * half. True, and it is now the lesser evil twice over. Failing to mint is not
+   * "safe", it is a comment that is unplaceable from the moment it is written; a
+   * far-reaching reference at least works today and fails honestly later. And
+   * when it does fail there is now a fallback that does not depend on page text
+   * at all: src/layer/pointing.js scores the element's own identity.
+   *
+   * In practice the climb is short, because it stops the moment the region is
+   * unique: on the 73-card page it takes one ring and one sibling.
    */
-  var CONTEXT_LEVELS_MAX = 3;
-
   function contextLevelsOf(node, scope) {
     var levels = [];
     var current = node;
-    while (current && current !== scope && levels.length < CONTEXT_LEVELS_MAX) {
+    while (current && current !== scope) {
       if (siblingsOf(current).length > 1) levels.push(current);
       var parent = parentOf(current);
       if (!parent || parent === scope) break;
@@ -759,6 +805,93 @@
   }
 
   /**
+   * Everything about the candidates that does not change while mint widens.
+   *
+   * WHY THIS EXISTS, measured rather than guessed. Widening asks the same
+   * question once per ring per sibling, and the naive loop recomputed all of it
+   * every time: the DOM walk that finds the text, every candidate's path and
+   * heading, and every candidate's neighbouring text. On a page of 625 identical
+   * rows nested five deep that took 3.6 seconds, and on a wider one it did not
+   * finish at all.
+   *
+   * Almost none of it actually changes. The set of candidates depends on the
+   * PROBE, which is fixed for the whole mint. A candidate's neighbours depend on
+   * which ring is being read, so they are cached per ring. The only thing that
+   * varies with the widening itself is how much of that neighbouring text is
+   * compared, which is a string slice.
+   *
+   * Ken, on where the cost lives: "I can see how siblings might get out of hand,
+   * but doing dot parent should be fairly limited." Exactly so. The climb up is
+   * a dozen steps on a real page; it was the sweep sideways, repeated at every
+   * step, that was quadratic.
+   */
+  function candidateWorkspace(ref, scope) {
+    var kind = probeKindOf(ref);
+    var probe = typeof ref.probe === "string" ? normalize.normalizeText(ref.probe) : "";
+    var nodes = [];
+    if (isElement(scope) && probe) {
+      if (kind === PROBE.ELEMENT) findSignatureMatches(scope, probe, nodes);
+      else findMatches(scope, probe, nodes);
+    }
+
+    var base = nodes.map(function (node) {
+      return {
+        key: node,
+        match: matchKind(contentOf(node, kind), probe),
+        structure: typeof ref.path === "string" && ref.path === pathOf(node, scope),
+        heading: typeof ref.heading === "string" && ref.heading !== null && ref.heading === headingOf(node, scope),
+        rings: Object.create(null)
+      };
+    });
+
+    // The author's attribute still points somewhere when the text is gone, so
+    // the card can say "it used to be here" instead of "no idea". Never
+    // eligible to place a write; see uniqueness.isEligible.
+    var structureOnly = [];
+    if (!nodes.length && typeof ref.attr === "string" && ref.attr) {
+      findByAuthorAttr(scope, ref.attr, []).forEach(function (node) {
+        structureOnly.push({
+          key: node,
+          match: uniqueness.MATCH.STRUCTURE,
+          prefix: null,
+          suffix: null,
+          structure: true,
+          heading: false
+        });
+      });
+    }
+
+    function ringFor(candidate, level) {
+      var have = candidate.rings[level];
+      if (have) return have;
+      var texts = contextTextsOf(candidate.key, scope, level);
+      have = { before: joinContext(texts.before), after: joinContext(texts.after) };
+      candidate.rings[level] = have;
+      return have;
+    }
+
+    return {
+      empty: !base.length,
+      at: function (level, storedPrefix, storedSuffix) {
+        if (!base.length) return structureOnly;
+        return base.map(function (candidate) {
+          var ring = ringFor(candidate, level);
+          return {
+            key: candidate.key,
+            match: candidate.match,
+            prefix: storedPrefix
+              ? ring.before.slice(Math.max(0, ring.before.length - storedPrefix.length))
+              : ring.before,
+            suffix: storedSuffix ? ring.after.slice(0, storedSuffix.length) : ring.after,
+            structure: candidate.structure,
+            heading: candidate.heading
+          };
+        });
+      }
+    };
+  }
+
+  /**
    * Mints a durable reference from a live element.
    *
    * Widening: one whole sibling on each side to start, then two, then three,
@@ -772,6 +905,12 @@
    *   failed, `failure` {reason, failureCode, detail}
    */
   function mint(input) {
+    return withTextMemo(function () {
+      return mintInner(input);
+    });
+  }
+
+  function mintInner(input) {
     var element = input && input.element ? input.element : null;
     var ref = emptyRef();
     ref.id = "ref_" + Math.random().toString(16).slice(2, 14);
@@ -813,6 +952,7 @@
     ref.fingerprint = fingerprintOf(element, scope);
 
     var levelCount = contextLevelsOf(element, scope).length;
+    var workspace = candidateWorkspace(ref, scope);
     var lastVerdict = null;
 
     // OUTWARD, THEN UP. Widen through this ring's whole siblings first, and only
@@ -828,17 +968,32 @@
       // already unique without any: a reference minted with no context can never
       // be told apart from a copy of itself pasted in later, and a page that
       // gains a duplicate is the ordinary case, not the exotic one.
+      //
+      // STOP SWEEPING SIDEWAYS WHEN IT STOPS HELPING. The context filter is
+      // monotone: more stored context compares more strictly, so survivors can
+      // only fall or hold. A step that eliminates nobody is a step into
+      // neighbours the rivals have too, and on a wall of identical rows every
+      // step is that step. Forty of them over 1600 candidates took thirty
+      // seconds to reach the same "ambiguous" that two steps reach.
+      //
+      // It is a real trade and not a free win: a differing sibling further out
+      // is now missed. Climbing is what replaces it, and climbing is both
+      // cheaper and better evidence, because the thing that tells repeated
+      // blocks apart is almost always in the block, not further along the row.
+      var lastSurvivors = -1;
       for (var depth = 1; depth <= Math.max(1, maxDepth); depth += 1) {
         var stored = storedContextAt(texts, depth);
         ref.context_level = level;
         ref.prefix = stored.prefix;
         ref.suffix = stored.suffix;
-        lastVerdict = uniqueness.selectUnique(candidatesFor(ref, scope), ref);
+        lastVerdict = uniqueness.selectUnique(workspace.at(level, ref.prefix, ref.suffix), ref);
         if (lastVerdict.bound && lastVerdict.key === element) {
           ref.ok = true;
           ref.failure = null;
           return ref;
         }
+        if (lastSurvivors !== -1 && lastVerdict.survivors >= lastSurvivors) break;
+        lastSurvivors = lastVerdict.survivors;
       }
     }
 
