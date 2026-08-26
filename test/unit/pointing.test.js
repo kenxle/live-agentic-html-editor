@@ -167,3 +167,81 @@ test("nothing that looks like the target produces nothing, rather than the least
   const guess = pointing.bestGuess(ref, unrelated);
   assert.equal(guess.element, null, "an empty answer is a real answer");
 });
+
+// ---------------------------------------------------------------------------
+// The page of identical decision lines
+// ---------------------------------------------------------------------------
+//
+// A review of 73 lesson cards, each ending in the same three words: Approve /
+// Deny / Discuss. The reviewer comments on one Approve, and the anchor's own
+// siblings are byte for byte identical on all 73 cards, so mint widened through
+// them, ran out, and failed as not_unique_in_containing_block. The item reached
+// the agent stamped lost, which was honest, and the agent had to resolve it by
+// counting span ordinals and then ask the reviewer to confirm.
+//
+// What tells those cards apart is one level up, inside the card: the filename.
+
+function decisionCard(filename) {
+  const approve = el("span", { attrs: { class: "decide" }, text: "Approve" });
+  const card = el("article", {
+    attrs: { class: "lesson-card" },
+    children: [
+      el("h3", { attrs: { class: "lesson-card__name" }, text: filename }),
+      el("div", {
+        attrs: { class: "lesson-card__decide" },
+        children: [
+          approve,
+          el("span", { text: " / " }),
+          el("span", { attrs: { class: "decide" }, text: "Deny" }),
+          el("span", { text: " / " }),
+          el("span", { attrs: { class: "decide" }, text: "Discuss" })
+        ]
+      })
+    ]
+  });
+  return { card, approve };
+}
+
+function cardWall(names) {
+  const built = names.map(decisionCard);
+  const body = el("body", {
+    children: [el("main", { children: [el("section", { children: built.map((b) => b.card) })] })]
+  });
+  return { body, approves: built.map((b) => b.approve) };
+}
+
+test("a comment on one of 73 identical Approve buttons knows which card it was on", () => {
+  const names = [];
+  for (let i = 0; i < 73; i += 1) names.push("lesson-" + i + ".md");
+  const wall = cardWall(names);
+
+  // The reviewer clicks the Approve on the fortieth card.
+  const target = wall.approves[39];
+  const ref = anchor.mint({ element: target, root: wall.body });
+
+  assert.equal(ref.ok, true, "mint no longer gives up on the first ring of context");
+  assert.ok(ref.context_level > 0, "it had to climb to find anything that told the cards apart");
+  assert.ok(
+    ref.prefix.indexOf("lesson-39.md") !== -1 || ref.suffix.indexOf("lesson-39.md") !== -1,
+    "and what it climbed to is the filename: " + JSON.stringify({ prefix: ref.prefix, suffix: ref.suffix })
+  );
+
+  // The whole point: it comes back to the same button, not to card one.
+  const again = cardWall(names);
+  const verdict = anchor.resolve(ref, again.body);
+  assert.equal(verdict.element, again.approves[39], "and it resolves to the card the reviewer was on");
+});
+
+test("identical cards with nothing to tell them apart still fail, rather than guessing", () => {
+  // The climb is not a licence to bind to something. When the cards really are
+  // indistinguishable, every ring is identical too, and the honest answer is the
+  // same one it always was.
+  const names = [];
+  for (let i = 0; i < 6; i += 1) names.push("the same name.md");
+  const wall = cardWall(names);
+
+  const ref = anchor.mint({ element: wall.approves[2], root: wall.body });
+
+  assert.equal(ref.ok, false, "no ring separates them, so nothing is minted");
+  assert.equal(ref.failure.failureCode, "ANCHOR_AMBIGUOUS");
+});

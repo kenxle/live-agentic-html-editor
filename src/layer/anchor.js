@@ -183,6 +183,10 @@
       heading: null,
       attr: null,
       minted_at: null,
+      // Which ring of context prefix/suffix were read from. Stored because
+      // resolve has to read the same ring; a reference written before this
+      // existed carries none and reads as 0, which is what it was.
+      context_level: 0,
       // THE FINGERPRINT. Everything above describes the region by its WORDS and
       // where they sat. These describe the element itself, in the terms the page
       // author wrote, and they exist for the case the words cannot cover: the
@@ -458,6 +462,47 @@
 
   // Climbs through only-children so a wrapper element is transparent. Stops at
   // the scope: the scope's own siblings are outside the page under review.
+  /**
+   * Every level the context could be read from, nearest first.
+   *
+   * A level is an ancestor (or the region itself) that HAS siblings, because a
+   * level with none offers no context to widen into. Rule 4 climbs through
+   * only-children to find the first such level; this returns that one and the
+   * ones above it, because the first is not always enough.
+   *
+   * WHY THE FIRST IS NOT ALWAYS ENOUGH, and it is the case that sent a reviewer
+   * to an agent to sort out by hand. A page of 73 lesson cards, each ending in
+   * the same decision line: Approve / Deny / Discuss. The reviewer comments on
+   * one Approve. Its level-0 context is "" before and "/ Deny / Discuss" after,
+   * which is byte for byte identical on all 73 cards, so mint widened through
+   * that level, ran out, and failed as not_unique_in_containing_block. The thing
+   * that tells those cards apart, the filename, is one level up, inside the card
+   * (Ken, 2026-08-26).
+   *
+   * D9 says widening runs "until it resolves to one element or the containing
+   * block runs out". Stopping at the first level with siblings is narrower than
+   * that, so this is the documented rule rather than a change to it. The bound
+   * is what keeps it honest: a reference that had to read the whole page to be
+   * unique is invalidated by any edit anywhere, so the climb stops well short of
+   * the document.
+   */
+  var CONTEXT_LEVELS_MAX = 3;
+
+  function contextLevelsOf(node, scope) {
+    var levels = [];
+    var current = node;
+    while (current && current !== scope && levels.length < CONTEXT_LEVELS_MAX) {
+      if (siblingsOf(current).length > 1) levels.push(current);
+      var parent = parentOf(current);
+      if (!parent || parent === scope) break;
+      current = parent;
+    }
+    // A region with no sibling anywhere above it still has to answer, and its
+    // own level is the honest answer: no context at all.
+    if (!levels.length) levels.push(contextAnchorOf(node, scope));
+    return levels;
+  }
+
   function contextAnchorOf(node, scope) {
     var current = node;
     while (current && current !== scope) {
@@ -470,9 +515,18 @@
     return current || node;
   }
 
-  /** {before: [normalized sibling texts], after: [...]} around the region. */
-  function contextTextsOf(node, scope) {
-    var anchorNode = contextAnchorOf(node, scope);
+  /**
+   * {before: [normalized sibling texts], after: [...]} around the region.
+   *
+   * `level` is which ring of context to read, and it is STORED ON THE REFERENCE
+   * so resolve reads the same ring mint wrote. Reading a different ring than the
+   * one that was stored compares two different things and is worse than no
+   * context at all.
+   */
+  function contextTextsOf(node, scope, level) {
+    var levels = contextLevelsOf(node, scope);
+    var want = typeof level === "number" && level > 0 ? Math.min(level, levels.length - 1) : 0;
+    var anchorNode = levels[want] || levels[0];
     var siblings = siblingsOf(anchorNode);
     var at = siblings.indexOf(anchorNode);
     if (at === -1) return { before: [], after: [] };
@@ -503,7 +557,7 @@
   // a candidate at the foot of the page would match any stored prefix, because
   // everything on the page precedes it.
   function foundContextFor(node, scope, ref) {
-    var texts = contextTextsOf(node, scope);
+    var texts = contextTextsOf(node, scope, ref && ref.context_level);
     var storedPrefix = typeof ref.prefix === "string" ? ref.prefix : "";
     var storedSuffix = typeof ref.suffix === "string" ? ref.suffix : "";
     var before = joinContext(texts.before);
@@ -758,23 +812,33 @@
     // has to be shown where their comment went. Storing it is not scoring it.
     ref.fingerprint = fingerprintOf(element, scope);
 
-    var texts = contextTextsOf(element, scope);
-    var maxDepth = Math.max(texts.before.length, texts.after.length);
+    var levelCount = contextLevelsOf(element, scope).length;
     var lastVerdict = null;
 
-    // Depth starts at one whole sibling on each side, even when the region is
-    // already unique without any: a reference minted with no context can never
-    // be told apart from a copy of itself pasted in later, and a page that
-    // gains a duplicate is the ordinary case, not the exotic one.
-    for (var depth = 1; depth <= Math.max(1, maxDepth); depth += 1) {
-      var stored = storedContextAt(texts, depth);
-      ref.prefix = stored.prefix;
-      ref.suffix = stored.suffix;
-      lastVerdict = uniqueness.selectUnique(candidatesFor(ref, scope), ref);
-      if (lastVerdict.bound && lastVerdict.key === element) {
-        ref.ok = true;
-        ref.failure = null;
-        return ref;
+    // OUTWARD, THEN UP. Widen through this ring's whole siblings first, and only
+    // when the ring is exhausted without becoming unique, read the next ring
+    // out. Rings before depth, because a near neighbour is better evidence than
+    // a distant one: taking the enclosing block first would store a whole card's
+    // text as the context for a region whose own siblings already identified it.
+    for (var level = 0; level < levelCount; level += 1) {
+      var texts = contextTextsOf(element, scope, level);
+      var maxDepth = Math.max(texts.before.length, texts.after.length);
+
+      // Depth starts at one whole sibling on each side, even when the region is
+      // already unique without any: a reference minted with no context can never
+      // be told apart from a copy of itself pasted in later, and a page that
+      // gains a duplicate is the ordinary case, not the exotic one.
+      for (var depth = 1; depth <= Math.max(1, maxDepth); depth += 1) {
+        var stored = storedContextAt(texts, depth);
+        ref.context_level = level;
+        ref.prefix = stored.prefix;
+        ref.suffix = stored.suffix;
+        lastVerdict = uniqueness.selectUnique(candidatesFor(ref, scope), ref);
+        if (lastVerdict.bound && lastVerdict.key === element) {
+          ref.ok = true;
+          ref.failure = null;
+          return ref;
+        }
       }
     }
 
