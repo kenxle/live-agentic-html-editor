@@ -410,6 +410,17 @@ anything else drops to `false` rather than costing the agent the whole line. A `
 refusal needs its reason read. An unflagged `handled` reply still renders whole on its card in Done,
 with its text and timestamp; it just arrives already read.
 
+**The flag needs words behind it** (`needsToSeeReply` in `src/layer/tab_done.js`). Every use the
+contract names, an answer, a caveat, a judgment call, a change made differently than asked, is
+something an agent says, so a flagged `handled` reply carrying neither `text` nor `reason` does not
+count. The card is unchanged; it arrives already read. This is enforced rather than asked for
+because a flagged reply with nothing in it draws `agentMessageFor`'s wordless fallback, "claude
+handled this", and agents do it in runs: Ken opened a review on 2026-09-04 whose every reply line
+was `handled` plus the flag plus nothing else. A badge that means "nothing here" a dozen times is
+one the reviewer stops opening, including the time it was a real caveat. `question` and
+`not_handled` are deliberately exempt, because there the status is the signal and swallowing a
+wordless refusal would leave the reviewer thinking their item was done.
+
 **Malformed-line behavior:** the helper skips that line, **never dies**, appends a `reply.rejected`
 event naming the file, the line number and the reason, and raises a dismissible chip on the rail
 (`REPLY_LINE_MALFORMED`). A helper that fails loud by exiting on one agent's typo takes the
@@ -600,6 +611,40 @@ Read via `document.currentScript`, falling back to `document.querySelector('scri
 (`protocol.SCRIPT_SELECTOR`) for the deferred and re-executed cases. **7817 is the fixed default
 port**, configurable with `--port`: the page has to find the helper again after a restart, and an
 ephemeral port makes the reconnect-and-re-post promise false the first time the helper is restarted.
+
+### The tab icon
+
+The other thing the response carries, and the same rule governs it: LAHE may
+change the response, never the reviewer's file (`src/service/tab_icon.js`).
+
+A page served under review that names no icon of its own is served one, a blue
+rounded square with a white speech bubble, as an inline `data:` URI so there is
+no second asset to publish and no extra request. The rendered-Markdown page
+carries the identical link, put there by `markdown.render`. Both read it from
+the one module, so there is one drawing and not two.
+
+**A page that declares an icon keeps exactly the icon it declared.** The test is
+per `rel` TOKEN, and any icon relation counts: `icon`, `shortcut icon`,
+`apple-touch-icon`, `mask-icon`. An author who shipped only an
+`apple-touch-icon` still made a choice, and a second link appended under it
+would win on some browsers and not others. `rel="stylesheet"` on a file named
+`icons.css` is not an icon, which is why the test is on tokens rather than on a
+substring of the attribute.
+
+Placement walks down to the least presumptuous spot that works: inside an
+existing `<head>`, else straight after `<html>`, else after the doctype, else at
+the top. **Nothing is ever written above the doctype.** Markup above it puts the
+browser into quirks mode, and breaking a page's layout to decorate its tab is
+not a trade this makes.
+
+WHY IT EXISTS: a reviewer usually has several documents open at once and finds
+the right one by its tab, and a page with no icon gets the browser's blank
+default. The fallback is identical on every document, so it says "this is a
+review tab" and nothing more; an agent that AUTHORED the page it is serving is
+told (AGENTS.md, Step 2) to give it a title and an icon of its own, which is
+what says WHICH review tab. The two rows the fallback does not reach are the
+`file://` fallback and the dev-server row, where nothing of LAHE's sits between
+the page and the browser.
 
 ### The routes and the per-request checks (D11)
 

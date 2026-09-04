@@ -193,6 +193,28 @@ opens with the helper down, and still gives the rail, an honest unreachable
 status, and everything kept in the browser until the helper is back: the server
 that answered the request for the page answers for the library too.
 
+**A served page always has a tab icon, and yours should say something.** A page
+under review that names no icon of its own is served one: a plain blue speech
+bubble, added to the response and not to the file, so no review tab shows the
+browser's blank default. A rendered Markdown page carries the same one. It is a
+floor and never an override: a page that declares `rel="icon"`,
+`rel="shortcut icon"`, `rel="apple-touch-icon"`, or `rel="mask-icon"` is served
+with exactly the icon its author chose.
+
+Because the fallback is identical everywhere, it says "this is a review tab" and
+stops there. When YOU wrote the HTML, give it a `<title>` that names the
+document and an icon that says which document it is, and the human picks it out
+of six open tabs. An emoji data URI needs no asset file:
+
+```html
+<title>Logo options, round 2</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%8E%A8</text></svg>">
+```
+
+Do not add an icon to a page you did not write. The fallback reaches every
+served page; it does not reach the `file://` fallback or the dev-server row,
+because on those two nothing of LAHE's sits between the page and the browser.
+
 For Markdown, pass the source file directly. Do not run Pandoc, hand-write an
 HTML wrapper, start a separate Python server, or translate the blocks yourself:
 
@@ -502,6 +524,16 @@ badge counts. Leave it off a routine confirmation ("carried this into the
 source") so the badge keeps meaning something. A `question` or `not_handled`
 reply reaches the reviewer either way, flag or no flag. An unflagged `handled`
 reply still shows on its card in Done; it just does not interrupt.
+
+**The flag needs words on the same line.** An answer, a caveat, a judgment call
+and a change made differently than asked are all things you say, so a flagged
+reply carrying neither `text` nor `reason` is not counted at all. Nothing is
+hidden by this: the card renders as it always did, it just arrives already read.
+The reason it is enforced rather than asked for is that a flagged reply with
+nothing in it draws the card's wordless fallback, "claude handled this", and an
+agent that flags one of those flags twelve. The number on the rail then means
+"twelve cards say nothing", and the reviewer stops trusting it, including the
+one time it was a real caveat.
 
 ### If the page is build output, REBUILD BEFORE YOU REPLY
 

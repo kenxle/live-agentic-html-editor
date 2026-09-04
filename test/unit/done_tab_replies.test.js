@@ -58,9 +58,16 @@ function plainReply() {
   return { status: "handled", agent: "claude", at: "2026-08-19T10:00:00.000Z" };
 }
 
-/** The same reply, flagged as something the reviewer should read. */
+/**
+ * The same reply, flagged as something the reviewer should read, WITH the words
+ * that make the flag mean anything. A flag over an empty reply does not count,
+ * which is its own test below, so the shared fixture carries real text.
+ */
 function flaggedReply() {
-  return Object.assign(plainReply(), { user_needs_to_see_reply: true });
+  return Object.assign(plainReply(), {
+    user_needs_to_see_reply: true,
+    text: "Made it, but in the Solution slide rather than the one you pointed at."
+  });
 }
 
 /** A fold whose reply the agent flagged, which is what the badge counts. */
@@ -71,7 +78,13 @@ function flaggedFoldEvent(item, extra) {
         accepted: true,
         state: record.STATE.HANDLED,
         file: "replies-claude.jsonl",
-        reply: { status: "handled", agent: "claude", files: [], user_needs_to_see_reply: true }
+        reply: {
+          status: "handled",
+          agent: "claude",
+          files: [],
+          user_needs_to_see_reply: true,
+          text: "Made it, but in the Solution slide rather than the one you pointed at."
+        }
       },
       extra || {}
     )
@@ -502,6 +515,39 @@ test("a question and a refusal count without the flag; the flag only decides a h
   // And the flag is the only thing that separates two handled replies.
   assert.equal(tabDone.needsToSeeReply(plainReply()), false);
   assert.equal(tabDone.needsToSeeReply(flaggedReply()), true);
+});
+
+test("a flag with nothing to read is not something to read", () => {
+  // What Ken hit on 2026-09-04: a run of handled replies, every one flagged,
+  // not one of them carrying a word. The badge sent him to a card that said
+  // "claude handled this."
+  const wordless = Object.assign(plainReply(), { user_needs_to_see_reply: true });
+  assert.equal(tabDone.needsToSeeReply(wordless), false);
+  assert.equal(
+    tabDone.needsToSeeReply(Object.assign({}, wordless, { text: "   " })),
+    false,
+    "and whitespace is not words"
+  );
+  assert.equal(
+    tabDone.needsToSeeReply(Object.assign({}, wordless, { reason: "moved it to the Solution slide" })),
+    true,
+    "reason carries the words just as well as text"
+  );
+
+  const item = readyItem({ id: "itm_wordless" });
+  item.reply = wordless;
+  assert.deepEqual(tabDone.unseenReplyIds([item], {}), [], "so it arrives already read");
+});
+
+test("a wordless question or refusal still counts: the status is the signal there", () => {
+  const asking = { status: "question", agent: "claude", at: "2026-08-19T10:00:00.000Z" };
+  const refused = { status: "not_handled", agent: "claude", at: "2026-08-19T10:00:00.000Z" };
+  assert.equal(tabDone.needsToSeeReply(asking), true);
+  assert.equal(
+    tabDone.needsToSeeReply(refused),
+    true,
+    "swallowing a wordless refusal would leave the reviewer thinking the item was done"
+  );
 });
 
 test("only the literal boolean true is a flag", () => {

@@ -221,6 +221,7 @@ var NON_BUNDLE_FILES = [
   { path: "src/service/watchers.js", owner: "1A", why: "asks the machine whether anything holds a session's wake feed open" },
   { path: "src/service/static_servers.js", owner: "1A", why: "session-owned static HTTP server lifecycle" },
   { path: "src/service/markdown.js", owner: "1A", why: "deterministic Markdown review artifacts" },
+  { path: "src/service/tab_icon.js", owner: "1A", why: "the fallback tab icon, and the rule that a page declaring its own keeps it. The Markdown renderer and the static server both need it, so it is spelled once" },
   { path: "src/service/markdown_links.js", owner: "1A", why: "render-time translation of local Markdown links, and the mount path-safety rules that bound it" },
   { path: "src/service/reviews.js", owner: "1A", why: "review creation, per-review token minting, origin registration, the second-window session" },
   {

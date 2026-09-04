@@ -108,7 +108,8 @@
    *
    *   THE AGENT SAID SO   user_needs_to_see_reply on the reply line, which the
    *                       contract asks for on an answer, a caveat, or a change
-   *                       made differently than asked
+   *                       made differently than asked, AND words to read in
+   *                       text or reason
    *   THE STATUS SAYS SO  question and not_handled, always, flag or no flag: a
    *                       question needs an answer and a refusal needs its
    *                       reason read, and neither is the agent's call
@@ -116,13 +117,35 @@
    * Everything else still lands on its card in Done, whole, with its text and
    * its timestamp. It simply arrives already read.
    *
+   * THE FLAG NEEDS WORDS BEHIND IT. All three things the contract asks the flag
+   * for, an answer, a caveat, a change made differently than asked, are things
+   * an agent says in words. A flagged reply carrying neither text nor reason
+   * has nothing to read, so the card falls through to the wordless line
+   * `agentMessageFor` writes: "claude handled this." Counting that is a badge
+   * that sends the reviewer to a card to learn nothing, and it happens in runs:
+   * an agent that flags one wordless confirmation flags twelve, and the number
+   * on the rail stops meaning anything. Ken hit exactly this (2026-09-04). The
+   * agent asked for attention it had no use for, so the ask is refused here
+   * rather than trusted; the reply is not hidden, only already read.
+   *
+   * `question` and `not_handled` are deliberately NOT held to this. A refusal
+   * with no reason and a question with no text are both worth fixing, but the
+   * status alone is the signal there, and swallowing a wordless refusal would
+   * leave the reviewer thinking their item was done.
+   *
    * @param {object} reply the reply as it sits on a record
    */
   function needsToSeeReply(reply) {
     if (!reply) return false;
     if (reply.status === record.REPLY_STATUS.QUESTION) return true;
     if (reply.status === record.REPLY_STATUS.NOT_HANDLED) return true;
-    return reply.user_needs_to_see_reply === true;
+    if (reply.user_needs_to_see_reply !== true) return false;
+    return hasWords(reply.text) || hasWords(reply.reason);
+  }
+
+  /** Is there anything here for a person to actually read? */
+  function hasWords(value) {
+    return typeof value === "string" && value.trim() !== "";
   }
 
   /**

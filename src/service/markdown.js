@@ -15,6 +15,7 @@ var path = require("node:path");
 var markedPackage = require("../../vendor/marked/marked.cjs");
 var marked = markedPackage.marked;
 var links = require("./markdown_links.js");
+var tabIcon = require("./tab_icon.js");
 var stateDir = require("./state_dir.js");
 
 var MARKDOWN_EXTENSIONS = [".md", ".markdown"];
@@ -84,19 +85,6 @@ function sourceNote(sourcePath) {
     "</code>. This document is not under review.</p>";
 }
 
-// The tab icon for a page LAHE generated itself.
-//
-// A rendered Markdown page is a document LAHE owns end to end, and without this
-// it gets the browser's blank default: several review tabs open at once and none
-// of them is tellable from the others. It is an inline data URI rather than a
-// served file because the tool has zero runtime dependencies and this way there
-// is no second asset for the static server to publish and no extra request.
-//
-// A page the reviewer wrote keeps its OWN icon. This is only for pages LAHE
-// generated, where there is no author icon to overwrite.
-var FAVICON_LINK =
-  "<link rel=\"icon\" href=\"data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%231a73e8'/%3E%3Cpath%20d='M9%208h14a3%203%200%200%201%203%203v8a3%203%200%200%201-3%203h-6l-6%205v-5H9a3%203%200%200%201-3-3v-8a3%203%200%200%201%203-3z'%20fill='%23fff'/%3E%3C/svg%3E\">";
-
 function render(source, options) {
   var opts = options || {};
   var resolved = path.resolve(source);
@@ -142,7 +130,7 @@ function render(source, options) {
     "<html lang=\"en\"><head><meta charset=\"utf-8\">",
     "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">",
     "<title>" + escapeHtml(title) + "</title>",
-    FAVICON_LINK,
+    tabIcon.LINK,
     "<style>",
     ":root{color-scheme:light dark}body{font:16px/1.65 system-ui,sans-serif;max-width:52rem;margin:3rem auto;padding:0 1.25rem;color:#202124}",
     "@media(prefers-color-scheme:dark){body{color:#e8eaed}}img{max-width:100%;height:auto}pre{overflow:auto;padding:1rem;background:rgba(127,127,127,.1);border-radius:.5rem}",

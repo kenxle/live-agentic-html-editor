@@ -13,6 +13,7 @@ var scriptLine = require("../shared/script_line.js");
 var markdown = require("./markdown.js");
 var markdownLinks = require("./markdown_links.js");
 var stateDir = require("./state_dir.js");
+var tabIcon = require("./tab_icon.js");
 var heal = require("./heal.js");
 var logModule = require("./log.js");
 
@@ -542,7 +543,12 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
         try { html = fs.readFileSync(candidate, "utf8"); } catch (err) { html = null; }
         if (html !== null) {
           var injected = injectForMatch(dir, match, candidate, html);
-          var outHtml = injected !== null ? injected : html;
+          // The tab icon rides along with the script line, and for the same
+          // reason: the response is the only place LAHE may change a reviewed
+          // page. Writing a link tag into the reviewer's own file would put it
+          // in their working tree, and an ordinary `git add -A` would commit
+          // it. A page that already names an icon is left exactly as it is.
+          var outHtml = tabIcon.ensure(injected !== null ? injected : html);
           var body = Buffer.from(outHtml, "utf8");
           res.writeHead(200, {
             "cache-control": "no-store",

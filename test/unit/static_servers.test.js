@@ -12,6 +12,7 @@ const logModule = require("../../src/service/log.js");
 const reviewsModule = require("../../src/service/reviews.js");
 const protocol = require("../../src/shared/protocol.js");
 const scriptLine = require("../../src/shared/script_line.js");
+const tabIcon = require("../../src/service/tab_icon.js");
 
 function tempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -172,7 +173,36 @@ test("a file that already carries this review's tag is served with exactly one, 
   assert.equal(res.status, 200);
   const occurrences = (res.body.match(/data-lahe-review="/g) || []).length;
   assert.equal(occurrences, 1, "the tag was not injected a second time");
-  assert.equal(res.body, onDiskBefore, "an already-tagged page is served byte for byte unchanged");
+  assert.equal(
+    res.body,
+    tabIcon.ensure(onDiskBefore),
+    "an already-tagged page is served as it is on disk, with the fallback tab icon as the only difference"
+  );
+});
+
+test("a served page with no tab icon of its own gets the fallback, and one that has an icon keeps it", async (t) => {
+  const f = injectFixture();
+  const server = await staticServers.start({ dir: f.state, sessionId: "s_icon", root: f.root });
+  t.after(async () => { await staticServers.stopAll(f.state, "s_icon"); });
+
+  const plain = await request(server.meta, "/page.html");
+  assert.ok(plain.body.includes(tabIcon.LINK), "the blank-tab default is what a reviewer cannot find among six tabs");
+  assert.equal(
+    Number(plain.headers["content-length"]),
+    Buffer.byteLength(plain.body, "utf8"),
+    "content-length covers the icon too"
+  );
+  assert.equal(
+    fs.readFileSync(f.page, "utf8").indexOf("rel=\"icon\""),
+    -1,
+    "the icon went into the response only: the reviewer's file stays out of it"
+  );
+
+  const own = "<!doctype html>\n<html>\n<head>\n<link rel=\"icon\" href=\"/mine.svg\">\n</head>\n<body>\n<h1>hello</h1>\n</body>\n</html>\n";
+  fs.writeFileSync(f.page, own);
+  const authored = await request(server.meta, "/page.html");
+  assert.ok(authored.body.includes("/mine.svg"), "the author's icon survives");
+  assert.equal(authored.body.indexOf(tabIcon.LINK), -1, "and LAHE's fallback does not pile on top of it");
 });
 
 test("injection still matches after restartAll, which re-derives root from meta rather than the original call", async (t) => {
