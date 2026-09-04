@@ -82,6 +82,31 @@ Two traps worth knowing before you hand the link over:
   and the comment is not a guard. Wrap it in the framework's real
   development-only conditional before it goes near a layout.
 
+**Give a page you wrote a real tab.** A reviewer usually has several documents
+open at once, and they find the right one by the tab. So when YOU authored the
+HTML you are about to serve, put two things in its `<head>`:
+
+- a `<title>` that names the document, not the file
+- a `<link rel="icon">` whose picture says what the document is: an emoji data
+  URI is enough, and it needs no asset file.
+
+```html
+<title>Logo options, round 2</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%8E%A8</text></svg>">
+```
+
+Swap the percent-escaped emoji for one that fits the document. Do not add an
+icon to a page you did not write: an author who set one meant it, and a page
+under review is still their document.
+
+You are not the safety net here, you are the improvement. A served HTML page
+with no icon of its own is given a plain blue speech bubble as it is served, and
+a rendered Markdown page gets the same one, so no review tab is ever blank. That
+fallback is identical on every document, which tells the human "this is a review
+tab" and nothing more. Your own icon is what tells them WHICH review tab. The
+two rows the fallback does not reach are the `file://` fallback and the
+dev-server row, where nothing of LAHE's sits between the page and the browser.
+
 **When it becomes a deliverable**, a PDF, a deploy, an email: run
 `lahe add path/to/page.html --remove`, then `lahe session close <id>`. For the
 dev-server row, delete the line that was pasted.
@@ -265,6 +290,13 @@ read: an answer to them, a caveat, a judgment call, or a change you made
 differently than asked. It is what the rail's unread badge counts, so leave it
 off a routine confirmation. A `question` or `not_handled` reply reaches them
 regardless.
+
+**Put the words on the same line.** All four of those are things you say, so a
+flagged reply with no `text` and no `reason` is not counted: the badge would
+send the reviewer to a card reading "claude handled this", and a badge that
+means "nothing here" a dozen times is one nobody opens the thirteenth time. If
+the reply is worth flagging, write what it says. If there is nothing to write,
+it was a routine confirmation and does not want the flag.
 
 Run the printed `lahe session close <id>` command when the agent session ends.
 That stops its owned servers and stops the shared helper after the final open
