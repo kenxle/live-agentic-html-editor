@@ -17,6 +17,10 @@ reads records continuously and answers one record at a time. The page shows thos
 arrive. The store holds the truth and the screen is only a view of it, so nothing that happens on
 screen can take a record back.
 
+The current version of this picture, including agent sessions and the
+session-owned static servers this diagram predates, is
+[`docs/diagrams/system_overview.md`](../../diagrams/system_overview.md).
+
 ```mermaid
 flowchart LR
     R["Reviewer<br/>comments + edits on the page"] --> L["Library<br/>in the page"]
