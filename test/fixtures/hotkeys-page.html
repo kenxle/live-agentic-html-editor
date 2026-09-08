@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Hotkeys Fixture</title>
+  <style>
+    html { font: 16px/1.6 system-ui, sans-serif; color: #111; }
+    body { max-width: 46rem; margin: 2rem auto; }
+  </style>
+</head>
+<body>
+  <h1 id="hk-title">A deck that listens for keys</h1>
+
+  <p id="hk-intro">This slide talks about spacing and sizing, and the reviewer wants to say that the second sentence contradicts the heading above it.</p>
+
+  <p id="hk-body">Arrow keys move between slides, the space bar advances, and the letter s opens the speaker view.</p>
+
+  <button id="hk-button" type="button">A button the page owns</button>
+
+  <script>
+    // reveal.js's own rule, reproduced: a document-level keydown listener in the
+    // BUBBLING phase that skips the key when the person is typing, decided by
+    // reading document.activeElement. That read is the whole point of the
+    // fixture. The library's comment box is inside a closed shadow root, so
+    // focus is retargeted and this check sees the plain shadow host, which is
+    // not editable. Without a fence at the shadow boundary, every key typed in a
+    // comment box also drives the page.
+    window.__hotkeys = 0;
+    window.__hotkeyLog = [];
+    document.addEventListener("keydown", function (event) {
+      var active = document.activeElement;
+      if (active) {
+        var tag = active.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+        if (active.isContentEditable) return;
+      }
+      if (event.key === " " || event.key === "ArrowRight" || event.key === "s") {
+        window.__hotkeys += 1;
+        window.__hotkeyLog.push(event.key);
+      }
+    });
+  </script>
+</body>
+</html>
