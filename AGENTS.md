@@ -520,7 +520,9 @@ it, your line is refused and the item stays open, which is correct.
 Add `"user_needs_to_see_reply": true` when the reply is worth the reviewer's
 attention: an answer to something they asked, a caveat, a judgment call, or a
 change you made differently than asked. That flag is what the rail's unread
-badge counts. Leave it off a routine confirmation ("carried this into the
+badge counts, and it also pops a toast over the page the reviewer is reading, so
+a flag on a routine confirmation interrupts them for nothing. Leave it off a
+routine confirmation ("carried this into the
 source") so the badge keeps meaning something. A `question` or `not_handled`
 reply reaches the reviewer either way, flag or no flag. An unflagged `handled`
 reply still shows on its card in Done; it just does not interrupt.

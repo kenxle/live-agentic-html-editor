@@ -588,8 +588,51 @@
     ".pill__jewel{font-variant-numeric:tabular-nums;font-size:10px;font-weight:700;line-height:1;",
     "color:#fff;background:var(--accent);border-radius:999px;padding:2px 5px;min-width:14px;text-align:center}",
     ":host([data-lahe-scheme='dark']) .pill__jewel{color:#12151a}",
-    ".pill__jewel[hidden]{display:none}"
+    ".pill__jewel[hidden]{display:none}",
+
+    // --- the toast ------------------------------------------------------------
+    // BOTTOM LEFT, and that is the whole of the placement rule. The rail is on
+    // the right and the collapsed pill sits in the bottom-right corner (and can
+    // be dragged), so anything that appears on the right can land on top of the
+    // one control the reviewer needs to reach.
+    //
+    // It borrows nothing new: the card's own paper, the card's own border, the
+    // accent rule the question block already uses down its left edge. What makes
+    // it read is that it is the only thing on that side of the page.
+    ".toasts{position:fixed;left:16px;bottom:16px;pointer-events:none;display:flex;",
+    "flex-direction:column;align-items:flex-start;gap:8px;",
+    "width:min(360px,calc(100vw - 32px))}",
+    ".toasts[hidden]{display:none}",
+    ".toast{pointer-events:auto;width:100%;display:flex;align-items:flex-start;gap:8px;",
+    "padding:10px 11px;background:var(--paper);color:var(--ink);text-align:left;",
+    "border:1px solid var(--line);border-left:3px solid var(--accent);",
+    "border-radius:var(--radius-sm);box-shadow:var(--shadow);cursor:pointer}",
+    ".toast:hover{background:var(--surface)}",
+    ".toast__body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}",
+    ".toast__label{font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;",
+    "color:var(--accent-ink)}",
+    // Two lines, then it stops. The card has the whole answer; this only has to
+    // be enough for the reviewer to know whether to go and read it.
+    ".toast__text{font-size:13px;line-height:1.4;color:var(--ink);overflow-wrap:anywhere;",
+    "overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}",
+    // One line, quieter: this is what the answer is ABOUT, not the answer.
+    ".toast__about{font-size:11px;line-height:1.35;color:var(--ink-faint);",
+    "white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+    ".toast__about:empty{display:none}",
+    ".toast__x{flex:none;width:20px;height:20px;border-radius:6px;color:var(--ink-faint);",
+    "display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1}",
+    ".toast__x:hover{background:var(--sunken);color:var(--ink)}",
+    ".toast__more{pointer-events:auto;font-size:11px;color:var(--ink-faint);padding:0 4px}"
   ].join("");
+
+  // How long a toast that is not a question stays on screen. ONE number, named
+  // once: everything that auto-dismisses reads it, and a test shortens it
+  // through the rail's toastDuration rather than by waiting ten seconds.
+  var TOAST_MS = 10000;
+  // How many stand at once before the rest collapse into a count. Four toasts
+  // stacked up the side of a page is a second rail, which is the thing the
+  // reviewer already closed.
+  var TOAST_MAX = 3;
 
   // The review-level actions, in the head's menu. They are the same two the
   // footer used to stand up as buttons, and they run through the same
@@ -1174,8 +1217,16 @@
         pillDrag = null;
       });
 
+      // The toast stack. Bottom-left, so it is never under the rail and never
+      // under the collapsed pill, which is the one control a reviewer working
+      // with the rail closed has to be able to reach.
+      var toastHost = el("div", "toasts");
+      markers.markChrome(toastHost);
+      toastHost.hidden = true;
+
       shadow.appendChild(rail);
       shadow.appendChild(pill);
+      shadow.appendChild(toastHost);
       surfaceRoot.appendChild(host);
 
       // A remembered offset outlives the viewport that produced it. Rotating a
@@ -1233,7 +1284,8 @@
         collapseBtn: collapseBtn,
         pill: pill,
         pillCount: pillCount,
-        pillJewel: pillJewel
+        pillJewel: pillJewel,
+        toastHost: toastHost
       };
 
       // Everything already in state is painted once, here. This is the only
@@ -1248,6 +1300,10 @@
       renderAgent();
       renderTabs();
       renderCollapsed();
+      // A toast is state, not a paint: the nodes went with the old root on a
+      // remount and the thing they were telling the reviewer about is still
+      // true, so they are drawn again and their clocks start over.
+      remountToasts();
       // The pill exists now, so the reviewer's own arrangement can go back on it.
       // Read here as well as in setReview because a rail built WITH a review id
       // never goes through setReview at all, which is how the fixture and the
@@ -1280,6 +1336,13 @@
         endRun = null;
         settleEndPrompt({ confirmed: false, result: null });
       }
+      // The toast nodes go with the root. The toasts themselves are state, so
+      // mount draws them again; what must not survive is their clocks, which
+      // would otherwise dismiss a toast that no longer has a node.
+      toasts.forEach(function (toast) {
+        clearToastTimer(toast);
+        toast.node = null;
+      });
       if (dom && dom.host && dom.host.parentNode) dom.host.parentNode.removeChild(dom.host);
       Object.keys(cards).forEach(function (id) {
         cards[id].node = null;
@@ -3167,6 +3230,272 @@
       return collapsed;
     }
 
+    // -------------------------------------------------------------------------
+    // Toasts
+    // -------------------------------------------------------------------------
+    //
+    // WHY THERE IS A TOAST AT ALL. Ken works with the rail collapsed, because
+    // the rail is in the way of the page he is reviewing. That is the tool
+    // working as designed, and it has one cost: an answer arriving on a card
+    // behind a closed rail is an answer nobody reads. He told us what that cost
+    // is in practice: "I forget to go look for answers and end up asking the
+    // same questions again."
+    //
+    // So this file draws a small thing on the page when something arrives that
+    // is worth stopping for. It knows nothing about replies: WHAT is worth
+    // stopping for is decided in tab_done.js, by the same rule the tab badge
+    // already uses, so there is one notion of important and not two.
+    //
+    // Three rules it will not bend:
+    //
+    //   ONE PER KEY     a toast is shown once. The caller passes the key (an
+    //                   item plus which reply it is), so a reload replaying the
+    //                   same folded reply cannot toast it a second time.
+    //   THREE AT MOST   the rest collapse into "+N more". A column of toasts is
+    //                   a second rail, which is the thing the reviewer closed.
+    //   A QUESTION WAITS  sticky toasts have no timer at all. Everything else
+    //                   leaves on its own after toastMs.
+
+    var toasts = [];
+    var toastSeq = 0;
+    var toastKeys = Object.create(null);
+    // The live duration, so a test can shorten it. TOAST_MS is the only place
+    // the real number is written.
+    var toastMs = TOAST_MS;
+
+    /**
+     * Put a toast on the page.
+     *
+     * @param {object} spec
+     * @param {string} spec.key     shown once per key, for the life of the rail
+     * @param {string} spec.label   the short status word ("Question")
+     * @param {string} spec.text    what the agent said, already bounded
+     * @param {string} [spec.about] the words the item is about, one line
+     * @param {boolean} [spec.sticky] true stays until clicked or dismissed
+     * @param {function} [spec.onOpen] run when the reviewer clicks the toast
+     * @returns {string|null} the toast id, or null when the key was already used
+     */
+    function showToast(spec) {
+      var s = spec || {};
+      toastSeq += 1;
+      var key = s.key ? String(s.key) : "toast-" + String(toastSeq);
+      if (toastKeys[key]) return null;
+      toastKeys[key] = true;
+      var toast = {
+        id: "toast-" + String(toastSeq),
+        key: key,
+        label: String(s.label || ""),
+        text: String(s.text || ""),
+        about: String(s.about || ""),
+        sticky: s.sticky === true,
+        onOpen: typeof s.onOpen === "function" ? s.onOpen : null,
+        node: null,
+        timer: null,
+        paused: false
+      };
+      // Newest first, which is newest on top: the stack grows upward from the
+      // bottom-left corner.
+      toasts.unshift(toast);
+      renderToasts();
+      armToast(toast);
+      return toast.id;
+    }
+
+    function toastById(id) {
+      for (var i = 0; i < toasts.length; i += 1) {
+        if (toasts[i].id === id) return toasts[i];
+      }
+      return null;
+    }
+
+    function clearToastTimer(toast) {
+      var view = doc && doc.defaultView;
+      if (toast.timer && view && typeof view.clearTimeout === "function") view.clearTimeout(toast.timer);
+      toast.timer = null;
+    }
+
+    function armToast(toast) {
+      clearToastTimer(toast);
+      if (toast.sticky || toast.paused) return null;
+      var view = doc && doc.defaultView;
+      if (!view || typeof view.setTimeout !== "function") return null;
+      // harness-allow-timer: a toast's own life, pinned at TOAST_MS. It is the
+      // duration itself rather than a wait for something to happen, so there is
+      // no condition to poll instead.
+      toast.timer = view.setTimeout(function () {
+        toast.timer = null;
+        dismissToast(toast.id);
+      }, toastMs);
+      return toast.timer;
+    }
+
+    /** Hovering holds it. The reviewer reading it is not the reviewer ignoring it. */
+    function pauseToast(toast) {
+      toast.paused = true;
+      clearToastTimer(toast);
+    }
+
+    function resumeToast(toast) {
+      if (!toast.paused) return;
+      toast.paused = false;
+      armToast(toast);
+    }
+
+    function dismissToast(id) {
+      var toast = toastById(id);
+      if (!toast) return false;
+      clearToastTimer(toast);
+      var at = toasts.indexOf(toast);
+      if (at !== -1) toasts.splice(at, 1);
+      if (toast.node && toast.node.parentNode) toast.node.parentNode.removeChild(toast.node);
+      toast.node = null;
+      renderToasts();
+      return true;
+    }
+
+    /** The reviewer pressed it: run what it was for, then take it away. */
+    function openToast(id) {
+      var toast = toastById(id);
+      if (!toast) return false;
+      var run = toast.onOpen;
+      dismissToast(id);
+      if (run) {
+        try {
+          run();
+        } catch (err) {
+          // A toast that cannot navigate must still go away when pressed.
+        }
+      }
+      return true;
+    }
+
+    function clearToasts() {
+      toasts.slice().forEach(function (toast) {
+        clearToastTimer(toast);
+      });
+      toasts = [];
+      if (dom && dom.toastHost) {
+        while (dom.toastHost.firstChild) dom.toastHost.removeChild(dom.toastHost.firstChild);
+        dom.toastHost.hidden = true;
+      }
+      return true;
+    }
+
+    /** The dom went with the old root; the toasts did not. Draw them again. */
+    function remountToasts() {
+      toasts.forEach(function (toast) {
+        toast.node = null;
+        toast.paused = false;
+      });
+      renderToasts();
+      toasts.forEach(armToast);
+      return toasts.length;
+    }
+
+    function toastNodeFor(toast) {
+      if (toast.node) return toast.node;
+      var node = el("div", "toast");
+      markers.markChrome(node);
+      node.setAttribute("role", "status");
+      node.setAttribute("data-lahe-toast", toast.id);
+      node.setAttribute("data-lahe-sticky", toast.sticky ? "true" : "false");
+      node.tabIndex = 0;
+
+      var body = el("span", "toast__body");
+      body.appendChild(el("span", "toast__label", toast.label));
+      body.appendChild(el("span", "toast__text", toast.text));
+      body.appendChild(el("span", "toast__about", toast.about));
+      node.appendChild(body);
+
+      var close = el("button", "toast__x", "×");
+      close.setAttribute("type", "button");
+      close.setAttribute("aria-label", "Dismiss");
+      close.addEventListener("click", function (event) {
+        event.stopPropagation();
+        dismissToast(toast.id);
+      });
+      node.appendChild(close);
+
+      node.addEventListener("click", function () {
+        openToast(toast.id);
+      });
+      node.addEventListener("keydown", function (event) {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openToast(toast.id);
+          return;
+        }
+        // ESCAPE IS THE PAGE'S FIRST. This handler is on the toast, so it only
+        // ever runs with focus inside one: a comment box's Escape and the
+        // page's own Escape never reach here.
+        if (event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          dismissToast(toasts.length ? toasts[0].id : toast.id);
+        }
+      });
+      node.addEventListener("mouseenter", function () {
+        pauseToast(toast);
+      });
+      node.addEventListener("mouseleave", function () {
+        resumeToast(toast);
+      });
+
+      toast.node = node;
+      return node;
+    }
+
+    function renderToasts() {
+      if (!dom || !dom.toastHost) return false;
+      var host = dom.toastHost;
+      while (host.firstChild) host.removeChild(host.firstChild);
+      var shown = toasts.slice(0, TOAST_MAX);
+      shown.forEach(function (toast) {
+        host.appendChild(toastNodeFor(toast));
+      });
+      var hidden = toasts.length - shown.length;
+      if (hidden > 0) host.appendChild(el("div", "toast__more", "+" + String(hidden) + " more"));
+      host.hidden = toasts.length === 0;
+      return true;
+    }
+
+    /**
+     * What is on screen, for a spec that cannot reach into a closed root.
+     *
+     * Geometry as well as text, so a test clicks the real thing at real
+     * coordinates rather than calling openToast and proving nothing about
+     * whether the toast was clickable.
+     */
+    function toastInfo() {
+      return {
+        count: toasts.length,
+        more: Math.max(0, toasts.length - TOAST_MAX),
+        toasts: toasts.map(function (toast, index) {
+          var rect = toast.node && typeof toast.node.getBoundingClientRect === "function"
+            ? toast.node.getBoundingClientRect()
+            : null;
+          return {
+            id: toast.id,
+            key: toast.key,
+            label: toast.label,
+            text: toast.text,
+            about: toast.about,
+            sticky: toast.sticky,
+            paused: toast.paused,
+            armed: !!toast.timer,
+            visible: index < TOAST_MAX,
+            rect: rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null
+          };
+        })
+      };
+    }
+
+    /** Read the auto-dismiss duration, or set it. A test shortens it; nothing else does. */
+    function toastDuration(ms) {
+      if (typeof ms === "number" && ms > 0) toastMs = ms;
+      return toastMs;
+    }
+
     // Rects for both, plus the overlap answer, because "never overlaps" is a
     // geometric claim and a test should be able to check it as one.
     function geometry() {
@@ -3281,6 +3610,16 @@
         dom.endBtn.click();
         return true;
       },
+      // The toast surface. What is worth toasting is not decided here; see the
+      // Toasts section above.
+      showToast: showToast,
+      dismissToast: dismissToast,
+      openToast: openToast,
+      clearToasts: clearToasts,
+      toastInfo: toastInfo,
+      toastDuration: toastDuration,
+      TOAST_MS: TOAST_MS,
+      TOAST_MAX: TOAST_MAX,
       openMenu: openMenu,
       closeMenu: closeMenu,
       showRefusal: showRefusal,
@@ -3306,6 +3645,8 @@
     AGENT_STATE: AGENT_STATE,
     AGENT_TEXT: AGENT_TEXT,
     LIMIT_SEPARATE_STORAGE_NO_HELPER: LIMIT_SEPARATE_STORAGE_NO_HELPER,
+    TOAST_MS: TOAST_MS,
+    TOAST_MAX: TOAST_MAX,
     END_REVIEW: END_REVIEW,
     endReviewCounts: endReviewCounts,
     unfinishedSentence: unfinishedSentence,

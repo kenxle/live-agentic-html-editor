@@ -287,9 +287,10 @@ page for routine status; use chat only for blockers or questions.
 
 Set `"user_needs_to_see_reply": true` on a reply the reviewer should actually
 read: an answer to them, a caveat, a judgment call, or a change you made
-differently than asked. It is what the rail's unread badge counts, so leave it
-off a routine confirmation. A `question` or `not_handled` reply reaches them
-regardless.
+differently than asked. It is what the rail's unread badge counts, and it also
+pops a toast over the page the reviewer is reading, so a flag on a routine
+confirmation interrupts them for nothing. Leave it off a routine confirmation. A
+`question` or `not_handled` reply reaches them regardless.
 
 **Put the words on the same line.** All four of those are things you say, so a
 flagged reply with no `text` and no `reason` is not counted: the badge would

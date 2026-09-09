@@ -199,6 +199,115 @@
     return out;
   }
 
+  // ---------------------------------------------------------------------------
+  // The toast: telling the reviewer an answer arrived, on the page
+  // ---------------------------------------------------------------------------
+  //
+  // The rail is where answers live, and Ken works with the rail closed, because
+  // an open rail covers the page he came to review. That is the tool working as
+  // intended, and the cost is real: "I forget to go look for answers and end up
+  // asking the same questions again."
+  //
+  // So an answer worth stopping for says so on the page. Three things keep this
+  // from becoming noise, and they are the whole design:
+  //
+  //   ONE NOTION OF IMPORTANT   needsToSeeReply, unchanged, is the test. The
+  //                             badge and the toast agree by construction, and
+  //                             a routine "carried this into the source" gets
+  //                             neither.
+  //   NOT IF THEY ARE LOOKING   a reply landing on the tab the reviewer already
+  //                             has open is on screen. A toast would be telling
+  //                             them about something they can see.
+  //   NOT WHEN THEY CANNOT ACT  a refused (read-only) window writes nothing and
+  //                             answers nothing, so it interrupts with nothing.
+
+  var TOAST_LABEL = {
+    question: "Question",
+    not_handled: "Not handled",
+    note: "Note"
+  };
+
+  // Two lines of text and one line of context, roughly. The CSS clamps what is
+  // drawn; these clamp what is CARRIED, so a very long agent answer cannot make
+  // a toast node holding a whole essay.
+  var TOAST_TEXT_MAX = 220;
+  var TOAST_ABOUT_MAX = 120;
+
+  /** The short word at the top of the toast. */
+  function toastLabelFor(reply) {
+    var status = reply && reply.status;
+    if (status === record.REPLY_STATUS.QUESTION) return TOAST_LABEL.question;
+    if (status === record.REPLY_STATUS.NOT_HANDLED) return TOAST_LABEL.not_handled;
+    return TOAST_LABEL.note;
+  }
+
+  /** Cut to length on a word where it can, with the ellipsis saying it was cut. */
+  function clip(text, max) {
+    var value = String(text === undefined || text === null ? "" : text).replace(/\s+/g, " ").trim();
+    if (value.length <= max) return value;
+    var cut = value.slice(0, max);
+    var space = cut.lastIndexOf(" ");
+    if (space > max * 0.6) cut = cut.slice(0, space);
+    return cut + "...";
+  }
+
+  /**
+   * Should this reply interrupt the reviewer?
+   *
+   * Pure, and the whole decision: given the reply, whether the reviewer is
+   * already looking at the tab its card is in, whether this window can act at
+   * all, and whether this browser had already folded this same reply before
+   * (a reload re-delivers the backlog, and an answer read yesterday is not news
+   * today).
+   *
+   * @param {object} options
+   * @param {object} options.reply       the reply as it sits on the record
+   * @param {boolean} [options.watching] the rail is open on the card's own tab
+   * @param {boolean} [options.readOnly] this window is refused
+   * @param {boolean} [options.known]    this browser already held this reply
+   */
+  function shouldToastReply(options) {
+    var o = options || {};
+    if (o.readOnly === true) return false;
+    if (o.known === true) return false;
+    if (o.watching === true) return false;
+    return needsToSeeReply(o.reply);
+  }
+
+  /** How many replies are waiting, and how many of those are questions. */
+  function replyWaitCounts(items, marks) {
+    var byId = Object.create(null);
+    (items || []).forEach(function (item) {
+      byId[item[record.FIELD.ID]] = item;
+    });
+    var counts = { total: 0, questions: 0 };
+    unseenReplyIds(items, marks).forEach(function (id) {
+      var reply = byId[id] && byId[id][record.FIELD.REPLY];
+      counts.total += 1;
+      if (reply && reply.status === record.REPLY_STATUS.QUESTION) counts.questions += 1;
+    });
+    return counts;
+  }
+
+  /**
+   * The one sentence a summary toast says. Plain words, and no jargon: it is
+   * read at a glance by someone who was doing something else.
+   */
+  function waitingSentence(counts) {
+    var c = counts || {};
+    var total = c.total || 0;
+    var questions = c.questions || 0;
+    if (total < 1) return "";
+    if (total === 1) {
+      return questions ? "1 reply is waiting, and it is a question." : "1 reply is waiting.";
+    }
+    var head = String(total) + " replies are waiting";
+    if (!questions) return head + ".";
+    if (questions === 1) return head + ", 1 of them is a question.";
+    if (questions === total) return head + ", and they are all questions.";
+    return head + ", " + String(questions) + " of them are questions.";
+  }
+
   /**
    * The marks after the reviewer has looked at a set of replies.
    *
@@ -416,6 +525,9 @@
         });
       }
       refresh();
+      // A load that arrives with answers already waiting says so once. See
+      // toastWaiting: a backlog is one interruption, not one per reply.
+      toastWaiting();
       return api;
     }
 
@@ -1022,7 +1134,169 @@
         applied.push(foldedReply(event));
       });
       refresh();
-      return applied.filter(Boolean);
+      var settled = applied.filter(Boolean);
+      // SEVERAL AT ONCE IS ONE INTERRUPTION. A page that was closed while an
+      // agent worked comes back to a whole batch, and five toasts in one breath
+      // is the rail again, in the corner the reviewer keeps clear. One is the
+      // answer itself; more than one is a count and a way in.
+      var wanted = settled.filter(function (result) {
+        return result.toast === true;
+      });
+      if (wanted.length === 1) toastReply(wanted[0].item);
+      else if (wanted.length > 1) {
+        toastMany(
+          "batch:" + wanted
+            .map(function (result) {
+              return result.item;
+            })
+            .sort()
+            .join(","),
+          wanted.map(function (result) {
+            return result.item;
+          })
+        );
+      }
+      return settled;
+    }
+
+    // -------------------------------------------------------------------------
+    // What the toast says, and what pressing it does
+    // -------------------------------------------------------------------------
+
+    function canToast() {
+      return typeof rail.showToast === "function" && !isReadOnly();
+    }
+
+    /** The words the item is about: the passage, or the edit's own sentence. */
+    function aboutWords(item) {
+      if (!item) return "";
+      var context = item[record.FIELD.CONTEXT] || {};
+      if (record.isHandEdit(item)) return item[record.FIELD.CHANGE] || context.quote || "";
+      return context.quote || item[record.FIELD.NOTE] || item[record.FIELD.CHANGE] || "";
+    }
+
+    /**
+     * What the agent said, bounded as agent text always is before it is drawn.
+     *
+     * A question or a refusal can arrive with no words at all (the status alone
+     * is the signal, which is why needsToSeeReply lets them through). The toast
+     * still has to say something, so it says what happened.
+     */
+    function toastText(item) {
+      var reply = item[record.FIELD.REPLY] || {};
+      var said = reply.text || reply.reason;
+      if (hasWords(said)) return clip(boundedText(said), TOAST_TEXT_MAX);
+      if (reply.status === record.REPLY_STATUS.QUESTION) return agentName(reply) + " has a question about this.";
+      if (reply.status === record.REPLY_STATUS.NOT_HANDLED) return agentName(reply) + " did not do this one.";
+      return agentName(reply) + " answered this.";
+    }
+
+    /** One reply, on its own toast. */
+    function toastReply(id) {
+      if (!canToast()) return null;
+      var item = itemById(id);
+      if (!item || !item[record.FIELD.REPLY]) return null;
+      var reply = item[record.FIELD.REPLY];
+      return rail.showToast({
+        key: "reply:" + id + ":" + String(replyStamp(item)),
+        label: toastLabelFor(reply),
+        text: toastText(item),
+        about: clip(aboutWords(item), TOAST_ABOUT_MAX),
+        // A QUESTION WAITS. An agent asking is an agent stopped, so the one
+        // thing on screen that says so does not time out.
+        sticky: reply.status === record.REPLY_STATUS.QUESTION,
+        onOpen: function () {
+          jumpToCard(id);
+        }
+      });
+    }
+
+    /** Several at once, or a boot that arrives with answers already waiting. */
+    function toastMany(key, ids) {
+      if (!canToast() || !ids || !ids.length) return null;
+      var items = itemsNow();
+      var wanted = Object.create(null);
+      ids.forEach(function (id) {
+        wanted[id] = true;
+      });
+      var counts = { total: 0, questions: 0 };
+      items.forEach(function (item) {
+        if (!wanted[item[record.FIELD.ID]]) return;
+        var reply = item[record.FIELD.REPLY];
+        counts.total += 1;
+        if (reply && reply.status === record.REPLY_STATUS.QUESTION) counts.questions += 1;
+      });
+      if (!counts.total) return null;
+      return rail.showToast({
+        key: key,
+        label: "Replies",
+        text: waitingSentence(counts),
+        about: "Open the review to read them.",
+        sticky: counts.questions > 0,
+        onOpen: function () {
+          openTabFor(ids);
+        }
+      });
+    }
+
+    /**
+     * On boot: one toast for everything already waiting, never one per reply.
+     *
+     * The unread replies on a fresh load are not news, they are a backlog, and
+     * a backlog replayed one toast at a time is the reviewer clearing a stack
+     * of things they already knew about. Replies whose tab the reviewer is
+     * already looking at are left out for the same reason a live one is: they
+     * are on screen.
+     */
+    function toastWaiting() {
+      if (!canToast()) return null;
+      var items = itemsNow();
+      var ids = unseenReplyIds(items, readSeen()).filter(function (id) {
+        return !watchingTab(paneOf(itemById(id)));
+      });
+      if (!ids.length) return null;
+      return toastMany("waiting:" + ids.slice().sort().join(","), ids);
+    }
+
+    /**
+     * The way in, from the toast: open the rail, go to the card, and count the
+     * reply as read, because the reviewer is now looking at it.
+     *
+     * It uses the rail's own seams and adds none: collapse, selectTab (which is
+     * what tells this file to mark the tab's replies seen) and the card node.
+     */
+    function jumpToCard(id) {
+      var item = itemById(id);
+      if (!item) return false;
+      var tab = paneOf(item);
+      if (typeof rail.collapse === "function") rail.collapse(false);
+      if (typeof rail.selectTab === "function") rail.selectTab(tab);
+      var node = rail.cardNode(id);
+      if (node) {
+        if (typeof node.scrollIntoView === "function") node.scrollIntoView({ block: "nearest" });
+        node.tabIndex = -1;
+        if (typeof node.focus === "function") node.focus();
+      }
+      markRepliesSeen(tab);
+      return true;
+    }
+
+    /** The summary toast's way in: the tab holding the most of what is waiting. */
+    function openTabFor(ids) {
+      var grouped = Object.create(null);
+      (ids || []).forEach(function (id) {
+        var item = itemById(id);
+        if (!item) return;
+        var tab = paneOf(item);
+        grouped[tab] = (grouped[tab] || 0) + 1;
+      });
+      var best = null;
+      Object.keys(grouped).forEach(function (tab) {
+        if (!best || grouped[tab] > grouped[best]) best = tab;
+      });
+      if (typeof rail.collapse === "function") rail.collapse(false);
+      if (best && typeof rail.selectTab === "function") rail.selectTab(best);
+      return best;
     }
 
     /**
@@ -1104,6 +1378,12 @@
       }
 
       counters.folded += 1;
+      // WHAT THIS BROWSER ALREADY KNEW. The reply cursor starts at zero on
+      // every load, so a reload re-delivers every folded reply the helper has.
+      // Re-applying them is harmless and correct; toasting them again is the
+      // reviewer being told about yesterday's answers every time they refresh.
+      // The stamp names WHICH reply, so an identical one is not news.
+      var hadStamp = replyStamp(item);
       var next = Object.assign({}, item);
       next[record.FIELD.STATE] = event.state || item[record.FIELD.STATE];
       next[record.FIELD.REPLY] = {
@@ -1145,13 +1425,27 @@
       // repaints, so neither can turn up unread later. Every other case leaves
       // it unseen and the badge appears on the next paint, on the tab the card
       // is in.
-      if (watchingTab(paneOf(next)) || !needsToSeeReply(next[record.FIELD.REPLY])) {
+      var watching = watchingTab(paneOf(next));
+      if (watching || !needsToSeeReply(next[record.FIELD.REPLY])) {
         var marks = readSeen();
         marks[id] = replyStamp(next);
         writeSeen(marks);
       }
 
-      return { kind: "folded", item: id, state: next[record.FIELD.STATE], status: reply.status };
+      return {
+        kind: "folded",
+        item: id,
+        state: next[record.FIELD.STATE],
+        status: reply.status,
+        // Decided here, where the "was the reviewer watching" answer is true,
+        // and acted on in applyReplies once every event in the batch is folded.
+        toast: shouldToastReply({
+          reply: next[record.FIELD.REPLY],
+          watching: watching,
+          readOnly: isReadOnly(),
+          known: hadStamp === replyStamp(next)
+        })
+      };
     }
 
     // -------------------------------------------------------------------------
@@ -1305,6 +1599,10 @@
         return unseenByTab(itemsNow(), readSeen(), paneOf);
       },
       markRepliesSeen: markRepliesSeen,
+      // The toast seams, for boot and for a spec: what a load found waiting,
+      // and the jump a pressed toast makes.
+      toastWaiting: toastWaiting,
+      jumpToCard: jumpToCard,
       rowCount: function () {
         return Object.keys(rows).length;
       },
@@ -1324,6 +1622,14 @@
     UNSEEN_ATTR: UNSEEN_ATTR,
     STALE_NOTICE: STALE_NOTICE,
     STYLE: STYLE,
+    TOAST_LABEL: TOAST_LABEL,
+    TOAST_TEXT_MAX: TOAST_TEXT_MAX,
+    TOAST_ABOUT_MAX: TOAST_ABOUT_MAX,
+    toastLabelFor: toastLabelFor,
+    shouldToastReply: shouldToastReply,
+    replyWaitCounts: replyWaitCounts,
+    waitingSentence: waitingSentence,
+    clip: clip,
     replyStamp: replyStamp,
     needsToSeeReply: needsToSeeReply,
     unseenReplyIds: unseenReplyIds,
