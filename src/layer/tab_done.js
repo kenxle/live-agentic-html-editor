@@ -227,10 +227,11 @@
     note: "Note"
   };
 
-  // Two lines of text and one line of context, roughly. The CSS clamps what is
-  // drawn; these clamp what is CARRIED, so a very long agent answer cannot make
-  // a toast node holding a whole essay.
-  var TOAST_TEXT_MAX = 220;
+  // The whole answer, and one line of context. The toast grows to fit the text,
+  // so this is not a display clamp; it is the ceiling on what is CARRIED, so a
+  // very long agent answer cannot turn the toast into a wall. An answer longer
+  // than this is cut on a word, and the card has the rest.
+  var TOAST_TEXT_MAX = 1200;
   var TOAST_ABOUT_MAX = 120;
 
   /** The short word at the top of the toast. */
