@@ -285,6 +285,90 @@ test.describe("the toast: an answer that finds a reviewer with the rail closed",
     }
   });
 
+  // --- the promises to the page underneath ------------------------------------
+  //
+  // Ken: "we need to be careful of it interacting with and preventing other
+  // JavaScript on the page in a website." These two are the halves of that a
+  // test can actually check.
+
+  test("the page stays clickable in the toast's own column, everywhere the toast box is not", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      await commentOnSelection(page, "p.lede", "cut this to one sentence");
+      const [item] = await waitForProjected(helper, 1);
+      await page.evaluate(() => window.__lahe.rail.collapse(true));
+
+      // The page's own click handling, which is the thing that must not be
+      // taken away from it. Capture phase, on the document, which is where a
+      // real application's delegated handlers usually sit.
+      await page.evaluate(() => {
+        window.__pageClicks = [];
+        document.addEventListener(
+          "click",
+          (event) => {
+            window.__pageClicks.push({ id: event.target.id || "", tag: event.target.tagName });
+          },
+          true
+        );
+      });
+
+      appendReply(helper, {
+        item: item.id,
+        rev: item.rev,
+        status: "handled",
+        agent: "claude",
+        text: "cut it to one sentence",
+        user_needs_to_see_reply: true
+      });
+      const info = await waitForToast(page, "the toast to appear top right");
+
+      // Just below the toast box, in the stack's own column. The container is
+      // pointer-events:none, so this is page, not tool.
+      const rect = info.toasts[0].rect;
+      await page.mouse.click(rect.x + rect.width / 2, rect.y + rect.height + 8);
+
+      const clicks = await page.evaluate(() => window.__pageClicks);
+      expect(clicks.length, "the page's own handler ran").toBe(1);
+      expect(clicks[0].id, "and the click reached the page, not the tool's host").not.toBe("lahe-surface-root");
+      expect((await toastState(page)).count, "the toast did not take a click that was not on it").toBe(1);
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
+  test("a toast appearing never takes focus off the page", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      await commentOnSelection(page, "p.lede", "cut this to one sentence");
+      const [item] = await waitForProjected(helper, 1);
+      await page.evaluate(() => window.__lahe.rail.collapse(true));
+
+      // The reviewer is using the application, with the caret in it.
+      await page.evaluate(() => document.querySelector("#log-session").focus());
+      const before = await page.evaluate(() => document.activeElement.id);
+      expect(before).toBe("log-session");
+
+      appendReply(helper, {
+        item: item.id,
+        rev: item.rev,
+        status: "question",
+        agent: "claude",
+        text: "which heading did you mean?"
+      });
+      await waitForToast(page, "the question to toast");
+
+      expect(await page.evaluate(() => document.activeElement.id), "focus stayed where the reviewer put it").toBe(
+        "log-session"
+      );
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
   test("a load that arrives with answers already waiting says so once", async ({ page }) => {
     const { app, helper, token } = await startBoth();
     try {

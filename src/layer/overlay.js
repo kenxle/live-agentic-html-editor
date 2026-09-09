@@ -591,16 +591,18 @@
     ".pill__jewel[hidden]{display:none}",
 
     // --- the toast ------------------------------------------------------------
-    // BOTTOM LEFT, and that is the whole of the placement rule. The rail is on
-    // the right and the collapsed pill sits in the bottom-right corner (and can
-    // be dragged), so anything that appears on the right can land on top of the
-    // one control the reviewer needs to reach.
+    // TOP RIGHT. Bottom-left was where it started and Ken kept nearly missing
+    // it: the eye is not down there, and a notification that has to be hunted
+    // for is a notification that gets hunted for later, which is the whole
+    // problem this exists to solve. Top right is where a person looks for one.
+    // It can land over the open rail, and that is fine: it is on screen for
+    // seconds and the rail is not going anywhere. The collapsed pill is
+    // bottom-right, so there is nothing to collide with.
     //
     // It borrows nothing new: the card's own paper, the card's own border, the
-    // accent rule the question block already uses down its left edge. What makes
-    // it read is that it is the only thing on that side of the page.
-    ".toasts{position:fixed;left:16px;bottom:16px;pointer-events:none;display:flex;",
-    "flex-direction:column;align-items:flex-start;gap:8px;",
+    // accent rule the question block already uses down its left edge.
+    ".toasts{position:fixed;top:16px;right:16px;pointer-events:none;display:flex;",
+    "flex-direction:column;align-items:flex-end;gap:8px;",
     "width:min(360px,calc(100vw - 32px))}",
     ".toasts[hidden]{display:none}",
     ".toast{pointer-events:auto;width:100%;display:flex;align-items:flex-start;gap:8px;",
@@ -608,6 +610,29 @@
     "border:1px solid var(--line);border-left:3px solid var(--accent);",
     "border-radius:var(--radius-sm);box-shadow:var(--shadow);cursor:pointer}",
     ".toast:hover{background:var(--surface)}",
+
+    // THE MOVEMENT IS THE POINT. A toast that fades in place is a thing that was
+    // always there; a toast that arrives from the edge is a thing that just
+    // happened, and the reviewer's eye goes to it without being asked to. It
+    // slides in from the right, which is the edge it is anchored to, so the
+    // motion reads as "this came in" rather than as decoration.
+    //
+    // Transform and opacity only: neither one costs a layout, so a page with its
+    // own scroll and resize handlers is untouched by a toast arriving.
+    "@keyframes lahe-toast-in{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}",
+    "@keyframes lahe-toast-fade{from{opacity:0}to{opacity:1}}",
+    ".toast{animation:lahe-toast-in 200ms cubic-bezier(.2,.7,.3,1) both}",
+    // Going: shorter than arriving, and pointer-events off the moment it starts,
+    // so a half-faded toast can never eat a click meant for the page under it.
+    // The node itself is removed when the fade ends (see dismissToast); this
+    // never leaves a transparent box sitting over the page.
+    ".toast[data-lahe-leaving='true']{opacity:0;transform:translateX(24px);pointer-events:none;",
+    "transition:opacity 120ms ease-in,transform 120ms ease-in}",
+    // Someone who asked their machine for less motion gets a plain fade, and
+    // nothing slides. The toast still arrives and still leaves.
+    "@media (prefers-reduced-motion:reduce){",
+    ".toast{animation:lahe-toast-fade 160ms ease-out both}",
+    ".toast[data-lahe-leaving='true']{transform:none;transition:opacity 120ms ease-in}}",
     ".toast__body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}",
     ".toast__label{font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;",
     "color:var(--accent-ink)}",
@@ -622,7 +647,11 @@
     ".toast__x{flex:none;width:20px;height:20px;border-radius:6px;color:var(--ink-faint);",
     "display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1}",
     ".toast__x:hover{background:var(--sunken);color:var(--ink)}",
-    ".toast__more{pointer-events:auto;font-size:11px;color:var(--ink-faint);padding:0 4px}"
+    // pointer-events STAYS off: it is a count, there is nothing to press on it,
+    // and a line of text that swallows clicks is exactly the kind of guest this
+    // tool must not be on someone else's page.
+    ".toast__more{pointer-events:none;font-size:11px;color:var(--ink-faint);padding:0 4px}",
+    ".toast__more[hidden]{display:none}"
   ].join("");
 
   // How long a toast that is not a question stays on screen. ONE number, named
@@ -633,6 +662,10 @@
   // stacked up the side of a page is a second rail, which is the thing the
   // reviewer already closed.
   var TOAST_MAX = 3;
+  // How long the going-away fade runs. The CSS owns the animation; JS knows this
+  // number for one reason only, which is when to take the node out of the DOM.
+  // It matches the transition in the .toast[data-lahe-leaving] rule above.
+  var TOAST_OUT_MS = 120;
 
   // The review-level actions, in the head's menu. They are the same two the
   // footer used to stand up as buttons, and they run through the same
@@ -1223,6 +1256,12 @@
       var toastHost = el("div", "toasts");
       markers.markChrome(toastHost);
       toastHost.hidden = true;
+      // Created once and kept last in the stack, so a toast arriving never has
+      // to move it and moving a node never restarts somebody's animation.
+      var toastMore = el("div", "toast__more", "");
+      markers.markChrome(toastMore);
+      toastMore.hidden = true;
+      toastHost.appendChild(toastMore);
 
       shadow.appendChild(rail);
       shadow.appendChild(pill);
@@ -1285,7 +1324,8 @@
         pill: pill,
         pillCount: pillCount,
         pillJewel: pillJewel,
-        toastHost: toastHost
+        toastHost: toastHost,
+        toastMore: toastMore
       };
 
       // Everything already in state is painted once, here. This is the only
@@ -1343,6 +1383,8 @@
         clearToastTimer(toast);
         toast.node = null;
       });
+      // A node mid-fade belongs to a root that is going away with it.
+      toastLeaving = [];
       if (dom && dom.host && dom.host.parentNode) dom.host.parentNode.removeChild(dom.host);
       Object.keys(cards).forEach(function (id) {
         cards[id].node = null;
@@ -3255,10 +3297,51 @@
     //                   a second rail, which is the thing the reviewer closed.
     //   A QUESTION WAITS  sticky toasts have no timer at all. Everything else
     //                   leaves on its own after toastMs.
+    //
+    // -------------------------------------------------------------------------
+    // WHAT THIS PROMISES THE PAGE UNDERNEATH
+    // -------------------------------------------------------------------------
+    //
+    // Ken: "we need to be careful of it interacting with and preventing other
+    // JavaScript on the page in a website." The tool is a guest, and a guest
+    // that eats clicks or steals focus on somebody's real application is worse
+    // than no notification at all. Six promises, each with the thing that keeps
+    // it true, because a promise with no mechanism is a comment:
+    //
+    //  1. THE PAGE STAYS CLICKABLE. `.toasts` is pointer-events:none and only
+    //     `.toast` turns it back on, so every pixel of the container that is not
+    //     a toast box passes clicks straight through. `.toast__more` is a count
+    //     with nothing to press, so it stays none too, and a toast mid-fade is
+    //     set pointer-events:none the moment it starts leaving.
+    //  2. FOCUS IS NEVER TAKEN. Nothing here calls focus(). A toast appearing
+    //     leaves document.activeElement exactly where it was, so a half-typed
+    //     form field on the page keeps the caret. Focus reaches a toast only if
+    //     the reviewer tabs or clicks into one.
+    //  3. NO DOCUMENT OR WINDOW LISTENERS. Every handler (click, keydown,
+    //     mouseenter, mouseleave) is bound on the toast node itself. Escape is
+    //     the one worth naming: the handler is on the toast, so it can only run
+    //     with focus inside a toast, and the page's own Escape and an open
+    //     comment box's Escape never reach it. preventDefault and
+    //     stopPropagation are called only on events that started inside a toast.
+    //  4. NO LAYOUT, NO SCROLL, NO OBSERVER. The container is position:fixed
+    //     inside the closed shadow root, and the animation moves opacity and
+    //     transform only. Nothing here scrolls anything, resizes anything, or
+    //     touches the page host's size or attributes, so the page's own resize
+    //     handlers and MutationObservers never see a toast arrive.
+    //  5. NOTHING IS TOUCHED OUTSIDE THE SHADOW ROOT. Every node created and
+    //     removed here is a child of dom.toastHost, which is inside the rail's
+    //     own closed root.
+    //  6. A DISMISSED TOAST IS GONE. It is removed from the DOM at the end of
+    //     its fade (TOAST_OUT_MS), never left sitting at opacity 0 over page
+    //     content.
 
     var toasts = [];
     var toastSeq = 0;
     var toastKeys = Object.create(null);
+    // Nodes part way through their going-away fade. They are out of `toasts`
+    // already, so they count for nothing; they are held only so the render pass
+    // leaves them where they are instead of yanking them out mid-fade.
+    var toastLeaving = [];
     // The live duration, so a test can shorten it. TOAST_MS is the only place
     // the real number is written.
     var toastMs = TOAST_MS;
@@ -3347,8 +3430,42 @@
       clearToastTimer(toast);
       var at = toasts.indexOf(toast);
       if (at !== -1) toasts.splice(at, 1);
-      if (toast.node && toast.node.parentNode) toast.node.parentNode.removeChild(toast.node);
+      var node = toast.node;
       toast.node = null;
+      // Out of the count at once, off the screen a fade later. The node stops
+      // taking clicks the instant it starts leaving (the CSS sets
+      // pointer-events:none), so the page under it is clickable through the
+      // whole fade, and it is REMOVED at the end rather than left transparent.
+      fadeOutNode(node);
+      renderToasts();
+      return true;
+    }
+
+    function fadeOutNode(node) {
+      if (!node) return false;
+      if (!node.parentNode) return false;
+      var view = doc && doc.defaultView;
+      if (!view || typeof view.setTimeout !== "function") {
+        node.parentNode.removeChild(node);
+        return true;
+      }
+      node.setAttribute("data-lahe-leaving", "true");
+      toastLeaving.push(node);
+      // harness-allow-timer: the going-away fade, pinned at TOAST_OUT_MS to
+      // match the CSS transition. It is when to take the node out of the DOM,
+      // not a wait for anything to happen.
+      view.setTimeout(function () {
+        dropLeavingNode(node);
+      }, TOAST_OUT_MS);
+      return true;
+    }
+
+    function dropLeavingNode(node) {
+      var at = toastLeaving.indexOf(node);
+      if (at !== -1) toastLeaving.splice(at, 1);
+      if (node.parentNode) node.parentNode.removeChild(node);
+      // The container hides itself again once the last node has actually gone,
+      // so an emptied stack leaves nothing at all over the page.
       renderToasts();
       return true;
     }
@@ -3372,17 +3489,18 @@
     function clearToasts() {
       toasts.slice().forEach(function (toast) {
         clearToastTimer(toast);
+        if (toast.node && toast.node.parentNode) toast.node.parentNode.removeChild(toast.node);
+        toast.node = null;
       });
       toasts = [];
-      if (dom && dom.toastHost) {
-        while (dom.toastHost.firstChild) dom.toastHost.removeChild(dom.toastHost.firstChild);
-        dom.toastHost.hidden = true;
-      }
+      toastLeaving.slice().forEach(dropLeavingNode);
+      renderToasts();
       return true;
     }
 
     /** The dom went with the old root; the toasts did not. Draw them again. */
     function remountToasts() {
+      toastLeaving = [];
       toasts.forEach(function (toast) {
         toast.node = null;
         toast.paused = false;
@@ -3445,17 +3563,44 @@
       return node;
     }
 
+    /**
+     * Put the stack in order, moving as little as possible.
+     *
+     * A NODE ALREADY IN PLACE IS NEVER MOVED. Re-parenting an element restarts
+     * its CSS animation, so a rebuild-everything render made every standing
+     * toast slide in again each time a new one arrived, and it would rip a
+     * toast out from under its own fade. Newest first, inserted ahead of the
+     * one it is newer than; everything else stays put.
+     *
+     * Everything this touches is a child of dom.toastHost, inside the closed
+     * root. Nothing outside the shadow root is read or written.
+     */
     function renderToasts() {
       if (!dom || !dom.toastHost) return false;
       var host = dom.toastHost;
-      while (host.firstChild) host.removeChild(host.firstChild);
       var shown = toasts.slice(0, TOAST_MAX);
-      shown.forEach(function (toast) {
-        host.appendChild(toastNodeFor(toast));
+      var live = [];
+      // The count line is created once and lives at the end, so it is the thing
+      // the oldest visible toast is inserted before.
+      var anchor = dom.toastMore;
+      for (var i = shown.length - 1; i >= 0; i -= 1) {
+        var node = toastNodeFor(shown[i]);
+        if (node.parentNode !== host) host.insertBefore(node, anchor);
+        anchor = node;
+        live.push(node);
+      }
+      // Anything left that is neither live, nor fading, nor the count line is a
+      // toast that has been pushed past the cap.
+      Array.prototype.slice.call(host.childNodes).forEach(function (child) {
+        if (child === dom.toastMore) return;
+        if (live.indexOf(child) !== -1) return;
+        if (toastLeaving.indexOf(child) !== -1) return;
+        host.removeChild(child);
       });
       var hidden = toasts.length - shown.length;
-      if (hidden > 0) host.appendChild(el("div", "toast__more", "+" + String(hidden) + " more"));
-      host.hidden = toasts.length === 0;
+      dom.toastMore.textContent = hidden > 0 ? "+" + String(hidden) + " more" : "";
+      dom.toastMore.hidden = hidden < 1;
+      host.hidden = toasts.length === 0 && toastLeaving.length === 0;
       return true;
     }
 
@@ -3620,6 +3765,7 @@
       toastDuration: toastDuration,
       TOAST_MS: TOAST_MS,
       TOAST_MAX: TOAST_MAX,
+      TOAST_OUT_MS: TOAST_OUT_MS,
       openMenu: openMenu,
       closeMenu: closeMenu,
       showRefusal: showRefusal,
@@ -3647,6 +3793,7 @@
     LIMIT_SEPARATE_STORAGE_NO_HELPER: LIMIT_SEPARATE_STORAGE_NO_HELPER,
     TOAST_MS: TOAST_MS,
     TOAST_MAX: TOAST_MAX,
+    TOAST_OUT_MS: TOAST_OUT_MS,
     END_REVIEW: END_REVIEW,
     endReviewCounts: endReviewCounts,
     unfinishedSentence: unfinishedSentence,
