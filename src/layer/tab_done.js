@@ -221,10 +221,13 @@
   //   NOT WHEN THEY CANNOT ACT  a refused (read-only) window writes nothing and
   //                             answers nothing, so it interrupts with nothing.
 
+  // The plain note is labeled with who said it ("claude says"), because "Note"
+  // told Ken nothing about where the words came from. The name is the reply's
+  // own agent field, the same one the card shows.
   var TOAST_LABEL = {
     question: "Question",
     not_handled: "Not handled",
-    note: "Note"
+    says: " says"
   };
 
   // The whole answer, and one line of context. The toast grows to fit the text,
@@ -239,7 +242,7 @@
     var status = reply && reply.status;
     if (status === record.REPLY_STATUS.QUESTION) return TOAST_LABEL.question;
     if (status === record.REPLY_STATUS.NOT_HANDLED) return TOAST_LABEL.not_handled;
-    return TOAST_LABEL.note;
+    return ((reply && reply.agent) || "agent") + TOAST_LABEL.says;
   }
 
   /** Cut to length on a word where it can, with the ellipsis saying it was cut. */

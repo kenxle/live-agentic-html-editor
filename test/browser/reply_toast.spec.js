@@ -150,7 +150,7 @@ test.describe("the toast: an answer that finds a reviewer with the rail closed",
 
       const info = await waitForToast(page, "the flagged answer to toast");
       expect(info.count).toBe(1);
-      expect(info.toasts[0].label).toBe("Note");
+      expect(info.toasts[0].label).toBe("claude says");
       expect(info.toasts[0].text).toContain("moved the number to the front");
       expect(info.toasts[0].about, "the words the answer is about").toContain("Nine clients checked in this week");
       expect(info.toasts[0].sticky, "a note is not a question, so it can leave on its own").toBe(false);

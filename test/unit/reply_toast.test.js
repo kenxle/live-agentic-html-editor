@@ -74,8 +74,9 @@ test("a reply this browser already held is not news, however loud it was the fir
 test("the label names the status in plain words", () => {
   assert.equal(tabDone.toastLabelFor(question()), "Question");
   assert.equal(tabDone.toastLabelFor({ status: "not_handled" }), "Not handled");
-  assert.equal(tabDone.toastLabelFor(flagged()), "Note");
-  assert.equal(tabDone.toastLabelFor(null), "Note");
+  assert.equal(tabDone.toastLabelFor(flagged()), (flagged().agent || "agent") + " says");
+  assert.equal(tabDone.toastLabelFor({ status: "handled", agent: "codex" }), "codex says");
+  assert.equal(tabDone.toastLabelFor(null), "agent says");
 });
 
 test("the summary sentence counts replies and questions in words a person reads at a glance", () => {
