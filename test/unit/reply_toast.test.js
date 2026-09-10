@@ -235,6 +235,87 @@ test("a refused window is told nothing, because it can do nothing about it", () 
   assert.equal(rail.toastInfo().count, 0);
 });
 
+// --- read is read, and it has to reach storage --------------------------------
+//
+// Ken, on an SPA that reloads every few minutes: "this page keeps toasting me
+// telling me there are responses waiting and it appears I've already read them
+// all." Suppressing the toast is only half of "seen"; the mark has to be
+// durable, or the next load finds the same replies unread.
+
+/** A second rail and tab over the same storage: what the next load sees. */
+function reboot(store) {
+  const rail = overlay.createRail({ store: store, reviewId: REVIEW });
+  const done = tabDone.createDoneTab({ store: store, reviewId: REVIEW, overlay: rail, document: null });
+  done.mount();
+  return { rail, done };
+}
+
+test("a reply read as it lands is marked seen, so the next load says nothing", () => {
+  const store = storeModule.createStore({ storage: null });
+  const rail = overlay.createRail({ store: store, reviewId: REVIEW });
+  rail.collapse(false);
+  rail.selectTab("done");
+  const done = tabDone.createDoneTab({ store: store, reviewId: REVIEW, overlay: rail, document: null });
+  done.mount();
+
+  const item = readyItem("c_watched");
+  store.write(REVIEW, item);
+  done.refresh();
+  done.applyReplies([foldEvent(item, flagged())]);
+
+  assert.equal(rail.toastInfo().count, 0, "it landed in front of them, so it did not toast");
+  assert.deepEqual(done.unseenIds(), [], "and it is not sitting unread either");
+  assert.equal(reboot(store).rail.toastInfo().count, 0, "so the next load has nothing to announce");
+});
+
+test("opening the rail on the tab it was already on marks that tab's replies read", () => {
+  const store = storeModule.createStore({ storage: null });
+  const rail = overlay.createRail({ store: store, reviewId: REVIEW });
+  rail.selectTab("done");
+  rail.collapse(true);
+  const done = tabDone.createDoneTab({ store: store, reviewId: REVIEW, overlay: rail, document: null });
+  done.mount();
+
+  const item = readyItem("c_expanded");
+  store.write(REVIEW, item);
+  done.refresh();
+  done.applyReplies([foldEvent(item, flagged())]);
+  assert.equal(rail.toastInfo().count, 1, "the rail was closed, so it toasted");
+  assert.deepEqual(done.unseenIds(), [item[record.FIELD.ID]]);
+
+  // The reviewer expands the rail with the pill. No tab is SELECTED, because it
+  // is the tab the rail was already on. That used to write no mark at all.
+  rail.collapse(false);
+  assert.deepEqual(done.unseenIds(), [], "opening it onto the card is reading the card");
+  assert.equal(reboot(store).rail.toastInfo().count, 0, "so the reload says nothing");
+});
+
+test("a refused window has the rail opened for it, and that is not the reviewer reading", () => {
+  const store = storeModule.createStore({ storage: null });
+  const rail = overlay.createRail({ store: store, reviewId: REVIEW });
+  rail.selectTab("done");
+  rail.collapse(true);
+  const done = tabDone.createDoneTab({
+    store: store,
+    reviewId: REVIEW,
+    overlay: rail,
+    document: null,
+    isReadOnly: () => true
+  });
+  done.mount();
+
+  const item = readyItem("c_refused_open");
+  store.write(REVIEW, item);
+  done.refresh();
+  done.applyReplies([foldEvent(item, flagged())]);
+  assert.deepEqual(done.unseenIds(), [item[record.FIELD.ID]]);
+
+  // showRefusal forces the rail open so its remedy is visible. That is the tool
+  // talking, not the reviewer reading.
+  rail.collapse(false);
+  assert.deepEqual(done.unseenIds(), [item[record.FIELD.ID]], "still unread, because nobody read it");
+});
+
 test("a load that arrives with answers already waiting says so once", () => {
   const store = storeModule.createStore({ storage: null });
   const item = readyItem("c_waiting");

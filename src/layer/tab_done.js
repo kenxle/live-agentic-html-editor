@@ -520,15 +520,35 @@
           visitTab(tab);
         });
       }
-      // Collapsing the rail ends the visit, so the cards the reviewer was given
-      // a second look at go back to ordinary. Opening it again is a new visit,
-      // and a new visit to an already-read tab has nothing fresh in it.
+      // OPENING THE RAIL IS ALSO THE READING, and missing that is what kept
+      // toasting Ken about answers he had already read (2026-09-09). He works
+      // with the rail collapsed, expands it onto the tab it was already on,
+      // reads every card, and puts it away. No tab was ever SELECTED in that,
+      // so nothing was ever marked read, and the next reload found the same
+      // replies "unseen" and announced them again. On an SPA that rebuilds
+      // often, that is every few minutes.
+      //
+      // Collapsing still ends the visit, so the cards the reviewer was given a
+      // second look at go back to ordinary.
       if (!dropCollapseWatch && typeof rail.onCollapse === "function") {
-        dropCollapseWatch = rail.onCollapse(function () {
+        dropCollapseWatch = rail.onCollapse(function (collapsed) {
+          if (collapsed === false) {
+            // A refused window has the rail forced open so its remedy is
+            // visible. That is the tool talking, not the reviewer reading.
+            if (!isReadOnly()) visitTab(rail.currentTab());
+            return;
+          }
           clearFresh();
         });
       }
       refresh();
+      // A rail that is ALREADY open on this load is being read too, for the
+      // same reason. Nothing selects a tab on boot and nothing collapses, so
+      // without this the one state the reviewer spends most of a session in
+      // (rail open, one tab, reading) writes no marks at all.
+      if (!isReadOnly() && typeof rail.isCollapsed === "function" && rail.isCollapsed() !== true) {
+        visitTab(rail.currentTab());
+      }
       // A load that arrives with answers already waiting says so once. See
       // toastWaiting: a backlog is one interruption, not one per reply.
       toastWaiting();
@@ -1431,9 +1451,15 @@
       // is in.
       var watching = watchingTab(paneOf(next));
       if (watching || !needsToSeeReply(next[record.FIELD.REPLY])) {
-        var marks = readSeen();
-        marks[id] = replyStamp(next);
-        writeSeen(marks);
+        // DURABLE, not just quiet. Suppressing the toast and the badge is only
+        // half of "the reviewer has seen this": the mark has to reach storage,
+        // or the next load finds it unread and announces it all over again.
+        // Scoped to this one item, so nothing else's mark is touched.
+        writeSeen(
+          seenMarksFor(itemsNow(), readSeen(), function (candidate) {
+            return candidate[record.FIELD.ID] === id;
+          })
+        );
       }
 
       return {

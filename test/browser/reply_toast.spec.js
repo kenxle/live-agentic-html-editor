@@ -285,6 +285,104 @@ test.describe("the toast: an answer that finds a reviewer with the rail closed",
     }
   });
 
+  // --- read is read, and it survives the reload -------------------------------
+  //
+  // Ken, on an SPA that rebuilds (and so reloads) every few minutes: "this page
+  // keeps toasting me telling me there are responses waiting and it appears
+  // I've already read them all." Both halves of that are below: an answer read
+  // as it lands, and an answer read by opening the rail onto the tab it is
+  // already on, which selects no tab and used to write no mark at all.
+
+  test("an answer read as it lands stays read across a reload", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      await commentOnSelection(page, "p.lede", "cut this to one sentence");
+      const [item] = await waitForProjected(helper, 1);
+
+      // Rail open, on the tab the handled card lands in: the reviewer is
+      // looking straight at it when the answer arrives.
+      await page.evaluate(() => {
+        window.__lahe.rail.collapse(false);
+        window.__lahe.rail.selectTab("done");
+      });
+
+      appendReply(helper, {
+        item: item.id,
+        rev: item.rev,
+        status: "handled",
+        agent: "claude",
+        text: "cut it to one sentence",
+        user_needs_to_see_reply: true
+      });
+      await pollPage(page, (id) => window.__lahe.itemById(id).reply !== null, item.id, {
+        message: "the reply to fold onto the card in front of the reviewer"
+      });
+      expect((await toastState(page)).count, "it is on screen, so it does not toast").toBe(0);
+
+      // The agent rebuilds, the page reloads. Nothing new has happened.
+      await page.reload();
+      await pollPage(page, () => !!(window.__lahe && window.__lahe.booted), undefined, {
+        message: "the layer to boot again"
+      });
+      await pollPage(page, (id) => window.__lahe.itemById(id).reply !== null, item.id, {
+        message: "the backlog to be applied again"
+      });
+      expect((await toastState(page)).count, "an answer already read is not announced again").toBe(0);
+      expect(await page.evaluate(() => window.__lahe.handle.doneTab().unseenIds()), "and nothing is unread").toEqual([]);
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
+  test("opening the rail on the tab it was already on counts as reading it", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      await commentOnSelection(page, "p.lede", "cut this to one sentence");
+      const [item] = await waitForProjected(helper, 1);
+
+      // Ken's own working state: the rail put away, sitting on Done.
+      await page.evaluate(() => {
+        window.__lahe.rail.selectTab("done");
+        window.__lahe.rail.collapse(true);
+      });
+
+      appendReply(helper, {
+        item: item.id,
+        rev: item.rev,
+        status: "handled",
+        agent: "claude",
+        text: "cut it to one sentence",
+        user_needs_to_see_reply: true
+      });
+      const info = await waitForToast(page, "the answer to toast at a closed rail");
+      expect(info.count).toBe(1);
+
+      // He opens the rail with the pill and reads the card. No tab is selected,
+      // because it is the tab the rail was already on.
+      const pill = await page.evaluate(() => window.__lahe.rail.geometry().pill);
+      await page.mouse.click((pill.left + pill.right) / 2, (pill.top + pill.bottom) / 2);
+      await pollPage(page, () => window.__lahe.rail.isCollapsed() === false, undefined, {
+        message: "the pill to open the rail"
+      });
+      expect((await railState(page)).tab, "and it opened on the tab it was left on").toBe("done");
+
+      await page.reload();
+      await pollPage(page, () => !!(window.__lahe && window.__lahe.booted), undefined, {
+        message: "the layer to boot again"
+      });
+      await pollPage(page, (id) => window.__lahe.itemById(id).reply !== null, item.id, {
+        message: "the backlog to be applied again"
+      });
+      expect((await toastState(page)).count, "he read it, so the reload says nothing").toBe(0);
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
   // --- the promises to the page underneath ------------------------------------
   //
   // Ken: "we need to be careful of it interacting with and preventing other
