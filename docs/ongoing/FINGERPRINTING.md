@@ -435,6 +435,46 @@ rebuild because it lives upstream of the build, and it scores decisively.
 | A curly quote replacing a straight one | the normalizer folds whitespace and invisibles, deliberately not typography, because folding it would let a write discard your punctuation fix |
 | Looped generated output | **deferred on purpose.** 73 cards, one card in the source: there is nothing there to fingerprint or stamp |
 | Any of the pointing ladder, in the product | **built and proven, wired to nothing** |
+| The agent is told WHERE the element sits | the record knows (fingerprint chain, path), review.json does not say it. See the L8 case below |
+
+### The L8 case: the record knew, the agent was never told (2026-09-09)
+
+Ken clicked a whole blog block on a tearsheet that shows the same block six
+ways, one per treatment, each inside `<section class="tcase t6" id="t6">`. The
+click landed on `<div class="wrap">`, a div with no id, whose text is identical
+in all six. The agent asked which treatment he meant.
+
+The record had the answer three ways over:
+
+- `region.ref.path` was `body>main:1>section:6>div:3>section:1>div:1`, the sixth
+  section.
+- `region.ref.fingerprint.chain` listed the ancestors with their classes:
+  `section.sec-blog`, `div.state`, `section.tcase.t6`, `main`.
+- `text_unique` was true and `ok` was true: the layer had found the element and
+  could write to it.
+
+None of that reaches the agent. review.json projects `subject` (the element's
+own opening tag, `<div class="wrap">`, which said nothing), `context.heading`
+(null: the block's own `<h2>Blog</h2>` is a child, not a sibling, and the
+treatment's heading sits inside a sibling wrapper the sibling walk never
+enters), and `region_label` (`div 42`, an ordinal). The path and the chain are
+kept on the record for the layer's own re-find and never projected.
+
+What to add, in order of how much it would have helped here:
+
+1. A `where` line in review.json built from the chain: ancestor tag, id, and
+   classes, innermost last, e.g. `main > section#t6.tcase > div.state >
+   section.sec-blog > div.wrap`. The chain today keeps ancestor classes but not
+   ancestor ids; keep ids too, since an id is the one thing a page author put
+   there to be pointed at.
+2. The heading walk should also look inside earlier siblings, not only at them.
+   A heading wrapped in a `<div class="thead">` is the common case on built
+   pages, and today it is invisible.
+3. The agent's contract should say to read `where` before asking.
+
+The other agent's answer within a minute was to stamp `data-treatment` and
+`aria-label` on every wrapper in the page. That fixes this page. The projection
+fix is what stops the next page from needing the same favor.
 
 ---
 
