@@ -289,8 +289,10 @@ Set `"user_needs_to_see_reply": true` on a reply the reviewer should actually
 read: an answer to them, a caveat, a judgment call, or a change you made
 differently than asked. It is what the rail's unread badge counts, and it also
 pops a toast over the page the reviewer is reading, so a flag on a routine
-confirmation interrupts them for nothing. Leave it off a routine confirmation. A
-`question` or `not_handled` reply reaches them regardless.
+confirmation interrupts them for nothing. Leave it off a routine confirmation,
+and off bookkeeping about the reviewer's own edits ("superseded by your next
+edit", "this earlier revision will never match again"): they edit quickly and
+expect that. A `question` or `not_handled` reply reaches them regardless.
 
 **Put the words on the same line.** All four of those are things you say, so a
 flagged reply with no `text` and no `reason` is not counted: the badge would

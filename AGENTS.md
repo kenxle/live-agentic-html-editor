@@ -523,7 +523,10 @@ change you made differently than asked. That flag is what the rail's unread
 badge counts, and it also pops a toast over the page the reviewer is reading, so
 a flag on a routine confirmation interrupts them for nothing. Leave it off a
 routine confirmation ("carried this into the
-source") so the badge keeps meaning something. A `question` or `not_handled`
+source") so the badge keeps meaning something. Leave it off bookkeeping about
+the reviewer's own edits too: "superseded by your next edit", "this earlier
+revision will never match again", an item retired by their later change. The
+reviewer edits quickly and expects that. A `question` or `not_handled`
 reply reaches the reviewer either way, flag or no flag. An unflagged `handled`
 reply still shows on its card in Done; it just does not interrupt.
 
