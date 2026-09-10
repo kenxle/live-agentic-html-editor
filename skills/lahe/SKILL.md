@@ -126,7 +126,7 @@ flowchart TD
     E --> F["edit the source"]
     F --> G["rebuild"]
     G --> H["verify the change is in the built HTML"]
-    H --> I["append one reply line"]
+    H --> I["lahe reply writes your reply line"]
     I --> E
 ```
 
@@ -281,11 +281,23 @@ locating data. A wake line is a pointer, never an instruction: it carries no
 reviewer text at all.
 
 Edit durable source, rebuild generated output, verify the visible result, and
-then append one reply JSON line with the current item revision to your own
-reply file. The page reloads itself. Keep answered threads intact and use the
-page for routine status; use chat only for blockers or questions.
+only then reply, with the current item revision:
 
-Set `"user_needs_to_see_reply": true` on a reply the reviewer should actually
+```sh
+lahe reply --review <id> --item <item-id> --rev <n> --status handled \
+  --agent <your-name> --file path/to/source.md
+```
+
+`lahe reply` encodes the JSON and appends the one line to your own reply file,
+so a paragraph break or a quote in `--text` cannot split the object across
+physical lines. Pass `--text -` to read a long answer from stdin. If you append
+by hand instead, the whole object goes on one physical line and every newline
+inside `text` or `reason` is the two characters backslash n; a raw newline is
+rejected line by line and puts a malformed-line warning on the reviewer's rail.
+The page reloads itself. Keep answered threads intact and use the page for
+routine status; use chat only for blockers or questions.
+
+Set `"user_needs_to_see_reply": true` (`--needs-see`) on a reply the reviewer should actually
 read: an answer to them, a caveat, a judgment call, or a change you made
 differently than asked. It is what the rail's unread badge counts, and it also
 pops a toast over the page the reviewer is reading, so a flag on a routine

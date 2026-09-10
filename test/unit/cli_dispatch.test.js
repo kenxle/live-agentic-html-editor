@@ -42,6 +42,10 @@ test("the dispatcher advertises review and session lifecycle", async () => {
   assert.match(help.stdout, /\badd\b/);
   assert.match(help.stdout, /\bstatus\b/);
   assert.match(help.stdout, /\bmonitor\b/);
+  // `reply` is advertised for the same reason the rest are: an agent that
+  // cannot see the command hand-encodes the JSON in a shell instead, which is
+  // how a multi-paragraph answer becomes three rejected lines.
+  assert.match(help.stdout, /\breply\b/);
   assert.equal(/\bwait\b/.test(help.stdout), false);
 });
 
@@ -68,8 +72,8 @@ test("missing and unknown commands use the shared CLI bad-usage exit", async () 
   assert.match(unknown.stderr, /unknown command/);
 });
 
-test("add, serve, session, and monitor help use stdout and the successful help exit", async () => {
-  for (const command of ["add", "serve", "session", "monitor"]) {
+test("add, serve, session, monitor, and reply help use stdout and the successful help exit", async () => {
+  for (const command of ["add", "serve", "session", "monitor", "reply"]) {
     const help = await captureMain([command, "--help"]);
     assert.equal(help.code, protocol.CLI_EXIT.OK, command + " --help exits successfully");
     assert.match(help.stdout, new RegExp("usage: lahe " + command));

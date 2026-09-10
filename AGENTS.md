@@ -42,7 +42,7 @@ each one cost a reviewer their work.
   edit source, rebuild          verify the change is in the built HTML
           |
           v
-  append your reply line        only now. handled means it is on their screen
+  lahe reply ...                only now. handled means it is on their screen
           |
           `--------------------> back to drain, until it prints nothing
 ```
@@ -63,7 +63,7 @@ reviewer whose comments are about to split in half.
 
 **3. Rebuild before you reply, and verify.** `handled` means the reviewer's page
 now shows the change. Edit the source, rebuild, check the change is really in
-the built HTML, and only then append your reply line. Never tell them to reload;
+the built HTML, and only then run `lahe reply`. Never tell them to reload;
 the page does that itself.
 
 **4. `file://` works, and it is the fallback, not the normal path.** It is there
@@ -504,13 +504,33 @@ Inside the review folder:
   and finishing a change the reviewer just made unnecessary is worse than
   pausing it. If your host has no subagents, cut the long work into short pieces
   and drain between them.
-- **`replies.jsonl`** is where you answer (use `replies-<your-name>.jsonl` if
-  several agents work at once). Append one JSON line per item; never edit or
-  rewrite the file. The shape:
+- **`lahe reply`** is how you answer. It writes one correctly encoded JSON line
+  into your reply file (`replies.jsonl`, or `replies-<your-name>.jsonl` when you
+  pass `--agent`):
+
+```sh
+lahe reply --review <id> --item c_7fa2 --rev 2 --status handled \
+  --agent claude --file src/views/home.html
+```
+
+  That writes this line:
 
 ```json
 {"item":"c_7fa2","rev":2,"status":"handled","agent":"claude","files":["src/views/home.html"]}
 ```
+
+  Use `--text` for a question or anything you want the reviewer to read,
+  `--reason` for why something was not handled, `--needs-see` for the flag, and
+  `--text -` to read a long answer from stdin.
+
+**Do not hand-write the reply JSON.** An agent that appends with `echo` and puts
+a paragraph break inside `--text`'s place writes a raw newline into the JSON
+string, which splits one object across three physical lines; the helper rejects
+all three and the reviewer gets a malformed-line warning on their rail. That
+happened on 2026-09-10 and is the reason this command exists. Hand-appending is
+still read, so if you must do it: the whole object goes on ONE physical line,
+every newline inside `text` or `reason` is the two characters backslash n, and
+you only ever append. Never edit or rewrite a reply file.
 
 `status` is `handled` (you made the change), `not_handled` (you did not, with a
 `reason` the reviewer will read), or `question` (you need an answer, in `text`).
@@ -558,7 +578,8 @@ documents, it is the project's canonical build command):
 # 2. rebuild, however this project builds
 # 3. check the change is actually in the built HTML
 grep -n "the new wording" path/to/built/page.html
-# 4. only now append your reply line
+# 4. only now write the reply line, with the tool rather than by hand
+lahe reply --review <id> --item <item-id> --rev <n> --status handled --agent <name>
 ```
 
 **The rebuild no longer needs a `lahe add` after it.** On the served path there
@@ -757,7 +778,7 @@ post repeated "standing by" updates.
 
 The session scope covers reviews added later to this session and never another
 agent's reviews. Neither channel acknowledges anything: only a reply line marks
-an item handled. Stop your wake tail or monitor when you run
+an item handled, and `lahe reply` is how you write one. Stop your wake tail or monitor when you run
 `lahe session close <id>`; the close appends a `closed` line to the feed and any
 running monitor exits with code 5.
 

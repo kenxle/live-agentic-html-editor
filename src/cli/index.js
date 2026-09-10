@@ -5,7 +5,10 @@
 //
 // The public commands are the whole surface. The agent-facing pair from the
 // archived send model (`next` and `ack`) is gone: an agent answers by appending
-// one JSON line to a reply file, which needs no command at all.
+// one JSON line to a reply file. `reply` is that append done by the tool rather
+// than by a shell, which is not a new protocol: it writes the same line to the
+// same file, and hand-appending still works. It exists because JSON encoded by
+// `echo` is JSON that breaks on the first newline in an agent's answer.
 //
 // `wait` IS RETIRED, and it is not wired here any more. It blocked, which meant
 // agents ran it in the foreground and stopped working while a reviewer typed,
@@ -31,6 +34,7 @@ var USAGE = [
   "  session list the agent sessions on this machine, or close, reopen, or take one over",
   "  add     add the library to a page and mint that review's token",
   "  status  print what is open right now, and whether the page is still connected",
+  "  reply   write one correctly encoded reply line into your reply file",
   "  monitor watch locally for session work, print it, and exit (zero-token no-ops)",
   "",
   "Run `lahe <command> --help` for a command's own options."
@@ -47,6 +51,7 @@ var COMMANDS = {
   session: function () { return require("./commands/session.js"); },
   add: function () { return require("./commands/add.js"); },
   status: function () { return require("./commands/status.js"); },
+  reply: function () { return require("./commands/reply.js"); },
   monitor: function () { return require("./commands/monitor.js"); }
 };
 

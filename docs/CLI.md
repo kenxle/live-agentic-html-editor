@@ -21,6 +21,7 @@ once, and after that a plain sentence works:
 | `lahe add ... --source path/to/template` | Record where the source lives, so an agent edits the template rather than build output |
 | `lahe add ... --review <id>` | Re-attach this page to a review that already exists, by id |
 | `lahe status [--session <id>] [--review <id>] [--json]` | What is open right now. Agent monitors must name their session; plain global status is only a human diagnostic |
+| `lahe reply --review <id> --item <itm> --rev <n> --status handled\|not_handled\|question` | Write one reply. Add `--text` or `--reason` for what you want to say, `--file <path>` per file you changed, `--needs-see` when the reviewer should read it, `--agent <name>` for the card and the per-agent file. The command encodes the JSON, so a newline or a quote in your answer cannot split the line |
 | `lahe monitor --session <id>` | Poll locally without model wakeups, print unanswered session work, and exit |
 | `lahe session list [--json]` | Read-only: every agent session on this machine, open ones first, with its handoff revision, reviews owned, unanswered items, whether anything is listening to it, and when the agent last replied. This is how you find a session id |
 | `lahe session close <id>` | Close an agent workstream, stop its static servers, and keep all review history. The final close also stops the shared helper |
@@ -129,4 +130,11 @@ either way.
 field is the whole contract), and `replies.jsonl` (or `replies-<agent>.jsonl`)
 is where an agent answers, one appended JSON line per item. `events.jsonl` is
 the append-only history underneath both.
+
+Write that line with `lahe reply`, not with `echo`. The command encodes the
+JSON, so a paragraph break or a quote in an agent's answer lands as `\n` and
+`\"` instead of splitting one object across three physical lines that the
+helper then rejects one by one. Hand-appending still works and is still read:
+if you do it, the whole object goes on one physical line and every newline
+inside `text` or `reason` is the two characters backslash n.
 
