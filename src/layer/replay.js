@@ -596,9 +596,12 @@
   // page just quietly reads the way it did before they touched it.
   //
   // The check runs once per page load, after the settling window closes, and it
-  // reopens the item so the change becomes ready work again. The wake feed
-  // already wakes on a reopen, so the agent is told without the reviewer having
-  // to notice anything.
+  // reopens the item so the change becomes ready work again. It reopens any one
+  // item ONCE: an agent that answers handled again while the page still reads
+  // the same way is telling the check the rendering is intended, not inviting
+  // another round. See the stamp rule below and record.js. The wake feed already
+  // wakes on a reopen, so the agent is told without the reviewer having to
+  // notice anything.
   //
   // BOTH HALVES ARE REQUIRED, and that is the whole design.
   //
@@ -620,29 +623,46 @@
   // paragraph has not reverted anything, and a substring compare on raw text
   // would say it had.
 
-  // The sentence the reopened item carries. It is tool-generated, and it says so
-  // in its own first words, because the record shape has no field that could
-  // carry "this text is not the reviewer's". It names no page content: the item
-  // already carries the before and after text, and repeating page text into the
-  // note would push page content into the intent channel (D12).
-  var REVERTED_EDIT_NOTE =
-    "Reopened by the page check: this handled change is no longer on the page and the original text is back. " +
-    "Reapply it, or reply not_handled saying why.";
+  // The sentence the reopened item carries. Authored in record.js beside the
+  // rest of the tool-generated note text; named here too because this is where
+  // it is used and where every test looks for it.
+  var REVERTED_EDIT_NOTE = record.PAGE_CHECK_NOTE;
+
+  // The backstop, independent of the stamp rule below. Two checks that both look
+  // at the same item cannot reopen it twice inside this window, whatever they
+  // each believe about the record. Sixty seconds because the loop that caused
+  // this ran roughly three times a minute, and a genuine revert is a thing a
+  // build did minutes or hours ago, so nothing honest is lost by waiting.
+  var CHECK_REOPEN_COOLDOWN_MS = 60000;
 
   /**
    * Has this handled hand edit been reverted on the page?
    *
-   * Pure: a record and the page's current text in, a boolean out.
+   * Pure: a record and the page's current text in, a boolean out. `options.now`
+   * is the clock, in milliseconds, so the cooldown can be tested without waiting
+   * a minute.
+   *
+   * TWO THINGS HOLD IT BACK, and they answer different questions.
+   *
+   *   the stamp rule    has the agent already answered the revision this check
+   *                     itself created? Then the reply in hand is the agent
+   *                     saying "this is how it renders now", and reopening again
+   *                     is the loop. See record.answeredPageCheckReopen.
+   *   the cooldown      did any check reopen this item in the last minute? Then
+   *                     not again, whatever the record says.
    *
    * @param {Object} item the record
    * @param {string} pageText the reviewed page's current text, the library's own
    *                 chrome excluded (see pageTextOf)
+   * @param {Object} [options] {now}
    * @returns {boolean}
    */
-  function isRevertedHandledEdit(item, pageText) {
+  function isRevertedHandledEdit(item, pageText, options) {
     if (!item || typeof pageText !== "string") return false;
     if (!record.isHandEdit(item)) return false;
     if (item[record.FIELD.STATE] !== record.STATE.HANDLED) return false;
+    if (record.answeredPageCheckReopen(item)) return false;
+    if (withinCheckCooldown(item, options)) return false;
 
     var after = item[record.FIELD.AFTER];
     var before = item[record.FIELD.BEFORE];
@@ -659,6 +679,17 @@
     if (!pageKey) return false;
     if (pageKey.indexOf(afterKey) !== -1) return false;
     return pageKey.indexOf(beforeKey) !== -1;
+  }
+
+  /** Did a check reopen this item less than CHECK_REOPEN_COOLDOWN_MS ago? */
+  function withinCheckCooldown(item, options) {
+    var stamp = record.pageCheckReopen(item);
+    if (!stamp || typeof stamp.at !== "string") return false;
+    var then = Date.parse(stamp.at);
+    if (!Number.isFinite(then)) return false;
+    var opts = options || {};
+    var now = typeof opts.now === "number" ? opts.now : Date.now();
+    return now - then < CHECK_REOPEN_COOLDOWN_MS;
   }
 
   /**
@@ -678,13 +709,13 @@
    * built for: a rebuild that quietly dropped an applied fix, where nobody asked
    * for anything.
    */
-  function revertedHandledEditIds(items, pageText) {
+  function revertedHandledEditIds(items, pageText, options) {
     var list = Array.isArray(items) ? items : [];
     var takenBack = record.takenBackIds(list);
     var out = [];
     for (var i = 0; i < list.length; i += 1) {
       if (takenBack[list[i][record.FIELD.ID]]) continue;
-      if (isRevertedHandledEdit(list[i], pageText)) out.push(list[i][record.FIELD.ID]);
+      if (isRevertedHandledEdit(list[i], pageText, options)) out.push(list[i][record.FIELD.ID]);
     }
     return out;
   }
@@ -1706,6 +1737,7 @@
     compare: compare,
     applyRecord: applyRecord,
     REVERTED_EDIT_NOTE: REVERTED_EDIT_NOTE,
+    CHECK_REOPEN_COOLDOWN_MS: CHECK_REOPEN_COOLDOWN_MS,
     isRevertedHandledEdit: isRevertedHandledEdit,
     revertedHandledEditIds: revertedHandledEditIds,
     pageTextOf: pageTextOf,

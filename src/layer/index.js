@@ -994,21 +994,40 @@
      * through the same path the reviewer's own Reopen issue button uses, and the
      * wake feed already wakes on a reopen.
      *
-     * Once, not in a loop. An item the agent answers again without actually
-     * fixing the page is caught on the next load, which is the right cadence: it
-     * is one more piece of ready work, not a live watcher fighting the page.
+     * ONCE PER ITEM PER LOAD, and never a loop.
+     *
+     * The check and the agent can answer each other. On 2026-09-10 they did:
+     * the reviewer's edit was applied in a shape the check could not see, so the
+     * check reopened, the agent replied handled, the check read the same page
+     * and reopened again, thirteen times in thirty six minutes. Three things
+     * hold it now, and the first two are the ones that matter:
+     *
+     *   the stamp   the record remembers which revision the check created, so a
+     *               handled reply answering that revision is the agent saying
+     *               "this is how it renders now" and is left alone
+     *               (record.answeredPageCheckReopen)
+     *   the cooldown  no item is reopened by a check twice inside a minute
+     *               (replay.CHECK_REOPEN_COOLDOWN_MS)
+     *   this set    and no item is reopened by a check twice in one page load,
+     *               however many times this function is called
      */
+    var checkReopened = {};
+
     function runRevertCheck() {
       if (readOnlyActive) return [];
       var body = doc && doc.body;
       if (!body) return [];
       var pageText = ns.replay.pageTextOf(body);
-      var ids = ns.replay.revertedHandledEditIds(refreshItems(), pageText);
+      var ids = ns.replay.revertedHandledEditIds(refreshItems(), pageText).filter(function (id) {
+        return !checkReopened[id];
+      });
       counters.revertChecks += 1;
       ids.forEach(function (id) {
+        checkReopened[id] = true;
         done.reopen(id, {
           note: ns.replay.REVERTED_EDIT_NOTE,
-          notice: "This change was undone on the page. The item is open again."
+          notice: "This change was undone on the page. The item is open again.",
+          pageCheck: true
         });
         counters.revertReopens += 1;
       });

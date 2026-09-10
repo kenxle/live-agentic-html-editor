@@ -200,9 +200,18 @@
       return value;
     }
 
+    // Everything comes out of storage through here, which is why the repair
+    // below lives here. Records written before the reopen loop was fixed
+    // (2026-09-10) carry the page check's sentence many times over in one note,
+    // once per cycle. Collapsing it on the way out means the reviewer's card
+    // reads right on the next reload, with nobody editing storage by hand, and
+    // the next write of that item persists the collapse.
     function readAll(reviewId) {
       var parsed = readJson(keyFor(reviewId), []);
-      return Array.isArray(parsed) ? parsed : [];
+      if (!Array.isArray(parsed)) return [];
+      return parsed.map(function (item) {
+        return record.collapsePageCheckNote(item);
+      });
     }
 
     function writeAll(reviewId, items) {

@@ -205,3 +205,119 @@ test("the page text joins text nodes the way textContent does", () => {
   assert.equal(replay.pageTextOf(body), "Ken St. Clair");
   assert.equal(replay.pageTextOf(null), "");
 });
+
+// ---------------------------------------------------------------------------
+// The loop, and the three things that stop it
+// ---------------------------------------------------------------------------
+//
+// What happened on 2026-09-10, in review rbbe2de599404. The reviewer split a
+// numbered list item in two and added a sentence. The agent applied it as a new
+// numbered item instead, which was a legitimate reading and the one the
+// reviewer had actually meant. So the record's `after` was never on the page as
+// one block, and the record's `before` was still sitting there untouched: both
+// halves of the check held, on a page nobody had reverted. The check reopened
+// the item, the agent replied handled, the check read the same page and
+// reopened it again. Thirteen revisions in thirty six minutes, each one waking
+// the agent and appending another copy of the same sentence to the note.
+
+/** The agent answering the revision in front of it. */
+function answeredHandled(item, at) {
+  const next = Object.assign({}, item);
+  next[record.FIELD.STATE] = record.STATE.HANDLED;
+  next[record.FIELD.REPLY] = { status: "handled", agent: "claude", at: at };
+  return next;
+}
+
+test("the page check reopens a stuck item once, and the agent's next handled reply ends it", () => {
+  const pageText = page(BEFORE);
+  const first = handledEdit();
+
+  // Pass one. Nothing has been stamped, the page reads reverted, so it reopens.
+  assert.equal(replay.isRevertedHandledEdit(first, pageText), true);
+  const reopened = record.pageCheckReopenOf(first, replay.REVERTED_EDIT_NOTE, "2026-09-10T16:31:00.000Z");
+  assert.equal(reopened[record.FIELD.STATE], record.STATE.READY);
+  assert.equal(reopened[record.FIELD.REV], first[record.FIELD.REV] + 1, "the reopen bumped the rev");
+  assert.equal(reopened.region.check_reopen.rev, reopened[record.FIELD.REV], "and stamped the rev it created");
+
+  // Pass two. The agent answers handled again and the page has not moved: this
+  // is the agent saying the rendering is intended, and the loop's first turn.
+  const answered = answeredHandled(reopened, "2026-09-10T16:33:00.000Z");
+  assert.equal(
+    replay.isRevertedHandledEdit(answered, pageText),
+    false,
+    "the check does not reopen its own reopen coming back"
+  );
+  assert.deepEqual(replay.revertedHandledEditIds([answered], pageText), []);
+});
+
+test("the reopen sentence lands in the note exactly once, however many cycles run", () => {
+  let item = handledEdit();
+  let at = Date.parse("2026-09-10T16:31:00.000Z");
+  for (let cycle = 0; cycle < 13; cycle += 1) {
+    const when = new Date(at + cycle * 180000).toISOString();
+    // Forced, so the note path is exercised even once the rule has closed it.
+    item = answeredHandled(record.pageCheckReopenOf(item, replay.REVERTED_EDIT_NOTE, when), when);
+  }
+  const copies = item[record.FIELD.NOTE].split(replay.REVERTED_EDIT_NOTE).length - 1;
+  assert.equal(copies, 1, "thirteen reopens, one sentence");
+});
+
+test("the reviewer's own words are kept, with the sentence added under them once", () => {
+  const item = handledEdit({ note: "Please split this into two paragraphs." });
+  const once = record.pageCheckReopenOf(item, replay.REVERTED_EDIT_NOTE, "2026-09-10T16:31:00.000Z");
+  assert.match(once[record.FIELD.NOTE], /^Please split this into two paragraphs\./);
+  assert.match(once[record.FIELD.NOTE], /Reopened by the page check:/);
+  const twice = record.pageCheckReopenOf(
+    answeredHandled(once, "2026-09-10T16:33:00.000Z"),
+    replay.REVERTED_EDIT_NOTE,
+    "2026-09-10T16:35:00.000Z"
+  );
+  assert.equal(twice[record.FIELD.NOTE].split(replay.REVERTED_EDIT_NOTE).length - 1, 1);
+});
+
+test("a note carrying the sentence many times collapses to one copy when it is read", () => {
+  const item = handledEdit({ note: "Split this in two." });
+  const damaged = Object.assign({}, item);
+  damaged[record.FIELD.NOTE] =
+    "Split this in two.\n\n" + new Array(13).fill(replay.REVERTED_EDIT_NOTE).join("\n\n");
+  const fixed = record.collapsePageCheckNote(damaged);
+  assert.equal(fixed[record.FIELD.NOTE].split(replay.REVERTED_EDIT_NOTE).length - 1, 1);
+  assert.match(fixed[record.FIELD.NOTE], /^Split this in two\./, "the reviewer's own words survive");
+
+  // A note with one copy, or none, comes back untouched and unrewritten.
+  assert.equal(record.collapsePageCheckNote(fixed), fixed);
+  assert.equal(record.collapsePageCheckNote(item), item);
+});
+
+test("the cooldown holds a second check-reopen back even when the rev has moved on", () => {
+  // The reviewer reworded after the check reopened, so the stamped rev no longer
+  // matches and the stamp rule has let go. The clock has not.
+  const reopened = record.pageCheckReopenOf(handledEdit(), replay.REVERTED_EDIT_NOTE, "2026-09-10T16:31:00.000Z");
+  const moved = answeredHandled(record.bumpRev(reopened, {}), "2026-09-10T16:31:30.000Z");
+  const at = Date.parse("2026-09-10T16:31:00.000Z");
+
+  assert.equal(
+    replay.isRevertedHandledEdit(moved, page(BEFORE), { now: at + 30000 }),
+    false,
+    "half a minute after the last check-reopen, not again"
+  );
+  assert.equal(
+    replay.isRevertedHandledEdit(moved, page(BEFORE), { now: at + replay.CHECK_REOPEN_COOLDOWN_MS + 1 }),
+    true,
+    "past the cooldown, a genuine revert is still caught"
+  );
+  assert.equal(replay.CHECK_REOPEN_COOLDOWN_MS, 60000);
+});
+
+test("a later revert, long after the check's own round closed, still reopens", () => {
+  // The honest case must survive all of the above: the reviewer reopened by
+  // hand months later, the agent answered handled, and a build then took the
+  // change back out.
+  const reopened = record.pageCheckReopenOf(handledEdit(), replay.REVERTED_EDIT_NOTE, "2026-09-10T16:31:00.000Z");
+  const laterRound = record.bumpRev(answeredHandled(reopened, "2026-09-10T16:33:00.000Z"), {});
+  const answered = answeredHandled(laterRound, "2026-12-01T09:00:00.000Z");
+  assert.equal(
+    replay.isRevertedHandledEdit(answered, page(BEFORE), { now: Date.parse("2026-12-01T09:05:00.000Z") }),
+    true
+  );
+});

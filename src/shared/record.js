@@ -198,6 +198,9 @@
     // The page's own words, kept so replay knows which page states the reviewer
     // has already answered. Data, and emphatically not intent.
     "region.accepted_page_texts": CLASS_DATA,
+    // The page check's own bookkeeping. Tool-written, never read as an
+    // instruction, and not projected into review.json at all.
+    "region.check_reopen": CLASS_DATA,
     page_title: CLASS_DATA,
     page_path: CLASS_DATA,
     "reply.reason": CLASS_DATA,
@@ -419,7 +422,11 @@
       lost: null,
       // The page states the reviewer has already answered "keep mine" to. See
       // acceptedPageTexts below.
-      accepted_page_texts: []
+      accepted_page_texts: [],
+      // null, or {rev, at, stamp} once the page check has reopened this record.
+      // It is what stops the check and an agent from answering each other
+      // forever. See pageCheckReopen below.
+      check_reopen: null
     };
   }
 
@@ -482,6 +489,177 @@
     next.accepted_page_texts = list;
     item[FIELD.REGION] = next;
     return list;
+  }
+
+  // ---------------------------------------------------------------------------
+  // The page check's stamp: what stops a reopen loop
+  // ---------------------------------------------------------------------------
+  //
+  // The incident this exists for (review rbbe2de599404, 2026-09-10). The
+  // reviewer split a numbered list item in two and added a sentence. The agent
+  // applied it as a new numbered item instead, which was a legitimate reading
+  // and the one the reviewer had actually wanted. The page check then read the
+  // record's `after` as missing (it was never on the page as one block) and the
+  // record's `before` as still there (the original item was untouched), called
+  // that a revert, and reopened the item. The agent replied handled. The check
+  // reopened it again. Thirteen revisions in thirty six minutes, each one waking
+  // the agent and appending another copy of the same sentence to the note.
+  //
+  // The fix is one fact on the record: WHICH REVISION THE CHECK ITSELF CREATED.
+  // When the check reopens, the record moves to rev R+1 and the stamp says
+  // rev R+1. If the agent then answers rev R+1 handled and the page still reads
+  // the same way, the check is looking at its own reopen coming back, and that
+  // second handled reply is the agent saying "this is how it renders now". The
+  // check stays quiet, the way replay stays quiet about a page state the
+  // reviewer already answered with Keep mine (accepted_page_texts above).
+  //
+  // It unblocks itself honestly: any later revision (a reviewer rewording, the
+  // reviewer's own Reopen issue) moves rev past the stamp, and the check is free
+  // to fire once more. So a genuine revert months later is still caught.
+  //
+  // `stamp` is the reply this reopen answered (replyStamp below), kept for the
+  // record rather than for the rule, so a person reading storage can see which
+  // reply the check acted on.
+
+  /** The page check's stamp on this record, or null. */
+  function pageCheckReopen(item) {
+    var region = item && item[FIELD.REGION];
+    var stamp = region && region.check_reopen;
+    return stamp && typeof stamp === "object" ? stamp : null;
+  }
+
+  /**
+   * Which reply this is, as one string: when it landed, plus the revision it
+   * answered. A boolean cannot carry it, because an item that is answered,
+   * reopened and answered again has to read as a different reply the second
+   * time. Null when there is no reply.
+   */
+  function replyStamp(item) {
+    var reply = item && item[FIELD.REPLY];
+    if (!reply) return null;
+    var rev = item[FIELD.REV];
+    return String(reply.at || "") + "@" + String(rev === undefined || rev === null ? "" : rev);
+  }
+
+  /**
+   * Stamp `item` (already the reopened revision) as reopened by the page check.
+   *
+   * Writes a NEW region object rather than mutating the old one, like every
+   * other region stamp here, so a caller holding the previous region still sees
+   * the value it read.
+   *
+   * @param {Object} item the reopened revision
+   * @param {string|null} stamp the reply stamp the check acted on
+   * @param {string} at ISO time of the reopen
+   */
+  function stampPageCheckReopen(item, stamp, at) {
+    if (!item) return null;
+    var region = item[FIELD.REGION] || emptyRegion();
+    var next = {};
+    Object.keys(region).forEach(function (key) {
+      next[key] = region[key];
+    });
+    next.check_reopen = {
+      rev: item[FIELD.REV],
+      at: at || nowIso(),
+      stamp: typeof stamp === "string" ? stamp : null
+    };
+    item[FIELD.REGION] = next;
+    return next.check_reopen;
+  }
+
+  /**
+   * Has the agent already answered the revision the page check itself created?
+   *
+   * True means the current handled reply IS the answer to the check's reopen,
+   * so reopening again would be the loop.
+   */
+  function answeredPageCheckReopen(item) {
+    var stamp = pageCheckReopen(item);
+    if (!stamp || typeof stamp.rev !== "number") return false;
+    return item[FIELD.REV] === stamp.rev;
+  }
+
+  // ---------------------------------------------------------------------------
+  // The page check's sentence, and keeping one copy of it
+  // ---------------------------------------------------------------------------
+  //
+  // The sentence a page-check reopen carries. Tool-generated, and it says so in
+  // its own first words, because the record shape has no field that could carry
+  // "this text is not the reviewer's". It names no page content: the item
+  // already carries the before and after text, and repeating page text into the
+  // note would push page content into the intent channel (D12).
+  var PAGE_CHECK_NOTE =
+    "Reopened by the page check: this handled change is no longer on the page and the original text is back. " +
+    "Reapply it, or reply not_handled saying why.";
+
+  /**
+   * The carried note with `sentence` on the end, AT MOST ONCE.
+   *
+   * The loop above appended the same sentence thirteen times, because the append
+   * asked nothing about what was already there. A note that already carries the
+   * sentence comes back unchanged.
+   */
+  function appendNoteOnce(carried, sentence) {
+    var line = typeof sentence === "string" ? sentence : "";
+    if (!line.trim()) return typeof carried === "string" ? carried : null;
+    var note = typeof carried === "string" ? carried : "";
+    if (!note.trim()) return line;
+    if (note.indexOf(line) !== -1) return note;
+    return note + "\n\n" + line;
+  }
+
+  /**
+   * The next revision of `item` as the PAGE CHECK reopens it.
+   *
+   * An ordinary reopenIssue, plus the two things that keep the check from
+   * running away with itself: the sentence lands at most once, and the record
+   * remembers which revision this reopen created. It lives here rather than in
+   * the Done tab so the rule a test asserts and the rule the reviewer's page
+   * runs are one function.
+   *
+   * @param {Object} item the handled record
+   * @param {string} note the sentence the reopened item carries
+   * @param {string} [at] ISO time of the reopen
+   */
+  function pageCheckReopenOf(item, note, at) {
+    var stamp = replyStamp(item);
+    var next = reopenIssue(item);
+    if (typeof note === "string" && note.trim()) {
+      next[FIELD.NOTE] = appendNoteOnce(next[FIELD.NOTE], note);
+    }
+    stampPageCheckReopen(next, stamp, at);
+    return next;
+  }
+
+  /**
+   * One copy of the page-check sentence, however many a stored record has.
+   *
+   * Records written before the loop was fixed carry the sentence many times
+   * over. This is read on the way out of storage so those cards recover on the
+   * next reload rather than needing storage edited by hand. Returns the same
+   * object when there was nothing to collapse.
+   */
+  function collapsePageCheckNote(item) {
+    if (!item || typeof item !== "object") return item;
+    var note = item[FIELD.NOTE];
+    if (typeof note !== "string" || note.indexOf(PAGE_CHECK_NOTE) === -1) return item;
+    var first = note.indexOf(PAGE_CHECK_NOTE);
+    var second = note.indexOf(PAGE_CHECK_NOTE, first + PAGE_CHECK_NOTE.length);
+    if (second === -1) return item;
+    // Keep the head up to and including the first copy, drop every later copy
+    // and the blank line each one was joined on, keep anything else that was
+    // written between them.
+    var head = note.slice(0, first + PAGE_CHECK_NOTE.length);
+    var tail = note
+      .slice(first + PAGE_CHECK_NOTE.length)
+      .split(PAGE_CHECK_NOTE)
+      .join("")
+      .replace(/^(\s*\n)+/, "")
+      .replace(/\n{3,}/g, "\n\n");
+    var out = Object.assign({}, item);
+    out[FIELD.NOTE] = tail.trim() ? head + "\n\n" + tail.trim() : head;
+    return out;
   }
 
   // `subject` is what the region IS, for a record made on a whole element:
@@ -1032,6 +1210,14 @@
     ACCEPTED_PAGE_TEXTS_MAX: ACCEPTED_PAGE_TEXTS_MAX,
     acceptedPageTexts: acceptedPageTexts,
     acceptPageText: acceptPageText,
+    PAGE_CHECK_NOTE: PAGE_CHECK_NOTE,
+    pageCheckReopen: pageCheckReopen,
+    stampPageCheckReopen: stampPageCheckReopen,
+    answeredPageCheckReopen: answeredPageCheckReopen,
+    replyStamp: replyStamp,
+    appendNoteOnce: appendNoteOnce,
+    pageCheckReopenOf: pageCheckReopenOf,
+    collapsePageCheckNote: collapsePageCheckNote,
     changedSpan: changedSpan,
     editChangeText: editChangeText,
     REVERT_EDIT: REVERT_EDIT,

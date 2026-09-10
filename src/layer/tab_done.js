@@ -91,12 +91,12 @@
    * answered again has to read as new the second time, so the mark has to name
    * WHICH reply was read: the time it landed, plus the revision it answered.
    * Returns null when there is no reply to have seen.
+   *
+   * Spelled in record.js, because the page check stamps the same string onto the
+   * record and the two must not drift.
    */
   function replyStamp(item) {
-    var reply = item && item[record.FIELD.REPLY];
-    if (!reply) return null;
-    var rev = item[record.FIELD.REV];
-    return String(reply.at || "") + "@" + String(rev === undefined || rev === null ? "" : rev);
+    return record.replyStamp(item);
   }
 
   /**
@@ -1075,6 +1075,17 @@
      * reviewer is not looking at and therefore has to say why on the card. The
      * button in this file passes neither, so the reviewer's own reopen is
      * unchanged: same rev bump, same event, same rail behavior.
+     *
+     * TWO THINGS THE CHECK'S REOPEN DOES THAT THE BUTTON DOES NOT, both from
+     * the loop of 2026-09-10 (see record.js, "The page check's stamp"):
+     *
+     *   the sentence lands at most once   record.appendNoteOnce. Thirteen
+     *                                     reopens appended thirteen copies of
+     *                                     the same sentence to one note.
+     *   the reopen is stamped             `options.pageCheck` records which
+     *                                     revision the check created, so the
+     *                                     check can recognize its own reopen
+     *                                     coming back and stay quiet.
      */
     function reopenItem(id, options) {
       var opts = options || {};
@@ -1091,11 +1102,14 @@
       // and an offline reopen arrives at a rev the store has never seen, so
       // merge's BROWSER_NEWER_REV protects it instead of it being discarded at
       // equal rev (STATE/REPLY are not content fields).
-      var reopened = record.reopenIssue(item);
-      if (typeof opts.note === "string" && opts.note.trim()) {
-        var carried = reopened[record.FIELD.NOTE];
-        reopened[record.FIELD.NOTE] =
-          typeof carried === "string" && carried.trim() ? carried + "\n\n" + opts.note : opts.note;
+      var reopened;
+      if (opts.pageCheck) {
+        reopened = record.pageCheckReopenOf(item, opts.note, null);
+      } else {
+        reopened = record.reopenIssue(item);
+        if (typeof opts.note === "string" && opts.note.trim()) {
+          reopened[record.FIELD.NOTE] = record.appendNoteOnce(reopened[record.FIELD.NOTE], opts.note);
+        }
       }
       counters.reopened += 1;
       return continueItem(

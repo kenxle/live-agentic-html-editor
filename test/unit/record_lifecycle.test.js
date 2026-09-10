@@ -173,7 +173,13 @@ test("the kinds are exactly D4's closed list", () => {
 
 test("the region reference carries its lost-anchor state as a named field (R20)", () => {
   const item = anItem();
-  assert.deepEqual(Object.keys(item.region).sort(), ["accepted_page_texts", "label", "lost", "ref"]);
+  assert.deepEqual(Object.keys(item.region).sort(), [
+    "accepted_page_texts",
+    "check_reopen",
+    "label",
+    "lost",
+    "ref"
+  ]);
 });
 
 // The accepted page states: what "Keep mine" remembers so the reviewer's

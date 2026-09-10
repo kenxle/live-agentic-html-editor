@@ -37,14 +37,30 @@ const CLI = path.join(REPO_ROOT, "bin", "lahe.js");
 // One walk, one helper, one session. Serial because the whole file is one story.
 test.describe.configure({ mode: "serial" });
 
+// The sentence a page-check reopen carries, restated so the browser test asserts
+// the reviewer's own copy of it rather than importing the layer.
+const REOPEN_SENTENCE =
+  "Reopened by the page check: this handled change is no longer on the page and the original text is back. " +
+  "Reapply it, or reply not_handled saying why.";
+
 const P_BEFORE = "The trainer writes the plan every week.";
 const P_AFTER = "The trainer writes the plan each week.";
 const Q_BEFORE = "Runners come back too fast after a layoff.";
 const Q_AFTER = "Runners come back too fast after a break.";
 // Neither the before text nor the after text: the passage genuinely moved on.
 const Q_REWRITTEN = "Coming back from time off is where most training plans fall apart.";
+// The third block is the loop's block. The reviewer retypes it as one thing and
+// the agent renders it as another, which is what made the check and the agent
+// answer each other thirteen times.
+const R_BEFORE = "Warm up before every session.";
+const R_AFTER = "Warm up before every session. Five minutes of easy jogging is enough.";
+// What the agent actually did: it kept the block as the reviewer found it and
+// wrote the added sentence as its own paragraph. A legitimate rendering, and
+// the one the reviewer wanted, but the record's after text is now nowhere on
+// the page as one block while its before text is still sitting there.
+const R_AS_APPLIED = "Five minutes of easy jogging is plenty.";
 
-function docHtml(p, q, scriptLine) {
+function docHtml(p, q, scriptLine, r, extra) {
   return [
     "<!doctype html>",
     '<html lang="en">',
@@ -53,6 +69,8 @@ function docHtml(p, q, scriptLine) {
     "<main>",
     '<p id="p">' + p + "</p>",
     '<p id="q">' + q + "</p>",
+    '<p id="r">' + (typeof r === "string" ? r : R_BEFORE) + "</p>",
+    extra ? '<p id="extra">' + extra + "</p>" : "",
     "</main>",
     scriptLine,
     "</body>",
@@ -88,7 +106,7 @@ test.describe("a handled hand edit that was reverted reopens itself", () => {
     const work = path.join(root, "work");
     fs.mkdirSync(work, { recursive: true });
     const pagePath = path.join(work, "doc.html");
-    fs.writeFileSync(pagePath, docHtml(P_BEFORE, Q_BEFORE, ""));
+    fs.writeFileSync(pagePath, docHtml(P_BEFORE, Q_BEFORE, "", R_BEFORE, null));
 
     const env = Object.assign({}, process.env, { LAHE_STATE_DIR: stateDir });
     delete env.XDG_STATE_HOME;
@@ -157,8 +175,8 @@ test.describe("a handled hand edit that was reverted reopens itself", () => {
   }
 
   /** A build: the source is rewritten, and the page reloads itself off it. */
-  function rebuild(p, q) {
-    fs.writeFileSync(world.pagePath, docHtml(p, q, ""));
+  function rebuild(p, q, r, extra) {
+    fs.writeFileSync(world.pagePath, docHtml(p, q, "", r, extra));
     // The mtime is the reload signal, and a coarse-timestamp filesystem can
     // give two quick writes the same one.
     const later = new Date(Date.now() + 10000);
@@ -352,5 +370,115 @@ test.describe("a handled hand edit that was reverted reopens itself", () => {
     const after = await itemState(page, made.id);
     expect(after.state, "a rewritten passage leaves the handled item alone").toBe("handled");
     expect(wakeLines().length, "and nobody was woken for it").toBe(before);
+  });
+
+  // -------------------------------------------------------------------------
+  // The loop, and the one thing that ends it
+  // -------------------------------------------------------------------------
+  //
+  // On 2026-09-10 (review rbbe2de599404) the check and the agent answered each
+  // other for thirty six minutes. The reviewer split a list item in two and
+  // added a sentence; the agent rendered it as a separate item, which was a
+  // legitimate reading and the one the reviewer had meant. The record's after
+  // text was then nowhere on the page as one block while its before text was
+  // still there, so both halves of the check held on a page nobody had
+  // reverted. Thirteen reopens, thirteen wakes, and thirteen copies of the same
+  // sentence stacked up in one note.
+  test("a page check reopen happens once, and the agent's next handled reply ends it", async ({ page }) => {
+    await page.goto(world.open);
+    await booted(page);
+
+    // The reviewer retypes the block as one paragraph with the sentence added.
+    await handEdit(page, "r", R_AFTER);
+    await pollPage(
+      page,
+      (text) => !!window.__lahe.items().find((item) => item.kind === "edit" && item.after === text),
+      R_AFTER,
+      { message: "the hand edit on #r to land as a ready record" }
+    );
+    const made = await page.evaluate((text) => {
+      const found = window.__lahe.items().find((item) => item.kind === "edit" && item.after === text);
+      return { id: found.id, rev: found.rev };
+    }, R_AFTER);
+
+    // The agent applies it ITS way: the block stays as it was and the added
+    // sentence becomes its own paragraph. Then it answers handled.
+    rebuild(P_BEFORE, Q_BEFORE, R_BEFORE, R_AS_APPLIED);
+    await page.reload();
+    await booted(page);
+    await pollPage(page, (text) => !!document.querySelector("#extra") && document.querySelector("#extra").textContent === text, R_AS_APPLIED, {
+      message: "the page to come back on the agent's rendering",
+      timeoutMs: 20000
+    });
+    reply(made.id, made.rev);
+    await pollPage(
+      page,
+      (id) => {
+        const found = window.__lahe.items().find((item) => item.id === id);
+        return !!found && found.state === "handled";
+      },
+      made.id,
+      { message: "the agent's reply to fold and move the item to Done", timeoutMs: 20000 }
+    );
+
+    // Reload. The check sees after-gone and before-back, and reopens ONCE.
+    const wakesBefore = wakeLines().length;
+    await page.reload();
+    await booted(page);
+    await pollPage(
+      page,
+      (id) => {
+        const found = window.__lahe.items().find((item) => item.id === id);
+        return !!found && found.state === "ready";
+      },
+      made.id,
+      { message: "the page check to reopen the item on this load", timeoutMs: 20000 }
+    );
+    const reopened = await page.evaluate((id) => {
+      const found = window.__lahe.items().find((item) => item.id === id);
+      return { rev: found.rev, note: found.note, stamp: found.region.check_reopen };
+    }, made.id);
+    expect(reopened.note.split(REOPEN_SENTENCE).length - 1, "one copy of the sentence, not two").toBe(1);
+    expect(reopened.stamp, "the reopen stamped the record").toBeTruthy();
+    expect(reopened.stamp.rev, "and the stamp names the revision the check created").toBe(reopened.rev);
+    expect(await page.evaluate(() => window.__lahe.counters.revertReopens), "one reopen on this load").toBe(1);
+
+    // The agent answers handled again without changing the page, which is it
+    // saying the rendering is intended. In the incident this is where the loop
+    // turned over. It has to end here.
+    reply(made.id, reopened.rev);
+    await pollPage(
+      page,
+      (id) => {
+        const found = window.__lahe.items().find((item) => item.id === id);
+        return !!found && found.state === "handled";
+      },
+      made.id,
+      { message: "the second handled reply to fold", timeoutMs: 20000 }
+    );
+
+    // Another reload, same page. The check runs and reopens NOTHING. Both
+    // guards cover this window, the stamp and the one-a-minute cooldown; the
+    // unit suite is where they are pulled apart and asserted separately.
+    await page.reload();
+    await booted(page);
+    await checkRan(page);
+    expect(
+      await page.evaluate(() => window.__lahe.counters.revertReopens),
+      "the check reopened nothing on the second load"
+    ).toBe(0);
+    const settled = await page.evaluate((id) => {
+      const found = window.__lahe.items().find((item) => item.id === id);
+      return { state: found.state, rev: found.rev, note: found.note };
+    }, made.id);
+    expect(settled.state, "the item stays handled").toBe("handled");
+    expect(settled.rev, "and no second reopen bumped the rev again").toBe(reopened.rev);
+    expect(settled.note.split(REOPEN_SENTENCE).length - 1, "still one copy of the sentence").toBe(1);
+
+    // The agent was woken once for the reopen, and not again for a second one.
+    const work = wakeLines()
+      .slice(wakesBefore)
+      .filter((line) => line.kind === "work" && line.item === made.id);
+    expect(work.length, "one wake for the one reopen").toBe(1);
   });
 });
