@@ -220,6 +220,79 @@
   //                             them about something they can see.
   //   NOT WHEN THEY CANNOT ACT  a refused (read-only) window writes nothing and
   //                             answers nothing, so it interrupts with nothing.
+  //
+  // ---------------------------------------------------------------------------
+  // THE MESSAGE, NOT A COUNT (Ken, after a day of using it)
+  // ---------------------------------------------------------------------------
+  //
+  // "toasts that just say one message is waiting, and then another toast comes
+  // up while it's still there and says two messages are waiting. I don't want
+  // those. I want the message."
+  //
+  // He was right twice over. A count is a notification about a notification: it
+  // costs the same interruption and carries none of the information, so the
+  // reviewer still has to go and look. And the counts multiplied, because the
+  // summary was keyed by the set of ids it named: every remount recomputed that
+  // set, a set that had grown by one produced a brand-new key, the rail's
+  // per-key dedupe saw a key it had never met, and a second count stood up
+  // beside the first. On an SPA that remounts on every hash change, that is a
+  // fresh count every few seconds.
+  //
+  // The rules now:
+  //
+  //   1. A LIVE REPLY IS ITS OWN TOAST, with its words. Always. Ten arriving at
+  //      once is ten toasts through the stack (three visible, the rest queued
+  //      with no clock until they come into view), never one count.
+  //   2. THE X MEANS READ. Dismissing a toast marks that reply seen, exactly as
+  //      clicking through to the card does. It never comes back, in a toast or
+  //      in a summary. Timing out is NOT dismissing: nobody decided anything.
+  //   3. A COUNT IS FOR NEGLECT ONLY. A reply that was toasted, was neither
+  //      opened nor dismissed, timed out, and has still not been read
+  //      NEGLECT_MS later gets one summary. A new neglected reply REPLACES that
+  //      summary rather than standing beside it.
+  //   4. AFTER A RELOAD, recent unread replies are toasted as themselves; only
+  //      the ones already older than NEGLECT_MS collapse into a summary.
+  //   5. ONCE PER PAGE LIFE. What has been announced is remembered across
+  //      remounts (see pageLife below), so a hash navigation announces nothing
+  //      a second time.
+
+  // How long a reply the reviewer never touched has to sit unread before the
+  // tool says so with a count. Two minutes: long enough that it is neglect
+  // rather than "they are reading it", short enough to still be the same piece
+  // of work. One number, named once.
+  var NEGLECT_MS = 120000;
+
+  // What has already been said on this page, per review, kept OUTSIDE
+  // createDoneTab on purpose.
+  //
+  // A client-side navigation tears the Done tab down and builds a new one
+  // (index.js's remount), so anything held in the factory's closure is
+  // forgotten several times a session, and "have I already announced this?"
+  // then answers no every time. The module outlives every remount and dies with
+  // the page, which is exactly the lifetime this question has.
+  var pageLife = Object.create(null);
+
+  function lifeFor(reviewId) {
+    var key = String(reviewId);
+    if (!pageLife[key]) {
+      pageLife[key] = {
+        // id -> true, every reply this page has already put on screen
+        announced: Object.create(null),
+        // id -> true, toasted and then ignored until it timed out
+        neglected: Object.create(null),
+        // the standing count, so a new one can replace it rather than join it
+        summaryToast: null
+      };
+    }
+    return pageLife[key];
+  }
+
+  /** Only the tests need this: a fresh page, without a fresh browser. */
+  function forgetPageLife(reviewId) {
+    if (reviewId === undefined) pageLife = Object.create(null);
+    else delete pageLife[String(reviewId)];
+    return true;
+  }
 
   // The plain note is labeled with who said it ("claude says"), because "Note"
   // told Ken nothing about where the words came from. The name is the reply's
@@ -457,6 +530,13 @@
     var markedNow = Object.create(null);
     var dropTabWatch = null;
     var dropCollapseWatch = null;
+    // What this PAGE has already said, which outlives this tab: a remount
+    // builds a new Done tab and must not start announcing from scratch.
+    var life = lifeFor(reviewId);
+    // The live neglect delay, so a test can shorten it. NEGLECT_MS is the only
+    // place the real number is written.
+    var neglectMs = NEGLECT_MS;
+    var neglectTimer = null;
 
     function el(tag, className, text) {
       var node = doc.createElement(tag);
@@ -550,8 +630,12 @@
         visitTab(rail.currentTab());
       }
       // A load that arrives with answers already waiting says so once. See
-      // toastWaiting: a backlog is one interruption, not one per reply.
+      // toastWaiting: recent answers get their words, an old backlog gets one
+      // count, and nothing this page already said is said again.
       toastWaiting();
+      // A remount cancelled the pending sweep on the way out; the neglect it
+      // was going to report is still neglect.
+      if (Object.keys(life.neglected).length) scheduleNeglect();
       return api;
     }
 
@@ -634,6 +718,12 @@
         overlayModule.TABS.forEach(function (tab) {
           rail.setTabNewCount(tab, (grouped[tab] || []).length);
         });
+      }
+      // The standing "N replies are waiting" is about unread replies. There are
+      // none, so it is about nothing, and a reminder that outlives the thing it
+      // reminds you of is how a surface stops being believed.
+      if (!ids.length && life.summaryToast && typeof rail.dismissToast === "function") {
+        rail.dismissToast(life.summaryToast, "replaced");
       }
       return ids;
     }
@@ -1173,27 +1263,14 @@
       });
       refresh();
       var settled = applied.filter(Boolean);
-      // SEVERAL AT ONCE IS ONE INTERRUPTION. A page that was closed while an
-      // agent worked comes back to a whole batch, and five toasts in one breath
-      // is the rail again, in the corner the reviewer keeps clear. One is the
-      // answer itself; more than one is a count and a way in.
-      var wanted = settled.filter(function (result) {
-        return result.toast === true;
+      // EVERY ANSWER GETS ITS WORDS. A batch used to collapse into "3 replies
+      // are waiting", which is an interruption that tells the reviewer nothing
+      // and still makes them go and look. The stack is what handles a crowd:
+      // three stand at a time and the rest wait their turn with no clock
+      // running, so a batch of ten is ten messages read one after another.
+      settled.forEach(function (result) {
+        if (result.toast === true) toastReply(result.item);
       });
-      if (wanted.length === 1) toastReply(wanted[0].item);
-      else if (wanted.length > 1) {
-        toastMany(
-          "batch:" + wanted
-            .map(function (result) {
-              return result.item;
-            })
-            .sort()
-            .join(","),
-          wanted.map(function (result) {
-            return result.item;
-          })
-        );
-      }
       return settled;
     }
 
@@ -1229,13 +1306,19 @@
       return agentName(reply) + " answered this.";
     }
 
-    /** One reply, on its own toast. */
+    /**
+     * One reply, on its own toast, with what the agent actually said.
+     *
+     * The key is the item plus WHICH reply, so the rail's own dedupe stops the
+     * same answer being shown twice however many times a remount or a replayed
+     * backlog asks for it.
+     */
     function toastReply(id) {
       if (!canToast()) return null;
       var item = itemById(id);
       if (!item || !item[record.FIELD.REPLY]) return null;
       var reply = item[record.FIELD.REPLY];
-      return rail.showToast({
+      var shown = rail.showToast({
         key: "reply:" + id + ":" + String(replyStamp(item)),
         label: toastLabelFor(reply),
         text: toastText(item),
@@ -1245,55 +1328,178 @@
         sticky: reply.status === record.REPLY_STATUS.QUESTION,
         onOpen: function () {
           jumpToCard(id);
+        },
+        onGone: function (why) {
+          // THE X MEANS READ. The reviewer looked at the words, decided they
+          // needed nothing, and put them away: that is a decision about this
+          // reply, and it must not come back as a toast or inside a count.
+          // Timing out is the opposite: nobody decided anything, so it starts
+          // the neglect clock instead.
+          if (why === "timeout") noteNeglected(id);
+          else markOneSeen(id);
         }
       });
+      if (shown) life.announced[id] = true;
+      return shown;
     }
 
-    /** Several at once, or a boot that arrives with answers already waiting. */
-    function toastMany(key, ids) {
+    /**
+     * The count, and the ONLY thing that is ever a count: replies the reviewer
+     * was shown, did not touch, and has still not read NEGLECT_MS later.
+     *
+     * One at a time. A second neglected reply REPLACES the standing summary,
+     * because "1 waiting" sitting next to "2 waiting" is exactly the pile Ken
+     * asked us to take away. No key is passed: this file owns the one-at-a-time
+     * rule, so the rail's per-key dedupe must not also refuse a legitimately
+     * new count.
+     */
+    function showSummary(ids) {
       if (!canToast() || !ids || !ids.length) return null;
-      var items = itemsNow();
       var wanted = Object.create(null);
       ids.forEach(function (id) {
         wanted[id] = true;
       });
       var counts = { total: 0, questions: 0 };
-      items.forEach(function (item) {
+      itemsNow().forEach(function (item) {
         if (!wanted[item[record.FIELD.ID]]) return;
         var reply = item[record.FIELD.REPLY];
         counts.total += 1;
         if (reply && reply.status === record.REPLY_STATUS.QUESTION) counts.questions += 1;
       });
       if (!counts.total) return null;
-      return rail.showToast({
-        key: key,
-        label: "Replies",
+      if (life.summaryToast && typeof rail.dismissToast === "function") {
+        rail.dismissToast(life.summaryToast, "replaced");
+      }
+      life.summaryToast = rail.showToast({
+        label: "Waiting",
         text: waitingSentence(counts),
         about: "Open the review to read them.",
-        sticky: counts.questions > 0,
+        // IT DOES NOT TIME OUT. This toast exists because a message already
+        // timed out unread; letting the reminder do the same thing is the tool
+        // forgetting on the reviewer's behalf. It carries an X, and reading the
+        // replies takes it away (see paintUnseen).
+        sticky: true,
         onOpen: function () {
           openTabFor(ids);
+        },
+        onGone: function () {
+          life.summaryToast = null;
         }
       });
+      return life.summaryToast;
     }
 
     /**
-     * On boot: one toast for everything already waiting, never one per reply.
+     * On boot: recent answers get their words, old ones get a count.
      *
-     * The unread replies on a fresh load are not news, they are a backlog, and
-     * a backlog replayed one toast at a time is the reviewer clearing a stack
-     * of things they already knew about. Replies whose tab the reviewer is
-     * already looking at are left out for the same reason a live one is: they
-     * are on screen.
+     * A reply that landed a minute before the reload is news the reviewer has
+     * not had yet, and Ken wants the message. One that has been sitting unread
+     * since yesterday is a backlog, and a backlog replayed one toast at a time
+     * is a stack of things they already know about.
+     *
+     * Anything already announced on this page is skipped, whatever a remount
+     * thinks. Replies on the tab the reviewer is looking at are skipped for the
+     * same reason a live one is: they are on screen.
      */
     function toastWaiting() {
       if (!canToast()) return null;
-      var items = itemsNow();
-      var ids = unseenReplyIds(items, readSeen()).filter(function (id) {
-        return !watchingTab(paneOf(itemById(id)));
+      var now = Date.now();
+      var recent = [];
+      var stale = [];
+      unseenReplyIds(itemsNow(), readSeen()).forEach(function (id) {
+        if (life.announced[id]) return;
+        var item = itemById(id);
+        if (!item || watchingTab(paneOf(item))) return;
+        if (replyAge(item, now) >= neglectMs) stale.push(id);
+        else recent.push(id);
+      });
+      recent.forEach(toastReply);
+      if (stale.length) {
+        stale.forEach(function (id) {
+          life.announced[id] = true;
+        });
+        showSummary(stale);
+      }
+      return recent.length + (stale.length ? 1 : 0);
+    }
+
+    /** How long this reply has been sitting there. Unknown counts as brand new. */
+    function replyAge(item, atMs) {
+      var reply = item && item[record.FIELD.REPLY];
+      var at = reply && reply.at ? Date.parse(reply.at) : NaN;
+      if (isNaN(at)) return 0;
+      return Math.max(0, atMs - at);
+    }
+
+    // -------------------------------------------------------------------------
+    // Neglect
+    // -------------------------------------------------------------------------
+
+    /** This reply was shown, ignored, and ran out of time. Start the clock. */
+    function noteNeglected(id) {
+      life.neglected[id] = true;
+      return scheduleNeglect();
+    }
+
+    /**
+     * One pending sweep at a time.
+     *
+     * A second reply that times out while a sweep is already pending joins that
+     * sweep rather than booking its own, which is a little early for it and is
+     * the right trade: two sweeps a few seconds apart would put up two counts,
+     * and one count is the whole point.
+     */
+    function scheduleNeglect() {
+      var view = doc && doc.defaultView;
+      if (!view || typeof view.setTimeout !== "function") return null;
+      if (neglectTimer) return neglectTimer;
+      // harness-allow-timer: how long neglect has to last before the tool says
+      // so, pinned at NEGLECT_MS. It is a duration, not a wait on a condition.
+      neglectTimer = view.setTimeout(function () {
+        neglectTimer = null;
+        sweepNeglected();
+      }, neglectMs);
+      return neglectTimer;
+    }
+
+    /** Which of the ignored replies are still unread, and still off screen. */
+    function sweepNeglected() {
+      if (!canToast()) return null;
+      var unread = unseenReplyIds(itemsNow(), readSeen());
+      var onScreen = toastedIdsOnScreen();
+      var ids = Object.keys(life.neglected).filter(function (id) {
+        return unread.indexOf(id) !== -1 && onScreen.indexOf(id) === -1;
       });
       if (!ids.length) return null;
-      return toastMany("waiting:" + ids.slice().sort().join(","), ids);
+      return showSummary(ids);
+    }
+
+    /**
+     * The item ids whose own toast is standing right now.
+     *
+     * A count must never talk about something the reviewer can read in full a
+     * few pixels away. The toast keys carry the id, which is the only thing the
+     * rail knows about a reply and all this needs.
+     */
+    function toastedIdsOnScreen() {
+      if (typeof rail.toastInfo !== "function") return [];
+      return rail.toastInfo().toasts.reduce(function (out, toast) {
+        var parts = String(toast.key || "").split(":");
+        if (parts[0] === "reply" && parts[1]) out.push(parts[1]);
+        return out;
+      }, []);
+    }
+
+    /** One reply, read, durably. The same path a tab visit writes through. */
+    function markOneSeen(id) {
+      writeSeen(
+        seenMarksFor(itemsNow(), readSeen(), function (candidate) {
+          return candidate[record.FIELD.ID] === id;
+        })
+      );
+      delete life.neglected[id];
+      paintUnseen();
+      return true;
     }
 
     /**
@@ -1568,6 +1774,12 @@
       dropTabWatch = null;
       if (dropCollapseWatch) dropCollapseWatch();
       dropCollapseWatch = null;
+      // The pending neglect sweep belongs to this tab. The page's memory of
+      // what it has announced does not, and stays where it is (see pageLife).
+      if (neglectTimer && doc && doc.defaultView && typeof doc.defaultView.clearTimeout === "function") {
+        doc.defaultView.clearTimeout(neglectTimer);
+      }
+      neglectTimer = null;
       Object.keys(markedNow).forEach(function (id) {
         markUnseenCard(id, false);
       });
@@ -1644,9 +1856,22 @@
       },
       markRepliesSeen: markRepliesSeen,
       // The toast seams, for boot and for a spec: what a load found waiting,
-      // and the jump a pressed toast makes.
+      // the jump a pressed toast makes, and the neglect sweep.
       toastWaiting: toastWaiting,
       jumpToCard: jumpToCard,
+      sweepNeglected: sweepNeglected,
+      /** Read the neglect delay, or set it. A test shortens it; nothing else does. */
+      neglectDelay: function (ms) {
+        if (typeof ms === "number" && ms > 0) neglectMs = ms;
+        return neglectMs;
+      },
+      /** What this page has already put on screen, for a spec that asks. */
+      announcedIds: function () {
+        return Object.keys(life.announced);
+      },
+      neglectedIds: function () {
+        return Object.keys(life.neglected);
+      },
       rowCount: function () {
         return Object.keys(rows).length;
       },
@@ -1667,6 +1892,8 @@
     STALE_NOTICE: STALE_NOTICE,
     STYLE: STYLE,
     TOAST_LABEL: TOAST_LABEL,
+    NEGLECT_MS: NEGLECT_MS,
+    forgetPageLife: forgetPageLife,
     TOAST_TEXT_MAX: TOAST_TEXT_MAX,
     TOAST_ABOUT_MAX: TOAST_ABOUT_MAX,
     toastLabelFor: toastLabelFor,

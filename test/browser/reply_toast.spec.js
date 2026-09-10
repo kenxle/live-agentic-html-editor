@@ -467,7 +467,92 @@ test.describe("the toast: an answer that finds a reviewer with the rail closed",
     }
   });
 
-  test("a load that arrives with answers already waiting says so once", async ({ page }) => {
+  // --- the message, never a count ---------------------------------------------
+  //
+  // Ken, after a day: "toasts that just say one message is waiting, and then
+  // another toast comes up while it's still there and says two messages are
+  // waiting. I don't want those. I want the message."
+
+  test("two answers at once are two messages, with their words, and no count", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      await commentOnSelection(page, "p.lede", "cut this to one sentence");
+      await commentOnSelection(page, "h1", "tighten this");
+      const projected = await waitForProjected(helper, 2);
+      await page.evaluate(() => window.__lahe.rail.collapse(true));
+
+      const said = {};
+      projected.forEach((item, index) => {
+        said[item.id] = index === 0 ? "cut it to one sentence" : "tightened the heading";
+        appendReply(helper, {
+          item: item.id,
+          rev: item.rev,
+          status: "handled",
+          agent: "claude",
+          text: said[item.id],
+          user_needs_to_see_reply: true
+        });
+      });
+
+      await pollPage(page, () => window.__lahe.rail.toastInfo().count === 2, undefined, {
+        message: "one toast for each answer"
+      });
+      const texts = (await toastState(page)).toasts.map((toast) => toast.text).sort();
+      expect(texts).toEqual(["cut it to one sentence", "tightened the heading"].sort());
+      texts.forEach((text) => expect(text, "no counts anywhere").not.toContain("waiting"));
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
+  test("pressing the X marks that answer read, and the reload says nothing about it", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      await commentOnSelection(page, "p.lede", "cut this to one sentence");
+      const [item] = await waitForProjected(helper, 1);
+      await page.evaluate(() => window.__lahe.rail.collapse(true));
+
+      appendReply(helper, {
+        item: item.id,
+        rev: item.rev,
+        status: "handled",
+        agent: "claude",
+        text: "cut it to one sentence",
+        user_needs_to_see_reply: true
+      });
+      const info = await waitForToast(page, "the answer to toast");
+
+      // The real close control, at its own coordinates.
+      const x = info.toasts[0].closeRect;
+      expect(x, "the toast carries a close control").toBeTruthy();
+      await page.mouse.click(x.x + x.width / 2, x.y + x.height / 2);
+      await pollPage(page, () => window.__lahe.rail.toastInfo().count === 0, undefined, {
+        message: "the toast to go"
+      });
+
+      expect(await page.evaluate(() => window.__lahe.handle.doneTab().unseenIds()), "read, because he read it").toEqual(
+        []
+      );
+      expect(await page.evaluate(() => window.__lahe.rail.isCollapsed()), "and the rail was not opened").toBe(true);
+
+      await page.reload();
+      await pollPage(page, () => !!(window.__lahe && window.__lahe.booted), undefined, {
+        message: "the layer to boot again"
+      });
+      await pollPage(page, (id) => window.__lahe.itemById(id).reply !== null, item.id, {
+        message: "the backlog to be applied again"
+      });
+      expect((await toastState(page)).count, "it never comes back").toBe(0);
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
+  test("an answer nobody touches becomes one count, and a second one replaces it", async ({ page }) => {
     const { app, helper, token } = await startBoth();
     try {
       await bootedPage(page, app, helper, token);
@@ -475,44 +560,138 @@ test.describe("the toast: an answer that finds a reviewer with the rail closed",
       await commentOnSelection(page, "h1", "tighten this");
       const projected = await waitForProjected(helper, 2);
 
-      await page.evaluate(() => window.__lahe.rail.collapse(true));
-      projected.forEach((item) => {
-        appendReply(helper, {
-          item: item.id,
-          rev: item.rev,
-          status: "handled",
-          agent: "claude",
-          text: "done, and here is what changed",
-          user_needs_to_see_reply: true
-        });
-      });
-      await pollPage(page, (ids) => ids.every((id) => window.__lahe.itemById(id).reply !== null), projected.map((i) => i.id), {
-        message: "both replies to fold"
+      await page.evaluate((ms) => {
+        window.__lahe.rail.collapse(true);
+        window.__lahe.rail.toastDuration(ms);
+        // The neglect window, shortened. TOAST_MS and NEGLECT_MS are the real
+        // numbers; a test must not sit through two minutes of either.
+        window.__lahe.handle.doneTab().neglectDelay(ms);
+      }, SHORT_TOAST_MS);
+
+      appendReply(helper, {
+        item: projected[0].id,
+        rev: projected[0].rev,
+        status: "handled",
+        agent: "claude",
+        text: "cut it to one sentence",
+        user_needs_to_see_reply: true
       });
 
-      // The reviewer never looked. They reload the page the next morning.
+      // It arrives with its words, is ignored, and times out.
+      await waitForToast(page, "the first answer to toast");
+      await pollPage(page, () => window.__lahe.rail.toastInfo().count === 0, undefined, {
+        message: "the ignored answer to time out"
+      });
+
+      // Only now, and only because it was neglected, does a count appear.
+      await pollPage(
+        page,
+        () => {
+          const info = window.__lahe.rail.toastInfo();
+          return info.count === 1 && info.toasts[0].text === "1 reply is waiting.";
+        },
+        undefined,
+        { message: "one count for the neglected answer" }
+      );
+
+      appendReply(helper, {
+        item: projected[1].id,
+        rev: projected[1].rev,
+        status: "handled",
+        agent: "claude",
+        text: "tightened the heading",
+        user_needs_to_see_reply: true
+      });
+
+      // The second answer is ignored the same way. The count must REPLACE the
+      // one standing, not stand beside it.
+      await pollPage(
+        page,
+        () => {
+          const info = window.__lahe.rail.toastInfo();
+          return info.count === 1 && info.toasts[0].text === "2 replies are waiting.";
+        },
+        undefined,
+        { message: "the count to be replaced rather than joined" }
+      );
+      expect((await toastState(page)).count, "never two counts side by side").toBe(1);
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
+  test("a client-side navigation does not re-announce what this page already said", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      await commentOnSelection(page, "p.lede", "cut this to one sentence");
+      const [item] = await waitForProjected(helper, 1);
+      await page.evaluate(() => window.__lahe.rail.collapse(true));
+
+      appendReply(helper, {
+        item: item.id,
+        rev: item.rev,
+        status: "question",
+        agent: "claude",
+        text: "which heading did you mean?"
+      });
+      const info = await waitForToast(page, "the question to toast");
+      expect(info.count).toBe(1);
+
+      // The rail is torn down and rebuilt, which is what a hash navigation does
+      // on the SPA Ken reviews. This is where the counts used to multiply: the
+      // summary key was the id set, the set had moved, and the rail's dedupe
+      // had never seen that key before.
+      await page.evaluate(() => {
+        window.__lahe.remount();
+        window.__lahe.remount();
+        window.__lahe.remount();
+      });
+
+      const after = await toastState(page);
+      expect(after.count, "three navigations, still one message").toBe(1);
+      expect(after.toasts[0].text).toBe("which heading did you mean?");
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
+  test("a reload shows a recent unread answer as itself, with its words", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      await commentOnSelection(page, "p.lede", "cut this to one sentence");
+      const [item] = await waitForProjected(helper, 1);
+      await page.evaluate(() => window.__lahe.rail.collapse(true));
+
+      appendReply(helper, {
+        item: item.id,
+        rev: item.rev,
+        status: "handled",
+        agent: "claude",
+        text: "cut it to one sentence, and moved the number to the front",
+        user_needs_to_see_reply: true
+      });
+      await waitForToast(page, "the answer to toast");
+
+      // The agent rebuilds and the page reloads before he has read it. It is
+      // still recent, so he still gets the words rather than a count.
       await page.reload();
       await pollPage(page, () => !!(window.__lahe && window.__lahe.booted), undefined, {
         message: "the layer to boot again"
       });
 
-      const info = await waitForToast(page, "one summary toast on boot");
-      expect(info.count, "a backlog is one interruption, not one per reply").toBe(1);
-      expect(info.toasts[0].text).toBe("2 replies are waiting.");
+      const info = await waitForToast(page, "the answer to toast again after the reload");
+      expect(info.count).toBe(1);
+      expect(info.toasts[0].text).toContain("moved the number to the front");
 
-      // And it stays one: the reply poll starts at zero on every load and
-      // re-delivers the whole backlog, which is not news.
-      await pollPage(page, (ids) => ids.every((id) => window.__lahe.itemById(id).reply !== null), projected.map((i) => i.id), {
-        message: "the replayed backlog to be applied again"
+      // And the replayed backlog does not add a second one.
+      await pollPage(page, (id) => window.__lahe.itemById(id).reply !== null, item.id, {
+        message: "the backlog to be applied again"
       });
       expect((await toastState(page)).count).toBe(1);
-
-      const rect = info.toasts[0].rect;
-      await page.mouse.click(rect.x + rect.width / 2, rect.y + rect.height / 2);
-      await pollPage(page, () => window.__lahe.rail.isCollapsed() === false, undefined, {
-        message: "the summary toast to open the rail"
-      });
-      expect((await railState(page)).tab).toBe("done");
     } finally {
       await helper.kill9();
       await app.close();

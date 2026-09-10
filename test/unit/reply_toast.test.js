@@ -124,15 +124,27 @@ test("the waiting counts hold only the replies the reviewer has not read", () =>
 });
 
 // --- the wiring, headless -----------------------------------------------------
+//
+// A real overlay with no document, which is the shape 1B built for exactly
+// this: every rail call is real and nothing is drawn. Timers do not run in it,
+// so the two things a clock would have done (a toast timing out, a neglect
+// sweep firing) are called the way the clock calls them.
+
+/** A fresh page: new storage, and none of the page's memory of what it said. */
+function freshPage() {
+  tabDone.forgetPageLife();
+  return storeModule.createStore({ storage: null });
+}
 
 function setup(options) {
   const opts = options || {};
-  const store = storeModule.createStore({ storage: null });
+  const store = opts.store || freshPage();
   const rail = overlay.createRail({ store: store, reviewId: REVIEW });
   // The reviewer works with the rail closed. That is the whole reason the toast
   // exists, so it is the state these assertions are made in: an open rail on
   // the card's own tab is already showing them the answer.
-  rail.collapse(true);
+  rail.collapse(opts.collapsed === false ? false : true);
+  if (opts.tab) rail.selectTab(opts.tab);
   const done = tabDone.createDoneTab({
     store: store,
     reviewId: REVIEW,
@@ -144,6 +156,33 @@ function setup(options) {
   return { store, rail, done };
 }
 
+/** A client-side navigation: same page, same rail, a new Done tab. */
+function remount(parts) {
+  parts.done.unmount();
+  const done = tabDone.createDoneTab({
+    store: parts.store,
+    reviewId: REVIEW,
+    overlay: parts.rail,
+    document: null
+  });
+  done.mount();
+  return done;
+}
+
+/** A reload: the same storage read by a new page, which remembers nothing. */
+function reboot(store) {
+  tabDone.forgetPageLife();
+  const rail = overlay.createRail({ store: store, reviewId: REVIEW });
+  rail.collapse(true);
+  const done = tabDone.createDoneTab({ store: store, reviewId: REVIEW, overlay: rail, document: null });
+  done.mount();
+  return { rail, done };
+}
+
+// One pinned fold time, because the stamp (which reply this is) is built from
+// it: a replayed backlog has to carry the timestamp it carried the first time.
+const FOLD_AT = "2026-09-10T10:00:00.000Z";
+
 function foldEvent(item, reply) {
   return protocol.newEvent({
     event: protocol.EVENT.REPLY_FOLDED,
@@ -152,8 +191,9 @@ function foldEvent(item, reply) {
     item: item[record.FIELD.ID],
     rev: item[record.FIELD.REV],
     // Pinned, because the fold's own timestamp is half of which reply this is:
-    // a replayed backlog carries the timestamp it carried the first time.
-    ts: "2026-08-19T10:00:00.000Z",
+    // a replayed backlog carries the timestamp it carried the first time. It is
+    // also how old the reply is, which decides message-or-count on a boot.
+    ts: reply.at || FOLD_AT,
     payload: {
       accepted: true,
       state: reply.status === "handled" ? record.STATE.HANDLED : record.STATE.NOT_HANDLED,
@@ -175,14 +215,28 @@ function readyItem(id) {
   return item;
 }
 
-test("one folded question makes one toast, and folding it again makes none", () => {
-  const { store, rail, done } = setup();
-  const item = readyItem("c_ask");
-  store.write(REVIEW, item);
-  done.refresh();
+/** Write the items, paint, and hand back the fold events for them. */
+function pending(parts, ids) {
+  return ids.map((id) => {
+    const item = readyItem(id);
+    parts.store.write(REVIEW, item);
+    return item;
+  });
+}
 
-  done.applyReplies([foldEvent(item, question())]);
-  const first = rail.toastInfo();
+function toastTexts(rail) {
+  return rail.toastInfo().toasts.map((toast) => toast.text);
+}
+
+// --- rule 1: the message, never a count ---------------------------------------
+
+test("one folded question makes one toast with its words, and folding it again makes none", () => {
+  const parts = setup();
+  const [item] = pending(parts, ["c_ask"]);
+  parts.done.refresh();
+
+  parts.done.applyReplies([foldEvent(item, question())]);
+  const first = parts.rail.toastInfo();
   assert.equal(first.count, 1);
   assert.equal(first.toasts[0].label, "Question");
   assert.equal(first.toasts[0].text, "which heading did you mean?");
@@ -190,49 +244,172 @@ test("one folded question makes one toast, and folding it again makes none", () 
 
   // The reply cursor starts at zero on every load, so the same fold arrives
   // again. It is applied again and it is not news again.
-  done.applyReplies([foldEvent(store.readItem(REVIEW, "c_ask"), question())]);
-  assert.equal(rail.toastInfo().count, 1, "a replayed backlog does not toast twice");
+  parts.done.applyReplies([foldEvent(parts.store.readItem(REVIEW, "c_ask"), question())]);
+  assert.equal(parts.rail.toastInfo().count, 1, "a replayed backlog does not toast twice");
 });
 
-test("a batch of answers is one toast, not four", () => {
-  const { store, done, rail } = setup();
-  const items = ["c_1", "c_2", "c_3"].map((id) => {
-    const item = readyItem(id);
-    store.write(REVIEW, item);
-    return item;
-  });
-  done.refresh();
+test("a batch of answers is a toast each, with the words, and never a count", () => {
+  const parts = setup();
+  const items = pending(parts, ["c_1", "c_2", "c_3"]);
+  parts.done.refresh();
 
-  done.applyReplies([
+  parts.done.applyReplies([
     foldEvent(items[0], question()),
-    foldEvent(items[1], flagged()),
-    foldEvent(items[2], flagged())
+    foldEvent(items[1], flagged({ text: "shortened the second one" })),
+    foldEvent(items[2], flagged({ text: "shortened the third one" }))
   ]);
 
-  const info = rail.toastInfo();
-  assert.equal(info.count, 1);
-  assert.equal(info.toasts[0].text, "3 replies are waiting, 1 of them is a question.");
+  const info = parts.rail.toastInfo();
+  assert.equal(info.count, 3, "three answers, three messages");
+  assert.deepEqual(
+    toastTexts(parts.rail).slice().sort(),
+    ["shortened the second one", "shortened the third one", "which heading did you mean?"],
+    "and every one of them carries what the agent actually said"
+  );
+  info.toasts.forEach((toast) => {
+    assert.ok(!/replies are waiting/.test(toast.text), "no counts: " + toast.text);
+  });
 });
 
 test("a routine confirmation lands on its card and says nothing on the page", () => {
-  const { store, done, rail } = setup();
-  const item = readyItem("c_quiet");
-  store.write(REVIEW, item);
-  done.refresh();
+  const parts = setup();
+  const [item] = pending(parts, ["c_quiet"]);
+  parts.done.refresh();
 
-  done.applyReplies([foldEvent(item, routine())]);
-  assert.equal(rail.toastInfo().count, 0);
-  assert.equal(store.readItem(REVIEW, "c_quiet").reply.status, "handled", "it is still on the card, whole");
+  parts.done.applyReplies([foldEvent(item, routine())]);
+  assert.equal(parts.rail.toastInfo().count, 0);
+  assert.equal(parts.store.readItem(REVIEW, "c_quiet").reply.status, "handled", "it is still on the card, whole");
 });
 
 test("a refused window is told nothing, because it can do nothing about it", () => {
-  const { store, done, rail } = setup({ isReadOnly: () => true });
-  const item = readyItem("c_refused");
-  store.write(REVIEW, item);
-  done.refresh();
+  const parts = setup({ isReadOnly: () => true });
+  const [item] = pending(parts, ["c_refused"]);
+  parts.done.refresh();
 
-  done.applyReplies([foldEvent(item, question())]);
-  assert.equal(rail.toastInfo().count, 0);
+  parts.done.applyReplies([foldEvent(item, question())]);
+  assert.equal(parts.rail.toastInfo().count, 0);
+});
+
+// --- rule 2: the X means read -------------------------------------------------
+
+test("dismissing a toast marks that reply read, and a reload says nothing about it", () => {
+  const parts = setup();
+  const [item] = pending(parts, ["c_dismissed"]);
+  parts.done.refresh();
+  parts.done.applyReplies([foldEvent(item, flagged())]);
+
+  const toastId = parts.rail.toastInfo().toasts[0].id;
+  parts.rail.dismissToast(toastId, "user");
+
+  assert.deepEqual(parts.done.unseenIds(), [], "the reviewer read it and put it away");
+  assert.deepEqual(parts.done.neglectedIds(), [], "so it is not neglect either");
+  assert.equal(reboot(parts.store).rail.toastInfo().count, 0, "and the reload has nothing to say");
+});
+
+test("timing out is not dismissing: nobody decided anything, so it stays unread", () => {
+  const parts = setup();
+  const [item] = pending(parts, ["c_ignored"]);
+  parts.done.refresh();
+  parts.done.applyReplies([foldEvent(item, flagged())]);
+
+  const toastId = parts.rail.toastInfo().toasts[0].id;
+  parts.rail.dismissToast(toastId, "timeout");
+
+  assert.deepEqual(parts.done.unseenIds(), ["c_ignored"], "still waiting to be read");
+  assert.deepEqual(parts.done.neglectedIds(), ["c_ignored"], "and now on the neglect clock");
+});
+
+// --- rule 3: a count is for neglect only --------------------------------------
+
+test("a neglected reply becomes one summary, and a second one replaces it", () => {
+  const parts = setup();
+  const items = pending(parts, ["c_a", "c_b"]);
+  parts.done.refresh();
+
+  parts.done.applyReplies([foldEvent(items[0], flagged({ text: "did the first one" }))]);
+  parts.rail.dismissToast(parts.rail.toastInfo().toasts[0].id, "timeout");
+  parts.done.sweepNeglected();
+
+  let info = parts.rail.toastInfo();
+  assert.equal(info.count, 1);
+  assert.equal(info.toasts[0].text, "1 reply is waiting.");
+
+  // A second answer is ignored the same way. The count must REPLACE the one
+  // standing, not stand beside it, which is the pile Ken asked us to remove.
+  parts.done.applyReplies([foldEvent(items[1], flagged({ text: "did the second one" }))]);
+  const second = parts.rail.toastInfo().toasts.find((toast) => toast.text === "did the second one");
+  parts.rail.dismissToast(second.id, "timeout");
+  parts.done.sweepNeglected();
+
+  info = parts.rail.toastInfo();
+  assert.equal(info.count, 1, "one count on screen, not two");
+  assert.equal(info.toasts[0].text, "2 replies are waiting.");
+});
+
+test("a count never talks about a reply whose own toast is still on screen", () => {
+  const parts = setup();
+  const items = pending(parts, ["c_seen_toast", "c_gone_toast"]);
+  parts.done.refresh();
+  parts.done.applyReplies([
+    foldEvent(items[0], flagged({ text: "this one is still up" })),
+    foldEvent(items[1], flagged({ text: "this one timed out" }))
+  ]);
+
+  const timedOut = parts.rail.toastInfo().toasts.find((toast) => toast.text === "this one timed out");
+  parts.rail.dismissToast(timedOut.id, "timeout");
+  parts.done.sweepNeglected();
+
+  const info = parts.rail.toastInfo();
+  const counts = info.toasts.filter((toast) => /waiting/.test(toast.text));
+  assert.equal(counts.length, 1);
+  assert.equal(counts[0].text, "1 reply is waiting.", "only the one that is not on screen is counted");
+});
+
+// --- rules 4 and 5: a reload, and a remount -----------------------------------
+
+test("a reload toasts a recent unread answer as itself, with its words", () => {
+  const store = freshPage();
+  const item = readyItem("c_recent");
+  item[record.FIELD.STATE] = record.STATE.HANDLED;
+  item[record.FIELD.REPLY] = Object.assign({ at: new Date().toISOString() }, flagged({ text: "just did this" }));
+  store.write(REVIEW, item);
+
+  const back = reboot(store);
+  const info = back.rail.toastInfo();
+  assert.equal(info.count, 1);
+  assert.equal(info.toasts[0].text, "just did this", "recent means he has not had the words yet");
+});
+
+test("a reload collapses an answer older than the neglect window into one count", () => {
+  const store = freshPage();
+  const item = readyItem("c_old");
+  item[record.FIELD.STATE] = record.STATE.HANDLED;
+  item[record.FIELD.REPLY] = Object.assign({ at: "2026-08-19T10:00:00.000Z" }, flagged());
+  store.write(REVIEW, item);
+
+  const back = reboot(store);
+  const info = back.rail.toastInfo();
+  assert.equal(info.count, 1);
+  assert.equal(info.toasts[0].text, "1 reply is waiting.");
+  assert.equal(info.toasts[0].sticky, true, "a reminder about neglect does not get to be neglected");
+});
+
+test("a remount says nothing this page has already said", () => {
+  const parts = setup();
+  const [item] = pending(parts, ["c_remount"]);
+  parts.done.refresh();
+  parts.done.applyReplies([foldEvent(item, flagged({ text: "carried it over" }))]);
+  assert.equal(parts.rail.toastInfo().count, 1);
+
+  // A hash navigation. This is what used to stack a fresh count every time,
+  // because the summary key was built from the id set and the set had moved.
+  parts.done = remount(parts);
+  parts.done = remount(parts);
+  parts.done = remount(parts);
+
+  const info = parts.rail.toastInfo();
+  assert.equal(info.count, 1, "three navigations, still one message");
+  assert.equal(info.toasts[0].text, "carried it over");
 });
 
 // --- read is read, and it has to reach storage --------------------------------
@@ -242,99 +419,41 @@ test("a refused window is told nothing, because it can do nothing about it", () 
 // all." Suppressing the toast is only half of "seen"; the mark has to be
 // durable, or the next load finds the same replies unread.
 
-/** A second rail and tab over the same storage: what the next load sees. */
-function reboot(store) {
-  const rail = overlay.createRail({ store: store, reviewId: REVIEW });
-  const done = tabDone.createDoneTab({ store: store, reviewId: REVIEW, overlay: rail, document: null });
-  done.mount();
-  return { rail, done };
-}
-
 test("a reply read as it lands is marked seen, so the next load says nothing", () => {
-  const store = storeModule.createStore({ storage: null });
-  const rail = overlay.createRail({ store: store, reviewId: REVIEW });
-  rail.collapse(false);
-  rail.selectTab("done");
-  const done = tabDone.createDoneTab({ store: store, reviewId: REVIEW, overlay: rail, document: null });
-  done.mount();
+  const parts = setup({ collapsed: false, tab: "done" });
+  const [item] = pending(parts, ["c_watched"]);
+  parts.done.refresh();
+  parts.done.applyReplies([foldEvent(item, flagged())]);
 
-  const item = readyItem("c_watched");
-  store.write(REVIEW, item);
-  done.refresh();
-  done.applyReplies([foldEvent(item, flagged())]);
-
-  assert.equal(rail.toastInfo().count, 0, "it landed in front of them, so it did not toast");
-  assert.deepEqual(done.unseenIds(), [], "and it is not sitting unread either");
-  assert.equal(reboot(store).rail.toastInfo().count, 0, "so the next load has nothing to announce");
+  assert.equal(parts.rail.toastInfo().count, 0, "it landed in front of them, so it did not toast");
+  assert.deepEqual(parts.done.unseenIds(), [], "and it is not sitting unread either");
+  assert.equal(reboot(parts.store).rail.toastInfo().count, 0, "so the next load has nothing to announce");
 });
 
 test("opening the rail on the tab it was already on marks that tab's replies read", () => {
-  const store = storeModule.createStore({ storage: null });
-  const rail = overlay.createRail({ store: store, reviewId: REVIEW });
-  rail.selectTab("done");
-  rail.collapse(true);
-  const done = tabDone.createDoneTab({ store: store, reviewId: REVIEW, overlay: rail, document: null });
-  done.mount();
-
-  const item = readyItem("c_expanded");
-  store.write(REVIEW, item);
-  done.refresh();
-  done.applyReplies([foldEvent(item, flagged())]);
-  assert.equal(rail.toastInfo().count, 1, "the rail was closed, so it toasted");
-  assert.deepEqual(done.unseenIds(), [item[record.FIELD.ID]]);
+  const parts = setup({ tab: "done" });
+  const [item] = pending(parts, ["c_expanded"]);
+  parts.done.refresh();
+  parts.done.applyReplies([foldEvent(item, flagged())]);
+  assert.equal(parts.rail.toastInfo().count, 1, "the rail was closed, so it toasted");
+  assert.deepEqual(parts.done.unseenIds(), ["c_expanded"]);
 
   // The reviewer expands the rail with the pill. No tab is SELECTED, because it
   // is the tab the rail was already on. That used to write no mark at all.
-  rail.collapse(false);
-  assert.deepEqual(done.unseenIds(), [], "opening it onto the card is reading the card");
-  assert.equal(reboot(store).rail.toastInfo().count, 0, "so the reload says nothing");
+  parts.rail.collapse(false);
+  assert.deepEqual(parts.done.unseenIds(), [], "opening it onto the card is reading the card");
+  assert.equal(reboot(parts.store).rail.toastInfo().count, 0, "so the reload says nothing");
 });
 
 test("a refused window has the rail opened for it, and that is not the reviewer reading", () => {
-  const store = storeModule.createStore({ storage: null });
-  const rail = overlay.createRail({ store: store, reviewId: REVIEW });
-  rail.selectTab("done");
-  rail.collapse(true);
-  const done = tabDone.createDoneTab({
-    store: store,
-    reviewId: REVIEW,
-    overlay: rail,
-    document: null,
-    isReadOnly: () => true
-  });
-  done.mount();
-
-  const item = readyItem("c_refused_open");
-  store.write(REVIEW, item);
-  done.refresh();
-  done.applyReplies([foldEvent(item, flagged())]);
-  assert.deepEqual(done.unseenIds(), [item[record.FIELD.ID]]);
+  const parts = setup({ tab: "done", isReadOnly: () => true });
+  const [item] = pending(parts, ["c_refused_open"]);
+  parts.done.refresh();
+  parts.done.applyReplies([foldEvent(item, flagged())]);
+  assert.deepEqual(parts.done.unseenIds(), ["c_refused_open"]);
 
   // showRefusal forces the rail open so its remedy is visible. That is the tool
   // talking, not the reviewer reading.
-  rail.collapse(false);
-  assert.deepEqual(done.unseenIds(), [item[record.FIELD.ID]], "still unread, because nobody read it");
-});
-
-test("a load that arrives with answers already waiting says so once", () => {
-  const store = storeModule.createStore({ storage: null });
-  const item = readyItem("c_waiting");
-  item[record.FIELD.STATE] = record.STATE.HANDLED;
-  item[record.FIELD.REPLY] = Object.assign({ at: "2026-08-19T10:00:00.000Z" }, flagged());
-  store.write(REVIEW, item);
-
-  const rail = overlay.createRail({ store: store, reviewId: REVIEW });
-  const done = tabDone.createDoneTab({ store: store, reviewId: REVIEW, overlay: rail, document: null });
-  done.mount();
-
-  const info = rail.toastInfo();
-  assert.equal(info.count, 1);
-  assert.equal(info.toasts[0].text, "1 reply is waiting.");
-  assert.equal(info.toasts[0].sticky, false, "no question in it, so it does not have to be pressed");
-
-  // Mounting again (a client-side navigation remounts the tab) does not
-  // re-announce the same backlog.
-  done.unmount();
-  done.mount();
-  assert.equal(rail.toastInfo().count, 1);
+  parts.rail.collapse(false);
+  assert.deepEqual(parts.done.unseenIds(), ["c_refused_open"], "still unread, because nobody read it");
 });

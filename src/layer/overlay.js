@@ -668,6 +668,9 @@
   // number for one reason only, which is when to take the node out of the DOM.
   // It matches the transition in the .toast[data-lahe-leaving] rule above.
   var TOAST_OUT_MS = 120;
+  // Why a toast left, told to whoever put it up. The reviewer pressing the X is
+  // a decision about that message; the clock running out is not.
+  var TOAST_GONE = { USER: "user", TIMEOUT: "timeout", REPLACED: "replaced" };
 
   // The review-level actions, in the head's menu. They are the same two the
   // footer used to stand up as buttons, and they run through the same
@@ -3374,15 +3377,20 @@
         about: String(s.about || ""),
         sticky: s.sticky === true,
         onOpen: typeof s.onOpen === "function" ? s.onOpen : null,
+        // Told WHY it left, because the caller cares about the difference: a
+        // reviewer who presses the X has dealt with it, and a toast that ran
+        // out of time has not been dealt with by anyone.
+        onGone: typeof s.onGone === "function" ? s.onGone : null,
         node: null,
         timer: null,
         paused: false
       };
-      // Newest first, which is newest on top: the stack grows upward from the
-      // bottom-left corner.
+      // Newest first, which is newest on top.
       toasts.unshift(toast);
+      // The clock starts when it is VISIBLE, not when it is created (see
+      // renderToasts), so a toast waiting its turn behind three others cannot
+      // expire before anyone has laid eyes on it.
       renderToasts();
-      armToast(toast);
       return toast.id;
     }
 
@@ -3409,7 +3417,7 @@
       // no condition to poll instead.
       toast.timer = view.setTimeout(function () {
         toast.timer = null;
-        dismissToast(toast.id);
+        dismissToast(toast.id, TOAST_GONE.TIMEOUT);
       }, toastMs);
       return toast.timer;
     }
@@ -3426,14 +3434,22 @@
       armToast(toast);
     }
 
-    function dismissToast(id) {
+    function dismissToast(id, reason) {
       var toast = toastById(id);
       if (!toast) return false;
+      var why = reason || TOAST_GONE.USER;
       clearToastTimer(toast);
       var at = toasts.indexOf(toast);
       if (at !== -1) toasts.splice(at, 1);
       var node = toast.node;
       toast.node = null;
+      if (toast.onGone) {
+        try {
+          toast.onGone(why);
+        } catch (err) {
+          // A bad listener must never leave a toast stuck on the page.
+        }
+      }
       // Out of the count at once, off the screen a fade later. The node stops
       // taking clicks the instant it starts leaving (the CSS sets
       // pointer-events:none), so the page under it is clickable through the
@@ -3507,8 +3523,9 @@
         toast.node = null;
         toast.paused = false;
       });
+      // renderToasts arms what is visible and leaves the queue cold, so there
+      // is nothing to arm by hand here.
       renderToasts();
-      toasts.forEach(armToast);
       return toasts.length;
     }
 
@@ -3581,6 +3598,16 @@
       if (!dom || !dom.toastHost) return false;
       var host = dom.toastHost;
       var shown = toasts.slice(0, TOAST_MAX);
+      // THE STACK CYCLES. A toast queued behind the cap has no clock, and gets
+      // one the moment it comes into view, so every message is eventually seen
+      // rather than three being shown and the rest quietly expiring off screen.
+      toasts.forEach(function (toast, index) {
+        if (index < TOAST_MAX) {
+          if (!toast.timer && !toast.sticky && !toast.paused) armToast(toast);
+        } else {
+          clearToastTimer(toast);
+        }
+      });
       var live = [];
       // The count line is created once and lives at the end, so it is the thing
       // the oldest visible toast is inserted before.
@@ -3621,7 +3648,15 @@
           var rect = toast.node && typeof toast.node.getBoundingClientRect === "function"
             ? toast.node.getBoundingClientRect()
             : null;
+          // The close control's own geometry. A spec presses the X the way a
+          // reviewer does, at real coordinates, rather than calling the
+          // dismissal and proving nothing about whether the button was there.
+          var closeNode = toast.node ? toast.node.querySelector(".toast__x") : null;
+          var closeRect = closeNode ? closeNode.getBoundingClientRect() : null;
           return {
+            closeRect: closeRect
+              ? { x: closeRect.x, y: closeRect.y, width: closeRect.width, height: closeRect.height }
+              : null,
             id: toast.id,
             key: toast.key,
             label: toast.label,
@@ -3768,6 +3803,7 @@
       TOAST_MS: TOAST_MS,
       TOAST_MAX: TOAST_MAX,
       TOAST_OUT_MS: TOAST_OUT_MS,
+      TOAST_GONE: TOAST_GONE,
       openMenu: openMenu,
       closeMenu: closeMenu,
       showRefusal: showRefusal,
@@ -3796,6 +3832,7 @@
     TOAST_MS: TOAST_MS,
     TOAST_MAX: TOAST_MAX,
     TOAST_OUT_MS: TOAST_OUT_MS,
+    TOAST_GONE: TOAST_GONE,
     END_REVIEW: END_REVIEW,
     endReviewCounts: endReviewCounts,
     unfinishedSentence: unfinishedSentence,
