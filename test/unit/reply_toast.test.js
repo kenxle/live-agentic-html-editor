@@ -457,3 +457,27 @@ test("a refused window has the rail opened for it, and that is not the reviewer 
   parts.rail.collapse(false);
   assert.deepEqual(parts.done.unseenIds(), ["c_refused_open"], "still unread, because nobody read it");
 });
+
+test("an agent answering the same revision twice: the older line replayed later is not news", () => {
+  // rde58be04d90e, 2026-09-10: two flagged lines for one item fifteen seconds
+  // apart. Every load replays both in order, and the older one differed from
+  // the stamp the browser held, so it toasted an answer Ken had read half an
+  // hour before, on every reload.
+  const parts = setup();
+  const item = readyItem("itm_twice");
+  parts.store.write(REVIEW, item);
+  const early = flagged({ at: "2026-08-19T10:00:00.000Z", text: "first answer" });
+  const late = flagged({ at: "2026-08-19T10:00:15.000Z", text: "second answer" });
+  parts.done.applyReplies([foldEvent(item, early), foldEvent(item, late)]);
+  const held = parts.store.readItem(REVIEW, "itm_twice")[record.FIELD.REPLY];
+  assert.equal(held.at, late.at, "the later line is the one the record keeps");
+  // The reviewer reads it, then the page reloads and the helper replays both.
+  parts.done.markRepliesSeen();
+  const before = parts.rail.toastInfo().count;
+  const results = parts.done.applyReplies([foldEvent(item, early), foldEvent(item, late)]);
+  assert.equal(results[0].kind, "superseded", "the older line is recognized as superseded");
+  assert.equal(results[0].toast, false);
+  assert.equal(parts.store.readItem(REVIEW, "itm_twice")[record.FIELD.REPLY].at, late.at, "and it does not roll the record back");
+  assert.equal(parts.rail.toastInfo().count, before, "nothing toasts for an answer already read");
+  assert.deepEqual(parts.done.unseenIds(), [], "and nothing is left unread");
+});

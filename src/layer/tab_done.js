@@ -1628,6 +1628,25 @@
       // reviewer being told about yesterday's answers every time they refresh.
       // The stamp names WHICH reply, so an identical one is not news.
       var hadStamp = replyStamp(item);
+      // A SUPERSEDED DUPLICATE IS NOT NEWS EITHER. An agent can answer the same
+      // revision twice (rde58be04d90e, 2026-09-10: two lines for one item,
+      // fifteen seconds apart). Every load replays both folds in order, and the
+      // older one differs from the stamp this browser holds, so it read as a
+      // fresh reply and toasted an answer Ken had read half an hour before, on
+      // every reload. A fold for the revision this record already answers,
+      // carrying an older timestamp than the reply it holds, is left exactly as
+      // it is: not applied, not announced.
+      var heldReply = item[record.FIELD.REPLY];
+      var foldAt = event[protocol.EVENT_FIELD.TS] || null;
+      if (
+        heldReply &&
+        heldReply.at &&
+        foldAt &&
+        Number(replyRev) === Number(item[record.FIELD.REV]) &&
+        foldAt < heldReply.at
+      ) {
+        return { kind: "superseded", item: id, state: item[record.FIELD.STATE], toast: false };
+      }
       var next = Object.assign({}, item);
       next[record.FIELD.STATE] = event.state || item[record.FIELD.STATE];
       next[record.FIELD.REPLY] = {
