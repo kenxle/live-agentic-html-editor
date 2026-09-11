@@ -712,7 +712,7 @@
     // accent rule the question block already uses down its left edge.
     ".toasts{position:fixed;top:16px;right:16px;pointer-events:none;display:flex;",
     "flex-direction:column;align-items:flex-end;gap:8px;",
-    "width:min(480px,calc(100vw - 32px))}",
+    "width:min(560px,calc(100vw - 32px))}",
     ".toasts[hidden]{display:none}",
     ".toast{pointer-events:auto;width:100%;display:flex;align-items:flex-start;gap:8px;",
     "padding:10px 11px;background:var(--paper);color:var(--ink);text-align:left;",
@@ -743,16 +743,19 @@
     ".toast{animation:lahe-toast-fade 160ms ease-out both}",
     ".toast[data-lahe-leaving='true']{transform:none;transition:opacity 120ms ease-in}}",
     ".toast__body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}",
-    ".toast__label{font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;",
+    ".toast__label{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;",
     "color:var(--accent-ink)}",
     // The whole answer, not the first two lines of it. Ken's first day with the
     // toast: a clamped answer sent him to the rail anyway, which is the trip the
     // toast exists to save. The box grows down to fit; tab_done's TOAST_TEXT_MAX
     // is the ceiling that keeps an essay from becoming a wall.
-    ".toast__text{font-size:13px;line-height:1.4;color:var(--ink);overflow-wrap:anywhere;",
+    // 15px, up from 13: Ken read toasts from a laptop on his lap and had to
+    // pull the screen to his face. A toast is read from farther away than the
+    // rail, so it is set a size larger than the card text (2026-09-11).
+    ".toast__text{font-size:15px;line-height:1.45;color:var(--ink);overflow-wrap:anywhere;",
     "white-space:pre-line}",
     // One line, quieter: this is what the answer is ABOUT, not the answer.
-    ".toast__about{font-size:11px;line-height:1.35;color:var(--ink-faint);",
+    ".toast__about{font-size:12.5px;line-height:1.35;color:var(--ink-soft);",
     "white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
     ".toast__about:empty{display:none}",
     ".toast__x{flex:none;width:20px;height:20px;border-radius:6px;color:var(--ink-faint);",
