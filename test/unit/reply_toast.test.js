@@ -321,48 +321,77 @@ test("timing out is not dismissing: nobody decided anything, so it stays unread"
 
 // --- rule 3: a count is for neglect only --------------------------------------
 
-test("a neglected reply becomes one summary, and a second one replaces it", () => {
+test("a neglected answer comes back as itself, with its words, and does not time out", () => {
+  const parts = setup();
+  const [item] = pending(parts, ["c_a"]);
+  parts.done.refresh();
+
+  parts.done.applyReplies([foldEvent(item, flagged({ text: "did the first one" }))]);
+  parts.rail.dismissToast(parts.rail.toastInfo().toasts[0].id, "timeout");
+  parts.done.sweepNeglected();
+
+  const info = parts.rail.toastInfo();
+  assert.equal(info.count, 1);
+  assert.equal(
+    info.toasts[0].text,
+    "did the first one",
+    "Ken: if it is going to sit there, why would it not just be the message"
+  );
+  assert.equal(info.toasts[0].sticky, true, "and it stays until he does something about it");
+});
+
+test("two neglected answers are two messages, because they both fit", () => {
   const parts = setup();
   const items = pending(parts, ["c_a", "c_b"]);
   parts.done.refresh();
 
-  parts.done.applyReplies([foldEvent(items[0], flagged({ text: "did the first one" }))]);
-  parts.rail.dismissToast(parts.rail.toastInfo().toasts[0].id, "timeout");
+  parts.done.applyReplies([
+    foldEvent(items[0], flagged({ text: "did the first one" })),
+    foldEvent(items[1], flagged({ text: "did the second one" }))
+  ]);
+  parts.rail.toastInfo().toasts.forEach((toast) => parts.rail.dismissToast(toast.id, "timeout"));
   parts.done.sweepNeglected();
 
-  let info = parts.rail.toastInfo();
-  assert.equal(info.count, 1);
-  assert.equal(info.toasts[0].text, "1 reply is waiting.");
+  assert.deepEqual(
+    toastTexts(parts.rail).slice().sort(),
+    ["did the first one", "did the second one"],
+    "no count, because the words fit"
+  );
+});
 
-  // A second answer is ignored the same way. The count must REPLACE the one
-  // standing, not stand beside it, which is the pile Ken asked us to remove.
-  parts.done.applyReplies([foldEvent(items[1], flagged({ text: "did the second one" }))]);
-  const second = parts.rail.toastInfo().toasts.find((toast) => toast.text === "did the second one");
-  parts.rail.dismissToast(second.id, "timeout");
+test("more neglect than the stack can hold is the one case that becomes a count", () => {
+  const parts = setup();
+  const ids = ["c_1", "c_2", "c_3", "c_4"];
+  const items = pending(parts, ids);
+  parts.done.refresh();
+
+  parts.done.applyReplies(items.map((item, index) => foldEvent(item, flagged({ text: "answer " + index }))));
+  parts.rail.toastInfo().toasts.forEach((toast) => parts.rail.dismissToast(toast.id, "timeout"));
   parts.done.sweepNeglected();
 
-  info = parts.rail.toastInfo();
-  assert.equal(info.count, 1, "one count on screen, not two");
-  assert.equal(info.toasts[0].text, "2 replies are waiting.");
+  const info = parts.rail.toastInfo();
+  assert.equal(info.count, 1, "one count, not four messages the stack cannot show");
+  assert.equal(info.toasts[0].text, "4 replies are waiting.");
+  assert.equal(info.toasts[0].sticky, true, "a reminder about neglect does not get to be neglected");
 });
 
 test("a count never talks about a reply whose own toast is still on screen", () => {
   const parts = setup();
-  const items = pending(parts, ["c_seen_toast", "c_gone_toast"]);
+  const items = pending(parts, ["c_1", "c_2", "c_3", "c_4", "c_still_up"]);
   parts.done.refresh();
-  parts.done.applyReplies([
-    foldEvent(items[0], flagged({ text: "this one is still up" })),
-    foldEvent(items[1], flagged({ text: "this one timed out" }))
-  ]);
+  parts.done.applyReplies(items.map((item, index) => foldEvent(item, flagged({ text: "answer " + index }))));
 
-  const timedOut = parts.rail.toastInfo().toasts.find((toast) => toast.text === "this one timed out");
-  parts.rail.dismissToast(timedOut.id, "timeout");
+  // Four time out. The fifth is still standing, so the reviewer can read it
+  // where it is and a count has no business naming it.
+  const stillUp = parts.rail.toastInfo().toasts.find((toast) => toast.text === "answer 4");
+  parts.rail.toastInfo().toasts.forEach((toast) => {
+    if (toast.id !== stillUp.id) parts.rail.dismissToast(toast.id, "timeout");
+  });
   parts.done.sweepNeglected();
 
-  const info = parts.rail.toastInfo();
-  const counts = info.toasts.filter((toast) => /waiting/.test(toast.text));
+  const counts = parts.rail.toastInfo().toasts.filter((toast) => /waiting/.test(toast.text));
   assert.equal(counts.length, 1);
-  assert.equal(counts[0].text, "1 reply is waiting.", "only the one that is not on screen is counted");
+  assert.equal(counts[0].text, "4 replies are waiting.", "only the four that are not on screen are counted");
 });
 
 // --- rules 4 and 5: a reload, and a remount -----------------------------------
@@ -380,18 +409,35 @@ test("a reload toasts a recent unread answer as itself, with its words", () => {
   assert.equal(info.toasts[0].text, "just did this", "recent means he has not had the words yet");
 });
 
-test("a reload collapses an answer older than the neglect window into one count", () => {
+test("a reload shows an answer older than the neglect window as itself, sticky", () => {
   const store = freshPage();
   const item = readyItem("c_old");
   item[record.FIELD.STATE] = record.STATE.HANDLED;
-  item[record.FIELD.REPLY] = Object.assign({ at: "2026-08-19T10:00:00.000Z" }, flagged());
+  item[record.FIELD.REPLY] = Object.assign({ at: "2026-08-19T10:00:00.000Z" }, flagged({ text: "did this yesterday" }));
   store.write(REVIEW, item);
 
   const back = reboot(store);
   const info = back.rail.toastInfo();
   assert.equal(info.count, 1);
-  assert.equal(info.toasts[0].text, "1 reply is waiting.");
-  assert.equal(info.toasts[0].sticky, true, "a reminder about neglect does not get to be neglected");
+  assert.equal(info.toasts[0].text, "did this yesterday", "one message fits, so he gets the message");
+  assert.equal(info.toasts[0].sticky, true, "it has already been waiting; it does not get to slip past again");
+});
+
+test("a reload with more stale answers than the stack can hold gives one count", () => {
+  const store = freshPage();
+  ["c_o1", "c_o2", "c_o3", "c_o4"].forEach((id, index) => {
+    const item = readyItem(id);
+    item[record.FIELD.STATE] = record.STATE.HANDLED;
+    item[record.FIELD.REPLY] = Object.assign(
+      { at: "2026-08-19T10:00:00.000Z" },
+      flagged({ text: "old answer " + index })
+    );
+    store.write(REVIEW, item);
+  });
+
+  const info = reboot(store).rail.toastInfo();
+  assert.equal(info.count, 1);
+  assert.equal(info.toasts[0].text, "4 replies are waiting.");
 });
 
 test("a remount says nothing this page has already said", () => {

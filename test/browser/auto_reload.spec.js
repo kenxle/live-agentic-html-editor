@@ -101,6 +101,12 @@ async function booted(page) {
   await pollPage(page, () => !!(window.__lahe && window.__lahe.booted), undefined, {
     message: "the layer to boot from its script tag"
   });
+  // A LAHE reload now waits for the reviewer to be still (see
+  // INTERACTION_BUSY_MS in index.js: a card must not vanish out from in front
+  // of someone reading it). This suite types and clicks and then expects a
+  // reload, so it shortens that window rather than sitting out ten real
+  // seconds per test.
+  await page.evaluate(() => window.__lahe.interactionBusy(50));
 }
 
 /** The reviewer's gesture: select the passage, Cmd-Shift-C, type, Cmd-Enter. */
@@ -443,5 +449,98 @@ test.describe("the page updates itself as the agent lands changes (R36)", () => 
     );
     expect(await page.evaluate(() => window.__lahe.cardIds().length), "its card is redrawn").toBe(1);
     expect(await page.evaluate(() => window.__lahe.review), "on the same review").toBe(REVIEW);
+  });
+
+  // --- the reviewer is reading, so the page holds still -----------------------
+  //
+  // Ken clicked a toast, the rail opened on the card, and two seconds later a
+  // rebuild for a different review reloaded the page: the card "disappeared out
+  // from in front of me". Reading is not typing, so neither the open-edit check
+  // nor the open-box check saw it.
+
+  test("a reload waits while the reviewer is still touching the page, then lands", async ({ page }) => {
+    rebuild(filePath, service.url, token, "Busy baseline");
+    await page.goto(pages.origin + "/" + PAGE_FILE);
+    await booted(page);
+    await pollPage(page, () => !!window.__lahe.handle.sync.status().targetMtime, undefined, {
+      message: "the first poll to establish the baseline mtime"
+    });
+
+    // A long window, so the deferral is observable rather than a race.
+    await page.evaluate(() => window.__lahe.interactionBusy(30000));
+    await page.mouse.click(12, 12);
+
+    rebuild(filePath, service.url, token, "Deferred edition");
+
+    // The reload is armed, checked, and put off. Repeatedly: a deferral is not
+    // a cancellation, and the counter is what proves the check keeps running.
+    await pollPage(page, () => window.__lahe.handle.sync.status().reloadChecks >= 2, undefined, {
+      message: "the reload to be checked more than once",
+      timeoutMs: 20000
+    });
+    const deferred = await reloadState(page);
+    expect(deferred.fired, "nothing reloaded while they were touching the page").toBe(0);
+    expect(deferred.pending, "and it is still waiting to").toBe(true);
+    expect(await page.evaluate(() => document.querySelector("#edition").textContent)).toBe("Busy baseline");
+
+    // They stop. The window passes (shortened, so the suite does not sit out
+    // ten real seconds) and the page catches up on its own.
+    await page.evaluate(() => window.__lahe.interactionBusy(1));
+    await pollPage(page, () => document.querySelector("#edition").textContent === "Deferred edition", undefined, {
+      message: "the deferred reload to land once the reviewer is still",
+      timeoutMs: 20000
+    });
+  });
+
+  test("a LAHE reload gives the rail back: same tab, same card, still open", async ({ page }) => {
+    rebuild(filePath, service.url, token, "Rail baseline");
+    await page.goto(pages.origin + "/" + PAGE_FILE);
+    await booted(page);
+    await pollPage(page, () => !!window.__lahe.handle.sync.status().targetMtime, undefined, {
+      message: "the first poll to establish the baseline mtime"
+    });
+
+    await commentOnBody(page, SAID);
+    const itemId = await pollPage(page, () => window.__lahe.cardIds().length === 1, undefined, {
+      message: "the comment's card"
+    }).then(() => page.evaluate(() => window.__lahe.cardIds()[0]));
+
+    // What Ken was doing: the rail open, on the card, reading it.
+    await page.evaluate((id) => {
+      const rail = window.__lahe.rail;
+      rail.collapse(false);
+      rail.selectTab("active");
+      const node = rail.cardNode(id);
+      node.tabIndex = -1;
+      node.focus();
+    }, itemId);
+    expect(await page.evaluate(() => window.__lahe.rail.railState().focused), "the card is his").toBe(itemId);
+
+    // The agent rebuilds, working on something else entirely.
+    rebuild(filePath, service.url, token, "Rail edition");
+    await pollPage(page, () => document.querySelector("#edition").textContent === "Rail edition", undefined, {
+      message: "the page to reload itself onto the rebuilt file",
+      timeoutMs: 20000
+    });
+    await booted(page);
+
+    // The card is still in front of him. A fresh boot focuses nothing, so this
+    // is the marker being consumed and not a coincidence of defaults.
+    await pollPage(page, (id) => window.__lahe.rail.focusedCardId() === id, itemId, {
+      message: "the card he was reading to still be focused",
+      timeoutMs: 20000
+    });
+    const back = await page.evaluate(() => ({
+      collapsed: window.__lahe.rail.isCollapsed(),
+      tab: window.__lahe.rail.currentTab()
+    }));
+    expect(back.collapsed, "the rail is open, the way he left it").toBe(false);
+    expect(back.tab, "on the tab he left it on").toBe("active");
+
+    // Once only: nothing is left in storage to rearrange a later page.
+    expect(
+      await page.evaluate((key) => window.sessionStorage.getItem(key), syncModule.RAIL_MARKER_KEY),
+      "the marker is consumed"
+    ).toBeNull();
   });
 });

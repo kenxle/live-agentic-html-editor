@@ -552,7 +552,7 @@ test.describe("the toast: an answer that finds a reviewer with the rail closed",
     }
   });
 
-  test("an answer nobody touches becomes one count, and a second one replaces it", async ({ page }) => {
+  test("two neglected answers come back as two messages, and still no count", async ({ page }) => {
     const { app, helper, token } = await startBoth();
     try {
       await bootedPage(page, app, helper, token);
@@ -563,58 +563,42 @@ test.describe("the toast: an answer that finds a reviewer with the rail closed",
       await page.evaluate((ms) => {
         window.__lahe.rail.collapse(true);
         window.__lahe.rail.toastDuration(ms);
-        // The neglect window, shortened. TOAST_MS and NEGLECT_MS are the real
-        // numbers; a test must not sit through two minutes of either.
         window.__lahe.handle.doneTab().neglectDelay(ms);
       }, SHORT_TOAST_MS);
 
-      appendReply(helper, {
-        item: projected[0].id,
-        rev: projected[0].rev,
-        status: "handled",
-        agent: "claude",
-        text: "cut it to one sentence",
-        user_needs_to_see_reply: true
+      const said = ["cut it to one sentence", "tightened the heading"];
+      projected.forEach((item, index) => {
+        appendReply(helper, {
+          item: item.id,
+          rev: item.rev,
+          status: "handled",
+          agent: "claude",
+          text: said[index],
+          user_needs_to_see_reply: true
+        });
       });
 
-      // It arrives with its words, is ignored, and times out.
-      await waitForToast(page, "the first answer to toast");
+      await pollPage(page, () => window.__lahe.rail.toastInfo().count === 2, undefined, {
+        message: "both answers to toast"
+      });
       await pollPage(page, () => window.__lahe.rail.toastInfo().count === 0, undefined, {
-        message: "the ignored answer to time out"
+        message: "both to time out unread"
       });
 
-      // Only now, and only because it was neglected, does a count appear.
+      // Both come back as themselves. Two messages fit in the stack, so there
+      // is nothing here a number would do better.
       await pollPage(
         page,
         () => {
           const info = window.__lahe.rail.toastInfo();
-          return info.count === 1 && info.toasts[0].text === "1 reply is waiting.";
+          return info.count === 2 && info.toasts.every((toast) => toast.sticky);
         },
         undefined,
-        { message: "one count for the neglected answer" }
+        { message: "both neglected answers to come back, sticky" }
       );
-
-      appendReply(helper, {
-        item: projected[1].id,
-        rev: projected[1].rev,
-        status: "handled",
-        agent: "claude",
-        text: "tightened the heading",
-        user_needs_to_see_reply: true
-      });
-
-      // The second answer is ignored the same way. The count must REPLACE the
-      // one standing, not stand beside it.
-      await pollPage(
-        page,
-        () => {
-          const info = window.__lahe.rail.toastInfo();
-          return info.count === 1 && info.toasts[0].text === "2 replies are waiting.";
-        },
-        undefined,
-        { message: "the count to be replaced rather than joined" }
-      );
-      expect((await toastState(page)).count, "never two counts side by side").toBe(1);
+      const texts = (await toastState(page)).toasts.map((toast) => toast.text).sort();
+      expect(texts).toEqual(said.slice().sort());
+      texts.forEach((text) => expect(text, "no counts anywhere").not.toContain("waiting"));
     } finally {
       await helper.kill9();
       await app.close();
@@ -692,6 +676,55 @@ test.describe("the toast: an answer that finds a reviewer with the rail closed",
         message: "the backlog to be applied again"
       });
       expect((await toastState(page)).count).toBe(1);
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+  test("a neglected answer comes back as itself, with its words, not as a number", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      await commentOnSelection(page, "p.lede", "cut this to one sentence");
+      const [item] = await waitForProjected(helper, 1);
+
+      await page.evaluate((ms) => {
+        window.__lahe.rail.collapse(true);
+        window.__lahe.rail.toastDuration(ms);
+        // TOAST_MS and NEGLECT_MS are the real numbers; a test must not sit
+        // through ten seconds and two minutes of them.
+        window.__lahe.handle.doneTab().neglectDelay(ms);
+      }, SHORT_TOAST_MS);
+
+      appendReply(helper, {
+        item: item.id,
+        rev: item.rev,
+        status: "handled",
+        agent: "claude",
+        text: "cut it to one sentence, and moved the number to the front",
+        user_needs_to_see_reply: true
+      });
+
+      // It arrives with its words, he is in another tab, it times out.
+      await waitForToast(page, "the answer to toast");
+      await pollPage(page, () => window.__lahe.rail.toastInfo().count === 0, undefined, {
+        message: "the ignored answer to time out"
+      });
+
+      // Ken: "if we're going to have a persistent toast on the page that
+      // doesn't go away and there's only one message, then why wouldn't it just
+      // be that message? Just tell me what it is."
+      await pollPage(page, () => window.__lahe.rail.toastInfo().count === 1, undefined, {
+        message: "the neglected answer to come back"
+      });
+      const back = await toastState(page);
+      expect(back.toasts[0].text).toContain("moved the number to the front");
+      expect(back.toasts[0].sticky, "and this time it stays").toBe(true);
+      expect(back.toasts[0].text, "never a count while the words fit").not.toContain("waiting");
+
+      // It stays because it has no clock at all, which is a stronger claim than
+      // "it was still there when I looked".
+      expect(back.toasts[0].armed, "no timer on it").toBe(false);
     } finally {
       await helper.kill9();
       await app.close();

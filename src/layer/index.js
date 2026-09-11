@@ -88,6 +88,16 @@
   // script tag, so there is nothing here to hide behind a flag.
   var GLOBAL = "__lahe";
 
+  // How long after the reviewer last touched anything a LAHE reload waits.
+  //
+  // Ken clicked a toast, the rail opened on the card, and two seconds later a
+  // rebuild reloaded the page: the card "disappeared out from in front of me".
+  // The open-edit and open-box checks did not catch it, because reading is not
+  // typing. A reload is never urgent, and ten seconds of stillness is a cheap
+  // way to be sure nobody is mid-thought. The reload is deferred, not
+  // cancelled: every poll re-asks, so it lands as soon as they stop.
+  var INTERACTION_BUSY_MS = 10000;
+
   // ---------------------------------------------------------------------------
   // Configuration
   // ---------------------------------------------------------------------------
@@ -308,6 +318,37 @@
     var comments = opts.comments || ns.comments.createComments({ store: scopedStore, reviewId: reviewId, page: page });
     comments.bind({ page: page });
 
+    // -------------------------------------------------------------------------
+    // Is the reviewer in the middle of something?
+    // -------------------------------------------------------------------------
+    //
+    // One timestamp, four event types, bound once on the document in the
+    // capture phase. Capture on the document is enough for both halves of the
+    // question: an event inside the rail's closed shadow root still propagates
+    // out to the document (retargeted, which does not matter here, since only
+    // the TIME is wanted), so this sees a click on a card and a click on the
+    // page through the same handler, with no listener inside the rail at all.
+    //
+    // isTrusted is the whole of "not our own synthetic events": every event the
+    // library dispatches itself is untrusted by construction, so nothing the
+    // tool does to the page can make the tool think the reviewer is busy.
+    var lastInteractionAt = 0;
+    var interactionBusyMs = INTERACTION_BUSY_MS;
+
+    function noteInteraction(event) {
+      if (event && event.isTrusted === false) return;
+      lastInteractionAt = Date.now();
+    }
+
+    function sinceInteraction() {
+      if (!lastInteractionAt) return Infinity;
+      return Date.now() - lastInteractionAt;
+    }
+
+    ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (type) {
+      ns.listeners.shared.on(doc, type, noteInteraction, { capture: true, passive: true }, ns.listeners.GROUP.INTERACTION);
+    });
+
     // The Active tab's contents live INSIDE the rail's own Active pane, so
     // there is one rail on the page and one host under it.
     var tab = createTab();
@@ -451,7 +492,16 @@
         // busyBoxes, not openBoxes: the rail's page-note box is open for the
         // whole session, and counting it deferred the reload forever.
         if (comments && typeof comments.busyBoxes === "function" && comments.busyBoxes().length > 0) return true;
+        // READING IS WORK TOO. See INTERACTION_BUSY_MS: a reviewer who just
+        // clicked a card is looking at it, and swapping the page under them is
+        // the same injury as swapping it under a half-typed sentence.
+        if (sinceInteraction() < interactionBusyMs) return true;
         return false;
+      },
+      // What the rail is showing, read at the last moment before the document
+      // goes away, so the page that replaces it can put it back.
+      railState: function () {
+        return rail.railState();
       },
       // Said before the document goes away, so the reload is announced rather
       // than a surprise. The reviewer's outstanding work is replayed onto the
@@ -546,6 +596,15 @@
     // rows can exist puts it where it belongs on the first paint the reviewer
     // sees.
     done.refresh();
+
+    // R36's reload already gives the reviewer their scroll position back. This
+    // gives them the RAIL back: open or closed as it actually was, the same
+    // tab, the same scroll offset, the same card focused. Consumed once, and
+    // only when this tool wrote it on its own way out, so a reload the reviewer
+    // asked for themselves is untouched. Here, because every tab has drawn its
+    // cards by now and the card to focus exists to be focused.
+    var railBack = ns.sync.restoreRailAfterReload(win, reviewId);
+    if (railBack) rail.applyRailState(railBack);
 
     // -------------------------------------------------------------------------
     // End review (D10)
@@ -1192,6 +1251,19 @@
       // The revert check the settling window runs on its own. Exposed so a test
       // can run it at a known moment rather than racing the timer.
       revertCheck: runRevertCheck,
+      /**
+       * How long a LAHE reload waits after the reviewer last touched anything.
+       *
+       * Read it, or set it. A browser test shortens it rather than sitting out
+       * ten real seconds; INTERACTION_BUSY_MS is the only place the real number
+       * is written.
+       */
+      interactionBusy: function (ms) {
+        if (typeof ms === "number" && ms >= 0) interactionBusyMs = ms;
+        return interactionBusyMs;
+      },
+      /** How long ago that was, so a spec can see the guard is actually armed. */
+      sinceInteraction: sinceInteraction,
       // The change marks, as the library sees them: the keys wearing one right
       // now, and a way to run the comparison at a known moment.
       changedBlocks: function () {
@@ -1344,6 +1416,11 @@
       // The rail, which is inside a closed shadow root and cannot be reached
       // with a selector.
       rail: handle.rail,
+      // The reload guard's clock: a spec shortens the window rather than
+      // sitting out ten real seconds, and can see how long ago the reviewer
+      // last touched anything.
+      interactionBusy: handle.interactionBusy,
+      sinceInteraction: handle.sinceInteraction,
       status: function () {
         return handle.rail.getStatusLine();
       },

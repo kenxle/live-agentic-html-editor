@@ -107,7 +107,12 @@
     // as a literal in two files is a leak the registry count cannot see: the
     // handlers pile up under a name the remount never asks about.
     COMMENTS: "comments", // the comment surface's keydown, mousemove, click
-    EDITING: "editing" // the editing surface's keydown, click, and block input
+    EDITING: "editing", // the editing surface's keydown, click, and block input
+    // "has the reviewer touched anything lately", which the reload guard asks.
+    // Its own group because it is bound once for the life of the page and a
+    // remount must NOT clear it: a page that forgets the reviewer is reading
+    // will reload out from under them, which is the bug it exists to prevent.
+    INTERACTION: "interaction"
   };
 
   var shared = createRegistry();

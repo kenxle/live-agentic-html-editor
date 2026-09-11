@@ -250,6 +250,11 @@ test.describe("a handled hand edit that was reverted reopens itself", () => {
       message: "the layer to boot from its own script tag",
       timeoutMs: 20000
     });
+    // A LAHE reload now waits for the reviewer to be still (see INTERACTION_BUSY_MS
+    // in index.js: a card must not vanish out from in front of someone reading
+    // it). This suite types and clicks and then expects a reload, so it shortens
+    // that window rather than sitting out ten real seconds per test.
+    await page.evaluate(() => window.__lahe.interactionBusy(50));
   }
 
   function itemState(page, itemId) {

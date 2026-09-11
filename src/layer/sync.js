@@ -183,6 +183,19 @@
   var VIEWPORT_MARKER_VERSION = 1;
   var VIEWPORT_MARKER_KEY = "lahe.viewport.v1";
 
+  // The rail's own marker, beside the viewport one and never inside it: the
+  // viewport marker is about where the PAGE was, this is about what the TOOL
+  // was showing, they are written by different owners, and a malformed or
+  // missing one of these must not cost the reviewer the other.
+  //
+  // Why it exists: Ken clicked a toast, the rail opened on the card, and two
+  // seconds later a rebuild for a different review reloaded the page. The rail
+  // came back in its default state and the card he was reading "disappeared out
+  // from in front of me". A reload the tool starts on its own must give the
+  // reviewer back exactly what it took.
+  var RAIL_MARKER_VERSION = 1;
+  var RAIL_MARKER_KEY = "lahe.rail.v1";
+
   function removeViewportMarker(storage) {
     try {
       if (storage && typeof storage.removeItem === "function") storage.removeItem(VIEWPORT_MARKER_KEY);
@@ -851,6 +864,91 @@
   }
 
   /**
+   * Remember what the rail was showing, for the reload LAHE is about to start.
+   *
+   * A sibling of saveViewportForReload, deliberately not a change to it. Same
+   * moment, same storage, its own key: this one can fail (or be absent, on a
+   * page with no rail state worth keeping) without touching the scroll restore,
+   * and the scroll restore's own rules about fragments and history mode are
+   * none of this one's business.
+   *
+   * @param {Window} win
+   * @param {string} review
+   * @param {object} state from overlay's railState()
+   */
+  function saveRailForReload(win, review, state) {
+    if (!win || !win.location || !review || !state) return false;
+    var storage = null;
+    try {
+      storage = win.sessionStorage;
+    } catch (error) {
+      return false;
+    }
+    if (!storage || typeof storage.setItem !== "function") return false;
+
+    var href = typeof win.location.href === "string" ? win.location.href : "";
+    if (!href) return false;
+    try {
+      storage.setItem(
+        RAIL_MARKER_KEY,
+        JSON.stringify({
+          version: RAIL_MARKER_VERSION,
+          exactHref: href,
+          review: review,
+          collapsed: state.collapsed === true,
+          tab: state.tab || null,
+          scroll: typeof state.scroll === "number" && Number.isFinite(state.scroll) ? state.scroll : 0,
+          focused: state.focused || null
+        })
+      );
+    } catch (error) {
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Consume the rail marker, once, on the next boot of the same page.
+   *
+   * Same match rules as the viewport marker for the same reason: a stale marker
+   * from another page or another review must not rearrange the rail on a page
+   * the reviewer navigated to themselves. Removed on read whatever the verdict,
+   * so it can never apply twice.
+   *
+   * @returns {object|null} the state to hand to overlay's applyRailState
+   */
+  function restoreRailAfterReload(win, review) {
+    if (!win || !win.location || !review) return null;
+    var raw = null;
+    try {
+      var storage = win.sessionStorage;
+      if (!storage || typeof storage.getItem !== "function") return null;
+      raw = storage.getItem(RAIL_MARKER_KEY);
+      if (raw !== null && typeof storage.removeItem === "function") storage.removeItem(RAIL_MARKER_KEY);
+    } catch (error) {
+      return null;
+    }
+    if (!raw) return null;
+
+    var marker = null;
+    try {
+      marker = JSON.parse(raw);
+    } catch (error) {
+      return null;
+    }
+    var href = typeof win.location.href === "string" ? win.location.href : "";
+    if (!marker || marker.version !== RAIL_MARKER_VERSION) return null;
+    if (marker.exactHref !== href || marker.review !== review) return null;
+    if (navigationType(win) === "back_forward") return null;
+    return {
+      collapsed: marker.collapsed === true,
+      tab: marker.tab || null,
+      scroll: typeof marker.scroll === "number" ? marker.scroll : 0,
+      focused: marker.focused || null
+    };
+  }
+
+  /**
    * Consume LAHE's one-shot viewport marker on the next normal document boot.
    *
    * Exact URL and review matching prevents a stale same-tab marker from moving
@@ -991,6 +1089,9 @@
     // the moment before the reload, where the rail says so in plain words.
     var isBusy = opts.isBusy || function () { return false; };
     var onPageChanged = opts.onPageChanged || function () {};
+    // What the rail is showing, asked for at the last possible moment before
+    // the document goes away. A caller with no rail simply does not pass it.
+    var railState = typeof opts.railState === "function" ? opts.railState : null;
     var reloadDebounceMs = typeof opts.reloadDebounceMs === "number" ? opts.reloadDebounceMs : RELOAD_DEBOUNCE_MS;
     var reloadNoticeMs = typeof opts.reloadNoticeMs === "number" ? opts.reloadNoticeMs : RELOAD_NOTICE_MS;
     // The window-session state machine (D5, findings 1/2/3/12, NEW-2). onRefused
@@ -1675,6 +1776,15 @@
           // What the page says right now, so the page that replaces it can show
           // the reviewer what the agent changed.
           saveBlockSnapshot(win, review);
+          // And what the TOOL was showing, so a card the reviewer was reading
+          // is still in front of them afterwards.
+          if (typeof railState === "function") {
+            try {
+              saveRailForReload(win, review, railState());
+            } catch (error) {
+              // A rail that cannot describe itself must not cost the reload.
+            }
+          }
           win.location.reload();
         }
       }, reloadNoticeMs);
@@ -2457,6 +2567,10 @@
     topBlockAnchor: topBlockAnchor,
     findUniqueBlock: findUniqueBlock,
     saveViewportForReload: saveViewportForReload,
+    RAIL_MARKER_KEY: RAIL_MARKER_KEY,
+    RAIL_MARKER_VERSION: RAIL_MARKER_VERSION,
+    saveRailForReload: saveRailForReload,
+    restoreRailAfterReload: restoreRailAfterReload,
     restoreViewportAfterReload: restoreViewportAfterReload,
     lastReloadRestore: lastReloadRestore,
     steadyAfterReload: steadyAfterReload,
