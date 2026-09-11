@@ -14,7 +14,10 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 - [ ] @anyone 2026-09-11 LAHE-stabilization-pass -- **A cleanup, architecture, and
   code review pass over everything that landed 2026-09-08 to 2026-09-11 without
-  a brief.** Ken: "I've been throwing so many things at you for this without
+  a brief.** **Deadline: land before Monday 2026-09-14.** Ken's second stclair.ai
+  article (the chat window piece) publishes that day and links here, so LAHE gets
+  more traction right after; Ken (2026-09-11): "we need to finish the article and do
+  a cleanup pass on the lahe editor since it will get more traction after this." Ken: "I've been throwing so many things at you for this without
   really briefing them or specing them out, so we may need to do a pass of
   cleanup and architecture and code review." What landed in that window, each
   as a bug report turned straight into a builder dispatch:
