@@ -16,6 +16,12 @@
 //      reviewer's own work back to them.
 //   4. The mark fades and is gone. It is an attention mark, never a state.
 //
+// And the one this feature got wrong first time round, reported by Ken on a
+// reveal.js deck: a countdown timer and a slide number rewrite themselves every
+// second, and both lit up as though the agent had written them. A page that
+// changes itself is never the agent, so the page is read twice before it goes
+// away and anything that moved between those two readings is left out.
+//
 // A live helper is required (the reload trigger is the reviewed file's mtime),
 // so this serves a real file from a real directory, like auto_reload.spec.js.
 
@@ -25,7 +31,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const { test, expect, pollPage, placeCaret, startStaticServer, startService } = require("../helpers");
+const { test, expect, pollPage, pollUntil, placeCaret, startStaticServer, startService } = require("../helpers");
 const protocol = require("../../src/shared/protocol.js");
 const highlightModule = require("../../src/layer/highlight.js");
 const replayModule = require("../../src/layer/replay.js");
@@ -38,6 +44,14 @@ const ORIGINAL = "Runners come back too fast after a layoff.";
 const REWRITTEN = "Runners come back too fast, and the third week is where it shows.";
 const ADDED = "A new paragraph the agent wrote in answer to the comment.";
 const MINE_BEFORE = "The reviewer will rewrite this sentence themselves.";
+// The page's own moving parts, inlined from a fixture asset because a test file
+// may not hold a timer.
+const TICKER = fs.readFileSync(path.join(__dirname, "..", "fixtures", "assets", "ticking-counter.js"), "utf8");
+const MOVING_PARTS = [
+  '<p id="clock">0:00</p>',
+  '<p id="pagenum">1 / 40</p>',
+  '<p id="status">Recalculating the pace band for this week right now.</p>'
+].join("\n");
 const MINE_APPENDED = " And they added this themselves.";
 const MINE_AFTER = MINE_BEFORE + MINE_APPENDED;
 
@@ -48,8 +62,19 @@ function docHtml(helperOrigin, token, edition, body) {
     '<body>\n<main>\n<h1 id="edition">' +
     edition +
     "</h1>\n" +
+    // The moving parts come FIRST, so a rebuild that adds a paragraph does not
+    // shift their position. That is the shape a deck has (a timer and a slide
+    // number in a corner, the content below), and it is the shape the exclusion
+    // is exact for: a self-changing block that a rebuild pushes DOWN the page
+    // keeps only the counter guard, since both its position and its text have
+    // moved on.
+    MOVING_PARTS +
+    "\n" +
     body +
     "\n</main>\n" +
+    "<script>\n" +
+    TICKER +
+    "\n</script>\n" +
     '<script src="' +
     helperOrigin +
     '/lahe-layer.js" ' +
@@ -131,6 +156,28 @@ function markedIds(page, names) {
   }, names);
 }
 
+/**
+ * Wait until the page has been read TWICE: once at boot, once when the settling
+ * window closed. That second reading is what tells the page's own moving parts
+ * from the agent's edits, so a rebuild that beats it has only the boot reading
+ * to go on and the counter guard to fall back to.
+ */
+async function readTwice(page) {
+  await pollPage(page, () => window.LAHE.sync.stableBlocks() !== null, undefined, {
+    message: "the page to be read once at boot"
+  });
+  const firstReading = await page.evaluate(() => window.LAHE.sync.stableBlocks().join("|"));
+  await pollPage(
+    page,
+    (was) => {
+      const now = window.LAHE.sync.stableBlocks();
+      return !!now && now.join("|") !== was;
+    },
+    firstReading,
+    { message: "the settled reading to catch the page moving on its own", timeoutMs: replayModule.SETTLE_MS + 10000 }
+  );
+}
+
 /** The reviewer's gesture: open the block, type into it, commit. */
 async function rewriteMine(page) {
   await placeCaret(page, { selector: "#mine", offset: 0 });
@@ -195,6 +242,8 @@ test.describe("the reviewer can see what the agent changed", () => {
       message: "the first poll to establish the baseline mtime"
     });
 
+    await readTwice(page);
+
     // The reviewer's own edit, which replay re-applies after the reload. It is
     // on both sides of the comparison, so it is not news.
     await rewriteMine(page);
@@ -230,6 +279,7 @@ test.describe("the reviewer can see what the agent changed", () => {
       message: "the first poll to establish the baseline mtime"
     });
 
+    await readTwice(page);
     write(filePath, secondEdition(service.url, token));
     await pollPage(page, () => document.querySelector("#edition").textContent === "Second edition", undefined, {
       message: "the page to reload itself onto the rebuilt file",
@@ -259,7 +309,7 @@ test.describe("the reviewer can see what the agent changed", () => {
     expect(await markedIds(page, CHANGED_NAMES), "nothing is left painted").toEqual([]);
   });
 
-  test("a change that lands with no reload at all is marked too", async ({ page }) => {
+  test("nothing the page changes by itself is ever marked", async ({ page }) => {
     write(filePath, firstEdition(service.url, token));
     await page.goto(pages.origin + "/" + PAGE_FILE);
     await booted(page);
@@ -267,21 +317,50 @@ test.describe("the reviewer can see what the agent changed", () => {
       message: "the first poll to establish the baseline mtime"
     });
 
-    // The baseline this page will compare against. On a reload it comes from
-    // the page that left; here the page takes its own, which is what the boot
-    // pass does on a first load.
-    await page.evaluate(() => window.__lahe.handle.paintWhatChanged(null));
+    // The timer gives itself away between the two readings of this page.
+    await readTwice(page);
 
-    // The page rewrites a paragraph on its own: a dev server hot-swapping it,
-    // or an app repainting a section.
+    write(filePath, secondEdition(service.url, token));
+    await pollPage(page, () => document.querySelector("#edition").textContent === "Second edition", undefined, {
+      message: "the page to reload itself onto the rebuilt file",
+      timeoutMs: 20000
+    });
+    await booted(page);
+    await pollPage(page, () => window.__lahe.handle.changedBlocks().length > 0, undefined, {
+      message: "the changed blocks to be marked",
+      timeoutMs: replayModule.SETTLE_MS + 10000
+    });
+
+    expect(
+      await markedIds(page, CHANGED_NAMES),
+      "the agent's paragraphs, and never the clock, the slide number or the status line"
+    ).toEqual(["added", "reworded"]);
+  });
+
+  test("a change with no reload behind it paints nothing at all", async ({ page }) => {
+    write(filePath, firstEdition(service.url, token));
+    await page.goto(pages.origin + "/" + PAGE_FILE);
+    await booted(page);
+    await pollPage(page, () => !!window.__lahe.handle.sync.status().targetMtime, undefined, {
+      message: "the first poll to establish the baseline mtime"
+    });
+
+    // A dev server hot-swapping a block, or the page rewriting one on its own.
+    // Nobody rebuilt anything the reviewer asked for, so there is nothing to
+    // report and nothing is painted.
     await page.evaluate((text) => {
       document.querySelector("#reworded").textContent = text;
     }, REWRITTEN);
 
-    await pollPage(page, () => window.__lahe.handle.changedBlocks().length > 0, undefined, {
-      message: "the hot-swapped paragraph to be marked",
-      timeoutMs: 10000
-    });
-    expect(await markedIds(page, CHANGED_NAMES), "only the block whose text changed").toEqual(["reworded"]);
+    // Two reply polls is long past the debounce the old mutation path used,
+    // measured on a counter the library already keeps rather than on a clock.
+    const polls = await page.evaluate(() => window.__lahe.handle.sync.status().counters.polls);
+    await pollUntil(
+      async () => (await page.evaluate(() => window.__lahe.handle.sync.status().counters.polls)) >= polls + 3,
+      { timeoutMs: 20000, message: "the page to sit with its own mutation on it" }
+    );
+
+    expect(await page.evaluate(() => window.__lahe.handle.changedBlocks())).toEqual([]);
+    expect(await markedIds(page, CHANGED_NAMES), "a page mutating itself is never the agent").toEqual([]);
   });
 });

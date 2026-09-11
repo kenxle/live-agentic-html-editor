@@ -331,6 +331,40 @@
     return out;
   }
 
+  /**
+   * Where a block SITS, written so it survives a rebuild.
+   *
+   * Tag names and sibling positions from the body down: "MAIN[0]/P[3]". A bare
+   * index into the block list does not survive, and that is not a theory. The
+   * reviewer edits a paragraph, so that paragraph is one of the blocks that
+   * differ between the old page's two readings; the agent then adds a paragraph
+   * above it; and the added paragraph lands on the index the edited one used to
+   * hold, so the one thing the reviewer most needs to see is the one thing that
+   * gets suppressed. A structural path moves only when the structure above the
+   * element moves, which is the right sensitivity for "this is the same slide
+   * number in the same corner of the page".
+   *
+   * @returns {string} the path, or "" when it cannot be computed
+   */
+  function blockPath(el) {
+    if (!el || el.nodeType !== 1) return "";
+    var parts = [];
+    var node = el;
+    var guard = 0;
+    while (node && node.nodeType === 1 && node.tagName !== "BODY" && guard < 40) {
+      var index = 0;
+      var sibling = node.previousElementSibling;
+      while (sibling) {
+        if (sibling.tagName === node.tagName) index += 1;
+        sibling = sibling.previousElementSibling;
+      }
+      parts.push(node.tagName + "[" + index + "]");
+      node = node.parentElement;
+      guard += 1;
+    }
+    return parts.reverse().join("/");
+  }
+
   /** Every leaf block's normalized text, in document order. */
   function blockTextsIn(doc) {
     return blockCandidates(doc).map(function (entry) {
@@ -420,6 +454,16 @@
   var BLOCK_SNAPSHOT_VERSION = 1;
   var BLOCK_SNAPSHOT_KEY = "lahe.blocks.v1";
 
+  // WHY THE REASON IS STORED, and why it gates the whole comparison.
+  //
+  // The mark means "the agent changed this". A reload that happened for any
+  // other reason (the helper healing the script line back in, a second window
+  // taking over, the reviewer pressing reload themselves) has no agent edit
+  // behind it, so there is nothing to report and the comparison does not run.
+  // Only the reload LAHE fires because the reviewed file's mtime moved carries
+  // this reason, and takeBlockSnapshot refuses anything else.
+  var RELOAD_REASON = { REBUILT: "target_mtime" };
+
   // The cap, in two numbers, and what happens at it: nothing is stored and the
   // feature sits out that one reload. A page big enough to hit this is a page
   // where the diff would cost more than the paint is worth, and a highlight that
@@ -427,17 +471,107 @@
   var SNAPSHOT_MAX_BLOCKS = MAX_BLOCKS_SCANNED;
   var SNAPSHOT_MAX_BYTES = 1048576;
 
+  // A PAGE THAT CHANGES ITSELF IS NOT THE AGENT, and this is the whole of that
+  // rule.
+  //
+  // Ken, on a reveal.js deck: "that countdown timer is automatically dynamic.
+  // The agent is not changing it, but the highlight is applying to it because
+  // it's changing. I'm seeing that on page number changes as well. That's not
+  // how the highlight should work. It should only be things that the agent
+  // changed, not anything that changes."
+  //
+  // So the old page is read TWICE before it goes away: once when it has settled
+  // after boot, and once at reload time. Anything whose words moved between
+  // those two readings moved on its own, because no rebuild happened in between.
+  // A clock, a countdown, a slide number, a hit counter: all of them announce
+  // themselves that way, and all of them are excluded from the comparison the
+  // next page runs.
+  //
+  // The exclusion is by POSITION and by TEXT, because either one alone leaks:
+  // the block may sit at a different index after the rebuild, and the text it
+  // shows may be a third value by then.
+
+  // The reading taken when this page settled. Set by index.js at boot and again
+  // at the end of replay's settling window, so a reload that beats the settle
+  // still has a baseline to compare against.
+  var stableBlockTexts = null;
+
+  function noteStableBlocks(texts) {
+    stableBlockTexts = Array.isArray(texts) ? texts.slice() : null;
+    return stableBlockTexts;
+  }
+
+  function stableBlocks() {
+    return stableBlockTexts;
+  }
+
+  /**
+   * Which blocks moved on their own between two readings of the SAME page.
+   *
+   * Positional, deliberately. Nothing rebuilt between the two readings, so a
+   * block that is at a different index is a block the page added or removed by
+   * itself, and a page doing that is a page whose comparison cannot be trusted
+   * anyway. The result there is conservative: many positions differ, many
+   * exclusions, and the next page paints little or nothing. Painting nothing is
+   * the right failure for a mark that means "the agent did this".
+   *
+   * @returns {{indexes: Array<number>, texts: Array<string>}}
+   */
+  function selfChangingBlocks(baseline, current) {
+    var indexes = [];
+    var texts = [];
+    if (!Array.isArray(baseline) || !Array.isArray(current)) return { indexes: indexes, texts: texts };
+    var span = Math.max(baseline.length, current.length);
+    for (var i = 0; i < span; i += 1) {
+      var was = baseline[i];
+      var now = current[i];
+      if (was === now) continue;
+      indexes.push(i);
+      if (typeof was === "string" && texts.indexOf(was) === -1) texts.push(was);
+      if (typeof now === "string" && texts.indexOf(now) === -1) texts.push(now);
+    }
+    return { indexes: indexes, texts: texts };
+  }
+
+  // A block this short that is only digits and the punctuation counters are
+  // written with is almost certainly a counter: "12:04", "3 / 40", "87%",
+  // "2 of 9".
+  var COUNTER_TEXT_MAX = 12;
+
+  /**
+   * A GUARD, NOT THE RULE. The rule is the two readings above, and it catches a
+   * counter that actually ticked. This catches the one that happened to hold
+   * still across both readings and then ticked after the reload, which would
+   * otherwise be painted as the agent's work. It is deliberately narrow: short,
+   * and nothing in it but digits, the separators counters use, and the word
+   * "of". Any real sentence fails it.
+   */
+  function looksLikeACounter(text) {
+    if (typeof text !== "string") return false;
+    if (!text || text.length >= COUNTER_TEXT_MAX) return false;
+    if (!/\d/.test(text)) return false;
+    return text.replace(/of/gi, "").replace(/[\d\s:/%.,-]/g, "") === "";
+  }
+
   /**
    * The stored form, or null when it is over the cap.
    *
    * @returns {string|null} the JSON to store
    */
-  function snapshotPayload(review, href, texts) {
+  function snapshotPayload(review, href, texts, excluded, reason) {
     if (!Array.isArray(texts) || texts.length === 0) return null;
     if (texts.length > SNAPSHOT_MAX_BLOCKS) return null;
     var json;
     try {
-      json = JSON.stringify({ version: BLOCK_SNAPSHOT_VERSION, exactHref: href, review: review, texts: texts });
+      json = JSON.stringify({
+        version: BLOCK_SNAPSHOT_VERSION,
+        exactHref: href,
+        review: review,
+        reason: reason || RELOAD_REASON.REBUILT,
+        texts: texts,
+        excludedPaths: (excluded && excluded.paths) || [],
+        excludedTexts: (excluded && excluded.texts) || []
+      });
     } catch (error) {
       return null;
     }
@@ -446,7 +580,7 @@
   }
 
   /** Write down what this page says, for the page that replaces it. */
-  function saveBlockSnapshot(win, review) {
+  function saveBlockSnapshot(win, review, reason) {
     if (!win || !win.location || !review) return false;
     var storage = null;
     try {
@@ -458,7 +592,18 @@
     var href = typeof win.location.href === "string" ? win.location.href : "";
     var json = null;
     try {
-      json = snapshotPayload(review, href, blockTextsIn(win.document));
+      var entries = blockCandidates(win.document);
+      var texts = entries.map(function (entry) {
+        return entry.text;
+      });
+      var moving = selfChangingBlocks(stableBlockTexts, texts);
+      var excluded = { paths: [], texts: moving.texts };
+      moving.indexes.forEach(function (index) {
+        var entry = entries[index];
+        var path = entry ? blockPath(entry.el) : "";
+        if (path && excluded.paths.indexOf(path) === -1) excluded.paths.push(path);
+      });
+      json = snapshotPayload(review, href, texts, excluded, reason);
     } catch (error) {
       json = null;
     }
@@ -478,7 +623,8 @@
    * Read the outgoing page's blocks, ONCE. The key is removed on the way past
    * whatever the answer is, so a snapshot is never used twice.
    *
-   * @returns {Array<string>|null}
+   * @returns {{texts: Array<string>, excludedPaths: Array<string>,
+   *            excludedTexts: Array<string>}|null}
    */
   function takeBlockSnapshot(win, review) {
     if (!win || !win.location || !review) return null;
@@ -501,11 +647,19 @@
     var href = typeof win.location.href === "string" ? win.location.href : "";
     if (!stored || stored.version !== BLOCK_SNAPSHOT_VERSION) return null;
     if (stored.review !== review || stored.exactHref !== href) return null;
-    return Array.isArray(stored.texts) ? stored.texts : null;
+    // Only the agent's rebuild has anything to report. See RELOAD_REASON.
+    if (stored.reason !== RELOAD_REASON.REBUILT) return null;
+    if (!Array.isArray(stored.texts)) return null;
+    return {
+      texts: stored.texts,
+      excludedPaths: Array.isArray(stored.excludedPaths) ? stored.excludedPaths : [],
+      excludedTexts: Array.isArray(stored.excludedTexts) ? stored.excludedTexts : []
+    };
   }
 
   /**
-   * Which blocks of the new page are new or changed.
+   * Which blocks of the new page are new or different, minus the ones that were
+   * never the agent's doing.
    *
    * A MULTISET DIFFERENCE, not a longest common subsequence. LCS is the textbook
    * answer and it is the wrong one here: it is O(n*m), which at the 4000-block
@@ -519,28 +673,33 @@
    *   a block that only MOVED                               not painted, which
    *                                                         is right: nothing
    *                                                         about it changed
-   *   a paragraph that now appears twice where it appeared  the second copy is
+   *   a paragraph that now appears twice where it appeared   the second copy is
    *   once                                                  painted, because the
    *                                                         count is tracked
+   *   a block the old page was already changing by itself    never painted; see
+   *                                                          selfChangingBlocks
    *
    * REMOVALS ARE NOT PAINTED, and that is deliberate rather than missing. Text
    * that is gone has nothing to paint, and marking the block that now sits where
    * it used to be would put a change highlight on words that did not change,
    * which is worse than saying nothing.
    *
-   * @param {Array<string>} before the old page's block texts, in order
+   * @param {Object|Array<string>|null} before the snapshot the old page stored,
+   *        or just its texts
    * @param {Array<string>} after  the new page's block texts, in order
    * @returns {Array<number>} indexes into `after`
    */
   function diffBlockTexts(before, after) {
     var changed = [];
     if (!Array.isArray(after) || after.length === 0) return changed;
+    var snapshot = Array.isArray(before) ? { texts: before } : before || {};
+    var texts = Array.isArray(snapshot.texts) ? snapshot.texts : null;
     // No baseline is not "everything changed". A first load has nothing to
     // compare against, and lighting the whole page up would be noise.
-    if (!Array.isArray(before) || before.length === 0) return changed;
+    if (!texts || texts.length === 0) return changed;
     var counts = Object.create(null);
-    for (var i = 0; i < before.length; i += 1) {
-      var key = "t:" + before[i];
+    for (var i = 0; i < texts.length; i += 1) {
+      var key = "t:" + texts[i];
       counts[key] = (counts[key] || 0) + 1;
     }
     for (var j = 0; j < after.length; j += 1) {
@@ -549,6 +708,28 @@
       else changed.push(j);
     }
     return changed;
+  }
+
+  /**
+   * Should this block be left alone, however different it looks?
+   *
+   * Three reasons, and the first two are the rule: the page was already
+   * changing this block by itself (its path, or one of the texts it wore), or it
+   * reads as a counter. The caller has the element, which is why the path is
+   * passed in rather than looked up here.
+   *
+   * @param {Object|null} snapshot from takeBlockSnapshot
+   * @param {string} text the block's normalized text now
+   * @param {string} path blockPath(el)
+   * @returns {boolean}
+   */
+  function isExcludedBlock(snapshot, text, path) {
+    if (looksLikeACounter(text)) return true;
+    if (!snapshot) return false;
+    var texts = Array.isArray(snapshot.excludedTexts) ? snapshot.excludedTexts : [];
+    if (texts.indexOf(text) !== -1) return true;
+    var paths = Array.isArray(snapshot.excludedPaths) ? snapshot.excludedPaths : [];
+    return !!path && paths.indexOf(path) !== -1;
   }
 
   // ---------------------------------------------------------------------------
@@ -1775,7 +1956,7 @@
           saveViewportForReload(win, review);
           // What the page says right now, so the page that replaces it can show
           // the reviewer what the agent changed.
-          saveBlockSnapshot(win, review);
+          saveBlockSnapshot(win, review, RELOAD_REASON.REBUILT);
           // And what the TOOL was showing, so a card the reviewer was reading
           // is still in front of them afterwards.
           if (typeof railState === "function") {
@@ -2560,6 +2741,14 @@
     BLOCK_SNAPSHOT_VERSION: BLOCK_SNAPSHOT_VERSION,
     SNAPSHOT_MAX_BLOCKS: SNAPSHOT_MAX_BLOCKS,
     SNAPSHOT_MAX_BYTES: SNAPSHOT_MAX_BYTES,
+    RELOAD_REASON: RELOAD_REASON,
+    COUNTER_TEXT_MAX: COUNTER_TEXT_MAX,
+    looksLikeACounter: looksLikeACounter,
+    selfChangingBlocks: selfChangingBlocks,
+    isExcludedBlock: isExcludedBlock,
+    blockPath: blockPath,
+    noteStableBlocks: noteStableBlocks,
+    stableBlocks: stableBlocks,
     snapshotPayload: snapshotPayload,
     saveBlockSnapshot: saveBlockSnapshot,
     takeBlockSnapshot: takeBlockSnapshot,

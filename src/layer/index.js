@@ -764,6 +764,13 @@
     var TOOK_BACK_NOTICE = "You took this back. The agent is asked to remove it from the source.";
 
     editing.onChange(function (item) {
+      // The reviewer just changed a block, so the reading this page compares
+      // against has to include it. Without this their own edit looks like a
+      // block the page changed by itself, it lands in the exclusion set, and
+      // whatever occupies that position after the rebuild is silently not
+      // painted: the agent's new paragraph, most often, which is the one thing
+      // they most need to see.
+      ns.sync.noteStableBlocks(ns.sync.blockTextsIn(doc));
       // No sync call here: editing posts through the sync it was handed, on the
       // same act that wrote the record, and posts the delete on the act that
       // removes one (its unpersist, reached from undo and retire). And NO replay pass here either. The pass
@@ -949,13 +956,14 @@
     // to the page that arrived, so a re-applied edit is identical on both sides
     // and cancels. What is left is what the agent did.
 
-    // The block texts this page last saw. The baseline for a change that lands
-    // with no reload at all.
-    var blockTextsSeen = null;
-
-    // A page can repaint itself in bursts. One scan per burst.
-    var CHANGE_SCAN_DEBOUNCE_MS = 250;
-    var changeScanTimer = null;
+    // A MUTATING PAGE IS NOT AN AGENT EDIT, and this mark only ever means the
+    // agent. An earlier version of this also painted changes that landed with
+    // no reload, on the theory that a dev server hot-swapping a block was the
+    // same event. It is not, and a reveal.js deck showed why: a countdown timer
+    // and a slide number both rewrite themselves every second, and both lit up.
+    // There is no way to tell a self-changing element from a hot swap from
+    // inside the page, so the whole path is gone. The comparison runs once, on
+    // the reload LAHE fired because the agent rebuilt the file.
 
     /**
      * Is the reviewer in this block right now?
@@ -982,9 +990,12 @@
     }
 
     /**
-     * Paint every block whose text is new or different, against a baseline.
+     * Paint every block whose text is new or different, against the snapshot the
+     * page that left wrote down.
      *
-     * @param {Array<string>|null} before the texts to compare against
+     * @param {Object|null} before the snapshot from sync.takeBlockSnapshot,
+     *        which carries the old page's texts AND the blocks it was already
+     *        changing on its own
      * @returns {number} how many blocks were marked
      */
     function paintWhatChanged(before) {
@@ -1002,6 +1013,10 @@
       changed.forEach(function (index) {
         var el = entries[index].el;
         if (!el || !el.isConnected) return;
+        // The page's own moving parts: a clock, a slide number, a status line
+        // that rewrites itself. The old page said which ones those were, by
+        // where they sit and by the text they wore. See sync.isExcludedBlock.
+        if (ns.sync.isExcludedBlock(before, entries[index].text, ns.sync.blockPath(el))) return;
         if (blockIsBusy(el)) return;
         var range = doc.createRange();
         range.selectNodeContents(el);
@@ -1009,31 +1024,12 @@
         // same thing are two marks rather than one overwriting the other.
         if (comments.highlights.markChanged(index + ":" + entries[index].text, range)) marked += 1;
       });
-      blockTextsSeen = texts;
+      // This page's reading, for the snapshot it will write down if it is
+      // reloaded. Taken after the settling window, so what it holds is the page
+      // standing still rather than the page still arriving.
+      ns.sync.noteStableBlocks(texts);
       counters.changesPainted += marked;
       return marked;
-    }
-
-    /**
-     * A change that lands with NO reload: a dev server hot-swapping the page,
-     * or the page rewriting a block on its own. Same mark, same fade, and
-     * deliberately narrow: only a block whose text is different from the one
-     * this page last saw.
-     */
-    function scanForChanges() {
-      changeScanTimer = null;
-      if (!handle || current !== handle) return 0;
-      // Replay's own writes are not news: they are the reviewer's records going
-      // back on, and they were on the page before too.
-      if (ns.epoch.isWriting()) return 0;
-      if (blockTextsSeen === null) return 0;
-      return paintWhatChanged(blockTextsSeen);
-    }
-
-    function noteMutationForChanges() {
-      if (blockTextsSeen === null) return;
-      if (changeScanTimer || typeof win.setTimeout !== "function") return;
-      changeScanTimer = win.setTimeout(scanForChanges, CHANGE_SCAN_DEBOUNCE_MS);
     }
 
     // The ORDINARY coalescing path, deliberately: no {immediate: true} anywhere
@@ -1046,7 +1042,6 @@
     if (typeof win.MutationObserver === "function" && doc.body) {
       pageObserver = new win.MutationObserver(function () {
         ns.replay.schedule(ns.replay.REASON.MUTATION);
-        noteMutationForChanges();
       });
       pageObserver.observe(doc.body, { childList: true, characterData: true, subtree: true });
     }
@@ -1146,6 +1141,13 @@
     // The first pass. Replay is what puts committed edits back on a page that
     // was reloaded, so it runs on boot and not only on a later repaint.
     ns.replay.schedule(ns.replay.REASON.BOOT);
+
+    // The first reading of this page's blocks, so that a rebuild landing before
+    // the settling window closes still has something to compare the reload-time
+    // reading against. The settled reading replaces it below; this is the one a
+    // fast rebuild falls back to. Two readings of the same page are what tells a
+    // countdown timer from an agent's edit.
+    ns.sync.noteStableBlocks(ns.sync.blockTextsIn(doc));
 
     // The reviewer's marks get the same second chance replay's lost verdicts
     // get. A page that finishes drawing itself after load (mermaid rendering a
@@ -1318,8 +1320,6 @@
         injector.teardown();
         if (pageObserver) pageObserver.disconnect();
         pageObserver = null;
-        if (changeScanTimer && typeof win.clearTimeout === "function") win.clearTimeout(changeScanTimer);
-        changeScanTimer = null;
         protect.uninstall();
         editing.teardown();
         comments.teardown();
