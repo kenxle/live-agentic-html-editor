@@ -1136,6 +1136,13 @@
       // CLOSED, per D8. Nothing outside the library can reach in, which is also
       // why this module answers holdsFocus and activeElementInfo itself.
       var shadow = host.attachShadow({ mode: "closed" });
+      // The page's own keyboard shortcuts do not reach the rail's text fields:
+      // the card's editable note, the follow-up composers, the page note. The
+      // surface root outside this one is fenced too, and that is not enough,
+      // because THIS root is closed as well: a listener out there sees the host
+      // div as both target and composedPath()[0], never the field. The whole
+      // reasoning, and the measurement, are at highlight.fenceTypingKeys.
+      highlightModule.fenceTypingKeys(shadow);
 
       var style = doc.createElement("style");
       style.textContent = CSS;

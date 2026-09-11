@@ -284,6 +284,89 @@
     return (0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b) / 255;
   }
 
+  // ---------------------------------------------------------------------------
+  // The typing fence
+  // ---------------------------------------------------------------------------
+
+  /**
+   * True for the things a person types into: the fields the fence is for.
+   *
+   * @param {any} node the event's real target, inside the closed root
+   * @returns {boolean}
+   */
+  function isTypingTarget(node) {
+    if (!node || node.nodeType !== 1) return false;
+    var tag = node.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+    return node.isContentEditable === true;
+  }
+
+  /**
+   * Keys typed into the library's own text fields stay in the library.
+   *
+   * A keyboard-driven page decides "is someone typing" by reading
+   * document.activeElement and asking whether it is an input, a textarea, or
+   * contenteditable. reveal.js is the one that caught this, and any deck or app
+   * with document-level hotkeys does the same thing. Everything the library
+   * draws lives inside a CLOSED shadow root, and the browser retargets focus
+   * across a shadow boundary: from the page's side the active element is the
+   * plain host div, which is not editable. So the page decides nobody is typing
+   * and handles the key, and a space pressed mid-sentence in a comment advances
+   * the slide.
+   *
+   * CALL THIS ON EVERY SHADOW ROOT THE LIBRARY OPENS, not just the outermost
+   * one. Retargeting happens at each boundary, and a CLOSED root hides its
+   * nodes from listeners outside it on composedPath() as well as on target.
+   * Measured in Chromium with a field in a closed root nested inside another
+   * closed root: at the inner root's own listener both target and
+   * composedPath()[0] are the TEXTAREA, and at the OUTER root's listener both
+   * are the inner host DIV. That is why the first version of this fence, which
+   * sat only on the surface root, held for a comment box anchored on the page
+   * and did nothing at all for the rail's own fields (the card's editable note,
+   * the follow-up composers, the page note), which live in the rail's nested
+   * root. Ken found it by correcting a comment in the rail on a reveal deck and
+   * watching the deck change slides.
+   *
+   * The fence sits on the roots rather than in each box because a root is a
+   * boundary the page can see across: every text field the library grows inside
+   * one is covered without anyone remembering to cover it, and there is one
+   * place to read when this behavior is in question.
+   *
+   * Stopping at the innermost root also stops the event completely, so a page
+   * that listens on window rather than on document is covered by the same line.
+   *
+   * Bubbling phase, so the field's own handlers at the target have already run:
+   * Cmd-Enter still commits a comment and Escape still closes a box. Never
+   * preventDefault, because typing must still type.
+   *
+   * The library's own document-level handlers are unaffected. comments.js and
+   * editing.js both register their keydown in the CAPTURE phase
+   * (listeners.on(target, "keydown", fn, true, ...)), so they run on the way
+   * down, before this listener ever sees the event.
+   *
+   * Keys aimed at non-text chrome pass through untouched: a reviewer who
+   * clicked a rail button and then pressed an arrow key still expects the page
+   * to move.
+   *
+   * Hand edits are out of scope by construction. They happen in the page's own
+   * DOM, where a contenteditable block is exactly what the page already checks
+   * for.
+   *
+   * @param {ShadowRoot} root a closed shadow root the library owns
+   * @returns {void}
+   */
+  function fenceTypingKeys(root) {
+    if (!root || typeof root.addEventListener !== "function") return;
+    var stop = function (event) {
+      var path = typeof event.composedPath === "function" ? event.composedPath() : null;
+      var target = (path && path[0]) || event.target;
+      if (isTypingTarget(target)) event.stopPropagation();
+    };
+    root.addEventListener("keydown", stop);
+    root.addEventListener("keyup", stop);
+    root.addEventListener("keypress", stop);
+  }
+
   function systemScheme(win) {
     if (win && typeof win.matchMedia === "function") {
       try {
@@ -613,68 +696,6 @@
     // cannot be styled by the page. The root is kept in this closure because a
     // closed root is not readable from the element, which is the point.
 
-    /**
-     * True for the things a person types into: the fields the fence is for.
-     *
-     * @param {any} node the event's real target, inside the closed root
-     * @returns {boolean}
-     */
-    function isTypingTarget(node) {
-      if (!node || node.nodeType !== 1) return false;
-      var tag = node.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
-      return node.isContentEditable === true;
-    }
-
-    /**
-     * Keys typed into the library's own text fields stay in the library.
-     *
-     * A keyboard-driven page decides "is someone typing" by reading
-     * document.activeElement and asking whether it is an input, a textarea, or
-     * contenteditable. reveal.js is the one that caught this, and any deck or
-     * app with document-level hotkeys does the same thing. Every field the
-     * library draws lives inside this CLOSED shadow root, and the browser
-     * retargets focus across a shadow boundary: from the page's side the active
-     * element is the plain host div, which is not editable. So the page decides
-     * nobody is typing and handles the key, and a space bar pressed mid-sentence
-     * in a comment box advances the slide.
-     *
-     * The fence sits on the root rather than in each box because the root is the
-     * boundary the page can see across: every text field the library grows from
-     * here on is covered without anyone remembering to cover it, and there is
-     * one place to read when this behavior is in question.
-     *
-     * Bubbling phase, so the field's own handlers at the target have already
-     * run: Cmd-Enter still commits a comment and Escape still closes a box.
-     * Never preventDefault, because typing must still type.
-     *
-     * The library's own document-level handlers are unaffected. comments.js and
-     * editing.js both register their keydown in the CAPTURE phase
-     * (listeners.on(target, "keydown", fn, true, ...)), so they run on the way
-     * down, before this listener ever sees the event.
-     *
-     * Keys aimed at non-text chrome pass through untouched: a reviewer who
-     * clicked a rail button and then pressed an arrow key still expects the page
-     * to move.
-     *
-     * Hand edits are out of scope by construction. They happen in the page's own
-     * DOM, where a contenteditable block is exactly what the page already checks
-     * for.
-     *
-     * @param {ShadowRoot} root the library's one closed shadow root
-     * @returns {void}
-     */
-    function fenceTypingKeys(root) {
-      var stop = function (event) {
-        var path = typeof event.composedPath === "function" ? event.composedPath() : null;
-        var target = (path && path[0]) || event.target;
-        if (isTypingTarget(target)) event.stopPropagation();
-      };
-      root.addEventListener("keydown", stop);
-      root.addEventListener("keyup", stop);
-      root.addEventListener("keypress", stop);
-    }
-
     function surface() {
       if (!doc) return { host: null, root: null };
       if (surfaceRoot && surfaceHost && surfaceHost.isConnected) {
@@ -839,6 +860,7 @@
     CHANGED_STEPS: CHANGED_STEPS,
     CHANGED_PREFIX: CHANGED_PREFIX,
     schemeForPage: schemeForPage,
+    fenceTypingKeys: fenceTypingKeys,
     createHighlights: createHighlights,
     shared: shared
   };

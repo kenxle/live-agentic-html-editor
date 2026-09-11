@@ -25,19 +25,37 @@
     // focus is retargeted and this check sees the plain shadow host, which is
     // not editable. Without a fence at the shadow boundary, every key typed in a
     // comment box also drives the page.
+    // Two counters, because pages differ on where they listen. reveal listens
+    // on document; plenty of decks and apps listen on window. A fence that
+    // stops the event at the library's boundary covers both, and counting them
+    // apart is what proves it.
     window.__hotkeys = 0;
+    window.__hotkeysWindow = 0;
     window.__hotkeyLog = [];
-    document.addEventListener("keydown", function (event) {
+
+    function typingSomewhereElse() {
       var active = document.activeElement;
-      if (active) {
-        var tag = active.tagName;
-        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-        if (active.isContentEditable) return;
-      }
-      if (event.key === " " || event.key === "ArrowRight" || event.key === "s") {
-        window.__hotkeys += 1;
-        window.__hotkeyLog.push(event.key);
-      }
+      if (!active) return false;
+      var tag = active.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+      return !!active.isContentEditable;
+    }
+
+    function isHotkey(event) {
+      return event.key === " " || event.key === "ArrowRight" || event.key === "s";
+    }
+
+    document.addEventListener("keydown", function (event) {
+      if (typingSomewhereElse()) return;
+      if (!isHotkey(event)) return;
+      window.__hotkeys += 1;
+      window.__hotkeyLog.push(event.key);
+    });
+
+    window.addEventListener("keydown", function (event) {
+      if (typingSomewhereElse()) return;
+      if (!isHotkey(event)) return;
+      window.__hotkeysWindow += 1;
     });
   </script>
 </body>
