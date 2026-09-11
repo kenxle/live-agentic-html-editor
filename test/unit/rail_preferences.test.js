@@ -31,11 +31,13 @@ test("rail collapse preference is versioned, review-scoped, and defaults open", 
   assert.equal(first.isCollapsed(), false, "a new review starts open");
   first.collapse(true);
 
-  // The bucket is written whole, so both preferences are always in it. `pill`
-  // is null until the reviewer moves it off its default corner.
+  // The bucket is written whole, so every preference is always in it. `pill` is
+  // null until the reviewer moves it off its default corner, and `width` until
+  // they drag the rail off its default width.
   assert.deepEqual(JSON.parse(backing.getItem(storeModule.UI_PREFIX + "review-a")), {
     collapsed: true,
-    pill: null
+    pill: null,
+    width: null
   });
   assert.equal(
     overlay.createRail({ document: null, store: store, reviewId: "review-a" }).isCollapsed(),
@@ -116,7 +118,8 @@ test("a moved pill is remembered as a corner and two offsets, never as a point",
 
   assert.deepEqual(store.readUiPreferences("review-a"), {
     collapsed: true,
-    pill: { h: "left", x: 12, v: "top", y: 90 }
+    pill: { h: "left", x: 12, v: "top", y: 90 },
+    width: null
   });
   assert.equal(store.readUiPreferences("review-b").pill, null, "another review keeps the default corner");
 });

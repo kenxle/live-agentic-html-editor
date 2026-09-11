@@ -248,6 +248,81 @@
   // second copy on every remount.
   var SHEET_ATTR = "data-lahe-sheet";
 
+  // ---------------------------------------------------------------------------
+  // How wide the rail is
+  // ---------------------------------------------------------------------------
+  //
+  // Ken: "some of these responses are getting quite thorough and long, so the
+  // chat rail should be drag-expandable." An agent's answer is a piece of
+  // reading now, and a column sized for a one-line status note is the wrong
+  // shape for it. So the reviewer drags the rail's left edge and the rail
+  // remembers where they left it.
+  //
+  // The default stays exactly what it was, expressed in CSS so a rail nobody
+  // has touched has no inline width at all: clamp(320px, 26vw, 392px).
+  //
+  // Nothing about the PAGE changes when the rail grows (D8). The rail is
+  // position:fixed inside a closed root, so its width is not part of any layout
+  // the page can see.
+
+  // The default width, as three numbers rather than a CSS string, so the one
+  // place it is spelled is here and the stylesheet is built from it. A rail
+  // nobody has dragged carries no inline width at all and wears this.
+  var RAIL_DEFAULT_MIN = 320;
+  var RAIL_DEFAULT_VW = 26;
+  var RAIL_DEFAULT_MAX = 392;
+
+  // The narrowest useful rail. Below this the cards' own controls start
+  // wrapping, so there is nothing to gain by letting the drag go further.
+  var RAIL_MIN_WIDTH = 280;
+  // The widest, as a share of the viewport. A rail past this is not a panel
+  // beside the page, it IS the page, and the reviewer can no longer see what
+  // they are reviewing.
+  var RAIL_MAX_FRACTION = 0.7;
+  // ...and never closer than this to the left edge, which is what keeps the
+  // fraction sane on a narrow window: 70% of a 480px phone would leave 144px of
+  // page, and this leaves a usable strip instead.
+  var RAIL_MAX_MARGIN = 48;
+  // The gap the rail keeps from the right edge of the viewport. It matches the
+  // `right` in the .rail rule, and it is the difference between the rail's own
+  // width and the allowance everything else keeps clear of.
+  var RAIL_EDGE_GAP = 16;
+  // One press of an arrow key. Small enough to tune with, large enough that the
+  // rail visibly moves.
+  var RAIL_KEY_STEP = 16;
+  // What the grip says it is, to a screen reader and to a test.
+  var RAIL_GRIP_LABEL = "Resize the review panel";
+
+  /**
+   * The width the rail may actually take, given the viewport it is in.
+   *
+   * Pure, and exported, because this is the whole of the resize policy: a test
+   * can state the rule without a browser, and the drag, the keyboard and the
+   * restore-from-storage path all clamp through this ONE function rather than
+   * each having its own idea of the bounds.
+   *
+   * The minimum wins a fight with the maximum. On a viewport too narrow for
+   * both, a rail clamped to something under RAIL_MIN_WIDTH is a rail whose
+   * cards have started wrapping, and a reviewer on a small window is better
+   * served by a readable panel that covers more of the page.
+   *
+   * @param {number} width          the width being asked for, in CSS pixels
+   * @param {number} [viewportWidth] the viewport's width, when there is one
+   * @returns {number|null} the width to use, rounded, or null for "not a width"
+   */
+  function clampRailWidth(width, viewportWidth) {
+    var want = Number(width);
+    if (!isFinite(want) || want <= 0) return null;
+    var view = Number(viewportWidth);
+    var max = null;
+    if (isFinite(view) && view > 0) {
+      max = Math.max(RAIL_MIN_WIDTH, Math.min(view * RAIL_MAX_FRACTION, view - RAIL_MAX_MARGIN));
+    }
+    if (want < RAIL_MIN_WIDTH) want = RAIL_MIN_WIDTH;
+    if (max !== null && want > max) want = max;
+    return Math.round(want);
+  }
+
   var CSS = [
     // all: initial stops every inheritable property of the host page (font,
     // color, line-height, letter-spacing) from reaching the rail. A closed
@@ -296,12 +371,38 @@
     // pointer-events comes back on here: the ONE page-level host is
     // pointer-events:none so the page stays clickable through it, and the two
     // things the rail actually draws turn it back on.
-    ".rail{position:fixed;top:16px;right:16px;bottom:16px;width:clamp(320px,26vw,392px);",
+    ".rail{position:fixed;top:16px;right:" + RAIL_EDGE_GAP + "px;bottom:16px;",
+    "width:clamp(" + RAIL_DEFAULT_MIN + "px," + RAIL_DEFAULT_VW + "vw," + RAIL_DEFAULT_MAX + "px);",
     "pointer-events:auto;",
     "display:flex;flex-direction:column;background:var(--paper);color:var(--ink);",
     "border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);",
     "overflow:hidden;font-size:13px;line-height:1.45;letter-spacing:.005em}",
     ".rail[hidden]{display:none}",
+
+    // --- the resize grip ------------------------------------------------------
+    // The rail is fixed to the right edge, so its LEFT edge is the one that
+    // moves. The grip is an 8px hit area along that edge: wide enough to catch
+    // with a mouse, narrow enough that it is not stealing presses from the
+    // cards beside it.
+    //
+    // Inside the rail rather than straddling its border, because .rail is
+    // overflow:hidden and anything hanging outside it would simply be clipped.
+    // The visible affordance is the 2px line, which is what the reviewer aims
+    // at, and it only appears on hover, focus or during a drag: a permanent
+    // line down the inside edge would read as a second border.
+    //
+    // NO TRANSITION ON WIDTH anywhere. A rail that eases toward the pointer
+    // feels broken while you are dragging it.
+    ".grip{position:absolute;left:0;top:0;bottom:0;width:8px;z-index:6;",
+    "cursor:col-resize;touch-action:none;background:none;border:0;padding:0}",
+    ".grip::after{content:'';position:absolute;left:3px;top:0;bottom:0;width:2px;background:transparent}",
+    ".grip:hover::after,.grip:focus-visible::after{background:var(--line)}",
+    ".grip[data-lahe-dragging]::after{background:var(--accent)}",
+    // The drag must not select the words it passes over, and it must not land a
+    // press on a card when the pointer is released. The grip itself keeps its
+    // events: it is the thing being dragged.
+    ".rail[data-lahe-resizing]{-webkit-user-select:none;user-select:none}",
+    ".rail[data-lahe-resizing]>*:not(.grip){pointer-events:none}",
 
     // position/z-index so the head's menu can hang over the panes below it.
     ".head{position:relative;z-index:3;display:flex;align-items:center;gap:10px;padding:13px 14px 12px;",
@@ -600,9 +701,12 @@
     // it: the eye is not down there, and a notification that has to be hunted
     // for is a notification that gets hunted for later, which is the whole
     // problem this exists to solve. Top right is where a person looks for one.
-    // It can land over the open rail, and that is fine: it is on screen for
-    // seconds and the rail is not going anywhere. The collapsed pill is
-    // bottom-right, so there is nothing to collide with.
+    // right:16px here is the COLLAPSED case, which is the one the toast exists
+    // for: nothing else is on screen, so the corner is free. With the rail open
+    // the column is moved left of it from JS (placeToasts), because a rail the
+    // reviewer can drag to most of the window is no longer something a toast
+    // can politely sit on top of for a few seconds. The collapsed pill is
+    // bottom-right, so there is nothing to collide with either way.
     //
     // It borrows nothing new: the card's own paper, the card's own border, the
     // accent rule the question block already uses down its left edge.
@@ -669,6 +773,13 @@
   // stacked up the side of a page is a second rail, which is the thing the
   // reviewer already closed.
   var TOAST_MAX = 3;
+  // The gap the toast column keeps from the open rail's left edge, and the
+  // narrowest the column may be squeezed to on the way to making that gap.
+  var TOAST_RAIL_GAP = 8;
+  var TOAST_MIN_WIDTH = 220;
+  // Two presses of the grip closer together than this are one double press,
+  // which puts the rail back to its default width.
+  var GRIP_DOUBLE_MS = 400;
   // How long the going-away fade runs. The CSS owns the animation; JS knows this
   // number for one reason only, which is when to take the node out of the DOM.
   // It matches the transition in the .toast[data-lahe-leaving] rule above.
@@ -858,6 +969,24 @@
     // that forced opening must not erase the choice to keep the rail collapsed.
     var preferredCollapsed = readCollapsedPreference();
     var collapsed = preferredCollapsed;
+    // How wide the reviewer dragged the rail, or null while they have left it
+    // at its default. Held UNCLAMPED: the clamp belongs to the viewport that is
+    // on screen right now, and a window dragged narrow and then wide again
+    // gives the reviewer their own width back rather than the one the small
+    // window forced.
+    var railWidth = readWidthPreference();
+    // Who wants to know the rail's width changed. The surfaces that keep clear
+    // of the rail read the published allowance instead (see publishRailAllowance);
+    // this is for a caller that wants to hear about it rather than measure.
+    var widthHandlers = [];
+    // The drag in progress, or null. Holds the width the drag started from, so
+    // Escape can put it back.
+    var gripDrag = null;
+    // When the grip was last pressed, for the double-press that resets the
+    // width. Read from pointerdown rather than from a dblclick event: the drag
+    // calls preventDefault on pointerdown, and what a browser does with the
+    // compatibility mouse events after that is not something to bet a control on.
+    var gripPressedAt = 0;
     var mounted = false;
     var limitText = null;
     // The whole agent_liveness object the helper last sent, or null before one
@@ -945,6 +1074,21 @@
 
       var rail = el("aside", "rail");
       rail.setAttribute("aria-label", "Review");
+
+      // The handle that widens the rail. A separator rather than a button: it
+      // does not do a thing when it is pressed, it divides the page from the
+      // panel, and a screen reader reading "Resize the review panel, separator,
+      // 392" is reading what it actually is. Focusable so the same move is
+      // available without a pointer.
+      var grip = el("div", "grip");
+      markers.markChrome(grip);
+      grip.setAttribute("role", "separator");
+      grip.setAttribute("aria-orientation", "vertical");
+      grip.setAttribute("aria-label", RAIL_GRIP_LABEL);
+      grip.setAttribute("aria-valuemin", String(RAIL_MIN_WIDTH));
+      grip.tabIndex = 0;
+      grip.title = RAIL_GRIP_LABEL;
+      rail.appendChild(grip);
 
       var head = el("div", "head");
       head.appendChild(el("span", "mark"));
@@ -1302,8 +1446,12 @@
 
       dom = {
         host: host,
+        // The library's ONE page-level host, kept because the rail's width is
+        // published on it as a custom property for the other surfaces to read.
+        surfaceHost: surface.host || null,
         shadow: shadow,
         rail: rail,
+        grip: grip,
         tabButtons: tabButtons,
         counts: counts,
         newmarks: newmarks,
@@ -1360,6 +1508,13 @@
       // library both make one.
       pillSpot = readPillPreference();
       applyPillSpot();
+      // The width the reviewer dragged the rail to, back on the rail, and the
+      // allowance published for everything that keeps clear of it. Read here as
+      // well as in setReview for the same reason the pill is: a rail built WITH
+      // a review id never goes through setReview at all.
+      railWidth = readWidthPreference();
+      bindGrip(grip, shadow);
+      applyRailWidth();
       if (mo.hidden) setCollapsed(true, false);
       if (refusalInfo) showRefusal(refusalInfo);
       return { rootId: markers.OVERLAY_ROOT_ID, remounted: false };
@@ -1467,6 +1622,7 @@
       reviewId = id;
       preferredCollapsed = readCollapsedPreference();
       pillSpot = readPillPreference();
+      railWidth = readWidthPreference();
       collapsed = preferredCollapsed;
       loadChips();
       if (dom) {
@@ -1474,6 +1630,7 @@
         renderChips();
         renderCollapsed();
         applyPillSpot();
+        applyRailWidth();
         if (refusalInfo) setCollapsed(false, false);
       }
       return reviewId;
@@ -3141,10 +3298,15 @@
     function persistCollapsedPreference() {
       if (!reviewId || !store || typeof store.writeUiPreferences !== "function") return false;
       try {
-        // BOTH FIELDS, ALWAYS. The bucket is written whole, so writing one and
-        // omitting the other is how a reviewer collapses the rail and finds the
-        // pill back in the corner they dragged it out of.
-        store.writeUiPreferences(reviewId, { collapsed: preferredCollapsed, pill: pillSpot });
+        // EVERY FIELD, ALWAYS. The bucket is written whole, so writing one and
+        // omitting another is how a reviewer collapses the rail and finds the
+        // pill back in the corner they dragged it out of, or drags the rail
+        // wider and finds it narrow again after collapsing it once.
+        store.writeUiPreferences(reviewId, {
+          collapsed: preferredCollapsed,
+          pill: pillSpot,
+          width: railWidth
+        });
         return true;
       } catch (err) {
         return false;
@@ -3276,10 +3438,335 @@
       if (!dom) return;
       dom.rail.hidden = collapsed;
       dom.pill.hidden = !collapsed;
+      // The toast column stands beside an open rail and in the corner with the
+      // rail closed, so putting the rail away moves it back.
+      publishRailAllowance();
     }
 
     function isCollapsed() {
       return collapsed;
+    }
+
+    // -------------------------------------------------------------------------
+    // Dragging the rail wider
+    // -------------------------------------------------------------------------
+    //
+    // Ken: "some of these responses are getting quite thorough and long, so the
+    // chat rail should be drag-expandable: you should be able to drag the edge
+    // of it to expand it horizontally so you can read more."
+    //
+    // The rail is fixed to the right edge of the viewport, so widening it moves
+    // its LEFT edge and changes nothing about the page underneath (D8). What it
+    // does change is how much room the other surfaces have to leave: the
+    // anchored comment box, the selection pill and the toast column all keep
+    // clear of the rail, and until now they did it against a number typed into
+    // comments.js. The rail publishes the number instead; see
+    // publishRailAllowance.
+
+    function readWidthPreference() {
+      if (!reviewId || !store || typeof store.readUiPreferences !== "function") return null;
+      try {
+        return store.readUiPreferences(reviewId).width || null;
+      } catch (err) {
+        return null;
+      }
+    }
+
+    /** The default width, in pixels, for a viewport. The stylesheet's clamp. */
+    function defaultRailWidth(viewWidth) {
+      if (!isFinite(viewWidth) || viewWidth <= 0) return RAIL_DEFAULT_MAX;
+      var want = (viewWidth * RAIL_DEFAULT_VW) / 100;
+      return Math.min(RAIL_DEFAULT_MAX, Math.max(RAIL_DEFAULT_MIN, want));
+    }
+
+    /** The viewport width the rail is in, or null with nothing on screen. */
+    function railViewWidth() {
+      var view = dom ? viewportOf(dom.rail) : null;
+      return view ? view.w : null;
+    }
+
+    /**
+     * How wide the rail is RIGHT NOW, measured where that is possible.
+     *
+     * Measured rather than computed, because the default width is a CSS clamp
+     * and the browser is the only thing that knows what it came out as. A
+     * collapsed rail cannot be measured (it is display:none), so its width is
+     * computed from the same numbers the stylesheet was built from.
+     */
+    function currentRailWidth() {
+      if (dom && !dom.rail.hidden) {
+        var rect = dom.rail.getBoundingClientRect();
+        if (rect && rect.width > 0) return rect.width;
+      }
+      var view = railViewWidth();
+      var chosen = clampRailWidth(railWidth, view);
+      return chosen === null ? defaultRailWidth(view === null ? NaN : view) : chosen;
+    }
+
+    /**
+     * Tell everything that has to keep clear of the rail how much room it takes.
+     *
+     * ONE NUMBER, ONE PLACE. It goes on the library's one page-level host as a
+     * custom property (highlight.RAIL_ALLOWANCE_PROP), which is the only thing
+     * the rail's closed root and the comment boxes' closed root both touch.
+     * comments.js reads it back for the anchored box and the selection pill;
+     * the toast column is the rail's own, so it is moved here.
+     */
+    function publishRailAllowance() {
+      if (!dom) return null;
+      var allowance = Math.round(currentRailWidth() + RAIL_EDGE_GAP);
+      if (dom.surfaceHost && dom.surfaceHost.style) {
+        dom.surfaceHost.style.setProperty(highlightModule.RAIL_ALLOWANCE_PROP, allowance + "px");
+      }
+      placeToasts(allowance);
+      widthHandlers.forEach(function (fn) {
+        try {
+          fn(allowance);
+        } catch (err) {
+          // One bad listener must never leave a drag half applied.
+        }
+      });
+      return allowance;
+    }
+
+    /**
+     * The toast column, clear of the rail it used to sit on top of.
+     *
+     * It was top-right and overlapped the open rail deliberately: a toast is on
+     * screen for seconds and the rail was a known width. A rail the reviewer
+     * can drag to most of the window makes that a toast landing on the card it
+     * is telling them about, so with the rail OPEN the column now stands beside
+     * it. With the rail collapsed nothing is in the way and the column goes
+     * back to the corner, which is the case the toast exists for.
+     */
+    function placeToasts(allowance) {
+      if (!dom || !dom.toastHost) return;
+      if (collapsed) {
+        dom.toastHost.style.right = "";
+        dom.toastHost.style.maxWidth = "";
+        return;
+      }
+      var view = railViewWidth();
+      var right = allowance + TOAST_RAIL_GAP;
+      dom.toastHost.style.right = right + "px";
+      // The stylesheet's own min(480px, 100vw - 32px) does not know about the
+      // offset, so a wide rail would push the column off the left edge.
+      if (view !== null) {
+        dom.toastHost.style.maxWidth = Math.max(TOAST_MIN_WIDTH, view - right - RAIL_EDGE_GAP) + "px";
+      }
+    }
+
+    /** What the grip says about itself, once the width is known. */
+    function paintGrip() {
+      if (!dom || !dom.grip) return;
+      var view = railViewWidth();
+      var width = Math.round(currentRailWidth());
+      var max = clampRailWidth(view === null ? RAIL_MIN_WIDTH : view, view);
+      dom.grip.setAttribute("aria-valuenow", String(width));
+      dom.grip.setAttribute("aria-valuemax", String(max === null ? width : max));
+      dom.grip.setAttribute("aria-valuetext", width + " pixels wide");
+    }
+
+    /**
+     * Put the chosen width on the rail.
+     *
+     * Clamped HERE rather than when it was stored, so a window that shrank
+     * gives back a rail that fits and a window that grows again gives back the
+     * width the reviewer actually chose.
+     */
+    function applyRailWidth() {
+      if (!dom) return null;
+      var want = clampRailWidth(railWidth, railViewWidth());
+      // "" and not a number: an untouched rail keeps the stylesheet's clamp,
+      // which is the thing a reset goes back to.
+      dom.rail.style.width = want === null ? "" : want + "px";
+      publishRailAllowance();
+      paintGrip();
+      return want;
+    }
+
+    /**
+     * Set the rail's width. null is "back to the default".
+     *
+     * @param {number|null} next    the width in pixels, or null for the default
+     * @param {Object} [options]    persist:false for a width mid-drag
+     */
+    function setRailWidth(next, options) {
+      var opts = options || {};
+      railWidth = next === null || next === undefined ? null : clampRailWidth(next, railViewWidth());
+      var applied = applyRailWidth();
+      if (opts.persist !== false) persistCollapsedPreference();
+      return applied;
+    }
+
+    /** The rail's own width in pixels, measured. */
+    function width() {
+      return dom ? Math.round(currentRailWidth()) : null;
+    }
+
+    /** How much room from the right edge is the rail's, in pixels. */
+    function railAllowance() {
+      return Math.round(currentRailWidth() + RAIL_EDGE_GAP);
+    }
+
+    /** Tell me when the rail's width changes. Returns an unsubscribe. */
+    function onWidth(fn) {
+      if (typeof fn !== "function") throw new TypeError("onWidth: a function is required");
+      widthHandlers.push(fn);
+      return function () {
+        var at = widthHandlers.indexOf(fn);
+        if (at !== -1) widthHandlers.splice(at, 1);
+      };
+    }
+
+    function endGripDrag(event) {
+      if (!gripDrag) return;
+      if (event && event.pointerId !== undefined && event.pointerId !== gripDrag.id) return;
+      if (dom && dom.grip) {
+        dom.grip.removeAttribute("data-lahe-dragging");
+        try {
+          if (typeof dom.grip.releasePointerCapture === "function") {
+            dom.grip.releasePointerCapture(gripDrag.id);
+          }
+        } catch (err) {
+          // The capture is already gone, which is the state we wanted.
+        }
+      }
+      if (dom) dom.rail.removeAttribute("data-lahe-resizing");
+      gripDrag = null;
+      persistCollapsedPreference();
+    }
+
+    /** Escape: the width goes back to what it was when the drag started. */
+    function cancelGripDrag() {
+      if (!gripDrag) return false;
+      railWidth = gripDrag.was;
+      applyRailWidth();
+      endGripDrag();
+      return true;
+    }
+
+    function stepRailWidth(by) {
+      setRailWidth(currentRailWidth() + by);
+    }
+
+    function onGripKey(event) {
+      var key = event.key;
+      if (key === "ArrowLeft") {
+        // LEFT GROWS. The rail's left edge is the one that moves, so left is
+        // the direction the reviewer drags to make it wider.
+        stepRailWidth(RAIL_KEY_STEP);
+      } else if (key === "ArrowRight") {
+        stepRailWidth(-RAIL_KEY_STEP);
+      } else if (key === "Home") {
+        setRailWidth(RAIL_MIN_WIDTH);
+      } else if (key === "End") {
+        var view = railViewWidth();
+        setRailWidth(view === null ? RAIL_MIN_WIDTH : view);
+      } else if (key === "Escape") {
+        if (!cancelGripDrag()) return;
+      } else {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    function bindGrip(grip, shadow) {
+      // POINTER EVENTS AND CAPTURE, and nothing bound on the page's document.
+      // The library is a guest here (D8): the drag has to survive the pointer
+      // outrunning an 8px strip without the page carrying a listener of ours.
+      grip.addEventListener("pointerdown", function (event) {
+        if (event.button !== undefined && event.button !== 0) return;
+        if (!dom) return;
+        var at = now();
+        var doubled = at - gripPressedAt < GRIP_DOUBLE_MS;
+        gripPressedAt = at;
+        if (doubled) {
+          // The second press of a double press: back to the default width, and
+          // no drag, so the reviewer does not resize by a pixel on the way.
+          endGripDrag();
+          setRailWidth(null);
+          event.preventDefault();
+          return;
+        }
+        gripDrag = { id: event.pointerId, from: event.clientX, was: railWidth, width: currentRailWidth() };
+        try {
+          if (typeof grip.setPointerCapture === "function") grip.setPointerCapture(event.pointerId);
+        } catch (err) {
+          // No capture is a worse drag, not a broken one: the moves that land
+          // on the grip still resize.
+        }
+        grip.setAttribute("data-lahe-dragging", "");
+        dom.rail.setAttribute("data-lahe-resizing", "");
+        // Stops the press becoming a text selection that runs across the page
+        // the moment the pointer leaves the rail.
+        event.preventDefault();
+        // ...which also stops the press focusing the grip, so the focus is
+        // moved by hand. Escape has to reach a keydown handler of ours to
+        // abandon the drag, and a keyboard left on the page reaches none.
+        try {
+          grip.focus();
+        } catch (err) {
+          // A grip that cannot take focus still drags.
+        }
+      });
+
+      grip.addEventListener("pointermove", function (event) {
+        if (!gripDrag || event.pointerId !== gripDrag.id) return;
+        // Leftwards is wider: the distance the pointer has travelled from where
+        // the press landed, added to the width the rail had then.
+        setRailWidth(gripDrag.width + (gripDrag.from - event.clientX), { persist: false });
+        event.preventDefault();
+      });
+
+      grip.addEventListener("pointerup", endGripDrag);
+      grip.addEventListener("pointercancel", endGripDrag);
+      grip.addEventListener("keydown", onGripKey);
+      // A browser that does deliver a dblclick here gets the same answer. Both
+      // paths end at one width, so arriving twice costs nothing.
+      grip.addEventListener("dblclick", function (event) {
+        setRailWidth(null);
+        event.preventDefault();
+      });
+
+      // Escape anywhere in the rail's own root ends a drag, because the pointer
+      // is down on the grip and the keyboard is wherever the reviewer left it.
+      shadow.addEventListener("keydown", function (event) {
+        if (event.key !== "Escape") return;
+        if (cancelGripDrag()) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      });
+    }
+
+    /**
+     * What the grip is, for a caller outside the closed root: the specs' way in,
+     * and the coordinates a real press uses.
+     */
+    function gripInfo() {
+      if (!dom || !dom.grip) return { present: false, dragging: false, rect: null };
+      var rect = dom.grip.getBoundingClientRect();
+      return {
+        present: true,
+        dragging: !!gripDrag,
+        label: dom.grip.getAttribute("aria-label"),
+        role: dom.grip.getAttribute("role"),
+        orientation: dom.grip.getAttribute("aria-orientation"),
+        valueNow: Number(dom.grip.getAttribute("aria-valuenow")),
+        valueMin: Number(dom.grip.getAttribute("aria-valuemin")),
+        valueMax: Number(dom.grip.getAttribute("aria-valuemax")),
+        focused: dom.shadow.activeElement === dom.grip,
+        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+      };
+    }
+
+    /** Put the keyboard on the grip, for a caller that cannot reach into it. */
+    function focusGrip() {
+      if (!dom || !dom.grip) return false;
+      dom.grip.focus();
+      return dom.shadow.activeElement === dom.grip;
     }
 
     // -------------------------------------------------------------------------
@@ -3815,6 +4302,13 @@
       collapse: collapse,
       isCollapsed: isCollapsed,
       onCollapse: onCollapse,
+      // The rail's width, and the room everything else leaves for it.
+      width: width,
+      setWidth: setRailWidth,
+      railAllowance: railAllowance,
+      onWidth: onWidth,
+      gripInfo: gripInfo,
+      focusGrip: focusGrip,
       geometry: geometry,
       // What is on screen, and putting it back after a reload the tool started.
       railState: railState,
@@ -3912,6 +4406,13 @@
     endReviewCounts: endReviewCounts,
     unfinishedSentence: unfinishedSentence,
     SHEET_ATTR: SHEET_ATTR,
+    RAIL_MIN_WIDTH: RAIL_MIN_WIDTH,
+    RAIL_MAX_FRACTION: RAIL_MAX_FRACTION,
+    RAIL_MAX_MARGIN: RAIL_MAX_MARGIN,
+    RAIL_EDGE_GAP: RAIL_EDGE_GAP,
+    RAIL_KEY_STEP: RAIL_KEY_STEP,
+    RAIL_GRIP_LABEL: RAIL_GRIP_LABEL,
+    clampRailWidth: clampRailWidth,
     timestampLabel: timestampLabel,
     paneForItem: paneForItem,
     createRail: createRail,

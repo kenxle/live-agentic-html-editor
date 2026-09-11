@@ -482,22 +482,42 @@
       return { h: h, x: x, v: v, y: y };
     }
 
+    /**
+     * How wide the reviewer dragged the rail, or null for its default width.
+     *
+     * A bare number, unlike the pill's corner-and-offset, because a width has
+     * nothing to be relative to: it is the same number on a phone and on a
+     * monitor. A width that no longer fits the viewport is CLAMPED WHERE IT IS
+     * READ (overlay.js knows the viewport; this file does not) rather than
+     * rewritten here, so widening the window again brings the reviewer's own
+     * choice back instead of the narrow one a shrunken window forced on them.
+     */
+    function readRailWidth(got) {
+      var width = got && typeof got === "object" ? Number(got.width) : NaN;
+      if (!isFinite(width) || width <= 0) return null;
+      return width;
+    }
+
     function readUiPreferences(reviewId) {
       try {
         var raw = backing.getItem(uiKey(reviewId));
-        if (!raw) return { collapsed: false, pill: null };
+        if (!raw) return { collapsed: false, pill: null, width: null };
         var got = JSON.parse(raw);
-        if (!got || typeof got !== "object") return { collapsed: false, pill: null };
-        return { collapsed: got.collapsed === true, pill: readPillSpot(got) };
+        if (!got || typeof got !== "object") return { collapsed: false, pill: null, width: null };
+        return { collapsed: got.collapsed === true, pill: readPillSpot(got), width: readRailWidth(got) };
       } catch (err) {
-        return { collapsed: false, pill: null };
+        return { collapsed: false, pill: null, width: null };
       }
     }
 
     function writeUiPreferences(reviewId, value) {
       // Whitelisted on the way in as well as on the way out: this bucket is
       // chrome preference and nothing else ever belongs in it.
-      var next = { collapsed: !!(value && value.collapsed), pill: readPillSpot(value) };
+      var next = {
+        collapsed: !!(value && value.collapsed),
+        pill: readPillSpot(value),
+        width: readRailWidth(value)
+      };
       try {
         backing.setItem(uiKey(reviewId), JSON.stringify(next));
       } catch (err) {

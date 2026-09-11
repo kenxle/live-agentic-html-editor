@@ -832,10 +832,14 @@
     var listenerHandles = [];
     var listenersState = [];
     var pick = { active: false, element: null };
-    // How much room the rail is assumed to take on the right. The rail's real
-    // width is 1B's; this is only a clamp for box placement, so being generous
-    // costs nothing.
-    var RAIL_ALLOWANCE = 340;
+    // How much room the rail takes on the right, when nothing has said.
+    //
+    // The rail is drag-resizable now, so its width is not a number this file
+    // can know: the rail PUBLISHES it, as a custom property on the library's
+    // one page-level host (highlight.RAIL_ALLOWANCE_PROP), and railAllowance()
+    // below reads it back. This constant is what a page with no rail on it
+    // falls back to, which is what the number always really was.
+    var RAIL_ALLOWANCE_DEFAULT = 340;
     var outlineNode = null;
     var surfaceRoot = null;
     // The selection popover. `pill` holds the nodes; the rest is what it is
@@ -920,6 +924,30 @@
       surfaceRoot = got.root || got.host;
       highlights.addSurfaceStyle("comments", BOX_STYLE);
       return surfaceRoot;
+    }
+
+    /**
+     * How much room from the right edge of the viewport belongs to the rail.
+     *
+     * Read off the library's one page-level host, where the rail writes it
+     * whenever its width changes. Found by id rather than through surface()
+     * above, because asking a geometry question must not CREATE the host: a
+     * page being measured before anything is drawn on it would end up with a
+     * surface it never needed.
+     *
+     * Falls back to the old fixed number whenever there is nothing to read: no
+     * document, no host yet, or a value that is not a length. A box placed
+     * against the fallback is where it has always been, which is the right kind
+     * of wrong.
+     */
+    function railAllowance() {
+      if (!doc || !win || typeof win.getComputedStyle !== "function") return RAIL_ALLOWANCE_DEFAULT;
+      var host = doc.getElementById(highlightModule.SURFACE_ID);
+      if (!host) return RAIL_ALLOWANCE_DEFAULT;
+      var raw = win.getComputedStyle(host).getPropertyValue(highlightModule.RAIL_ALLOWANCE_PROP);
+      var px = parseFloat(raw);
+      if (!isFinite(px) || px < 0) return RAIL_ALLOWANCE_DEFAULT;
+      return px;
     }
 
     // A box the rail hosts lives in the RAIL's root, not in the surface root
@@ -1720,7 +1748,7 @@
       var vw = win.innerWidth || 1024;
       var vh = win.innerHeight || 768;
       var rect = range && typeof range.getBoundingClientRect === "function" ? range.getBoundingClientRect() : null;
-      var rightLimit = Math.max(16, vw - BOX_WIDTH - 16 - RAIL_ALLOWANCE);
+      var rightLimit = Math.max(16, vw - BOX_WIDTH - 16 - railAllowance());
       var top;
       var left;
 
@@ -2234,7 +2262,7 @@
       var left = (upward ? end.left : end.right) - size.width / 2;
       // Clear of the rail, the same allowance the comment box uses, so the pill
       // is never drawn underneath it.
-      var railLimit = vw - RAIL_ALLOWANCE - size.width - POPOVER_GAP;
+      var railLimit = vw - railAllowance() - size.width - POPOVER_GAP;
       var rightLimit = railLimit > POPOVER_GAP ? railLimit : vw - size.width - POPOVER_GAP;
       if (left > rightLimit) left = rightLimit;
       if (left < POPOVER_GAP) left = POPOVER_GAP;

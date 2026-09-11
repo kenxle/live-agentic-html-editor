@@ -252,6 +252,20 @@
   // amounts to.
   var SCHEME_ATTR = "data-lahe-scheme";
 
+  // How wide a berth everything else has to give the rail, in CSS pixels,
+  // published on the ONE page-level host as a custom property.
+  //
+  // The rail is resizable, so its width is no longer a number another file can
+  // hardcode. The rail writes this whenever its width changes (overlay.js) and
+  // the other surfaces read it back (comments.js: the anchored box and the
+  // selection pill). It lives HERE because the host it is written on is this
+  // file's, and because a property name spelled twice is a property name that
+  // will eventually be spelled two ways.
+  //
+  // It is the rail's width PLUS the gap it keeps from the viewport edge, so a
+  // reader can treat it as "distance from the right edge that is spoken for".
+  var RAIL_ALLOWANCE_PROP = "--lahe-rail-allowance";
+
   /** rgb()/rgba() as {r,g,b,a}, or null for anything else (including keywords). */
   function parseColor(value) {
     if (!value || typeof value !== "string") return null;
@@ -816,6 +830,7 @@
     STYLE_ATTR: STYLE_ATTR,
     SURFACE_ID: SURFACE_ID,
     SCHEME_ATTR: SCHEME_ATTR,
+    RAIL_ALLOWANCE_PROP: RAIL_ALLOWANCE_PROP,
     STYLE_TEXT: STYLE_TEXT,
     PRINT_HOST_STYLE_TEXT: PRINT_HOST_STYLE_TEXT,
     EMPHASIS_MS: EMPHASIS_MS,

@@ -215,6 +215,52 @@
     geometry: function () {
       return rail.geometry();
     },
+
+    // --- the rail's width ----------------------------------------------------
+
+    railWidth: function () {
+      return rail.width();
+    },
+    setRailWidth: function (px) {
+      return rail.setWidth(px === undefined ? null : px);
+    },
+    railAllowance: function () {
+      return rail.railAllowance();
+    },
+    gripInfo: function () {
+      return rail.gripInfo();
+    },
+    focusGrip: function () {
+      return rail.focusGrip();
+    },
+    // The allowance as the OTHER surfaces read it: off the library's one
+    // page-level host, which is the whole point of publishing it there.
+    publishedAllowance: function () {
+      var host = document.getElementById(LAHE.highlight.SURFACE_ID);
+      if (!host) return null;
+      return getComputedStyle(host).getPropertyValue(LAHE.highlight.RAIL_ALLOWANCE_PROP).trim();
+    },
+    toast: function (spec) {
+      return rail.showToast(spec);
+    },
+    toastInfo: function () {
+      return rail.toastInfo();
+    },
+    /**
+     * A comment box anchored to a passage on the page, and where it landed.
+     *
+     * The box is placed by comments.js against the rail's published allowance,
+     * which is the thing under test: a box opened after the rail was widened
+     * has to sit clear of the rail's new edge.
+     */
+    openAnchoredBox: function (selector) {
+      var target = document.querySelector(selector);
+      var range = document.createRange();
+      range.selectNodeContents(target);
+      var box = comments.openBox({ page: page(), kind: LAHE.record.KIND.COMMENT, range: range });
+      var rect = box.node.getBoundingClientRect();
+      return { id: box.id, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } };
+    },
     selectTab: function (tab) {
       return rail.selectTab(tab);
     },
