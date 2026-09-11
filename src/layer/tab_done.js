@@ -986,7 +986,7 @@
         // The reply's own fields are kept as they came, so nothing reading the
         // card's model loses what the agent actually said in which field. Only
         // `text` is what gets DRAWN, which is what makes it one carrier.
-        reason: reviewFormat.boundData(reply.reason, reviewFormat.CONTEXT_MAX),
+        reason: reviewFormat.boundData(reply.reason, reviewFormat.REPLY_TEXT_MAX),
         // The wordless fallback is kind-aware: "made this change" was written
         // for hand edits and read strangely under a handled COMMENT, where the
         // agent made a change the card never shows (Ken, 2026-08-18).
@@ -1177,7 +1177,7 @@
 
     /** Agent text, bounded by review_format's own bound, marker visible. */
     function boundedText(text) {
-      return reviewFormat.boundData(text, reviewFormat.BEFORE_MAX);
+      return reviewFormat.boundData(text, reviewFormat.REPLY_TEXT_MAX);
     }
 
     // -------------------------------------------------------------------------

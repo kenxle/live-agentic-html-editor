@@ -488,8 +488,10 @@ passage of text (D9, the element anchor). It is `{tag, src, alt, html, near}`, a
 comment on text. `src` is the attribute **as the page author wrote it**, not the resolved absolute
 URL, because the source file is what the agent edits. `html` is the **opening tag only**. All of it
 is text off the page, so it is data and it is bounded, exactly like `quote`.
-`BEFORE_MAX` (2000), `CONTEXT_MAX` (400) and `TRUNCATION_MARKER` are named constants, and the bound
-is **visible in the value**, so an agent cannot mistake a cut-off passage for the whole passage.
+`BEFORE_MAX` (2000), `CONTEXT_MAX` (400), `REPLY_TEXT_MAX` (20000, for the agent's own text and
+reason, which are the reviewer's reading and not a locating hint) and `TRUNCATION_MARKER` are named
+constants, and the bound is **visible in the value**, so an agent cannot mistake a cut-off passage
+for the whole passage.
 
 **The `contract` field, verbatim.** This is the exact value of the file's top-level `contract` field,
 and it is the entire implementation of R4 (an agent never rewrites the whole document) and R45 (text

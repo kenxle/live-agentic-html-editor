@@ -206,6 +206,13 @@
   var BEFORE_MAX = 2000;
   // Shorter, because these are locating hints rather than passages.
   var CONTEXT_MAX = 400;
+  // The agent's own words: text and reason on a reply, and the agent's turns in
+  // a card's thread. Bounded because they are agent-controlled and reach the
+  // rail's DOM, but far above BEFORE_MAX, because the reply IS the reading. At
+  // 2000 a 2156-character answer lost its last sentence, which was the one
+  // instruction the reviewer had to act on (Ken, 2026-09-11: "why is this
+  // truncated?!"). The marker still says when the cap is hit.
+  var REPLY_TEXT_MAX = 20000;
   // reply.files is agent-controlled and reaches the rail, so it is not trusted
   // to be a short list of strings. The count is capped and each entry is bounded
   // (finding 24).
@@ -457,8 +464,8 @@
         agent: {
           status: agent.status || null,
           agent: boundData(agent.agent, CONTEXT_MAX),
-          reason: boundData(agent.reason, BEFORE_MAX),
-          text: boundData(agent.text, BEFORE_MAX),
+          reason: boundData(agent.reason, REPLY_TEXT_MAX),
+          text: boundData(agent.text, REPLY_TEXT_MAX),
           files: boundFiles(agent.files),
           at: agent.at || null
         }
@@ -732,6 +739,7 @@
     DATA_FIELDS: DATA_FIELDS,
     PROJECTED_FIELD_CLASS: PROJECTED_FIELD_CLASS,
     BEFORE_MAX: BEFORE_MAX,
+    REPLY_TEXT_MAX: REPLY_TEXT_MAX,
     CONTEXT_MAX: CONTEXT_MAX,
     REPLY_FILES_MAX: REPLY_FILES_MAX,
     AFTER_HISTORY_MAX: AFTER_HISTORY_MAX,
