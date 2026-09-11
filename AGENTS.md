@@ -215,6 +215,13 @@ Do not add an icon to a page you did not write. The fallback reaches every
 served page; it does not reach the `file://` fallback or the dev-server row,
 because on those two nothing of LAHE's sits between the page and the browser.
 
+**A page inside an iframe does not get a rail.** The library refuses to boot
+when it is framed, because a reveal.js deck's speaker-notes window embeds the
+same deck in an iframe and the embedded copy fought the real window over the
+review's window claim. The reviewer's own window is unaffected. If a page really
+is meant to be reviewed while embedded, add `data-lahe-frames="allow"` to its
+script tag.
+
 For Markdown, pass the source file directly. Do not run Pandoc, hand-write an
 HTML wrapper, start a separate Python server, or translate the blocks yourself:
 

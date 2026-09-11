@@ -227,6 +227,11 @@ test("boot reads its config from the script tag, and options win over it", () =>
     review: "rev-abc",
     token: "tok-1",
     helper: "http://127.0.0.1:9999",
+    // The two opt-ins are absent from an ordinary tag, which is the whole
+    // point of them: a page gets frames refused and the rail on screen unless
+    // it says otherwise.
+    frames: null,
+    start: null,
     from: "currentScript"
   });
 
@@ -238,7 +243,7 @@ test("boot reads its config from the script tag, and options win over it", () =>
 test("no script tag and no options means no configuration, and the helper default fills in", () => {
   const doc = { querySelector: () => null };
   const empty = layer.readScriptConfig(doc, null);
-  assert.deepEqual(empty, { review: null, token: null, helper: null, from: null });
+  assert.deepEqual(empty, { review: null, token: null, helper: null, frames: null, start: null, from: null });
   assert.equal(layer.resolveConfig(doc, {}, null).helper, protocol.DEFAULT_HELPER_ORIGIN);
 });
 

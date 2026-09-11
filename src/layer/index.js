@@ -119,11 +119,15 @@
       tag = doc.querySelector(protocol.SCRIPT_SELECTOR);
       from = tag ? "selector" : null;
     }
-    if (!tag) return { review: null, token: null, helper: null, from: null };
+    if (!tag) return { review: null, token: null, helper: null, frames: null, start: null, from: null };
     return {
       review: tag.getAttribute(attr.REVIEW) || null,
       token: tag.getAttribute(attr.TOKEN) || null,
       helper: tag.getAttribute(attr.HELPER) || null,
+      // The two opt-ins (protocol.SCRIPT_ATTR): boot in a frame anyway, and
+      // start with nothing of the library's on screen.
+      frames: tag.getAttribute(attr.FRAMES) || null,
+      start: tag.getAttribute(attr.START) || null,
       from: from
     };
   }
@@ -136,8 +140,80 @@
       review: opts.review || fromTag.review,
       token: opts.token !== undefined ? opts.token : fromTag.token,
       helper: opts.helper || fromTag.helper || protocol.DEFAULT_HELPER_ORIGIN,
+      frames: opts.frames !== undefined ? opts.frames : fromTag.frames,
+      start: opts.start !== undefined ? opts.start : fromTag.start,
       from: opts.review ? "options" : fromTag.from
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // A page inside a frame is not a page to review
+  // ---------------------------------------------------------------------------
+  //
+  // reveal.js's speaker-notes window is what found this. Pressing S on a deck
+  // opens a second window whose job is to show the notes, and the way it shows
+  // the current slide is to embed THE SAME DECK in an iframe (older versions
+  // load plugin/notes/notes.html, newer ones write an inline document; both
+  // frame the deck with a `?receiver` style query and talk to the real window
+  // over postMessage). That embedded copy carries the deck's own script tags,
+  // so the library booted a second time, on the same review, in a window the
+  // reviewer never asked to review anything in.
+  //
+  // What the reviewer then saw was the two windows fighting over the review's
+  // window claim: refusal panels, a read-only rail, and a heartbeat churning
+  // between them. Ken, presenting: "something is happening when I pull up
+  // speaker notes where LAHE is trying to interact with them."
+  //
+  // So a framed document boots NOTHING: no rail, no pill, no sync, no
+  // listeners, no storage writes. It is not an error and it is not announced on
+  // the page, because the page is the notes window's business and the reviewer
+  // is looking at the real one. The decision is readable afterwards as
+  // LAHE.layer.skipped, which is how a test and a curious developer tell "the
+  // library was framed" from "the script tag is wrong".
+  //
+  // A page that genuinely wants to review an embedded document opts back in
+  // with data-lahe-frames="allow" on the script tag.
+
+  var SKIPPED_FRAMED = "framed";
+
+  var FRAMED_REASON =
+    "this document is inside a frame, so the library did not boot. The window that framed it owns the review. " +
+    'Add ' + protocol.SCRIPT_ATTR.FRAMES + '="' + protocol.FRAMES_ALLOW + '" to the script tag to review a framed document anyway.';
+
+  /**
+   * Are we inside a frame?
+   *
+   * Pure over a window-shaped object, so the rule is unit-testable with no
+   * browser. A cross-origin top THROWS on access, and that throw is itself the
+   * answer: only a framed document can have a top it is not allowed to read.
+   *
+   * @param {Object} win anything with a `top`
+   * @returns {boolean}
+   */
+  function isFramed(win) {
+    if (!win) return false;
+    try {
+      if (!win.top) return false;
+      return win.top !== win;
+    } catch (error) {
+      return true;
+    }
+  }
+
+  /**
+   * Should this document boot?
+   *
+   * @param {Object} win
+   * @param {string|null} [frames] the script tag's data-lahe-frames value
+   * @returns {{framed: boolean, skip: boolean, reason: (string|null)}}
+   */
+  function frameDecision(win, frames) {
+    var framed = isFramed(win);
+    if (!framed) return { framed: false, skip: false, reason: null };
+    if (String(frames || "").toLowerCase() === protocol.FRAMES_ALLOW) {
+      return { framed: true, skip: false, reason: null };
+    }
+    return { framed: true, skip: true, reason: SKIPPED_FRAMED };
   }
 
   // ---------------------------------------------------------------------------
@@ -145,6 +221,14 @@
   // ---------------------------------------------------------------------------
 
   var current = null;
+  // Set once, by a boot that decided not to boot. Published on the module's own
+  // handle (LAHE.layer.skipped) rather than on the page global, because the page
+  // global is the library reporting on a review it is running and there is none.
+  var skipped = null;
+  // Assigned at the bottom of this file. Named here because boot() may run
+  // before it exists (nothing does today) and writing to a missing binding is a
+  // ReferenceError in strict mode.
+  var api = null;
 
   /**
    * Wire the library onto this page.
@@ -166,6 +250,17 @@
     }
 
     var config = resolveConfig(doc, opts, opts.script || ownScript);
+
+    // BEFORE the missing-review throw, and before anything is bound, mounted or
+    // written: a framed document is not this library's business at all, and a
+    // frame with no review id on it should be silent rather than loud.
+    var frames = frameDecision(win, config.frames);
+    if (frames.skip) {
+      skipped = frames.reason;
+      if (api) api.skipped = frames.reason;
+      return { booted: false, skipped: frames.reason, reason: FRAMED_REASON, version: VERSION };
+    }
+
     if (!config.review) {
       // Fails closed and LOUD. A page with the library on it and no review id
       // is a misconfiguration, and a quiet no-op here is a reviewer typing into
@@ -1555,9 +1650,15 @@
     return boot({ script: ownScript });
   }
 
-  var api = {
+  api = {
     VERSION: VERSION,
     GLOBAL: GLOBAL,
+    // Why this page has no rail on it, or null when it has one. The ONLY value
+    // it takes today is SKIPPED_FRAMED, and it is static: nothing sets it back.
+    skipped: skipped,
+    SKIPPED_FRAMED: SKIPPED_FRAMED,
+    isFramed: isFramed,
+    frameDecision: frameDecision,
     boot: boot,
     booted: function () {
       return current;

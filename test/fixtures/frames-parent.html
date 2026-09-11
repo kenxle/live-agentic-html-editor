@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>A reviewed deck with its speaker-notes window open</title>
+  <style>
+    body { font: 16px/1.6 system-ui, sans-serif; margin: 2rem; }
+    iframe { width: 320px; height: 180px; border: 1px solid #cfd6e0; }
+  </style>
+</head>
+<body>
+  <!--
+    What reveal.js's speaker-notes window does, with nothing of reveal in it.
+
+    Pressing S on a deck opens a notes window, and the way that window shows the
+    current slide is to EMBED THE SAME DECK in an iframe with a `?receiver`
+    style query, talking to the real window over postMessage. The embedded copy
+    carries the deck's own script tags, so the library used to boot a second
+    time on the same review and the two windows fought over the window claim.
+
+    This page is the deck (a real script tag, the library booting itself from
+    it) and the frame below is the notes window's embedded copy: the same page,
+    the same review, framed. See test/browser/framed_boot.spec.js.
+
+    Served from the REPO ROOT, so /dist/lahe-layer.js is reachable beside it.
+  -->
+  <h1 id="deck-title">A deck being presented</h1>
+  <p id="deck-body" data-region="deck-body">
+    A short passage, so the reviewer has something to comment on while the notes
+    window is open beside them.
+  </p>
+
+  <iframe id="notes-frame" title="Speaker notes" src="/test/fixtures/frames-child.html?receiver"></iframe>
+
+  <script src="/dist/lahe-layer.js"
+          data-lahe-review="frames-review"
+          data-lahe-token="frames-token"
+          data-lahe-helper="http://127.0.0.1:7817"></script>
+</body>
+</html>

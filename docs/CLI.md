@@ -105,6 +105,11 @@ session. The helper asks with `lsof`, cached for 15 seconds and off the poll pat
 A machine that cannot answer says so, and the line falls back to the wait, which
 is always knowable.
 
+**A framed page does not boot.** When the library finds itself inside an iframe
+it mounts nothing, so a reveal.js speaker-notes window (which embeds the deck in
+a frame) cannot fight the real window over the review; `data-lahe-frames="allow"`
+on the script tag opts a genuinely embedded document back in.
+
 **If the page is build output**, an agent should rebuild before it reports an
 item handled: `handled` is supposed to mean your page shows the change. It does
 not have to re-run `lahe add` afterwards, and on the served path there is nothing

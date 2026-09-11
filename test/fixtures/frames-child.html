@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>The deck, as the notes window embeds it</title>
+</head>
+<body>
+  <!--
+    The embedded copy: the same page, the same script tag, the same review id as
+    test/fixtures/frames-parent.html. Loaded on its own it would boot normally;
+    loaded in a frame it boots nothing and says why on LAHE.layer.skipped.
+
+    The opt-in variant beside it is frames-child-allow.html, which carries
+    data-lahe-frames="allow" and boots anyway.
+  -->
+  <h1 id="child-title">A deck being presented</h1>
+  <p id="child-body" data-region="deck-body">
+    A short passage, so the reviewer has something to comment on while the notes
+    window is open beside them.
+  </p>
+
+  <script src="/dist/lahe-layer.js"
+          data-lahe-review="frames-review"
+          data-lahe-token="frames-token"
+          data-lahe-helper="http://127.0.0.1:7817"></script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>An embedded document that is meant to be reviewed</title>
+</head>
+<body>
+  <!--
+    The opt-in: a page that IS meant to be reviewed inside a frame says so on
+    its own script tag with data-lahe-frames="allow", and the library boots
+    there the way it does anywhere else.
+
+    Its review id is its own, not the parent's, because two windows on one
+    review is the thing the refusal exists to stop.
+  -->
+  <h1 id="child-title">An embedded document</h1>
+  <p id="child-body" data-region="embedded-body">
+    A short passage, so the reviewer has something to comment on inside the
+    frame.
+  </p>
+
+  <script src="/dist/lahe-layer.js"
+          data-lahe-review="frames-embedded-review"
+          data-lahe-token="frames-token"
+          data-lahe-helper="http://127.0.0.1:7817"
+          data-lahe-frames="allow"></script>
+</body>
+</html>

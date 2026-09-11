@@ -845,12 +845,34 @@
   // inline event handlers. The primary src still loads there, which is the
   // ordinary dev-server case; `lahe add` prints that caveat with the snippet.
 
+  // FRAMES and START are OPT-INS, and neither is written by `lahe add`. They
+  // exist for two pages that would otherwise be wrong by default:
+  //
+  //   data-lahe-frames="allow"   boot inside an iframe anyway. The library
+  //                              refuses to boot in a frame (see the frame
+  //                              decision in src/layer/index.js), because a
+  //                              reveal.js speaker-notes window embeds the deck
+  //                              in an iframe and the embedded copy fought the
+  //                              real window for the review's window claim.
+  //                              A page that deliberately reviews an embedded
+  //                              document sets this and gets the old behavior.
+  //   data-lahe-start="hidden"   start in present mode: nothing of the
+  //                              library's is on screen until the reviewer
+  //                              presses the show/hide chord. For a deck that
+  //                              is presented more often than it is reviewed.
   var SCRIPT_ATTR = {
     REVIEW: "data-lahe-review",
     TOKEN: "data-lahe-token",
     HELPER: "data-lahe-helper",
-    FALLBACK: "data-lahe-fallback"
+    FALLBACK: "data-lahe-fallback",
+    FRAMES: "data-lahe-frames",
+    START: "data-lahe-start"
   };
+
+  // The one value each of the two opt-ins takes. Anything else is ignored, so a
+  // typo fails to the safe default rather than to a guess.
+  var FRAMES_ALLOW = "allow";
+  var START_HIDDEN = "hidden";
 
   // The inline onerror, kept to one statement-per-clause line so the attribute
   // stays readable in a page's source. Single quotes only: the attribute is
@@ -1245,6 +1267,8 @@
     splitCompleteLines: splitCompleteLines,
 
     SCRIPT_ATTR: SCRIPT_ATTR,
+    FRAMES_ALLOW: FRAMES_ALLOW,
+    START_HIDDEN: START_HIDDEN,
     SCRIPT_SELECTOR: SCRIPT_SELECTOR,
     SCRIPT_FALLBACK_ONERROR: SCRIPT_FALLBACK_ONERROR,
     scriptTag: scriptTag,
