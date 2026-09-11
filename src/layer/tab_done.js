@@ -246,12 +246,14 @@
   //   2. THE X MEANS READ. Dismissing a toast marks that reply seen, exactly as
   //      clicking through to the card does. It never comes back, in a toast or
   //      in a summary. Timing out is NOT dismissing: nobody decided anything.
-  //   3. A COUNT IS FOR NEGLECT ONLY. A reply that was toasted, was neither
-  //      opened nor dismissed, timed out, and has still not been read
-  //      NEGLECT_MS later gets one summary. A new neglected reply REPLACES that
-  //      summary rather than standing beside it.
-  //   4. AFTER A RELOAD, recent unread replies are toasted as themselves; only
-  //      the ones already older than NEGLECT_MS collapse into a summary.
+  //   3. NEGLECT BRINGS THE WORDS BACK, NOT A NUMBER. A reply that was toasted,
+  //      was neither opened nor dismissed, timed out, and is still unread
+  //      NEGLECT_MS later comes back as itself, sticky. Only when more than a
+  //      stackful are waiting does it become a count, because that is the one
+  //      case where the words will not fit. A new count REPLACES the standing
+  //      one rather than joining it.
+  //   4. AFTER A RELOAD, recent unread replies are toasted as themselves, and
+  //      the ones already older than NEGLECT_MS come back under rule 3.
   //   5. ONCE PER PAGE LIFE. What has been announced is remembered across
   //      remounts (see pageLife below), so a hash navigation announces nothing
   //      a second time.
@@ -436,7 +438,11 @@
     "." + ROW_CLASS + " .cardacts:empty{display:none}",
     ".lahe-thread{display:flex;flex-direction:column;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}",
     ".lahe-thread-round{display:flex;flex-direction:column;gap:5px}",
-    ".lahe-thread-turn{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12.5px;line-height:1.45}",
+    // The reviewer's own turns are context; the agent's turns are the reading.
+    // So the agent's words get full ink and the card body's size, and the
+    // reviewer's stay smaller and softer (Ken, 2026-09-11).
+    ".lahe-thread-turn{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12.5px;line-height:1.45;color:var(--ink-soft)}",
+    ".lahe-thread-turn[data-lahe-turn='agent']{font-size:14px;line-height:1.55;color:var(--ink)}",
     ".lahe-thread-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}",
     ".lahe-thread-turn strong{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint)}",
     ".lahe-thread-time,.lahe-ask-time{font-size:10px;color:var(--ink-faint);font-variant-numeric:tabular-nums;white-space:nowrap}",
@@ -725,7 +731,32 @@
       if (!ids.length && life.summaryToast && typeof rail.dismissToast === "function") {
         rail.dismissToast(life.summaryToast, "replaced");
       }
+      dismissReadWaiting(next);
       return ids;
+    }
+
+    /**
+     * Take away a sticky "still waiting" toast once its reply has been read.
+     *
+     * These do not time out, so nothing else ever removes them, and a reminder
+     * about an answer the reviewer has now read is the surface lying. The
+     * arrival toasts are left alone: they are transient and already going.
+     *
+     * @param {object} unread id -> true, as the paint just worked it out
+     */
+    function dismissReadWaiting(unread) {
+      if (typeof rail.toastInfo !== "function" || typeof rail.dismissToast !== "function") return 0;
+      var gone = 0;
+      rail.toastInfo().toasts.forEach(function (toast) {
+        var parts = String(toast.key || "").split(":");
+        // reply:<id>:<stamp>:waiting, and the stamp carries colons of its own,
+        // so the suffix is read off the end rather than by position.
+        if (parts[0] !== "reply" || parts[parts.length - 1] !== "waiting") return;
+        if (unread[parts[1]]) return;
+        rail.dismissToast(toast.id, "replaced");
+        gone += 1;
+      });
+      return gone;
     }
 
     /**
@@ -1000,19 +1031,20 @@
       record.chronologicalThread(item).forEach(function (round) {
         var pair = el("div", "lahe-thread-round");
         var reviewer = round.reviewer || {};
-        if (reviewer.note) appendTurn(pair, "Reviewer note", reviewer.note, reviewer.at);
-        if (reviewer.change) appendTurn(pair, "Reviewer change", reviewer.change, reviewer.at);
+        if (reviewer.note) appendTurn(pair, "Reviewer note", reviewer.note, reviewer.at, "reviewer");
+        if (reviewer.change) appendTurn(pair, "Reviewer change", reviewer.change, reviewer.at, "reviewer");
         var agent = round.agent || {};
-        if (agent.text) appendTurn(pair, agent.agent || "Agent", agent.text, agent.at);
-        if (agent.reason) appendTurn(pair, (agent.agent || "Agent") + " reason", agent.reason, agent.at);
-        if (!agent.text && !agent.reason) appendTurn(pair, agent.agent || "Agent", agent.status || "", agent.at);
+        if (agent.text) appendTurn(pair, agent.agent || "Agent", agent.text, agent.at, "agent");
+        if (agent.reason) appendTurn(pair, (agent.agent || "Agent") + " reason", agent.reason, agent.at, "agent");
+        if (!agent.text && !agent.reason) appendTurn(pair, agent.agent || "Agent", agent.status || "", agent.at, "agent");
         node.appendChild(pair);
       });
       return node;
     }
 
-    function appendTurn(host, who, text, at) {
+    function appendTurn(host, who, text, at, side) {
       var line = el("p", "lahe-thread-turn");
+      line.setAttribute("data-lahe-turn", side === "agent" ? "agent" : "reviewer");
       var head = el("span", "lahe-thread-head");
       head.appendChild(el("strong", null, who));
       if (at) {
@@ -1313,19 +1345,21 @@
      * same answer being shown twice however many times a remount or a replayed
      * backlog asks for it.
      */
-    function toastReply(id) {
+    function toastReply(id, options) {
       if (!canToast()) return null;
+      var o = options || {};
       var item = itemById(id);
       if (!item || !item[record.FIELD.REPLY]) return null;
       var reply = item[record.FIELD.REPLY];
       var shown = rail.showToast({
-        key: "reply:" + id + ":" + String(replyStamp(item)),
+        key: "reply:" + id + ":" + String(replyStamp(item)) + (o.keySuffix || ""),
         label: toastLabelFor(reply),
         text: toastText(item),
         about: clip(aboutWords(item), TOAST_ABOUT_MAX),
         // A QUESTION WAITS. An agent asking is an agent stopped, so the one
-        // thing on screen that says so does not time out.
-        sticky: reply.status === record.REPLY_STATUS.QUESTION,
+        // thing on screen that says so does not time out. So does a reply the
+        // reviewer has already let time out once: see showWaiting.
+        sticky: o.sticky === true || reply.status === record.REPLY_STATUS.QUESTION,
         onOpen: function () {
           jumpToCard(id);
         },
@@ -1336,11 +1370,46 @@
           // Timing out is the opposite: nobody decided anything, so it starts
           // the neglect clock instead.
           if (why === "timeout") noteNeglected(id);
-          else markOneSeen(id);
+          else if (why === "user") markOneSeen(id);
         }
       });
       if (shown) life.announced[id] = true;
       return shown;
+    }
+
+    /**
+     * What a reviewer who has not read these should see, now that waiting is
+     * the point rather than arrival.
+     *
+     * IF IT FITS ON SCREEN, IT IS THE MESSAGE. Ken, looking at a sticky "1 reply
+     * is waiting" he could not dismiss by reading it: "if we're going to have a
+     * persistent toast on the page that doesn't go away and there's only one
+     * message, then why wouldn't it just be that message? Just tell me what it
+     * is." A count that costs the same space as the answer and the same
+     * permanence, and carries none of the words, is the worst of both.
+     *
+     * So up to a stackful (TOAST_MAX) come back as themselves, sticky, with
+     * their words: the X still means read and pressing one still jumps to its
+     * card. Only a pile too big for the stack collapses into a number, because
+     * that is the one case where the words genuinely will not fit.
+     *
+     * @param {string[]} ids the unread replies to put back in front of them
+     */
+    function showWaiting(ids) {
+      if (!canToast() || !ids || !ids.length) return null;
+      if (ids.length > toastRoom()) return showSummary(ids);
+      ids.forEach(function (id) {
+        // A suffixed key, because this same reply already had its arrival toast
+        // and the rail shows one toast per key for the life of the page. This
+        // is a second, different thing to say about it: it is still waiting.
+        toastReply(id, { sticky: true, keySuffix: ":waiting" });
+      });
+      return ids.length;
+    }
+
+    /** How many messages the stack can hold at once. The rail owns the number. */
+    function toastRoom() {
+      return typeof overlayModule.TOAST_MAX === "number" ? overlayModule.TOAST_MAX : 3;
     }
 
     /**
@@ -1413,12 +1482,14 @@
         if (replyAge(item, now) >= neglectMs) stale.push(id);
         else recent.push(id);
       });
-      recent.forEach(toastReply);
+      recent.forEach(function (id) {
+        toastReply(id);
+      });
       if (stale.length) {
         stale.forEach(function (id) {
           life.announced[id] = true;
         });
-        showSummary(stale);
+        showWaiting(stale);
       }
       return recent.length + (stale.length ? 1 : 0);
     }
@@ -1471,7 +1542,7 @@
         return unread.indexOf(id) !== -1 && onScreen.indexOf(id) === -1;
       });
       if (!ids.length) return null;
-      return showSummary(ids);
+      return showWaiting(ids);
     }
 
     /**

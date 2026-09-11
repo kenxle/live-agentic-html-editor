@@ -426,13 +426,18 @@
 
     // The agent's question is the loudest thing on a card: its own block, its
     // own rule, its own weight. Not a tinted label (D10).
-    ".agent{border-radius:8px;padding:8px 10px;background:var(--surface);font-size:12.5px}",
+    // THE AGENT'S WORDS ARE WHAT THE REVIEWER CAME TO READ. Ken, 2026-09-11: the
+    // answer sat at 12.5px on a tinted surface, so it was both smaller and
+    // lower-contrast than his own note above it, "and it's the thing I need to
+    // read." Full ink and the card body's size, the same weight as the note.
+    ".agent{border-radius:8px;padding:9px 11px;background:var(--surface);color:var(--ink);",
+    "font-size:14px;line-height:1.55}",
     ".agent:empty{display:none}",
     ".agent__head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:3px}",
     ".agent__who{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;",
     "color:var(--ink-faint);display:block}",
     ".agent.is-loud{background:var(--accent-wash);border-left:3px solid var(--accent);",
-    "color:var(--ink);font-size:13.5px;line-height:1.5}",
+    "color:var(--ink);font-size:14px;line-height:1.55}",
     ".agent.is-loud .agent__who{color:var(--accent-ink)}",
     // ONE PATH PER LINE, AND IT BREAKS. Repo-relative paths are long and have
     // no natural break points, so joined on one line with normal wrapping they
@@ -3678,6 +3683,73 @@
       return toastMs;
     }
 
+    // -------------------------------------------------------------------------
+    // Carrying the rail across a reload the tool itself started
+    // -------------------------------------------------------------------------
+    //
+    // Ken clicked a toast, the rail opened on the card, and two seconds later
+    // the agent rebuilt the page for a different review. LAHE reloaded, the rail
+    // came back in its default state, and the card he was reading "disappeared
+    // out from in front of me".
+    //
+    // The reload is right and the scroll position is already carried (see
+    // sync.js's viewport marker). This is the same promise for the rail: what
+    // was open stays open, on the same tab, scrolled to the same place, with the
+    // same card focused. It is the LIVE state, not the stored preference: a rail
+    // opened by a toast is open whatever the reviewer's usual choice is.
+    //
+    // A reviewer's own reload is untouched. Only the marker sync.js writes on
+    // the way out is consumed, and only once.
+
+    /** What is on screen right now, as plain data. */
+    function railState() {
+      var pane = dom && dom.panes ? dom.panes[activeTab] : null;
+      return {
+        collapsed: collapsed,
+        tab: activeTab,
+        scroll: pane && typeof pane.scrollTop === "number" ? Math.round(pane.scrollTop) : 0,
+        focused: focusedCardId()
+      };
+    }
+
+    /**
+     * Put it back, exactly.
+     *
+     * The collapse is applied WITHOUT persisting: this is restoring what was on
+     * screen, not recording a new decision, and writing it back as a preference
+     * would turn "a toast opened the rail once" into "the rail is open now".
+     *
+     * @param {object} state from railState, across a reload
+     * @returns {object} what could actually be applied
+     */
+    function applyRailState(state) {
+      var s = state || {};
+      var done = { collapsed: false, tab: null, scroll: false, focused: null };
+      if (typeof s.collapsed === "boolean") {
+        setCollapsed(s.collapsed, false);
+        done.collapsed = true;
+      }
+      if (s.tab && TABS.indexOf(s.tab) !== -1) {
+        selectTab(s.tab);
+        done.tab = s.tab;
+      }
+      var pane = dom && dom.panes ? dom.panes[activeTab] : null;
+      if (pane && typeof s.scroll === "number" && s.scroll >= 0) {
+        pane.scrollTop = s.scroll;
+        done.scroll = true;
+      }
+      if (s.focused) {
+        var node = cardNode(s.focused);
+        if (node && typeof node.focus === "function") {
+          node.tabIndex = -1;
+          if (typeof node.scrollIntoView === "function") node.scrollIntoView({ block: "nearest" });
+          node.focus();
+          done.focused = s.focused;
+        }
+      }
+      return done;
+    }
+
     // Rects for both, plus the overlap answer, because "never overlaps" is a
     // geometric claim and a test should be able to check it as one.
     function geometry() {
@@ -3744,6 +3816,9 @@
       isCollapsed: isCollapsed,
       onCollapse: onCollapse,
       geometry: geometry,
+      // What is on screen, and putting it back after a reload the tool started.
+      railState: railState,
+      applyRailState: applyRailState,
       selectTab: selectTab,
       currentTab: currentTab,
       onTabSelect: onTabSelect,
