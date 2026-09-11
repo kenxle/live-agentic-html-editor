@@ -209,6 +209,16 @@ handled edit placed. Handled edits are the reviewer's own decisions, listed in
 handled edit's after text, apply the rest of the sweep, leave that one spot
 alone, and reply `question` naming the conflict.
 
+**The reviewer's formatting is part of the edit.** An item's `after_full` is
+the words; `after_html` is the same words carrying the bold and italic they
+applied. Apply `after_html`, not the text alone: bold reaches you as `<strong>`
+and italic as `<em>`, which a Markdown source spells `**` and `_` (or `*`). When
+they took bold or italic OFF words a page stylesheet makes bold or italic, the
+record marks that run `<not-bold>` or `<not-italic>`: make that true in the
+source the way the source says it, and never copy either tag into the source. A
+`handled` reply for an edit whose formatting you did not carry is a wrong
+handled, and the page check reopens the item and says so.
+
 **A break the reviewer typed is part of the edit.** A blank line in an item's
 `after_full` is a paragraph break; a single newline is a line break. Markdown
 does not read a single newline as a new paragraph, so writing the after text
