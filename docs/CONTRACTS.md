@@ -723,6 +723,24 @@ window bearing the review token may depose the current holder, automatically onc
 the reviewer's explicit "Review here instead"); a fresh secret is minted on every takeover, so a
 deposed holder cannot re-assert with its old one.
 
+The session table is written to `windows.json` in the state directory (owner-only, atomic) on every
+grant, heartbeat, release and takeover, and read back at startup. The helper is replaced whenever the
+code on disk is newer than the running process, which on a working day is several times an hour, and a
+memory-only table handed each new helper an empty holder slot: the open page's heartbeat carried a
+secret nobody held, so it was refused as a second window, dropped to read-only under the reviewer's open
+comment boxes, and thirty seconds later took the review over from itself. A holder whose `last_seen` is
+older than `STALE_AFTER_MS` at load time is dropped rather than restored, which is the same answer the
+ordinary rule would have given. A refusal also carries `deposed: true` when the refused window is the
+one an explicit "Review here instead" threw out; the page acts on that one immediately and waits every
+other refusal out, because a helper being replaced looks the same from the page.
+
+The same file is what a CLI command reads before it replaces a stale helper (`reviews.readLiveHolders`,
+`LIVE_WINDOW_MS` = 120s). A stale helper with a live reviewer on it is left running and the command says
+which review and how long ago that page spoke; `lahe serve --restart` replaces it regardless. The file
+rather than a route, because the command asks before it holds any review's token, and the only route it
+could use is the unauthenticated `/health`, which would publish the machine's open review ids to every
+page on it.
+
 The checks, in order, each with the code it refuses under (`protocol.CHECKS`, and
 `protocol.checkRequest(request, config)` is the whole block as one pure function):
 

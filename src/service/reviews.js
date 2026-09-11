@@ -62,6 +62,25 @@ var TOKEN_BYTES = 32;
 var HEARTBEAT_SECONDS = 10;
 var STALE_AFTER_MS = 30 * 1000;
 
+// THE SESSION TABLE OUTLIVES THE PROCESS. It used to be memory only, and the
+// helper is replaced whenever the code on disk is newer than the running
+// process, which on a working day is several times an hour. Each replacement
+// handed the reviewer's open page to a helper that had never heard of it: the
+// page's heartbeat carried a secret nobody held, so it was read as a second
+// window while the (empty) holder slot looked alive, the page dropped to
+// read-only under the reviewer's open comment boxes, and thirty seconds later
+// it "took over from a holder whose heartbeat had been quiet", which was
+// itself. Seen on review r4915e2d5d632 on 2026-09-10, and twice more the same
+// night. Writing the table to the state directory on every change, and reading
+// it back at startup, makes a restart invisible to a page that is still there.
+//
+// The window a CLI command calls "somebody is using this helper right now".
+// Longer than STALE_AFTER_MS on purpose: losing the review after thirty quiet
+// seconds is a decision about one page, while replacing the process is a
+// decision about every page on the machine, and it deserves the more cautious
+// number.
+var LIVE_WINDOW_MS = 120 * 1000;
+
 // A REVIEW MINTED AFTER THIS HELPER STARTED IS ON DISK BUT NOT IN MEMORY, and
 // there is no create-review route to tell the helper about it (on purpose). The
 // helper therefore looks on disk once for a review it is asked about and does
@@ -783,6 +802,123 @@ function createReviews(options) {
    * how the helper and the page ended up disagreeing on screen. The `since`
    * field of the refusal is untouched: that one IS for machines.
    */
+  // ---------------------------------------------------------------------------
+  // The session table on disk
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Write the session table to the state directory.
+   *
+   * Called on every change of holder and on every heartbeat, because last_seen
+   * is the whole value of the file: a table whose timestamps stopped a helper
+   * lifetime ago says a page is live when nobody is there. One small atomic
+   * write per holder per heartbeat interval, which is one write every ten
+   * seconds per open page.
+   *
+   * Fails soft. A helper that cannot write this file still runs the review; it
+   * only loses the ability to survive its own replacement, which is exactly the
+   * state everything was in before this existed.
+   */
+  function saveSessions() {
+    var payload = { version: 1, saved_at: new Date().toISOString(), sessions: {} };
+    Object.keys(sessions).forEach(function (id) {
+      var holder = sessions[id];
+      payload.sessions[id] = {
+        window_id: holder.window_id,
+        session_secret: holder.session_secret,
+        since: holder.since,
+        since_ms: holder.since_ms,
+        last_seen: holder.last_seen,
+        deposed_secret: holder.deposed_secret || null
+      };
+    });
+    try {
+      stateDir.ensureDir(dir);
+      stateDir.writeAtomic(stateDir.windowsPath(dir), JSON.stringify(payload, null, 2) + "\n");
+    } catch (err) {
+      log.helperLog("could not write the window session table: " + err.message);
+    }
+    return payload;
+  }
+
+  /**
+   * Read the session table back, dropping holders that already went quiet.
+   *
+   * A holder whose last_seen is older than STALE_AFTER_MS at load time has lost
+   * the review by the ordinary rule, so it is not restored: the first window to
+   * ask gets it, which is what would have happened had the helper never stopped.
+   * A holder inside the window is restored WITH ITS SECRET, and that is the
+   * whole point: the page still open out there is carrying that secret on every
+   * heartbeat, and the secret is what claimWindow recognizes the holder by.
+   */
+  function loadSessions() {
+    var parsed = null;
+    try {
+      parsed = JSON.parse(fs.readFileSync(stateDir.windowsPath(dir), "utf8"));
+    } catch (err) {
+      // No file, or an unreadable one. Either way there is nothing to restore,
+      // and an empty table is the state this helper would have had anyway.
+      return sessions;
+    }
+    var table = parsed && parsed.sessions;
+    if (!table || typeof table !== "object") return sessions;
+    var at = clock();
+    var restored = 0;
+    var dropped = 0;
+    Object.keys(table).forEach(function (id) {
+      var holder = table[id];
+      if (!holder || typeof holder.session_secret !== "string" || !holder.session_secret) return;
+      if (typeof holder.last_seen !== "number") return;
+      if (!protocol.isSafeId(id)) return;
+      if (at - holder.last_seen > STALE_AFTER_MS) {
+        dropped += 1;
+        return;
+      }
+      sessions[id] = {
+        window_id: typeof holder.window_id === "string" ? holder.window_id : "unknown",
+        session_secret: holder.session_secret,
+        since: holder.since || new Date(holder.last_seen).toISOString(),
+        since_ms: typeof holder.since_ms === "number" ? holder.since_ms : holder.last_seen,
+        last_seen: holder.last_seen,
+        deposed_secret: typeof holder.deposed_secret === "string" ? holder.deposed_secret : null
+      };
+      restored += 1;
+    });
+    if (restored || dropped) {
+      log.helperLog(
+        "window sessions restored: " + restored + " still live, " + dropped + " already quiet longer than " +
+          Math.ceil(STALE_AFTER_MS / 1000) + " seconds"
+      );
+    }
+    return sessions;
+  }
+
+  /**
+   * Every review whose page said something within `withinMs`.
+   *
+   * This is the question a command asks before it replaces the helper: is
+   * somebody reviewing on it right now.
+   */
+  function liveHolders(withinMs) {
+    var window = typeof withinMs === "number" ? withinMs : LIVE_WINDOW_MS;
+    var at = clock();
+    return Object.keys(sessions)
+      .filter(function (id) {
+        return at - sessions[id].last_seen <= window;
+      })
+      .map(function (id) {
+        return {
+          review: id,
+          window_id: sessions[id].window_id,
+          since: sessions[id].since,
+          quiet_ms: at - sessions[id].last_seen
+        };
+      })
+      .sort(function (a, b) {
+        return a.quiet_ms - b.quiet_ms;
+      });
+  }
+
   function heldForPhrase(holder) {
     var startedAt = typeof holder.since_ms === "number" ? holder.since_ms : holder.since;
     return elapsed.elapsedPhrase(startedAt, { now: clock() });
@@ -822,6 +958,7 @@ function createReviews(options) {
       // This is the heartbeat, and it is the ONLY thing recognized as the holder.
       holder.last_seen = at;
       holder.window_id = windowId;
+      saveSessions();
       return granted(holder, false, null);
     }
 
@@ -831,18 +968,31 @@ function createReviews(options) {
       // A window that is not the holder and did not ask to take over, while the
       // holder is alive. Refused, and the refusal names NOTHING about the holder:
       // no window id (which a rival used to replay as a heartbeat) and no secret.
-      var reason =
-        "this review is already open in another window, which has been holding it " +
-        heldForPhrase(holder) +
-        ". Close that window, or wait " +
-        Math.ceil(STALE_AFTER_MS / 1000) +
-        " seconds after it stops responding and this one takes over.";
-      log.helperLog("review " + reviewId + ": refused window " + windowId + " (holder still alive)");
+      // WAS THIS WINDOW DEPOSED ON PURPOSE? A window whose secret is the one the
+      // current holder took the review from ran into somebody pressing "Review
+      // here instead", and that is a decision a person made rather than an
+      // ambiguous refusal. The page acts on it at once; every other refusal it
+      // waits out, because a refusal that arrives during a helper swap looks
+      // exactly the same from the page and used to close the comment boxes the
+      // reviewer had open.
+      var deposed = !!holder.deposed_secret && secretsMatch(holder.deposed_secret, req.session_secret);
+      var reason = deposed
+        ? "another window took this review with Review here instead " + heldForPhrase(holder) + " ago."
+        : "this review is already open in another window, which has been holding it " +
+          heldForPhrase(holder) +
+          ". Close that window, or wait " +
+          Math.ceil(STALE_AFTER_MS / 1000) +
+          " seconds after it stops responding and this one takes over.";
+      log.helperLog(
+        "review " + reviewId + ": refused window " + windowId +
+          (deposed ? " (it was deposed by an explicit Review-here-instead)" : " (holder still alive)")
+      );
       return {
         granted: false,
         since: holder.since,
         heartbeat_seconds: HEARTBEAT_SECONDS,
         reason: reason,
+        deposed: deposed,
         took_over: false
       };
     }
@@ -871,8 +1021,13 @@ function createReviews(options) {
       // The same instant on the injectable clock, which is what the refusal
       // measures elapsed time against. `since` is the wire field and stays ISO.
       since_ms: at,
-      last_seen: at
+      last_seen: at,
+      // Only an EXPLICIT takeover records this. A holder that simply went quiet
+      // was not deposed by anyone, and its page, if it comes back, should be
+      // told the ordinary ambiguous refusal and given time to sort itself out.
+      deposed_secret: tookOver && wantsTakeover && !holderIsStale(holder) ? holder.session_secret : null
     };
+    saveSessions();
     return granted(sessions[reviewId], tookOver, null);
   }
 
@@ -901,6 +1056,7 @@ function createReviews(options) {
     if (!holder) return { released: false };
     if (!secretsMatch(holder.session_secret, req.session_secret)) return { released: false };
     delete sessions[reviewId];
+    saveSessions();
     log.helperLog("review " + reviewId + ": window " + holder.window_id + " released it on the way out");
     return { released: true };
   }
@@ -943,6 +1099,7 @@ function createReviews(options) {
       })
     ]);
     delete sessions[reviewId];
+    saveSessions();
     log.helperLog("review " + reviewId + " archived");
     return { ended_at: endedAt };
   }
@@ -950,6 +1107,7 @@ function createReviews(options) {
   return {
     HEARTBEAT_SECONDS: HEARTBEAT_SECONDS,
     STALE_AFTER_MS: STALE_AFTER_MS,
+    LIVE_WINDOW_MS: LIVE_WINDOW_MS,
     RESCAN_INTERVAL_MS: RESCAN_INTERVAL_MS,
     RESCAN_TRACKED_MAX: RESCAN_TRACKED_MAX,
     loadFromDisk: loadFromDisk,
@@ -968,16 +1126,95 @@ function createReviews(options) {
     claimWindow: claimWindow,
     releaseWindow: releaseWindow,
     holderOf: holderOf,
+    loadSessions: loadSessions,
+    saveSessions: saveSessions,
+    liveHolders: liveHolders,
     endReview: endReview
   };
+}
+
+/**
+ * Which reviews on this machine have a page that spoke recently, read straight
+ * off the state directory.
+ *
+ * WHY A FILE AND NOT A ROUTE. The command that asks this is deciding whether to
+ * replace the shared helper, and it asks BEFORE it has any review's token: the
+ * only route it could use is /health, which is unauthenticated, and putting
+ * review ids on an unauthenticated route hands every page on the machine a list
+ * of the reviews open on it. The state directory is owner-only, so reading the
+ * table there is already the permission check, and it answers even while the
+ * helper is mid-restart and answering nothing.
+ *
+ * @param {string} dir the resolved state directory
+ * @param {number} [withinMs] how recent counts as live. Default LIVE_WINDOW_MS
+ * @param {number} [nowMs] injectable clock, for tests
+ * @returns {Array<{review: string, quiet_ms: number}>} newest first, or []
+ */
+function readLiveHolders(dir, withinMs, nowMs) {
+  var window = typeof withinMs === "number" ? withinMs : LIVE_WINDOW_MS;
+  var at = typeof nowMs === "number" ? nowMs : Date.now();
+  var parsed;
+  try {
+    parsed = JSON.parse(fs.readFileSync(stateDir.windowsPath(dir), "utf8"));
+  } catch (err) {
+    // No table at all is the answer "nobody that this machine knows of", which
+    // is also what a helper older than this code leaves behind.
+    return [];
+  }
+  var table = parsed && parsed.sessions;
+  if (!table || typeof table !== "object") return [];
+  return Object.keys(table)
+    .filter(function (id) {
+      var holder = table[id];
+      return !!holder && typeof holder.last_seen === "number" && at - holder.last_seen <= window;
+    })
+    .map(function (id) {
+      return { review: id, quiet_ms: at - table[id].last_seen };
+    })
+    .sort(function (a, b) {
+      return a.quiet_ms - b.quiet_ms;
+    });
+}
+
+/**
+ * The sentence a command prints when it decided not to replace the helper.
+ *
+ * One spelling, because `lahe review`, `lahe add` and `lahe session` all reach
+ * the same fork and the person reading the output should not have to work out
+ * whether three differently worded paragraphs mean the same thing.
+ *
+ * @param {Array<{review: string, quiet_ms: number}>} holders from readLiveHolders
+ * @param {{forced?: boolean}} [options] forced is `lahe serve --restart`, which
+ *   replaces the helper anyway and so says what it is about to interrupt
+ * @returns {string}
+ */
+function liveReviewerSentence(holders, options) {
+  var list = holders || [];
+  if (list.length === 0) return "";
+  var first = list[0];
+  var seconds = Math.max(0, Math.round(first.quiet_ms / 1000));
+  var who =
+    "A reviewer has a page open on this helper (review " + first.review + ", last seen " + seconds + "s ago)" +
+    (list.length > 1 ? ", and " + (list.length - 1) + " more" : "") + ".";
+  if (options && options.forced) {
+    return who + " Replacing the helper anyway, because --restart was asked for; their page reconnects on its own.";
+  }
+  return (
+    who +
+    " Leaving the running helper in place; it is older than the code on disk." +
+    " Restart it when they are done: lahe serve --restart"
+  );
 }
 
 module.exports = {
   TOKEN_BYTES: TOKEN_BYTES,
   HEARTBEAT_SECONDS: HEARTBEAT_SECONDS,
   STALE_AFTER_MS: STALE_AFTER_MS,
+  LIVE_WINDOW_MS: LIVE_WINDOW_MS,
   RESCAN_INTERVAL_MS: RESCAN_INTERVAL_MS,
   RESCAN_TRACKED_MAX: RESCAN_TRACKED_MAX,
+  readLiveHolders: readLiveHolders,
+  liveReviewerSentence: liveReviewerSentence,
   mintToken: mintToken,
   mintReviewId: mintReviewId,
   createReviews: createReviews

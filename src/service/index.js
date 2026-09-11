@@ -176,6 +176,11 @@ async function serve(options) {
   var log = logModule.createEventLog({ dir: dir });
   var reviews = reviewsModule.createReviews({ dir: dir, log: log });
   reviews.loadFromDisk();
+  // The window sessions the LAST helper was holding. A helper is replaced
+  // whenever the code on disk is newer than the running process, and without
+  // this every replacement threw the reviewer's open page out of its own review
+  // (see the session table note in reviews.js).
+  reviews.loadSessions();
   var auth = authModule.createAuth({ log: log, reviews: reviews });
 
   // Reviews named on the command line (or by the harness) exist before the

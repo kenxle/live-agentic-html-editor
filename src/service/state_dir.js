@@ -16,6 +16,9 @@
 //                            tokens. 0600. Written beside, then renamed
 //     helper.log             one line per notable thing, and one line per
 //                            REFUSAL NAMING THE CHECK THAT FAILED (D11). 0600
+//     windows.json           who holds each review's window session right now,
+//                            so a helper restart does not depose an open page
+//                            (D5). 0600
 //     reviews/<review-id>/                                             (0700)
 //       events.jsonl         append-only, one JSON line per event. 0600
 //       review.json          the projection the agent reads (3A writes it)
@@ -48,7 +51,8 @@ var FILES = {
   helperLog: "helper.log",
   events: "events.jsonl",
   review: "review.json",
-  meta: "meta.json"
+  meta: "meta.json",
+  windows: "windows.json"
 };
 
 var REVIEWS_DIR = "reviews";
@@ -227,6 +231,19 @@ function helperLogPath(dir) {
   return path.join(dir, FILES.helperLog);
 }
 
+/**
+ * The window-session table: which window holds each review, and when it last
+ * said so.
+ *
+ * It sits beside service.json rather than under a review, because the question
+ * every reader asks is "does ANY review on this machine have a live page", and
+ * a reader that has to walk every review directory to answer it will skip the
+ * walk. Owner-only like everything else here: it carries session secrets.
+ */
+function windowsPath(dir) {
+  return path.join(dir, FILES.windows);
+}
+
 function reviewsRoot(dir) {
   return path.join(dir, REVIEWS_DIR);
 }
@@ -402,6 +419,7 @@ module.exports = {
   resolveWithin: resolveWithin,
   readyPath: readyPath,
   helperLogPath: helperLogPath,
+  windowsPath: windowsPath,
   reviewsRoot: reviewsRoot,
   agentSessionsRoot: agentSessionsRoot,
   agentSessionDir: agentSessionDir,

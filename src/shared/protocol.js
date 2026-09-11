@@ -54,7 +54,11 @@
   // 12: older static servers hand back raw Markdown bytes from a source mount
   // and have no on-request renderer, so a reviewed document's links to other
   // local documents download or 404 behind them. They must be restarted.
-  var SERVICE_CONTRACT = 12;
+  // 13: older helpers keep the window-session table in memory only, so
+  // replacing one throws every open review page out of its own review, and
+  // they leave no windows.json for a CLI command to ask whether anybody is
+  // reviewing before it replaces them. They must be restarted.
+  var SERVICE_CONTRACT = 13;
   var BASE = "/lahe/" + API_VERSION;
 
   // ---------------------------------------------------------------------------
@@ -257,7 +261,11 @@
       mutating: true,
       why: "D5's second-window refusal for windows that cannot see each other's storage, plus the takeover",
       request: "{review, window_id, session_secret?, takeover?}",
-      response: "grant {granted:true, since, heartbeat_seconds, took_over, session_secret}; refusal {granted:false, since, heartbeat_seconds, reason} (no holder id, no secret)"
+      response:
+        "grant {granted:true, since, heartbeat_seconds, took_over, session_secret}; refusal {granted:false, since, " +
+        "heartbeat_seconds, reason, deposed} (no holder id, no secret). deposed is true only when the refused " +
+        "window is the one an explicit Review-here-instead threw out, which is the one refusal the page acts on " +
+        "immediately; every other refusal it waits out, because a helper being replaced looks the same from there"
     },
     {
       name: "window.release",
