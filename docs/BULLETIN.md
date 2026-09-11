@@ -5,6 +5,13 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
+- [ ] @ken 2026-09-11 LAHE-organic-discovery -- **Someone found LAHE on their own,
+  days after launch.** A student in Ken's Columbia class searched, found the tool,
+  and brought it up in class. Nobody pointed them to it. Ken: "i just launched it,
+  but people are already finding it. i need to keep working on it." Worth deciding
+  what the first outside user should hit: the README, the install path, and whether
+  the anchoring and stabilization passes come before any wider announcement.
+
 - [ ] @anyone 2026-09-11 LAHE-stabilization-pass -- **A cleanup, architecture, and
   code review pass over everything that landed 2026-09-08 to 2026-09-11 without
   a brief.** Ken: "I've been throwing so many things at you for this without
