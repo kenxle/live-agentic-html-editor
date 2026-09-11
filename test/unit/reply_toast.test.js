@@ -527,3 +527,56 @@ test("an agent answering the same revision twice: the older line replayed later 
   assert.equal(parts.rail.toastInfo().count, before, "nothing toasts for an answer already read");
   assert.deepEqual(parts.done.unseenIds(), [], "and nothing is left unread");
 });
+
+// --- the swipe ----------------------------------------------------------------
+//
+// Ken: "because the toasts slide in like a Mac notification, my inclination is
+// to grab them with the mouse and slide them back away, click and drag to the
+// right to get rid of it. Of course that just highlights text and then opens
+// the card instead."
+//
+// The gesture has to mean exactly what the X means, so the decision it rests on
+// is pure and argued about here rather than by dragging things in a browser.
+
+test("the throw is the shorter of a share of the toast and a flat ceiling", () => {
+  // A narrow toast: a share of its own width, so it is no harder to push away
+  // than a wide one.
+  assert.equal(overlay.toastSwipeThreshold(200), 80);
+  // A wide one: the ceiling, so it never asks for an arm's length of travel.
+  assert.equal(overlay.toastSwipeThreshold(560), overlay.TOAST_SWIPE_MAX_PX);
+  // Nonsense in, the dead zone out, rather than a threshold of zero that would
+  // make every press a dismissal.
+  assert.equal(overlay.toastSwipeThreshold(0), overlay.TOAST_SWIPE_SLOP);
+  assert.equal(overlay.toastSwipeThreshold(undefined), overlay.TOAST_SWIPE_SLOP);
+});
+
+test("a patient drag most of the way across is a dismissal", () => {
+  assert.equal(overlay.shouldDismissSwipe({ dx: 200, velocity: 0, width: 400 }), true);
+  assert.equal(overlay.shouldDismissSwipe({ dx: 120, velocity: 0, width: 300 }), true, "exactly the threshold counts");
+  assert.equal(overlay.shouldDismissSwipe({ dx: 60, velocity: 0, width: 400 }), false, "half way is not a decision");
+});
+
+test("a quick flick counts even when it was let go early", () => {
+  assert.equal(overlay.shouldDismissSwipe({ dx: 30, velocity: overlay.TOAST_FLING_SPEED, width: 560 }), true);
+  assert.equal(
+    overlay.shouldDismissSwipe({ dx: 30, velocity: overlay.TOAST_FLING_SPEED - 0.1, width: 560 }),
+    false,
+    "a slow drag that changed its mind is not a throw"
+  );
+});
+
+test("a press, a shake, and a leftward drag are none of them dismissals", () => {
+  assert.equal(overlay.shouldDismissSwipe({ dx: 0, velocity: 0, width: 400 }), false);
+  assert.equal(
+    overlay.shouldDismissSwipe({ dx: overlay.TOAST_SWIPE_SLOP, velocity: 9, width: 400 }),
+    false,
+    "inside the dead zone is a click, however fast the hand was"
+  );
+  assert.equal(
+    overlay.shouldDismissSwipe({ dx: -300, velocity: -9, width: 400 }),
+    false,
+    "it came from the right and goes back to the right; there is nothing over there"
+  );
+  assert.equal(overlay.shouldDismissSwipe(null), false);
+  assert.equal(overlay.shouldDismissSwipe({}), false);
+});

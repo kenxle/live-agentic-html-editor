@@ -730,4 +730,155 @@ test.describe("the toast: an answer that finds a reviewer with the rail closed",
       await app.close();
     }
   });
+
+  // --- the swipe --------------------------------------------------------------
+  //
+  // Ken: "because the toasts slide in like a Mac notification, my inclination
+  // is to grab them with the mouse and slide them back away, click and drag to
+  // the right to get rid of it. Of course that just highlights text and then
+  // opens the card instead."
+
+  /** Put a flagged answer on screen with the rail closed, and return the toast. */
+  async function toastedAnswer(page, app, helper, token) {
+    await bootedPage(page, app, helper, token);
+    await commentOnSelection(page, "p.lede", "cut this to one sentence");
+    const [item] = await waitForProjected(helper, 1);
+    await page.evaluate(() => window.__lahe.rail.collapse(true));
+    appendReply(helper, {
+      item: item.id,
+      rev: item.rev,
+      status: "handled",
+      agent: "claude",
+      text: "cut it to one sentence, and moved the number to the front",
+      user_needs_to_see_reply: true
+    });
+    const info = await waitForToast(page, "the answer to toast");
+    return { item, rect: info.toasts[0].rect };
+  }
+
+  /** Press in the middle of the toast, move right in steps, and let go. */
+  async function swipe(page, rect, distance) {
+    const y = rect.y + rect.height / 2;
+    const from = rect.x + 40;
+    await page.mouse.move(from, y);
+    await page.mouse.down();
+    for (let step = 1; step <= 6; step += 1) {
+      await page.mouse.move(from + (distance * step) / 6, y);
+    }
+    await page.mouse.up();
+  }
+
+  test("pushing a toast off to the right dismisses it, and means what the X means", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      const { item, rect } = await toastedAnswer(page, app, helper, token);
+
+      await swipe(page, rect, 200);
+
+      await pollPage(page, () => window.__lahe.rail.toastInfo().count === 0, undefined, {
+        message: "the toast to be pushed away"
+      });
+      expect(
+        await page.evaluate(() => window.__lahe.handle.doneTab().unseenIds()),
+        "pushing it away is dealing with it, exactly as the X is"
+      ).toEqual([]);
+      expect(await page.evaluate(() => window.__lahe.rail.isCollapsed()), "and the rail did not open").toBe(true);
+
+      // It never comes back, which is the half that makes the gesture safe.
+      await page.reload();
+      await pollPage(page, () => !!(window.__lahe && window.__lahe.booted), undefined, {
+        message: "the layer to boot again"
+      });
+      await pollPage(page, (id) => window.__lahe.itemById(id).reply !== null, item.id, {
+        message: "the backlog to be applied again"
+      });
+      expect((await toastState(page)).count).toBe(0);
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
+  test("a short drag springs back: the toast stays, and nothing opens", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      const { rect } = await toastedAnswer(page, app, helper, token);
+
+      await swipe(page, rect, 20);
+
+      const after = await toastState(page);
+      expect(after.count, "20px is a hand that changed its mind").toBe(1);
+      expect(after.toasts[0].text).toContain("moved the number to the front");
+      expect(await page.evaluate(() => window.__lahe.rail.isCollapsed()), "and it did not read as a click").toBe(true);
+      expect(
+        await page.evaluate(() => window.__lahe.handle.doneTab().unseenIds().length),
+        "still unread, because it was not dealt with"
+      ).toBe(1);
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
+  test("a plain click still opens the card, gesture or no gesture", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      const { item, rect } = await toastedAnswer(page, app, helper, token);
+
+      await page.mouse.click(rect.x + rect.width / 2, rect.y + rect.height / 2);
+
+      await pollPage(page, () => window.__lahe.rail.isCollapsed() === false, undefined, {
+        message: "the rail to open"
+      });
+      const rail = await railState(page);
+      expect(rail.tab).toBe("done");
+      expect(rail.focused, "on the card it was about").toBe(item.id);
+      expect((await toastState(page)).count).toBe(0);
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
+  test("a sticky neglect toast is pushed away the same way", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      await commentOnSelection(page, "p.lede", "cut this to one sentence");
+      const [item] = await waitForProjected(helper, 1);
+
+      await page.evaluate((ms) => {
+        window.__lahe.rail.collapse(true);
+        window.__lahe.rail.toastDuration(ms);
+        window.__lahe.handle.doneTab().neglectDelay(ms);
+      }, SHORT_TOAST_MS);
+
+      appendReply(helper, {
+        item: item.id,
+        rev: item.rev,
+        status: "handled",
+        agent: "claude",
+        text: "cut it to one sentence",
+        user_needs_to_see_reply: true
+      });
+      await waitForToast(page, "the answer to toast");
+      await pollPage(page, () => window.__lahe.rail.toastInfo().count === 0, undefined, {
+        message: "the ignored answer to time out"
+      });
+      const back = await pollPage(page, () => window.__lahe.rail.toastInfo().count === 1, undefined, {
+        message: "the neglected answer to come back, sticky"
+      }).then(() => toastState(page));
+      expect(back.toasts[0].sticky).toBe(true);
+
+      await swipe(page, back.toasts[0].rect, 200);
+
+      await pollPage(page, () => window.__lahe.rail.toastInfo().count === 0, undefined, {
+        message: "a sticky toast to go the same way a fresh one does"
+      });
+      expect(await page.evaluate(() => window.__lahe.handle.doneTab().unseenIds())).toEqual([]);
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
 });

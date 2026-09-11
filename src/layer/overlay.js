@@ -717,8 +717,17 @@
     ".toast{pointer-events:auto;width:100%;display:flex;align-items:flex-start;gap:8px;",
     "padding:10px 11px;background:var(--paper);color:var(--ink);text-align:left;",
     "border:1px solid var(--line);border-left:3px solid var(--accent);",
-    "border-radius:var(--radius-sm);box-shadow:var(--shadow);cursor:pointer}",
+    "border-radius:var(--radius-sm);box-shadow:var(--shadow);cursor:pointer;",
+    // SWIPED, NOT SELECTED. Ken: "because the toasts slide in like a Mac
+    // notification, my inclination is to grab them with the mouse and slide
+    // them back away ... of course that just highlights text and then opens the
+    // card instead." A toast is chrome, nobody has ever wanted to copy half of
+    // one, and a press that starts a text selection is a press that cannot
+    // start a gesture. touch-action keeps vertical scrolling the page's, and
+    // takes the horizontal axis for the swipe.
+    "-webkit-user-select:none;user-select:none;touch-action:pan-y}",
     ".toast:hover{background:var(--surface)}",
+    ".toast[data-lahe-dragging='true']{cursor:grabbing;box-shadow:var(--shadow),0 0 0 1px var(--accent)}",
 
     // THE MOVEMENT IS THE POINT. A toast that fades in place is a thing that was
     // always there; a toast that arrives from the edge is a thing that just
@@ -790,6 +799,63 @@
   // Why a toast left, told to whoever put it up. The reviewer pressing the X is
   // a decision about that message; the clock running out is not.
   var TOAST_GONE = { USER: "user", TIMEOUT: "timeout", REPLACED: "replaced" };
+
+  // ---------------------------------------------------------------------------
+  // Swipe to dismiss: the numbers, and the one decision
+  // ---------------------------------------------------------------------------
+  //
+  // The toast arrives from the right edge like a notification, so a reviewer's
+  // hand reaches to push it back the way it came. That gesture has to mean the
+  // same thing the X means, or it is a trap: the reviewer thinks they have
+  // dealt with the message and the tool thinks they have not.
+
+  // How far a pointer travels before this is a drag rather than a press. Small
+  // enough that a deliberate push is recognized at once, large enough that the
+  // shake in a click still opens the card.
+  var TOAST_SWIPE_SLOP = 6;
+  // The far end of the throw: the smaller of a share of the toast's own width
+  // and a flat ceiling, so a narrow toast is not harder to dismiss than a wide
+  // one and a very wide one does not demand an arm's length of travel.
+  var TOAST_SWIPE_FRACTION = 0.4;
+  var TOAST_SWIPE_MAX_PX = 120;
+  // A flick: rightward pixels per millisecond at the moment of release. Half a
+  // pixel per millisecond is 500px a second, which is a deliberate throw and
+  // not a slow drag that changed its mind.
+  var TOAST_FLING_SPEED = 0.5;
+  // The slide off the edge, matched to TOAST_OUT_MS so the node is taken out of
+  // the DOM exactly as it finishes leaving.
+  var TOAST_SPRING_MS = 160;
+
+  /** How far this toast has to travel to count as thrown away. */
+  function toastSwipeThreshold(width) {
+    var w = typeof width === "number" && width > 0 ? width : 0;
+    return Math.max(TOAST_SWIPE_SLOP, Math.min(TOAST_SWIPE_MAX_PX, w * TOAST_SWIPE_FRACTION));
+  }
+
+  /**
+   * Did that gesture mean "get rid of this"?
+   *
+   * Pure, and the whole of the decision, so the feel can be argued about in a
+   * unit test rather than by dragging things in a browser. Two ways to say yes,
+   * because two hands say it differently: the patient one drags it most of the
+   * way across, and the quick one flicks it and lets go early.
+   *
+   * Rightward only. The toast came from the right edge and goes back to it;
+   * a leftward drag is not a dismissal in any direction anyone means.
+   *
+   * @param {object} gesture
+   * @param {number} gesture.dx        how far right of where it started, px
+   * @param {number} gesture.velocity  px per ms at release, rightward positive
+   * @param {number} gesture.width     the toast's own width
+   */
+  function shouldDismissSwipe(gesture) {
+    var g = gesture || {};
+    var dx = typeof g.dx === "number" ? g.dx : 0;
+    if (dx <= TOAST_SWIPE_SLOP) return false;
+    if (dx >= toastSwipeThreshold(g.width)) return true;
+    var velocity = typeof g.velocity === "number" ? g.velocity : 0;
+    return velocity >= TOAST_FLING_SPEED;
+  }
 
   // The review-level actions, in the head's menu. They are the same two the
   // footer used to stand up as buttons, and they run through the same
@@ -3834,6 +3900,13 @@
     //  6. A DISMISSED TOAST IS GONE. It is removed from the DOM at the end of
     //     its fade (TOAST_OUT_MS), never left sitting at opacity 0 over page
     //     content.
+    //  7. A SWIPE NEVER REACHES THE PAGE. All four pointer handlers are on the
+    //     toast node, and the gesture is held with setPointerCapture on that
+    //     same node, so a drag that outruns the toast still belongs to the
+    //     toast and never becomes a drag, a selection, or a click on whatever
+    //     is underneath. Nothing is bound to the document for it. The "+N more"
+    //     line has no handlers at all and is pointer-events:none, so a swipe
+    //     across it does nothing to anything.
 
     var toasts = [];
     var toastSeq = 0;
@@ -3878,7 +3951,11 @@
         onGone: typeof s.onGone === "function" ? s.onGone : null,
         node: null,
         timer: null,
-        paused: false
+        paused: false,
+        // The swipe: the gesture in progress, and whether the last press turned
+        // into one (which is how the click handler knows not to open the card).
+        drag: null,
+        dragged: false
       };
       // Newest first, which is newest on top.
       toasts.unshift(toast);
@@ -3915,6 +3992,67 @@
         dismissToast(toast.id, TOAST_GONE.TIMEOUT);
       }, toastMs);
       return toast.timer;
+    }
+
+    /** The toast follows the pointer, and fades as it goes. */
+    function paintToastDrag(node, dx) {
+      node.style.transform = "translateX(" + Math.round(dx) + "px)";
+      // Gone by about the point it would be released as a dismissal, so the
+      // gesture tells the reviewer what it is going to do before they let go.
+      var span = Math.max(1, toastSwipeThreshold(node.offsetWidth || 0));
+      var fade = dx > 0 ? Math.min(0.75, dx / (span * 1.4)) : 0;
+      node.style.opacity = String(1 - fade);
+    }
+
+    function releaseToastPointer(node, pointerId) {
+      if (typeof node.releasePointerCapture !== "function") return false;
+      try {
+        node.releasePointerCapture(pointerId);
+        return true;
+      } catch (err) {
+        return false;
+      }
+    }
+
+    /** Not far enough, and not fast enough: it goes back where it was. */
+    function springToastBack(node) {
+      node.style.transition = reducedMotion()
+        ? "none"
+        : "transform " + String(TOAST_SPRING_MS) + "ms cubic-bezier(.2,.7,.3,1), opacity " +
+          String(TOAST_SPRING_MS) + "ms ease-out";
+      node.style.transform = "";
+      node.style.opacity = "";
+      return true;
+    }
+
+    /**
+     * Thrown away: off the right edge it came in from, and gone.
+     *
+     * The SAME meaning as the X, deliberately. A reviewer who pushes a message
+     * off the screen has dealt with it; if the tool treated that as "ignored"
+     * the reply would come back later as neglect, which is the tool arguing
+     * with a decision it just watched them make.
+     */
+    function flingToast(toast) {
+      var node = toast.node;
+      if (node && !reducedMotion()) {
+        node.style.transition =
+          "transform " + String(TOAST_OUT_MS) + "ms ease-out, opacity " + String(TOAST_OUT_MS) + "ms ease-out";
+        node.style.transform = "translateX(" + String(Math.round((node.offsetWidth || 0) + 48)) + "px)";
+        node.style.opacity = "0";
+      }
+      return dismissToast(toast.id, TOAST_GONE.USER);
+    }
+
+    /** Has this machine asked for less movement? */
+    function reducedMotion() {
+      var view = doc && doc.defaultView;
+      if (!view || typeof view.matchMedia !== "function") return false;
+      try {
+        return view.matchMedia("(prefers-reduced-motion: reduce)").matches === true;
+      } catch (err) {
+        return false;
+      }
     }
 
     /** Hovering holds it. The reviewer reading it is not the reviewer ignoring it. */
@@ -4049,8 +4187,108 @@
       node.appendChild(close);
 
       node.addEventListener("click", function () {
+        // A swipe ends in a click, because the pointer went down and up on the
+        // same element. Without this the reviewer pushes the toast away and the
+        // rail opens on the card for their trouble. The flag is cleared on the
+        // NEXT pointerdown rather than here, so nothing else can clear it early.
+        if (toast.dragged) return;
         openToast(toast.id);
       });
+
+      // --- the swipe ----------------------------------------------------------
+      //
+      // Pointer events, so the mouse and the finger are one set of handlers,
+      // and all four of them are on THIS node. Capture keeps the gesture alive
+      // when the pointer outruns the toast; nothing is ever bound to the
+      // document, so a swipe cannot reach the page underneath.
+      node.addEventListener("pointerdown", function (event) {
+        if (event.button !== undefined && event.button !== 0) return;
+        // The X is a button and stays one. A press on it is not a gesture.
+        if (event.target && typeof event.target.closest === "function" && event.target.closest(".toast__x")) return;
+        toast.dragged = false;
+        toast.drag = {
+          id: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          dx: 0,
+          lastX: event.clientX,
+          lastAt: now(),
+          velocity: 0,
+          moved: false
+        };
+        if (typeof node.setPointerCapture === "function") {
+          try {
+            node.setPointerCapture(event.pointerId);
+          } catch (err) {
+            // Not fatal: without capture a fast drag off the node simply ends.
+          }
+        }
+      });
+
+      node.addEventListener("pointermove", function (event) {
+        var drag = toast.drag;
+        if (!drag || event.pointerId !== drag.id) return;
+        var dx = event.clientX - drag.startX;
+        var dy = event.clientY - drag.startY;
+        if (!drag.moved) {
+          if (Math.abs(dx) <= TOAST_SWIPE_SLOP) return;
+          // A mostly vertical drag is the reviewer scrolling the page with the
+          // pointer over a toast. The page keeps it.
+          if (Math.abs(dy) > Math.abs(dx)) {
+            toast.drag = null;
+            return;
+          }
+          drag.moved = true;
+          toast.dragged = true;
+          // The arrival animation fills forwards, and a filled animation beats
+          // an inline transform, so it has to be out of the way before the
+          // toast can follow the pointer at all.
+          node.style.animation = "none";
+          node.style.transition = "none";
+          node.setAttribute("data-lahe-dragging", "true");
+          // A toast being handled is not a toast being ignored.
+          pauseToast(toast);
+        }
+        var at = now();
+        var since = Math.max(1, at - drag.lastAt);
+        drag.velocity = (event.clientX - drag.lastX) / since;
+        drag.lastX = event.clientX;
+        drag.lastAt = at;
+        // Rightward is the gesture. Leftward gives a little and no more, so the
+        // toast feels attached to the pointer rather than nailed down, without
+        // ever suggesting there is something to find over there.
+        drag.dx = dx > 0 ? dx : Math.max(-14, dx * 0.2);
+        paintToastDrag(node, drag.dx);
+        if (typeof event.preventDefault === "function") event.preventDefault();
+      });
+
+      node.addEventListener("pointerup", function (event) {
+        var drag = toast.drag;
+        if (!drag || event.pointerId !== drag.id) return;
+        toast.drag = null;
+        releaseToastPointer(node, event.pointerId);
+        node.removeAttribute("data-lahe-dragging");
+        // Never past the dead zone: that was a click, and the click handler is
+        // about to run and open the card, which is what it has always done.
+        if (!drag.moved) return;
+        if (shouldDismissSwipe({ dx: drag.dx, velocity: drag.velocity, width: node.offsetWidth || 0 })) {
+          flingToast(toast);
+          return;
+        }
+        springToastBack(node);
+        resumeToast(toast);
+      });
+
+      node.addEventListener("pointercancel", function (event) {
+        var drag = toast.drag;
+        if (!drag || event.pointerId !== drag.id) return;
+        toast.drag = null;
+        releaseToastPointer(node, event.pointerId);
+        node.removeAttribute("data-lahe-dragging");
+        springToastBack(node);
+        resumeToast(toast);
+      });
+
       node.addEventListener("keydown", function (event) {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
@@ -4405,6 +4643,14 @@
     TOAST_MAX: TOAST_MAX,
     TOAST_OUT_MS: TOAST_OUT_MS,
     TOAST_GONE: TOAST_GONE,
+    // Swipe to dismiss: the numbers, and the one decision, pure so the feel can
+    // be argued about in a unit test rather than by dragging things.
+    TOAST_SWIPE_SLOP: TOAST_SWIPE_SLOP,
+    TOAST_SWIPE_FRACTION: TOAST_SWIPE_FRACTION,
+    TOAST_SWIPE_MAX_PX: TOAST_SWIPE_MAX_PX,
+    TOAST_FLING_SPEED: TOAST_FLING_SPEED,
+    toastSwipeThreshold: toastSwipeThreshold,
+    shouldDismissSwipe: shouldDismissSwipe,
     END_REVIEW: END_REVIEW,
     endReviewCounts: endReviewCounts,
     unfinishedSentence: unfinishedSentence,
