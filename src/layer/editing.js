@@ -1031,7 +1031,17 @@
       // and the agent is left reading the data-class `after`/`before`. `before`
       // is pinned at first touch, so this states the change against the page's
       // original wording, whichever session committed it.
-      var changeText = record.editChangeText(verdict.kind, open.before ? open.before.text : null, after.text);
+      // The markup goes in beside the text: bold and italic the reviewer changed
+      // live only in the two html fields, and a change sentence built from the
+      // text alone tells the agent nothing about them (2026-09-11, the edit
+      // whose italics and bold were applied as plain words and replied handled).
+      var changeText = record.editChangeText(
+        verdict.kind,
+        open.before ? open.before.text : null,
+        after.text,
+        open.before ? open.before.html : null,
+        after.html
+      );
 
       var committed;
       if (record.isDraft(item)) {

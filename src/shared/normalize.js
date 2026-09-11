@@ -865,6 +865,60 @@
     return structureOf(a) === structureOf(b);
   }
 
+  /**
+   * The emphasis runs in a fragment of markup: which words are bold, which are
+   * italic, and which the reviewer marked as deliberately neither.
+   *
+   * Read off structureOf, so the vocabulary is the same closed list the two
+   * comparison modes use (strong, em, not-bold, not-italic) and everything else
+   * in the markup is already gone. A run nested inside another is reported
+   * twice, once per tag, because <strong><em>x</em></strong> is both.
+   *
+   * Runs with no words are dropped: a marker around nothing is not a formatting
+   * change anyone can be told about in words.
+   *
+   * @param {string} html
+   * @returns {Array<{tag: string, text: string}>}
+   */
+  function emphasisRuns(html) {
+    var s = structureOf(html);
+    var open = [];
+    var runs = [];
+    var i = 0;
+    while (i < s.length) {
+      var lt = s.indexOf("<", i);
+      var chunk = lt === -1 ? s.slice(i) : s.slice(i, lt);
+      if (chunk) {
+        for (var k = 0; k < open.length; k += 1) open[k].text += chunk;
+      }
+      if (lt === -1) break;
+      var tag = parseTag(s, lt);
+      if (!tag) {
+        i = lt + 1;
+        continue;
+      }
+      i = tag.end;
+      if (STRUCTURAL_TAGS.indexOf(tag.name) === -1) continue;
+      if (!tag.closing) {
+        open.push({ tag: tag.name, text: "" });
+        continue;
+      }
+      for (var j = open.length - 1; j >= 0; j -= 1) {
+        if (open[j].tag !== tag.name) continue;
+        pushRun(runs, open.splice(j, 1)[0]);
+        break;
+      }
+    }
+    // Anything the fragment left open still covers the words it reached.
+    for (var q = open.length - 1; q >= 0; q -= 1) pushRun(runs, open[q]);
+    return runs;
+  }
+
+  function pushRun(runs, run) {
+    var text = normalizeText(run.text);
+    if (text) runs.push({ tag: run.tag, text: text });
+  }
+
   // The one entry point. Fails loud on an unknown mode: a comparison that
   // silently fell back to text is exactly the format-only no-op this exists to
   // prevent, and it would look like a working feature.
@@ -1033,6 +1087,7 @@
     modeFor: modeFor,
     structureOf: structureOf,
     structureEquals: structureEquals,
+    emphasisRuns: emphasisRuns,
     textOf: textOf,
     equalsInMode: equalsInMode,
     isSafeUrlValue: isSafeUrlValue,

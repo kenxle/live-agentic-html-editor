@@ -449,3 +449,20 @@ test("the two readers agree: markup in and a live node in give the same text", (
   // textContent would run these two words together into one made-up word.
   assert.equal(n.blockTextFromNode(el("div", [el("p", [text("Hello")]), el("p", [text("world.")])])), "Hello\n\nworld.");
 });
+
+test("emphasisRuns reads which words are bold and italic, and nothing else", () => {
+  assert.deepEqual(n.emphasisRuns("a <em>b</em> c"), [{ tag: "em", text: "b" }]);
+  // b and i are already strong and em by the time the runs are read.
+  assert.deepEqual(n.emphasisRuns("a <b>b c</b> d"), [{ tag: "strong", text: "b c" }]);
+  // Nested: the words are both.
+  assert.deepEqual(n.emphasisRuns("<strong><em>x</em></strong>"), [
+    { tag: "em", text: "x" },
+    { tag: "strong", text: "x" }
+  ]);
+  // The resets are part of the vocabulary.
+  assert.deepEqual(n.emphasisRuns("a <not-bold>b</not-bold> c"), [{ tag: n.NOT_BOLD_TAG, text: "b" }]);
+  // Links, code, spans and the page's own classes are not formatting.
+  assert.deepEqual(n.emphasisRuns('<p class="lead"><a href="https://example.com">a</a> <code>b</code></p>'), []);
+  // A marker around no words is not something to report.
+  assert.deepEqual(n.emphasisRuns("a <em> </em>b"), []);
+});

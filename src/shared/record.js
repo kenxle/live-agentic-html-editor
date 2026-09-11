@@ -872,10 +872,24 @@
     return next;
   }
 
+  /**
+   * The reviewer says something more about an item the agent already answered.
+   *
+   * The change sentence is CARRIED, exactly as Reopen issue carries it. It
+   * describes the edit the reviewer made, and a follow-up does not undo that
+   * edit, so dropping it leaves the new revision saying nothing about what the
+   * reviewer actually did. That is what happened on 2026-09-11: the reviewer
+   * asked "did my bolding come through?", the revision that question created
+   * carried an empty change, and the only line describing the edit was gone
+   * from the one revision where it mattered most.
+   */
   function followUp(item, text) {
     var note = typeof text === "string" ? text : "";
     if (!note.trim()) return item;
-    return continueThread(item, { note: note, change: null });
+    return continueThread(item, {
+      note: note,
+      change: typeof item[FIELD.CHANGE] === "string" ? item[FIELD.CHANGE] : null
+    });
   }
 
   function reopenIssue(item) {
@@ -957,7 +971,99 @@
     return BREAK_REMOVED;
   }
 
-  function editChangeText(kind, before, after) {
+  // ---------------------------------------------------------------------------
+  // The formatting the reviewer changed, said in words
+  // ---------------------------------------------------------------------------
+  //
+  // On 2026-09-11 the reviewer made one word italic and one clause bold inside a
+  // rewrite. The record carried both: `after` held the plain words and
+  // `after_html` held the <em> and <strong>. The change sentence quoted only the
+  // wording, so the one line the agent reads as INTENT said nothing about the
+  // emphasis, the agent applied the text alone and replied handled, and the bold
+  // and italics were gone from the page and the source with nothing anywhere
+  // saying so.
+  //
+  // So the sentence says it. The vocabulary is normalize's closed list
+  // (strong, em, and the not-bold / not-italic resets), read through
+  // emphasisRuns, which means every other difference between the two markups
+  // (a link, a span, a class the page's own renderer added) is already gone and
+  // cannot be reported as a formatting change.
+  var FORMAT_ADDED = { strong: "bold", em: "italic" };
+  var FORMAT_REMOVED = { "not-bold": "bold", "not-italic": "italic" };
+  // The reset tag that says "these words are deliberately not this", per tag.
+  var RESET_FOR = { strong: normalize.NOT_BOLD_TAG, em: normalize.NOT_ITALIC_TAG };
+
+  function runKey(run) {
+    return run.tag + " " + run.text;
+  }
+
+  // How many of each run a list holds, so two identical bold runs in one block
+  // are two runs and not one.
+  function runCounts(runs) {
+    var counts = {};
+    for (var i = 0; i < runs.length; i += 1) {
+      var key = runKey(runs[i]);
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    return counts;
+  }
+
+  function takeOne(counts, run) {
+    var key = runKey(run);
+    if (!counts[key]) return false;
+    counts[key] -= 1;
+    return true;
+  }
+
+  /**
+   * The inline formatting that moved between two markups, in plain sentences.
+   *
+   * Returns "" when nothing did, which is every ordinary wording edit.
+   *
+   * @param {string} beforeHtml the region's markup before the edit
+   * @param {string} afterHtml the region's markup after it
+   */
+  function formattingChangeText(beforeHtml, afterHtml) {
+    if (typeof afterHtml !== "string" || !afterHtml) return "";
+    var before = normalize.emphasisRuns(typeof beforeHtml === "string" ? beforeHtml : "");
+    var after = normalize.emphasisRuns(afterHtml);
+    var beforeLeft = runCounts(before);
+    var afterLeft = runCounts(after);
+    var lines = [];
+    var i;
+    // Each loop consumes from ITS OWN copy of the other side's counts, so the
+    // two differences are read independently and a run present on both sides is
+    // reported by neither.
+    for (i = 0; i < after.length; i += 1) {
+      if (takeOne(beforeLeft, after[i])) continue;
+      if (hasOwn(FORMAT_ADDED, after[i].tag)) {
+        lines.push('Made "' + after[i].text + '" ' + FORMAT_ADDED[after[i].tag] + ".");
+      } else if (hasOwn(FORMAT_REMOVED, after[i].tag)) {
+        lines.push('Removed ' + FORMAT_REMOVED[after[i].tag] + ' from "' + after[i].text + '".');
+      }
+    }
+    // A run the before had and the after does not: the reviewer took the tag
+    // off words that carried it. The reset tags say the same thing about words
+    // a stylesheet made bold, and they are already reported above.
+    // Taking bold off words a stylesheet made bold writes BOTH a <not-bold> in
+    // the after and, when the words carried a <strong> too, the loss of that
+    // tag. One gesture, so one sentence: a reset already reported above cancels
+    // the matching loss here.
+    var resets = runCounts(after);
+    for (i = 0; i < before.length; i += 1) {
+      if (takeOne(afterLeft, before[i])) continue;
+      if (!hasOwn(FORMAT_ADDED, before[i].tag)) continue;
+      if (takeOne(resets, { tag: RESET_FOR[before[i].tag], text: before[i].text })) continue;
+      lines.push('Removed ' + FORMAT_ADDED[before[i].tag] + ' from "' + before[i].text + '".');
+    }
+    return lines.join(" ");
+  }
+
+  function hasOwn(map, key) {
+    return Object.prototype.hasOwnProperty.call(map, key);
+  }
+
+  function editChangeText(kind, before, after, beforeHtml, afterHtml) {
     if (kind === KIND.DELETE) return "Deleted this block.";
     if (kind === KIND.FORMAT_ONLY) return "Changed the emphasis in this block; the words are the same.";
     var span = changedSpan(before, after);
@@ -974,9 +1080,13 @@
     if (added && removed) words = 'Changed "' + removed + '" to "' + added + '".';
     else if (added) words = 'Added "' + added + '".';
     else if (removed) words = 'Removed "' + removed + '".';
-    if (breakLine && words) return breakLine + " " + words;
-    if (breakLine) return breakLine;
-    return words || "Edited this block.";
+    var emphasis = formattingChangeText(beforeHtml, afterHtml);
+    var parts = [];
+    if (breakLine) parts.push(breakLine);
+    if (words) parts.push(words);
+    if (emphasis) parts.push(emphasis);
+    if (parts.length) return parts.join(" ");
+    return "Edited this block.";
   }
 
   // ---------------------------------------------------------------------------
@@ -1219,6 +1329,7 @@
     pageCheckReopenOf: pageCheckReopenOf,
     collapsePageCheckNote: collapsePageCheckNote,
     changedSpan: changedSpan,
+    formattingChangeText: formattingChangeText,
     editChangeText: editChangeText,
     REVERT_EDIT: REVERT_EDIT,
     REVERT_DELETE: REVERT_DELETE,

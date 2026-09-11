@@ -601,3 +601,92 @@ test("merging two lists keeps the browser's order, so the rail does not reshuffl
 test("merging two different items is a loud error, never a silent pick", () => {
   assert.throws(() => merge.mergeItem(anItem({ id: "itm_a" }), anItem({ id: "itm_b" })), /two different items/);
 });
+
+// ---------------------------------------------------------------------------
+// The change sentence says the formatting (2026-09-11)
+// ---------------------------------------------------------------------------
+//
+// The reviewer made one word italic and one clause bold inside a rewrite. The
+// record carried both, in after_html; the change sentence quoted only the
+// wording, the agent applied the words alone and replied handled, and the
+// emphasis left the page and the source with nothing anywhere saying so.
+
+test("italic the reviewer added is named in the change sentence", () => {
+  const said = record.editChangeText(record.KIND.EDIT, "a b c", "a b c", "a b c", "a <em>b</em> c");
+  assert.equal(said, 'Made "b" italic.');
+});
+
+test("bold the reviewer added is named in the change sentence", () => {
+  const said = record.editChangeText(record.KIND.EDIT, "a b c", "a b c", "a b c", "a <strong>b c</strong>");
+  assert.equal(said, 'Made "b c" bold.');
+});
+
+test("bold the reviewer removed is named, once, however the browser said it", () => {
+  const tagGone = record.editChangeText(record.KIND.EDIT, "a b c", "a b c", "a <strong>b</strong> c", "a b c");
+  assert.equal(tagGone, 'Removed bold from "b".');
+
+  // The reset tag and the lost <strong> are one gesture, so one sentence.
+  const reset = record.editChangeText(
+    record.KIND.EDIT,
+    "runners come back too fast",
+    "runners come back too fast",
+    "runners come back <strong>too fast</strong>",
+    "runners come back <not-bold>too fast</not-bold>"
+  );
+  assert.equal(reset, 'Removed bold from "too fast".');
+
+  // Un-bolding words the page's own stylesheet made bold: no <strong> to lose.
+  const styleOnly = record.editChangeText(
+    record.KIND.EDIT,
+    "a b c",
+    "a b c",
+    "a b c",
+    "a <not-bold>b</not-bold> c"
+  );
+  assert.equal(styleOnly, 'Removed bold from "b".');
+});
+
+test("a reworded edit that also changes emphasis says both, wording first", () => {
+  const said = record.editChangeText(
+    record.KIND.EDIT,
+    "it is more functional and you can turn any page into an interface",
+    "it is more functional and you can turn any HTML page into an interface",
+    "it is more functional and you can turn any page into an interface",
+    "it is more <em>functional</em> and <strong>you can turn any HTML page into an interface</strong>"
+  );
+  assert.equal(
+    said,
+    'Added "HTML ". Made "functional" italic. ' +
+      'Made "you can turn any HTML page into an interface" bold.'
+  );
+});
+
+test("an edit that changes no emphasis says nothing about emphasis", () => {
+  const said = record.editChangeText(
+    record.KIND.EDIT,
+    "the quick fox",
+    "the quick brown fox",
+    "the <em>quick</em> fox",
+    "the <em>quick</em> brown fox"
+  );
+  assert.equal(said, 'Added "brown ".');
+  assert.equal(record.formattingChangeText("the <em>quick</em> fox", "the <em>quick</em> brown fox"), "");
+});
+
+test("markup that is not bold or italic is never reported as a formatting change", () => {
+  const said = record.formattingChangeText(
+    'a <span class="x">b</span> c',
+    '<p class="lead"><a href="https://example.com">a</a> <code>b</code> c</p>'
+  );
+  assert.equal(said, "");
+});
+
+test("a follow-up carries the change sentence, so every revision still says what the edit was", () => {
+  const answered = anItem({
+    change: 'Changed "old wording" to "new wording". Made "new" italic.',
+    reply: { status: record.REPLY_STATUS.HANDLED, agent: "claude", text: "Applied.", files: [] }
+  });
+  const next = record.followUp(answered, "i think you lost my bolding and italics. did they not come through?");
+  assert.equal(next.change, answered.change, "rev 4 of the 2026-09-11 item carried an empty change sentence");
+  assert.equal(next.note, "i think you lost my bolding and italics. did they not come through?");
+});
