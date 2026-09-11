@@ -215,6 +215,13 @@ Do not add an icon to a page you did not write. The fallback reaches every
 served page; it does not reach the `file://` fallback or the dev-server row,
 because on those two nothing of LAHE's sits between the page and the browser.
 
+**A reviewer who is also presenting can hide the tool.** Cmd-Shift-X (also in
+the rail's menu) takes every LAHE surface off the screen and brings it back;
+replies still fold while it is hidden and are waiting when they return. Nothing
+changes for you: the review, the files and the replies work exactly the same.
+A page that should always start hidden carries `data-lahe-start="hidden"` on its
+script tag.
+
 **A page inside an iframe does not get a rail.** The library refuses to boot
 when it is framed, because a reveal.js deck's speaker-notes window embeds the
 same deck in an iframe and the embedded copy fought the real window over the

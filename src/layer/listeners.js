@@ -112,7 +112,13 @@
     // Its own group because it is bound once for the life of the page and a
     // remount must NOT clear it: a page that forgets the reviewer is reading
     // will reload out from under them, which is the bug it exists to prevent.
-    INTERACTION: "interaction"
+    INTERACTION: "interaction",
+    // The show/hide chord, and nothing else. Bound once for the life of the
+    // page and never cleared by a remount, for the same reason INTERACTION is
+    // not: while the library is hidden this is the ONLY listener of ours the
+    // reviewer can reach, and a remount that dropped it would leave them with
+    // no way to bring the review back.
+    PRESENT: "present"
   };
 
   var shared = createRegistry();

@@ -156,6 +156,15 @@
   // goes with it, without naming any of them.
   var PRINT_HOST_STYLE_TEXT = ["@media print {", "  :host { display: none !important; }", "}"].join("\n");
 
+  // Present mode, and the same one-rule trick as print for the same reason: the
+  // rail, the collapsed pill, the toast column, the comment boxes, the selection
+  // pill and the pick outline are all descendants of the one host, so hiding the
+  // host hides every one of them without this module naming any of them. The
+  // reviewer is presenting the page and nothing of the tool's belongs on the
+  // screen behind them. See setHidden.
+  var HIDDEN_ATTR = "data-lahe-hidden";
+  var HIDDEN_HOST_STYLE_TEXT = [":host([" + HIDDEN_ATTR + "]) { display: none !important; }"].join("\n");
+
   // Highlight colors, as light a touch as a highlight can be and still read.
   // Written with color-mix-free plain rgba so a page-level stylesheet cannot
   // depend on anything the host page defines.
@@ -406,6 +415,11 @@
     // id -> {name, range}. One entry per item, so clearing one item's paint is
     // a lookup rather than a re-scan.
     var painted = Object.create(null);
+    // Present mode. While it is on, the surface is display:none and NOTHING is
+    // registered in CSS.highlights, so the page behind the presenter carries no
+    // wash of any kind. The ranges themselves are kept, so coming back puts
+    // every mark back where it was rather than re-resolving anchors.
+    var hidden = false;
     var styleNode = null;
     var surfaceHost = null;
     var surfaceRoot = null;
@@ -482,9 +496,15 @@
       var g = global();
       var highlight = registryFor(name);
       highlight.clear();
-      Object.keys(painted).forEach(function (id) {
-        if (painted[id].name === name && painted[id].range) highlight.add(painted[id].range);
-      });
+      // Hidden means hidden: the entries stay in `painted` and none of them is
+      // handed to the registry, so a paint made while presenting (a reply
+      // folding, a repaint after a morph) is remembered and drawn on the way
+      // back rather than appearing on the projector.
+      if (!hidden) {
+        Object.keys(painted).forEach(function (id) {
+          if (painted[id].name === name && painted[id].range) highlight.add(painted[id].range);
+        });
+      }
       g.CSS.highlights.set(name, highlight);
       return highlight;
     }
@@ -751,10 +771,13 @@
       // no inline value for this rule to lose to.
       if (root) {
         var printStyle = doc.createElement("style");
-        printStyle.textContent = PRINT_HOST_STYLE_TEXT;
+        printStyle.textContent = PRINT_HOST_STYLE_TEXT + "\n" + HIDDEN_HOST_STYLE_TEXT;
         root.appendChild(printStyle);
         fenceTypingKeys(root);
       }
+      // A surface built while the library is hidden (a remount during a talk)
+      // comes up hidden, rather than flashing the rail onto the projector.
+      if (hidden) host.setAttribute(HIDDEN_ATTR, "true");
       // Stamped on the host, so every stylesheet inside the closed root selects
       // its dark rules with :host([data-lahe-scheme='dark']) instead of a media
       // query. The page decides; see schemeForPage.
@@ -800,6 +823,33 @@
       return el;
     }
 
+    /**
+     * Put the whole library out of sight, or bring it back.
+     *
+     * Two halves, and both are needed: the surface host goes display:none (so
+     * the rail, the pill, the toasts and the boxes go with it), and every
+     * CSS.highlights entry is emptied (so the page's own words carry no wash).
+     * Nothing is torn down and nothing is forgotten.
+     *
+     * @param {boolean} next
+     * @returns {boolean} whether the library is hidden now
+     */
+    function setHidden(next) {
+      var want = next !== false;
+      if (want === hidden) return hidden;
+      hidden = want;
+      if (surfaceHost) {
+        if (hidden) surfaceHost.setAttribute(HIDDEN_ATTR, "true");
+        else surfaceHost.removeAttribute(HIDDEN_ATTR);
+      }
+      if (supported()) NAMES.forEach(rebuild);
+      return hidden;
+    }
+
+    function isHidden() {
+      return hidden;
+    }
+
     function teardown() {
       clearAllChanged();
       clearEmphasis();
@@ -833,6 +883,8 @@
       clearAllChanged: clearAllChanged,
       changedKeys: changedKeys,
       surface: surface,
+      setHidden: setHidden,
+      isHidden: isHidden,
       addSurfaceStyle: addSurfaceStyle,
       pageScheme: pageScheme,
       refreshScheme: refreshScheme,
@@ -851,9 +903,11 @@
     STYLE_ATTR: STYLE_ATTR,
     SURFACE_ID: SURFACE_ID,
     SCHEME_ATTR: SCHEME_ATTR,
+    HIDDEN_ATTR: HIDDEN_ATTR,
     RAIL_ALLOWANCE_PROP: RAIL_ALLOWANCE_PROP,
     STYLE_TEXT: STYLE_TEXT,
     PRINT_HOST_STYLE_TEXT: PRINT_HOST_STYLE_TEXT,
+    HIDDEN_HOST_STYLE_TEXT: HIDDEN_HOST_STYLE_TEXT,
     EMPHASIS_MS: EMPHASIS_MS,
     EMPHASIS_KEY: EMPHASIS_KEY,
     CHANGED_MS: CHANGED_MS,

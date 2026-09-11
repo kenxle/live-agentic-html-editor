@@ -300,7 +300,17 @@
       }
     }
     var store = opts.store || ns.store.createStore();
-    var rail = opts.rail || ns.overlay.createRail({ store: store, reviewId: reviewId });
+    var rail =
+      opts.rail ||
+      ns.overlay.createRail({
+        store: store,
+        reviewId: reviewId,
+        // data-lahe-start="hidden": a page that is presented more often than it
+        // is reviewed comes up with nothing of the library's on screen. The
+        // reviewer's own stored choice does the same job on an ordinary page;
+        // the rail reads that one itself.
+        present: String(config.start || "").toLowerCase() === protocol.START_HIDDEN
+      });
     rail.mount();
 
     // The page in front of the reviewer RIGHT NOW, re-read rather than pinned at
@@ -479,6 +489,13 @@
         },
         isReadOnly: function () {
           return readOnlyActive;
+        },
+        // Present mode. A reply that folds while the reviewer is presenting
+        // must not toast over a slide, and must still be waiting for them when
+        // they come back: see the onPresent handler below, which asks the Done
+        // tab for exactly that on the way out.
+        isHidden: function () {
+          return rail.isPresenting();
         }
       });
       made.mount();
@@ -525,9 +542,14 @@
     function exitReadOnly() {
       if (!readOnlyActive) return;
       readOnlyActive = false;
-      comments.bind({ page: page });
-      editing.bind({ page: page });
-      if (tab && typeof tab.ensureNoteBox === "function") tab.ensureNoteBox();
+      // NOT WHILE PRESENTING. Getting the claim back is not a reason to put
+      // comment and edit handlers back on a page the reviewer is showing a
+      // room; leaving present mode re-arms them (see applyPresent).
+      if (!rail.isPresenting()) {
+        comments.bind({ page: page });
+        editing.bind({ page: page });
+        if (tab && typeof tab.ensureNoteBox === "function") tab.ensureNoteBox();
+      }
       done.setReadOnly();
       rail.hideRefusal();
       // The condition ended, so its chip goes too (clear, not dismiss: dismiss
@@ -700,6 +722,94 @@
     // cards by now and the card to focus exists to be focused.
     var railBack = ns.sync.restoreRailAfterReload(win, reviewId);
     if (railBack) rail.applyRailState(railBack);
+
+    // -------------------------------------------------------------------------
+    // Present mode
+    // -------------------------------------------------------------------------
+    //
+    // Ken: "sometimes during a presentation there will not be LAHE on there, but
+    // during class it's nice if I can talk to the AI through the deck. I might
+    // want a way to hide the pill for the chat rail."
+    //
+    // HIDDEN, NOT OFF, and the difference is the whole design. The rail owns
+    // what is on screen (rail.setPresenting hides the surface and every wash on
+    // the page in one call). This is the other half: the gestures.
+    //
+    //   hidden   commenting and hand-editing are disarmed, so a stray
+    //            Cmd-Shift-C in front of a room does nothing
+    //   still on sync keeps polling and folding, so no reply is lost; the
+    //            window claim and its heartbeat carry on, so present mode is
+    //            never mistaken for a window that went away; the reload guard
+    //            still holds a rebuild off while the reviewer is mid-work
+    //   coming back  the handlers are re-armed, the reviewer's marks are
+    //            painted again, and anything that answered during the talk is
+    //            put in front of them through the ordinary waiting path (up to
+    //            three as messages, a bigger pile as one count)
+    //
+    // The way out is one chord, gestures.TOGGLE_PRESENT, bound below. It is the
+    // only listener of ours a hidden library leaves armed, which is why it is
+    // bound in its own group that no remount clears.
+
+    function applyPresent(presenting) {
+      if (presenting) {
+        comments.closeAll();
+        comments.unbind();
+        editing.teardown();
+        return;
+      }
+      if (readOnlyActive) return;
+      comments.bind({ page: page });
+      editing.bind({ page: page });
+      if (tab && typeof tab.ensureNoteBox === "function") tab.ensureNoteBox();
+    }
+
+    rail.onPresent(function (presenting) {
+      applyPresent(presenting);
+      if (presenting) return;
+      // Back on screen: the reviewer's own marks first (nothing repainted them
+      // while they were unregistered), then whatever answered during the talk.
+      repaintHighlights(refreshItems());
+      if (!done) return;
+      // Two different piles, and both of them are the reviewer's:
+      //   toastWaiting    answers that arrived during the talk and have never
+      //                   been on screen
+      //   sweepNeglected  answers that were on screen before the talk and timed
+      //                   out unread while the library was hidden, which the
+      //                   sweep could not report at the time
+      if (typeof done.toastWaiting === "function") done.toastWaiting();
+      if (typeof done.sweepNeglected === "function") done.sweepNeglected();
+    });
+
+    // The chord, in the capture phase on the document, in its own listener
+    // group. Capture matters twice: it beats the page's own handlers to the key
+    // on a deck that binds everything, and it sees a press inside the rail's
+    // closed root before the root's own typing fence stops it.
+    ns.listeners.shared.on(
+      doc,
+      "keydown",
+      function (event) {
+        var decided = ns.gestures.gestureFor({
+          type: "keydown",
+          key: event.key,
+          metaKey: event.metaKey === true,
+          ctrlKey: event.ctrlKey === true,
+          shiftKey: event.shiftKey === true
+        });
+        // EXACTLY THIS CHORD AND NOTHING ELSE. Every other key, in either mode,
+        // is the page's, which is what makes leaving this listener armed while
+        // the library is hidden honest.
+        if (decided.gesture !== ns.gestures.GESTURE.TOGGLE_PRESENT) return;
+        if (decided.preventDefault) event.preventDefault();
+        rail.setPresenting(!rail.isPresenting());
+      },
+      { capture: true },
+      ns.listeners.GROUP.PRESENT
+    );
+
+    // A page that boots hidden (the reviewer's own stored choice, or
+    // data-lahe-start="hidden") has to have its gestures disarmed too: the
+    // surfaces above were mounted and bound before this line.
+    if (rail.isPresenting()) applyPresent(true);
 
     // -------------------------------------------------------------------------
     // End review (D10)
@@ -1207,7 +1317,7 @@
         // read-only tab re-armed Cmd-Shift-C on its first Turbo navigation and
         // opened comment boxes that could do nothing (first-real-use bug,
         // 2026-08-14). exitReadOnly re-binds when the window becomes holder.
-        if (!readOnlyActive) {
+        if (!readOnlyActive && !rail.isPresenting()) {
           comments.bind({ page: page });
           editing.bind({ page: page });
         }
@@ -1374,6 +1484,11 @@
       // The revert check the settling window runs on its own. Exposed so a test
       // can run it at a known moment rather than racing the timer.
       revertCheck: runRevertCheck,
+      /** Hidden for a presentation? Read it, or set it, the way the chord does. */
+      present: function (next) {
+        if (next !== undefined) rail.setPresenting(!!next);
+        return rail.isPresenting();
+      },
       /**
        * How long a LAHE reload waits after the reviewer last touched anything.
        *
@@ -1537,6 +1652,9 @@
       // The rail, which is inside a closed shadow root and cannot be reached
       // with a selector.
       rail: handle.rail,
+      // Present mode, read or set: a spec (and a reviewer's own console) asks
+      // the same way the chord and the menu item do.
+      present: handle.present,
       // The reload guard's clock: a spec shortens the window rather than
       // sitting out ten real seconds, and can see how long ago the reviewer
       // last touched anything.

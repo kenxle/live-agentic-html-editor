@@ -501,12 +501,19 @@
     function readUiPreferences(reviewId) {
       try {
         var raw = backing.getItem(uiKey(reviewId));
-        if (!raw) return { collapsed: false, pill: null, width: null };
+        if (!raw) return { collapsed: false, pill: null, width: null, present: false };
         var got = JSON.parse(raw);
-        if (!got || typeof got !== "object") return { collapsed: false, pill: null, width: null };
-        return { collapsed: got.collapsed === true, pill: readPillSpot(got), width: readRailWidth(got) };
+        if (!got || typeof got !== "object") return { collapsed: false, pill: null, width: null, present: false };
+        return {
+          collapsed: got.collapsed === true,
+          pill: readPillSpot(got),
+          width: readRailWidth(got),
+          // Present mode: the reviewer chose to hide the whole library, and a
+          // reload in the middle of a talk has to keep it hidden.
+          present: got.present === true
+        };
       } catch (err) {
-        return { collapsed: false, pill: null, width: null };
+        return { collapsed: false, pill: null, width: null, present: false };
       }
     }
 
@@ -516,7 +523,8 @@
       var next = {
         collapsed: !!(value && value.collapsed),
         pill: readPillSpot(value),
-        width: readRailWidth(value)
+        width: readRailWidth(value),
+        present: !!(value && value.present)
       };
       try {
         backing.setItem(uiKey(reviewId), JSON.stringify(next));

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>A page that is presented more often than it is reviewed</title>
+</head>
+<body>
+  <!--
+    A reviewed page whose script tag asks to start hidden: one extra attribute,
+    data-lahe-start="hidden", and nothing of the library is on screen until the
+    reviewer presses Cmd-Shift-X.
+
+    Served from the REPO ROOT, so /dist/lahe-layer.js is reachable beside it.
+    The helper origin is a loopback port with nothing listening on it: this
+    fixture is about what is on the screen, and a page with an unreachable
+    helper still mounts the rail and keeps everything in the browser.
+  -->
+  <h1 id="deck-title">Slide one</h1>
+  <p id="deck-body" data-region="deck-body">
+    A short passage, so there is something to comment on when the reviewer comes
+    back out of present mode.
+  </p>
+
+  <script src="/dist/lahe-layer.js"
+          data-lahe-review="present-start-hidden"
+          data-lahe-token="present-token"
+          data-lahe-helper="http://127.0.0.1:1"
+          data-lahe-start="hidden"></script>
+</body>
+</html>

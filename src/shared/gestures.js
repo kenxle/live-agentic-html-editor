@@ -37,6 +37,7 @@
     MARK_READY: "mark_ready",
     COMMIT_EDIT: "commit_edit",
     CANCEL: "cancel",
+    TOGGLE_PRESENT: "toggle_present",
     PAGE_DEFAULT: "page_default",
     NONE: "none"
   };
@@ -113,6 +114,15 @@
       requirement: "R1"
     },
     {
+      gesture: GESTURE.TOGGLE_PRESENT,
+      keys: "Cmd-Shift-X",
+      when: "always, including while the tool is hidden",
+      hint: "Press Cmd-Shift-X to hide the review while you present, and again to bring it back.",
+      passThrough: false,
+      preventDefault: true,
+      requirement: "R13"
+    },
+    {
       gesture: GESTURE.PAGE_DEFAULT,
       keys: "everything else",
       when: "always",
@@ -123,6 +133,20 @@
     }
   ];
 
+  // WHY X, AND NOT P OR H. The present chord joins a family that reads as
+  // mnemonics (C comments, E edits), so P for present and H for hide were the
+  // two obvious letters, and both are taken by something a presenter cannot
+  // afford to fire mid-talk:
+  //
+  //   Cmd/Ctrl-Shift-P  opens a private window in Firefox and Edge
+  //   Cmd/Ctrl-Shift-H  is Home in Safari (which navigates the deck away) and
+  //                     the history library in Firefox
+  //
+  // X is unbound in Chrome, Safari, Firefox and Edge on both platforms, and
+  // reveal.js's own keys are unmodified letters (space, arrows, f, s, o, b,
+  // esc, ., n, p, h, j, k, l, v, g, m), so nothing of the deck's answers to it
+  // either.
+  //
   // The library's own modifier family, in one place, so the hint lines and the
   // matcher cannot disagree. Cmd on macOS, Ctrl elsewhere: one rule.
   function isPrimaryModifier(e) {
@@ -157,6 +181,12 @@
     }
 
     if (e.type === "keydown") {
+      // FIRST, and with no conditions on it at all. This is the one gesture
+      // that has to work while every other one is disarmed: present mode hides
+      // the whole library, and this chord is how the reviewer gets it back.
+      if (mod && e.shiftKey === true && isKey(e.key, "x")) {
+        return decide(GESTURE.TOGGLE_PRESENT, false, true, "Cmd-Shift-X hides the review for presenting, and shows it again");
+      }
       if (e.key === "Escape") {
         if (e.editing === true) {
           return decide(GESTURE.COMMIT_EDIT, false, true, "Esc commits the open edit and gives the block back to the page");

@@ -273,7 +273,11 @@ test.describe("the reviewer ends the review from the rail", () => {
       window.__lahe.rail.openMenu(0);
       return window.__lahe.rail.menuInfo();
     });
-    expect(menu.items.map((one) => one.label)).toEqual(["Copy review", "Export review to file"]);
+    expect(menu.items.map((one) => one.label)).toEqual([
+      "Copy review",
+      "Export review to file",
+      "Hide for presenting (Cmd-Shift-X)"
+    ]);
     await page.evaluate(() => window.__lahe.rail.closeMenu(false));
 
     // Nothing has ended, because nothing was pressed.

@@ -105,6 +105,13 @@ session. The helper asks with `lsof`, cached for 15 seconds and off the poll pat
 A machine that cannot answer says so, and the line falls back to the wait, which
 is always knowable.
 
+**A reviewer presenting the page can hide the whole tool.** The rail's menu
+carries "Hide for presenting (Cmd-Shift-X)", and that chord toggles it either
+way: hidden, nothing of LAHE is on the screen and its gestures do nothing, while
+sync keeps folding replies in the background so they are waiting the moment the
+reviewer comes back. The choice is remembered per review, and a page that should
+always come up hidden carries `data-lahe-start="hidden"` on its script tag.
+
 **A framed page does not boot.** When the library finds itself inside an iframe
 it mounts nothing, so a reveal.js speaker-notes window (which embeds the deck in
 a frame) cannot fight the real window over the review; `data-lahe-frames="allow"`

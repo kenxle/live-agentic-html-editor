@@ -37,7 +37,8 @@ test("rail collapse preference is versioned, review-scoped, and defaults open", 
   assert.deepEqual(JSON.parse(backing.getItem(storeModule.UI_PREFIX + "review-a")), {
     collapsed: true,
     pill: null,
-    width: null
+    width: null,
+    present: false
   });
   assert.equal(
     overlay.createRail({ document: null, store: store, reviewId: "review-a" }).isCollapsed(),
@@ -119,7 +120,8 @@ test("a moved pill is remembered as a corner and two offsets, never as a point",
   assert.deepEqual(store.readUiPreferences("review-a"), {
     collapsed: true,
     pill: { h: "left", x: 12, v: "top", y: 90 },
-    width: null
+    width: null,
+    present: false
   });
   assert.equal(store.readUiPreferences("review-b").pill, null, "another review keeps the default corner");
 });

@@ -178,14 +178,20 @@ test.describe("the review's actions live in the head's menu", () => {
       await bootedPage(page, app, helper, token);
       await commentOn(page, REGION.lede, "Pick one number and use it twice.");
 
-      // --- opens, and holds exactly the two review-level actions -------------
+      // --- opens, and holds exactly the actions the menu has -----------------
       await clickMenuButton(page);
       let info = await pollUntil(async () => {
         const got = await menuInfo(page);
         return got.open ? got : null;
       }, { message: "the menu to open on a real click" });
       expect(info.expanded).toBe("true");
-      expect(info.items.map((one) => one.label)).toEqual(["Copy review", "Export review to file"]);
+      // Two review-level actions, plus present mode, which is the rail putting
+      // itself away for a talk rather than work for boot to do.
+      expect(info.items.map((one) => one.label)).toEqual([
+        "Copy review",
+        "Export review to file",
+        "Hide for presenting (Cmd-Shift-X)"
+      ]);
       info.items.forEach((one) => {
         expect(one.rect.width, one.label + " is really on screen").toBeGreaterThan(0);
       });

@@ -501,6 +501,12 @@
     var sync = opts.sync || null;
     var onContinued = typeof opts.onContinued === "function" ? opts.onContinued : function () {};
     var isReadOnly = typeof opts.isReadOnly === "function" ? opts.isReadOnly : function () { return false; };
+    // Present mode: the library is hidden while the reviewer presents the page.
+    // Replies still arrive and still fold; what must not happen is a toast
+    // appearing over a slide. They are not lost: nothing announced while hidden
+    // is marked announced, so the ordinary waiting path (toastWaiting) puts
+    // them back the moment the reviewer comes out of it.
+    var isHidden = typeof opts.isHidden === "function" ? opts.isHidden : function () { return false; };
     var doc = Object.prototype.hasOwnProperty.call(opts, "document")
       ? opts.document
       : typeof document !== "undefined"
@@ -632,7 +638,11 @@
       // same reason. Nothing selects a tab on boot and nothing collapses, so
       // without this the one state the reviewer spends most of a session in
       // (rail open, one tab, reading) writes no marks at all.
-      if (!isReadOnly() && typeof rail.isCollapsed === "function" && rail.isCollapsed() !== true) {
+      // A HIDDEN RAIL IS NOT A RAIL ANYONE IS READING. Present mode leaves the
+      // rail "open" in its own state while the whole surface is off the screen,
+      // so without this a remount mid-talk would mark every waiting reply read
+      // and the reviewer would come back to a badge of nothing.
+      if (!isReadOnly() && !isHidden() && typeof rail.isCollapsed === "function" && rail.isCollapsed() !== true) {
         visitTab(rail.currentTab());
       }
       // A load that arrives with answers already waiting says so once. See
@@ -1311,7 +1321,7 @@
     // -------------------------------------------------------------------------
 
     function canToast() {
-      return typeof rail.showToast === "function" && !isReadOnly();
+      return typeof rail.showToast === "function" && !isReadOnly() && !isHidden();
     }
 
     /** The words the item is about: the passage, or the edit's own sentence. */

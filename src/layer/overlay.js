@@ -860,9 +860,24 @@
   // The review-level actions, in the head's menu. They are the same two the
   // footer used to stand up as buttons, and they run through the same
   // runAction seam, so what they DO is still boot's business (D10, revised).
+  //
+  // The third is not one of those. Present is the rail's OWN state rather than
+  // work for boot to do, so it is handled where it is drawn (see the menu item
+  // click, and setPresenting). Its label carries the chord, because pressing it
+  // takes every surface off the screen and the chord is the way back.
+  var PRESENT = {
+    ACTION: "present",
+    KEYS: "Cmd-Shift-X",
+    LABEL: "Hide for presenting",
+    // What the rail's own footer teaches. The chord is the ONLY way back, and
+    // the reviewer has to know that before they use it, not after.
+    MENU_LABEL: "Hide for presenting (Cmd-Shift-X)"
+  };
+
   var MENU_ITEMS = [
     { action: "copy", label: "Copy review" },
-    { action: "export", label: "Export review to file" }
+    { action: "export", label: "Export review to file" },
+    { action: PRESENT.ACTION, label: PRESENT.MENU_LABEL }
   ];
 
   // ---------------------------------------------------------------------------
@@ -1038,6 +1053,24 @@
     // that forced opening must not erase the choice to keep the rail collapsed.
     var preferredCollapsed = readCollapsedPreference();
     var collapsed = preferredCollapsed;
+    // PRESENT MODE: the whole library off the screen, and still working.
+    //
+    // Ken: "sometimes during a presentation there will not be LAHE on there,
+    // but during class it's nice if I can talk to the AI through the deck. I
+    // might want a way to hide the pill for the chat rail."
+    //
+    // So this is HIDDEN, not off. Sync keeps polling and folding, the window
+    // claim and its heartbeat carry on, and replies that arrive during the talk
+    // are waiting as toasts the moment the reviewer comes back. What goes is
+    // everything anyone in the room can see: the rail, the pill, the toasts,
+    // the boxes, and every wash on the page (highlight.setHidden does both
+    // halves in one call).
+    //
+    // The page starts hidden two ways: the reviewer chose it last time (the
+    // preference below, so a reload mid-talk stays hidden), or the page always
+    // wants to (data-lahe-start="hidden", which boot passes in).
+    var presenting = opts.present === true || readPresentPreference();
+    var presentHandlers = [];
     // How wide the reviewer dragged the rail, or null while they have left it
     // at its default. Held UNCLAMPED: the clamp belongs to the viewport that is
     // on screen right now, and a window dragged narrow and then wide again
@@ -1198,6 +1231,13 @@
           // the rail while the work runs, and the focus goes back where they
           // left it.
           closeMenu(true);
+          // Present is the rail putting ITSELF away, so there is no action for
+          // a caller to register and none to forget: the two review-level items
+          // beside it are work only boot knows how to do, and this one is not.
+          if (entry.action === PRESENT.ACTION) {
+            setPresenting(true);
+            return;
+          }
           runAction(entry.action);
         });
         menuList.appendChild(item);
@@ -1574,6 +1614,11 @@
       renderAgent();
       renderTabs();
       renderCollapsed();
+      // The surface exists now, so a rail mounted while the reviewer is
+      // presenting comes up hidden rather than flashing onto the projector for
+      // a frame. Remounts reach this too, which is the case that matters: a
+      // deck that re-renders mid-talk must not put the rail back on screen.
+      renderPresent();
       // A toast is state, not a paint: the nodes went with the old root on a
       // remount and the thing they were telling the reviewer about is still
       // true, so they are drawn again and their clocks start over.
@@ -1700,11 +1745,15 @@
       pillSpot = readPillPreference();
       railWidth = readWidthPreference();
       collapsed = preferredCollapsed;
+      // A rail told which review it is showing reads that review's own choice
+      // about being hidden, the way it reads the other three.
+      presenting = readPresentPreference();
       loadChips();
       if (dom) {
         dom.rail.querySelector(".review").textContent = id || "";
         renderChips();
         renderCollapsed();
+        renderPresent();
         applyPillSpot();
         applyRailWidth();
         if (refusalInfo) setCollapsed(false, false);
@@ -3371,6 +3420,15 @@
       }
     }
 
+    function readPresentPreference() {
+      if (!reviewId || !store || typeof store.readUiPreferences !== "function") return false;
+      try {
+        return store.readUiPreferences(reviewId).present === true;
+      } catch (err) {
+        return false;
+      }
+    }
+
     function persistCollapsedPreference() {
       if (!reviewId || !store || typeof store.writeUiPreferences !== "function") return false;
       try {
@@ -3381,7 +3439,8 @@
         store.writeUiPreferences(reviewId, {
           collapsed: preferredCollapsed,
           pill: pillSpot,
-          width: railWidth
+          width: railWidth,
+          present: presenting
         });
         return true;
       } catch (err) {
@@ -3494,6 +3553,61 @@
         }
       });
       return collapsed;
+    }
+
+    /**
+     * Hide the whole library, or bring it back.
+     *
+     * The rail owns this because the rail owns what is on screen and the
+     * preference bucket it is written into. What it does NOT own is the
+     * gestures: hiding the tool has to disarm commenting and hand-editing, and
+     * that is boot's, through onPresent below.
+     *
+     * @param {boolean} [next] undefined toggles
+     * @param {boolean} [persist] false leaves the reviewer's stored choice alone
+     * @returns {boolean} whether the library is hidden now
+     */
+    function setPresenting(next, persist) {
+      var want = next === undefined ? !presenting : !!next;
+      if (want === presenting) return presenting;
+      presenting = want;
+      // A menu hanging over the page while the rail goes invisible is a
+      // fragment of a tool the reviewer just put away.
+      if (presenting) closeMenu(false);
+      if (persist !== false) persistCollapsedPreference();
+      renderPresent();
+      presentHandlers.forEach(function (fn) {
+        try {
+          fn(presenting);
+        } catch (err) {
+          // One bad listener must never leave the library half hidden.
+        }
+      });
+      return presenting;
+    }
+
+    function isPresenting() {
+      return presenting;
+    }
+
+    /** Tell me when the library is hidden or brought back. Returns an unsubscribe. */
+    function onPresent(fn) {
+      if (typeof fn !== "function") throw new TypeError("onPresent: a function is required");
+      presentHandlers.push(fn);
+      return function () {
+        var at = presentHandlers.indexOf(fn);
+        if (at !== -1) presentHandlers.splice(at, 1);
+      };
+    }
+
+    /**
+     * One call, both halves: the surface goes display:none (so the rail, the
+     * pill, the toasts and the boxes go with it) and every page wash is
+     * unregistered. Nothing here is torn down, so coming back is the same call
+     * with the other argument.
+     */
+    function renderPresent() {
+      if (typeof highlights.setHidden === "function") highlights.setHidden(presenting);
     }
 
     /** Tell me when the rail collapses or opens. Returns an unsubscribe. */
@@ -4550,6 +4664,11 @@
       collapse: collapse,
       isCollapsed: isCollapsed,
       onCollapse: onCollapse,
+      // Present mode: the whole library off the screen, and still working.
+      PRESENT: PRESENT,
+      setPresenting: setPresenting,
+      isPresenting: isPresenting,
+      onPresent: onPresent,
       // The rail's width, and the room everything else leaves for it.
       width: width,
       setWidth: setRailWidth,
@@ -4638,6 +4757,7 @@
   var shared = createRail();
 
   return {
+    PRESENT: PRESENT,
     TAB: TAB,
     TABS: TABS,
     STATUS: STATUS,
