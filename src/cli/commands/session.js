@@ -12,6 +12,7 @@ var stateDir = require("../../service/state_dir.js");
 var sessions = require("../../service/agent_sessions.js");
 var service = require("../../service/index.js");
 var sourceStamp = require("../../service/source_stamp.js");
+var reviewsModule = require("../../service/reviews.js");
 var staticServers = require("../../service/static_servers.js");
 
 var statusCommand = require("./status.js");
@@ -104,10 +105,21 @@ async function stopVerifiedHelper(dir) {
  * neither costs anything when the helper is current, because the source check
  * only runs when one is answering.
  *
- * @returns {Promise<{started: boolean, stale: boolean}>} `started` is true when
- *   this call put a new process there, whether or not it replaced one.
+ * A stale helper with a live review page open on it is left alone: replacing it
+ * drops that page's connection and closes the comment boxes the reviewer has
+ * open, and being a few minutes behind the code is the smaller problem.
+ * `keptForReviewer` carries the sentence that says so.
+ *
+ * @param {string} dir the resolved state directory
+ * @param {number} port
+ * @param {{force?: boolean, now?: number}} [options] `force` replaces the helper
+ *   even with a reviewer on it, which is what `lahe serve --restart` asks for
+ * @returns {Promise<{started: boolean, stale: boolean, keptForReviewer: string|null}>}
+ *   `started` is true when this call put a new process there, whether or not it
+ *   replaced one.
  */
-async function startHelper(dir, port) {
+async function startHelper(dir, port, options) {
+  var opts = options || {};
   var stale = false;
   var live = await service.probeHealth(protocol.DEFAULT_HOST, port);
   if (live) {
@@ -120,7 +132,21 @@ async function startHelper(dir, port) {
     }
     if (liveContract === protocol.SERVICE_CONTRACT) {
       stale = sourceStamp.helperPredatesSource(live.started_at).stale;
-      if (!stale) return { started: false, stale: false };
+      if (!stale) return { started: false, stale: false, keptForReviewer: null };
+      // SOMEBODY IS REVIEWING ON IT. Being older than the code on disk is a
+      // reason to replace the helper, not a reason to interrupt a person who is
+      // mid-sentence in a comment box. The stale helper keeps serving them and
+      // the caller says so; `lahe serve --restart` is how a human overrules it.
+      if (!opts.force) {
+        var holders = reviewsModule.readLiveHolders(dir, reviewsModule.LIVE_WINDOW_MS, opts.now);
+        if (holders.length > 0) {
+          return {
+            started: false,
+            stale: true,
+            keptForReviewer: reviewsModule.liveReviewerSentence(holders)
+          };
+        }
+      }
     }
     if (!(await stopVerifiedHelper(dir))) {
       throw new Error("refusing to replace an older helper whose process identity cannot be verified");
@@ -133,7 +159,7 @@ async function startHelper(dir, port) {
   child.unref();
   var started = await waitFor(function () { return service.probeHealth(protocol.DEFAULT_HOST, port); }, 10000);
   if (!started) throw new Error("the helper did not start within 10 seconds");
-  return { started: true, stale: stale };
+  return { started: true, stale: stale, keptForReviewer: null };
 }
 
 // ---------------------------------------------------------------------------
@@ -362,6 +388,7 @@ async function run(argv, options) {
       var staticStarted = await staticServers.restartAll(dir, args.id);
       var helperNote = "; shared helper already running";
       if (helperRun.started) helperNote = helperRun.stale ? "; shared helper restarted" : "; shared helper started";
+      else if (helperRun.keptForReviewer) helperNote = "; shared helper left running for an open review page";
       var message =
         "agent session " + args.id + (handedOff ? " taken over explicitly" : " reopened") +
           helperNote +
@@ -369,7 +396,9 @@ async function run(argv, options) {
       // Never a silent bounce: a restart drops every open review page's
       // connection for a moment, and the person watching that page is owed the
       // reason.
-      if (helperRun.stale) {
+      if (helperRun.keptForReviewer) {
+        message += "  helper    " + helperRun.keptForReviewer + "\n";
+      } else if (helperRun.stale) {
         message +=
           "  helper    " + sourceStamp.REASON + ", so it was stopped and started again\n" +
           "            any review page open right now goes unreachable for a moment and reconnects on its own\n";

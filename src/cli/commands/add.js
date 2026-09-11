@@ -716,10 +716,11 @@ function tokenWarning(where) {
  * differently from a restart to teach it a review, and the reviewer whose page
  * just blinked is owed the real reason.
  *
- * @param {{started: boolean, staleRestart: boolean, restarted: boolean, learned: boolean, handedToHelper: boolean}} state
+ * @param {{started: boolean, keptForReviewer: boolean, staleRestart: boolean, restarted: boolean, learned: boolean, handedToHelper: boolean}} state
  */
 function helperNote(state) {
   if (state.started) return "  (started just now)";
+  if (state.keptForReviewer) return "  (already running, and left alone: a reviewer has a page open on it)";
   if (state.staleRestart) return "  (restarted: " + sourceStamp.REASON + ")";
   if (state.restarted) return "  (restarted, so it knows this review)";
   if (state.learned) return "  (already running, and it picked this review up without a restart)";
@@ -1007,6 +1008,9 @@ async function run(argv) {
   var handedToHelper = false;
   var restartReason = null;
   var staleRestart = false;
+  // Set when a stale helper was left running because somebody has a review page
+  // open on it. It is a sentence, and it is printed instead of the restart note.
+  var keptForReviewer = null;
 
   // A helper is intentionally shared across agent types, projects, and agent
   // sessions, which also means a maintainer can keep one alive across a code
@@ -1046,8 +1050,16 @@ async function run(argv) {
         "the verified helper uses older service contract " + liveContract +
         "; this clone requires " + protocol.SERVICE_CONTRACT;
     } else if (sourceStamp.helperPredatesSource(alive.started_at).stale) {
-      restartReason = sourceStamp.REASON;
-      staleRestart = true;
+      // SOMEBODY IS REVIEWING ON IT. Older than the code on disk is worth a
+      // restart; it is not worth throwing a reviewer out of a comment box they
+      // are typing in. See the same fork in `lahe session`.
+      var openPages = reviewsModule.readLiveHolders(dir, reviewsModule.LIVE_WINDOW_MS);
+      if (openPages.length > 0) {
+        keptForReviewer = reviewsModule.liveReviewerSentence(openPages);
+      } else {
+        restartReason = sourceStamp.REASON;
+        staleRestart = true;
+      }
     }
     if (restartReason) {
       try {
@@ -1282,6 +1294,7 @@ async function run(argv) {
       helperOrigin +
       helperNote({
         started: started,
+        keptForReviewer: !!keptForReviewer,
         staleRestart: staleRestart,
         restarted: restarted,
         learned: learned,
@@ -1381,6 +1394,11 @@ async function run(argv) {
   // A restart is never silent. It drops the connection under every review page
   // that is open, and the reviewer watching their status line change is owed the
   // reason in plain words rather than a mystery blink.
+  if (keptForReviewer) {
+    say();
+    say("  " + keptForReviewer);
+  }
+
   if (restarted) {
     say();
     if (staleRestart) {

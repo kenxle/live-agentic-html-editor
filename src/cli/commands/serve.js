@@ -19,9 +19,16 @@
 var protocol = require("../../shared/protocol.js");
 var service = require("../../service/index.js");
 var sourceStamp = require("../../service/source_stamp.js");
+var stateDirModule = require("../../service/state_dir.js");
+var reviewsModule = require("../../service/reviews.js");
+var sessionCommand = require("./session.js");
 
 var USAGE = [
-  "usage: lahe serve [--port <n>] [--state-dir <path>] [--review <id>] [--origin <origin>]",
+  "usage: lahe serve [--restart] [--port <n>] [--state-dir <path>] [--review <id>] [--origin <origin>]",
+  "",
+  "  --restart    replace a helper that is already answering on the port, even when somebody has a",
+  "               review page open on it. This is the deliberate override: every other command leaves",
+  "               a helper with a live reviewer alone and tells you to run this when they are done.",
   "",
   "  --port       the port to bind on 127.0.0.1. Default " + protocol.DEFAULT_PORT + ", which is fixed on",
   "               purpose: the page has the port in its script tag and no way to learn a new one.",
@@ -63,7 +70,9 @@ function parseArgs(argv) {
       if (name === "--help" || name === "-h") {
         return { ok: false, help: true, message: USAGE };
       }
-      if (name === "--port") {
+      if (name === "--restart") {
+        options.restart = true;
+      } else if (name === "--port") {
         var port = Number(takeValue("--port", inline));
         if (!Number.isInteger(port) || port < 0 || port > 65535) {
           return { ok: false, message: "--port takes a port number" };
@@ -97,6 +106,48 @@ function parseArgs(argv) {
 }
 
 /**
+ * Stop the helper answering on this port so this process can take its place.
+ *
+ * @returns {Promise<true|number>} true when the port is free (including when
+ *   nothing was on it), otherwise the exit code to return
+ */
+async function replaceRunningHelper(options) {
+  var port = options.port === undefined ? protocol.DEFAULT_PORT : options.port;
+  var live = await service.probeHealth(protocol.DEFAULT_HOST, port);
+  if (!live) return true;
+  var dir;
+  try {
+    dir = options.stateDir
+      ? stateDirModule.stateDir({ dir: options.stateDir, allowInsideCheckout: options.allowInsideCheckout })
+      : stateDirModule.stateDir();
+  } catch (err) {
+    process.stderr.write("lahe serve: " + err.message + "\n");
+    return 1;
+  }
+  // Say what is about to be interrupted. The whole reason this flag exists is
+  // that the other commands refuse to do this silently, so doing it silently
+  // here would put the problem back.
+  var holders = reviewsModule.readLiveHolders(dir, reviewsModule.LIVE_WINDOW_MS);
+  if (holders.length > 0) {
+    process.stdout.write("lahe serve: " + reviewsModule.liveReviewerSentence(holders, { forced: true }) + "\n");
+  }
+  try {
+    var replaced = await sessionCommand.stopVerifiedHelper(dir);
+    if (!replaced) {
+      process.stderr.write(
+        "lahe serve: something is answering on " + protocol.DEFAULT_HOST + ":" + port +
+          " that this state directory cannot identify as its own helper. Stop it yourself, then run serve again.\n"
+      );
+      return 1;
+    }
+  } catch (err) {
+    process.stderr.write("lahe serve: " + err.message + "\n");
+    return 1;
+  }
+  return true;
+}
+
+/**
  * @param {string[]} argv the arguments after the command name
  * @returns {Promise<number>} the process exit code
  */
@@ -105,6 +156,15 @@ async function run(argv) {
   if (!parsed.ok) {
     process[parsed.help ? "stdout" : "stderr"].write(parsed.message + "\n");
     return parsed.help ? protocol.CLI_EXIT.OK : protocol.CLI_EXIT.BAD_USAGE;
+  }
+
+  // --restart is the one path that replaces a helper a reviewer is using. It
+  // happens BEFORE the bind, because the bind is what would fail with the port
+  // still held. Everything else about serve is unchanged: without the flag a
+  // port a helper already answers on is reported and left alone.
+  if (parsed.options.restart) {
+    var stopped = await replaceRunningHelper(parsed.options);
+    if (stopped !== true) return stopped;
   }
 
   var helper;
@@ -131,7 +191,8 @@ async function run(argv) {
         if (sourceStamp.helperPredatesSource(already.started_at).stale) {
           process.stdout.write(
             "  " + sourceStamp.reasonSentence(".") + "\n" +
-              "  The next `lahe review` replaces it and says so.\n"
+              "  The next `lahe review` replaces it and says so, unless somebody has a review page open on\n" +
+              "  it, in which case it is left alone and `lahe serve --restart` is how you replace it anyway.\n"
           );
         }
         return 0;

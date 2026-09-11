@@ -340,6 +340,13 @@ newer helper with an older clone. This is what prevents a freshly rebuilt rail
 from talking to stale in-memory backend code, and the second check is the one
 that catches a helper that has simply been up for days.
 
+**One thing stops a replacement: a reviewer who has a page open on the running
+helper.** The helper writes down which reviews have a live window, so a command
+about to replace a stale helper can see that somebody is mid-comment and leave
+it running instead, saying which review and how long ago that page last spoke.
+Run `lahe serve --restart` once the reviewer is done, which replaces the helper
+regardless and names whose page it is interrupting.
+
 A restart costs nothing durable:
 
 - Nothing in the state directory moves. The record is on disk and a restart does
@@ -347,7 +354,9 @@ A restart costs nothing durable:
 - The static server serving the reviewed page belongs to the agent session, not
   to the helper, so the reviewer's URL keeps answering throughout.
 - An open page shows the helper unreachable for a moment, then reconnects on its
-  own and re-posts whatever it was holding.
+  own and re-posts whatever it was holding. It keeps its window session too: the
+  new helper reads the session table off disk, so the page is recognized as the
+  holder it already was rather than refused as a second window.
 
 **A different document gets its own review.** `--review <id>` is for putting a
 page back on the review it already belonged to, usually after a rebuild. Do not

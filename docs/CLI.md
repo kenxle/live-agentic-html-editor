@@ -28,6 +28,7 @@ once, and after that a plain sentence works:
 | `lahe session reopen <id>` | Reopen the workstream and restart its helper and static servers |
 | `lahe session takeover <id>` | Explicitly hand an existing workstream to a new agent, fence its older monitors, and print catch-up commands |
 | `lahe serve [--port N]` | Run the helper by hand (`add` starts it for you, so this is rarely needed) |
+| `lahe serve --restart` | Replace the helper that is already running, even when a reviewer has a page open on it. Every other command leaves such a helper alone and tells you to run this when they are done |
 
 Takeover is designed for token exhaustion, crashes, and switching agent clients
 mid-review. Its catch-up command lists every unanswered item, so work the old

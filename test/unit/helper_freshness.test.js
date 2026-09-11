@@ -362,13 +362,17 @@ test("session reopen replaces a stale helper and says why", async () => {
 
   try {
     const boot = await sessionCommand.startHelper(stateDir, port);
-    assert.deepEqual(boot, { started: true, stale: false }, "nothing was running, so one was started");
+    assert.deepEqual(
+      boot,
+      { started: true, stale: false, keptForReviewer: null },
+      "nothing was running, so one was started"
+    );
     const first = readyFile(stateDir);
 
     setMtime(source.file, Date.parse(first.started_at) - 1000);
     assert.deepEqual(
       await sessionCommand.startHelper(stateDir, port),
-      { started: false, stale: false },
+      { started: false, stale: false, keptForReviewer: null },
       "a current helper is left running"
     );
     assert.equal(readyFile(stateDir).pid, first.pid, "same process, same run");
@@ -376,7 +380,7 @@ test("session reopen replaces a stale helper and says why", async () => {
     setMtime(source.file, Date.parse(first.started_at) + 1000);
     assert.deepEqual(
       await sessionCommand.startHelper(stateDir, port),
-      { started: true, stale: true },
+      { started: true, stale: true, keptForReviewer: null },
       "a helper older than the code is replaced, and the caller is told why so it can print it"
     );
     assert.notEqual(readyFile(stateDir).pid, first.pid, "a new process is answering");
