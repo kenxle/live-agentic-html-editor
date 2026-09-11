@@ -364,6 +364,17 @@
   // loses the pill with the rest of the gestures. An affordance offering to do
   // something the window cannot do is worse than no affordance.
 
+  // NOT WHILE THE REVIEWER IS STILL DRAGGING, and this is why. Ken, highlighting
+  // a passage from the bottom line upward: the pill appeared as soon as the drag
+  // paused, right next to the cursor, and the cursor was still climbing through
+  // the text he wanted. He dragged over the word Comment, the selection jittered,
+  // the direction flipped, and the rest of the page below got selected instead.
+  // He could not finish the highlight. So three rules: the pill waits for the
+  // button to come up before it appears at all; the pill and the rest of the
+  // library's chrome are never selectable and never a selection target; and the
+  // pill lands on the side of the passage the cursor is NOT on, which for an
+  // upward drag is the top of the selection, not the bottom.
+  //
   // How long after the last selectionchange the pill appears. A drag fires the
   // event on every mouse move, and a pill that chased the cursor through a drag
   // would be the loudest thing on the page.
@@ -414,9 +425,18 @@
     "  font: 12.5px/1 ui-sans-serif, system-ui, -apple-system, sans-serif;",
     "  color: #15171c;",
     "  pointer-events: auto;",
+    // Not selectable, and not something a drag can extend a selection into. The
+    // reviewer dragging upward crosses the pill's own rectangle; without this
+    // the browser treats it as text and the selection runs away to the end of
+    // the page.
+    "  user-select: none;",
+    "  -webkit-user-select: none;",
     "  z-index: 3;",
     "}",
     "." + PILL_CLASS + "[data-lahe-shown='true'] { display: flex; }",
+    // Belt and braces for the rule above: while a button is held, a drag passes
+    // straight through the pill even if one is somehow on screen.
+    "." + PILL_CLASS + "[data-lahe-drag='true'] { pointer-events: none; }",
     "." + PILL_BTN_CLASS + " {",
     "  border: 0;",
     "  background: transparent;",
@@ -427,6 +447,10 @@
     "  color: inherit;",
     "  cursor: pointer;",
     "  white-space: nowrap;",
+    // Said again on the button: a form control carries its own UA rule for this
+    // and does not always take the one it inherits.
+    "  user-select: none;",
+    "  -webkit-user-select: none;",
     "}",
     "." + PILL_BTN_CLASS + ":hover { background: rgba(60, 86, 165, 0.10); color: #2c3f7d; }",
     "." + PILL_BTN_CLASS + ":focus-visible { outline: 2px solid #3c56a5; outline-offset: -1px; }",
@@ -822,6 +846,10 @@
     var pillShown = false;
     var pillPlacement = "above";
     var pillTipFor = null;
+    // True while a mouse or touch button is held down on the page: the reviewer
+    // is dragging out a selection and nothing of the pill may appear until they
+    // let go. See the note at the top of the popover section.
+    var pointerHeld = false;
     // The cards' own note nodes, by item id, and whether this window may type in
     // them. A window that loses the review goes read-only by unbinding this
     // group (index.js), and an editable node left editable there would be an
@@ -1948,6 +1976,7 @@
       node.setAttribute("role", "toolbar");
       node.setAttribute("aria-label", "What to do with this selection");
       node.setAttribute("data-lahe-placement", "above");
+      node.setAttribute("data-lahe-drag", pointerHeld ? "true" : "false");
       markers.markChrome(node);
 
       var tip = doc.createElement("span");
@@ -2109,11 +2138,17 @@
       // A selection that is gone goes NOW. Waiting out the debounce would leave
       // the pill sitting over a page the reviewer has already moved on from.
       if (!selectionWorthOffering()) return hidePopover();
+      // A held button means the reviewer is still dragging. The release path
+      // (onPointerUp) schedules, so the pill arrives once the highlight is
+      // finished and never under the moving cursor. A keyboard selection holds
+      // no button, so shift+arrow still gets the pill after the delay.
+      if (pointerHeld) return null;
       pillTimer = win.setTimeout(evaluatePopover, POPOVER_DELAY_MS);
       return pillTimer;
     }
 
     function showPopover(range) {
+      if (pointerHeld) return null;
       var made = ensurePill();
       if (!made) return null;
       made.node.setAttribute("data-lahe-shown", "true");
@@ -2135,18 +2170,53 @@
     }
 
     /**
-     * Places the pill at the END of the selection, above it when there is room
-     * and below it when there is not.
+     * Did the drag finish at the TOP of the selection?
      *
-     * The end rather than the middle, because that is where the reviewer's
-     * pointer finished; above rather than below, because below is where the next
-     * line of the page is and the pill would sit on the words they are about to
-     * read.
+     * The selection knows where the reviewer's hand stopped: focusNode is the
+     * end they were moving, anchorNode the end they started from. When the focus
+     * sits before the anchor in the document, the reviewer dragged upward and
+     * their cursor is at the start of the range, not the end.
+     *
+     * @returns {boolean} true when the cursor finished at the start of the range
+     */
+    function focusAtRangeStart() {
+      if (!doc || !win || !win.getSelection) return false;
+      var selection = win.getSelection();
+      if (!selection || !selection.anchorNode || !selection.focusNode) return false;
+      if (typeof doc.createRange !== "function") return false;
+      try {
+        var probe = doc.createRange();
+        probe.setStart(selection.anchorNode, selection.anchorOffset);
+        probe.setEnd(selection.anchorNode, selection.anchorOffset);
+        if (typeof probe.comparePoint !== "function") return false;
+        return probe.comparePoint(selection.focusNode, selection.focusOffset) < 0;
+      } catch (err) {
+        // Nodes in different roots, or an offset the range will not take. An
+        // unknown direction is the old behavior, which is the safe default.
+        return false;
+      }
+    }
+
+    /**
+     * Places the pill at the end of the selection the reviewer's cursor is NOT
+     * on, above it when there is room and below it when there is not.
+     *
+     * A downward drag finishes at the bottom, so the pill goes to the last
+     * rectangle, as it always has. An upward drag finishes at the TOP, and the
+     * pill goes to the first rectangle instead: put it at the bottom there and
+     * it sits in the path of the next upward drag, which is the jitter that
+     * flipped the selection and ran it to the end of the page.
+     *
+     * Above rather than below, either way, because below is where the next line
+     * of the page is and the pill would sit on the words they are about to read.
      */
     function positionPill(range) {
       if (!pill || !win) return null;
       var rects = typeof range.getClientRects === "function" ? range.getClientRects() : null;
-      var end = rects && rects.length ? rects[rects.length - 1] : range.getBoundingClientRect();
+      var upward = focusAtRangeStart();
+      var end;
+      if (rects && rects.length) end = upward ? rects[0] : rects[rects.length - 1];
+      else end = range.getBoundingClientRect();
       var size = pill.node.getBoundingClientRect();
       var vw = win.innerWidth || 1024;
       var vh = win.innerHeight || 768;
@@ -2159,7 +2229,9 @@
       }
       if (top > vh - size.height - POPOVER_GAP) top = Math.max(POPOVER_GAP, vh - size.height - POPOVER_GAP);
 
-      var left = end.right - size.width / 2;
+      // Centred on the corner the drag ended away from: the right edge of the
+      // last line going down, the left edge of the first line coming up.
+      var left = (upward ? end.left : end.right) - size.width / 2;
       // Clear of the rail, the same allowance the comment box uses, so the pill
       // is never drawn underneath it.
       var railLimit = vw - RAIL_ALLOWANCE - size.width - POPOVER_GAP;
@@ -2204,6 +2276,33 @@
           keys: visible && pillTipFor ? keysFor(pillTipFor) : null,
           text: tipRect ? String(pill.tip.textContent) : null
         }
+      };
+    }
+
+    /**
+     * The pill's own computed user-select, read from inside the closed root.
+     *
+     * A spec cannot query a closed root and neither can the page, so the one
+     * rule that keeps a drag from selecting the library's chrome would otherwise
+     * be untestable and free to rot.
+     *
+     * @returns {{userSelect: string|null, drag: string|null, buttons: string[]}}
+     */
+    function selectionPopoverStyles() {
+      var node = pill && pill.node ? pill.node : null;
+      if (!node || !win || typeof win.getComputedStyle !== "function") {
+        return { userSelect: null, drag: null, buttons: [] };
+      }
+      var read = function (el) {
+        var style = win.getComputedStyle(el);
+        return style.userSelect || style.webkitUserSelect || null;
+      };
+      return {
+        userSelect: read(node),
+        drag: node.getAttribute("data-lahe-drag"),
+        buttons: pill.buttons.map(function (b) {
+          return read(b.node);
+        })
       };
     }
 
@@ -2666,10 +2765,19 @@
       // offers. A remount re-registers the group, and the pill comes back with
       // the reviewer's next selection, which is the whole of its state.
       listenerHandles.push(listeners.on(target, "selectionchange", onSelectionChange, false, LISTENER_GROUP));
+      // The drag gate, in the same group for the same reason. pointerdown and
+      // pointerup cover mouse, pen and touch; mouseup is the fallback for a
+      // browser that fired no pointer event, and pointercancel plus the window's
+      // blur catch a release the window never hears about.
+      listenerHandles.push(listeners.on(target, "pointerdown", onPointerDown, true, LISTENER_GROUP));
+      listenerHandles.push(listeners.on(target, "pointerup", onPointerUp, true, LISTENER_GROUP));
+      listenerHandles.push(listeners.on(target, "pointercancel", onPointerLost, true, LISTENER_GROUP));
+      listenerHandles.push(listeners.on(target, "mouseup", onPointerUp, true, LISTENER_GROUP));
       if (win) {
         // Scrolling moves the passage out from under the pill. Hiding is honest
         // and cheap; a pill that chases the page during a scroll is neither.
         listenerHandles.push(listeners.on(win, "scroll", onScroll, true, LISTENER_GROUP));
+        listenerHandles.push(listeners.on(win, "blur", onPointerLost, false, LISTENER_GROUP));
       }
       // RE-DERIVED FROM STATE, NOT LEFT TO THE NEXT EVENT. A remount unbinds and
       // rebinds this group, and the reviewer's selection survives that: on the
@@ -2692,6 +2800,9 @@
         handle.off();
       });
       listenerHandles = [];
+      // The gate goes with its listeners. Left true, a window that unbound
+      // mid-drag would never offer the pill again after it rebinds.
+      setPointerHeld(false);
       hidePopover();
       gesturesBound = false;
       // Read-only, so the words stay readable and stop being an input. Without
@@ -2723,6 +2834,38 @@
 
     function onScroll() {
       hidePopover();
+    }
+
+    // The drag gate. A button going down on the page starts a selection the
+    // reviewer has not finished yet, so the pill goes away and stays away until
+    // the button comes up. The pill's own buttons are not that: pressing Comment
+    // is a press ON the library, and hiding there would take the pill out from
+    // under the finger.
+    function setPointerHeld(held) {
+      pointerHeld = held === true;
+      if (pill && pill.node) pill.node.setAttribute("data-lahe-drag", pointerHeld ? "true" : "false");
+      return pointerHeld;
+    }
+
+    function onPointerDown(event) {
+      if (markers.isInsideOverlay(event.target)) return;
+      setPointerHeld(true);
+      hidePopover();
+    }
+
+    function onPointerUp() {
+      if (!pointerHeld) return;
+      setPointerHeld(false);
+      // Now that the highlight is finished, the ordinary path: the same debounce
+      // the keyboard gets, and the same checks on what is worth offering.
+      schedulePopover();
+    }
+
+    // A release the window never hears about: the reviewer let go outside the
+    // window, or a touch was cancelled. Without this the flag stays true and the
+    // pill never comes back.
+    function onPointerLost() {
+      onPointerUp();
     }
 
     function onKeydown(event) {
@@ -2817,6 +2960,7 @@
       exitPickMode: exitPickMode,
       pickMode: pickState,
       selectionPopover: selectionPopover,
+      selectionPopoverStyles: selectionPopoverStyles,
       hideSelectionPopover: hidePopover,
       highlights: highlights,
       bind: bind,
