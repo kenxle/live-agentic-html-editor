@@ -80,13 +80,52 @@
     // "Here it is": the passage a card was just clicked to find. It lasts about
     // a second and a half and then it is gone, so it never becomes a third
     // permanent state a reviewer has to learn.
-    EMPHASIS: PREFIX + "emphasis"
+    EMPHASIS: PREFIX + "emphasis",
+    // "This is what just changed." Painted on a block whose words are new or
+    // different after the agent's rebuild, and gone a couple of seconds later.
+    // The two names after it are the same mark, fading: see CHANGED_STEPS.
+    CHANGED: PREFIX + "changed",
+    CHANGED_FADING: PREFIX + "changed-fading",
+    CHANGED_FAINT: PREFIX + "changed-faint"
   };
-  var NAMES = [NAME.COMMENT, NAME.ACTIVE, NAME.EMPHASIS];
+  var NAMES = [
+    NAME.COMMENT,
+    NAME.ACTIVE,
+    NAME.EMPHASIS,
+    NAME.CHANGED,
+    NAME.CHANGED_FADING,
+    NAME.CHANGED_FAINT
+  ];
 
   // How long the "here it is" wash stays up. Long enough to find with the eye
   // after a smooth scroll, short enough that it cannot be mistaken for state.
   var EMPHASIS_MS = 1500;
+
+  // How long a changed block stays lit. Long enough to find with the eye on a
+  // page that just replaced itself, short enough that it is gone before the
+  // reviewer starts reading and cannot be mistaken for a state of the record.
+  var CHANGED_MS = 2500;
+
+  // The fade, as steps rather than as a transition.
+  //
+  // A ::highlight() rule is not an element and engines do not animate one
+  // reliably, so the mark is moved between three rules of decreasing strength
+  // and then removed. Three steps read as a fade at this duration; more would be
+  // more timers for something nobody is watching closely.
+  //
+  // Each entry is {at: fraction of the hold, name}. Under
+  // prefers-reduced-motion the steps are skipped: the mark holds at full
+  // strength for the same time and then goes, so the information is identical
+  // and nothing moves.
+  var CHANGED_STEPS = [
+    { at: 0.55, name: NAME.CHANGED_FADING },
+    { at: 0.8, name: NAME.CHANGED_FAINT }
+  ];
+
+  // Changed marks live under their own key prefix, so a block's change paint
+  // and a record's comment paint are separate entries and clearing one never
+  // disturbs the other. No record id can collide with it.
+  var CHANGED_PREFIX = "__lahe_changed__:";
 
   // The one reserved key in the painted map. An item's own paint is keyed by its
   // record id, so the emphasis rides on a key no record can have: emphasizing a
@@ -152,6 +191,28 @@
     // is this comment".
     "::highlight(" + NAME.EMPHASIS + ") {",
     "  background-color: rgba(60, 86, 165, 0.38);",
+    "  color: inherit;",
+    "}",
+    // THE CHANGED MARK IS THE ONE YELLOW, and it is yellow on purpose. The
+    // indigo above is the reviewer's own language: I selected this, I commented
+    // here. A change is not theirs, it is the agent answering them, and it has
+    // to be legible as something else at a glance. A highlighter yellow is what
+    // a person reaches for when they mark what moved, it cannot be confused
+    // with the indigo wash an inch away, and it still reads as a mark over text
+    // rather than as an alarm.
+    //
+    // Translucent, like the rest: the words underneath are the point, and a
+    // wash never changes a single measurement on the page (D8).
+    "::highlight(" + NAME.CHANGED + ") {",
+    "  background-color: rgba(250, 204, 21, 0.55);",
+    "  color: inherit;",
+    "}",
+    "::highlight(" + NAME.CHANGED_FADING + ") {",
+    "  background-color: rgba(250, 204, 21, 0.32);",
+    "  color: inherit;",
+    "}",
+    "::highlight(" + NAME.CHANGED_FAINT + ") {",
+    "  background-color: rgba(250, 204, 21, 0.14);",
     "  color: inherit;",
     "}",
     "}",
@@ -432,6 +493,105 @@
     }
 
     // ------------------------------------------------------------------------
+    // "This is what just changed": the attention mark
+    // ------------------------------------------------------------------------
+    //
+    // The agent edits the source, the page rebuilds, LAHE reloads it, and the
+    // reviewer is looking at a page that is different in a way they asked for
+    // and cannot see. This is what puts their eye on it: a highlighter mark over
+    // the words that are new or different, which fades out and is gone.
+    //
+    // Same rules as every other paint here. Nothing enters the DOM, nothing is
+    // styled on the page's own nodes, and the mark is removed on a timer whether
+    // or not anything else happens.
+
+    // key -> the timers still owed to it.
+    var changedTimers = Object.create(null);
+
+    function changedKeyFor(key) {
+      return CHANGED_PREFIX + String(key);
+    }
+
+    function reducedMotion() {
+      var g = opts.window || global();
+      try {
+        if (!g || typeof g.matchMedia !== "function") return false;
+        return !!g.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      } catch (error) {
+        return false;
+      }
+    }
+
+    /**
+     * Mark one range as changed, and let it fade.
+     *
+     * @param {string} key   anything unique for this block; its own text does
+     *                       nicely, since two identical blocks are one mark
+     * @param {Range} range  a live Range over the changed words
+     * @param {number} [ms]  how long to hold it; CHANGED_MS by default
+     * @returns {boolean} true when the mark went on
+     */
+    function markChanged(key, range, ms) {
+      if (!key) return false;
+      if (!range || typeof range.cloneRange !== "function") return false;
+      if (!supported()) return false;
+      var id = changedKeyFor(key);
+      clearChanged(key);
+      paint(id, range, NAME.CHANGED);
+      var hold = typeof ms === "number" && ms > 0 ? ms : CHANGED_MS;
+      var g = global();
+      if (!g || typeof g.setTimeout !== "function") return true;
+      var timers = [];
+      if (!reducedMotion()) {
+        CHANGED_STEPS.forEach(function (step) {
+          timers.push(
+            g.setTimeout(function () {
+              if (painted[id]) paint(id, painted[id].range, step.name);
+            }, Math.round(hold * step.at))
+          );
+        });
+      }
+      timers.push(
+        g.setTimeout(function () {
+          clearChanged(key);
+        }, hold)
+      );
+      changedTimers[id] = timers;
+      return true;
+    }
+
+    function clearChanged(key) {
+      var id = changedKeyFor(key);
+      var g = global();
+      var timers = changedTimers[id];
+      if (timers && g && typeof g.clearTimeout === "function") timers.forEach(g.clearTimeout.bind(g));
+      delete changedTimers[id];
+      return clear(id);
+    }
+
+    function clearAllChanged() {
+      Object.keys(changedTimers).forEach(function (id) {
+        clearChanged(id.slice(CHANGED_PREFIX.length));
+      });
+      // A mark whose timers are already spent but whose paint is still up.
+      Object.keys(painted).forEach(function (id) {
+        if (id.indexOf(CHANGED_PREFIX) === 0) clear(id);
+      });
+      return true;
+    }
+
+    /** The keys wearing a changed mark right now. For tests and probes. */
+    function changedKeys() {
+      return Object.keys(painted)
+        .filter(function (id) {
+          return id.indexOf(CHANGED_PREFIX) === 0;
+        })
+        .map(function (id) {
+          return id.slice(CHANGED_PREFIX.length);
+        });
+    }
+
+    // ------------------------------------------------------------------------
     // The library's one shadow surface
     // ------------------------------------------------------------------------
     //
@@ -606,6 +766,7 @@
     }
 
     function teardown() {
+      clearAllChanged();
       clearEmphasis();
       clearAll();
       removeStylesheet();
@@ -632,6 +793,10 @@
       emphasize: emphasize,
       clearEmphasis: clearEmphasis,
       emphasisRange: emphasisRange,
+      markChanged: markChanged,
+      clearChanged: clearChanged,
+      clearAllChanged: clearAllChanged,
+      changedKeys: changedKeys,
       surface: surface,
       addSurfaceStyle: addSurfaceStyle,
       pageScheme: pageScheme,
@@ -655,6 +820,9 @@
     PRINT_HOST_STYLE_TEXT: PRINT_HOST_STYLE_TEXT,
     EMPHASIS_MS: EMPHASIS_MS,
     EMPHASIS_KEY: EMPHASIS_KEY,
+    CHANGED_MS: CHANGED_MS,
+    CHANGED_STEPS: CHANGED_STEPS,
+    CHANGED_PREFIX: CHANGED_PREFIX,
     schemeForPage: schemeForPage,
     createHighlights: createHighlights,
     shared: shared

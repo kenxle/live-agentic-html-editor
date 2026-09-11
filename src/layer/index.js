@@ -353,7 +353,7 @@
     // revertChecks counts the check having RUN on this load, which is what a
     // test waits on: "the check ran and reopened nothing" is a real result and
     // an arbitrary sleep is the only other way to observe it.
-    var counters = { merges: 0, cardsDrawn: 0, revertChecks: 0, revertReopens: 0 };
+    var counters = { merges: 0, cardsDrawn: 0, revertChecks: 0, revertReopens: 0, changesPainted: 0 };
 
     // The window-session state machine's boot half (D5, findings 1/12, NEW-2). A
     // window that loses the claim goes READ-ONLY: its edit and comment handlers
@@ -867,6 +867,116 @@
 
     // "The page changed, so replay gets a pass."
     //
+    // -------------------------------------------------------------------------
+    // What the agent changed, lit up for a moment
+    // -------------------------------------------------------------------------
+    //
+    // Ken, on the reload: "New things appearing or disappearing in a doc should
+    // use the highlight and fade micro interaction so that we can see them
+    // better... When text changes on the page, give it a highlight and fade. Not
+    // the grey-blue highlight that the cursor does, but a highlighter attention
+    // highlight."
+    //
+    // The reviewer asked for something, the agent edited the source, the page
+    // rebuilt, and LAHE reloaded it under them. Without this they are looking at
+    // a page that is different in a way they cannot see, and finding the change
+    // is their job. This makes it the tool's job: the blocks whose words are new
+    // or different wear a highlighter mark for a couple of seconds and then it
+    // is gone.
+    //
+    // WHY THE COMPARISON IS FAIR. The reviewer's own outstanding edits are on
+    // both sides of it. The page that left had replay's records applied to it,
+    // and the snapshot here is taken after replay's boot pass has applied them
+    // to the page that arrived, so a re-applied edit is identical on both sides
+    // and cancels. What is left is what the agent did.
+
+    // The block texts this page last saw. The baseline for a change that lands
+    // with no reload at all.
+    var blockTextsSeen = null;
+
+    // A page can repaint itself in bursts. One scan per burst.
+    var CHANGE_SCAN_DEBOUNCE_MS = 250;
+    var changeScanTimer = null;
+
+    /**
+     * Is the reviewer in this block right now?
+     *
+     * Two ways they can be, and both mean hands off: the block is protected
+     * (2B has it open for an edit), or a comment box is open on words inside it.
+     * A mark over text someone is working in is noise at best, and at worst it
+     * reads as the tool having changed what they were typing.
+     */
+    function blockIsBusy(el) {
+      try {
+        if (protect && typeof protect.isProtected === "function" && protect.isProtected(el)) return true;
+        var boxes = typeof comments.openBoxes === "function" ? comments.openBoxes() : [];
+        for (var i = 0; i < boxes.length; i += 1) {
+          var range = comments.highlights ? comments.highlights.rangeFor(boxes[i].id) : null;
+          var node = range ? range.commonAncestorContainer : null;
+          if (node && (el === node || (typeof el.contains === "function" && el.contains(node)))) return true;
+        }
+      } catch (error) {
+        // A check that throws is not a licence to paint over someone's work.
+        return true;
+      }
+      return false;
+    }
+
+    /**
+     * Paint every block whose text is new or different, against a baseline.
+     *
+     * @param {Array<string>|null} before the texts to compare against
+     * @returns {number} how many blocks were marked
+     */
+    function paintWhatChanged(before) {
+      if (!comments.highlights || typeof doc.createRange !== "function") return 0;
+      var entries = ns.sync.blockCandidates(doc);
+      // Over the cap the scan is truncated, so the list is not a description of
+      // this page and comparing it would light up everything past the cut. The
+      // feature sits this page out, which is what the cap is for.
+      if (entries.length > ns.sync.SNAPSHOT_MAX_BLOCKS) return 0;
+      var texts = entries.map(function (entry) {
+        return entry.text;
+      });
+      var changed = ns.sync.diffBlockTexts(before, texts);
+      var marked = 0;
+      changed.forEach(function (index) {
+        var el = entries[index].el;
+        if (!el || !el.isConnected) return;
+        if (blockIsBusy(el)) return;
+        var range = doc.createRange();
+        range.selectNodeContents(el);
+        // Keyed by position and text together, so two blocks that now say the
+        // same thing are two marks rather than one overwriting the other.
+        if (comments.highlights.markChanged(index + ":" + entries[index].text, range)) marked += 1;
+      });
+      blockTextsSeen = texts;
+      counters.changesPainted += marked;
+      return marked;
+    }
+
+    /**
+     * A change that lands with NO reload: a dev server hot-swapping the page,
+     * or the page rewriting a block on its own. Same mark, same fade, and
+     * deliberately narrow: only a block whose text is different from the one
+     * this page last saw.
+     */
+    function scanForChanges() {
+      changeScanTimer = null;
+      if (!handle || current !== handle) return 0;
+      // Replay's own writes are not news: they are the reviewer's records going
+      // back on, and they were on the page before too.
+      if (ns.epoch.isWriting()) return 0;
+      if (blockTextsSeen === null) return 0;
+      return paintWhatChanged(blockTextsSeen);
+    }
+
+    function noteMutationForChanges() {
+      if (blockTextsSeen === null) return;
+      if (changeScanTimer || typeof win.setTimeout !== "function") return;
+      changeScanTimer = win.setTimeout(scanForChanges, CHANGE_SCAN_DEBOUNCE_MS);
+    }
+
     // The ORDINARY coalescing path, deliberately: no {immediate: true} anywhere
     // in this file. replay.schedule races the frame against a 50ms timer, so a
     // page that is not painting still runs its pass; forcing a pass immediate
@@ -877,6 +987,7 @@
     if (typeof win.MutationObserver === "function" && doc.body) {
       pageObserver = new win.MutationObserver(function () {
         ns.replay.schedule(ns.replay.REASON.MUTATION);
+        noteMutationForChanges();
       });
       pageObserver.observe(doc.body, { childList: true, characterData: true, subtree: true });
     }
@@ -998,6 +1109,11 @@
         if (!handle || current !== handle) return;
         repaintHighlights(refreshItems());
         runRevertCheck();
+        // And what the agent changed, now that the page has finished drawing
+        // itself and replay has put the reviewer's own records back. Both sides
+        // of the comparison therefore include those records, which is what
+        // keeps a re-applied edit from being reported as news.
+        paintWhatChanged(ns.sync.takeBlockSnapshot(win, reviewId));
       }, ns.replay.SETTLE_MS + 100);
     }
 
@@ -1076,6 +1192,12 @@
       // The revert check the settling window runs on its own. Exposed so a test
       // can run it at a known moment rather than racing the timer.
       revertCheck: runRevertCheck,
+      // The change marks, as the library sees them: the keys wearing one right
+      // now, and a way to run the comparison at a known moment.
+      changedBlocks: function () {
+        return comments.highlights ? comments.highlights.changedKeys() : [];
+      },
+      paintWhatChanged: paintWhatChanged,
       sync: sync,
       exporter: exporter,
       editing: editing,
@@ -1098,6 +1220,8 @@
         injector.teardown();
         if (pageObserver) pageObserver.disconnect();
         pageObserver = null;
+        if (changeScanTimer && typeof win.clearTimeout === "function") win.clearTimeout(changeScanTimer);
+        changeScanTimer = null;
         protect.uninstall();
         editing.teardown();
         comments.teardown();

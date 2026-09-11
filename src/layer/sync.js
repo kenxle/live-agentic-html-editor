@@ -98,6 +98,33 @@
   // scheduleRetry's, and they keep going forever.
   var DRAIN_ATTEMPTS = 3;
 
+  // THE HELPER GETS REPLACED UNDER A LIVE PAGE. Any command that needs a helper
+  // newer than the running one stops it and starts another, and on a day when
+  // code is landing that happens several times an hour. For the second or two
+  // that takes, this page's requests fail and its heartbeat is answered by a
+  // process that has not read the session table yet. Both used to be acted on at
+  // once: the page dropped to read-only, which closes every comment box the
+  // reviewer has open, and it blamed the page's address for not being
+  // registered when the real answer was "wait a moment" (reviews r4915e2d5d632
+  // and r929a3d60b3cb, 2026-09-10 and 2026-09-11).
+  //
+  // So an ambiguous refusal has to REPEAT before the page believes it. Three
+  // consecutive misses, retried faster than the heartbeat so the three take
+  // about three seconds rather than half a minute. Any answer at all resets the
+  // count. The one refusal that is never waited out is a window deposed by an
+  // explicit Review here instead: that is a person deciding, not a machine
+  // restarting, and it says so on the wire.
+  var CLAIM_MISSES_BEFORE_READ_ONLY = 3;
+  var CLAIM_RETRY_MS = 1200;
+
+  // How long after the last answered request a failing page is given the benefit
+  // of the doubt about WHY it is failing. Inside this window a failure reads as
+  // the helper being down, which during a restart it is; past it the origin
+  // diagnosis runs as before. A page that has never had an answer is not in any
+  // window and is diagnosed on its first failure, which is the page whose origin
+  // really was never registered.
+  var RESTART_GRACE_MS = 6000;
+
   // The library's own poll of the helper. A visible review stays responsive;
   // a hidden document needs only a low-frequency safety check because it polls
   // immediately when it becomes visible again. The cursor is
@@ -107,6 +134,12 @@
 
   function pollIntervalFor(doc) {
     return doc && doc.hidden === true ? HIDDEN_POLL_INTERVAL_MS : POLL_INTERVAL_MS;
+  }
+
+  // One reading of the wall clock, in one place, so a test that wants to move it
+  // has one thing to move.
+  function nowMs() {
+    return Date.now();
   }
 
   // -------------------------------------------------------------------------
@@ -231,6 +264,12 @@
 
   // A bound on the scan, so a pathological document cannot turn a reload into a
   // long synchronous walk. Also the snapshot cap below.
+  //
+  // The scan collects ONE MORE than the cap on purpose. A list truncated at the
+  // cap looks like a complete list of a smaller page, and every block past the
+  // cut would then read as removed on one side and new on the other. The extra
+  // entry is the overflow signal: a caller that sees more than the cap knows the
+  // page is too big and sits the comparison out rather than painting nonsense.
   var MAX_BLOCKS_SCANNED = 4000;
 
   /**
@@ -257,7 +296,7 @@
       return [];
     }
     var withText = [];
-    for (var i = 0; i < found.length && withText.length < MAX_BLOCKS_SCANNED; i += 1) {
+    for (var i = 0; i < found.length && withText.length <= MAX_BLOCKS_SCANNED; i += 1) {
       var el = found[i];
       if (markers.isInsideOverlay(el)) continue;
       var text = "";
@@ -352,6 +391,151 @@
 
   function lastReloadRestore() {
     return lastRestore;
+  }
+
+  // ---------------------------------------------------------------------------
+  // What changed: the page's block texts, across a reload
+  // ---------------------------------------------------------------------------
+  //
+  // After a reload the reviewer is looking at a page that is different in some
+  // way they asked for and cannot see. So the outgoing page writes down what its
+  // blocks said, and the incoming page compares. index.js paints the difference.
+  //
+  // Stored beside the viewport marker and read once, because a snapshot that
+  // outlives its reload would paint a second page's changes onto a first page's
+  // text.
+  var BLOCK_SNAPSHOT_VERSION = 1;
+  var BLOCK_SNAPSHOT_KEY = "lahe.blocks.v1";
+
+  // The cap, in two numbers, and what happens at it: nothing is stored and the
+  // feature sits out that one reload. A page big enough to hit this is a page
+  // where the diff would cost more than the paint is worth, and a highlight that
+  // did not appear is a smaller failure than a reload that stalls.
+  var SNAPSHOT_MAX_BLOCKS = MAX_BLOCKS_SCANNED;
+  var SNAPSHOT_MAX_BYTES = 1048576;
+
+  /**
+   * The stored form, or null when it is over the cap.
+   *
+   * @returns {string|null} the JSON to store
+   */
+  function snapshotPayload(review, href, texts) {
+    if (!Array.isArray(texts) || texts.length === 0) return null;
+    if (texts.length > SNAPSHOT_MAX_BLOCKS) return null;
+    var json;
+    try {
+      json = JSON.stringify({ version: BLOCK_SNAPSHOT_VERSION, exactHref: href, review: review, texts: texts });
+    } catch (error) {
+      return null;
+    }
+    if (json.length > SNAPSHOT_MAX_BYTES) return null;
+    return json;
+  }
+
+  /** Write down what this page says, for the page that replaces it. */
+  function saveBlockSnapshot(win, review) {
+    if (!win || !win.location || !review) return false;
+    var storage = null;
+    try {
+      storage = win.sessionStorage;
+    } catch (error) {
+      return false;
+    }
+    if (!storage || typeof storage.setItem !== "function") return false;
+    var href = typeof win.location.href === "string" ? win.location.href : "";
+    var json = null;
+    try {
+      json = snapshotPayload(review, href, blockTextsIn(win.document));
+    } catch (error) {
+      json = null;
+    }
+    try {
+      if (!json) {
+        if (typeof storage.removeItem === "function") storage.removeItem(BLOCK_SNAPSHOT_KEY);
+        return false;
+      }
+      storage.setItem(BLOCK_SNAPSHOT_KEY, json);
+    } catch (error) {
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Read the outgoing page's blocks, ONCE. The key is removed on the way past
+   * whatever the answer is, so a snapshot is never used twice.
+   *
+   * @returns {Array<string>|null}
+   */
+  function takeBlockSnapshot(win, review) {
+    if (!win || !win.location || !review) return null;
+    var raw = null;
+    try {
+      var storage = win.sessionStorage;
+      if (!storage || typeof storage.getItem !== "function") return null;
+      raw = storage.getItem(BLOCK_SNAPSHOT_KEY);
+      if (raw !== null && typeof storage.removeItem === "function") storage.removeItem(BLOCK_SNAPSHOT_KEY);
+    } catch (error) {
+      return null;
+    }
+    if (!raw) return null;
+    var stored = null;
+    try {
+      stored = JSON.parse(raw);
+    } catch (error) {
+      return null;
+    }
+    var href = typeof win.location.href === "string" ? win.location.href : "";
+    if (!stored || stored.version !== BLOCK_SNAPSHOT_VERSION) return null;
+    if (stored.review !== review || stored.exactHref !== href) return null;
+    return Array.isArray(stored.texts) ? stored.texts : null;
+  }
+
+  /**
+   * Which blocks of the new page are new or changed.
+   *
+   * A MULTISET DIFFERENCE, not a longest common subsequence. LCS is the textbook
+   * answer and it is the wrong one here: it is O(n*m), which at the 4000-block
+   * cap is sixteen million cells to fill in on the main thread of a page the
+   * reviewer is trying to read. The multiset is one pass over each side.
+   *
+   * What it buys and what it costs, plainly:
+   *
+   *   a block whose text is not in the old page at all      painted
+   *   a block whose text was edited (so the new text is new)painted
+   *   a block that only MOVED                               not painted, which
+   *                                                         is right: nothing
+   *                                                         about it changed
+   *   a paragraph that now appears twice where it appeared  the second copy is
+   *   once                                                  painted, because the
+   *                                                         count is tracked
+   *
+   * REMOVALS ARE NOT PAINTED, and that is deliberate rather than missing. Text
+   * that is gone has nothing to paint, and marking the block that now sits where
+   * it used to be would put a change highlight on words that did not change,
+   * which is worse than saying nothing.
+   *
+   * @param {Array<string>} before the old page's block texts, in order
+   * @param {Array<string>} after  the new page's block texts, in order
+   * @returns {Array<number>} indexes into `after`
+   */
+  function diffBlockTexts(before, after) {
+    var changed = [];
+    if (!Array.isArray(after) || after.length === 0) return changed;
+    // No baseline is not "everything changed". A first load has nothing to
+    // compare against, and lighting the whole page up would be noise.
+    if (!Array.isArray(before) || before.length === 0) return changed;
+    var counts = Object.create(null);
+    for (var i = 0; i < before.length; i += 1) {
+      var key = "t:" + before[i];
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    for (var j = 0; j < after.length; j += 1) {
+      var k = "t:" + after[j];
+      if (counts[k] > 0) counts[k] -= 1;
+      else changed.push(j);
+    }
+    return changed;
   }
 
   // ---------------------------------------------------------------------------
@@ -837,6 +1021,13 @@
     // liveness poll (NEW-2), both stopped in sync.stop (finding 13).
     var readOnly = false;
     var sessionSecret = null;
+    // Consecutive heartbeats that were refused or never arrived. Reset by any
+    // answer; read only by the heartbeat path (see CLAIM_MISSES_BEFORE_READ_ONLY).
+    var claimMisses = 0;
+    var claimRetryTimer = null;
+    // When the helper last accepted an authenticated request from this page. 0
+    // means it never has, which is a different situation from having lost it.
+    var lastAnsweredAt = 0;
     var heartbeatTimer = null;
     var livenessTimer = null;
     var heartbeatMs = 10000;
@@ -960,6 +1151,7 @@
       var was = helperReachable;
       helperReachable = true;
       lastFailure = null;
+      lastAnsweredAt = nowMs();
       if (was !== true) onRecovered("HELPER_UNREACHABLE");
       // Every call site of markReachable is an AUTHENTICATED exchange the
       // helper accepted (an append, a reply poll, a claim); the health probe
@@ -1480,6 +1672,9 @@
       setTimeout(function () {
         if (win && win.location && typeof win.location.reload === "function") {
           saveViewportForReload(win, review);
+          // What the page says right now, so the page that replaces it can show
+          // the reviewer what the agent changed.
+          saveBlockSnapshot(win, review);
           win.location.reload();
         }
       }, reloadNoticeMs);
@@ -1607,6 +1802,16 @@
      */
     function diagnoseUnreachable() {
       if (cspRefused) return Promise.resolve(null);
+      // A HELPER BEING REPLACED ANSWERS HEALTH AND REFUSES EVERYTHING ELSE, for
+      // a moment, which is indistinguishable from an unregistered origin unless
+      // you know the page was working a second ago. So a page that HAS been
+      // answered recently keeps the "helper is down" reading, which during a
+      // restart is the true one, until the grace runs out. A page that has never
+      // been answered has no such history and is diagnosed at once, which is the
+      // page whose origin genuinely was never registered.
+      if (lastAnsweredAt && nowMs() - lastAnsweredAt < RESTART_GRACE_MS) {
+        return Promise.resolve(null);
+      }
       return probeHealth().then(function (healthAnswered) {
         if (healthAnswered !== true) {
           if (!originDiagnosed) return null;
@@ -1812,7 +2017,15 @@
         }
         originDiagnosed = false;
       }
-      return { granted: false, refused: refused, body: body, error: result.error };
+      return {
+        granted: false,
+        refused: refused,
+        // The one refusal the page acts on immediately: a person in another
+        // window pressed Review here instead. Everything else is waited out.
+        deposed: body.deposed === true,
+        body: body,
+        error: result.error
+      };
     }
 
     // The refusal, with no holder id to read anymore (finding 3): the server
@@ -1883,6 +2096,7 @@
     // stale, granted by the liveness poll) or on the reviewer's Review-here.
     function becomeHolder(parsed) {
       readOnly = false;
+      claimMisses = 0;
       rememberSecret(parsed.sessionSecret, parsed.seq);
       if (parsed.heartbeatSeconds) heartbeatMs = parsed.heartbeatSeconds * 1000;
       lock.acquired = true;
@@ -1972,10 +2186,41 @@
     function stopHeartbeat() {
       if (heartbeatTimer) clearInterval(heartbeatTimer);
       heartbeatTimer = null;
+      if (claimRetryTimer) clearTimeout(claimRetryTimer);
+      claimRetryTimer = null;
+    }
+
+    /**
+     * Give up the review, because another window has it.
+     *
+     * The only path from holding to read-only. It is behind the miss counter for
+     * every refusal except an explicit deposition, because closing the
+     * reviewer's open comment boxes for a helper that is merely being replaced
+     * is the loss this whole debounce exists to stop.
+     */
+    function loseTheReview(reason) {
+      lock.acquired = false;
+      lock.refusedBy = "helper";
+      lock.reason = reason;
+      raise(failures.failure("SECOND_WINDOW_REFUSED", lock.reason));
+      recomputeStatus();
+      enterReadOnly();
+    }
+
+    /** Try the heartbeat again sooner than the next beat, during a bad patch. */
+    function retryHeartbeatSoon() {
+      if (claimRetryTimer || readOnly || !lock.acquired) return null;
+      // harness-allow-timer: the faster retry that makes three consecutive
+      // misses take about three seconds instead of thirty.
+      claimRetryTimer = setTimeout(function () {
+        claimRetryTimer = null;
+        postHeartbeat();
+      }, CLAIM_RETRY_MS);
+      return claimRetryTimer;
     }
 
     function postHeartbeat() {
-      claimRequest({
+      return claimRequest({
         review: requireReview(),
         window_id: store.windowId,
         session_secret: sessionSecret,
@@ -1983,27 +2228,38 @@
       }).then(function (parsed) {
         if (parsed.granted) {
           lock.helperGranted = true;
+          claimMisses = 0;
           if (parsed.sessionSecret) rememberSecret(parsed.sessionSecret, parsed.seq);
           // The helper is covering separate-storage windows again, so the
           // named limit stops being actual and its note comes down.
           onLimit(null);
-          return;
+          return parsed;
         }
+        if (parsed.refused && parsed.deposed) {
+          // A person in another window pressed Review here instead. Nothing
+          // ambiguous about it, and nothing to wait for.
+          claimMisses = 0;
+          loseTheReview(reasonFromBody(parsed.body));
+          return parsed;
+        }
+        claimMisses += 1;
         if (parsed.refused) {
-          // Deposed: another window ran Review-here-instead. Drop to read-only
-          // rather than keep editing a review this window no longer owns.
-          lock.acquired = false;
-          lock.refusedBy = "helper";
-          lock.reason = reasonFromBody(parsed.body);
-          raise(failures.failure("SECOND_WINDOW_REFUSED", lock.reason));
-          recomputeStatus();
-          enterReadOnly();
-          return;
+          if (claimMisses >= CLAIM_MISSES_BEFORE_READ_ONLY) {
+            claimMisses = 0;
+            loseTheReview(reasonFromBody(parsed.body));
+            return parsed;
+          }
+          // A refusal that may just be a helper that has not read the session
+          // table yet. Ask again shortly before believing it.
+          retryHeartbeatSoon();
+          return parsed;
         }
         // Unreachable: keep the heartbeat running and try again next tick. The
         // uncovered case is actual for as long as this lasts, so the note is up.
         lock.helperGranted = false;
         onLimit(overlay.LIMIT_SEPARATE_STORAGE_NO_HELPER);
+        retryHeartbeatSoon();
+        return parsed;
       });
     }
 
@@ -2147,6 +2403,13 @@
       commitOnUnload: commitOnUnload,
       takeover: takeover,
       endReview: endReview,
+      // Exposed so a test can drive one beat instead of waiting ten seconds for
+      // the timer. The harness forbids arbitrary sleeps, and the whole point of
+      // the miss counter is what happens across several beats in a row.
+      heartbeat: postHeartbeat,
+      claimMisses: function () {
+        return claimMisses;
+      },
       isReadOnly: function () {
         return readOnly;
       },
@@ -2183,6 +2446,14 @@
     MAX_BLOCKS_SCANNED: MAX_BLOCKS_SCANNED,
     blockCandidates: blockCandidates,
     blockTextsIn: blockTextsIn,
+    BLOCK_SNAPSHOT_KEY: BLOCK_SNAPSHOT_KEY,
+    BLOCK_SNAPSHOT_VERSION: BLOCK_SNAPSHOT_VERSION,
+    SNAPSHOT_MAX_BLOCKS: SNAPSHOT_MAX_BLOCKS,
+    SNAPSHOT_MAX_BYTES: SNAPSHOT_MAX_BYTES,
+    snapshotPayload: snapshotPayload,
+    saveBlockSnapshot: saveBlockSnapshot,
+    takeBlockSnapshot: takeBlockSnapshot,
+    diffBlockTexts: diffBlockTexts,
     topBlockAnchor: topBlockAnchor,
     findUniqueBlock: findUniqueBlock,
     saveViewportForReload: saveViewportForReload,
