@@ -5,6 +5,39 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
+- [ ] @anyone 2026-09-11 LAHE-stabilization-pass -- **A cleanup, architecture, and
+  code review pass over everything that landed 2026-09-08 to 2026-09-11 without
+  a brief.** Ken: "I've been throwing so many things at you for this without
+  really briefing them or specing them out, so we may need to do a pass of
+  cleanup and architecture and code review." What landed in that window, each
+  as a bug report turned straight into a builder dispatch:
+
+  - the reply toast (message, X marks read, neglect rule, top-right, fade)
+  - the page hotkey fence at the shadow boundary
+  - the page-check reopen loop guard (region.check_reopen)
+  - `lahe reply`, and the contract sentences that go with it
+  - superseded duplicate replies ignored on fold
+  - steady in-place reload (viewport by block text, hide-and-fade)
+  - attention highlight on changed blocks (multiset block diff in sync.js)
+  - window holders persisted across a helper restart (windows.json), heartbeat
+    debounce, the live-reviewer guard on helper replacement, `serve --restart`
+  - the selection pill held back during a drag
+  - reload deferred while the reviewer is interacting; rail restored after a
+    LAHE reload
+
+  What the pass should do: read each against the architecture doc (D5, D7, D8,
+  D12 in particular); decide whether sync.js has become a dumping ground (the
+  block snapshot and diff, the steady-reload functions, and the rail-state save
+  all landed there because manifest.js is frozen and a new file needs the
+  orchestrator); propose the file moves and the manifest edit; run review-code-lead
+  and review-security on the diff (windows.json holds session secrets on disk;
+  the neglect toast and interaction tracking add document listeners); fold the
+  decisions into the architecture doc as amendments rather than rewriting it;
+  then rebuild and commit dist once, after the anchoring work lands.
+
+  Not before the anchoring pass: that work is in flight in anchor.js, pointing.js,
+  markers.js, regions.js and has two red browser specs on main that are its own.
+
 - [ ] @anyone 2026-08-25 LAHE-project-setup-file -- **A pointer to a
   per-project `.lahe-setup.md`, so an agent that works out how to wire LAHE into
   a given repo can leave that knowledge for the next one.** Proposed wording for
