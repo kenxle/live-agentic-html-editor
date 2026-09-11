@@ -42,16 +42,35 @@
   var browser = typeof window !== "undefined" && !!window.document;
   if (browser) {
     root.LAHE = root.LAHE || {};
-    root.LAHE.sync = factory(root.LAHE.protocol, root.LAHE.failures, root.LAHE.record, root.LAHE.overlay);
+    root.LAHE.sync = factory(
+      root.LAHE.protocol,
+      root.LAHE.failures,
+      root.LAHE.record,
+      root.LAHE.overlay,
+      root.LAHE.normalize,
+      root.LAHE.markers,
+      root.LAHE.selection
+    );
   } else {
     module.exports = factory(
       require("../shared/protocol.js"),
       require("../shared/failures.js"),
       require("../shared/record.js"),
-      require("./overlay.js")
+      require("./overlay.js"),
+      require("../shared/normalize.js"),
+      require("../shared/markers.js"),
+      require("./selection.js")
     );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (protocol, failures, record, overlay) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (
+  protocol,
+  failures,
+  record,
+  overlay,
+  normalize,
+  markers,
+  selection
+) {
   "use strict";
 
   var STATE = {
@@ -185,6 +204,409 @@
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // A reload that lands where the reviewer was looking
+  // ---------------------------------------------------------------------------
+  //
+  // The pixel offset alone is not where the reviewer was. A rebuilt page whose
+  // content grew or shrank ABOVE the viewport puts the same number of pixels on
+  // a different sentence, and late-drawn content (mermaid, an image with no
+  // dimensions, a webfont swapping in) moves the layout again after the restore
+  // has already run. Both read as the page jumping under them.
+  //
+  // So the marker carries what the reviewer was looking AT, not only how far
+  // down it was: the normalized text of the topmost visible block and that
+  // block's offset from the top of the viewport. On the way back in, the block
+  // is found by its text and put back at the same offset, and the pixel pair is
+  // still there as the fallback for every case the text cannot answer.
+  //
+  // The honesty rule is the anchor ladder's, deliberately: a text that matches
+  // once is the block, and a text that matches zero or several times is not an
+  // answer, so it falls back to pixels rather than guessing.
+
+  // Blocks, as selection.js means them. One notion of "this paragraph" across
+  // the library: the gesture that makes a block editable and the block this
+  // scrolls to are the same element.
+  var BLOCK_SELECTOR = selection.BLOCK_TAGS.join(",");
+
+  // A bound on the scan, so a pathological document cannot turn a reload into a
+  // long synchronous walk. Also the snapshot cap below.
+  var MAX_BLOCKS_SCANNED = 4000;
+
+  /**
+   * The blocks a reviewer would point at, in document order.
+   *
+   * LEAF BLOCKS ONLY. Every wrapper div is a block by tag, and counting them
+   * would make the topmost "visible block" the one holding the whole page. A
+   * block whose next block in document order is inside it is a container, since
+   * descendants always follow their ancestor in document order, so this is the
+   * leaf test and it is linear rather than pairwise.
+   *
+   * The cost: a container holding text of its own AND a nested block loses its
+   * own words here. That is the right trade for this job, where the question is
+   * which single element the reviewer's eye was on.
+   *
+   * @returns {Array<{el: Element, text: string}>}
+   */
+  function blockCandidates(doc) {
+    if (!doc || typeof doc.querySelectorAll !== "function") return [];
+    var found;
+    try {
+      found = doc.querySelectorAll(BLOCK_SELECTOR);
+    } catch (error) {
+      return [];
+    }
+    var withText = [];
+    for (var i = 0; i < found.length && withText.length < MAX_BLOCKS_SCANNED; i += 1) {
+      var el = found[i];
+      if (markers.isInsideOverlay(el)) continue;
+      var text = "";
+      try {
+        text = normalize.normalizeText(el.textContent || "");
+      } catch (error) {
+        text = "";
+      }
+      if (!text) continue;
+      withText.push({ el: el, text: text });
+    }
+    var out = [];
+    for (var j = 0; j < withText.length; j += 1) {
+      var next = withText[j + 1];
+      var el2 = withText[j].el;
+      if (next && typeof el2.contains === "function" && el2.contains(next.el)) continue;
+      out.push(withText[j]);
+    }
+    return out;
+  }
+
+  /** Every leaf block's normalized text, in document order. */
+  function blockTextsIn(doc) {
+    return blockCandidates(doc).map(function (entry) {
+      return entry.text;
+    });
+  }
+
+  /**
+   * The topmost block the reviewer can see, and how far below the viewport's
+   * top edge it sits. Partly visible counts: a paragraph running off the top of
+   * the screen is still the one being read.
+   */
+  function topBlockAnchor(win) {
+    var doc = win && win.document;
+    if (!doc || typeof win.innerHeight !== "number") return null;
+    var blocks = blockCandidates(doc);
+    for (var i = 0; i < blocks.length; i += 1) {
+      var el = blocks[i].el;
+      if (typeof el.getBoundingClientRect !== "function") continue;
+      var rect = el.getBoundingClientRect();
+      if (!rect) continue;
+      if (rect.width === 0 && rect.height === 0) continue;
+      if (rect.bottom <= 0) continue;
+      if (rect.top >= win.innerHeight) continue;
+      return { text: blocks[i].text, offset: rect.top };
+    }
+    return null;
+  }
+
+  /**
+   * The one block whose text is this text, or null.
+   *
+   * Null for zero matches and null for several: an ambiguous match is not an
+   * answer, and the caller falls back to the pixel offset rather than scrolling
+   * to whichever copy came first.
+   */
+  function findUniqueBlock(doc, text) {
+    if (!doc || typeof text !== "string" || !text) return null;
+    var blocks = blockCandidates(doc);
+    var hit = null;
+    for (var i = 0; i < blocks.length; i += 1) {
+      if (blocks[i].text !== text) continue;
+      if (hit) return null;
+      hit = blocks[i].el;
+    }
+    return hit;
+  }
+
+  /**
+   * Put the marker's block back where it was, or fall back to the pixels.
+   *
+   * @returns {{byBlock: boolean, text: string|null, offset: number|null}}
+   */
+  function scrollToMarker(win, marker) {
+    var el = typeof marker.blockText === "string" ? findUniqueBlock(win.document, marker.blockText) : null;
+    if (el && typeof el.getBoundingClientRect === "function" && typeof win.scrollY === "number") {
+      var rect = el.getBoundingClientRect();
+      var top = win.scrollY + rect.top - marker.blockOffset;
+      if (Number.isFinite(top)) {
+        win.scrollTo({ left: marker.x, top: Math.max(0, Math.round(top)), behavior: "instant" });
+        return { byBlock: true, text: marker.blockText, offset: marker.blockOffset };
+      }
+    }
+    win.scrollTo({ left: marker.x, top: marker.y, behavior: "instant" });
+    return { byBlock: false, text: null, offset: null };
+  }
+
+  // What the last restore on this page did. index.js reads it to decide whether
+  // there is a block worth re-asserting as the page finishes drawing itself.
+  var lastRestore = null;
+
+  function lastReloadRestore() {
+    return lastRestore;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Holding the page still while it finishes arriving
+  // ---------------------------------------------------------------------------
+
+  // How long the incoming page may be held invisible before it is shown no
+  // matter what. Short: this is cover for the first correction, not a loading
+  // screen, and a page held longer than this reads as a stall rather than as
+  // steadiness. Never longer than replay's settling window.
+  var STEADY_HIDE_MS = 300;
+
+  // The fade back in. Long enough to read as a fade, short enough that the
+  // reviewer is looking at the page rather than at the fade.
+  var STEADY_FADE_MS = 120;
+
+  // Below this, a correction would move the page for no reason a reviewer could
+  // see. Sub-pixel layout differences land here every time.
+  var STEADY_DRIFT_PX = 2;
+
+  // The default window over which late rendering is still expected. index.js
+  // passes replay.SETTLE_MS; this is the answer when nobody says.
+  var STEADY_SETTLE_MS = 2000;
+
+  function prefersReducedMotion(win) {
+    try {
+      if (!win || typeof win.matchMedia !== "function") return false;
+      return !!win.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Keep the reloaded page on its block while the page finishes arriving, and
+   * hide the moving about until it has.
+   *
+   * THE PAGE IS NEVER LEFT HIDDEN. The style goes on in a try/finally, a hard
+   * timeout removes it whatever else happens, and reveal() is idempotent. The
+   * inline style is the one transient write this makes to the page's own DOM,
+   * it is made inside an epoch so replay does not read its own reflection, and
+   * the element's previous style attribute is put back exactly as it was.
+   *
+   * THE REVIEWER ALWAYS WINS. A scroll, a key, a wheel or a touch ends the
+   * corrections on the spot: the page is theirs the moment they act on it, and
+   * a tool that scrolls them back is worse than one that never scrolled at all.
+   *
+   * @param {Window} win
+   * @param {Object} options {text, offset, settleMs}
+   * @returns {Object} a handle for tests: {correct, reveal, stop, state}
+   */
+  function steadyAfterReload(win, options) {
+    var opts = options || {};
+    var handle = null;
+    var doc = win && win.document;
+    var root = doc && doc.documentElement;
+    var settleMs = typeof opts.settleMs === "number" && opts.settleMs > 0 ? opts.settleMs : STEADY_SETTLE_MS;
+    var reduced = prefersReducedMotion(win);
+    var timers = [];
+    var unbinders = [];
+    var revealed = false;
+    var stopped = false;
+    var corrections = 0;
+    var expectedY = typeof win.scrollY === "number" ? win.scrollY : null;
+    var previousStyle = null;
+    var hidden = false;
+
+    // THE ONE WRITE THIS MAKES TO THE PAGE, and why it is not inside an epoch.
+    //
+    // The epoch rule exists so the library's own DOM writes do not retrigger
+    // the observers watching the page. No observer here can see this write:
+    // index.js watches body for childList and characterData, protect and inject
+    // watch documentElement for the same two, and not one of them asks for
+    // attributes. So an inline style on documentElement reaches nothing.
+    //
+    // Wrapping it anyway costs something real, which is how this was found. The
+    // hide happens at the very top of boot, and an epoch's depth only unwinds in
+    // a microtask, so the epoch stays OPEN for the whole of the rest of boot,
+    // including replay's first scheduled pass. That pass sees a write epoch in
+    // progress and declines, and the reviewer's committed edits are never
+    // re-applied to the page that just reloaded (caught by
+    // test/browser/paragraph_break.spec.js).
+    function writeToRoot(reason, fn) {
+      return fn();
+    }
+
+    function later(fn, ms) {
+      if (!win || typeof win.setTimeout !== "function") return null;
+      var id = win.setTimeout(fn, ms);
+      timers.push(id);
+      return id;
+    }
+
+    function hide() {
+      if (!root || typeof root.setAttribute !== "function") return false;
+      if (reduced) return false;
+      try {
+        previousStyle = root.getAttribute("style");
+        writeToRoot("sync.steady-reload-hide", function () {
+          root.setAttribute("style", (previousStyle ? previousStyle + ";" : "") + "opacity:0");
+        });
+        hidden = true;
+      } finally {
+        // The page is shown again even if the line above threw halfway.
+        later(reveal, STEADY_HIDE_MS);
+      }
+      return hidden;
+    }
+
+    function restoreStyle() {
+      writeToRoot("sync.steady-reload-show", function () {
+        if (previousStyle === null) root.removeAttribute("style");
+        else root.setAttribute("style", previousStyle);
+      });
+    }
+
+    function reveal() {
+      if (revealed) return false;
+      revealed = true;
+      if (!hidden || !root) return true;
+      if (reduced) {
+        restoreStyle();
+        return true;
+      }
+      writeToRoot("sync.steady-reload-fade", function () {
+        root.setAttribute(
+          "style",
+          (previousStyle ? previousStyle + ";" : "") +
+            "opacity:1;transition:opacity " +
+            STEADY_FADE_MS +
+            "ms linear"
+        );
+      });
+      // The transition property is temporary too: it goes with the rest of the
+      // inline style as soon as the fade is over, so the page is left exactly as
+      // the page's own stylesheet drew it.
+      later(restoreStyle, STEADY_FADE_MS + 20);
+      return true;
+    }
+
+    /** Re-find the block and correct the scroll if it drifted. */
+    function correct() {
+      if (stopped || !doc) return false;
+      var moved = false;
+      try {
+        var el = findUniqueBlock(doc, opts.text);
+        if (el && typeof el.getBoundingClientRect === "function" && typeof win.scrollY === "number") {
+          var delta = el.getBoundingClientRect().top - opts.offset;
+          if (Math.abs(delta) > STEADY_DRIFT_PX && typeof win.scrollTo === "function") {
+            var top = Math.max(0, Math.round(win.scrollY + delta));
+            expectedY = top;
+            win.scrollTo({ left: win.scrollX, top: top, behavior: "instant" });
+            corrections += 1;
+            moved = true;
+          }
+        }
+      } catch (error) {
+        // A correction that throws is a correction not made. It must never cost
+        // the reviewer a page stuck at opacity 0.
+      } finally {
+        reveal();
+      }
+      return moved;
+    }
+
+    function stop() {
+      if (stopped) return false;
+      stopped = true;
+      unbinders.splice(0).forEach(function (off) {
+        try {
+          off();
+        } catch (error) {
+          // Nothing to do about a listener that will not come off.
+        }
+      });
+      // The corrections are over, so the browser gets its own scroll
+      // restoration back. restoreViewportAfterReload held it at manual for
+      // exactly this window; see the note there.
+      restoreNativeScrollingAfterPageShow(win);
+      reveal();
+      return true;
+    }
+
+    function bind(name, handler, opts2) {
+      if (!win || typeof win.addEventListener !== "function") return;
+      win.addEventListener(name, handler, opts2 || false);
+      unbinders.push(function () {
+        if (typeof win.removeEventListener === "function") win.removeEventListener(name, handler);
+      });
+    }
+
+    // Our own scrollTo fires a scroll event, so "the reviewer scrolled" cannot
+    // be "a scroll event happened". A scroll that lands where we just put it is
+    // ours; anything else is theirs.
+    function onScroll() {
+      if (expectedY !== null && typeof win.scrollY === "number" && Math.abs(win.scrollY - expectedY) <= 1) return;
+      stop();
+    }
+    function onReviewer() {
+      stop();
+    }
+
+    if (typeof opts.text === "string" && opts.text && typeof opts.offset === "number") {
+      hide();
+      bind("scroll", onScroll, { passive: true });
+      bind("keydown", onReviewer, true);
+      bind("pointerdown", onReviewer, true);
+      bind("wheel", onReviewer, { passive: true });
+      bind("touchstart", onReviewer, { passive: true });
+
+      if (typeof win.requestAnimationFrame === "function") win.requestAnimationFrame(correct);
+      else later(correct, 0);
+
+      if (doc.readyState !== "complete") bind("load", correct, { once: true });
+
+      try {
+        if (doc.fonts && doc.fonts.ready && typeof doc.fonts.ready.then === "function") {
+          doc.fonts.ready.then(function () {
+            correct();
+          }, function () {});
+        }
+      } catch (error) {
+        // A document with no font loading API has nothing to wait for.
+      }
+
+      later(function () {
+        correct();
+        stop();
+      }, settleMs + 50);
+    } else {
+      // No block to hold on to: the pixel restore already happened and there is
+      // nothing to correct, so nothing is hidden and nothing is listened for.
+      revealed = true;
+    }
+
+    handle = {
+      correct: correct,
+      reveal: reveal,
+      stop: stop,
+      state: function () {
+        return { corrections: corrections, revealed: revealed, stopped: stopped, hidden: hidden, reduced: reduced };
+      }
+    };
+    lastSteadyHandle = handle;
+    return handle;
+  }
+
+  // The controller the last reload built, so a browser test can ask what it did
+  // rather than inferring it from pixels. Nothing in the library reads it.
+  var lastSteadyHandle = null;
+
+  function lastSteady() {
+    return lastSteadyHandle;
+  }
+
   /**
    * Remember the viewport for the reload LAHE is about to initiate.
    *
@@ -217,6 +639,19 @@
     if (!href || !Number.isFinite(x) || !Number.isFinite(y)) return false;
 
     var marker = { version: VIEWPORT_MARKER_VERSION, exactHref: href, review: review, x: x, y: y };
+    // The content anchor, when the page has one to give. Absent rather than
+    // null when there is none, so a marker from a page with no visible block is
+    // the same shape it always was and the pixel path is the whole story.
+    var top = null;
+    try {
+      top = topBlockAnchor(win);
+    } catch (error) {
+      top = null;
+    }
+    if (top && typeof top.offset === "number" && Number.isFinite(top.offset)) {
+      marker.blockText = top.text;
+      marker.blockOffset = Math.round(top.offset);
+    }
     try {
       storage.setItem(VIEWPORT_MARKER_KEY, JSON.stringify(marker));
     } catch (error) {
@@ -287,14 +722,36 @@
       setScrollRestoration(win, "auto");
       return false;
     }
+    var holdManual = false;
     try {
       if (typeof win.scrollTo !== "function") return false;
-      win.scrollTo({ left: marker.x, top: marker.y, behavior: "instant" });
+      var landed = scrollToMarker(win, marker);
+      lastRestore = { ok: true, byBlock: landed.byBlock, text: landed.text, offset: landed.offset };
+      // A BLOCK RESTORE HAS TO KEEP MANUAL MODE, and this is the bug that
+      // taught it. Handing native restoration back at pageshow lets the browser
+      // put its own remembered PIXEL offset on the page a moment later, which is
+      // the very number the block anchor exists to overrule. Worse, that scroll
+      // arrives as a scroll event, which the correction loop reads as the
+      // reviewer taking the page back, so it stands down and the page is left on
+      // the browser's answer. Manual stays on for the settling window and
+      // steadyAfterReload's stop() hands it back.
+      holdManual = landed.byBlock;
       return true;
     } catch (error) {
       return false;
     } finally {
-      restoreNativeScrollingAfterPageShow(win);
+      if (holdManual) {
+        // The safety net, in case nothing ever builds the controller: native
+        // mode comes back on its own a little after the window would have
+        // closed. Setting it twice is harmless.
+        if (typeof win.setTimeout === "function") {
+          win.setTimeout(function () {
+            restoreNativeScrollingAfterPageShow(win);
+          }, STEADY_SETTLE_MS + 500);
+        }
+      } else {
+        restoreNativeScrollingAfterPageShow(win);
+      }
     }
   }
 
@@ -1719,8 +2176,20 @@
     RELOAD_NOTICE_MS: RELOAD_NOTICE_MS,
     VIEWPORT_MARKER_VERSION: VIEWPORT_MARKER_VERSION,
     VIEWPORT_MARKER_KEY: VIEWPORT_MARKER_KEY,
+    STEADY_HIDE_MS: STEADY_HIDE_MS,
+    STEADY_FADE_MS: STEADY_FADE_MS,
+    STEADY_DRIFT_PX: STEADY_DRIFT_PX,
+    STEADY_SETTLE_MS: STEADY_SETTLE_MS,
+    MAX_BLOCKS_SCANNED: MAX_BLOCKS_SCANNED,
+    blockCandidates: blockCandidates,
+    blockTextsIn: blockTextsIn,
+    topBlockAnchor: topBlockAnchor,
+    findUniqueBlock: findUniqueBlock,
     saveViewportForReload: saveViewportForReload,
     restoreViewportAfterReload: restoreViewportAfterReload,
+    lastReloadRestore: lastReloadRestore,
+    steadyAfterReload: steadyAfterReload,
+    lastSteady: lastSteady,
     decideFailureCode: decideFailureCode,
     createSync: createSync
   };

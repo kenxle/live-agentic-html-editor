@@ -177,7 +177,23 @@
     // Consume it before mounting the rail, merging records, or replaying edits,
     // all of which are avoidable layout work. This call only lives on boot, so
     // an SPA/Turbo remount and a bfcache restore never apply numeric scrolling.
-    ns.sync.restoreViewportAfterReload(win, reviewId);
+    if (ns.sync.restoreViewportAfterReload(win, reviewId)) {
+      // The restore put the reviewer's block back under their eye. The page is
+      // not finished arriving yet, though: mermaid has not drawn, images with no
+      // dimensions have not reserved their space, and a webfont may still swap.
+      // Each of those moves the layout after the restore, which is the jump the
+      // reviewer sees. So the block is re-asserted across the same window replay
+      // defers a lost verdict over, and the page is held invisible for the first
+      // few hundred milliseconds of it so the correcting does not read as jitter.
+      var landing = ns.sync.lastReloadRestore();
+      if (landing && landing.byBlock) {
+        ns.sync.steadyAfterReload(win, {
+          text: landing.text,
+          offset: landing.offset,
+          settleMs: ns.replay.SETTLE_MS
+        });
+      }
+    }
     var store = opts.store || ns.store.createStore();
     var rail = opts.rail || ns.overlay.createRail({ store: store, reviewId: reviewId });
     rail.mount();
