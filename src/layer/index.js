@@ -1209,19 +1209,45 @@
       var body = doc && doc.body;
       if (!body) return [];
       var pageText = ns.replay.pageTextOf(body);
-      var ids = ns.replay.revertedHandledEditIds(refreshItems(), pageText).filter(function (id) {
+      // The page's markup goes in beside its text: a handled edit whose words
+      // landed and whose bold or italic did not is also a change that is not on
+      // the page, and text alone cannot see that (2026-09-11).
+      var options = ns.replay.pageCheckOptions(body);
+      var items = refreshItems();
+      var ids = ns.replay.revertedHandledEditIds(items, pageText, options).filter(function (id) {
         return !checkReopened[id];
       });
       counters.revertChecks += 1;
       ids.forEach(function (id) {
         checkReopened[id] = true;
+        var item = null;
+        for (var i = 0; i < items.length; i += 1) {
+          if (items[i][ns.record.FIELD.ID] === id) item = items[i];
+        }
+        var formatting =
+          ns.replay.pageCheckNoteFor(item, pageText, options) === ns.replay.FORMATTING_LOST_NOTE;
         done.reopen(id, {
-          note: ns.replay.REVERTED_EDIT_NOTE,
-          notice: "This change was undone on the page. The item is open again.",
+          note: formatting ? ns.replay.FORMATTING_LOST_NOTE : ns.replay.REVERTED_EDIT_NOTE,
+          notice: formatting
+            ? "The bold or italic in this change is not on the page. The item is open again."
+            : "This change was undone on the page. The item is open again.",
           pageCheck: true
         });
         counters.revertReopens += 1;
       });
+      // A reopened item is outstanding again, so its region gets compared
+      // again. That is what puts the reviewer's bold or italic back on a page
+      // whose rebuild dropped it: replay writes the record's markup, and an
+      // item is only replayed while it is outstanding.
+      //
+      // The refresh is the load-bearing half. Replay reads the `items` CACHE,
+      // and this function filled that cache before the reopens, so a pass
+      // scheduled without it reads every reopened item as still handled and
+      // skips it ("not outstanding").
+      if (ids.length) {
+        refreshItems();
+        ns.replay.schedule(ns.replay.REASON.REPLY, { immediate: true });
+      }
       return ids;
     }
 

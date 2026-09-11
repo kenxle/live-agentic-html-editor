@@ -321,3 +321,154 @@ test("a later revert, long after the check's own round closed, still reopens", (
     true
   );
 });
+
+// ---------------------------------------------------------------------------
+// The other half of "not on the page": the words landed, the emphasis did not
+// ---------------------------------------------------------------------------
+//
+// 2026-09-11. The reviewer made a word italic and a clause bold inside a
+// rewrite, the agent carried the words into a Markdown source and not the
+// emphasis and replied handled, and the check read text alone and saw a change
+// fully applied.
+
+const ITALIC_AFTER = "The trainer writes the plan each week.";
+const ITALIC_AFTER_HTML = "<p>The trainer writes the plan <em>each</em> week.</p>";
+
+function formattedEdit(overrides) {
+  return handledEdit(
+    Object.assign(
+      {
+        after: ITALIC_AFTER,
+        after_html: ITALIC_AFTER_HTML,
+        before_html: "<p>The trainer writes the plan every week.</p>"
+      },
+      overrides || {}
+    )
+  );
+}
+
+function pageHtml(passage) {
+  return "<h2>A heading above it.</h2>" + passage + "<p>And a paragraph below it.</p>";
+}
+
+test("a handled edit whose words landed without its italic is reopened, with its own sentence", () => {
+  const item = formattedEdit();
+  const plain = { pageHtml: pageHtml("<p>The trainer writes the plan each week.</p>") };
+  assert.equal(replay.isRevertedHandledEdit(item, page(ITALIC_AFTER), plain), true);
+  assert.equal(replay.pageCheckReasonFor(item, page(ITALIC_AFTER), plain), replay.PAGE_CHECK_REASON.FORMATTING);
+  assert.equal(replay.pageCheckNoteFor(item, page(ITALIC_AFTER), plain), replay.FORMATTING_LOST_NOTE);
+  assert.notEqual(replay.FORMATTING_LOST_NOTE, replay.REVERTED_EDIT_NOTE);
+});
+
+test("the same edit with its italic on the page is left alone", () => {
+  const item = formattedEdit();
+  const carried = { pageHtml: pageHtml(ITALIC_AFTER_HTML) };
+  assert.equal(replay.isRevertedHandledEdit(item, page(ITALIC_AFTER), carried), false);
+  assert.equal(replay.pageCheckNoteFor(item, page(ITALIC_AFTER), carried), null);
+  // The rebuilt page is free to say it differently, as long as it still says it.
+  const reserialized = {
+    pageHtml: pageHtml('<p class="lead">The trainer writes the plan <i>each</i>\n   week.</p>')
+  };
+  assert.equal(replay.isRevertedHandledEdit(item, page(ITALIC_AFTER), reserialized), false);
+});
+
+test("a revert still reads as a revert, and carries the revert sentence", () => {
+  const item = formattedEdit();
+  const options = { pageHtml: pageHtml("<p>The trainer writes the plan every week.</p>") };
+  assert.equal(replay.pageCheckReasonFor(item, page(BEFORE), options), replay.PAGE_CHECK_REASON.REVERTED);
+  assert.equal(replay.pageCheckNoteFor(item, page(BEFORE), options), replay.REVERTED_EDIT_NOTE);
+});
+
+test("emphasis the page adds of its own is not a loss and reopens nothing", () => {
+  // The record asks for nothing about emphasis, so the page rendering the block
+  // with its own <em> is rendering, not losing anything.
+  const item = handledEdit();
+  const extra = { pageHtml: pageHtml("<p>The trainer writes the plan <em>each</em> week.</p>") };
+  assert.equal(replay.isRevertedHandledEdit(item, page(AFTER), extra), false);
+
+  // And a page that emphasizes MORE words than the record asked for still says
+  // what the record asked for.
+  const wider = { pageHtml: pageHtml("<p>The trainer writes <em>the plan each week.</em></p>") };
+  assert.equal(replay.isRevertedHandledEdit(formattedEdit(), page(ITALIC_AFTER), wider), false);
+});
+
+test("un-bolding is carried too: the words are bold on the page again", () => {
+  const item = handledEdit({
+    before_html: "<p>Runners come back <strong>too fast</strong> after a layoff.</p>",
+    after_html: "<p>Runners come back <not-bold>too fast</not-bold> after a layoff.</p>",
+    before: "Runners come back too fast after a layoff.",
+    after: "Runners come back too fast after a layoff."
+  });
+  // before and after read the same, so the revert half can never fire here.
+  const stillBold = { pageHtml: pageHtml("<p>Runners come back <strong>too fast</strong> after a layoff.</p>") };
+  const page_ = page("Runners come back too fast after a layoff.");
+  assert.equal(replay.pageCheckReasonFor(item, page_, stillBold), replay.PAGE_CHECK_REASON.FORMATTING);
+
+  // A source that dropped the ** has no <strong> left, which is what the reset
+  // asked for, so nothing is reopened.
+  const unbolded = { pageHtml: pageHtml("<p>Runners come back too fast after a layoff.</p>") };
+  assert.equal(replay.pageCheckReasonFor(item, page_, unbolded), null);
+});
+
+test("a record whose markup no longer says its text is never reopened for formatting", () => {
+  // The reviewer reworded without the markup following. The writer will not use
+  // after_html either, so the check must not ask for it.
+  const item = formattedEdit({ after: "The trainer writes a different plan." });
+  const plain = { pageHtml: pageHtml("<p>The trainer writes a different plan.</p>") };
+  assert.equal(replay.isRevertedHandledEdit(item, page("The trainer writes a different plan."), plain), false);
+});
+
+test("with no page markup to read, the check answers on text alone", () => {
+  const item = formattedEdit();
+  assert.equal(replay.isRevertedHandledEdit(item, page(ITALIC_AFTER)), false);
+  assert.equal(replay.isRevertedHandledEdit(item, page(BEFORE)), true);
+});
+
+test("the sweep reads the page's structure once and hands it to every item", () => {
+  const lost = formattedEdit();
+  const standing = formattedEdit();
+  const options = { pageHtml: pageHtml("<p>The trainer writes the plan each week.</p>") };
+  const ids = replay.revertedHandledEditIds([lost, standing], page(ITALIC_AFTER), options);
+  assert.deepEqual(ids, [lost[record.FIELD.ID], standing[record.FIELD.ID]]);
+  // The caller's own options object is not written into.
+  assert.equal(Object.prototype.hasOwnProperty.call(options, "pageStructure"), false);
+});
+
+test("pageCheckOptions reads the document's markup once for the whole sweep", () => {
+  const body = { innerHTML: pageHtml(ITALIC_AFTER_HTML) };
+  const options = replay.pageCheckOptions(body);
+  assert.equal(options.pageHtml, body.innerHTML);
+  assert.equal(replay.isRevertedHandledEdit(formattedEdit(), page(ITALIC_AFTER), options), false);
+  assert.equal(replay.pageCheckOptions(null).pageHtml, null);
+});
+
+test("the reopened item carries the formatting sentence at most once", () => {
+  const item = formattedEdit();
+  const once = record.pageCheckReopenOf(item, replay.FORMATTING_LOST_NOTE, "2026-09-11T06:45:00.000Z");
+  assert.equal(once[record.FIELD.NOTE].split(replay.FORMATTING_LOST_NOTE).length - 1, 1);
+  const twice = record.pageCheckReopenOf(
+    Object.assign({}, once, {
+      [record.FIELD.REPLY]: { status: "handled", agent: "claude", at: "2026-09-11T06:46:00.000Z" }
+    }),
+    replay.FORMATTING_LOST_NOTE,
+    "2026-09-11T06:47:00.000Z"
+  );
+  assert.equal(twice[record.FIELD.NOTE].split(replay.FORMATTING_LOST_NOTE).length - 1, 1);
+});
+
+test("a stored note holding many copies of either sentence collapses to one of each", () => {
+  const both =
+    record.PAGE_CHECK_NOTE +
+    "\n\n" +
+    record.PAGE_CHECK_NOTE +
+    "\n\nthe reviewer's own words\n\n" +
+    record.PAGE_CHECK_FORMAT_NOTE +
+    "\n\n" +
+    record.PAGE_CHECK_FORMAT_NOTE;
+  const collapsed = record.collapsePageCheckNote({ [record.FIELD.NOTE]: both });
+  assert.equal(collapsed[record.FIELD.NOTE].split(record.PAGE_CHECK_NOTE).length - 1, 1);
+  assert.equal(collapsed[record.FIELD.NOTE].split(record.PAGE_CHECK_FORMAT_NOTE).length - 1, 1);
+  assert.equal(collapsed[record.FIELD.NOTE].indexOf("the reviewer's own words") !== -1, true);
+  const clean = { [record.FIELD.NOTE]: record.PAGE_CHECK_FORMAT_NOTE };
+  assert.equal(record.collapsePageCheckNote(clean), clean, "nothing to collapse returns the same object");
+});

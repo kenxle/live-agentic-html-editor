@@ -593,6 +593,20 @@
     "Reopened by the page check: this handled change is no longer on the page and the original text is back. " +
     "Reapply it, or reply not_handled saying why.";
 
+  // The check's other sentence. The words of the edit are on the page and the
+  // bold or italic the reviewer applied with them is not, which is a different
+  // situation and needs different words: nothing has to be reapplied, the
+  // formatting has to be carried. It is the 2026-09-11 case, where an agent
+  // working from a Markdown source applied the after text alone and replied
+  // handled three times over.
+  var PAGE_CHECK_FORMAT_NOTE =
+    "Reopened by the page check: the words landed but the bold or italic in this edit did not. " +
+    "Carry the formatting into the source, or reply not_handled saying why.";
+
+  // Every sentence the page check writes. collapsePageCheckNote reads this
+  // list, so a new one is collapsed the day it is added.
+  var PAGE_CHECK_NOTES = [PAGE_CHECK_NOTE, PAGE_CHECK_FORMAT_NOTE];
+
   /**
    * The carried note with `sentence` on the end, AT MOST ONCE.
    *
@@ -643,23 +657,34 @@
   function collapsePageCheckNote(item) {
     if (!item || typeof item !== "object") return item;
     var note = item[FIELD.NOTE];
-    if (typeof note !== "string" || note.indexOf(PAGE_CHECK_NOTE) === -1) return item;
-    var first = note.indexOf(PAGE_CHECK_NOTE);
-    var second = note.indexOf(PAGE_CHECK_NOTE, first + PAGE_CHECK_NOTE.length);
-    if (second === -1) return item;
+    if (typeof note !== "string") return item;
+    var collapsed = note;
+    for (var i = 0; i < PAGE_CHECK_NOTES.length; i += 1) {
+      collapsed = collapseSentence(collapsed, PAGE_CHECK_NOTES[i]);
+    }
+    if (collapsed === note) return item;
+    var out = Object.assign({}, item);
+    out[FIELD.NOTE] = collapsed;
+    return out;
+  }
+
+  // One copy of `sentence` in `note`, however many it holds.
+  function collapseSentence(note, sentence) {
+    var first = note.indexOf(sentence);
+    if (first === -1) return note;
+    var second = note.indexOf(sentence, first + sentence.length);
+    if (second === -1) return note;
     // Keep the head up to and including the first copy, drop every later copy
     // and the blank line each one was joined on, keep anything else that was
     // written between them.
-    var head = note.slice(0, first + PAGE_CHECK_NOTE.length);
+    var head = note.slice(0, first + sentence.length);
     var tail = note
-      .slice(first + PAGE_CHECK_NOTE.length)
-      .split(PAGE_CHECK_NOTE)
+      .slice(first + sentence.length)
+      .split(sentence)
       .join("")
       .replace(/^(\s*\n)+/, "")
       .replace(/\n{3,}/g, "\n\n");
-    var out = Object.assign({}, item);
-    out[FIELD.NOTE] = tail.trim() ? head + "\n\n" + tail.trim() : head;
-    return out;
+    return tail.trim() ? head + "\n\n" + tail.trim() : head;
   }
 
   // `subject` is what the region IS, for a record made on a whole element:
@@ -1321,6 +1346,8 @@
     acceptedPageTexts: acceptedPageTexts,
     acceptPageText: acceptPageText,
     PAGE_CHECK_NOTE: PAGE_CHECK_NOTE,
+    PAGE_CHECK_FORMAT_NOTE: PAGE_CHECK_FORMAT_NOTE,
+    PAGE_CHECK_NOTES: PAGE_CHECK_NOTES,
     pageCheckReopen: pageCheckReopen,
     stampPageCheckReopen: stampPageCheckReopen,
     answeredPageCheckReopen: answeredPageCheckReopen,

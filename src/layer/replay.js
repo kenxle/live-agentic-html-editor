@@ -516,9 +516,12 @@
    * @param {Object} item the record
    * @param {string} domText the region's current text (or markup, for a
    *                 format-only record, which compares on structure)
+   * @param {string} [domHtml] the region's current markup, when the caller
+   *                 holds it. Only read to answer the formatting question
+   *                 below; a caller without it gets the text comparison alone
    * @returns {Object} {branch, earlierAfter}
    */
-  function compare(item, domText) {
+  function compare(item, domText, domHtml) {
     var mode = record.comparisonMode(item);
     var F = record.FIELD;
     // A format-only record compares on its MARKUP fields: its `after` text is
@@ -547,6 +550,11 @@
     }
 
     if (typeof item[fields.after] === "string" && normalize.equalsInMode(mode, domText, item[fields.after])) {
+      // The words are the reviewer's. The EMPHASIS still might not be, and the
+      // text comparison above is built to ignore exactly that.
+      if (formattingLost(item, domHtml)) {
+        return { branch: BRANCH.REAPPLY, earlierAfter: null, formatting: true };
+      }
       return { branch: BRANCH.ALREADY_APPLIED, earlierAfter: null };
     }
     if (typeof item[fields.before] === "string" && normalize.equalsInMode(mode, domText, item[fields.before])) {
@@ -572,6 +580,92 @@
     }
 
     return { branch: BRANCH.CONTENT_CHANGED, earlierAfter: null };
+  }
+
+  // ---------------------------------------------------------------------------
+  // The formatting half of branch one (2026-09-11)
+  // ---------------------------------------------------------------------------
+  //
+  // An edit compares on TEXT, which is right for wording and blind to the one
+  // thing normalizeText exists to ignore. The reviewer made a word italic and a
+  // clause bold inside a rewrite; the agent carried the words into a Markdown
+  // source and not the emphasis; the rebuilt page came back with the right
+  // words in plain type; and this compare read the text, called it idempotent
+  // and wrote nothing. The reviewer's formatting was gone from the page and
+  // nothing anywhere said so.
+  //
+  // WHAT IS COMPARED: the bold and italic runs the record's after_html asks
+  // for, read through normalize.emphasisRuns, whose vocabulary is the closed
+  // list strong, em, not-bold, not-italic. A run is on the page when the page
+  // has the same tag over the same words; a not-bold or not-italic run is on
+  // the page when the page does NOT have that emphasis over those words, which
+  // is what the reset tags mean.
+  //
+  // WHAT IS IGNORED: everything else in the markup. Links, spans, code, the
+  // page's own classes and attributes, whitespace, and the way a framework
+  // reserialized the block are all dropped by the same key. So is emphasis the
+  // page has and the record never asked for: a page that adds its own <em> is
+  // rendering, not losing anything, and writing over it every pass would be the
+  // fight this tool exists to remove.
+  //
+  // ONE GUARD BEYOND THAT: writeRegion only uses after_html while it still says
+  // the record's after text (markupSaysAfter). Asking for a write the writer
+  // will not make is a pass that re-decides the same thing forever.
+  function formattingLost(item, domHtml) {
+    if (typeof domHtml !== "string") return false;
+    if (!item || item[record.FIELD.KIND] !== record.KIND.EDIT) return false;
+    if (!markupSaysAfter(item)) return false;
+    return missingEmphasis(item[record.FIELD.AFTER_HTML], domHtml);
+  }
+
+  // Which emphasis tag each reset tag denies.
+  var DENIES = {};
+  DENIES[normalize.NOT_BOLD_TAG] = "strong";
+  DENIES[normalize.NOT_ITALIC_TAG] = "em";
+
+  /**
+   * Does `html` fail to say what `afterHtml` says about bold and italic?
+   *
+   * Asymmetric on purpose, per the note above: only the runs after_html asks
+   * for are looked for, and emphasis `html` has of its own is not a difference.
+   */
+  function missingEmphasis(afterHtml, html) {
+    if (typeof afterHtml !== "string" || !afterHtml) return false;
+    var wanted = normalize.emphasisRuns(afterHtml);
+    if (!wanted.length) return false;
+    var have = normalize.emphasisRuns(html);
+    for (var i = 0; i < wanted.length; i += 1) {
+      var run = wanted[i];
+      if (Object.prototype.hasOwnProperty.call(DENIES, run.tag)) {
+        if (coversAny(have, DENIES[run.tag], run.text)) return true;
+        continue;
+      }
+      if (!coversAny(have, run.tag, run.text)) return true;
+    }
+    return false;
+  }
+
+  // Is any run of this tag over these words? Containment rather than equality,
+  // so a page that emphasizes a longer phrase still counts as emphasizing the
+  // words inside it.
+  function coversAny(runs, tag, text) {
+    for (var i = 0; i < runs.length; i += 1) {
+      if (runs[i].tag !== tag) continue;
+      if (runs[i].text.indexOf(text) !== -1) return true;
+    }
+    return false;
+  }
+
+  // Does this record's markup still say its text? The markup is used only when
+  // it does: a record whose text was reworded without its markup would
+  // otherwise write an older wording back onto the page, which is worse than
+  // losing the emphasis. When they disagree, the text is the reviewer's answer.
+  function markupSaysAfter(item) {
+    var afterText = item[record.FIELD.AFTER];
+    var afterHtml = item[record.FIELD.AFTER_HTML];
+    if (typeof afterHtml !== "string" || !afterHtml) return false;
+    if (typeof afterText !== "string") return false;
+    return normalize.blockText(afterHtml) === normalize.normalizeBlockText(afterText);
   }
 
   // Has the reviewer already said "keep mine" about the page looking like this?
@@ -628,6 +722,10 @@
   // it is used and where every test looks for it.
   var REVERTED_EDIT_NOTE = record.PAGE_CHECK_NOTE;
 
+  // The check's other sentence: the words landed and the bold or italic did
+  // not. Authored in record.js beside the first one, for the same reason.
+  var FORMATTING_LOST_NOTE = record.PAGE_CHECK_FORMAT_NOTE;
+
   // The backstop, independent of the stamp rule below. Two checks that both look
   // at the same item cannot reopen it twice inside this window, whatever they
   // each believe about the record. Sixty seconds because the loop that caused
@@ -658,27 +756,73 @@
    * @returns {boolean}
    */
   function isRevertedHandledEdit(item, pageText, options) {
-    if (!item || typeof pageText !== "string") return false;
-    if (!record.isHandEdit(item)) return false;
-    if (item[record.FIELD.STATE] !== record.STATE.HANDLED) return false;
-    if (record.answeredPageCheckReopen(item)) return false;
-    if (withinCheckCooldown(item, options)) return false;
+    return pageCheckReasonFor(item, pageText, options) !== null;
+  }
+
+  // The two things the check can find, and the sentence each one carries. A
+  // caller that only wants a yes or no asks isRevertedHandledEdit; one that has
+  // to write the note asks pageCheckNoteFor.
+  var CHECK_REASON = { REVERTED: "reverted", FORMATTING: "formatting" };
+
+  /**
+   * Why the page check would reopen this item, or null.
+   *
+   * @returns {string|null} CHECK_REASON.REVERTED, CHECK_REASON.FORMATTING, or null
+   */
+  function pageCheckReasonFor(item, pageText, options) {
+    if (!item || typeof pageText !== "string") return null;
+    if (!record.isHandEdit(item)) return null;
+    if (item[record.FIELD.STATE] !== record.STATE.HANDLED) return null;
+    if (record.answeredPageCheckReopen(item)) return null;
+    if (withinCheckCooldown(item, options)) return null;
 
     var after = item[record.FIELD.AFTER];
     var before = item[record.FIELD.BEFORE];
-    if (typeof after !== "string" || typeof before !== "string") return false;
+    if (typeof after !== "string" || typeof before !== "string") return null;
 
     var afterKey = normalize.normalizeText(after);
     var beforeKey = normalize.normalizeText(before);
     // An edit whose after text was never page text (a delete, an empty region)
-    // has nothing to go missing, and an edit whose before and after read the
-    // same cannot be both gone and back.
-    if (!afterKey || !beforeKey || afterKey === beforeKey) return false;
+    // has nothing to go missing.
+    if (!afterKey) return null;
 
     var pageKey = normalize.normalizeText(pageText);
-    if (!pageKey) return false;
-    if (pageKey.indexOf(afterKey) !== -1) return false;
-    return pageKey.indexOf(beforeKey) !== -1;
+    if (!pageKey) return null;
+    if (pageKey.indexOf(afterKey) === -1) {
+      // The revert half. An edit whose before and after read the same cannot be
+      // both gone and back, which is why this test lives here and not above:
+      // a format-only change is exactly that edit, and its formatting half is
+      // still worth asking about.
+      if (!beforeKey || beforeKey === afterKey) return null;
+      return pageKey.indexOf(beforeKey) !== -1 ? CHECK_REASON.REVERTED : null;
+    }
+    // The reviewer's words ARE on the page. Their bold and italic may not be,
+    // and a handled change that is only half on the page is still not on the
+    // page. Compared and ignored: exactly what formattingLost compares and
+    // ignores, over the whole document's markup rather than one block's.
+    return formattingMissingFromPage(item, options) ? CHECK_REASON.FORMATTING : null;
+  }
+
+  /** The sentence a page-check reopen of this item should carry, or null. */
+  function pageCheckNoteFor(item, pageText, options) {
+    var reason = pageCheckReasonFor(item, pageText, options);
+    if (reason === CHECK_REASON.REVERTED) return REVERTED_EDIT_NOTE;
+    if (reason === CHECK_REASON.FORMATTING) return FORMATTING_LOST_NOTE;
+    return null;
+  }
+
+  // Is the emphasis this edit asks for absent from the whole page's markup?
+  // The caller passes the document's markup as `options.pageHtml`
+  // (pageCheckOptions reads it off the body once per sweep).
+  function formattingMissingFromPage(item, options) {
+    var opts = options || {};
+    var html = typeof opts.pageHtml === "string" ? opts.pageHtml : null;
+    // Nothing to read is not evidence of anything: a check that guessed would
+    // reopen every handled edit on the page.
+    if (html === null) return false;
+    if (item[record.FIELD.KIND] !== record.KIND.EDIT) return false;
+    if (!markupSaysAfter(item)) return false;
+    return missingEmphasis(item[record.FIELD.AFTER_HTML], html);
   }
 
   /** Did a check reopen this item less than CHECK_REOPEN_COOLDOWN_MS ago? */
@@ -712,10 +856,11 @@
   function revertedHandledEditIds(items, pageText, options) {
     var list = Array.isArray(items) ? items : [];
     var takenBack = record.takenBackIds(list);
+    var opts = options || {};
     var out = [];
     for (var i = 0; i < list.length; i += 1) {
       if (takenBack[list[i][record.FIELD.ID]]) continue;
-      if (isRevertedHandledEdit(list[i], pageText, options)) out.push(list[i][record.FIELD.ID]);
+      if (isRevertedHandledEdit(list[i], pageText, opts)) out.push(list[i][record.FIELD.ID]);
     }
     return out;
   }
@@ -738,6 +883,20 @@
   function pageTextOf(root) {
     if (!root) return "";
     return normalize.blockTextFromNode(root, { skip: markers.isToolNode });
+  }
+
+  /**
+   * The page-check options for a whole sweep: the document's markup, read once.
+   *
+   * The tool's own chrome goes out of it the way it goes out of pageTextOf: the
+   * rail lives in a closed shadow root, and cleanMarkup drops any chrome node
+   * that ever lands in the light DOM on the way through emphasisRuns.
+   */
+  function pageCheckOptions(root, options) {
+    var opts = options || {};
+    var out = { pageHtml: root && typeof root.innerHTML === "string" ? root.innerHTML : null };
+    if (typeof opts.now === "number") out.now = opts.now;
+    return out;
   }
 
   // What the card says when branch three fires. Written once here so the
@@ -1555,7 +1714,9 @@
     }
 
     var domValue = domValueOf(element, item);
-    var verdictBranch = compare(item, domValue);
+    // The markup goes in beside the text so branch one can see emphasis the
+    // text comparison is built to ignore (formattingLost).
+    var verdictBranch = compare(item, domValue, typeof element.innerHTML === "string" ? element.innerHTML : null);
     var branch = verdictBranch.branch;
 
     if (branch === BRANCH.ALREADY_APPLIED) {
@@ -1664,22 +1825,14 @@
       element.innerHTML = item[record.FIELD.AFTER_HTML];
       return;
     }
-    var afterText = item[record.FIELD.AFTER];
-    var afterHtml = item[record.FIELD.AFTER_HTML];
-    // The markup is used only when it still SAYS the record's after text. A
-    // record whose text was reworded without its markup would otherwise write
-    // an older wording back onto the page, which is worse than losing the
-    // emphasis. When they disagree, the text is the reviewer's answer.
-    if (
-      typeof afterHtml === "string" &&
-      afterHtml &&
-      typeof afterText === "string" &&
-      normalize.blockText(afterHtml) === normalize.normalizeBlockText(afterText)
-    ) {
-      element.innerHTML = afterHtml;
+    // The markup is used only when it still says the record's after text
+    // (markupSaysAfter, which the compare asks the same question of, so it can
+    // never ask for a write this will not make).
+    if (markupSaysAfter(item)) {
+      element.innerHTML = item[record.FIELD.AFTER_HTML];
       return;
     }
-    writeTextWithBreaks(element, afterText);
+    writeTextWithBreaks(element, item[record.FIELD.AFTER]);
   }
 
   // A record with no markup of its own, written so its breaks survive. Built
@@ -1716,6 +1869,7 @@
     REASONS: REASONS,
     PASS_ORDER: PASS_ORDER,
     BRANCH: BRANCH,
+    formattingLost: formattingLost,
     BRANCHES: BRANCHES,
     EARLIER_REVISION_MESSAGE: EARLIER_REVISION_MESSAGE,
     counters: counters,
@@ -1737,10 +1891,15 @@
     compare: compare,
     applyRecord: applyRecord,
     REVERTED_EDIT_NOTE: REVERTED_EDIT_NOTE,
+    FORMATTING_LOST_NOTE: FORMATTING_LOST_NOTE,
     CHECK_REOPEN_COOLDOWN_MS: CHECK_REOPEN_COOLDOWN_MS,
     isRevertedHandledEdit: isRevertedHandledEdit,
+    pageCheckReasonFor: pageCheckReasonFor,
+    pageCheckNoteFor: pageCheckNoteFor,
+    PAGE_CHECK_REASON: CHECK_REASON,
     revertedHandledEditIds: revertedHandledEditIds,
     pageTextOf: pageTextOf,
+    pageCheckOptions: pageCheckOptions,
     uniqueness: uniqueness
   };
 });

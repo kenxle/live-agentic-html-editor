@@ -694,3 +694,85 @@ test("a load opens the settling window, so the pass a reload schedules does not 
   assert.equal(replay.isSettling(), true, "boot and remount are the two moments the page redraws");
   replay.noteSettling(0);
 });
+
+// ---------------------------------------------------------------------------
+// Branch one sees the emphasis, not only the words (2026-09-11)
+// ---------------------------------------------------------------------------
+//
+// The reviewer made a word italic inside a rewrite, the agent carried the words
+// into a Markdown source without the emphasis, and the rebuilt page came back
+// with the right words in plain type. The text comparison called that
+// idempotent and wrote nothing, so the italic was gone for good.
+
+const ITALIC_HTML = "The trainer writes the plan <em>each</em> week.";
+
+function italicEdit() {
+  const item = fixtures.edit();
+  const next = Object.assign({}, item);
+  next[record.FIELD.BEFORE_HTML] = "The trainer writes the plan every week.";
+  next[record.FIELD.AFTER_HTML] = ITALIC_HTML;
+  return next;
+}
+
+test("branch one: the words are there and the italic is not, so the edit is written again", () => {
+  const item = italicEdit();
+  const page = pageOf(["Before it.", { text: item.after }, "After it."]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+
+  const ran = runOne(anchoredItem, page.root);
+
+  assert.equal(ran.result.branch, replay.BRANCH.REAPPLY);
+  assert.equal(page.blocks[1].innerHTML, ITALIC_HTML, "the reviewer's italic is back on the page");
+  assert.equal(replay.counters.regionsWritten, 1);
+  assert.equal(replay.counters.regionsConflicted, 0, "lost emphasis is not a collision");
+
+  // And the write settles: the second pass finds the block already right.
+  const cards = fakeCards();
+  replay.runPass(replay.REASON.MUTATION, { root: page.root, items: [anchoredItem], cards: cards });
+  assert.equal(replay.counters.regionsWritten, 1, "idempotent once the italic is back");
+});
+
+test("branch one: the words and the italic both there stays idempotent", () => {
+  const item = italicEdit();
+  const page = pageOf(["Before it.", { html: ITALIC_HTML }, "After it."]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+
+  replay.resetCounters();
+  const cards = fakeCards();
+  const context = { root: page.root, items: [anchoredItem], cards: cards };
+  for (let i = 0; i < 3; i += 1) replay.runPass(replay.REASON.MUTATION, context);
+
+  assert.equal(replay.counters.regionsWritten, 0, "nothing to do, three passes running");
+  assert.equal(replay.counters.regionsSkippedEqual, 3);
+});
+
+test("branch one: emphasis the page added of its own is left alone", () => {
+  // The record asks for nothing about emphasis. A page that renders the block
+  // with its own <em> is rendering, and writing over it every pass is the fight
+  // this tool exists to remove.
+  const item = fixtures.edit();
+  const page = pageOf(["Before it.", { html: "The trainer writes the plan <em>each</em> week." }, "After it."]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+
+  const ran = runOne(anchoredItem, page.root);
+  assert.equal(ran.result.branch, replay.BRANCH.ALREADY_APPLIED);
+  assert.equal(replay.counters.regionsWritten, 0);
+});
+
+test("formattingLost: what it compares, and what it ignores", () => {
+  const item = italicEdit();
+  // Ignored: links, code, spans, the page's own classes, and whitespace.
+  assert.equal(
+    replay.formattingLost(item, 'The trainer <a href="https://example.com">writes</a> the plan\n  <i>each</i> week.'),
+    false
+  );
+  // Compared: the italic run itself.
+  assert.equal(replay.formattingLost(item, "The trainer writes the plan each week."), true);
+  // A record whose markup no longer says its text is never used to write, so it
+  // is never a reason to write either.
+  const reworded = Object.assign({}, item);
+  reworded[record.FIELD.AFTER] = "The trainer writes a different plan.";
+  assert.equal(replay.formattingLost(reworded, "The trainer writes a different plan."), false);
+  // Nothing to read, nothing to say.
+  assert.equal(replay.formattingLost(item, null), false);
+});
