@@ -780,6 +780,85 @@
     return out;
   }
 
+  // THE TWO WAYS A STAMP CAN LIE, in words the reviewer can read on the card.
+  //
+  // The stamp is the top rung of the write ladder, so these are the guards that
+  // keep it from being a confident wrong answer. Ken, 2026-09-11: "I would much
+  // rather have graceful failures than quiet failures or destroying work."
+  var STAMP_REASON = {
+    // S1. A copy-paste in somebody's source duplicated the attribute with the
+    // markup around it. Two elements carrying one id is ambiguous in exactly
+    // the way two identical list items are, and it fails the same way.
+    DUPLICATED: "two elements carry this id",
+    // S2. The id is where it was, and the words under it are not the words the
+    // reviewer commented on: the agent stamped the wrong twin, or the passage
+    // was rewritten. Identity is certain, the target is not, and a write may
+    // not land on a maybe.
+    TEXT_MOVED: "the stamp points at different words"
+  };
+
+  function stampResult(bound, node, reason, considered) {
+    return {
+      bound: bound,
+      key: bound ? node : null,
+      element: bound ? node : null,
+      via: "stamp",
+      reason: reason,
+      failureCode: bound
+        ? null
+        : reason === STAMP_REASON.DUPLICATED
+          ? "ANCHOR_AMBIGUOUS"
+          : "ANCHOR_NO_TEXT_MATCH",
+      considered: considered,
+      survivors: bound ? 1 : 0,
+      corroboration: { structure: false, heading: false }
+    };
+  }
+
+  /**
+   * Does the stamped element still hold the words the reference was made of?
+   *
+   * A reference with no words at all (a bare canvas) has nothing that can
+   * disagree, so the stamp stands on its own. `accept` is the caller's list of
+   * other texts that are legitimately this region now: a replay that has
+   * already applied an edit knows what it wrote, and the region is still the
+   * region.
+   */
+  function stampTextAgrees(ref, node, accept) {
+    var probe = typeof ref.probe === "string" ? normalize.normalizeText(ref.probe) : "";
+    if (!probe) return true;
+    var raw = probeKindOf(ref) === PROBE.ELEMENT ? signatureOf(node) : textOf(node);
+    var now = normalize.normalizeText(raw || "");
+    if (!now) return false;
+    if (now === probe || now.indexOf(probe) !== -1) return true;
+    var others = Array.isArray(accept) ? accept : [];
+    for (var i = 0; i < others.length; i += 1) {
+      var other = typeof others[i] === "string" ? normalize.normalizeText(others[i]) : "";
+      if (other && (now === other || now.indexOf(other) !== -1)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * The first rung of the write ladder, or null to fall through to the words.
+   *
+   * A stamp that is not on the page at all is not a failure here: the page may
+   * never have carried it into the source, which is the ordinary case. That
+   * falls through to text, then to the fingerprint, then to an honest refusal,
+   * exactly as it did before stamps existed.
+   */
+  function stampVerdict(ref, scope, accept) {
+    var stamp = ref && typeof ref.stamp === "string" ? ref.stamp : "";
+    if (!stamp) return null;
+    var found = findByStamp(scope, stamp);
+    if (!found.length) return null;
+    if (found.length > 1) return stampResult(false, null, STAMP_REASON.DUPLICATED, found.length);
+    if (!stampTextAgrees(ref, found[0], accept)) {
+      return stampResult(false, null, STAMP_REASON.TEXT_MOVED, 1);
+    }
+    return stampResult(true, found[0], "stamp", 1);
+  }
+
   function candidatesFor(ref, scope) {
     var probe = typeof ref.probe === "string" ? normalize.normalizeText(ref.probe) : "";
     var kind = probeKindOf(ref);
@@ -1102,9 +1181,15 @@
    *   null. A null element with a failureCode is an honest failure, and it is a
    *   perfectly good answer.
    */
-  function resolve(ref, root) {
+  function resolve(ref, root, options) {
     var reference = ref || {};
     var scope = scopeOf(root, null);
+    // The stamp first, because it is the one signal that is true by
+    // construction. It answers in three ways and only one of them is a bind:
+    // see stampVerdict. A stamp that is not on the page says nothing, and the
+    // words decide as they always did.
+    var stamped = stampVerdict(reference, scope, options && options.accept);
+    if (stamped) return stamped;
     var verdict = uniqueness.selectUnique(candidatesFor(reference, scope), reference);
     verdict.element = verdict.bound ? verdict.key : null;
     return verdict;
@@ -1313,6 +1398,7 @@
     stampFor: stampFor,
     findByStamp: findByStamp,
     STAMP_ATTR: markers.STAMP_ATTR,
+    STAMP_REASON: STAMP_REASON,
     foundContextFor: foundContextFor,
     eachElement: eachElement
   };

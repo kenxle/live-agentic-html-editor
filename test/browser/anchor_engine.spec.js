@@ -207,15 +207,19 @@ test.describe("anchor engine: a real document", () => {
     }
   });
 
-  test("a region whose context is symmetric with a copy of itself: mint fails honestly", async ({
+  test("a region whose context is symmetric with a copy of itself: kept, and told it is a twin", async ({
     page,
     fixtureServer
   }) => {
     // The dangerous case D9 exists for: two exact copies, each with the same
     // neighbours on both sides, all the way out to the containing block. Any
-    // scalar score rates both high and picks one. Widening cannot separate
-    // them, so mint refuses rather than minting a reference that will bind to
-    // whichever copy the search happens to reach first.
+    // scalar score rates both high and picks one.
+    //
+    // The click still places (Ken, 2026-09-11). The reviewer pointed at one of
+    // the two and the element was in our hands, so it is stamped and kept. What
+    // the record says is that its WORDS will not find it again, which is the
+    // thing an agent has to know. The write ladder is untouched: resolve below
+    // still refuses, because position never places a write.
     await page.goto(fixtureServer.urlFor("built-doc.html"));
     await loadEngine(page);
 
@@ -232,12 +236,57 @@ test.describe("anchor engine: a real document", () => {
 
       const first = section.children[1];
       const ref = window.LAHE.anchor.mint({ element: first, root: section });
-      return { ok: ref.ok, failure: ref.failure };
+      const withStamp = window.LAHE.anchor.resolve(ref, section);
+
+      // NOW TAKE THE STAMP AWAY, which is what a rebuild that did not carry the
+      // attribute into the source does. The record still remembers an id; the
+      // page no longer has it; and the words are on the page twice.
+      Array.prototype.forEach.call(document.querySelectorAll("[data-lahe-id]"), function (node) {
+        node.removeAttribute("data-lahe-id");
+      });
+      const withoutStamp = window.LAHE.anchor.resolve(ref, section);
+
+      return {
+        ok: ref.ok,
+        stamp: ref.stamp,
+        textUnique: ref.text_unique,
+        notUniqueReason: ref.not_unique_reason,
+        failure: ref.failure,
+        withStamp: {
+          bound: withStamp.bound,
+          via: withStamp.via || null,
+          isTheClickedOne: withStamp.element === first,
+          code: withStamp.failureCode
+        },
+        withoutStamp: {
+          bound: withoutStamp.bound,
+          element: withoutStamp.element,
+          code: withoutStamp.failureCode,
+          reason: withoutStamp.reason
+        }
+      };
     });
 
-    expect(result.ok, "position could pick one; D9 says position never places a write").toBe(false);
-    expect(result.failure.reason).toBe("not_unique_in_containing_block");
-    expect(result.failure.failureCode).toBe("ANCHOR_AMBIGUOUS");
+    expect(result.ok, "the reviewer clicked one of them, and that click is kept").toBe(true);
+    expect(typeof result.stamp, "and it is identified by an id we wrote onto it").toBe("string");
+    expect(result.textUnique, "its words are on the page twice").toBe(false);
+    expect(result.notUniqueReason).toBe("not_unique_in_containing_block");
+    expect(result.failure || null, "a kept reference carries no failure").toBe(null);
+
+    // While the id is on the page, the write lands on the one the reviewer
+    // clicked, and it got there by the id rather than by counting.
+    expect(result.withStamp.bound, "an id nothing else carries is certainty").toBe(true);
+    expect(result.withStamp.via).toBe("stamp");
+    expect(result.withStamp.isTheClickedOne, "and it is the element the reviewer clicked").toBe(true);
+
+    // S4, which is the half that must never move: with no id on the page, two
+    // copies of the words are two copies, and nothing is written.
+    expect(
+      result.withoutStamp.bound,
+      "position could pick one; D9 says position never places a write"
+    ).toBe(false);
+    expect(result.withoutStamp.element).toBe(null);
+    expect(result.withoutStamp.code, "and the refusal names itself for the card").toBe("ANCHOR_AMBIGUOUS");
   });
 
   test("occurrence four of five survives the deletion of occurrence two", async ({ page, fixtureServer }) => {

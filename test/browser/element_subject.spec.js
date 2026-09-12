@@ -182,7 +182,7 @@ test.describe("the element anchor: which image did he mean", () => {
     ]);
   });
 
-  test("a canvas with nothing identifying about it is stamped lost, not stored as healthy", async ({ page }) => {
+  test("a canvas with nothing identifying about it is stamped, not stamped lost", async ({ page }) => {
     await page.goto(server.urlFor(FIXTURE));
     await bootLayer(page);
 
@@ -194,19 +194,36 @@ test.describe("the element anchor: which image did he mean", () => {
     expect(items).toHaveLength(1);
     const item = items[0];
 
-    // The reviewer's words are kept, always. What is refused is the pretence
-    // that the tool knows where they point.
+    // The reviewer's words are kept, always. What used to happen here is that
+    // the tool ALSO threw away the place they pointed at, because a canvas has
+    // no words and no signature. Ken, 2026-09-11: "there should be nothing on
+    // the page that we cannot identify." The element was in our hands, so it
+    // carries an id nothing else on the page carries, and the agent can place
+    // the comment from that.
     expect(item.note).toBe("this chart needs a legend");
-    expect(item.region.ref.ok).toBe(false);
-    expect(item.region.ref.failure.reason).toBe("empty_probe");
-    expect(item.region.lost).toBeTruthy();
-    expect(item.region.lost.code).toBe("ANCHOR_NO_TEXT_MATCH");
+    expect(item.region.ref.ok).toBe(true);
+    expect(typeof item.region.ref.stamp).toBe("string");
+    expect(item.region.lost, "a stamped click is not lost").toBe(null);
 
-    // And review.json says it out loud, with the sentence the agent reads.
+    // What the canvas still cannot do is describe itself, and that is said
+    // rather than hidden.
+    expect(item.region.ref.text_unique).toBe(false);
+
+    const stampOnPage = await page.evaluate(function () {
+      var el = document.querySelector("#chart-holder canvas");
+      return el ? el.getAttribute("data-lahe-id") : null;
+    });
+    expect(stampOnPage, "the id is on the element itself, for the agent to copy").toBe(
+      item.region.ref.stamp
+    );
+
+    // And review.json carries it as a healthy item whose subject says nothing
+    // identifying, rather than as a dead one.
     const projected = await projectedItems(page);
-    expect(projected.items[0].lost).toBeTruthy();
-    expect(projected.items[0].lost.code).toBe("ANCHOR_NO_TEXT_MATCH");
-    expect(typeof projected.items[0].lost.hint).toBe("string");
+    expect(projected.items[0].lost).toBe(null);
+    expect(projected.items[0].subject.tag).toBe("canvas");
+    expect(projected.items[0].subject.src).toBe(null);
+    expect(projected.items[0].subject.alt).toBe(null);
   });
 
   test("picking inside an svg records the whole graphic, and it anchors", async ({ page }) => {

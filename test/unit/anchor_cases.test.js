@@ -667,3 +667,106 @@ test("case 23: a snapshot is only taken from something that really bound", () =>
   const page = article(WORDS);
   assert.equal(pointing.snapshot(null, page.body), null, "nothing in, nothing remembered");
 });
+
+// ---------------------------------------------------------------------------
+// THE STAMP'S OWN HAZARDS (S1, S2)
+// ---------------------------------------------------------------------------
+//
+// Ken, 2026-09-11: "I would much rather have graceful failures than quiet
+// failures or destroying work."
+//
+// The stamp is the top rung of the write ladder, so it is also the newest way
+// to be confidently wrong. Both cases below end in a refusal with a reason the
+// reviewer can read, and neither writes.
+//
+// The simulated DOM answers getAttribute and has no setAttribute, so mint
+// cannot stamp here. That is convenient: the stamp is set by hand, which is
+// exactly what an agent writing the attribute into the source does.
+
+/** One paragraph per text, each carrying the given stamp. */
+function stamped(texts, stamps) {
+  const nodes = texts.map((text, i) => {
+    const attrs = { class: "para__body" };
+    if (stamps[i]) attrs[anchor.STAMP_ATTR] = stamps[i];
+    return el("p", { attrs: attrs, text: text });
+  });
+  return { body: el("body", { children: [el("main", { children: nodes })] }), paragraphs: nodes };
+}
+
+test("S1: two elements carry the same id, so nothing is written", () => {
+  // A copy-paste in somebody's source duplicated the attribute along with the
+  // markup around it. One id on two elements is ambiguous in exactly the way
+  // two identical list items are, and it fails the same way.
+  const page = stamped([WORDS[0], WORDS[1], WORDS[1]], [null, "e-twin", "e-twin"]);
+  const ref = anchor.mint({ element: page.paragraphs[1], root: page.body });
+  ref.stamp = "e-twin";
+
+  const verdict = anchor.resolve(ref, page.body);
+  assert.equal(verdict.bound, false, "two elements carrying one id is not an answer");
+  assert.equal(verdict.element, null, "and nothing is written");
+  assert.equal(verdict.failureCode, "ANCHOR_AMBIGUOUS");
+  assert.equal(verdict.reason, anchor.STAMP_REASON.DUPLICATED);
+  assert.equal(verdict.reason, "two elements carry this id", "in words the reviewer can read");
+});
+
+test("S2: the id is on an element whose words are not the reviewer's, so nothing is written", () => {
+  // The agent stamped the wrong twin, or the passage under the id was
+  // rewritten. Identity is certain and the target is not, and a write may not
+  // land on a maybe.
+  const page = stamped([WORDS[0], WORDS[1]], [null, "e-moved"]);
+  const ref = anchor.mint({ element: page.paragraphs[0], root: page.body });
+  ref.stamp = "e-moved";
+
+  const verdict = anchor.resolve(ref, page.body);
+  assert.equal(verdict.bound, false, "the id points at different words");
+  assert.equal(verdict.element, null);
+  assert.equal(verdict.failureCode, "ANCHOR_NO_TEXT_MATCH");
+  assert.equal(verdict.reason, anchor.STAMP_REASON.TEXT_MOVED);
+  assert.equal(verdict.reason, "the stamp points at different words");
+
+  // A caller that already knows what it wrote there is a different story: the
+  // words under the id are the words that caller put there, and the region is
+  // still the region.
+  const knowing = anchor.resolve(ref, page.body, { accept: [WORDS[1]] });
+  assert.equal(knowing.bound, true, "an edit that landed is not a stamp that lied");
+  assert.equal(knowing.element, page.paragraphs[1]);
+});
+
+test("S1/S2 negative: a unique id over the right words writes, as it always did", () => {
+  const page = stamped([WORDS[0], WORDS[1]], [null, "e-good"]);
+  const ref = anchor.mint({ element: page.paragraphs[1], root: page.body });
+  ref.stamp = "e-good";
+
+  const verdict = anchor.resolve(ref, page.body);
+  assert.equal(verdict.bound, true);
+  assert.equal(verdict.element, page.paragraphs[1]);
+  assert.equal(verdict.via, "stamp", "and it says how it got there");
+});
+
+test("S3: an id the page no longer has falls through to the words, not to a refusal", () => {
+  // A rebuild that did not carry the attribute into the source. The stamp says
+  // nothing, and the words decide, exactly as they did before stamps existed.
+  const page = stamped([WORDS[0], WORDS[1]], [null, null]);
+  const ref = anchor.mint({ element: page.paragraphs[1], root: page.body });
+  ref.stamp = "e-gone";
+
+  const verdict = anchor.resolve(ref, page.body);
+  assert.equal(verdict.bound, true, "the words are still unique on the page");
+  assert.equal(verdict.element, page.paragraphs[1]);
+});
+
+test("S4: no id on the page and the words twice over refuses, exactly as before", () => {
+  // Symmetric all the way out: the same neighbour on each side of each copy, so
+  // widening cannot separate them and only position could.
+  const page = stamped(
+    ["A lead-in line.", WORDS[1], "A trailing line.", "A lead-in line.", WORDS[1], "A trailing line."],
+    [null, null, null, null, null, null]
+  );
+  const ref = anchor.mint({ element: page.paragraphs[1], root: page.body });
+  ref.stamp = "e-gone";
+
+  const verdict = anchor.resolve(ref, page.body);
+  assert.equal(verdict.bound, false, "position could pick one; D9 says it never does");
+  assert.equal(verdict.element, null);
+  assert.equal(verdict.failureCode, "ANCHOR_AMBIGUOUS");
+});

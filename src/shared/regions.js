@@ -198,7 +198,14 @@
     // Keeping this is what preserves RF19: an item whose anchor cannot identify
     // anything must never read as healthy, which is exactly how every image
     // comment shipped broken and silent.
-    if (ref.text_unique === false) {
+    //
+    // THE STAMP ANSWERS IT (Ken, 2026-09-11: "there should be nothing on the
+    // page that we cannot identify"). An element carrying data-lahe-id is
+    // describable whether or not its words are: the item hands the agent an id
+    // nothing else carries, plus the path and the ordinal among its identical
+    // siblings, and that is enough to pick the right twin in the source. So a
+    // stamped click is never lost. Without a stamp, nothing below changes.
+    if (ref.text_unique === false && !ref.stamp) {
       return lostState(
         ref.not_unique_reason === "not_unique_in_containing_block"
           ? "ANCHOR_AMBIGUOUS"

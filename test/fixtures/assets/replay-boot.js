@@ -196,6 +196,15 @@
     parent.replaceChild(second, marker);
     parent.insertBefore(tail, second.nextSibling);
     if (!ref.ok) throw new Error("replay-boot: the twin fixture could not mint: " + JSON.stringify(ref.failure));
+    // THE CASE THIS FIXTURE IS FOR IS THE ONE WITH NO ID ON THE PAGE (S4).
+    //
+    // Mint stamps the element, and an id nothing else carries would place the
+    // write with certainty, which is a different branch and a good one. What is
+    // being tested here is the page as a rebuild leaves it when the agent never
+    // carried the attribute into the source: the record remembers an id, the
+    // page has none, and two copies of the words are two copies. So the
+    // attribute comes back off, and the reference keeps remembering it.
+    document.querySelector("#region-twin-1").removeAttribute(anchor.STAMP_ATTR);
     return ref;
   }
 
