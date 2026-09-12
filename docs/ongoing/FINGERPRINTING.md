@@ -545,14 +545,137 @@ fix is what stops the next page from needing the same favor.
 
 ---
 
-## Open questions
+## Open questions, now decided
+
+All four were answered by Ken in the 2026-09-11 review. Each keeps its
+original wording, with the decision under it.
 
 1. **How does a probable place announce itself?** Paint it like a certain match,
    paint it and say it is probable, or do not paint but let the card jump there.
+
+   What a probable place is. You comment on a sentence. The agent rewrites that
+   sentence the way you asked. The page rebuilds. Now your comment's words are
+   not on the page any more, because the whole point was to change them. The
+   comment still needs a home on the page, so you can see where it was and
+   what it became. The engine looks for the paragraph that is most likely the
+   same one: same position under the same parent, same neighbours either side,
+   some of the same words left. It cannot be sure the way an exact text match
+   is sure. That best candidate is the probable place. It is where the card
+   jumps to and where a highlight would go, if we paint one.
+
+   With the stamp (question 2), this case shrinks. The agent's rewrite is the
+   first edit of that element, so the agent stamps it in the source at that
+   moment, the rebuilt page carries the stamp, and the comment finds it with
+   certainty. A probable place is then only the fallback: an agent that did
+   not stamp, a rebuild that dropped the attribute, or looped output. The
+   question is still worth deciding because the fallback has to look like
+   something.
+
+   What this is about. There are two ladders. The write ladder places an edit,
+   and it refuses unless it finds exactly one candidate, because a wrong write
+   destroys text. The point ladder only has to show you where a comment lives,
+   and a wrong point costs a highlight in the wrong place, so it is allowed a
+   best guess. Case 5b above is the picture: two identical rows swapped, the
+   write refuses, and the point takes the remembered place. The question is
+   what the page should DO with a guess it knows might be wrong.
+
+   The three choices:
+
+   - **Paint it like a certain match.** The highlight looks the same whether
+     the engine was sure or guessing. Simplest, and dishonest: you cannot tell
+     a guess from a find, so a wrong guess teaches you to distrust every
+     highlight.
+   - **Paint it and say it is probable.** The same highlight in a lighter or
+     dashed treatment, and the card says "probably here". You still get taken
+     to the spot, and you know to check. Costs one more highlight style and one
+     more word on the card.
+   - **Do not paint; let the card jump there.** No mark on the page at all. The
+     card still knows the best place, so clicking it scrolls you there, but
+     nothing on the page claims to be your comment. Honest, but the comment
+     becomes invisible on the page until you go looking.
+
+   **Decided (Ken, 2026-09-11): the stamp is the answer, and guessing is the
+   fallback only.** Ken: "This is why we added data attributes. We gave the
+   green light to writing them into the source because they are invisible and
+   don't do anything. I do this all the time; this works currently." So the
+   design is: a comment's element carries the stamp, the agent carries the
+   stamp into the source with its rewrite, and the rebuilt page is found with
+   certainty, not probability. The engine's best guess runs only when the
+   stamp is missing, and when it does, it is painted in a visibly weaker
+   treatment with the word "probable" on the card (the second choice above),
+   so a guess is never dressed as a find.
 2. **When does the agent stamp the source?** At first edit of an element, or a
    one-time pass at setup. First-edit is less cruft; setup means even the first
    comment binds to a stamp.
+
+   **Decided (Ken, 2026-09-11): at first edit.** No one-time pass at setup.
+   Only the elements that actually get edited carry a stamp. The first comment
+   on an untouched element binds by text and signature, as it does today; the
+   stamp arrives with the first edit and helps from then on.
 3. **Do we stamp documents we do not own?** The "leftovers are inert" argument is
    easier for your own files than for someone else's page.
+
+   **Decided (Ken, 2026-09-11): moot.** Everything has to be local for the tool
+   to work at all: the source is on this machine and the agent edits it here.
+   There is no "someone else's page" case to protect; if the agent can edit the
+   file, it can stamp it.
 4. **Should the reviewer be told at click time** that a comment cannot be placed?
    Mint knows immediately; today you find out from an agent, later.
+
+   When a comment cannot be placed. "Placed" means the write ladder can find
+   exactly one element for it later. At the moment you click, the engine mints
+   the reference: it takes the element's text (or its signature, for something
+   with no words), its tie-breakers, and its ring of surrounding text, and it
+   searches the page for that combination right then. That search is the same
+   one the agent's edit will run later. So the mint already knows, at click
+   time, whether the combination is unique on the page. The cases where it is
+   not:
+
+   - two or more elements with identical text and identical surroundings (the
+     two indistinguishable rows, the duplicated block, two images sharing one
+     src);
+   - an element with no words and nothing identifying about it (a bare canvas,
+     an icon with no label, no src, no alt);
+   - a region whose text disappears into a larger identical region (a line that
+     also appears inside a copy of its own section).
+
+   How we know at click time: the mint returns `ok: false` with a failure code
+   (`ANCHOR_AMBIGUOUS`, or the no-signature case) the instant it runs. The
+   record is stamped lost immediately. Today that stamp travels to the agent,
+   and the agent tells you, minutes later, that it could not tell which one you
+   meant.
+
+   What telling you at click time would look like: the comment box still opens
+   (your words are never refused), but the card says, before you type, "This
+   spot is one of N identical ones. The agent will not be able to tell them
+   apart." The fix is yours and it is cheap at that moment: point at the
+   containing element instead, or select a longer run that includes something
+   distinctive. Waiting until the agent says it costs a round trip and means
+   you are no longer looking at the spot.
+
+   **Decided (Ken, 2026-09-11): this question mostly dissolves, because the
+   stamp is the answer to it.** Ken: "There should be nothing on the page that
+   we cannot identify. That's why we've made all these many, many different
+   ways of getting there." With the stamp, an element that text and signature
+   cannot tell apart from its twins is still identifiable: it carries an id
+   nothing else carries. So the click-time warning above is not the design.
+   The design is that the click always places.
+
+   What closes the last gap. The stamp is written into the browser at click
+   time and reaches the source only when the agent first edits that element
+   (question 2). So the first edit on one of N identical elements happens
+   before any stamp is in the source, and the agent has to know WHICH twin to
+   stamp. The record carries that: the element's ordinal among its identical
+   siblings under the same parent, and the path to it. A page built once from
+   its source keeps the source's order (looped output is the deferred case),
+   so "the third identical row" on the page is the third identical row in the
+   source. The agent stamps that one, and from then on the stamp alone finds
+   it. D9's rule that position never places a write is about the browser's
+   own write ladder, which still refuses; the ordinal here is information
+   handed to the agent, who is editing the source with the reviewer's words
+   in front of them.
+
+   What is left of the click-time message: only the deferred case, output
+   generated in a loop from one source element, where there is nothing in the
+   source to stamp. There, and only there, the card should say at click time
+   that the comment lands on the template, not the instance.
