@@ -182,9 +182,31 @@
   // thing. A reference with no `ok` at all is treated as failed, because a
   // caller who cannot say the mint worked has not shown that it did.
   function lostFromMint(ref) {
-    if (ref && ref.ok === true) return null;
-    var failure = (ref && ref.failure) || {};
-    return lostState(failure.failureCode || "ANCHOR_NO_TEXT_MATCH", failure.reason || null);
+    if (!ref) return lostState("ANCHOR_NO_TEXT_MATCH", null);
+    if (ref.ok !== true) {
+      var failure = ref.failure || {};
+      return lostState(failure.failureCode || "ANCHOR_NO_TEXT_MATCH", failure.reason || null);
+    }
+    // MINTED, AND STILL NOT DESCRIBABLE TO AN AGENT.
+    //
+    // These came apart deliberately. `ok` now means the reviewer's click was
+    // captured, which it always is: the element was in our hands. `lost` means
+    // something else and always did, which is that nothing we can put in
+    // review.json will let an agent place this. A comment on one of 73
+    // identical buttons is both at once, and saying so is the honest answer.
+    //
+    // Keeping this is what preserves RF19: an item whose anchor cannot identify
+    // anything must never read as healthy, which is exactly how every image
+    // comment shipped broken and silent.
+    if (ref.text_unique === false) {
+      return lostState(
+        ref.not_unique_reason === "not_unique_in_containing_block"
+          ? "ANCHOR_AMBIGUOUS"
+          : "ANCHOR_NO_TEXT_MATCH",
+        ref.not_unique_reason || null
+      );
+    }
+    return null;
   }
 
   return {

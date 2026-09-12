@@ -183,6 +183,13 @@
       heading: null,
       attr: null,
       minted_at: null,
+      // The id we wrote onto the element itself. See markers.STAMP_ATTR.
+      stamp: null,
+      // Whether the region's own words can find it again on their own. False
+      // does NOT mean the reference is bad: it means text alone will not place a
+      // write later, and the fingerprint and path are carrying the identity.
+      text_unique: true,
+      not_unique_reason: null,
       // Which ring of context prefix/suffix were read from. Stored because
       // resolve has to read the same ring; a reference written before this
       // existed carries none and reads as 0, which is what it was.
@@ -743,6 +750,36 @@
    * The candidate descriptors selectUnique judges. The node itself is the key,
    * so a bind hands the caller the element with no lookup table in between.
    */
+  /**
+   * The element's assigned id, minting one onto it if it has none.
+   *
+   * Returns null in a document that cannot be written to, which includes the
+   * simulated DOM the unit tests use. Everything downstream treats a missing
+   * stamp as "no such evidence", so nothing depends on the write succeeding.
+   */
+  function stampFor(element) {
+    var existing = attrOf(element, markers.STAMP_ATTR);
+    if (typeof existing === "string" && existing) return existing;
+    if (!element || typeof element.setAttribute !== "function") return null;
+    var id = "e" + Math.random().toString(36).slice(2, 10);
+    try {
+      element.setAttribute(markers.STAMP_ATTR, id);
+    } catch (err) {
+      return null;
+    }
+    return id;
+  }
+
+  /** Every element carrying this exact stamp. More than one is a duplicate. */
+  function findByStamp(scope, stamp) {
+    var out = [];
+    if (!stamp) return out;
+    eachElement(scope, function (node) {
+      if (attrOf(node, markers.STAMP_ATTR) === stamp) out.push(node);
+    });
+    return out;
+  }
+
   function candidatesFor(ref, scope) {
     var probe = typeof ref.probe === "string" ? normalize.normalizeText(ref.probe) : "";
     var kind = probeKindOf(ref);
@@ -794,6 +831,14 @@
   // mint
   // -------------------------------------------------------------------------
 
+  /**
+   * The two things that are still refusals, and nothing else is.
+   *
+   * No element and no searchable root are both "there is nothing here to talk
+   * about". Everything that used to be a failure below them was really a
+   * prediction that the region would be hard to find LATER, and predicting that
+   * at mint time cost the reviewer the comment they had just written.
+   */
   function mintFailure(ref, reason, detail) {
     ref.ok = false;
     ref.failure = {
@@ -921,6 +966,15 @@
 
     if (!element) return mintFailure(ref, MINT_FAILURE.NO_ELEMENT);
 
+    // STAMP IT NOW, while it is in our hands. Every other signal in this file is
+    // a way of recognising the element again from what it happens to look like.
+    // This one is true because we put it there, and the moment the reviewer
+    // clicks is the only moment it can be put there with certainty.
+    //
+    // An element already carrying a stamp keeps it: it may have come back from
+    // the source, which is the whole point of the agent writing it there.
+    ref.stamp = stampFor(element);
+
     // Text first, always. A region with words in it is anchored by its words,
     // and the signature path is what happens when there are none, never a
     // second opinion about a region that has some.
@@ -939,7 +993,11 @@
     // src, no alt and no srcset really is unidentifiable, and saying so is the
     // whole fix: the old code said it too, and then stored the failure as
     // though it were a reference.
-    if (!ref.probe) return mintFailure(ref, MINT_FAILURE.EMPTY_PROBE);
+    // NO WORDS AND NO SIGNATURE IS NOT A REFUSAL ANY MORE. See the note on
+    // mintFailure below: the element is in our hands, so something is always
+    // captured. What an empty probe costs is the ability to re-find it BY TEXT,
+    // which is recorded rather than thrown.
+    if (!ref.probe) ref.text_unique = false;
 
     var scope = scopeOf(input.root, element);
     if (!isElement(scope)) return mintFailure(ref, MINT_FAILURE.NOT_FOUND, "no searchable root");
@@ -997,11 +1055,29 @@
       }
     }
 
-    return mintFailure(
-      ref,
-      lastVerdict && lastVerdict.considered > 1 ? MINT_FAILURE.NOT_UNIQUE_IN_BLOCK : MINT_FAILURE.NOT_FOUND,
-      lastVerdict ? lastVerdict.reason : null
-    );
+    // WIDENING RAN OUT, AND THE COMMENT IS STILL GOOD.
+    //
+    // Ken: "when i click on an element on the page, we should be able to
+    // identify it." He is right, and this used to be the line that said
+    // otherwise. The reviewer pointed at a thing; the thing was in our hands;
+    // and because its words were not enough to FIND IT AGAIN, the reference was
+    // thrown away and the comment was born broken. On a page of 73 identical
+    // Approve buttons that is every comment on the page.
+    //
+    // Not being re-findable by text is a fact about the FUTURE, not about now.
+    // It is recorded here so the write path can refuse later, which it does on
+    // its own through uniqueness.js whether or not this flag exists, and so the
+    // rail can say something useful at the moment it happens. The path and the
+    // fingerprint were taken above and they describe exactly the element the
+    // reviewer clicked.
+    ref.ok = true;
+    ref.text_unique = false;
+    ref.failure = null;
+    ref.not_unique_reason =
+      lastVerdict && lastVerdict.considered > 1
+        ? MINT_FAILURE.NOT_UNIQUE_IN_BLOCK
+        : MINT_FAILURE.NOT_FOUND;
+    return ref;
   }
 
   // -------------------------------------------------------------------------
@@ -1234,6 +1310,9 @@
     attrOf: attrOf,
     scopeOf: scopeOf,
     fingerprintOf: fingerprintOf,
+    stampFor: stampFor,
+    findByStamp: findByStamp,
+    STAMP_ATTR: markers.STAMP_ATTR,
     foundContextFor: foundContextFor,
     eachElement: eachElement
   };

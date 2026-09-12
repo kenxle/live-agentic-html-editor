@@ -384,10 +384,16 @@ test("widening happens by whole sibling elements, outward from the region", () =
   assert.equal(verdict.reason, uniqueness.REASON.CONTEXT_ELIMINATED_RIVALS);
 });
 
-test("widening stops at the containing block, and mint then fails honestly", () => {
+test("widening runs out, and the reference is kept anyway", () => {
   // Three identical items in one list with nothing around them to tell the
   // first from the second. Position could pick one; D9 says position never
-  // places a write, so mint refuses rather than widening to the document.
+  // places a write, and that has not changed: resolve refuses below.
+  //
+  // WHAT CHANGED IS THE MINT. It used to throw the reference away here, which
+  // meant the reviewer's click was lost at the moment they made it. Ken: "when
+  // i click on an element on the page, we should be able to identify it." The
+  // element was in our hands, so it is captured; what is recorded is that its
+  // WORDS will not find it again.
   const root = el("body");
   const list = append(root, el("ul"));
   const items = [1, 2, 3].map(function () {
@@ -396,18 +402,28 @@ test("widening stops at the containing block, and mint then fails honestly", () 
   append(root, el("p", { text: "A paragraph outside the list that would make item one unique." }));
 
   const ref = anchor.mint({ element: items[0], root: root });
-  assert.equal(ref.ok, false, "the containing block is exhausted and the region is still not unique");
-  assert.equal(ref.failure.reason, anchor.MINT_FAILURE.NOT_UNIQUE_IN_BLOCK);
-  assert.equal(ref.failure.failureCode, "ANCHOR_AMBIGUOUS");
+  assert.equal(ref.ok, true, "the click is captured");
+  assert.equal(ref.text_unique, false, "and the thing that could not be done is named");
+  assert.equal(ref.not_unique_reason, anchor.MINT_FAILURE.NOT_UNIQUE_IN_BLOCK);
+  assert.ok(ref.fingerprint, "with an identity taken from the element itself");
+
+  // The write path is untouched: three candidates, no write.
+  const verdict = anchor.resolve(ref, root);
+  assert.equal(verdict.element, null, "position still never places a write");
+  assert.equal(verdict.failureCode, "ANCHOR_AMBIGUOUS");
+
+  // And the agent is still told, which is what keeps RF19 fixed.
+  assert.notEqual(regions.lostFromMint(ref), null, "an item nobody can place must not read as healthy");
 });
 
-test("mint fails honestly on a region with no text at all", () => {
+test("a region with no text at all is captured, and says text will not find it", () => {
   const root = el("body");
   const empty = append(root, el("p", { text: "   " }));
   append(root, el("p", { text: "Something else." }));
   const ref = anchor.mint({ element: empty, root: root });
-  assert.equal(ref.ok, false);
-  assert.equal(ref.failure.reason, anchor.MINT_FAILURE.EMPTY_PROBE);
+  assert.equal(ref.ok, true, "the reviewer pointed at something, so something was captured");
+  assert.equal(ref.text_unique, false);
+  assert.notEqual(regions.lostFromMint(ref), null, "and the agent is told it cannot be placed from words");
 });
 
 // ---------------------------------------------------------------------------
@@ -543,10 +559,15 @@ test("two images sharing one src are ambiguous, exactly like two identical list 
   ]);
   const ref = anchor.mint({ element: page.images[1], root: page.root });
 
-  assert.equal(ref.ok, false, "a page cannot tell these two apart, and neither may we");
-  assert.equal(ref.failure.failureCode, "ANCHOR_AMBIGUOUS");
+  assert.equal(ref.ok, true, "the reviewer clicked one of them, and that click is kept");
+  assert.equal(ref.text_unique, false, "but nothing about the image tells the two apart");
+
+  const verdict = anchor.resolve(ref, page.root);
+  assert.equal(verdict.element, null, "a page cannot tell these two apart, and neither may we");
+  assert.equal(verdict.failureCode, "ANCHOR_AMBIGUOUS");
+
   const lost = regions.lostFromMint(ref);
-  assert.equal(lost.code, "ANCHOR_AMBIGUOUS", "and the failure is stamped, not swallowed");
+  assert.equal(lost.code, "ANCHOR_AMBIGUOUS", "and it is stamped, not swallowed");
 });
 
 test("a failed mint is stamped lost, so no item can read as healthy with a dead anchor", () => {
@@ -556,8 +577,11 @@ test("a failed mint is stamped lost, so no item can read as healthy with a dead 
   const orphan = append(root, el("img", { attrs: {} }));
 
   const ref = anchor.mint({ element: orphan, root: root });
-  assert.equal(ref.ok, false);
-  assert.equal(ref.failure.reason, anchor.MINT_FAILURE.EMPTY_PROBE);
+  // `ok` and `lost` came apart deliberately: the click IS captured, and the
+  // agent still cannot be told which image this is, because the image says
+  // nothing about itself. Both are true and both are reported.
+  assert.equal(ref.ok, true, "the reviewer's click is never thrown away");
+  assert.equal(ref.text_unique, false);
 
   const lost = regions.lostFromMint(ref);
   assert.equal(lost.code, "ANCHOR_NO_TEXT_MATCH");

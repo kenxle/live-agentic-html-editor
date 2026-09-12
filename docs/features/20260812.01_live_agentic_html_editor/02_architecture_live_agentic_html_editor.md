@@ -415,6 +415,39 @@ the only identity that survives the page being replaced. Transient marking is di
 while a region is actively being edited, the library does tag the element (the protection attribute
 in D7), because that tag only has to live as long as the edit.
 
+**AMENDED 2026-08-26: the assigned identity, and why the rejection above no longer covers it.**
+That rejection turned on one fact, which was correct: a marker written only into the browser does
+not survive the rebuild, and the rebuild is the moment it would have been needed. Measured since:
+the library calls `location.reload()` when the target's mtime changes, so a browser-only marker dies
+on exactly the event it was for. The rejection stands, unchanged, for any marker that lives only in
+the browser.
+
+What it does not cover is a marker the AGENT CARRIES INTO THE SOURCE. Ken: "it should like we should
+add a data-* attribute to the dom in the browser, and in most cases carry that into the source." The
+source is the thing the rebuild is built FROM, so a stamp that reaches it is reproduced by the
+rebuild rather than erased by it. The objection and the proposal are about different halves of the
+same round trip.
+
+So `data-lahe-id` (markers.STAMP_ATTR) is written onto the live element the moment the reviewer
+touches it, and an agent that edits that element writes the same attribute into the source. Three
+rules keep it inside D9 rather than beside it:
+
+1. **A stamp places a write only when it is UNIQUE in the document.** Two elements carrying one
+   stamp is a copy-paste in somebody's source, and it is ambiguous in exactly the way two identical
+   list items are ambiguous. It fails the same way, through the same predicate.
+2. **A stamp is not content and never appears as content.** `cleanMarkup` strips it from
+   `before_html` and `after_html` like every other tool attribute (R33). It reaches an agent as its
+   own field, which is also what an agent needs in order to write it.
+3. **Nothing depends on the stamp existing.** A page that cannot be written to, an element the
+   agent never edited, a stamp a rebuild dropped: every one of those falls through to text, then to
+   the fingerprint, then to an honest refusal. The stamp is the fastest and surest rung on the
+   ladder, and it is never the only one.
+
+Why it is worth an amendment at all: it is the only signal in this engine that is true by
+construction rather than inferred from what an element happens to look like. It is also the only one
+that answers the queued-edits case by bookkeeping instead of by matching, because a queue entry
+carrying an id cannot be moved by a deletion or a swap that lands ahead of it.
+
 One shared normalizer is used everywhere text is compared (recording, replay, anchoring): two
 normalizers that disagree is how a replay engine ends up fighting the reviewer's own cursor, so this
 is a single module by design, not convention.

@@ -87,7 +87,15 @@
     // clear winner and it was the wrong element, which is the exact outcome
     // uniqueness.js refuses. So they order candidates that are otherwise equally
     // good, and they can never promote one past the margin.
+    // TWO PLACES, NOT ONE. Ken: "before and after ref.paths is still good for
+    // some of the use cases." Keeping only the fresher one is lossy, and undo is
+    // the case that shows it: a region minted at s2, moved to s4 by an edit,
+    // refreshed to s4, and then put back at s2 when the reviewer takes the edit
+    // away. The fresh path now matches nothing and the minted one is exactly
+    // right. Both count, and the fresher is worth more because it is the more
+    // recent evidence, not because it is more true.
     PATH: 20,
+    PATH_MINTED: 12,
     ORDINAL: 5
   };
 
@@ -147,10 +155,22 @@
    * carries none of them and scores on context and path alone, which is the
    * honest amount of evidence it has.
    */
-  function scoreAgainst(ref, node, scope) {
+  function scoreAgainst(ref, node, scope, knownPath, knownPrint) {
     var reference = ref || {};
-    var print = reference.fingerprint || {};
     var found = anchor.fingerprintOf(node, scope) || {};
+    // TWO REMEMBERED SELVES, and a candidate matching EITHER is evidence.
+    //
+    // Ken: "what if the whole fingerprint is rerun before and after?" An edit can
+    // change what an element IS, not only where it sits: the agent rewords the
+    // passage and wraps it in a new div with a new class, and a fingerprint from
+    // before that describes something that no longer exists. Re-taking it after
+    // each edit is how the later look has anything current to compare with.
+    //
+    // The minted one is kept rather than replaced, for the same reason both paths
+    // are kept: an undo puts back the thing that was there on the day the comment
+    // was made. Whichever self this candidate resembles more is the score.
+    var print = reference.fingerprint || {};
+    var alt = knownPrint || null;
     var score = 0;
     var position = 0;
     var reasons = [];
@@ -165,13 +185,24 @@
     if (attr && attr === textish(anchor.attrOf(node, anchor.AUTHOR_ATTR))) {
       add(WEIGHT.AUTHOR_ATTR, "author region name");
     }
-    if (print.element_id && print.element_id === found.element_id) {
+    var wantId = print.element_id || (alt && alt.element_id);
+    if (wantId && (wantId === found.element_id || (alt && alt.element_id === found.element_id))) {
       add(WEIGHT.ELEMENT_ID, "id");
     }
-    add(Math.round(WEIGHT.CLASSES * overlap(print.classes, found.classes)), "classes");
-    add(Math.round(WEIGHT.CHAIN * chainAgreement(print.chain, found.chain)), "parents");
-    if (reference.path && reference.path === anchor.pathOf(node, scope)) {
-      position += WEIGHT.PATH;
+    var classFit = Math.max(
+      overlap(print.classes, found.classes),
+      alt ? overlap(alt.classes, found.classes) : 0
+    );
+    var chainFit = Math.max(
+      chainAgreement(print.chain, found.chain),
+      alt ? chainAgreement(alt.chain, found.chain) : 0
+    );
+    add(Math.round(WEIGHT.CLASSES * classFit), "classes");
+    add(Math.round(WEIGHT.CHAIN * chainFit), "parents");
+    var herePath = knownPath || reference.path ? anchor.pathOf(node, scope) : null;
+    if (knownPath && knownPath === herePath) position += WEIGHT.PATH;
+    if (reference.path && reference.path !== knownPath && reference.path === herePath) {
+      position += WEIGHT.PATH_MINTED;
     }
     var context = anchor.foundContextFor(node, scope, reference);
     if (contextAgrees(reference.prefix, context.prefix)) add(WEIGHT.PREFIX, "text before");
@@ -179,8 +210,12 @@
     if (reference.heading && reference.heading === anchor.headingOf(node, scope)) {
       add(WEIGHT.HEADING, "under the same heading");
     }
-    if (print.tag && print.tag === found.tag) add(WEIGHT.TAG, "same kind of element");
-    if (print.ordinal && print.ordinal === found.ordinal) position += WEIGHT.ORDINAL;
+    if ((print.tag && print.tag === found.tag) || (alt && alt.tag === found.tag)) {
+      add(WEIGHT.TAG, "same kind of element");
+    }
+    if ((print.ordinal && print.ordinal === found.ordinal) || (alt && alt.ordinal === found.ordinal)) {
+      position += WEIGHT.ORDINAL;
+    }
 
     return { score: score, position: position, reasons: reasons };
   }
@@ -194,15 +229,40 @@
    * to be reported with a caveat, it is the shape of the error this whole design
    * refuses, so it produces no answer at all.
    */
-  function bestGuess(ref, root) {
+  /**
+   * @param {Object} ref the stored reference
+   * @param {Node} root the document to look in
+   * @param {{knownPath?: string}} [options] `knownPath` is where this region was
+   *   the last time anything actually FOUND it, which is not where it was minted.
+   *
+   *   WHY THAT MATTERS, and it is the queued-edits problem rather than a detail.
+   *   Four comments are made against one page. The agent applies the first edit,
+   *   which deletes a block; everything below it shifts up. The remaining three
+   *   references still bind, because they bind on their own words. But their
+   *   stored PATHS are now wrong, and nothing has said so. Apply a second edit
+   *   that rewords one of them and its text is gone too, so the only thing left
+   *   is a path from before a deletion that moved it.
+   *
+   *   Ken: "before the edit it was d1>d3>s2 and after the edit it was d1>d3>s4".
+   *   Refreshing it while the text still matches is how the second fact gets
+   *   known, and it has to happen on every successful bind rather than when
+   *   something has already gone wrong, because by then there is nothing left to
+   *   ask. It is the same shape as his answer about undo: commit constantly.
+   */
+  function bestGuess(ref, root, options) {
     var reference = ref || {};
-    if (!reference.fingerprint && !reference.path && !reference.attr) return { element: null };
+    var known = (options && options.known) || null;
+    var knownPath = (options && options.knownPath) || (known && known.path) || null;
+    var knownPrint = known ? known.fingerprint : null;
+    if (!reference.fingerprint && !reference.path && !knownPath && !knownPrint && !reference.attr) {
+      return { element: null };
+    }
     var scope = anchor.scopeOf(root, null);
     if (!scope) return { element: null };
 
     var scored = [];
     anchor.eachElement(scope, function (node) {
-      var got = scoreAgainst(reference, node, scope);
+      var got = scoreAgainst(reference, node, scope, knownPath, knownPrint);
       if (got.score <= 0) return;
       scored.push({ node: node, score: got.score, position: got.position, reasons: got.reasons });
     });
@@ -218,19 +278,175 @@
     var top = scored[0];
     var next = scored.length > 1 ? scored[1] : null;
     if (top.score < FLOOR) return { element: null, score: top.score, runnerUp: next ? next.score : 0 };
+
     if (next && top.score - next.score < MARGIN) {
+      // IDENTITY COULD NOT SEPARATE THEM, so ask where they are. Ken: "ref.path
+      // should be used to get to the right region, and then from there we should
+      // look more deeply to ensure we're working on the right thing." This is the
+      // other half of that: looking deeply has been done, it came back tied
+      // because the candidates really are alike, and the stored path is the only
+      // fact left.
+      //
+      // A path match is used here and nowhere else in the scoring, and the
+      // difference matters. It is not a number added to a total, it is one
+      // question with a yes or no answer: is exactly one of the tied candidates
+      // standing where this region stood. Two of them cannot both be.
+      //
+      // IT IS ALLOWED TO BE WRONG, and it is marked so the rail can say so. If
+      // the page reordered, the element now standing in that slot is a different
+      // one, and this points at it. Ken again, on that trade: "for the moment
+      // when the edit needs to be made, it does work ... but anything that's
+      // reordered or deleted, then after that this thing no longer works." True.
+      // The alternative is pointing at nothing, which is what the reviewer has
+      // been getting, and a mark in the wrong place can be seen and dismissed
+      // where an absent one cannot. Nothing here places a write either way.
+      var tied = scored.filter(function (candidate) {
+        return top.score - candidate.score < MARGIN;
+      });
+      var onPath = tied.filter(function (candidate) {
+        // Either remembered place qualifies. An ordinal match alone does not:
+        // that is a fact about one render and it is worth 5.
+        if (candidate.position < WEIGHT.PATH_MINTED) return false;
+        // THE REGION WAS DELETED AND EVERYTHING SHIFTED UP, which looks exactly
+        // like the region still being here until you read what is standing in
+        // its place. If that is the text we remembered as this region's
+        // NEIGHBOUR, then the neighbour has moved into the slot and the region
+        // itself is gone. Pointing at it would tell the reviewer their comment
+        // is on a paragraph that no longer exists, which is worse than pointing
+        // at nothing, because nothing is visibly nothing.
+        var here = textish(candidate.node && candidate.node.textContent);
+        if (!here) return true;
+        return here !== textish(reference.prefix) && here !== textish(reference.suffix);
+      });
+      if (onPath.length === 1) {
+        return {
+          element: onPath[0].node,
+          score: onPath[0].score,
+          runnerUp: next.score,
+          reasons: onPath[0].reasons.concat(["and it is the one still standing in that place"]),
+          via: "position"
+        };
+      }
       return { element: null, score: top.score, runnerUp: next.score };
     }
+
     return {
       element: top.node,
       score: top.score,
       runnerUp: next ? next.score : 0,
-      reasons: top.reasons
+      reasons: top.reasons,
+      via: "identity"
     };
+  }
+
+  /**
+   * The gap a removed region left behind, so the reviewer can be shown WHERE.
+   *
+   * Ken, on trying to identify something that has been deleted: "you only need
+   * to identify it before you've removed it. After you've removed it, you don't
+   * need to identify it ... trying to identify a removed element, you can't even
+   * do that with an ID." Exactly so, and that is why bestGuess refuses here: no
+   * fingerprint, no path and no injected marker can find a node that is not in
+   * the document. The question has no answer.
+   *
+   * A different question does have one. "The better UX would be to show where it
+   * was deleted, but that would be tagged to something else, not the removed
+   * element." The something else is already stored: the reference kept the text
+   * of its neighbours when it was minted, and a neighbour that survived the
+   * deletion is findable by exactly the machinery the region itself used.
+   *
+   * So this answers "your passage was here", never "here is your passage". It
+   * places no write, and the rail has to say the region is gone rather than
+   * letting a mark on the neighbour imply it is still there.
+   *
+   * @returns {{element, side}|null} the surviving neighbour and which side of
+   *   the gap it sat on, or null when both neighbours went too.
+   */
+  function whereItWas(ref, root) {
+    var reference = ref || {};
+    var sides = [
+      { side: "after", text: reference.suffix },
+      { side: "before", text: reference.prefix }
+    ];
+    for (var i = 0; i < sides.length; i += 1) {
+      var text = textish(sides[i].text);
+      if (!text) continue;
+      // The real engine, not a second opinion about what a match is: innermost
+      // element wins, and two candidates are no answer.
+      var verdict = anchor.resolve(
+        { probe: text, probe_kind: "text", prefix: "", suffix: "", context_level: 0 },
+        root
+      );
+      if (verdict && verdict.element) return { element: verdict.element, side: sides[i].side };
+    }
+    return null;
+  }
+
+  /**
+   * The three answers a card can honestly give about where its region went.
+   *
+   * Today there is one message for all of them: "could not be safely matched to
+   * this version of the page", which is where this whole argument started. It is
+   * true and it is useless, because it does not separate a passage the agent
+   * REWORDED from one the agent DELETED, and those want different things from
+   * the reviewer.
+   *
+   * Ken, arriving at it through the reference's path: "before the edit it was
+   * d1>d3>s2 and after the edit it was d1>d3>s4", and then "or d1>d3>s2 to
+   * d1>d3>deleted". The second one is the interesting half. A path that ends in
+   * a tombstone is not a failure to look, it is a finding.
+   *
+   * The evidence for that finding is already here. A region is REMOVED, rather
+   * than merely unfound, when its neighbours are still on the page and the place
+   * it used to sit is now occupied by one of them. That is the same shift-up
+   * that bestGuess refuses to point at, read as information instead of as a
+   * hazard.
+   *
+   * @returns {{state: "found"|"removed"|"unknown", element?, via?, gap?}}
+   */
+  function verdictFor(ref, root, options) {
+    var guess = bestGuess(ref, root, options);
+    if (guess.element) return { state: "found", element: guess.element, via: guess.via };
+
+    var gap = whereItWas(ref, root);
+    if (gap) return { state: "removed", gap: gap };
+
+    // The neighbours went too, or nothing here resembles any of it. Either way
+    // there is nothing to say beyond that, and saying more would be inventing.
+    return { state: "unknown" };
   }
 
   return {
     WEIGHT: WEIGHT,
+    whereItWas: whereItWas,
+    verdictFor: verdictFor,
+    /**
+     * Where this region is NOW, to be kept until the next successful bind.
+     *
+     * Called after the strict engine binds, which is the only moment the answer
+     * is known to be right. Returns null when nothing bound, so a caller cannot
+     * accidentally record a guess as a fact.
+     */
+    placeOf: function (element, root) {
+      if (!element) return null;
+      var scope = anchor.scopeOf(root, null);
+      return scope ? anchor.pathOf(element, scope) : null;
+    },
+
+    /**
+     * Everything worth remembering about where and what this region is NOW.
+     *
+     * Taken after a successful bind, which is the only moment it is known to be
+     * right, and taken again after every edit that lands while the region can
+     * still be found. A region whose words an edit destroys keeps the snapshot
+     * from just before that edit, which is the most recent true thing about it.
+     */
+    snapshot: function (element, root) {
+      if (!element) return null;
+      var scope = anchor.scopeOf(root, null);
+      if (!scope) return null;
+      return { path: anchor.pathOf(element, scope), fingerprint: anchor.fingerprintOf(element, scope) };
+    },
     FLOOR: FLOOR,
     MARGIN: MARGIN,
     scoreAgainst: scoreAgainst,

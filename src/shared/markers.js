@@ -50,6 +50,21 @@
   // written by the tool and never stripped on capture.
   var AUTHOR_REGION_ATTR = "data-review-region";
 
+  // IDENTITY WE ASSIGN, rather than identity we infer.
+  //
+  // Written onto the live element the moment the reviewer touches it, which
+  // costs nothing: the layer owns the browser DOM. Everything else in the
+  // anchor engine is an attempt to recognise an element again from what it
+  // happens to look like; this is the one signal that is true by construction,
+  // because we put it there.
+  //
+  // It is a tool attribute, so cleanMarkup strips it from before_html and
+  // after_html like every other one (R33). That is deliberate: the stamp is not
+  // the reviewer's content and must never read as part of it. It reaches an
+  // agent as its own field instead, which is also what an agent needs in order
+  // to write it into the source.
+  var STAMP_ATTR = "data-lahe-id";
+
   function isToolAttrName(name) {
     if (typeof name !== "string") return false;
     return name.toLowerCase().indexOf(TOOL_ATTR_PREFIX) === 0;
@@ -93,6 +108,7 @@
 
   var api = {
     TOOL_ATTR: TOOL_ATTR,
+    STAMP_ATTR: STAMP_ATTR,
     TOOL_ATTR_PREFIX: TOOL_ATTR_PREFIX,
     TOOL_CLASS_PREFIX: TOOL_CLASS_PREFIX,
     ROLE_CHROME: ROLE_CHROME,

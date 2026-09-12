@@ -129,8 +129,44 @@ test("two elements that look equally like the target produce no answer at all", 
     children: [el("main", { children: [el("ul", { children: [swappedSecond, swappedFirst] })] })]
   });
 
+  // THE WRITE PATH STILL REFUSES, and that is the part that must never move.
+  assert.equal(
+    anchor.resolve(ref, swappedBody).element,
+    null,
+    "nothing may be written into either of two things that cannot be told apart"
+  );
+
+  // Pointing answers, because identity tied and exactly one of them is standing
+  // where the region stood. It is the WRONG row: they swapped, so the row in
+  // that slot is the other one. That is a known and accepted trade for a mark on
+  // screen, which the reviewer can see and dismiss, and it is marked as reached
+  // by position so the rail can say so rather than claiming certainty.
   const guess = pointing.bestGuess(ref, swappedBody);
-  assert.equal(guess.element, null, "a near tie is refused, not resolved to the higher number");
+  assert.equal(guess.via, "position", "and it says that is how it got there");
+  assert.equal(
+    guess.element.textContent,
+    "Delta",
+    "which is the row now standing in that slot, and NOT the one the reviewer meant"
+  );
+
+  // With nothing standing in that slot either, there is no answer at all.
+  // A second list ahead of them, so the rows genuinely are not where the region
+  // was: their path is now ul:2, and nothing at all stands at ul:1>li:1.
+  const shuffled = el("body", {
+    children: [
+      el("main", {
+        children: [
+          el("ul", { children: [el("li", { attrs: { class: "other" }, text: "unrelated" })] }),
+          el("ul", { children: [twin("Gamma"), twin("Delta")] })
+        ]
+      })
+    ]
+  });
+  assert.equal(
+    pointing.bestGuess(ref, shuffled).element,
+    null,
+    "a tie with no one in the remembered place is still refused"
+  );
 });
 
 test("a name the author wrote wins on its own, and is the reason it wins", () => {
@@ -242,8 +278,12 @@ test("identical cards with nothing to tell them apart still fail, rather than gu
 
   const ref = anchor.mint({ element: wall.approves[2], root: wall.body });
 
-  assert.equal(ref.ok, false, "no ring separates them, so nothing is minted");
-  assert.equal(ref.failure.failureCode, "ANCHOR_AMBIGUOUS");
+  // The click is kept, because the reviewer really did point at one of them.
+  // What no ring could do is make the WORDS find it again, and that is what is
+  // recorded, so the write path refuses and the agent is told.
+  assert.equal(ref.ok, true);
+  assert.equal(ref.text_unique, false, "no ring separates them");
+  assert.equal(anchor.resolve(ref, wall.body).element, null, "so nothing may be written");
 });
 
 // ---------------------------------------------------------------------------
@@ -301,8 +341,8 @@ test("a page where nothing is distinguishable fails fast rather than never", () 
   const ref = anchor.mint({ element: wall.targets[312], root: body });
   const spent = Date.now() - started;
 
-  assert.equal(ref.ok, false, "nothing distinguishes them, so nothing is minted");
-  assert.equal(ref.failure.failureCode, "ANCHOR_AMBIGUOUS");
+  assert.equal(ref.text_unique, false, "nothing distinguishes them by text");
+  assert.equal(ref.not_unique_reason, "not_unique_in_containing_block");
   assert.ok(spent < 8000, "and it reached that answer in " + spent + "ms, not in a quarter of a minute");
 });
 
