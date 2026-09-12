@@ -472,3 +472,145 @@ test("a stored note holding many copies of either sentence collapses to one of e
   const clean = { [record.FIELD.NOTE]: record.PAGE_CHECK_FORMAT_NOTE };
   assert.equal(record.collapsePageCheckNote(clean), clean, "nothing to collapse returns the same object");
 });
+
+// ---------------------------------------------------------------------------
+// S7: the change landed and the id did not
+// ---------------------------------------------------------------------------
+//
+// The reviewer's page wrote data-lahe-id onto the element the moment they
+// touched it, and the contract asks the agent to carry that attribute into the
+// source. An agent that rewrites the words and drops the attribute leaves a
+// page that READS right and can only be found by its words again, which is the
+// one thing the stamp exists to stop. The check reopens it once, through the
+// same guard the other two sentences go through, and asks for the id.
+//
+// Ken, 2026-09-11: "I would much rather have graceful failures than quiet
+// failures or destroying work."
+
+function stampedEdit(stamp, overrides) {
+  return handledEdit(
+    Object.assign(
+      { region: { ref: { id: "ref_edit", probe: null, stamp: stamp }, label: "Stamped region", lost: null } },
+      overrides || {}
+    )
+  );
+}
+
+/** The document as the check reads it: its markup, and the ids on it. */
+function rebuilt(passage, stamps) {
+  return {
+    pageHtml: pageHtml("<p>" + passage + "</p>"),
+    stamps: (stamps || []).reduce(function (set, id) {
+      set[id] = true;
+      return set;
+    }, {})
+  };
+}
+
+test("S7: the words are on the page and no element carries the id, so it reopens", () => {
+  const item = stampedEdit("e-1a2b3c");
+  const built = rebuilt(AFTER, ["e-something-else"]);
+  assert.equal(replay.pageCheckReasonFor(item, page(AFTER), built), replay.PAGE_CHECK_REASON.STAMP);
+  assert.equal(replay.pageCheckNoteFor(item, page(AFTER), built), replay.STAMP_LOST_NOTE);
+  assert.equal(replay.isRevertedHandledEdit(item, page(AFTER), built), true);
+});
+
+test("S7: the id in the rebuilt source is the whole ask, and it closes the check", () => {
+  const item = stampedEdit("e-1a2b3c");
+  const carried = rebuilt(AFTER, ["e-1a2b3c"]);
+  assert.equal(replay.pageCheckReasonFor(item, page(AFTER), carried), null);
+  assert.equal(replay.pageCheckNoteFor(item, page(AFTER), carried), null);
+});
+
+test("S7: a record with no stamp is untouched, because nothing went missing", () => {
+  // Every item minted before the element was ever stamped. An absent id cannot
+  // have failed to land, and reopening these would reopen the whole review.
+  const item = handledEdit();
+  assert.equal(replay.pageCheckReasonFor(item, page(AFTER), rebuilt(AFTER, [])), null);
+  assert.equal(replay.pageCheckReasonFor(stampedEdit(null), page(AFTER), rebuilt(AFTER, [])), null);
+  assert.equal(replay.pageCheckReasonFor(stampedEdit(""), page(AFTER), rebuilt(AFTER, [])), null);
+});
+
+test("S7: with no id list read off the document, the absence is not evidence", () => {
+  // pageCheckOptions hands back null for a document it cannot query. A check
+  // that guessed there would reopen every stamped item on the page.
+  const item = stampedEdit("e-1a2b3c");
+  assert.equal(replay.pageCheckReasonFor(item, page(AFTER), { pageHtml: pageHtml("<p>" + AFTER + "</p>") }), null);
+  assert.equal(replay.pageCheckReasonFor(item, page(AFTER)), null);
+  assert.equal(replay.pageCheckReasonFor(item, page(AFTER), { stamps: null }), null);
+});
+
+test("S7: a revert is still a revert, and says so rather than talking about ids", () => {
+  // Both halves hold at once: the words are gone AND the id never landed. The
+  // reviewer's change coming back is the bigger news, so it wins.
+  const item = stampedEdit("e-1a2b3c");
+  assert.equal(replay.pageCheckReasonFor(item, page(BEFORE), rebuilt(BEFORE, [])), replay.PAGE_CHECK_REASON.REVERTED);
+});
+
+test("S7: lost formatting is still lost formatting, for the same reason", () => {
+  const item = stampedEdit("e-1a2b3c", { after: ITALIC_AFTER, after_html: ITALIC_AFTER_HTML });
+  const plain = rebuilt(ITALIC_AFTER, []);
+  assert.equal(replay.pageCheckReasonFor(item, page(ITALIC_AFTER), plain), replay.PAGE_CHECK_REASON.FORMATTING);
+});
+
+test("S7: it reopens ONCE, through the same guard the other two sentences use", () => {
+  const item = stampedEdit("e-1a2b3c");
+  const built = rebuilt(AFTER, []);
+  const pageText = page(AFTER);
+
+  // Pass one: the id is not in the source, so the item goes back to the agent.
+  assert.deepEqual(replay.revertedHandledEditIds([item], pageText, built), [item[record.FIELD.ID]]);
+  const reopened = record.pageCheckReopenOf(item, replay.STAMP_LOST_NOTE, "2026-09-11T08:00:00.000Z");
+  assert.equal(reopened[record.FIELD.STATE], record.STATE.READY);
+  assert.match(reopened[record.FIELD.NOTE], /data-lahe-id stamp did not reach the source/);
+
+  // Pass two: the agent answers handled and the page has not moved. That reply
+  // IS the answer to this reopen, and asking again is the loop.
+  const answered = answeredHandled(reopened, "2026-09-11T08:02:00.000Z");
+  assert.equal(replay.isRevertedHandledEdit(answered, pageText, built), false);
+  assert.deepEqual(replay.revertedHandledEditIds([answered], pageText, built), []);
+});
+
+test("S7: the sentence names the check, asks for the id, and carries no page text", () => {
+  assert.equal(
+    replay.STAMP_LOST_NOTE,
+    "Reopened by the page check: the change landed but the data-lahe-id stamp did not reach the source. " +
+      "Write the stamp onto that element so the next build reproduces it, or reply not_handled saying why."
+  );
+  assert.match(replay.STAMP_LOST_NOTE, /^Reopened by the page check:/);
+  assert.equal(replay.STAMP_LOST_NOTE.indexOf(BEFORE), -1);
+  assert.equal(replay.STAMP_LOST_NOTE.indexOf(AFTER), -1);
+  assert.notEqual(replay.STAMP_LOST_NOTE, replay.REVERTED_EDIT_NOTE);
+  assert.notEqual(replay.STAMP_LOST_NOTE, replay.FORMATTING_LOST_NOTE);
+  // And collapsePageCheckNote knows it, so a stored note never stacks it up.
+  const many = new Array(5).fill(record.PAGE_CHECK_STAMP_NOTE).join("\n\n");
+  const collapsed = record.collapsePageCheckNote({ [record.FIELD.NOTE]: many });
+  assert.equal(collapsed[record.FIELD.NOTE].split(record.PAGE_CHECK_STAMP_NOTE).length - 1, 1);
+});
+
+test("S7: each sentence brings its own line for the card", () => {
+  assert.match(replay.pageCheckNoticeFor(replay.STAMP_LOST_NOTE), /id for this element is not in the source/);
+  assert.match(replay.pageCheckNoticeFor(replay.FORMATTING_LOST_NOTE), /bold or italic/);
+  assert.match(replay.pageCheckNoticeFor(replay.REVERTED_EDIT_NOTE), /undone on the page/);
+  // A note nobody has a line for still says the item is open again.
+  assert.match(replay.pageCheckNoticeFor(null), /The item is open again/);
+});
+
+test("pageCheckOptions reads the document's ids once, beside its markup", () => {
+  const stamped = { getAttribute: () => "e-1a2b3c" };
+  const blank = { getAttribute: () => "" };
+  const body = {
+    innerHTML: pageHtml("<p>" + AFTER + "</p>"),
+    querySelectorAll: () => [stamped, blank]
+  };
+  const options = replay.pageCheckOptions(body);
+  assert.deepEqual(options.stamps, { "e-1a2b3c": true }, "an empty attribute is not an id");
+  assert.equal(replay.pageCheckReasonFor(stampedEdit("e-1a2b3c"), page(AFTER), options), null);
+  assert.equal(
+    replay.pageCheckReasonFor(stampedEdit("e-gone"), page(AFTER), options),
+    replay.PAGE_CHECK_REASON.STAMP
+  );
+  // A document with no way to be queried says nothing rather than guessing.
+  assert.equal(replay.pageCheckOptions({ innerHTML: "<p>x</p>" }).stamps, null);
+  assert.equal(replay.pageCheckOptions(null).stamps, null);
+});

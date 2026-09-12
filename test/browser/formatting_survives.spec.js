@@ -55,14 +55,18 @@ const ITALIC_WORD = "drafts";
 const P_AFTER_PLAIN_HTML = P_AFTER;
 const P_AFTER_ITALIC_HTML = "The coach <em>drafts</em> the plan each week.";
 
-function docHtml(p) {
+// `stamp` is the data-lahe-id the reviewer's page wrote onto the paragraph. An
+// agent that edits the source is asked to carry it across, so a rebuild that
+// stands in for a well-behaved agent writes it back (S7).
+function docHtml(p, stamp) {
+  const id = stamp ? ' data-lahe-id="' + stamp + '"' : "";
   return [
     "<!doctype html>",
     '<html lang="en">',
     '<head><meta charset="utf-8" /><title>Steady Pace</title></head>',
     "<body>",
     "<main>",
-    '<p id="p">' + p + "</p>",
+    '<p id="p"' + id + ">" + p + "</p>",
     '<p id="q">Runners come back too fast after a layoff.</p>',
     "</main>",
     "</body>",
@@ -152,8 +156,8 @@ test.describe("an edit's bold and italic survive the rebuild that dropped them",
   }
 
   /** A build: the source is rewritten, and the page reloads itself off it. */
-  function rebuild(p) {
-    fs.writeFileSync(world.pagePath, docHtml(p));
+  function rebuild(p, stamp) {
+    fs.writeFileSync(world.pagePath, docHtml(p, stamp));
     // The mtime is the reload signal, and a coarse-timestamp filesystem can
     // give two quick writes the same one.
     const later = new Date(Date.now() + 10000);
@@ -356,7 +360,13 @@ test.describe("an edit's bold and italic survive the rebuild that dropped them",
 
     const made = await handEditWithItalic(page, "p");
 
-    rebuild(P_AFTER_ITALIC_HTML);
+    // What a well-behaved agent writes: the emphasis AND the id the page put on
+    // the element, so the next build is found with certainty rather than by its
+    // words. Without the id the page check reopens the item and says so (S7),
+    // which is test/browser/graceful_failure.spec.js.
+    const stamp = await page.evaluate(() => document.getElementById("p").getAttribute("data-lahe-id"));
+    expect(stamp, "the reviewer's hand edit stamped the paragraph").toBeTruthy();
+    rebuild(P_AFTER_ITALIC_HTML, stamp);
     reply(made.id, made.rev);
     await pollPage(
       page,

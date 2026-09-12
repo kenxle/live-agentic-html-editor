@@ -603,9 +603,18 @@
     "Reopened by the page check: the words landed but the bold or italic in this edit did not. " +
     "Carry the formatting into the source, or reply not_handled saying why.";
 
+  // The check's third sentence. The words of the edit are on the page and the
+  // element they are on carries no data-lahe-id, so the agent edited the source
+  // without carrying the stamp into it. Nothing has to be reapplied and nothing
+  // is wrong with the rendering: the id is what lets the next build be found
+  // with certainty instead of guessed at, and it is missing (S7).
+  var PAGE_CHECK_STAMP_NOTE =
+    "Reopened by the page check: the change landed but the data-lahe-id stamp did not reach the source. " +
+    "Write the stamp onto that element so the next build reproduces it, or reply not_handled saying why.";
+
   // Every sentence the page check writes. collapsePageCheckNote reads this
   // list, so a new one is collapsed the day it is added.
-  var PAGE_CHECK_NOTES = [PAGE_CHECK_NOTE, PAGE_CHECK_FORMAT_NOTE];
+  var PAGE_CHECK_NOTES = [PAGE_CHECK_NOTE, PAGE_CHECK_FORMAT_NOTE, PAGE_CHECK_STAMP_NOTE];
 
   /**
    * The carried note with `sentence` on the end, AT MOST ONCE.
@@ -1347,6 +1356,7 @@
     acceptPageText: acceptPageText,
     PAGE_CHECK_NOTE: PAGE_CHECK_NOTE,
     PAGE_CHECK_FORMAT_NOTE: PAGE_CHECK_FORMAT_NOTE,
+    PAGE_CHECK_STAMP_NOTE: PAGE_CHECK_STAMP_NOTE,
     PAGE_CHECK_NOTES: PAGE_CHECK_NOTES,
     pageCheckReopen: pageCheckReopen,
     stampPageCheckReopen: stampPageCheckReopen,

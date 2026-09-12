@@ -742,6 +742,9 @@
   // not. Authored in record.js beside the first one, for the same reason.
   var FORMATTING_LOST_NOTE = record.PAGE_CHECK_FORMAT_NOTE;
 
+  // And the third: the words landed and the id did not. Same reason again.
+  var STAMP_LOST_NOTE = record.PAGE_CHECK_STAMP_NOTE;
+
   // The backstop, independent of the stamp rule below. Two checks that both look
   // at the same item cannot reopen it twice inside this window, whatever they
   // each believe about the record. Sixty seconds because the loop that caused
@@ -775,10 +778,10 @@
     return pageCheckReasonFor(item, pageText, options) !== null;
   }
 
-  // The two things the check can find, and the sentence each one carries. A
+  // The three things the check can find, and the sentence each one carries. A
   // caller that only wants a yes or no asks isRevertedHandledEdit; one that has
   // to write the note asks pageCheckNoteFor.
-  var CHECK_REASON = { REVERTED: "reverted", FORMATTING: "formatting" };
+  var CHECK_REASON = { REVERTED: "reverted", FORMATTING: "formatting", STAMP: "stamp" };
 
   /**
    * Why the page check would reopen this item, or null.
@@ -816,7 +819,9 @@
     // and a handled change that is only half on the page is still not on the
     // page. Compared and ignored: exactly what formattingLost compares and
     // ignores, over the whole document's markup rather than one block's.
-    return formattingMissingFromPage(item, options) ? CHECK_REASON.FORMATTING : null;
+    if (formattingMissingFromPage(item, options)) return CHECK_REASON.FORMATTING;
+    // The words landed and the ID DID NOT. See stampMissingFromPage.
+    return stampMissingFromPage(item, options) ? CHECK_REASON.STAMP : null;
   }
 
   /** The sentence a page-check reopen of this item should carry, or null. */
@@ -824,7 +829,62 @@
     var reason = pageCheckReasonFor(item, pageText, options);
     if (reason === CHECK_REASON.REVERTED) return REVERTED_EDIT_NOTE;
     if (reason === CHECK_REASON.FORMATTING) return FORMATTING_LOST_NOTE;
+    if (reason === CHECK_REASON.STAMP) return STAMP_LOST_NOTE;
     return null;
+  }
+
+  // What the rail says on the card when a check reopens an item, one line per
+  // sentence. It lives beside the sentences rather than in the caller, so a
+  // fourth reason cannot ship with the wrong notice on it.
+  var CHECK_NOTICES = {};
+  CHECK_NOTICES[REVERTED_EDIT_NOTE] = "This change was undone on the page. The item is open again.";
+  CHECK_NOTICES[FORMATTING_LOST_NOTE] =
+    "The bold or italic in this change is not on the page. The item is open again.";
+  CHECK_NOTICES[STAMP_LOST_NOTE] = "The id for this element is not in the source. The item is open again.";
+
+  /** The rail's line for a page-check note, defaulting to the revert one. */
+  function pageCheckNoticeFor(note) {
+    return CHECK_NOTICES[note] || CHECK_NOTICES[REVERTED_EDIT_NOTE];
+  }
+
+  /**
+   * The stamp this record was minted with, or null.
+   *
+   * The reference's shape belongs to the anchor engine, and record.js keeps it
+   * opaque on purpose, so the one place replay reaches into it is here.
+   */
+  function stampOf(item) {
+    var region = item && item[record.FIELD.REGION];
+    var ref = region && region.ref;
+    var stamp = ref && ref.stamp;
+    return typeof stamp === "string" && stamp ? stamp : null;
+  }
+
+  /**
+   * THE CHANGE LANDED AND THE ID DID NOT (S7).
+   *
+   * The reviewer's page wrote `data-lahe-id` onto the element the moment they
+   * touched it, and the agent editing the source is asked to carry it across so
+   * the next build reproduces it. An agent that edits the words and drops the
+   * attribute leaves a page that reads correctly and can only be found by its
+   * words again, which is the thing the stamp exists to stop.
+   *
+   * Three things hold it back, and each one is a case where saying nothing is
+   * the honest answer:
+   *
+   *   no stamp list   the caller could not read the document (pageCheckOptions
+   *                   was handed no root), so the absence is not evidence.
+   *   no stamp        the record was minted before the element was ever
+   *                   stamped. There is nothing to have gone missing.
+   *   stamp present   an element carries it, which is the whole ask.
+   */
+  function stampMissingFromPage(item, options) {
+    var opts = options || {};
+    var stamps = opts.stamps && typeof opts.stamps === "object" ? opts.stamps : null;
+    if (!stamps) return false;
+    var stamp = stampOf(item);
+    if (!stamp) return false;
+    return !Object.prototype.hasOwnProperty.call(stamps, stamp);
   }
 
   // Is the emphasis this edit asks for absent from the whole page's markup?
@@ -911,8 +971,29 @@
   function pageCheckOptions(root, options) {
     var opts = options || {};
     var out = { pageHtml: root && typeof root.innerHTML === "string" ? root.innerHTML : null };
+    // Every id the document carries, read once for the whole sweep the way the
+    // markup is. A document that cannot be queried hands back null, which
+    // stampMissingFromPage reads as "no evidence" rather than as "missing".
+    out.stamps = stampsOn(root);
     if (typeof opts.now === "number") out.now = opts.now;
     return out;
+  }
+
+  /** The set of data-lahe-id values in the document, or null if none was read. */
+  function stampsOn(root) {
+    if (!root || typeof root.querySelectorAll !== "function") return null;
+    var found = {};
+    var nodes;
+    try {
+      nodes = root.querySelectorAll("[" + markers.STAMP_ATTR + "]");
+    } catch (err) {
+      return null;
+    }
+    for (var i = 0; i < nodes.length; i += 1) {
+      var value = nodes[i].getAttribute(markers.STAMP_ATTR);
+      if (typeof value === "string" && value) found[value] = true;
+    }
+    return found;
   }
 
   // What the card says when branch three fires. Written once here so the
@@ -1584,6 +1665,14 @@
   // matches and several matches are the same verdict (nothing is written) and
   // they are DIFFERENT situations, so they do not get the same sentence.
   function lostReason(verdict) {
+    // THE STAMP'S OWN TWO SENTENCES (S1, S2). An id on two elements and an id
+    // over different words are both refusals the text ladder has no words for,
+    // and the engine already wrote each one for the reviewer to read. Passing
+    // them through is what keeps the card from saying "could not be matched"
+    // over a page where the id was found and was the problem.
+    if (verdict && verdict.via === "stamp" && isStampReason(verdict.reason)) {
+      return verdict.reason + ", so nothing was written or moved";
+    }
     if (verdict.reason === uniqueness.REASON.AMBIGUOUS) {
       return (
         "more than one place on this page matches this item (" +
@@ -1595,6 +1684,18 @@
       return "a structurally similar place is still present, but its text does not match, so nothing was written or moved";
     }
     return "this feedback could not be safely matched to the current page, so nothing was written or moved";
+  }
+
+  // Is this one of the engine's stamp refusals rather than a text verdict? Read
+  // off the engine's own table, so a third sentence there needs nothing here.
+  function isStampReason(reason) {
+    var table = anchorEngine && anchorEngine.STAMP_REASON;
+    if (!table || typeof reason !== "string") return false;
+    var names = Object.keys(table);
+    for (var i = 0; i < names.length; i += 1) {
+      if (table[names[i]] === reason) return true;
+    }
+    return false;
   }
 
   // Spelled once, in failures.js, because tab_done clears the same badges when
@@ -2143,10 +2244,12 @@
     applyRecord: applyRecord,
     REVERTED_EDIT_NOTE: REVERTED_EDIT_NOTE,
     FORMATTING_LOST_NOTE: FORMATTING_LOST_NOTE,
+    STAMP_LOST_NOTE: STAMP_LOST_NOTE,
     CHECK_REOPEN_COOLDOWN_MS: CHECK_REOPEN_COOLDOWN_MS,
     isRevertedHandledEdit: isRevertedHandledEdit,
     pageCheckReasonFor: pageCheckReasonFor,
     pageCheckNoteFor: pageCheckNoteFor,
+    pageCheckNoticeFor: pageCheckNoticeFor,
     PAGE_CHECK_REASON: CHECK_REASON,
     revertedHandledEditIds: revertedHandledEditIds,
     pageTextOf: pageTextOf,

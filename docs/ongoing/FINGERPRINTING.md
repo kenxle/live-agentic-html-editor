@@ -543,6 +543,34 @@ fix is what stops the next page from needing the same favor.
 | 6b | the rail actually using any of this | nothing is wired yet |
 | (none) | a page whose class names are generated per build | no case exists |
 
+### The graceful-failure net (S1 to S8)
+
+The stamp is the top rung of the write ladder, so it is also the newest way to
+be confidently wrong. Ken, 2026-09-11: "I would much rather have graceful
+failures than quiet failures or destroying work." Every case below refuses the
+write, says why in words the reviewer reads, and leaves the page alone. Each row
+names the test that proves it, so this table and the gate cannot drift apart.
+
+| # | The hazard | Proved by |
+| --- | --- | --- |
+| S1 | the same id on two elements | unit `anchor_cases.test.js`: "S1: two elements carry the same id, so nothing is written". Browser `graceful_failure.spec.js`: "S1: the same id on two elements writes to neither, and says which kind of no" |
+| S2 | the id is over words that are not the reviewer's | unit `anchor_cases.test.js`: "S2: the id is on an element whose words are not the reviewer's, so nothing is written". Browser `graceful_failure.spec.js`: "S2: the id over somebody else's words writes nothing, even where the words still are" |
+| S3 | a stale id: the id is gone and so are the words | unit `anchor_cases.test.js`: "S3: an id the page no longer has falls through to the words, not to a refusal" |
+| S4 | no id, and the words are on the page twice | unit `anchor_cases.test.js`: "S4: no id on the page and the words twice over refuses, exactly as before". Browser `graceful_failure.spec.js`: "S4: no id and the words twice over refuses, exactly as it did before ids existed" |
+| S5 | no id, the words once, and the tie-breakers disagree | unit `anchor_cases.test.js`: "S5: the words moved to a different tag under a different parent, and the write still lands" and "S5: the words twice over refuse, however loudly the tie-breakers point at one of them" |
+| S6 | the reviewer is mid-edit in the block when the rebuild lands | browser `graceful_failure.spec.js`: "S6: a rebuild under an open edit waits, and then collides rather than overwriting" |
+| S7 | the agent replied handled and the id never reached the source | unit `reverted_edit.test.js`: the seven tests beginning "S7:". Browser `graceful_failure.spec.js`: "S7: handled, and the id never reached the source: reopened once, and once only" |
+| S8 | a probable place (the point ladder's guess) | unit `anchor_cases.test.js`: "S8: every shape that produces a guess produces a refusal from the write ladder" and "S8: a guess is not shaped like a verdict, so no caller can read one as the other" |
+
+Plus the negative of the whole list: `anchor_cases.test.js`'s "S1/S2 negative: a
+unique id over the right words writes, as it always did", and every case above
+it in the file, unchanged.
+
+Case 4b in the table above is closed by the same work. The browser stamped a
+record lost and the agent never heard: replay's persist hook now posts the
+record to the helper, so `review.json` carries the lost code and its sentence.
+Each browser case asserts the projection as well as the card.
+
 ---
 
 ## Open questions, now decided

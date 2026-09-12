@@ -824,3 +824,138 @@ test("the fingerprint chain keeps ancestor ids, not only their classes", () => {
   assert.equal(print.chain[0].id, "second", "two sections of one template are not the same section");
   assert.deepEqual(print.chain[0].classes, ["card"]);
 });
+
+// ---------------------------------------------------------------------------
+// S5: the tie-breakers disagree, and they are still only tie-breakers
+// ---------------------------------------------------------------------------
+//
+// D9, in one sentence: a write needs a unique candidate, and structure and
+// heading corroborate it, never place it. Both halves are asserted here,
+// because each one alone would be a different tool. Corroboration that could
+// overrule would let a moved region be written over; corroboration that could
+// veto would refuse every framework that renames a wrapper class.
+
+test("S5: the words moved to a different tag under a different parent, and the write still lands", () => {
+  // Nothing the reference remembers about the SHAPE of the region survived the
+  // rebuild: it was a p.para__body inside a section.para and it is now an h3
+  // inside an aside. The words are on the page once, which is the only
+  // question a write is allowed to ask.
+  const page = article(WORDS);
+  const ref = anchor.mint({ element: page.paragraphs[2], root: page.body });
+
+  const moved = el("body", {
+    children: [
+      el("main", {
+        children: [
+          el("section", { attrs: { class: "para" }, children: [el("p", { attrs: { class: "para__body" }, text: WORDS[0] })] }),
+          el("aside", { attrs: { class: "pull" }, children: [el("h3", { attrs: { class: "pull__line" }, text: WORDS[2] })] }),
+          el("section", { attrs: { class: "para" }, children: [el("p", { attrs: { class: "para__body" }, text: WORDS[3] })] })
+        ]
+      })
+    ]
+  });
+  const target = moved.children[0].children[1].children[0];
+
+  const verdict = anchor.resolve(ref, moved.body || moved);
+  assert.equal(verdict.bound, true, "unique text is the whole test");
+  assert.equal(verdict.element, target);
+  assert.equal(verdict.corroboration.structure, false, "and it landed with neither tie-breaker agreeing");
+  assert.equal(verdict.corroboration.heading, false);
+});
+
+test("S5: the words twice over refuse, however loudly the tie-breakers point at one of them", () => {
+  // The second copy is the symmetric one: same neighbour above, same neighbour
+  // below. What separates them is exactly and only that the FIRST one is
+  // standing where the reference was minted, which is the corroboration that
+  // is not allowed to decide.
+  const one = article(["A lead-in line.", WORDS[1], "A trailing line."]);
+  const ref = anchor.mint({ element: one.paragraphs[1], root: one.body });
+
+  const twice = article([
+    "A lead-in line.",
+    WORDS[1],
+    "A trailing line.",
+    "A lead-in line.",
+    WORDS[1],
+    "A trailing line."
+  ]);
+  // The first copy really is at the minted path: the tie-breaker is available
+  // and agrees, which is the only way this test means anything.
+  assert.equal(pointing.placeOf(twice.paragraphs[1], twice.body), ref.path, "the path points at the first copy");
+
+  const verdict = anchor.resolve(ref, twice.body);
+  assert.equal(verdict.bound, false, "corroborate, never overrule");
+  assert.equal(verdict.element, null, "and nothing is written");
+  assert.equal(verdict.failureCode, "ANCHOR_AMBIGUOUS");
+
+  // The reviewer is not left with nothing: the mark still has somewhere to go,
+  // and it says it got there by position rather than by recognising anything.
+  assert.equal(pointing.bestGuess(ref, twice.body).via, "position");
+});
+
+// ---------------------------------------------------------------------------
+// S8: a probable place is never a write target
+// ---------------------------------------------------------------------------
+//
+// The point ladder exists because a mark in the wrong place can be seen and
+// dismissed, where an absent one cannot. That trade is only acceptable while
+// the guess cannot reach a write, so the separation is asserted rather than
+// left to a convention about which function a caller happens to call.
+//
+// There is no "this may be wrong" flag on a guess today, and there does not
+// need to be one: the two functions return DIFFERENT SHAPES. A verdict says
+// `bound`, and only uniqueness.js or the stamp can produce it. A guess says
+// `via: "identity"` or `via: "position"`, which resolve has no path to return.
+
+test("S8: every shape that produces a guess produces a refusal from the write ladder", () => {
+  const page = article(WORDS);
+
+  // Four separate ways to end up with a guess and no bind: reworded, restyled,
+  // re-punctuated, and two indistinguishable rows that swapped.
+  const reworded = article([WORDS[0], WORDS[1], "Named the week in the heading instead.", WORDS[3]]);
+  const repunctuated = article([WORDS[0], WORDS[1], "Say which week this is about…", WORDS[3]]);
+  const cases = [
+    { ref: anchor.mint({ element: page.paragraphs[2], root: page.body }), root: reworded.body },
+    { ref: anchor.mint({ element: page.paragraphs[2], root: page.body }), root: repunctuated.body }
+  ];
+
+  cases.forEach(function (each, i) {
+    const guess = pointing.bestGuess(each.ref, each.root);
+    assert.ok(guess.element, "case " + i + ": the mark has somewhere to go");
+    assert.equal(typeof guess.via, "string", "case " + i + ": and it says how it got there");
+
+    const verdict = anchor.resolve(each.ref, each.root);
+    assert.equal(verdict.bound, false, "case " + i + ": and the write ladder says no");
+    assert.equal(verdict.element, null, "case " + i + ": so nothing is written");
+    assert.notEqual(verdict.element, guess.element, "case " + i + ": the guess is not the write target");
+  });
+});
+
+test("S8: a guess is not shaped like a verdict, so no caller can read one as the other", () => {
+  const page = article(WORDS);
+  const ref = anchor.mint({ element: page.paragraphs[2], root: page.body });
+  const reworded = article([WORDS[0], WORDS[1], "Entirely different words now.", WORDS[3]]);
+
+  const guess = pointing.bestGuess(ref, reworded.body);
+  assert.ok(guess.element);
+  assert.equal(guess.bound, undefined, "a guess never claims to be bound");
+  assert.equal(guess.failureCode, undefined, "and it is not a failure either: it is a place to point");
+
+  // And the other direction. resolve says how it got there for exactly one
+  // reason, the stamp, and never for a reason the point ladder could produce.
+  const GUESS_VIAS = ["identity", "position"];
+  const found = anchor.resolve(ref, article(WORDS).body);
+  assert.equal(found.bound, true);
+  assert.equal(GUESS_VIAS.indexOf(found.via), -1, "a bind is never reached the way a guess is");
+
+  const stamps = stamped([WORDS[0], WORDS[1]], [null, "e-one"]);
+  const stampRef = anchor.mint({ element: stamps.paragraphs[1], root: stamps.body });
+  stampRef.stamp = "e-one";
+  const byStamp = anchor.resolve(stampRef, stamps.body);
+  assert.equal(byStamp.via, "stamp", "the one way a verdict names its route");
+  assert.equal(GUESS_VIAS.indexOf(byStamp.via), -1);
+
+  // The refusals name themselves too, and none of them borrows a guess's word.
+  const refused = anchor.resolve(ref, reworded.body);
+  assert.equal(GUESS_VIAS.indexOf(refused.via), -1);
+});

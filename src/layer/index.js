@@ -1077,6 +1077,14 @@
         store.write(reviewId, item);
         refreshItems();
         rail.upsertCard(item);
+        // AND THE HELPER HEARS IT TOO. The lost stamp is the reviewer's answer
+        // on the card and the AGENT'S answer in review.json, and until this
+        // call the second half never left the browser: a record replay knew it
+        // could not place read as healthy in the file the agent works from
+        // (RF19, and the quiet failure Ken named on 2026-09-11). Replay only
+        // persists on a transition, never per pass, so this is one post when
+        // something actually changed.
+        if (sync && typeof sync.recordItem === "function") sync.recordItem(item);
       }
     });
 
@@ -1435,13 +1443,13 @@
         for (var i = 0; i < items.length; i += 1) {
           if (items[i][ns.record.FIELD.ID] === id) item = items[i];
         }
-        var formatting =
-          ns.replay.pageCheckNoteFor(item, pageText, options) === ns.replay.FORMATTING_LOST_NOTE;
+        // Which of the check's sentences this item gets, and the line the card
+        // shows with it. Both come from replay, so a new reason arrives here
+        // already carrying its own words rather than needing a branch added.
+        var note = ns.replay.pageCheckNoteFor(item, pageText, options) || ns.replay.REVERTED_EDIT_NOTE;
         done.reopen(id, {
-          note: formatting ? ns.replay.FORMATTING_LOST_NOTE : ns.replay.REVERTED_EDIT_NOTE,
-          notice: formatting
-            ? "The bold or italic in this change is not on the page. The item is open again."
-            : "This change was undone on the page. The item is open again.",
+          note: note,
+          notice: ns.replay.pageCheckNoticeFor(note),
           pageCheck: true
         });
         counters.revertReopens += 1;
