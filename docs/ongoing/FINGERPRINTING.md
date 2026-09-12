@@ -434,8 +434,8 @@ rebuild because it lives upstream of the build, and it scores decisively.
 | Generated class names | a hashed CSS-module class gets the full 40 points; five other tools built a "does this look generated?" check and we have none |
 | A curly quote replacing a straight one | the normalizer folds whitespace and invisibles, deliberately not typography, because folding it would let a write discard your punctuation fix |
 | Looped generated output | **deferred on purpose.** 73 cards, one card in the source: there is nothing there to fingerprint or stamp |
-| Any of the pointing ladder, in the product | **built and proven, wired to nothing** |
-| The agent is told WHERE the element sits | the record knows (fingerprint chain, path), review.json does not say it. See the L8 case below |
+| Any of the pointing ladder, in the product | wired 2026-09-11: a lost comment or note is painted at its probable place with "probable" on the card (Task 3) |
+| The agent is told WHERE the element sits | done 2026-09-11: review.json carries `region.where`, `region.ordinal`, `region.stamp`, `region.text_unique` (Task 1) |
 
 ### The L8 case: the record knew, the agent was never told (2026-09-09)
 
@@ -539,8 +539,8 @@ fix is what stops the next page from needing the same favor.
 
 | # | | |
 | --- | --- | --- |
-| 4b | `lost` reaching the agent in `review.json` | needs the projection, not just the engine |
-| 6b | the rail actually using any of this | nothing is wired yet |
+| 4b | `lost` reaching the agent in `review.json` | done 2026-09-11: replay's persist hook posts the record on every lost transition (Task 6) |
+| 6b | the rail actually using any of this | done 2026-09-11 (Task 3) |
 | (none) | a page whose class names are generated per build | no case exists |
 
 ### The graceful-failure net (S1 to S8)

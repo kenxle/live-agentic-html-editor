@@ -53,7 +53,7 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
   what the first outside user should hit: the README, the install path, and whether
   the anchoring and stabilization passes come before any wider announcement.
 
-- [ ] @anyone 2026-09-11 LAHE-stabilization-pass -- **A cleanup, architecture, and
+- [ ] @anyone 2026-09-11 LAHE-stabilization-pass (unblocked 2026-09-11 23:15: the anchoring work has landed) -- **A cleanup, architecture, and
   code review pass over everything that landed 2026-09-08 to 2026-09-11 without
   a brief.** **Deadline: land before Monday 2026-09-14.** Ken's second stclair.ai
   article (the chat window piece) publishes that day and links here, so LAHE gets

@@ -35,6 +35,10 @@ in a live review (see the "Open questions, now decided" section there).
 
 ## Tasks
 
+Status 2026-09-11 23:15: tasks 1, 2, 3, 4, 6 landed (commits b32b5f6, ac6f08b,
+69ba2fb, cda2619, ad91059, f0fc90a, d050b4d, ffc4b06, 344959a, 5155a05). Task 5:
+bundle committed at f5e35a9; three-lane gate and version bump below.
+
 | # | Task | Depends on | Done means |
 | --- | --- | --- | --- |
 | 1 | Land the engine, project it, and tell the agent | nothing | August work committed; the two specs assert the new rule; review.json carries `region.stamp`, `region.where`, `region.ordinal`, `region.text_unique`; the contract tells the agent to carry the stamp into the source and how to pick a twin; every restated copy matches |
