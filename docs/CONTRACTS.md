@@ -460,7 +460,7 @@ of the same document merge into one group rather than splitting in two.
 **The field classification is D12's, and it is the reverse of the archived draft's.** The intent
 channel is exactly `note` and `change`, carried **verbatim and never truncated**. Everything that
 came off the page rides in data-named fields and **may be bounded**: `quote`, `before`, `after_full`,
-`context`, plus `before_html`, `after_html`, `region_label`, `subject` and `after_history`. The record's `after` is
+`context`, plus `before_html`, `after_html`, `region_label`, `region`, `subject` and `after_history`. The record's `after` is
 projected as **`after_full`**, which is the name the contract field uses and therefore the name an
 agent reads.
 
@@ -482,6 +482,29 @@ right first time, which is exactly what R39's end-of-session list is read for. I
 `after_full`, so it is data and each wording is bounded at `BEFORE_MAX`; the count of entries is
 capped at `AFTER_HISTORY_MAX` (50) keeping the NEWEST, and the kept entries' own `rev` numbers are
 what makes a drop legible.
+
+**`region`** is how the agent finds the element in the SOURCE, as opposed to reading it on the page.
+Four fields, on every item.
+
+- `region.stamp`: the id the reviewer's page wrote onto the element (`data-lahe-id`,
+  `markers.STAMP_ATTR`), or null. An agent editing that element writes the same attribute into the
+  source, and the next build reproduces it, so the page finds the element with certainty instead of
+  recognising it. It is a tool attribute, so `cleanMarkup` strips it from `before_html` and
+  `after_html`: it reaches an agent here and nowhere else.
+- `region.where`: the ancestor chain, innermost last, one hop per element as `tag#id.class.class`,
+  joined with ` > `, e.g. `main > section#t6.tcase > div.state > div.wrap`.
+- `region.ordinal`: `{index, of}` among the siblings under the same parent with the same tag and the
+  same normalized text, in document order. `{index: 1, of: 1}` when the element is unique, which is
+  the ordinary case.
+- `region.text_unique`: false when the region's own words are on the page more than once, so text
+  alone will not place a write later. The reference is still good: `where` and `ordinal` are what
+  tell the twins apart.
+
+The last two exist for one moment: the FIRST edit of one of N identical elements happens before any
+stamp is in the source, so the agent has to be told which twin to stamp. A page built once from its
+source keeps the source's order, so the third identical row on the page is the third identical row in
+the source. None of this places a write in the browser, where position never decides (D9); it is
+information handed to an agent editing the source with the reviewer's words in front of it.
 
 **`subject`** is what the reviewer pointed at, when they pointed at a whole element rather than at a
 passage of text (D9, the element anchor). It is `{tag, src, alt, html, near}`, and it is null for a

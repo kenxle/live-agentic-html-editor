@@ -120,6 +120,7 @@
     BEFORE_HTML: "before_html",
     AFTER_HTML: "after_html",
     REGION_LABEL: "region_label",
+    REGION: "region",
     SUBJECT: "subject",
     AFTER_HISTORY: "after_history",
     THREAD: "thread"
@@ -137,6 +138,7 @@
     PROJECTED.BEFORE_HTML,
     PROJECTED.AFTER_HTML,
     PROJECTED.REGION_LABEL,
+    PROJECTED.REGION,
     PROJECTED.SUBJECT,
     PROJECTED.AFTER_HISTORY
   ];
@@ -160,6 +162,11 @@
     before_html: record.CLASS_DATA,
     after_html: record.CLASS_DATA,
     region_label: record.CLASS_DATA,
+    // How to find this element in the SOURCE: the id the page wrote onto it,
+    // the ancestor chain a person can read, which of N identical siblings it
+    // is, and whether its words are enough on their own. All four were read off
+    // the page, so all four are data.
+    region: record.CLASS_DATA,
     // What the element the reviewer pointed at says about itself: its tag, its
     // src, its alt, its opening tag, and the page text beside it. All of it was
     // read off the page, so it is data and it is bounded, exactly like `quote`.
@@ -500,6 +507,18 @@
     out[PROJECTED.BEFORE_HTML] = boundData(it[F.BEFORE_HTML], BEFORE_MAX);
     out[PROJECTED.AFTER_HTML] = boundData(it[F.AFTER_HTML], BEFORE_MAX);
     out[PROJECTED.REGION_LABEL] = boundData((it[F.REGION] && it[F.REGION].label) || null, CONTEXT_MAX);
+    // WHAT THE AGENT NEEDS TO EDIT THE SOURCE, rather than to read the page.
+    //
+    // `stamp` is the id the reviewer's page wrote onto the element. Carrying it
+    // into the source is what makes the next build reproduce it, and a stamped
+    // element is found with certainty rather than guessed at.
+    //
+    // `where` and `ordinal` are for the first edit of one of N identical
+    // elements, which happens before any stamp is in the source: the chain says
+    // which block, and the ordinal says which twin inside it. Neither ever
+    // places a write in the browser (D9); they are information handed to an
+    // agent who is editing the source with the reviewer's words in front of it.
+    out[PROJECTED.REGION] = regionFacts(it[F.REGION]);
     out[PROJECTED.AFTER_HISTORY] = boundHistory(it[F.AFTER_HISTORY]);
 
     // A HANDLED ITEM HAS NO LOST ANCHOR. The fix an agent reported was expected
@@ -535,6 +554,22 @@
     out.created_at = it[F.CREATED_AT] || null;
     out.updated_at = it[F.UPDATED_AT] || null;
     return out;
+  }
+
+  /** The four locating facts, defaulted so every item carries the same shape. */
+  function regionFacts(region) {
+    var ref = (region && region.ref) || null;
+    var ordinal = (ref && ref.ordinal) || null;
+    var index = ordinal && typeof ordinal.index === "number" ? ordinal.index : 1;
+    var of = ordinal && typeof ordinal.of === "number" ? ordinal.of : 1;
+    return {
+      stamp: ref && typeof ref.stamp === "string" && ref.stamp ? ref.stamp : null,
+      where: boundData((ref && ref.where) || null, CONTEXT_MAX),
+      ordinal: { index: index, of: of },
+      // Absent reads as true, which is what a reference minted before this
+      // existed was: findable by its words until something proved otherwise.
+      text_unique: !(ref && ref.text_unique === false)
+    };
   }
 
   function projectReview(review) {

@@ -185,6 +185,10 @@
       minted_at: null,
       // The id we wrote onto the element itself. See markers.STAMP_ATTR.
       stamp: null,
+      // The ancestor chain as an agent reads it, innermost last. See whereOf.
+      where: null,
+      // Which of N identical siblings this is. See twinOrdinalOf.
+      ordinal: null,
       // Whether the region's own words can find it again on their own. False
       // does NOT mean the reference is bad: it means text alone will not place a
       // write later, and the fingerprint and path are carrying the identity.
@@ -226,7 +230,10 @@
     var hop = parentOf(node);
     var levels = 0;
     while (isElement(hop) && levels < FINGERPRINT_DEPTH) {
-      chain.push({ tag: tagOf(hop), classes: classesOf(hop) });
+      // The id as well as the classes: an id is the strongest thing an author
+      // writes on an ancestor, and a chain that drops it describes two sections
+      // of the same template identically.
+      chain.push({ tag: tagOf(hop), id: attrOf(hop, "id") || null, classes: classesOf(hop) });
       if (hop === scope) break;
       hop = parentOf(hop);
       levels += 1;
@@ -272,6 +279,69 @@
       if (kids[i] === node) return seen;
     }
     return 0;
+  }
+
+  // How many hops of `where` are written down. Long enough to say which card on
+  // the page this is, short enough that it stays a line an agent can read.
+  var WHERE_DEPTH = 8;
+
+  /**
+   * The chain an agent reads to find the element in the source, innermost last.
+   *
+   * One hop per element as `tag#id.class.class`, joined with " > ", e.g.
+   * `main > section#t6.tcase > div.state > section.sec-blog > div.wrap`. It is
+   * the same walk the fingerprint takes, written for a person instead of for a
+   * comparison, and it stops below the search root because "body" says nothing.
+   */
+  function hopName(node) {
+    var name = tagOf(node);
+    var id = attrOf(node, "id");
+    if (typeof id === "string" && id) name += "#" + id;
+    var classes = classesOf(node);
+    for (var i = 0; i < classes.length; i += 1) name += "." + classes[i];
+    return name;
+  }
+
+  function whereOf(node, scope) {
+    if (!isElement(node)) return null;
+    var hops = [hopName(node)];
+    var hop = parentOf(node);
+    while (isElement(hop) && hop !== scope && hops.length < WHERE_DEPTH) {
+      hops.push(hopName(hop));
+      hop = parentOf(hop);
+    }
+    hops.reverse();
+    return hops.join(" > ");
+  }
+
+  /**
+   * Which of N identical siblings this one is, in document order.
+   *
+   * The agent's tie-breaker when the words are on the page more than once: the
+   * first edit of one of N twins happens before any stamp is in the source, so
+   * the agent has to be told WHICH twin to stamp. A page built once from its
+   * source keeps the source's order, so the third identical row on the page is
+   * the third identical row in the source. Looped output is the deferred case.
+   *
+   * Identical means the same tag and the same normalized text under the same
+   * parent. A unique element answers {index: 1, of: 1}.
+   */
+  function twinOrdinalOf(node) {
+    var parent = parentOf(node);
+    if (!isElement(parent)) return { index: 1, of: 1 };
+    var kids = elementChildren(parent);
+    var tag = tagOf(node);
+    var text = textOf(node);
+    var index = 0;
+    var of = 0;
+    for (var i = 0; i < kids.length; i += 1) {
+      if (tagOf(kids[i]) !== tag) continue;
+      if (textOf(kids[i]) !== text) continue;
+      of += 1;
+      if (kids[i] === node) index = of;
+    }
+    if (!of) return { index: 1, of: 1 };
+    return { index: index || 1, of: of };
   }
 
   // -------------------------------------------------------------------------
@@ -1087,6 +1157,12 @@
     // src/layer/pointing.js reads when the words are gone and the reviewer still
     // has to be shown where their comment went. Storing it is not scoring it.
     ref.fingerprint = fingerprintOf(element, scope);
+    // Both of these are for the AGENT, not for this engine: they are what
+    // review.json hands over so the right element can be found in the source
+    // and stamped there. Taken here because this is where the element is in our
+    // hands, and neither one ever places a write.
+    ref.where = whereOf(element, scope);
+    ref.ordinal = twinOrdinalOf(element);
 
     var levelCount = contextLevelsOf(element, scope).length;
     var workspace = candidateWorkspace(ref, scope);

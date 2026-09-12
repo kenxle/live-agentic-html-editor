@@ -770,3 +770,57 @@ test("S4: no id on the page and the words twice over refuses, exactly as before"
   assert.equal(verdict.element, null);
   assert.equal(verdict.failureCode, "ANCHOR_AMBIGUOUS");
 });
+
+// ---------------------------------------------------------------------------
+// WHAT THE AGENT IS TOLD ABOUT WHERE IT IS
+// ---------------------------------------------------------------------------
+//
+// The stamp reaches the source only when the agent first edits the element, so
+// the FIRST edit of one of N identical elements happens with no stamp in the
+// source at all. These two fields are how the agent picks the right one then.
+
+test("where: the ancestor chain, innermost last, with the ids the author wrote", () => {
+  const wrap = el("div", { attrs: { class: "wrap" }, text: WORDS[1] });
+  const body = el("body", {
+    children: [
+      el("main", {
+        children: [
+          el("section", {
+            attrs: { id: "t6", class: "tcase" },
+            children: [el("div", { attrs: { class: "state" }, children: [wrap] })]
+          })
+        ]
+      })
+    ]
+  });
+
+  const ref = anchor.mint({ element: wrap, root: body });
+  assert.equal(ref.where, "main > section#t6.tcase > div.state > div.wrap");
+});
+
+test("ordinal: which of N identical siblings, in the order the source has them", () => {
+  const rows = [WORDS[1], WORDS[1], WORDS[0], WORDS[1]].map((text) =>
+    el("p", { attrs: { class: "row" }, text: text })
+  );
+  const body = el("body", { children: [el("main", { children: rows })] });
+
+  // Three of the four say the same thing. The third of those is the fourth row.
+  assert.deepEqual(anchor.mint({ element: rows[0], root: body }).ordinal, { index: 1, of: 3 });
+  assert.deepEqual(anchor.mint({ element: rows[3], root: body }).ordinal, { index: 3, of: 3 });
+
+  // The odd one out is one of one, which is what unique means here.
+  assert.deepEqual(anchor.mint({ element: rows[2], root: body }).ordinal, { index: 1, of: 1 });
+});
+
+test("the fingerprint chain keeps ancestor ids, not only their classes", () => {
+  const target = el("p", { attrs: { class: "body" }, text: WORDS[2] });
+  const body = el("body", {
+    children: [
+      el("section", { attrs: { id: "second", class: "card" }, children: [target] })
+    ]
+  });
+  const print = anchor.fingerprintOf(target, body);
+  assert.equal(print.chain[0].tag, "section");
+  assert.equal(print.chain[0].id, "second", "two sections of one template are not the same section");
+  assert.deepEqual(print.chain[0].classes, ["card"]);
+});

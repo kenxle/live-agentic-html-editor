@@ -717,3 +717,55 @@ test("the text export names the element too, because it reaches an agent with no
   assert.match(text, /logo-square-b@2x\.png/);
   assert.match(text, /Where: img logo-square-b@2x\.png/, "the label names it too, rather than 'img 1'");
 });
+
+// ---------------------------------------------------------------------------
+// How the agent finds the element in the SOURCE
+// ---------------------------------------------------------------------------
+//
+// Four facts, on every item, in one object. They are what makes "the click
+// always places" true on the agent's side: the id to carry into the source, the
+// chain that says which block, the ordinal that says which twin inside it, and
+// whether the words are enough on their own.
+
+test("every item carries the stamp, the chain, the ordinal and text_unique", () => {
+  const item = anEdit({
+    region: {
+      ref: {
+        id: "ref_1",
+        stamp: "e7f2a91c",
+        where: "main > section#t6.tcase > div.state > div.wrap",
+        ordinal: { index: 3, of: 7 },
+        text_unique: false
+      },
+      label: "Introduction, p 2",
+      lost: null
+    }
+  });
+  const json = rf.projectReview(reviewWith([item], null));
+  const projected = json.pages[0].items[0];
+
+  assert.equal(projected.region.stamp, "e7f2a91c");
+  assert.equal(projected.region.where, "main > section#t6.tcase > div.state > div.wrap");
+  assert.deepEqual(projected.region.ordinal, { index: 3, of: 7 });
+  assert.equal(projected.region.text_unique, false);
+
+  // It is page-derived, so it is data like every other locating field (D12).
+  assert.equal(json.field_classes.region, record.CLASS_DATA);
+});
+
+test("an item with none of it still carries the same shape, defaulted honestly", () => {
+  const json = rf.projectReview(reviewWith([anEdit()], null));
+  const projected = json.pages[0].items[0];
+
+  assert.equal(projected.region.stamp, null, "no id was written, and none is claimed");
+  assert.equal(projected.region.where, null);
+  assert.deepEqual(projected.region.ordinal, { index: 1, of: 1 }, "one of one, which is what unique means");
+  assert.equal(projected.region.text_unique, true, "findable by its words until something says otherwise");
+});
+
+test("the chain is bounded like every other locating hint", () => {
+  const long = "div.wrap > ".repeat(200) + "p.end";
+  const item = anEdit({ region: { ref: { id: "ref_1", where: long }, label: null, lost: null } });
+  const projected = rf.projectReview(reviewWith([item], null)).pages[0].items[0];
+  assert.ok(projected.region.where.length < long.length, "a data field is bounded");
+});
