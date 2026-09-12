@@ -90,6 +90,18 @@ test("cleanMarkup strips every data-lahe attribute and lahe- class token", () =>
   assert.equal(n.cleanMarkup(html), '<p class="prose" id="x">text</p>');
 });
 
+// THE STAMP IS NOT CONTENT, and the contract says so to the agent. Rule 2 of
+// the D9 amendment: data-lahe-id is a tool attribute like every other one, so
+// it never reaches before_html or after_html. It reaches an agent as its own
+// field (region.stamp), which is also what an agent needs in order to write it
+// into the source.
+test("cleanMarkup strips the stamp, so an id never rides in as content", () => {
+  const markers = require("../../src/shared/markers.js");
+  assert.equal(markers.isToolAttrName(markers.STAMP_ATTR), true, "the stamp is a tool attribute");
+  const html = '<p class="prose" ' + markers.STAMP_ATTR + '="e7f2a91c">text</p>';
+  assert.equal(n.cleanMarkup(html), '<p class="prose">text</p>');
+});
+
 test("cleanMarkup drops a class attribute that was only tool classes", () => {
   assert.equal(n.cleanMarkup('<p class="lahe-a lahe-b">t</p>'), "<p>t</p>");
 });

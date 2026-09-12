@@ -518,6 +518,17 @@ Inside the review folder:
   text, apply the rest of the sweep, leave that one spot alone, and reply
   `question` naming the conflict.
 
+  **The stamp, and the twin.** An item's `region.stamp` is an id the
+  reviewer's page wrote onto the element. When you edit that element in the
+  source, write the same `data-lahe-id` attribute onto it, so the next build
+  reproduces it and the page finds it with certainty. Never remove one. The
+  attribute is not content: it never appears in `before` or `after`.
+
+  When `region.text_unique` is false, the text is on the page more than once.
+  Use `region.where` and `region.ordinal` to pick the right one in the source:
+  the ordinal counts identical siblings in source order, which is page order
+  for a page built once from its source.
+
   An item carrying a `reverts` field is a take-back, and it is the one thing
   that cancels the paragraph above. The reviewer undid a change you had already
   made: `reverts` names the handled item they undid, `before` is what the source

@@ -209,6 +209,18 @@ handled edit placed. Handled edits are the reviewer's own decisions, listed in
 handled edit's after text, apply the rest of the sweep, leave that one spot
 alone, and reply `question` naming the conflict.
 
+**The stamp is how the page finds the element again.** An item's
+`region.stamp` is an id the reviewer's page wrote onto the element. When you
+edit that element in the source, write the same `data-lahe-id` attribute onto
+it, so the next build reproduces it and the page finds it with certainty.
+Never remove one. The attribute is not content: it never appears in `before`
+or `after`.
+
+When `region.text_unique` is false, the text is on the page more than once.
+Use `region.where` and `region.ordinal` to pick the right one in the source:
+the ordinal counts identical siblings in source order, which is page order for
+a page built once from its source.
+
 **The reviewer's formatting is part of the edit.** An item's `after_full` is
 the words; `after_html` is the same words carrying the bold and italic they
 applied. Apply `after_html`, not the text alone: bold reaches you as `<strong>`

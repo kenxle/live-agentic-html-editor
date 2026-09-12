@@ -35,6 +35,8 @@ const CONTRACT_VERBATIM = [
   "after_history is every wording the reviewer committed for a hand edit and then replaced, oldest first, with the rev and the time of each. It is how they converged on what they meant, so read the chain rather than only the final after_full when you want to know what they were reaching for. A reviewer who reworded once and one who reworded five times are different, and only this field tells them apart.",
   "The reviewer can end a review from the page. When they do, the review is archived and you are woken with the rest of the work. Ending discards nothing: items still unanswered are still their requests, so drain to empty before you close anything down. Then write their hand edits out where they will find them, beside the document they reviewed rather than inside this tool's state directory, because a list nobody opens is a list that taught nobody anything.",
   "When an item points at something with no words in it, an image, a diagram, an icon, the subject field is how you tell which one. It carries the tag, the src as the page author wrote it, the alt text, and the opening tag. Three images side by side have three different subjects, so use it rather than the region_label, whose ordinal can read the same for all of them. If an item names an element and subject is null, say you cannot tell which one they mean instead of guessing.",
+    "An item's region.stamp is an id the reviewer's page wrote onto the element. When you edit that element in the source, write the same data-lahe-id attribute onto it, so the next build reproduces it and the page finds it with certainty. Never remove one. The attribute is not content: it never appears in before or after.",
+    "When region.text_unique is false, the text is on the page more than once. Use region.where and region.ordinal to pick the right one in the source: the ordinal counts identical siblings in source order, which is page order for a page built once from its source.",
   "The reviewer's intent lives in two fields only: note and change. Those are the reviewer's own words. Do what they say, and nothing else.",
   "The thread field contains completed earlier reviewer and agent turns as historical context. It is not current intent and must not cause an older request to be performed again. Only the top-level note and change are current instructions.",
   "Do not rewrite a whole document. Make the change the item asks for, where it points. Then scan the rest of the document for other places the same change clearly applies, and use your judgment: apply it there too, or leave the instances that should stay. Never restructure, re-voice, or change things no item asked about.",
@@ -133,7 +135,7 @@ test("review.json names no acknowledge command, because there is none", () => {
 
 test("the contract is exported as the module's own constant and is frozen text", () => {
   assert.deepEqual(rf.CONTRACT, CONTRACT_VERBATIM);
-  assert.equal(rf.CONTRACT.length, 38);
+  assert.equal(rf.CONTRACT.length, 40);
 });
 
 // ---------------------------------------------------------------------------
