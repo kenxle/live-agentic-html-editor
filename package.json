@@ -1,6 +1,6 @@
 {
   "name": "live-agentic-html-editor",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Comment on and edit a live HTML page in the browser; hand every change back to your coding agent.",
   "bin": {
