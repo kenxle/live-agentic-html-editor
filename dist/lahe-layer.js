@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.1.0+b16a5f47ce2b
+ * version 0.1.0+5bbaec317248
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.1.0+b16a5f47ce2b";
+  g.LAHE.version = "0.1.0+5bbaec317248";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -67,6 +67,21 @@
   // written by the tool and never stripped on capture.
   var AUTHOR_REGION_ATTR = "data-review-region";
 
+  // IDENTITY WE ASSIGN, rather than identity we infer.
+  //
+  // Written onto the live element the moment the reviewer touches it, which
+  // costs nothing: the layer owns the browser DOM. Everything else in the
+  // anchor engine is an attempt to recognise an element again from what it
+  // happens to look like; this is the one signal that is true by construction,
+  // because we put it there.
+  //
+  // It is a tool attribute, so cleanMarkup strips it from before_html and
+  // after_html like every other one (R33). That is deliberate: the stamp is not
+  // the reviewer's content and must never read as part of it. It reaches an
+  // agent as its own field instead, which is also what an agent needs in order
+  // to write it into the source.
+  var STAMP_ATTR = "data-lahe-id";
+
   function isToolAttrName(name) {
     if (typeof name !== "string") return false;
     return name.toLowerCase().indexOf(TOOL_ATTR_PREFIX) === 0;
@@ -110,6 +125,7 @@
 
   var api = {
     TOOL_ATTR: TOOL_ATTR,
+    STAMP_ATTR: STAMP_ATTR,
     TOOL_ATTR_PREFIX: TOOL_ATTR_PREFIX,
     TOOL_CLASS_PREFIX: TOOL_CLASS_PREFIX,
     ROLE_CHROME: ROLE_CHROME,
@@ -1003,6 +1019,60 @@
     return structureOf(a) === structureOf(b);
   }
 
+  /**
+   * The emphasis runs in a fragment of markup: which words are bold, which are
+   * italic, and which the reviewer marked as deliberately neither.
+   *
+   * Read off structureOf, so the vocabulary is the same closed list the two
+   * comparison modes use (strong, em, not-bold, not-italic) and everything else
+   * in the markup is already gone. A run nested inside another is reported
+   * twice, once per tag, because <strong><em>x</em></strong> is both.
+   *
+   * Runs with no words are dropped: a marker around nothing is not a formatting
+   * change anyone can be told about in words.
+   *
+   * @param {string} html
+   * @returns {Array<{tag: string, text: string}>}
+   */
+  function emphasisRuns(html) {
+    var s = structureOf(html);
+    var open = [];
+    var runs = [];
+    var i = 0;
+    while (i < s.length) {
+      var lt = s.indexOf("<", i);
+      var chunk = lt === -1 ? s.slice(i) : s.slice(i, lt);
+      if (chunk) {
+        for (var k = 0; k < open.length; k += 1) open[k].text += chunk;
+      }
+      if (lt === -1) break;
+      var tag = parseTag(s, lt);
+      if (!tag) {
+        i = lt + 1;
+        continue;
+      }
+      i = tag.end;
+      if (STRUCTURAL_TAGS.indexOf(tag.name) === -1) continue;
+      if (!tag.closing) {
+        open.push({ tag: tag.name, text: "" });
+        continue;
+      }
+      for (var j = open.length - 1; j >= 0; j -= 1) {
+        if (open[j].tag !== tag.name) continue;
+        pushRun(runs, open.splice(j, 1)[0]);
+        break;
+      }
+    }
+    // Anything the fragment left open still covers the words it reached.
+    for (var q = open.length - 1; q >= 0; q -= 1) pushRun(runs, open[q]);
+    return runs;
+  }
+
+  function pushRun(runs, run) {
+    var text = normalizeText(run.text);
+    if (text) runs.push({ tag: run.tag, text: text });
+  }
+
   // The one entry point. Fails loud on an unknown mode: a comparison that
   // silently fell back to text is exactly the format-only no-op this exists to
   // prevent, and it would look like a working feature.
@@ -1171,6 +1241,7 @@
     modeFor: modeFor,
     structureOf: structureOf,
     structureEquals: structureEquals,
+    emphasisRuns: emphasisRuns,
     textOf: textOf,
     equalsInMode: equalsInMode,
     isSafeUrlValue: isSafeUrlValue,
@@ -1816,6 +1887,9 @@
     // The page's own words, kept so replay knows which page states the reviewer
     // has already answered. Data, and emphatically not intent.
     "region.accepted_page_texts": CLASS_DATA,
+    // The page check's own bookkeeping. Tool-written, never read as an
+    // instruction, and not projected into review.json at all.
+    "region.check_reopen": CLASS_DATA,
     page_title: CLASS_DATA,
     page_path: CLASS_DATA,
     "reply.reason": CLASS_DATA,
@@ -2037,7 +2111,11 @@
       lost: null,
       // The page states the reviewer has already answered "keep mine" to. See
       // acceptedPageTexts below.
-      accepted_page_texts: []
+      accepted_page_texts: [],
+      // null, or {rev, at, stamp} once the page check has reopened this record.
+      // It is what stops the check and an agent from answering each other
+      // forever. See pageCheckReopen below.
+      check_reopen: null
     };
   }
 
@@ -2100,6 +2178,211 @@
     next.accepted_page_texts = list;
     item[FIELD.REGION] = next;
     return list;
+  }
+
+  // ---------------------------------------------------------------------------
+  // The page check's stamp: what stops a reopen loop
+  // ---------------------------------------------------------------------------
+  //
+  // The incident this exists for (review rbbe2de599404, 2026-09-10). The
+  // reviewer split a numbered list item in two and added a sentence. The agent
+  // applied it as a new numbered item instead, which was a legitimate reading
+  // and the one the reviewer had actually wanted. The page check then read the
+  // record's `after` as missing (it was never on the page as one block) and the
+  // record's `before` as still there (the original item was untouched), called
+  // that a revert, and reopened the item. The agent replied handled. The check
+  // reopened it again. Thirteen revisions in thirty six minutes, each one waking
+  // the agent and appending another copy of the same sentence to the note.
+  //
+  // The fix is one fact on the record: WHICH REVISION THE CHECK ITSELF CREATED.
+  // When the check reopens, the record moves to rev R+1 and the stamp says
+  // rev R+1. If the agent then answers rev R+1 handled and the page still reads
+  // the same way, the check is looking at its own reopen coming back, and that
+  // second handled reply is the agent saying "this is how it renders now". The
+  // check stays quiet, the way replay stays quiet about a page state the
+  // reviewer already answered with Keep mine (accepted_page_texts above).
+  //
+  // It unblocks itself honestly: any later revision (a reviewer rewording, the
+  // reviewer's own Reopen issue) moves rev past the stamp, and the check is free
+  // to fire once more. So a genuine revert months later is still caught.
+  //
+  // `stamp` is the reply this reopen answered (replyStamp below), kept for the
+  // record rather than for the rule, so a person reading storage can see which
+  // reply the check acted on.
+
+  /** The page check's stamp on this record, or null. */
+  function pageCheckReopen(item) {
+    var region = item && item[FIELD.REGION];
+    var stamp = region && region.check_reopen;
+    return stamp && typeof stamp === "object" ? stamp : null;
+  }
+
+  /**
+   * Which reply this is, as one string: when it landed, plus the revision it
+   * answered. A boolean cannot carry it, because an item that is answered,
+   * reopened and answered again has to read as a different reply the second
+   * time. Null when there is no reply.
+   */
+  function replyStamp(item) {
+    var reply = item && item[FIELD.REPLY];
+    if (!reply) return null;
+    var rev = item[FIELD.REV];
+    return String(reply.at || "") + "@" + String(rev === undefined || rev === null ? "" : rev);
+  }
+
+  /**
+   * Stamp `item` (already the reopened revision) as reopened by the page check.
+   *
+   * Writes a NEW region object rather than mutating the old one, like every
+   * other region stamp here, so a caller holding the previous region still sees
+   * the value it read.
+   *
+   * @param {Object} item the reopened revision
+   * @param {string|null} stamp the reply stamp the check acted on
+   * @param {string} at ISO time of the reopen
+   */
+  function stampPageCheckReopen(item, stamp, at) {
+    if (!item) return null;
+    var region = item[FIELD.REGION] || emptyRegion();
+    var next = {};
+    Object.keys(region).forEach(function (key) {
+      next[key] = region[key];
+    });
+    next.check_reopen = {
+      rev: item[FIELD.REV],
+      at: at || nowIso(),
+      stamp: typeof stamp === "string" ? stamp : null
+    };
+    item[FIELD.REGION] = next;
+    return next.check_reopen;
+  }
+
+  /**
+   * Has the agent already answered the revision the page check itself created?
+   *
+   * True means the current handled reply IS the answer to the check's reopen,
+   * so reopening again would be the loop.
+   */
+  function answeredPageCheckReopen(item) {
+    var stamp = pageCheckReopen(item);
+    if (!stamp || typeof stamp.rev !== "number") return false;
+    return item[FIELD.REV] === stamp.rev;
+  }
+
+  // ---------------------------------------------------------------------------
+  // The page check's sentence, and keeping one copy of it
+  // ---------------------------------------------------------------------------
+  //
+  // The sentence a page-check reopen carries. Tool-generated, and it says so in
+  // its own first words, because the record shape has no field that could carry
+  // "this text is not the reviewer's". It names no page content: the item
+  // already carries the before and after text, and repeating page text into the
+  // note would push page content into the intent channel (D12).
+  var PAGE_CHECK_NOTE =
+    "Reopened by the page check: this handled change is no longer on the page and the original text is back. " +
+    "Reapply it, or reply not_handled saying why.";
+
+  // The check's other sentence. The words of the edit are on the page and the
+  // bold or italic the reviewer applied with them is not, which is a different
+  // situation and needs different words: nothing has to be reapplied, the
+  // formatting has to be carried. It is the 2026-09-11 case, where an agent
+  // working from a Markdown source applied the after text alone and replied
+  // handled three times over.
+  var PAGE_CHECK_FORMAT_NOTE =
+    "Reopened by the page check: the words landed but the bold or italic in this edit did not. " +
+    "Carry the formatting into the source, or reply not_handled saying why.";
+
+  // The check's third sentence. The words of the edit are on the page and the
+  // element they are on carries no data-lahe-id, so the agent edited the source
+  // without carrying the stamp into it. Nothing has to be reapplied and nothing
+  // is wrong with the rendering: the id is what lets the next build be found
+  // with certainty instead of guessed at, and it is missing (S7).
+  var PAGE_CHECK_STAMP_NOTE =
+    "Reopened by the page check: the change landed but the data-lahe-id stamp did not reach the source. " +
+    "Write the stamp onto that element so the next build reproduces it, or reply not_handled saying why.";
+
+  // Every sentence the page check writes. collapsePageCheckNote reads this
+  // list, so a new one is collapsed the day it is added.
+  var PAGE_CHECK_NOTES = [PAGE_CHECK_NOTE, PAGE_CHECK_FORMAT_NOTE, PAGE_CHECK_STAMP_NOTE];
+
+  /**
+   * The carried note with `sentence` on the end, AT MOST ONCE.
+   *
+   * The loop above appended the same sentence thirteen times, because the append
+   * asked nothing about what was already there. A note that already carries the
+   * sentence comes back unchanged.
+   */
+  function appendNoteOnce(carried, sentence) {
+    var line = typeof sentence === "string" ? sentence : "";
+    if (!line.trim()) return typeof carried === "string" ? carried : null;
+    var note = typeof carried === "string" ? carried : "";
+    if (!note.trim()) return line;
+    if (note.indexOf(line) !== -1) return note;
+    return note + "\n\n" + line;
+  }
+
+  /**
+   * The next revision of `item` as the PAGE CHECK reopens it.
+   *
+   * An ordinary reopenIssue, plus the two things that keep the check from
+   * running away with itself: the sentence lands at most once, and the record
+   * remembers which revision this reopen created. It lives here rather than in
+   * the Done tab so the rule a test asserts and the rule the reviewer's page
+   * runs are one function.
+   *
+   * @param {Object} item the handled record
+   * @param {string} note the sentence the reopened item carries
+   * @param {string} [at] ISO time of the reopen
+   */
+  function pageCheckReopenOf(item, note, at) {
+    var stamp = replyStamp(item);
+    var next = reopenIssue(item);
+    if (typeof note === "string" && note.trim()) {
+      next[FIELD.NOTE] = appendNoteOnce(next[FIELD.NOTE], note);
+    }
+    stampPageCheckReopen(next, stamp, at);
+    return next;
+  }
+
+  /**
+   * One copy of the page-check sentence, however many a stored record has.
+   *
+   * Records written before the loop was fixed carry the sentence many times
+   * over. This is read on the way out of storage so those cards recover on the
+   * next reload rather than needing storage edited by hand. Returns the same
+   * object when there was nothing to collapse.
+   */
+  function collapsePageCheckNote(item) {
+    if (!item || typeof item !== "object") return item;
+    var note = item[FIELD.NOTE];
+    if (typeof note !== "string") return item;
+    var collapsed = note;
+    for (var i = 0; i < PAGE_CHECK_NOTES.length; i += 1) {
+      collapsed = collapseSentence(collapsed, PAGE_CHECK_NOTES[i]);
+    }
+    if (collapsed === note) return item;
+    var out = Object.assign({}, item);
+    out[FIELD.NOTE] = collapsed;
+    return out;
+  }
+
+  // One copy of `sentence` in `note`, however many it holds.
+  function collapseSentence(note, sentence) {
+    var first = note.indexOf(sentence);
+    if (first === -1) return note;
+    var second = note.indexOf(sentence, first + sentence.length);
+    if (second === -1) return note;
+    // Keep the head up to and including the first copy, drop every later copy
+    // and the blank line each one was joined on, keep anything else that was
+    // written between them.
+    var head = note.slice(0, first + sentence.length);
+    var tail = note
+      .slice(first + sentence.length)
+      .split(sentence)
+      .join("")
+      .replace(/^(\s*\n)+/, "")
+      .replace(/\n{3,}/g, "\n\n");
+    return tail.trim() ? head + "\n\n" + tail.trim() : head;
   }
 
   // `subject` is what the region IS, for a record made on a whole element:
@@ -2312,10 +2595,24 @@
     return next;
   }
 
+  /**
+   * The reviewer says something more about an item the agent already answered.
+   *
+   * The change sentence is CARRIED, exactly as Reopen issue carries it. It
+   * describes the edit the reviewer made, and a follow-up does not undo that
+   * edit, so dropping it leaves the new revision saying nothing about what the
+   * reviewer actually did. That is what happened on 2026-09-11: the reviewer
+   * asked "did my bolding come through?", the revision that question created
+   * carried an empty change, and the only line describing the edit was gone
+   * from the one revision where it mattered most.
+   */
   function followUp(item, text) {
     var note = typeof text === "string" ? text : "";
     if (!note.trim()) return item;
-    return continueThread(item, { note: note, change: null });
+    return continueThread(item, {
+      note: note,
+      change: typeof item[FIELD.CHANGE] === "string" ? item[FIELD.CHANGE] : null
+    });
   }
 
   function reopenIssue(item) {
@@ -2397,7 +2694,99 @@
     return BREAK_REMOVED;
   }
 
-  function editChangeText(kind, before, after) {
+  // ---------------------------------------------------------------------------
+  // The formatting the reviewer changed, said in words
+  // ---------------------------------------------------------------------------
+  //
+  // On 2026-09-11 the reviewer made one word italic and one clause bold inside a
+  // rewrite. The record carried both: `after` held the plain words and
+  // `after_html` held the <em> and <strong>. The change sentence quoted only the
+  // wording, so the one line the agent reads as INTENT said nothing about the
+  // emphasis, the agent applied the text alone and replied handled, and the bold
+  // and italics were gone from the page and the source with nothing anywhere
+  // saying so.
+  //
+  // So the sentence says it. The vocabulary is normalize's closed list
+  // (strong, em, and the not-bold / not-italic resets), read through
+  // emphasisRuns, which means every other difference between the two markups
+  // (a link, a span, a class the page's own renderer added) is already gone and
+  // cannot be reported as a formatting change.
+  var FORMAT_ADDED = { strong: "bold", em: "italic" };
+  var FORMAT_REMOVED = { "not-bold": "bold", "not-italic": "italic" };
+  // The reset tag that says "these words are deliberately not this", per tag.
+  var RESET_FOR = { strong: normalize.NOT_BOLD_TAG, em: normalize.NOT_ITALIC_TAG };
+
+  function runKey(run) {
+    return run.tag + " " + run.text;
+  }
+
+  // How many of each run a list holds, so two identical bold runs in one block
+  // are two runs and not one.
+  function runCounts(runs) {
+    var counts = {};
+    for (var i = 0; i < runs.length; i += 1) {
+      var key = runKey(runs[i]);
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    return counts;
+  }
+
+  function takeOne(counts, run) {
+    var key = runKey(run);
+    if (!counts[key]) return false;
+    counts[key] -= 1;
+    return true;
+  }
+
+  /**
+   * The inline formatting that moved between two markups, in plain sentences.
+   *
+   * Returns "" when nothing did, which is every ordinary wording edit.
+   *
+   * @param {string} beforeHtml the region's markup before the edit
+   * @param {string} afterHtml the region's markup after it
+   */
+  function formattingChangeText(beforeHtml, afterHtml) {
+    if (typeof afterHtml !== "string" || !afterHtml) return "";
+    var before = normalize.emphasisRuns(typeof beforeHtml === "string" ? beforeHtml : "");
+    var after = normalize.emphasisRuns(afterHtml);
+    var beforeLeft = runCounts(before);
+    var afterLeft = runCounts(after);
+    var lines = [];
+    var i;
+    // Each loop consumes from ITS OWN copy of the other side's counts, so the
+    // two differences are read independently and a run present on both sides is
+    // reported by neither.
+    for (i = 0; i < after.length; i += 1) {
+      if (takeOne(beforeLeft, after[i])) continue;
+      if (hasOwn(FORMAT_ADDED, after[i].tag)) {
+        lines.push('Made "' + after[i].text + '" ' + FORMAT_ADDED[after[i].tag] + ".");
+      } else if (hasOwn(FORMAT_REMOVED, after[i].tag)) {
+        lines.push('Removed ' + FORMAT_REMOVED[after[i].tag] + ' from "' + after[i].text + '".');
+      }
+    }
+    // A run the before had and the after does not: the reviewer took the tag
+    // off words that carried it. The reset tags say the same thing about words
+    // a stylesheet made bold, and they are already reported above.
+    // Taking bold off words a stylesheet made bold writes BOTH a <not-bold> in
+    // the after and, when the words carried a <strong> too, the loss of that
+    // tag. One gesture, so one sentence: a reset already reported above cancels
+    // the matching loss here.
+    var resets = runCounts(after);
+    for (i = 0; i < before.length; i += 1) {
+      if (takeOne(afterLeft, before[i])) continue;
+      if (!hasOwn(FORMAT_ADDED, before[i].tag)) continue;
+      if (takeOne(resets, { tag: RESET_FOR[before[i].tag], text: before[i].text })) continue;
+      lines.push('Removed ' + FORMAT_ADDED[before[i].tag] + ' from "' + before[i].text + '".');
+    }
+    return lines.join(" ");
+  }
+
+  function hasOwn(map, key) {
+    return Object.prototype.hasOwnProperty.call(map, key);
+  }
+
+  function editChangeText(kind, before, after, beforeHtml, afterHtml) {
     if (kind === KIND.DELETE) return "Deleted this block.";
     if (kind === KIND.FORMAT_ONLY) return "Changed the emphasis in this block; the words are the same.";
     var span = changedSpan(before, after);
@@ -2414,9 +2803,13 @@
     if (added && removed) words = 'Changed "' + removed + '" to "' + added + '".';
     else if (added) words = 'Added "' + added + '".';
     else if (removed) words = 'Removed "' + removed + '".';
-    if (breakLine && words) return breakLine + " " + words;
-    if (breakLine) return breakLine;
-    return words || "Edited this block.";
+    var emphasis = formattingChangeText(beforeHtml, afterHtml);
+    var parts = [];
+    if (breakLine) parts.push(breakLine);
+    if (words) parts.push(words);
+    if (emphasis) parts.push(emphasis);
+    if (parts.length) return parts.join(" ");
+    return "Edited this block.";
   }
 
   // ---------------------------------------------------------------------------
@@ -2650,7 +3043,19 @@
     ACCEPTED_PAGE_TEXTS_MAX: ACCEPTED_PAGE_TEXTS_MAX,
     acceptedPageTexts: acceptedPageTexts,
     acceptPageText: acceptPageText,
+    PAGE_CHECK_NOTE: PAGE_CHECK_NOTE,
+    PAGE_CHECK_FORMAT_NOTE: PAGE_CHECK_FORMAT_NOTE,
+    PAGE_CHECK_STAMP_NOTE: PAGE_CHECK_STAMP_NOTE,
+    PAGE_CHECK_NOTES: PAGE_CHECK_NOTES,
+    pageCheckReopen: pageCheckReopen,
+    stampPageCheckReopen: stampPageCheckReopen,
+    answeredPageCheckReopen: answeredPageCheckReopen,
+    replyStamp: replyStamp,
+    appendNoteOnce: appendNoteOnce,
+    pageCheckReopenOf: pageCheckReopenOf,
+    collapsePageCheckNote: collapsePageCheckNote,
     changedSpan: changedSpan,
+    formattingChangeText: formattingChangeText,
     editChangeText: editChangeText,
     REVERT_EDIT: REVERT_EDIT,
     REVERT_DELETE: REVERT_DELETE,
@@ -3325,9 +3730,38 @@
   // thing. A reference with no `ok` at all is treated as failed, because a
   // caller who cannot say the mint worked has not shown that it did.
   function lostFromMint(ref) {
-    if (ref && ref.ok === true) return null;
-    var failure = (ref && ref.failure) || {};
-    return lostState(failure.failureCode || "ANCHOR_NO_TEXT_MATCH", failure.reason || null);
+    if (!ref) return lostState("ANCHOR_NO_TEXT_MATCH", null);
+    if (ref.ok !== true) {
+      var failure = ref.failure || {};
+      return lostState(failure.failureCode || "ANCHOR_NO_TEXT_MATCH", failure.reason || null);
+    }
+    // MINTED, AND STILL NOT DESCRIBABLE TO AN AGENT.
+    //
+    // These came apart deliberately. `ok` now means the reviewer's click was
+    // captured, which it always is: the element was in our hands. `lost` means
+    // something else and always did, which is that nothing we can put in
+    // review.json will let an agent place this. A comment on one of 73
+    // identical buttons is both at once, and saying so is the honest answer.
+    //
+    // Keeping this is what preserves RF19: an item whose anchor cannot identify
+    // anything must never read as healthy, which is exactly how every image
+    // comment shipped broken and silent.
+    //
+    // THE STAMP ANSWERS IT (Ken, 2026-09-11: "there should be nothing on the
+    // page that we cannot identify"). An element carrying data-lahe-id is
+    // describable whether or not its words are: the item hands the agent an id
+    // nothing else carries, plus the path and the ordinal among its identical
+    // siblings, and that is enough to pick the right twin in the source. So a
+    // stamped click is never lost. Without a stamp, nothing below changes.
+    if (ref.text_unique === false && !ref.stamp) {
+      return lostState(
+        ref.not_unique_reason === "not_unique_in_containing_block"
+          ? "ANCHOR_AMBIGUOUS"
+          : "ANCHOR_NO_TEXT_MATCH",
+        ref.not_unique_reason || null
+      );
+    }
+    return null;
   }
 
   return {
@@ -3617,6 +4051,7 @@
     MARK_READY: "mark_ready",
     COMMIT_EDIT: "commit_edit",
     CANCEL: "cancel",
+    TOGGLE_PRESENT: "toggle_present",
     PAGE_DEFAULT: "page_default",
     NONE: "none"
   };
@@ -3693,6 +4128,15 @@
       requirement: "R1"
     },
     {
+      gesture: GESTURE.TOGGLE_PRESENT,
+      keys: "Cmd-Shift-X",
+      when: "always, including while the tool is hidden",
+      hint: "Press Cmd-Shift-X to hide the review while you present, and again to bring it back.",
+      passThrough: false,
+      preventDefault: true,
+      requirement: "R13"
+    },
+    {
       gesture: GESTURE.PAGE_DEFAULT,
       keys: "everything else",
       when: "always",
@@ -3703,6 +4147,20 @@
     }
   ];
 
+  // WHY X, AND NOT P OR H. The present chord joins a family that reads as
+  // mnemonics (C comments, E edits), so P for present and H for hide were the
+  // two obvious letters, and both are taken by something a presenter cannot
+  // afford to fire mid-talk:
+  //
+  //   Cmd/Ctrl-Shift-P  opens a private window in Firefox and Edge
+  //   Cmd/Ctrl-Shift-H  is Home in Safari (which navigates the deck away) and
+  //                     the history library in Firefox
+  //
+  // X is unbound in Chrome, Safari, Firefox and Edge on both platforms, and
+  // reveal.js's own keys are unmodified letters (space, arrows, f, s, o, b,
+  // esc, ., n, p, h, j, k, l, v, g, m), so nothing of the deck's answers to it
+  // either.
+  //
   // The library's own modifier family, in one place, so the hint lines and the
   // matcher cannot disagree. Cmd on macOS, Ctrl elsewhere: one rule.
   function isPrimaryModifier(e) {
@@ -3737,6 +4195,12 @@
     }
 
     if (e.type === "keydown") {
+      // FIRST, and with no conditions on it at all. This is the one gesture
+      // that has to work while every other one is disarmed: present mode hides
+      // the whole library, and this chord is how the reviewer gets it back.
+      if (mod && e.shiftKey === true && isKey(e.key, "x")) {
+        return decide(GESTURE.TOGGLE_PRESENT, false, true, "Cmd-Shift-X hides the review for presenting, and shows it again");
+      }
       if (e.key === "Escape") {
         if (e.editing === true) {
           return decide(GESTURE.COMMIT_EDIT, false, true, "Esc commits the open edit and gives the block back to the page");
@@ -4278,7 +4742,11 @@
   // 12: older static servers hand back raw Markdown bytes from a source mount
   // and have no on-request renderer, so a reviewed document's links to other
   // local documents download or 404 behind them. They must be restarted.
-  var SERVICE_CONTRACT = 12;
+  // 13: older helpers keep the window-session table in memory only, so
+  // replacing one throws every open review page out of its own review, and
+  // they leave no windows.json for a CLI command to ask whether anybody is
+  // reviewing before it replaces them. They must be restarted.
+  var SERVICE_CONTRACT = 13;
   var BASE = "/lahe/" + API_VERSION;
 
   // ---------------------------------------------------------------------------
@@ -4481,7 +4949,11 @@
       mutating: true,
       why: "D5's second-window refusal for windows that cannot see each other's storage, plus the takeover",
       request: "{review, window_id, session_secret?, takeover?}",
-      response: "grant {granted:true, since, heartbeat_seconds, took_over, session_secret}; refusal {granted:false, since, heartbeat_seconds, reason} (no holder id, no secret)"
+      response:
+        "grant {granted:true, since, heartbeat_seconds, took_over, session_secret}; refusal {granted:false, since, " +
+        "heartbeat_seconds, reason, deposed} (no holder id, no secret). deposed is true only when the refused " +
+        "window is the one an explicit Review-here-instead threw out, which is the one refusal the page acts on " +
+        "immediately; every other refusal it waits out, because a helper being replaced looks the same from there"
     },
     {
       name: "window.release",
@@ -5061,12 +5533,34 @@
   // inline event handlers. The primary src still loads there, which is the
   // ordinary dev-server case; `lahe add` prints that caveat with the snippet.
 
+  // FRAMES and START are OPT-INS, and neither is written by `lahe add`. They
+  // exist for two pages that would otherwise be wrong by default:
+  //
+  //   data-lahe-frames="allow"   boot inside an iframe anyway. The library
+  //                              refuses to boot in a frame (see the frame
+  //                              decision in src/layer/index.js), because a
+  //                              reveal.js speaker-notes window embeds the deck
+  //                              in an iframe and the embedded copy fought the
+  //                              real window for the review's window claim.
+  //                              A page that deliberately reviews an embedded
+  //                              document sets this and gets the old behavior.
+  //   data-lahe-start="hidden"   start in present mode: nothing of the
+  //                              library's is on screen until the reviewer
+  //                              presses the show/hide chord. For a deck that
+  //                              is presented more often than it is reviewed.
   var SCRIPT_ATTR = {
     REVIEW: "data-lahe-review",
     TOKEN: "data-lahe-token",
     HELPER: "data-lahe-helper",
-    FALLBACK: "data-lahe-fallback"
+    FALLBACK: "data-lahe-fallback",
+    FRAMES: "data-lahe-frames",
+    START: "data-lahe-start"
   };
+
+  // The one value each of the two opt-ins takes. Anything else is ignored, so a
+  // typo fails to the safe default rather than to a guess.
+  var FRAMES_ALLOW = "allow";
+  var START_HIDDEN = "hidden";
 
   // The inline onerror, kept to one statement-per-clause line so the attribute
   // stays readable in a page's source. Single quotes only: the attribute is
@@ -5461,6 +5955,8 @@
     splitCompleteLines: splitCompleteLines,
 
     SCRIPT_ATTR: SCRIPT_ATTR,
+    FRAMES_ALLOW: FRAMES_ALLOW,
+    START_HIDDEN: START_HIDDEN,
     SCRIPT_SELECTOR: SCRIPT_SELECTOR,
     SCRIPT_FALLBACK_ONERROR: SCRIPT_FALLBACK_ONERROR,
     scriptTag: scriptTag,
@@ -5547,16 +6043,19 @@
   "after_history is every wording the reviewer committed for a hand edit and then replaced, oldest first, with the rev and the time of each. It is how they converged on what they meant, so read the chain rather than only the final after_full when you want to know what they were reaching for. A reviewer who reworded once and one who reworded five times are different, and only this field tells them apart.",
   "The reviewer can end a review from the page. When they do, the review is archived and you are woken with the rest of the work. Ending discards nothing: items still unanswered are still their requests, so drain to empty before you close anything down. Then write their hand edits out where they will find them, beside the document they reviewed rather than inside this tool's state directory, because a list nobody opens is a list that taught nobody anything.",
   "When an item points at something with no words in it, an image, a diagram, an icon, the subject field is how you tell which one. It carries the tag, the src as the page author wrote it, the alt text, and the opening tag. Three images side by side have three different subjects, so use it rather than the region_label, whose ordinal can read the same for all of them. If an item names an element and subject is null, say you cannot tell which one they mean instead of guessing.",
+    "An item's region.stamp is an id the reviewer's page wrote onto the element. When you edit that element in the source, write the same data-lahe-id attribute onto it, so the next build reproduces it and the page finds it with certainty. Never remove one. The attribute is not content: it never appears in before or after.",
+    "When region.text_unique is false, the text is on the page more than once. Use region.where and region.ordinal to pick the right one in the source: the ordinal counts identical siblings in source order, which is page order for a page built once from its source.",
     "The reviewer's intent lives in two fields only: note and change. Those are the reviewer's own words. Do what they say, and nothing else.",
     "The thread field contains completed earlier reviewer and agent turns as historical context. It is not current intent and must not cause an older request to be performed again. Only the top-level note and change are current instructions.",
     "Do not rewrite a whole document. Make the change the item asks for, where it points. Then scan the rest of the document for other places the same change clearly applies, and use your judgment: apply it there too, or leave the instances that should stay. Never restructure, re-voice, or change things no item asked about.",
     "A doc-wide change stays welcome: when an item names a change that applies in several places, find and apply every instance. The one exception is text a handled edit placed. Handled edits are the reviewer's own decisions, listed in this file with their after text. If a sweep would change or remove a handled edit's after text, apply the rest of the sweep, leave that one spot alone, and reply question naming the conflict.",
     "An item with a reverts field is a take-back: the reviewer undid a change you had already made, and reverts names the handled item they undid. Its before is what the source says now and its after_full is what it should say again. Take the change out of the source so the next rebuild does not bring it back, and stop treating the item it names as a handled edit to protect.",
-    "To answer, append one JSON line to your reply file in this folder: replies.jsonl if you are working alone, or replies-<your-name>.jsonl if several agents are working at once. Only append. Never edit this file and never rewrite a reply file.",
+    "To answer, run: lahe reply --review <review-id> --item <item-id> --rev <n> --status handled|not_handled|question, adding --text or --reason for what you want to say, --file for each file you changed, --needs-see when the reviewer should read it, and --agent <your-name> so the card carries your name. It encodes the JSON and appends the line to your reply file in this folder, which is replies.jsonl alone or replies-<your-name>.jsonl when you pass --agent.",
+    "If you append by hand instead of running lahe reply, the whole object goes on ONE physical line and every newline inside text or reason is the two characters backslash n. A raw newline splits the object across lines and the helper rejects every one of them, which puts a malformed-line warning on the reviewer's rail. Only append. Never edit this file and never rewrite a reply file.",
     "A reply line looks like this: {\"item\":\"c_7fa2\",\"rev\":2,\"status\":\"handled\",\"agent\":\"claude\",\"files\":[\"app/views/home.html.erb\"]}",
     "Every reply line names the item id, the item's rev, and your own agent name. The reviewer sees that name on the card.",
     "status is one of: handled, you made the change; not_handled, you did not, and reason says why in words the reviewer will read; question, you need an answer, and text asks for it.",
-    "Add \"user_needs_to_see_reply\": true to a reply the reviewer should read: an answer, a caveat, or a change made differently than asked. Leave it off a routine confirmation; question and not_handled replies reach the reviewer regardless.",
+    "Add \"user_needs_to_see_reply\": true to a reply the reviewer should read: an answer, a caveat, or a change made differently than asked. All three are things you say in words, so the flag counts only when the same line carries text or reason; flagging a reply with nothing in it sends the reviewer to a card that says nothing. The flag also pops a toast over the page the reviewer is reading, so a flag on a routine confirmation interrupts them for nothing. Leave it off a routine confirmation, and off bookkeeping about the reviewer's own edits: a later edit superseding an earlier one, an earlier revision no longer matching, an item retired by their next change. The reviewer edits quickly and expects that; telling them is not worth a toast. Question and not_handled replies reach the reviewer regardless.",
     "rev must be the rev carried with the item. If the reviewer reworded the item after you read it, your line is refused and the item stays open. Re-read the item and answer its new rev.",
     "To see what is open right now, run: lahe status --review <id> (add --json for machine-readable lines). It prints the unanswered ready items and whether the reviewer's page is connected.",
     "If the human explicitly asks you to continue a session created by another agent, run: lahe session takeover <agent-session-id>. Find open sessions with: lahe session list. This keeps the reviews together, fences older monitors, and prints the catch-up command plus the four commands for the session. Never infer a takeover or silently reuse another agent's session.",
@@ -5574,7 +6073,7 @@
     "Do not use a native model timer, a forever daemon, a global monitor, or a parser pipeline.",
     "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and the rail comes back on its own if a rebuild leaves it out.",
     "A break the reviewer typed is part of the edit: a blank line in the after text is a paragraph break, and a single newline is a line break. Markdown does not read a single newline as a new paragraph, so write a blank line between the two paragraphs in the source, or the format's own hard-break form for a line break, then rebuild and check the page really shows the break.",
-    "Bold and italic the reviewer changed reach you as <strong> and <em> in after_html. When they took bold or italic OFF words that a page stylesheet makes bold or italic, HTML has no tag that says so, so the record marks that run <not-bold> or <not-italic>. Those two tags are the reviewer saying those words should not be bold or italic: make that true in the source the way the source says it, and never copy the tag itself into the source.",
+    "An edit's after is the words; after_html is the same words carrying the reviewer's bold and italic, and that formatting is part of the edit. Apply after_html, not after alone. Bold reaches you as <strong> and italic as <em>; in a Markdown source those are ** and _ (or *). When the reviewer took bold or italic OFF words that a page stylesheet makes bold or italic, HTML has no tag that says so, so the record marks that run <not-bold> or <not-italic>: make that true in the source the way the source says it, and never copy either tag into the source. A handled reply for an edit whose formatting you did not carry is a wrong handled.",
     "Links in a Markdown source are source-true: never rewrite an on-disk link to make the browser page work. The renderer translates local links when it builds the page, so fix a broken link only if it is wrong on disk too.",
     "The only way to say you handled an item is to append a reply line."
   ];
@@ -5599,6 +6098,7 @@
     BEFORE_HTML: "before_html",
     AFTER_HTML: "after_html",
     REGION_LABEL: "region_label",
+    REGION: "region",
     SUBJECT: "subject",
     AFTER_HISTORY: "after_history",
     THREAD: "thread"
@@ -5616,6 +6116,7 @@
     PROJECTED.BEFORE_HTML,
     PROJECTED.AFTER_HTML,
     PROJECTED.REGION_LABEL,
+    PROJECTED.REGION,
     PROJECTED.SUBJECT,
     PROJECTED.AFTER_HISTORY
   ];
@@ -5639,6 +6140,11 @@
     before_html: record.CLASS_DATA,
     after_html: record.CLASS_DATA,
     region_label: record.CLASS_DATA,
+    // How to find this element in the SOURCE: the id the page wrote onto it,
+    // the ancestor chain a person can read, which of N identical siblings it
+    // is, and whether its words are enough on their own. All four were read off
+    // the page, so all four are data.
+    region: record.CLASS_DATA,
     // What the element the reviewer pointed at says about itself: its tag, its
     // src, its alt, its opening tag, and the page text beside it. All of it was
     // read off the page, so it is data and it is bounded, exactly like `quote`.
@@ -5685,6 +6191,13 @@
   var BEFORE_MAX = 2000;
   // Shorter, because these are locating hints rather than passages.
   var CONTEXT_MAX = 400;
+  // The agent's own words: text and reason on a reply, and the agent's turns in
+  // a card's thread. Bounded because they are agent-controlled and reach the
+  // rail's DOM, but far above BEFORE_MAX, because the reply IS the reading. At
+  // 2000 a 2156-character answer lost its last sentence, which was the one
+  // instruction the reviewer had to act on (Ken, 2026-09-11: "why is this
+  // truncated?!"). The marker still says when the cap is hit.
+  var REPLY_TEXT_MAX = 20000;
   // reply.files is agent-controlled and reaches the rail, so it is not trusted
   // to be a short list of strings. The count is capped and each entry is bounded
   // (finding 24).
@@ -5936,8 +6449,8 @@
         agent: {
           status: agent.status || null,
           agent: boundData(agent.agent, CONTEXT_MAX),
-          reason: boundData(agent.reason, BEFORE_MAX),
-          text: boundData(agent.text, BEFORE_MAX),
+          reason: boundData(agent.reason, REPLY_TEXT_MAX),
+          text: boundData(agent.text, REPLY_TEXT_MAX),
           files: boundFiles(agent.files),
           at: agent.at || null
         }
@@ -5972,6 +6485,18 @@
     out[PROJECTED.BEFORE_HTML] = boundData(it[F.BEFORE_HTML], BEFORE_MAX);
     out[PROJECTED.AFTER_HTML] = boundData(it[F.AFTER_HTML], BEFORE_MAX);
     out[PROJECTED.REGION_LABEL] = boundData((it[F.REGION] && it[F.REGION].label) || null, CONTEXT_MAX);
+    // WHAT THE AGENT NEEDS TO EDIT THE SOURCE, rather than to read the page.
+    //
+    // `stamp` is the id the reviewer's page wrote onto the element. Carrying it
+    // into the source is what makes the next build reproduce it, and a stamped
+    // element is found with certainty rather than guessed at.
+    //
+    // `where` and `ordinal` are for the first edit of one of N identical
+    // elements, which happens before any stamp is in the source: the chain says
+    // which block, and the ordinal says which twin inside it. Neither ever
+    // places a write in the browser (D9); they are information handed to an
+    // agent who is editing the source with the reviewer's words in front of it.
+    out[PROJECTED.REGION] = regionFacts(it[F.REGION]);
     out[PROJECTED.AFTER_HISTORY] = boundHistory(it[F.AFTER_HISTORY]);
 
     // A HANDLED ITEM HAS NO LOST ANCHOR. The fix an agent reported was expected
@@ -6007,6 +6532,22 @@
     out.created_at = it[F.CREATED_AT] || null;
     out.updated_at = it[F.UPDATED_AT] || null;
     return out;
+  }
+
+  /** The four locating facts, defaulted so every item carries the same shape. */
+  function regionFacts(region) {
+    var ref = (region && region.ref) || null;
+    var ordinal = (ref && ref.ordinal) || null;
+    var index = ordinal && typeof ordinal.index === "number" ? ordinal.index : 1;
+    var of = ordinal && typeof ordinal.of === "number" ? ordinal.of : 1;
+    return {
+      stamp: ref && typeof ref.stamp === "string" && ref.stamp ? ref.stamp : null,
+      where: boundData((ref && ref.where) || null, CONTEXT_MAX),
+      ordinal: { index: index, of: of },
+      // Absent reads as true, which is what a reference minted before this
+      // existed was: findable by its words until something proved otherwise.
+      text_unique: !(ref && ref.text_unique === false)
+    };
   }
 
   function projectReview(review) {
@@ -6211,6 +6752,7 @@
     DATA_FIELDS: DATA_FIELDS,
     PROJECTED_FIELD_CLASS: PROJECTED_FIELD_CLASS,
     BEFORE_MAX: BEFORE_MAX,
+    REPLY_TEXT_MAX: REPLY_TEXT_MAX,
     CONTEXT_MAX: CONTEXT_MAX,
     REPLY_FILES_MAX: REPLY_FILES_MAX,
     AFTER_HISTORY_MAX: AFTER_HISTORY_MAX,
@@ -6620,7 +7162,18 @@
     // as a literal in two files is a leak the registry count cannot see: the
     // handlers pile up under a name the remount never asks about.
     COMMENTS: "comments", // the comment surface's keydown, mousemove, click
-    EDITING: "editing" // the editing surface's keydown, click, and block input
+    EDITING: "editing", // the editing surface's keydown, click, and block input
+    // "has the reviewer touched anything lately", which the reload guard asks.
+    // Its own group because it is bound once for the life of the page and a
+    // remount must NOT clear it: a page that forgets the reviewer is reading
+    // will reload out from under them, which is the bug it exists to prevent.
+    INTERACTION: "interaction",
+    // The show/hide chord, and nothing else. Bound once for the life of the
+    // page and never cleared by a remount, for the same reason INTERACTION is
+    // not: while the library is hidden this is the ONLY listener of ours the
+    // reviewer can reach, and a remount that dropped it would leave them with
+    // no way to bring the review back.
+    PRESENT: "present"
   };
 
   var shared = createRegistry();
@@ -7025,9 +7578,18 @@
       return value;
     }
 
+    // Everything comes out of storage through here, which is why the repair
+    // below lives here. Records written before the reopen loop was fixed
+    // (2026-09-10) carry the page check's sentence many times over in one note,
+    // once per cycle. Collapsing it on the way out means the reviewer's card
+    // reads right on the next reload, with nobody editing storage by hand, and
+    // the next write of that item persists the collapse.
     function readAll(reviewId) {
       var parsed = readJson(keyFor(reviewId), []);
-      return Array.isArray(parsed) ? parsed : [];
+      if (!Array.isArray(parsed)) return [];
+      return parsed.map(function (item) {
+        return record.collapsePageCheckNote(item);
+      });
     }
 
     function writeAll(reviewId, items) {
@@ -7298,22 +7860,50 @@
       return { h: h, x: x, v: v, y: y };
     }
 
+    /**
+     * How wide the reviewer dragged the rail, or null for its default width.
+     *
+     * A bare number, unlike the pill's corner-and-offset, because a width has
+     * nothing to be relative to: it is the same number on a phone and on a
+     * monitor. A width that no longer fits the viewport is CLAMPED WHERE IT IS
+     * READ (overlay.js knows the viewport; this file does not) rather than
+     * rewritten here, so widening the window again brings the reviewer's own
+     * choice back instead of the narrow one a shrunken window forced on them.
+     */
+    function readRailWidth(got) {
+      var width = got && typeof got === "object" ? Number(got.width) : NaN;
+      if (!isFinite(width) || width <= 0) return null;
+      return width;
+    }
+
     function readUiPreferences(reviewId) {
       try {
         var raw = backing.getItem(uiKey(reviewId));
-        if (!raw) return { collapsed: false, pill: null };
+        if (!raw) return { collapsed: false, pill: null, width: null, present: false };
         var got = JSON.parse(raw);
-        if (!got || typeof got !== "object") return { collapsed: false, pill: null };
-        return { collapsed: got.collapsed === true, pill: readPillSpot(got) };
+        if (!got || typeof got !== "object") return { collapsed: false, pill: null, width: null, present: false };
+        return {
+          collapsed: got.collapsed === true,
+          pill: readPillSpot(got),
+          width: readRailWidth(got),
+          // Present mode: the reviewer chose to hide the whole library, and a
+          // reload in the middle of a talk has to keep it hidden.
+          present: got.present === true
+        };
       } catch (err) {
-        return { collapsed: false, pill: null };
+        return { collapsed: false, pill: null, width: null, present: false };
       }
     }
 
     function writeUiPreferences(reviewId, value) {
       // Whitelisted on the way in as well as on the way out: this bucket is
       // chrome preference and nothing else ever belongs in it.
-      var next = { collapsed: !!(value && value.collapsed), pill: readPillSpot(value) };
+      var next = {
+        collapsed: !!(value && value.collapsed),
+        pill: readPillSpot(value),
+        width: readRailWidth(value),
+        present: !!(value && value.present)
+      };
       try {
         backing.setItem(uiKey(reviewId), JSON.stringify(next));
       } catch (err) {
@@ -7849,6 +8439,17 @@
       heading: null,
       attr: null,
       minted_at: null,
+      // The id we wrote onto the element itself. See markers.STAMP_ATTR.
+      stamp: null,
+      // The ancestor chain as an agent reads it, innermost last. See whereOf.
+      where: null,
+      // Which of N identical siblings this is. See twinOrdinalOf.
+      ordinal: null,
+      // Whether the region's own words can find it again on their own. False
+      // does NOT mean the reference is bad: it means text alone will not place a
+      // write later, and the fingerprint and path are carrying the identity.
+      text_unique: true,
+      not_unique_reason: null,
       // Which ring of context prefix/suffix were read from. Stored because
       // resolve has to read the same ring; a reference written before this
       // existed carries none and reads as 0, which is what it was.
@@ -7885,7 +8486,10 @@
     var hop = parentOf(node);
     var levels = 0;
     while (isElement(hop) && levels < FINGERPRINT_DEPTH) {
-      chain.push({ tag: tagOf(hop), classes: classesOf(hop) });
+      // The id as well as the classes: an id is the strongest thing an author
+      // writes on an ancestor, and a chain that drops it describes two sections
+      // of the same template identically.
+      chain.push({ tag: tagOf(hop), id: attrOf(hop, "id") || null, classes: classesOf(hop) });
       if (hop === scope) break;
       hop = parentOf(hop);
       levels += 1;
@@ -7931,6 +8535,69 @@
       if (kids[i] === node) return seen;
     }
     return 0;
+  }
+
+  // How many hops of `where` are written down. Long enough to say which card on
+  // the page this is, short enough that it stays a line an agent can read.
+  var WHERE_DEPTH = 8;
+
+  /**
+   * The chain an agent reads to find the element in the source, innermost last.
+   *
+   * One hop per element as `tag#id.class.class`, joined with " > ", e.g.
+   * `main > section#t6.tcase > div.state > section.sec-blog > div.wrap`. It is
+   * the same walk the fingerprint takes, written for a person instead of for a
+   * comparison, and it stops below the search root because "body" says nothing.
+   */
+  function hopName(node) {
+    var name = tagOf(node);
+    var id = attrOf(node, "id");
+    if (typeof id === "string" && id) name += "#" + id;
+    var classes = classesOf(node);
+    for (var i = 0; i < classes.length; i += 1) name += "." + classes[i];
+    return name;
+  }
+
+  function whereOf(node, scope) {
+    if (!isElement(node)) return null;
+    var hops = [hopName(node)];
+    var hop = parentOf(node);
+    while (isElement(hop) && hop !== scope && hops.length < WHERE_DEPTH) {
+      hops.push(hopName(hop));
+      hop = parentOf(hop);
+    }
+    hops.reverse();
+    return hops.join(" > ");
+  }
+
+  /**
+   * Which of N identical siblings this one is, in document order.
+   *
+   * The agent's tie-breaker when the words are on the page more than once: the
+   * first edit of one of N twins happens before any stamp is in the source, so
+   * the agent has to be told WHICH twin to stamp. A page built once from its
+   * source keeps the source's order, so the third identical row on the page is
+   * the third identical row in the source. Looped output is the deferred case.
+   *
+   * Identical means the same tag and the same normalized text under the same
+   * parent. A unique element answers {index: 1, of: 1}.
+   */
+  function twinOrdinalOf(node) {
+    var parent = parentOf(node);
+    if (!isElement(parent)) return { index: 1, of: 1 };
+    var kids = elementChildren(parent);
+    var tag = tagOf(node);
+    var text = textOf(node);
+    var index = 0;
+    var of = 0;
+    for (var i = 0; i < kids.length; i += 1) {
+      if (tagOf(kids[i]) !== tag) continue;
+      if (textOf(kids[i]) !== text) continue;
+      of += 1;
+      if (kids[i] === node) index = of;
+    }
+    if (!of) return { index: 1, of: 1 };
+    return { index: index || 1, of: of };
   }
 
   // -------------------------------------------------------------------------
@@ -8409,6 +9076,115 @@
    * The candidate descriptors selectUnique judges. The node itself is the key,
    * so a bind hands the caller the element with no lookup table in between.
    */
+  /**
+   * The element's assigned id, minting one onto it if it has none.
+   *
+   * Returns null in a document that cannot be written to, which includes the
+   * simulated DOM the unit tests use. Everything downstream treats a missing
+   * stamp as "no such evidence", so nothing depends on the write succeeding.
+   */
+  function stampFor(element) {
+    var existing = attrOf(element, markers.STAMP_ATTR);
+    if (typeof existing === "string" && existing) return existing;
+    if (!element || typeof element.setAttribute !== "function") return null;
+    var id = "e" + Math.random().toString(36).slice(2, 10);
+    try {
+      element.setAttribute(markers.STAMP_ATTR, id);
+    } catch (err) {
+      return null;
+    }
+    return id;
+  }
+
+  /** Every element carrying this exact stamp. More than one is a duplicate. */
+  function findByStamp(scope, stamp) {
+    var out = [];
+    if (!stamp) return out;
+    eachElement(scope, function (node) {
+      if (attrOf(node, markers.STAMP_ATTR) === stamp) out.push(node);
+    });
+    return out;
+  }
+
+  // THE TWO WAYS A STAMP CAN LIE, in words the reviewer can read on the card.
+  //
+  // The stamp is the top rung of the write ladder, so these are the guards that
+  // keep it from being a confident wrong answer. Ken, 2026-09-11: "I would much
+  // rather have graceful failures than quiet failures or destroying work."
+  var STAMP_REASON = {
+    // S1. A copy-paste in somebody's source duplicated the attribute with the
+    // markup around it. Two elements carrying one id is ambiguous in exactly
+    // the way two identical list items are, and it fails the same way.
+    DUPLICATED: "two elements carry this id",
+    // S2. The id is where it was, and the words under it are not the words the
+    // reviewer commented on: the agent stamped the wrong twin, or the passage
+    // was rewritten. Identity is certain, the target is not, and a write may
+    // not land on a maybe.
+    TEXT_MOVED: "the stamp points at different words"
+  };
+
+  function stampResult(bound, node, reason, considered) {
+    return {
+      bound: bound,
+      key: bound ? node : null,
+      element: bound ? node : null,
+      via: "stamp",
+      reason: reason,
+      failureCode: bound
+        ? null
+        : reason === STAMP_REASON.DUPLICATED
+          ? "ANCHOR_AMBIGUOUS"
+          : "ANCHOR_NO_TEXT_MATCH",
+      considered: considered,
+      survivors: bound ? 1 : 0,
+      corroboration: { structure: false, heading: false }
+    };
+  }
+
+  /**
+   * Does the stamped element still hold the words the reference was made of?
+   *
+   * A reference with no words at all (a bare canvas) has nothing that can
+   * disagree, so the stamp stands on its own. `accept` is the caller's list of
+   * other texts that are legitimately this region now: a replay that has
+   * already applied an edit knows what it wrote, and the region is still the
+   * region.
+   */
+  function stampTextAgrees(ref, node, accept) {
+    var probe = typeof ref.probe === "string" ? normalize.normalizeText(ref.probe) : "";
+    if (!probe) return true;
+    var raw = probeKindOf(ref) === PROBE.ELEMENT ? signatureOf(node) : textOf(node);
+    var now = normalize.normalizeText(raw || "");
+    if (!now) return false;
+    if (now === probe || now.indexOf(probe) !== -1) return true;
+    var others = Array.isArray(accept) ? accept : [];
+    for (var i = 0; i < others.length; i += 1) {
+      var other = typeof others[i] === "string" ? normalize.normalizeText(others[i]) : "";
+      if (other && (now === other || now.indexOf(other) !== -1)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * The first rung of the write ladder, or null to fall through to the words.
+   *
+   * A stamp that is not on the page at all is not a failure here: the page may
+   * never have carried it into the source, which is the ordinary case. That
+   * falls through to text, then to the fingerprint, then to an honest refusal,
+   * exactly as it did before stamps existed.
+   */
+  function stampVerdict(ref, scope, accept) {
+    var stamp = ref && typeof ref.stamp === "string" ? ref.stamp : "";
+    if (!stamp) return null;
+    var found = findByStamp(scope, stamp);
+    if (!found.length) return null;
+    if (found.length > 1) return stampResult(false, null, STAMP_REASON.DUPLICATED, found.length);
+    if (!stampTextAgrees(ref, found[0], accept)) {
+      return stampResult(false, null, STAMP_REASON.TEXT_MOVED, 1);
+    }
+    return stampResult(true, found[0], "stamp", 1);
+  }
+
   function candidatesFor(ref, scope) {
     var probe = typeof ref.probe === "string" ? normalize.normalizeText(ref.probe) : "";
     var kind = probeKindOf(ref);
@@ -8460,6 +9236,14 @@
   // mint
   // -------------------------------------------------------------------------
 
+  /**
+   * The two things that are still refusals, and nothing else is.
+   *
+   * No element and no searchable root are both "there is nothing here to talk
+   * about". Everything that used to be a failure below them was really a
+   * prediction that the region would be hard to find LATER, and predicting that
+   * at mint time cost the reviewer the comment they had just written.
+   */
   function mintFailure(ref, reason, detail) {
     ref.ok = false;
     ref.failure = {
@@ -8587,6 +9371,15 @@
 
     if (!element) return mintFailure(ref, MINT_FAILURE.NO_ELEMENT);
 
+    // STAMP IT NOW, while it is in our hands. Every other signal in this file is
+    // a way of recognising the element again from what it happens to look like.
+    // This one is true because we put it there, and the moment the reviewer
+    // clicks is the only moment it can be put there with certainty.
+    //
+    // An element already carrying a stamp keeps it: it may have come back from
+    // the source, which is the whole point of the agent writing it there.
+    ref.stamp = stampFor(element);
+
     // Text first, always. A region with words in it is anchored by its words,
     // and the signature path is what happens when there are none, never a
     // second opinion about a region that has some.
@@ -8605,7 +9398,11 @@
     // src, no alt and no srcset really is unidentifiable, and saying so is the
     // whole fix: the old code said it too, and then stored the failure as
     // though it were a reference.
-    if (!ref.probe) return mintFailure(ref, MINT_FAILURE.EMPTY_PROBE);
+    // NO WORDS AND NO SIGNATURE IS NOT A REFUSAL ANY MORE. See the note on
+    // mintFailure below: the element is in our hands, so something is always
+    // captured. What an empty probe costs is the ability to re-find it BY TEXT,
+    // which is recorded rather than thrown.
+    if (!ref.probe) ref.text_unique = false;
 
     var scope = scopeOf(input.root, element);
     if (!isElement(scope)) return mintFailure(ref, MINT_FAILURE.NOT_FOUND, "no searchable root");
@@ -8616,6 +9413,12 @@
     // src/layer/pointing.js reads when the words are gone and the reviewer still
     // has to be shown where their comment went. Storing it is not scoring it.
     ref.fingerprint = fingerprintOf(element, scope);
+    // Both of these are for the AGENT, not for this engine: they are what
+    // review.json hands over so the right element can be found in the source
+    // and stamped there. Taken here because this is where the element is in our
+    // hands, and neither one ever places a write.
+    ref.where = whereOf(element, scope);
+    ref.ordinal = twinOrdinalOf(element);
 
     var levelCount = contextLevelsOf(element, scope).length;
     var workspace = candidateWorkspace(ref, scope);
@@ -8663,11 +9466,29 @@
       }
     }
 
-    return mintFailure(
-      ref,
-      lastVerdict && lastVerdict.considered > 1 ? MINT_FAILURE.NOT_UNIQUE_IN_BLOCK : MINT_FAILURE.NOT_FOUND,
-      lastVerdict ? lastVerdict.reason : null
-    );
+    // WIDENING RAN OUT, AND THE COMMENT IS STILL GOOD.
+    //
+    // Ken: "when i click on an element on the page, we should be able to
+    // identify it." He is right, and this used to be the line that said
+    // otherwise. The reviewer pointed at a thing; the thing was in our hands;
+    // and because its words were not enough to FIND IT AGAIN, the reference was
+    // thrown away and the comment was born broken. On a page of 73 identical
+    // Approve buttons that is every comment on the page.
+    //
+    // Not being re-findable by text is a fact about the FUTURE, not about now.
+    // It is recorded here so the write path can refuse later, which it does on
+    // its own through uniqueness.js whether or not this flag exists, and so the
+    // rail can say something useful at the moment it happens. The path and the
+    // fingerprint were taken above and they describe exactly the element the
+    // reviewer clicked.
+    ref.ok = true;
+    ref.text_unique = false;
+    ref.failure = null;
+    ref.not_unique_reason =
+      lastVerdict && lastVerdict.considered > 1
+        ? MINT_FAILURE.NOT_UNIQUE_IN_BLOCK
+        : MINT_FAILURE.NOT_FOUND;
+    return ref;
   }
 
   // -------------------------------------------------------------------------
@@ -8692,9 +9513,15 @@
    *   null. A null element with a failureCode is an honest failure, and it is a
    *   perfectly good answer.
    */
-  function resolve(ref, root) {
+  function resolve(ref, root, options) {
     var reference = ref || {};
     var scope = scopeOf(root, null);
+    // The stamp first, because it is the one signal that is true by
+    // construction. It answers in three ways and only one of them is a bind:
+    // see stampVerdict. A stamp that is not on the page says nothing, and the
+    // words decide as they always did.
+    var stamped = stampVerdict(reference, scope, options && options.accept);
+    if (stamped) return stamped;
     var verdict = uniqueness.selectUnique(candidatesFor(reference, scope), reference);
     verdict.element = verdict.bound ? verdict.key : null;
     return verdict;
@@ -8900,6 +9727,10 @@
     attrOf: attrOf,
     scopeOf: scopeOf,
     fingerprintOf: fingerprintOf,
+    stampFor: stampFor,
+    findByStamp: findByStamp,
+    STAMP_ATTR: markers.STAMP_ATTR,
+    STAMP_REASON: STAMP_REASON,
     foundContextFor: foundContextFor,
     eachElement: eachElement
   };
@@ -8995,7 +9826,15 @@
     // clear winner and it was the wrong element, which is the exact outcome
     // uniqueness.js refuses. So they order candidates that are otherwise equally
     // good, and they can never promote one past the margin.
+    // TWO PLACES, NOT ONE. Ken: "before and after ref.paths is still good for
+    // some of the use cases." Keeping only the fresher one is lossy, and undo is
+    // the case that shows it: a region minted at s2, moved to s4 by an edit,
+    // refreshed to s4, and then put back at s2 when the reviewer takes the edit
+    // away. The fresh path now matches nothing and the minted one is exactly
+    // right. Both count, and the fresher is worth more because it is the more
+    // recent evidence, not because it is more true.
     PATH: 20,
+    PATH_MINTED: 12,
     ORDINAL: 5
   };
 
@@ -9055,10 +9894,22 @@
    * carries none of them and scores on context and path alone, which is the
    * honest amount of evidence it has.
    */
-  function scoreAgainst(ref, node, scope) {
+  function scoreAgainst(ref, node, scope, knownPath, knownPrint) {
     var reference = ref || {};
-    var print = reference.fingerprint || {};
     var found = anchor.fingerprintOf(node, scope) || {};
+    // TWO REMEMBERED SELVES, and a candidate matching EITHER is evidence.
+    //
+    // Ken: "what if the whole fingerprint is rerun before and after?" An edit can
+    // change what an element IS, not only where it sits: the agent rewords the
+    // passage and wraps it in a new div with a new class, and a fingerprint from
+    // before that describes something that no longer exists. Re-taking it after
+    // each edit is how the later look has anything current to compare with.
+    //
+    // The minted one is kept rather than replaced, for the same reason both paths
+    // are kept: an undo puts back the thing that was there on the day the comment
+    // was made. Whichever self this candidate resembles more is the score.
+    var print = reference.fingerprint || {};
+    var alt = knownPrint || null;
     var score = 0;
     var position = 0;
     var reasons = [];
@@ -9073,13 +9924,24 @@
     if (attr && attr === textish(anchor.attrOf(node, anchor.AUTHOR_ATTR))) {
       add(WEIGHT.AUTHOR_ATTR, "author region name");
     }
-    if (print.element_id && print.element_id === found.element_id) {
+    var wantId = print.element_id || (alt && alt.element_id);
+    if (wantId && (wantId === found.element_id || (alt && alt.element_id === found.element_id))) {
       add(WEIGHT.ELEMENT_ID, "id");
     }
-    add(Math.round(WEIGHT.CLASSES * overlap(print.classes, found.classes)), "classes");
-    add(Math.round(WEIGHT.CHAIN * chainAgreement(print.chain, found.chain)), "parents");
-    if (reference.path && reference.path === anchor.pathOf(node, scope)) {
-      position += WEIGHT.PATH;
+    var classFit = Math.max(
+      overlap(print.classes, found.classes),
+      alt ? overlap(alt.classes, found.classes) : 0
+    );
+    var chainFit = Math.max(
+      chainAgreement(print.chain, found.chain),
+      alt ? chainAgreement(alt.chain, found.chain) : 0
+    );
+    add(Math.round(WEIGHT.CLASSES * classFit), "classes");
+    add(Math.round(WEIGHT.CHAIN * chainFit), "parents");
+    var herePath = knownPath || reference.path ? anchor.pathOf(node, scope) : null;
+    if (knownPath && knownPath === herePath) position += WEIGHT.PATH;
+    if (reference.path && reference.path !== knownPath && reference.path === herePath) {
+      position += WEIGHT.PATH_MINTED;
     }
     var context = anchor.foundContextFor(node, scope, reference);
     if (contextAgrees(reference.prefix, context.prefix)) add(WEIGHT.PREFIX, "text before");
@@ -9087,8 +9949,12 @@
     if (reference.heading && reference.heading === anchor.headingOf(node, scope)) {
       add(WEIGHT.HEADING, "under the same heading");
     }
-    if (print.tag && print.tag === found.tag) add(WEIGHT.TAG, "same kind of element");
-    if (print.ordinal && print.ordinal === found.ordinal) position += WEIGHT.ORDINAL;
+    if ((print.tag && print.tag === found.tag) || (alt && alt.tag === found.tag)) {
+      add(WEIGHT.TAG, "same kind of element");
+    }
+    if ((print.ordinal && print.ordinal === found.ordinal) || (alt && alt.ordinal === found.ordinal)) {
+      position += WEIGHT.ORDINAL;
+    }
 
     return { score: score, position: position, reasons: reasons };
   }
@@ -9102,15 +9968,40 @@
    * to be reported with a caveat, it is the shape of the error this whole design
    * refuses, so it produces no answer at all.
    */
-  function bestGuess(ref, root) {
+  /**
+   * @param {Object} ref the stored reference
+   * @param {Node} root the document to look in
+   * @param {{knownPath?: string}} [options] `knownPath` is where this region was
+   *   the last time anything actually FOUND it, which is not where it was minted.
+   *
+   *   WHY THAT MATTERS, and it is the queued-edits problem rather than a detail.
+   *   Four comments are made against one page. The agent applies the first edit,
+   *   which deletes a block; everything below it shifts up. The remaining three
+   *   references still bind, because they bind on their own words. But their
+   *   stored PATHS are now wrong, and nothing has said so. Apply a second edit
+   *   that rewords one of them and its text is gone too, so the only thing left
+   *   is a path from before a deletion that moved it.
+   *
+   *   Ken: "before the edit it was d1>d3>s2 and after the edit it was d1>d3>s4".
+   *   Refreshing it while the text still matches is how the second fact gets
+   *   known, and it has to happen on every successful bind rather than when
+   *   something has already gone wrong, because by then there is nothing left to
+   *   ask. It is the same shape as his answer about undo: commit constantly.
+   */
+  function bestGuess(ref, root, options) {
     var reference = ref || {};
-    if (!reference.fingerprint && !reference.path && !reference.attr) return { element: null };
+    var known = (options && options.known) || null;
+    var knownPath = (options && options.knownPath) || (known && known.path) || null;
+    var knownPrint = known ? known.fingerprint : null;
+    if (!reference.fingerprint && !reference.path && !knownPath && !knownPrint && !reference.attr) {
+      return { element: null };
+    }
     var scope = anchor.scopeOf(root, null);
     if (!scope) return { element: null };
 
     var scored = [];
     anchor.eachElement(scope, function (node) {
-      var got = scoreAgainst(reference, node, scope);
+      var got = scoreAgainst(reference, node, scope, knownPath, knownPrint);
       if (got.score <= 0) return;
       scored.push({ node: node, score: got.score, position: got.position, reasons: got.reasons });
     });
@@ -9126,19 +10017,175 @@
     var top = scored[0];
     var next = scored.length > 1 ? scored[1] : null;
     if (top.score < FLOOR) return { element: null, score: top.score, runnerUp: next ? next.score : 0 };
+
     if (next && top.score - next.score < MARGIN) {
+      // IDENTITY COULD NOT SEPARATE THEM, so ask where they are. Ken: "ref.path
+      // should be used to get to the right region, and then from there we should
+      // look more deeply to ensure we're working on the right thing." This is the
+      // other half of that: looking deeply has been done, it came back tied
+      // because the candidates really are alike, and the stored path is the only
+      // fact left.
+      //
+      // A path match is used here and nowhere else in the scoring, and the
+      // difference matters. It is not a number added to a total, it is one
+      // question with a yes or no answer: is exactly one of the tied candidates
+      // standing where this region stood. Two of them cannot both be.
+      //
+      // IT IS ALLOWED TO BE WRONG, and it is marked so the rail can say so. If
+      // the page reordered, the element now standing in that slot is a different
+      // one, and this points at it. Ken again, on that trade: "for the moment
+      // when the edit needs to be made, it does work ... but anything that's
+      // reordered or deleted, then after that this thing no longer works." True.
+      // The alternative is pointing at nothing, which is what the reviewer has
+      // been getting, and a mark in the wrong place can be seen and dismissed
+      // where an absent one cannot. Nothing here places a write either way.
+      var tied = scored.filter(function (candidate) {
+        return top.score - candidate.score < MARGIN;
+      });
+      var onPath = tied.filter(function (candidate) {
+        // Either remembered place qualifies. An ordinal match alone does not:
+        // that is a fact about one render and it is worth 5.
+        if (candidate.position < WEIGHT.PATH_MINTED) return false;
+        // THE REGION WAS DELETED AND EVERYTHING SHIFTED UP, which looks exactly
+        // like the region still being here until you read what is standing in
+        // its place. If that is the text we remembered as this region's
+        // NEIGHBOUR, then the neighbour has moved into the slot and the region
+        // itself is gone. Pointing at it would tell the reviewer their comment
+        // is on a paragraph that no longer exists, which is worse than pointing
+        // at nothing, because nothing is visibly nothing.
+        var here = textish(candidate.node && candidate.node.textContent);
+        if (!here) return true;
+        return here !== textish(reference.prefix) && here !== textish(reference.suffix);
+      });
+      if (onPath.length === 1) {
+        return {
+          element: onPath[0].node,
+          score: onPath[0].score,
+          runnerUp: next.score,
+          reasons: onPath[0].reasons.concat(["and it is the one still standing in that place"]),
+          via: "position"
+        };
+      }
       return { element: null, score: top.score, runnerUp: next.score };
     }
+
     return {
       element: top.node,
       score: top.score,
       runnerUp: next ? next.score : 0,
-      reasons: top.reasons
+      reasons: top.reasons,
+      via: "identity"
     };
+  }
+
+  /**
+   * The gap a removed region left behind, so the reviewer can be shown WHERE.
+   *
+   * Ken, on trying to identify something that has been deleted: "you only need
+   * to identify it before you've removed it. After you've removed it, you don't
+   * need to identify it ... trying to identify a removed element, you can't even
+   * do that with an ID." Exactly so, and that is why bestGuess refuses here: no
+   * fingerprint, no path and no injected marker can find a node that is not in
+   * the document. The question has no answer.
+   *
+   * A different question does have one. "The better UX would be to show where it
+   * was deleted, but that would be tagged to something else, not the removed
+   * element." The something else is already stored: the reference kept the text
+   * of its neighbours when it was minted, and a neighbour that survived the
+   * deletion is findable by exactly the machinery the region itself used.
+   *
+   * So this answers "your passage was here", never "here is your passage". It
+   * places no write, and the rail has to say the region is gone rather than
+   * letting a mark on the neighbour imply it is still there.
+   *
+   * @returns {{element, side}|null} the surviving neighbour and which side of
+   *   the gap it sat on, or null when both neighbours went too.
+   */
+  function whereItWas(ref, root) {
+    var reference = ref || {};
+    var sides = [
+      { side: "after", text: reference.suffix },
+      { side: "before", text: reference.prefix }
+    ];
+    for (var i = 0; i < sides.length; i += 1) {
+      var text = textish(sides[i].text);
+      if (!text) continue;
+      // The real engine, not a second opinion about what a match is: innermost
+      // element wins, and two candidates are no answer.
+      var verdict = anchor.resolve(
+        { probe: text, probe_kind: "text", prefix: "", suffix: "", context_level: 0 },
+        root
+      );
+      if (verdict && verdict.element) return { element: verdict.element, side: sides[i].side };
+    }
+    return null;
+  }
+
+  /**
+   * The three answers a card can honestly give about where its region went.
+   *
+   * Today there is one message for all of them: "could not be safely matched to
+   * this version of the page", which is where this whole argument started. It is
+   * true and it is useless, because it does not separate a passage the agent
+   * REWORDED from one the agent DELETED, and those want different things from
+   * the reviewer.
+   *
+   * Ken, arriving at it through the reference's path: "before the edit it was
+   * d1>d3>s2 and after the edit it was d1>d3>s4", and then "or d1>d3>s2 to
+   * d1>d3>deleted". The second one is the interesting half. A path that ends in
+   * a tombstone is not a failure to look, it is a finding.
+   *
+   * The evidence for that finding is already here. A region is REMOVED, rather
+   * than merely unfound, when its neighbours are still on the page and the place
+   * it used to sit is now occupied by one of them. That is the same shift-up
+   * that bestGuess refuses to point at, read as information instead of as a
+   * hazard.
+   *
+   * @returns {{state: "found"|"removed"|"unknown", element?, via?, gap?}}
+   */
+  function verdictFor(ref, root, options) {
+    var guess = bestGuess(ref, root, options);
+    if (guess.element) return { state: "found", element: guess.element, via: guess.via };
+
+    var gap = whereItWas(ref, root);
+    if (gap) return { state: "removed", gap: gap };
+
+    // The neighbours went too, or nothing here resembles any of it. Either way
+    // there is nothing to say beyond that, and saying more would be inventing.
+    return { state: "unknown" };
   }
 
   return {
     WEIGHT: WEIGHT,
+    whereItWas: whereItWas,
+    verdictFor: verdictFor,
+    /**
+     * Where this region is NOW, to be kept until the next successful bind.
+     *
+     * Called after the strict engine binds, which is the only moment the answer
+     * is known to be right. Returns null when nothing bound, so a caller cannot
+     * accidentally record a guess as a fact.
+     */
+    placeOf: function (element, root) {
+      if (!element) return null;
+      var scope = anchor.scopeOf(root, null);
+      return scope ? anchor.pathOf(element, scope) : null;
+    },
+
+    /**
+     * Everything worth remembering about where and what this region is NOW.
+     *
+     * Taken after a successful bind, which is the only moment it is known to be
+     * right, and taken again after every edit that lands while the region can
+     * still be found. A region whose words an edit destroys keeps the snapshot
+     * from just before that edit, which is the most recent true thing about it.
+     */
+    snapshot: function (element, root) {
+      if (!element) return null;
+      var scope = anchor.scopeOf(root, null);
+      if (!scope) return null;
+      return { path: anchor.pathOf(element, scope), fingerprint: anchor.fingerprintOf(element, scope) };
+    },
     FLOOR: FLOOR,
     MARGIN: MARGIN,
     scoreAgainst: scoreAgainst,
@@ -10105,13 +11152,58 @@
     // "Here it is": the passage a card was just clicked to find. It lasts about
     // a second and a half and then it is gone, so it never becomes a third
     // permanent state a reviewer has to learn.
-    EMPHASIS: PREFIX + "emphasis"
+    EMPHASIS: PREFIX + "emphasis",
+    // "This is what just changed." Painted on a block whose words are new or
+    // different after the agent's rebuild, and gone a couple of seconds later.
+    // The two names after it are the same mark, fading: see CHANGED_STEPS.
+    CHANGED: PREFIX + "changed",
+    CHANGED_FADING: PREFIX + "changed-fading",
+    CHANGED_FAINT: PREFIX + "changed-faint",
+    // "This is probably where your comment went." The point ladder's best
+    // guess, when the words a comment was made on are no longer on the page and
+    // no stamp identifies the element. It is a guess, so it must not look like
+    // a find: see the rule beside its style below.
+    PROBABLE: PREFIX + "comment-probable"
   };
-  var NAMES = [NAME.COMMENT, NAME.ACTIVE, NAME.EMPHASIS];
+  var NAMES = [
+    NAME.COMMENT,
+    NAME.ACTIVE,
+    NAME.EMPHASIS,
+    NAME.CHANGED,
+    NAME.CHANGED_FADING,
+    NAME.CHANGED_FAINT,
+    NAME.PROBABLE
+  ];
 
   // How long the "here it is" wash stays up. Long enough to find with the eye
   // after a smooth scroll, short enough that it cannot be mistaken for state.
   var EMPHASIS_MS = 1500;
+
+  // How long a changed block stays lit. Long enough to find with the eye on a
+  // page that just replaced itself, short enough that it is gone before the
+  // reviewer starts reading and cannot be mistaken for a state of the record.
+  var CHANGED_MS = 2500;
+
+  // The fade, as steps rather than as a transition.
+  //
+  // A ::highlight() rule is not an element and engines do not animate one
+  // reliably, so the mark is moved between three rules of decreasing strength
+  // and then removed. Three steps read as a fade at this duration; more would be
+  // more timers for something nobody is watching closely.
+  //
+  // Each entry is {at: fraction of the hold, name}. Under
+  // prefers-reduced-motion the steps are skipped: the mark holds at full
+  // strength for the same time and then goes, so the information is identical
+  // and nothing moves.
+  var CHANGED_STEPS = [
+    { at: 0.55, name: NAME.CHANGED_FADING },
+    { at: 0.8, name: NAME.CHANGED_FAINT }
+  ];
+
+  // Changed marks live under their own key prefix, so a block's change paint
+  // and a record's comment paint are separate entries and clearing one never
+  // disturbs the other. No record id can collide with it.
+  var CHANGED_PREFIX = "__lahe_changed__:";
 
   // The one reserved key in the painted map. An item's own paint is keyed by its
   // record id, so the emphasis rides on a key no record can have: emphasizing a
@@ -10141,6 +11233,15 @@
   // boxes, the pick-mode outline and everything else the library ever draws
   // goes with it, without naming any of them.
   var PRINT_HOST_STYLE_TEXT = ["@media print {", "  :host { display: none !important; }", "}"].join("\n");
+
+  // Present mode, and the same one-rule trick as print for the same reason: the
+  // rail, the collapsed pill, the toast column, the comment boxes, the selection
+  // pill and the pick outline are all descendants of the one host, so hiding the
+  // host hides every one of them without this module naming any of them. The
+  // reviewer is presenting the page and nothing of the tool's belongs on the
+  // screen behind them. See setHidden.
+  var HIDDEN_ATTR = "data-lahe-hidden";
+  var HIDDEN_HOST_STYLE_TEXT = [":host([" + HIDDEN_ATTR + "]) { display: none !important; }"].join("\n");
 
   // Highlight colors, as light a touch as a highlight can be and still read.
   // Written with color-mix-free plain rgba so a page-level stylesheet cannot
@@ -10177,6 +11278,51 @@
     // is this comment".
     "::highlight(" + NAME.EMPHASIS + ") {",
     "  background-color: rgba(60, 86, 165, 0.38);",
+    "  color: inherit;",
+    "}",
+    // THE CHANGED MARK IS THE ONE YELLOW, and it is yellow on purpose. The
+    // indigo above is the reviewer's own language: I selected this, I commented
+    // here. A change is not theirs, it is the agent answering them, and it has
+    // to be legible as something else at a glance. A highlighter yellow is what
+    // a person reaches for when they mark what moved, it cannot be confused
+    // with the indigo wash an inch away, and it still reads as a mark over text
+    // rather than as an alarm.
+    //
+    // Translucent, like the rest: the words underneath are the point, and a
+    // wash never changes a single measurement on the page (D8).
+    "::highlight(" + NAME.CHANGED + ") {",
+    "  background-color: rgba(250, 204, 21, 0.55);",
+    "  color: inherit;",
+    "}",
+    "::highlight(" + NAME.CHANGED_FADING + ") {",
+    "  background-color: rgba(250, 204, 21, 0.32);",
+    "  color: inherit;",
+    "}",
+    "::highlight(" + NAME.CHANGED_FAINT + ") {",
+    "  background-color: rgba(250, 204, 21, 0.14);",
+    "  color: inherit;",
+    "}",
+    // A GUESS MUST NOT LOOK LIKE A FIND. This is the comment wash at less than
+    // half its strength with a dashed underline through it, so a reviewer
+    // scanning the page can tell at a glance which marks the tool is sure of.
+    // The card says the word "probable" beside it; this is the same statement
+    // made on the page.
+    //
+    // Two properties and no more. A ::highlight() rule only honours a short
+    // list, and the list is not the same in every engine: background-color and
+    // text-decoration are the two that Chromium, Firefox and WebKit all paint,
+    // so the whole treatment is built from those. Anything else (a border, an
+    // outline, a box-shadow) is ignored by at least one of them and would leave
+    // the guess looking exactly like a find there.
+    //
+    // No dark-scheme twin, for the same reason none of the rules above has one:
+    // these are translucent washes over the page's own text, and the text keeps
+    // its own colour, so the mark reads the same over a white page and a black
+    // one. The scheme switch (SCHEME_ATTR) is for the surfaces the library
+    // draws itself, which have their own backgrounds to get wrong.
+    "::highlight(" + NAME.PROBABLE + ") {",
+    "  background-color: rgba(60, 86, 165, 0.06);",
+    "  text-decoration: underline dashed rgba(60, 86, 165, 0.7);",
     "  color: inherit;",
     "}",
     "}",
@@ -10216,6 +11362,20 @@
   // amounts to.
   var SCHEME_ATTR = "data-lahe-scheme";
 
+  // How wide a berth everything else has to give the rail, in CSS pixels,
+  // published on the ONE page-level host as a custom property.
+  //
+  // The rail is resizable, so its width is no longer a number another file can
+  // hardcode. The rail writes this whenever its width changes (overlay.js) and
+  // the other surfaces read it back (comments.js: the anchored box and the
+  // selection pill). It lives HERE because the host it is written on is this
+  // file's, and because a property name spelled twice is a property name that
+  // will eventually be spelled two ways.
+  //
+  // It is the rail's width PLUS the gap it keeps from the viewport edge, so a
+  // reader can treat it as "distance from the right edge that is spoken for".
+  var RAIL_ALLOWANCE_PROP = "--lahe-rail-allowance";
+
   /** rgb()/rgba() as {r,g,b,a}, or null for anything else (including keywords). */
   function parseColor(value) {
     if (!value || typeof value !== "string") return null;
@@ -10232,6 +11392,89 @@
   /** Perceived lightness, 0 (black) to 1 (white). The sRGB luma weights. */
   function luminance(color) {
     return (0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b) / 255;
+  }
+
+  // ---------------------------------------------------------------------------
+  // The typing fence
+  // ---------------------------------------------------------------------------
+
+  /**
+   * True for the things a person types into: the fields the fence is for.
+   *
+   * @param {any} node the event's real target, inside the closed root
+   * @returns {boolean}
+   */
+  function isTypingTarget(node) {
+    if (!node || node.nodeType !== 1) return false;
+    var tag = node.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+    return node.isContentEditable === true;
+  }
+
+  /**
+   * Keys typed into the library's own text fields stay in the library.
+   *
+   * A keyboard-driven page decides "is someone typing" by reading
+   * document.activeElement and asking whether it is an input, a textarea, or
+   * contenteditable. reveal.js is the one that caught this, and any deck or app
+   * with document-level hotkeys does the same thing. Everything the library
+   * draws lives inside a CLOSED shadow root, and the browser retargets focus
+   * across a shadow boundary: from the page's side the active element is the
+   * plain host div, which is not editable. So the page decides nobody is typing
+   * and handles the key, and a space pressed mid-sentence in a comment advances
+   * the slide.
+   *
+   * CALL THIS ON EVERY SHADOW ROOT THE LIBRARY OPENS, not just the outermost
+   * one. Retargeting happens at each boundary, and a CLOSED root hides its
+   * nodes from listeners outside it on composedPath() as well as on target.
+   * Measured in Chromium with a field in a closed root nested inside another
+   * closed root: at the inner root's own listener both target and
+   * composedPath()[0] are the TEXTAREA, and at the OUTER root's listener both
+   * are the inner host DIV. That is why the first version of this fence, which
+   * sat only on the surface root, held for a comment box anchored on the page
+   * and did nothing at all for the rail's own fields (the card's editable note,
+   * the follow-up composers, the page note), which live in the rail's nested
+   * root. Ken found it by correcting a comment in the rail on a reveal deck and
+   * watching the deck change slides.
+   *
+   * The fence sits on the roots rather than in each box because a root is a
+   * boundary the page can see across: every text field the library grows inside
+   * one is covered without anyone remembering to cover it, and there is one
+   * place to read when this behavior is in question.
+   *
+   * Stopping at the innermost root also stops the event completely, so a page
+   * that listens on window rather than on document is covered by the same line.
+   *
+   * Bubbling phase, so the field's own handlers at the target have already run:
+   * Cmd-Enter still commits a comment and Escape still closes a box. Never
+   * preventDefault, because typing must still type.
+   *
+   * The library's own document-level handlers are unaffected. comments.js and
+   * editing.js both register their keydown in the CAPTURE phase
+   * (listeners.on(target, "keydown", fn, true, ...)), so they run on the way
+   * down, before this listener ever sees the event.
+   *
+   * Keys aimed at non-text chrome pass through untouched: a reviewer who
+   * clicked a rail button and then pressed an arrow key still expects the page
+   * to move.
+   *
+   * Hand edits are out of scope by construction. They happen in the page's own
+   * DOM, where a contenteditable block is exactly what the page already checks
+   * for.
+   *
+   * @param {ShadowRoot} root a closed shadow root the library owns
+   * @returns {void}
+   */
+  function fenceTypingKeys(root) {
+    if (!root || typeof root.addEventListener !== "function") return;
+    var stop = function (event) {
+      var path = typeof event.composedPath === "function" ? event.composedPath() : null;
+      var target = (path && path[0]) || event.target;
+      if (isTypingTarget(target)) event.stopPropagation();
+    };
+    root.addEventListener("keydown", stop);
+    root.addEventListener("keyup", stop);
+    root.addEventListener("keypress", stop);
   }
 
   function systemScheme(win) {
@@ -10273,6 +11516,11 @@
     // id -> {name, range}. One entry per item, so clearing one item's paint is
     // a lookup rather than a re-scan.
     var painted = Object.create(null);
+    // Present mode. While it is on, the surface is display:none and NOTHING is
+    // registered in CSS.highlights, so the page behind the presenter carries no
+    // wash of any kind. The ranges themselves are kept, so coming back puts
+    // every mark back where it was rather than re-resolving anchors.
+    var hidden = false;
     var styleNode = null;
     var surfaceHost = null;
     var surfaceRoot = null;
@@ -10349,9 +11597,15 @@
       var g = global();
       var highlight = registryFor(name);
       highlight.clear();
-      Object.keys(painted).forEach(function (id) {
-        if (painted[id].name === name && painted[id].range) highlight.add(painted[id].range);
-      });
+      // Hidden means hidden: the entries stay in `painted` and none of them is
+      // handed to the registry, so a paint made while presenting (a reply
+      // folding, a repaint after a morph) is remembered and drawn on the way
+      // back rather than appearing on the projector.
+      if (!hidden) {
+        Object.keys(painted).forEach(function (id) {
+          if (painted[id].name === name && painted[id].range) highlight.add(painted[id].range);
+        });
+      }
       g.CSS.highlights.set(name, highlight);
       return highlight;
     }
@@ -10457,6 +11711,105 @@
     }
 
     // ------------------------------------------------------------------------
+    // "This is what just changed": the attention mark
+    // ------------------------------------------------------------------------
+    //
+    // The agent edits the source, the page rebuilds, LAHE reloads it, and the
+    // reviewer is looking at a page that is different in a way they asked for
+    // and cannot see. This is what puts their eye on it: a highlighter mark over
+    // the words that are new or different, which fades out and is gone.
+    //
+    // Same rules as every other paint here. Nothing enters the DOM, nothing is
+    // styled on the page's own nodes, and the mark is removed on a timer whether
+    // or not anything else happens.
+
+    // key -> the timers still owed to it.
+    var changedTimers = Object.create(null);
+
+    function changedKeyFor(key) {
+      return CHANGED_PREFIX + String(key);
+    }
+
+    function reducedMotion() {
+      var g = opts.window || global();
+      try {
+        if (!g || typeof g.matchMedia !== "function") return false;
+        return !!g.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      } catch (error) {
+        return false;
+      }
+    }
+
+    /**
+     * Mark one range as changed, and let it fade.
+     *
+     * @param {string} key   anything unique for this block; its own text does
+     *                       nicely, since two identical blocks are one mark
+     * @param {Range} range  a live Range over the changed words
+     * @param {number} [ms]  how long to hold it; CHANGED_MS by default
+     * @returns {boolean} true when the mark went on
+     */
+    function markChanged(key, range, ms) {
+      if (!key) return false;
+      if (!range || typeof range.cloneRange !== "function") return false;
+      if (!supported()) return false;
+      var id = changedKeyFor(key);
+      clearChanged(key);
+      paint(id, range, NAME.CHANGED);
+      var hold = typeof ms === "number" && ms > 0 ? ms : CHANGED_MS;
+      var g = global();
+      if (!g || typeof g.setTimeout !== "function") return true;
+      var timers = [];
+      if (!reducedMotion()) {
+        CHANGED_STEPS.forEach(function (step) {
+          timers.push(
+            g.setTimeout(function () {
+              if (painted[id]) paint(id, painted[id].range, step.name);
+            }, Math.round(hold * step.at))
+          );
+        });
+      }
+      timers.push(
+        g.setTimeout(function () {
+          clearChanged(key);
+        }, hold)
+      );
+      changedTimers[id] = timers;
+      return true;
+    }
+
+    function clearChanged(key) {
+      var id = changedKeyFor(key);
+      var g = global();
+      var timers = changedTimers[id];
+      if (timers && g && typeof g.clearTimeout === "function") timers.forEach(g.clearTimeout.bind(g));
+      delete changedTimers[id];
+      return clear(id);
+    }
+
+    function clearAllChanged() {
+      Object.keys(changedTimers).forEach(function (id) {
+        clearChanged(id.slice(CHANGED_PREFIX.length));
+      });
+      // A mark whose timers are already spent but whose paint is still up.
+      Object.keys(painted).forEach(function (id) {
+        if (id.indexOf(CHANGED_PREFIX) === 0) clear(id);
+      });
+      return true;
+    }
+
+    /** The keys wearing a changed mark right now. For tests and probes. */
+    function changedKeys() {
+      return Object.keys(painted)
+        .filter(function (id) {
+          return id.indexOf(CHANGED_PREFIX) === 0;
+        })
+        .map(function (id) {
+          return id.slice(CHANGED_PREFIX.length);
+        });
+    }
+
+    // ------------------------------------------------------------------------
     // The library's one shadow surface
     // ------------------------------------------------------------------------
     //
@@ -10519,9 +11872,13 @@
       // no inline value for this rule to lose to.
       if (root) {
         var printStyle = doc.createElement("style");
-        printStyle.textContent = PRINT_HOST_STYLE_TEXT;
+        printStyle.textContent = PRINT_HOST_STYLE_TEXT + "\n" + HIDDEN_HOST_STYLE_TEXT;
         root.appendChild(printStyle);
+        fenceTypingKeys(root);
       }
+      // A surface built while the library is hidden (a remount during a talk)
+      // comes up hidden, rather than flashing the rail onto the projector.
+      if (hidden) host.setAttribute(HIDDEN_ATTR, "true");
       // Stamped on the host, so every stylesheet inside the closed root selects
       // its dark rules with :host([data-lahe-scheme='dark']) instead of a media
       // query. The page decides; see schemeForPage.
@@ -10567,7 +11924,35 @@
       return el;
     }
 
+    /**
+     * Put the whole library out of sight, or bring it back.
+     *
+     * Two halves, and both are needed: the surface host goes display:none (so
+     * the rail, the pill, the toasts and the boxes go with it), and every
+     * CSS.highlights entry is emptied (so the page's own words carry no wash).
+     * Nothing is torn down and nothing is forgotten.
+     *
+     * @param {boolean} next
+     * @returns {boolean} whether the library is hidden now
+     */
+    function setHidden(next) {
+      var want = next !== false;
+      if (want === hidden) return hidden;
+      hidden = want;
+      if (surfaceHost) {
+        if (hidden) surfaceHost.setAttribute(HIDDEN_ATTR, "true");
+        else surfaceHost.removeAttribute(HIDDEN_ATTR);
+      }
+      if (supported()) NAMES.forEach(rebuild);
+      return hidden;
+    }
+
+    function isHidden() {
+      return hidden;
+    }
+
     function teardown() {
+      clearAllChanged();
       clearEmphasis();
       clearAll();
       removeStylesheet();
@@ -10594,7 +11979,13 @@
       emphasize: emphasize,
       clearEmphasis: clearEmphasis,
       emphasisRange: emphasisRange,
+      markChanged: markChanged,
+      clearChanged: clearChanged,
+      clearAllChanged: clearAllChanged,
+      changedKeys: changedKeys,
       surface: surface,
+      setHidden: setHidden,
+      isHidden: isHidden,
       addSurfaceStyle: addSurfaceStyle,
       pageScheme: pageScheme,
       refreshScheme: refreshScheme,
@@ -10613,11 +12004,18 @@
     STYLE_ATTR: STYLE_ATTR,
     SURFACE_ID: SURFACE_ID,
     SCHEME_ATTR: SCHEME_ATTR,
+    HIDDEN_ATTR: HIDDEN_ATTR,
+    RAIL_ALLOWANCE_PROP: RAIL_ALLOWANCE_PROP,
     STYLE_TEXT: STYLE_TEXT,
     PRINT_HOST_STYLE_TEXT: PRINT_HOST_STYLE_TEXT,
+    HIDDEN_HOST_STYLE_TEXT: HIDDEN_HOST_STYLE_TEXT,
     EMPHASIS_MS: EMPHASIS_MS,
     EMPHASIS_KEY: EMPHASIS_KEY,
+    CHANGED_MS: CHANGED_MS,
+    CHANGED_STEPS: CHANGED_STEPS,
+    CHANGED_PREFIX: CHANGED_PREFIX,
     schemeForPage: schemeForPage,
+    fenceTypingKeys: fenceTypingKeys,
     createHighlights: createHighlights,
     shared: shared
   };
@@ -10874,6 +12272,81 @@
   // second copy on every remount.
   var SHEET_ATTR = "data-lahe-sheet";
 
+  // ---------------------------------------------------------------------------
+  // How wide the rail is
+  // ---------------------------------------------------------------------------
+  //
+  // Ken: "some of these responses are getting quite thorough and long, so the
+  // chat rail should be drag-expandable." An agent's answer is a piece of
+  // reading now, and a column sized for a one-line status note is the wrong
+  // shape for it. So the reviewer drags the rail's left edge and the rail
+  // remembers where they left it.
+  //
+  // The default stays exactly what it was, expressed in CSS so a rail nobody
+  // has touched has no inline width at all: clamp(320px, 26vw, 392px).
+  //
+  // Nothing about the PAGE changes when the rail grows (D8). The rail is
+  // position:fixed inside a closed root, so its width is not part of any layout
+  // the page can see.
+
+  // The default width, as three numbers rather than a CSS string, so the one
+  // place it is spelled is here and the stylesheet is built from it. A rail
+  // nobody has dragged carries no inline width at all and wears this.
+  var RAIL_DEFAULT_MIN = 320;
+  var RAIL_DEFAULT_VW = 26;
+  var RAIL_DEFAULT_MAX = 392;
+
+  // The narrowest useful rail. Below this the cards' own controls start
+  // wrapping, so there is nothing to gain by letting the drag go further.
+  var RAIL_MIN_WIDTH = 280;
+  // The widest, as a share of the viewport. A rail past this is not a panel
+  // beside the page, it IS the page, and the reviewer can no longer see what
+  // they are reviewing.
+  var RAIL_MAX_FRACTION = 0.7;
+  // ...and never closer than this to the left edge, which is what keeps the
+  // fraction sane on a narrow window: 70% of a 480px phone would leave 144px of
+  // page, and this leaves a usable strip instead.
+  var RAIL_MAX_MARGIN = 48;
+  // The gap the rail keeps from the right edge of the viewport. It matches the
+  // `right` in the .rail rule, and it is the difference between the rail's own
+  // width and the allowance everything else keeps clear of.
+  var RAIL_EDGE_GAP = 16;
+  // One press of an arrow key. Small enough to tune with, large enough that the
+  // rail visibly moves.
+  var RAIL_KEY_STEP = 16;
+  // What the grip says it is, to a screen reader and to a test.
+  var RAIL_GRIP_LABEL = "Resize the review panel";
+
+  /**
+   * The width the rail may actually take, given the viewport it is in.
+   *
+   * Pure, and exported, because this is the whole of the resize policy: a test
+   * can state the rule without a browser, and the drag, the keyboard and the
+   * restore-from-storage path all clamp through this ONE function rather than
+   * each having its own idea of the bounds.
+   *
+   * The minimum wins a fight with the maximum. On a viewport too narrow for
+   * both, a rail clamped to something under RAIL_MIN_WIDTH is a rail whose
+   * cards have started wrapping, and a reviewer on a small window is better
+   * served by a readable panel that covers more of the page.
+   *
+   * @param {number} width          the width being asked for, in CSS pixels
+   * @param {number} [viewportWidth] the viewport's width, when there is one
+   * @returns {number|null} the width to use, rounded, or null for "not a width"
+   */
+  function clampRailWidth(width, viewportWidth) {
+    var want = Number(width);
+    if (!isFinite(want) || want <= 0) return null;
+    var view = Number(viewportWidth);
+    var max = null;
+    if (isFinite(view) && view > 0) {
+      max = Math.max(RAIL_MIN_WIDTH, Math.min(view * RAIL_MAX_FRACTION, view - RAIL_MAX_MARGIN));
+    }
+    if (want < RAIL_MIN_WIDTH) want = RAIL_MIN_WIDTH;
+    if (max !== null && want > max) want = max;
+    return Math.round(want);
+  }
+
   var CSS = [
     // all: initial stops every inheritable property of the host page (font,
     // color, line-height, letter-spacing) from reaching the rail. A closed
@@ -10922,12 +12395,38 @@
     // pointer-events comes back on here: the ONE page-level host is
     // pointer-events:none so the page stays clickable through it, and the two
     // things the rail actually draws turn it back on.
-    ".rail{position:fixed;top:16px;right:16px;bottom:16px;width:clamp(320px,26vw,392px);",
+    ".rail{position:fixed;top:16px;right:" + RAIL_EDGE_GAP + "px;bottom:16px;",
+    "width:clamp(" + RAIL_DEFAULT_MIN + "px," + RAIL_DEFAULT_VW + "vw," + RAIL_DEFAULT_MAX + "px);",
     "pointer-events:auto;",
     "display:flex;flex-direction:column;background:var(--paper);color:var(--ink);",
     "border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);",
     "overflow:hidden;font-size:13px;line-height:1.45;letter-spacing:.005em}",
     ".rail[hidden]{display:none}",
+
+    // --- the resize grip ------------------------------------------------------
+    // The rail is fixed to the right edge, so its LEFT edge is the one that
+    // moves. The grip is an 8px hit area along that edge: wide enough to catch
+    // with a mouse, narrow enough that it is not stealing presses from the
+    // cards beside it.
+    //
+    // Inside the rail rather than straddling its border, because .rail is
+    // overflow:hidden and anything hanging outside it would simply be clipped.
+    // The visible affordance is the 2px line, which is what the reviewer aims
+    // at, and it only appears on hover, focus or during a drag: a permanent
+    // line down the inside edge would read as a second border.
+    //
+    // NO TRANSITION ON WIDTH anywhere. A rail that eases toward the pointer
+    // feels broken while you are dragging it.
+    ".grip{position:absolute;left:0;top:0;bottom:0;width:8px;z-index:6;",
+    "cursor:col-resize;touch-action:none;background:none;border:0;padding:0}",
+    ".grip::after{content:'';position:absolute;left:3px;top:0;bottom:0;width:2px;background:transparent}",
+    ".grip:hover::after,.grip:focus-visible::after{background:var(--line)}",
+    ".grip[data-lahe-dragging]::after{background:var(--accent)}",
+    // The drag must not select the words it passes over, and it must not land a
+    // press on a card when the pointer is released. The grip itself keeps its
+    // events: it is the thing being dragged.
+    ".rail[data-lahe-resizing]{-webkit-user-select:none;user-select:none}",
+    ".rail[data-lahe-resizing]>*:not(.grip){pointer-events:none}",
 
     // position/z-index so the head's menu can hang over the panes below it.
     ".head{position:relative;z-index:3;display:flex;align-items:center;gap:10px;padding:13px 14px 12px;",
@@ -11052,13 +12551,18 @@
 
     // The agent's question is the loudest thing on a card: its own block, its
     // own rule, its own weight. Not a tinted label (D10).
-    ".agent{border-radius:8px;padding:8px 10px;background:var(--surface);font-size:12.5px}",
+    // THE AGENT'S WORDS ARE WHAT THE REVIEWER CAME TO READ. Ken, 2026-09-11: the
+    // answer sat at 12.5px on a tinted surface, so it was both smaller and
+    // lower-contrast than his own note above it, "and it's the thing I need to
+    // read." Full ink and the card body's size, the same weight as the note.
+    ".agent{border-radius:8px;padding:9px 11px;background:var(--surface);color:var(--ink);",
+    "font-size:14px;line-height:1.55}",
     ".agent:empty{display:none}",
     ".agent__head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:3px}",
     ".agent__who{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;",
     "color:var(--ink-faint);display:block}",
     ".agent.is-loud{background:var(--accent-wash);border-left:3px solid var(--accent);",
-    "color:var(--ink);font-size:13.5px;line-height:1.5}",
+    "color:var(--ink);font-size:14px;line-height:1.55}",
     ".agent.is-loud .agent__who{color:var(--accent-ink)}",
     // ONE PATH PER LINE, AND IT BREAKS. Repo-relative paths are long and have
     // no natural break points, so joined on one line with normal wrapping they
@@ -11214,15 +12718,190 @@
     ".pill__jewel{font-variant-numeric:tabular-nums;font-size:10px;font-weight:700;line-height:1;",
     "color:#fff;background:var(--accent);border-radius:999px;padding:2px 5px;min-width:14px;text-align:center}",
     ":host([data-lahe-scheme='dark']) .pill__jewel{color:#12151a}",
-    ".pill__jewel[hidden]{display:none}"
+    ".pill__jewel[hidden]{display:none}",
+
+    // --- the toast ------------------------------------------------------------
+    // TOP RIGHT. Bottom-left was where it started and Ken kept nearly missing
+    // it: the eye is not down there, and a notification that has to be hunted
+    // for is a notification that gets hunted for later, which is the whole
+    // problem this exists to solve. Top right is where a person looks for one.
+    // right:16px here is the COLLAPSED case, which is the one the toast exists
+    // for: nothing else is on screen, so the corner is free. With the rail open
+    // the column is moved left of it from JS (placeToasts), because a rail the
+    // reviewer can drag to most of the window is no longer something a toast
+    // can politely sit on top of for a few seconds. The collapsed pill is
+    // bottom-right, so there is nothing to collide with either way.
+    //
+    // It borrows nothing new: the card's own paper, the card's own border, the
+    // accent rule the question block already uses down its left edge.
+    ".toasts{position:fixed;top:16px;right:16px;pointer-events:none;display:flex;",
+    "flex-direction:column;align-items:flex-end;gap:8px;",
+    "width:min(560px,calc(100vw - 32px))}",
+    ".toasts[hidden]{display:none}",
+    ".toast{pointer-events:auto;width:100%;display:flex;align-items:flex-start;gap:8px;",
+    "padding:10px 11px;background:var(--paper);color:var(--ink);text-align:left;",
+    "border:1px solid var(--line);border-left:3px solid var(--accent);",
+    "border-radius:var(--radius-sm);box-shadow:var(--shadow);cursor:pointer;",
+    // SWIPED, NOT SELECTED. Ken: "because the toasts slide in like a Mac
+    // notification, my inclination is to grab them with the mouse and slide
+    // them back away ... of course that just highlights text and then opens the
+    // card instead." A toast is chrome, nobody has ever wanted to copy half of
+    // one, and a press that starts a text selection is a press that cannot
+    // start a gesture. touch-action keeps vertical scrolling the page's, and
+    // takes the horizontal axis for the swipe.
+    "-webkit-user-select:none;user-select:none;touch-action:pan-y}",
+    ".toast:hover{background:var(--surface)}",
+    ".toast[data-lahe-dragging='true']{cursor:grabbing;box-shadow:var(--shadow),0 0 0 1px var(--accent)}",
+
+    // THE MOVEMENT IS THE POINT. A toast that fades in place is a thing that was
+    // always there; a toast that arrives from the edge is a thing that just
+    // happened, and the reviewer's eye goes to it without being asked to. It
+    // slides in from the right, which is the edge it is anchored to, so the
+    // motion reads as "this came in" rather than as decoration.
+    //
+    // Transform and opacity only: neither one costs a layout, so a page with its
+    // own scroll and resize handlers is untouched by a toast arriving.
+    "@keyframes lahe-toast-in{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}",
+    "@keyframes lahe-toast-fade{from{opacity:0}to{opacity:1}}",
+    ".toast{animation:lahe-toast-in 200ms cubic-bezier(.2,.7,.3,1) both}",
+    // Going: shorter than arriving, and pointer-events off the moment it starts,
+    // so a half-faded toast can never eat a click meant for the page under it.
+    // The node itself is removed when the fade ends (see dismissToast); this
+    // never leaves a transparent box sitting over the page.
+    ".toast[data-lahe-leaving='true']{opacity:0;transform:translateX(24px);pointer-events:none;",
+    "transition:opacity 120ms ease-in,transform 120ms ease-in}",
+    // Someone who asked their machine for less motion gets a plain fade, and
+    // nothing slides. The toast still arrives and still leaves.
+    "@media (prefers-reduced-motion:reduce){",
+    ".toast{animation:lahe-toast-fade 160ms ease-out both}",
+    ".toast[data-lahe-leaving='true']{transform:none;transition:opacity 120ms ease-in}}",
+    ".toast__body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}",
+    ".toast__label{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;",
+    "color:var(--accent-ink)}",
+    // The whole answer, not the first two lines of it. Ken's first day with the
+    // toast: a clamped answer sent him to the rail anyway, which is the trip the
+    // toast exists to save. The box grows down to fit; tab_done's TOAST_TEXT_MAX
+    // is the ceiling that keeps an essay from becoming a wall.
+    // 15px, up from 13: Ken read toasts from a laptop on his lap and had to
+    // pull the screen to his face. A toast is read from farther away than the
+    // rail, so it is set a size larger than the card text (2026-09-11).
+    ".toast__text{font-size:15px;line-height:1.45;color:var(--ink);overflow-wrap:anywhere;",
+    "white-space:pre-line}",
+    // One line, quieter: this is what the answer is ABOUT, not the answer.
+    ".toast__about{font-size:12.5px;line-height:1.35;color:var(--ink-soft);",
+    "white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+    ".toast__about:empty{display:none}",
+    ".toast__x{flex:none;width:20px;height:20px;border-radius:6px;color:var(--ink-faint);",
+    "display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1}",
+    ".toast__x:hover{background:var(--sunken);color:var(--ink)}",
+    // pointer-events STAYS off: it is a count, there is nothing to press on it,
+    // and a line of text that swallows clicks is exactly the kind of guest this
+    // tool must not be on someone else's page.
+    ".toast__more{pointer-events:none;font-size:11px;color:var(--ink-faint);padding:0 4px}",
+    ".toast__more[hidden]{display:none}"
   ].join("");
+
+  // How long a toast that is not a question stays on screen. ONE number, named
+  // once: everything that auto-dismisses reads it, and a test shortens it
+  // through the rail's toastDuration rather than by waiting ten seconds.
+  var TOAST_MS = 10000;
+  // How many stand at once before the rest collapse into a count. Four toasts
+  // stacked up the side of a page is a second rail, which is the thing the
+  // reviewer already closed.
+  var TOAST_MAX = 3;
+  // The gap the toast column keeps from the open rail's left edge, and the
+  // narrowest the column may be squeezed to on the way to making that gap.
+  var TOAST_RAIL_GAP = 8;
+  var TOAST_MIN_WIDTH = 220;
+  // Two presses of the grip closer together than this are one double press,
+  // which puts the rail back to its default width.
+  var GRIP_DOUBLE_MS = 400;
+  // How long the going-away fade runs. The CSS owns the animation; JS knows this
+  // number for one reason only, which is when to take the node out of the DOM.
+  // It matches the transition in the .toast[data-lahe-leaving] rule above.
+  var TOAST_OUT_MS = 120;
+  // Why a toast left, told to whoever put it up. The reviewer pressing the X is
+  // a decision about that message; the clock running out is not.
+  var TOAST_GONE = { USER: "user", TIMEOUT: "timeout", REPLACED: "replaced" };
+
+  // ---------------------------------------------------------------------------
+  // Swipe to dismiss: the numbers, and the one decision
+  // ---------------------------------------------------------------------------
+  //
+  // The toast arrives from the right edge like a notification, so a reviewer's
+  // hand reaches to push it back the way it came. That gesture has to mean the
+  // same thing the X means, or it is a trap: the reviewer thinks they have
+  // dealt with the message and the tool thinks they have not.
+
+  // How far a pointer travels before this is a drag rather than a press. Small
+  // enough that a deliberate push is recognized at once, large enough that the
+  // shake in a click still opens the card.
+  var TOAST_SWIPE_SLOP = 6;
+  // The far end of the throw: the smaller of a share of the toast's own width
+  // and a flat ceiling, so a narrow toast is not harder to dismiss than a wide
+  // one and a very wide one does not demand an arm's length of travel.
+  var TOAST_SWIPE_FRACTION = 0.4;
+  var TOAST_SWIPE_MAX_PX = 120;
+  // A flick: rightward pixels per millisecond at the moment of release. Half a
+  // pixel per millisecond is 500px a second, which is a deliberate throw and
+  // not a slow drag that changed its mind.
+  var TOAST_FLING_SPEED = 0.5;
+  // The slide off the edge, matched to TOAST_OUT_MS so the node is taken out of
+  // the DOM exactly as it finishes leaving.
+  var TOAST_SPRING_MS = 160;
+
+  /** How far this toast has to travel to count as thrown away. */
+  function toastSwipeThreshold(width) {
+    var w = typeof width === "number" && width > 0 ? width : 0;
+    return Math.max(TOAST_SWIPE_SLOP, Math.min(TOAST_SWIPE_MAX_PX, w * TOAST_SWIPE_FRACTION));
+  }
+
+  /**
+   * Did that gesture mean "get rid of this"?
+   *
+   * Pure, and the whole of the decision, so the feel can be argued about in a
+   * unit test rather than by dragging things in a browser. Two ways to say yes,
+   * because two hands say it differently: the patient one drags it most of the
+   * way across, and the quick one flicks it and lets go early.
+   *
+   * Rightward only. The toast came from the right edge and goes back to it;
+   * a leftward drag is not a dismissal in any direction anyone means.
+   *
+   * @param {object} gesture
+   * @param {number} gesture.dx        how far right of where it started, px
+   * @param {number} gesture.velocity  px per ms at release, rightward positive
+   * @param {number} gesture.width     the toast's own width
+   */
+  function shouldDismissSwipe(gesture) {
+    var g = gesture || {};
+    var dx = typeof g.dx === "number" ? g.dx : 0;
+    if (dx <= TOAST_SWIPE_SLOP) return false;
+    if (dx >= toastSwipeThreshold(g.width)) return true;
+    var velocity = typeof g.velocity === "number" ? g.velocity : 0;
+    return velocity >= TOAST_FLING_SPEED;
+  }
 
   // The review-level actions, in the head's menu. They are the same two the
   // footer used to stand up as buttons, and they run through the same
   // runAction seam, so what they DO is still boot's business (D10, revised).
+  //
+  // The third is not one of those. Present is the rail's OWN state rather than
+  // work for boot to do, so it is handled where it is drawn (see the menu item
+  // click, and setPresenting). Its label carries the chord, because pressing it
+  // takes every surface off the screen and the chord is the way back.
+  var PRESENT = {
+    ACTION: "present",
+    KEYS: "Cmd-Shift-X",
+    LABEL: "Hide for presenting",
+    // What the rail's own footer teaches. The chord is the ONLY way back, and
+    // the reviewer has to know that before they use it, not after.
+    MENU_LABEL: "Hide for presenting (Cmd-Shift-X)"
+  };
+
   var MENU_ITEMS = [
     { action: "copy", label: "Copy review" },
-    { action: "export", label: "Export review to file" }
+    { action: "export", label: "Export review to file" },
+    { action: PRESENT.ACTION, label: PRESENT.MENU_LABEL }
   ];
 
   // ---------------------------------------------------------------------------
@@ -11398,6 +13077,42 @@
     // that forced opening must not erase the choice to keep the rail collapsed.
     var preferredCollapsed = readCollapsedPreference();
     var collapsed = preferredCollapsed;
+    // PRESENT MODE: the whole library off the screen, and still working.
+    //
+    // Ken: "sometimes during a presentation there will not be LAHE on there,
+    // but during class it's nice if I can talk to the AI through the deck. I
+    // might want a way to hide the pill for the chat rail."
+    //
+    // So this is HIDDEN, not off. Sync keeps polling and folding, the window
+    // claim and its heartbeat carry on, and replies that arrive during the talk
+    // are waiting as toasts the moment the reviewer comes back. What goes is
+    // everything anyone in the room can see: the rail, the pill, the toasts,
+    // the boxes, and every wash on the page (highlight.setHidden does both
+    // halves in one call).
+    //
+    // The page starts hidden two ways: the reviewer chose it last time (the
+    // preference below, so a reload mid-talk stays hidden), or the page always
+    // wants to (data-lahe-start="hidden", which boot passes in).
+    var presenting = opts.present === true || readPresentPreference();
+    var presentHandlers = [];
+    // How wide the reviewer dragged the rail, or null while they have left it
+    // at its default. Held UNCLAMPED: the clamp belongs to the viewport that is
+    // on screen right now, and a window dragged narrow and then wide again
+    // gives the reviewer their own width back rather than the one the small
+    // window forced.
+    var railWidth = readWidthPreference();
+    // Who wants to know the rail's width changed. The surfaces that keep clear
+    // of the rail read the published allowance instead (see publishRailAllowance);
+    // this is for a caller that wants to hear about it rather than measure.
+    var widthHandlers = [];
+    // The drag in progress, or null. Holds the width the drag started from, so
+    // Escape can put it back.
+    var gripDrag = null;
+    // When the grip was last pressed, for the double-press that resets the
+    // width. Read from pointerdown rather than from a dblclick event: the drag
+    // calls preventDefault on pointerdown, and what a browser does with the
+    // compatibility mouse events after that is not something to bet a control on.
+    var gripPressedAt = 0;
     var mounted = false;
     var limitText = null;
     // The whole agent_liveness object the helper last sent, or null before one
@@ -11478,6 +13193,13 @@
       // CLOSED, per D8. Nothing outside the library can reach in, which is also
       // why this module answers holdsFocus and activeElementInfo itself.
       var shadow = host.attachShadow({ mode: "closed" });
+      // The page's own keyboard shortcuts do not reach the rail's text fields:
+      // the card's editable note, the follow-up composers, the page note. The
+      // surface root outside this one is fenced too, and that is not enough,
+      // because THIS root is closed as well: a listener out there sees the host
+      // div as both target and composedPath()[0], never the field. The whole
+      // reasoning, and the measurement, are at highlight.fenceTypingKeys.
+      highlightModule.fenceTypingKeys(shadow);
 
       var style = doc.createElement("style");
       style.textContent = CSS;
@@ -11485,6 +13207,21 @@
 
       var rail = el("aside", "rail");
       rail.setAttribute("aria-label", "Review");
+
+      // The handle that widens the rail. A separator rather than a button: it
+      // does not do a thing when it is pressed, it divides the page from the
+      // panel, and a screen reader reading "Resize the review panel, separator,
+      // 392" is reading what it actually is. Focusable so the same move is
+      // available without a pointer.
+      var grip = el("div", "grip");
+      markers.markChrome(grip);
+      grip.setAttribute("role", "separator");
+      grip.setAttribute("aria-orientation", "vertical");
+      grip.setAttribute("aria-label", RAIL_GRIP_LABEL);
+      grip.setAttribute("aria-valuemin", String(RAIL_MIN_WIDTH));
+      grip.tabIndex = 0;
+      grip.title = RAIL_GRIP_LABEL;
+      rail.appendChild(grip);
 
       var head = el("div", "head");
       head.appendChild(el("span", "mark"));
@@ -11518,6 +13255,13 @@
           // the rail while the work runs, and the focus goes back where they
           // left it.
           closeMenu(true);
+          // Present is the rail putting ITSELF away, so there is no action for
+          // a caller to register and none to forget: the two review-level items
+          // beside it are work only boot knows how to do, and this one is not.
+          if (entry.action === PRESENT.ACTION) {
+            setPresenting(true);
+            return;
+          }
           runAction(entry.action);
         });
         menuList.appendChild(item);
@@ -11800,8 +13544,22 @@
         pillDrag = null;
       });
 
+      // The toast stack. Bottom-left, so it is never under the rail and never
+      // under the collapsed pill, which is the one control a reviewer working
+      // with the rail closed has to be able to reach.
+      var toastHost = el("div", "toasts");
+      markers.markChrome(toastHost);
+      toastHost.hidden = true;
+      // Created once and kept last in the stack, so a toast arriving never has
+      // to move it and moving a node never restarts somebody's animation.
+      var toastMore = el("div", "toast__more", "");
+      markers.markChrome(toastMore);
+      toastMore.hidden = true;
+      toastHost.appendChild(toastMore);
+
       shadow.appendChild(rail);
       shadow.appendChild(pill);
+      shadow.appendChild(toastHost);
       surfaceRoot.appendChild(host);
 
       // A remembered offset outlives the viewport that produced it. Rotating a
@@ -11828,8 +13586,12 @@
 
       dom = {
         host: host,
+        // The library's ONE page-level host, kept because the rail's width is
+        // published on it as a custom property for the other surfaces to read.
+        surfaceHost: surface.host || null,
         shadow: shadow,
         rail: rail,
+        grip: grip,
         tabButtons: tabButtons,
         counts: counts,
         newmarks: newmarks,
@@ -11859,7 +13621,9 @@
         collapseBtn: collapseBtn,
         pill: pill,
         pillCount: pillCount,
-        pillJewel: pillJewel
+        pillJewel: pillJewel,
+        toastHost: toastHost,
+        toastMore: toastMore
       };
 
       // Everything already in state is painted once, here. This is the only
@@ -11874,12 +13638,28 @@
       renderAgent();
       renderTabs();
       renderCollapsed();
+      // The surface exists now, so a rail mounted while the reviewer is
+      // presenting comes up hidden rather than flashing onto the projector for
+      // a frame. Remounts reach this too, which is the case that matters: a
+      // deck that re-renders mid-talk must not put the rail back on screen.
+      renderPresent();
+      // A toast is state, not a paint: the nodes went with the old root on a
+      // remount and the thing they were telling the reviewer about is still
+      // true, so they are drawn again and their clocks start over.
+      remountToasts();
       // The pill exists now, so the reviewer's own arrangement can go back on it.
       // Read here as well as in setReview because a rail built WITH a review id
       // never goes through setReview at all, which is how the fixture and the
       // library both make one.
       pillSpot = readPillPreference();
       applyPillSpot();
+      // The width the reviewer dragged the rail to, back on the rail, and the
+      // allowance published for everything that keeps clear of it. Read here as
+      // well as in setReview for the same reason the pill is: a rail built WITH
+      // a review id never goes through setReview at all.
+      railWidth = readWidthPreference();
+      bindGrip(grip, shadow);
+      applyRailWidth();
       if (mo.hidden) setCollapsed(true, false);
       if (refusalInfo) showRefusal(refusalInfo);
       return { rootId: markers.OVERLAY_ROOT_ID, remounted: false };
@@ -11906,6 +13686,15 @@
         endRun = null;
         settleEndPrompt({ confirmed: false, result: null });
       }
+      // The toast nodes go with the root. The toasts themselves are state, so
+      // mount draws them again; what must not survive is their clocks, which
+      // would otherwise dismiss a toast that no longer has a node.
+      toasts.forEach(function (toast) {
+        clearToastTimer(toast);
+        toast.node = null;
+      });
+      // A node mid-fade belongs to a root that is going away with it.
+      toastLeaving = [];
       if (dom && dom.host && dom.host.parentNode) dom.host.parentNode.removeChild(dom.host);
       Object.keys(cards).forEach(function (id) {
         cards[id].node = null;
@@ -11978,13 +13767,19 @@
       reviewId = id;
       preferredCollapsed = readCollapsedPreference();
       pillSpot = readPillPreference();
+      railWidth = readWidthPreference();
       collapsed = preferredCollapsed;
+      // A rail told which review it is showing reads that review's own choice
+      // about being hidden, the way it reads the other three.
+      presenting = readPresentPreference();
       loadChips();
       if (dom) {
         dom.rail.querySelector(".review").textContent = id || "";
         renderChips();
         renderCollapsed();
+        renderPresent();
         applyPillSpot();
+        applyRailWidth();
         if (refusalInfo) setCollapsed(false, false);
       }
       return reviewId;
@@ -13649,13 +15444,28 @@
       }
     }
 
+    function readPresentPreference() {
+      if (!reviewId || !store || typeof store.readUiPreferences !== "function") return false;
+      try {
+        return store.readUiPreferences(reviewId).present === true;
+      } catch (err) {
+        return false;
+      }
+    }
+
     function persistCollapsedPreference() {
       if (!reviewId || !store || typeof store.writeUiPreferences !== "function") return false;
       try {
-        // BOTH FIELDS, ALWAYS. The bucket is written whole, so writing one and
-        // omitting the other is how a reviewer collapses the rail and finds the
-        // pill back in the corner they dragged it out of.
-        store.writeUiPreferences(reviewId, { collapsed: preferredCollapsed, pill: pillSpot });
+        // EVERY FIELD, ALWAYS. The bucket is written whole, so writing one and
+        // omitting another is how a reviewer collapses the rail and finds the
+        // pill back in the corner they dragged it out of, or drags the rail
+        // wider and finds it narrow again after collapsing it once.
+        store.writeUiPreferences(reviewId, {
+          collapsed: preferredCollapsed,
+          pill: pillSpot,
+          width: railWidth,
+          present: presenting
+        });
         return true;
       } catch (err) {
         return false;
@@ -13769,6 +15579,61 @@
       return collapsed;
     }
 
+    /**
+     * Hide the whole library, or bring it back.
+     *
+     * The rail owns this because the rail owns what is on screen and the
+     * preference bucket it is written into. What it does NOT own is the
+     * gestures: hiding the tool has to disarm commenting and hand-editing, and
+     * that is boot's, through onPresent below.
+     *
+     * @param {boolean} [next] undefined toggles
+     * @param {boolean} [persist] false leaves the reviewer's stored choice alone
+     * @returns {boolean} whether the library is hidden now
+     */
+    function setPresenting(next, persist) {
+      var want = next === undefined ? !presenting : !!next;
+      if (want === presenting) return presenting;
+      presenting = want;
+      // A menu hanging over the page while the rail goes invisible is a
+      // fragment of a tool the reviewer just put away.
+      if (presenting) closeMenu(false);
+      if (persist !== false) persistCollapsedPreference();
+      renderPresent();
+      presentHandlers.forEach(function (fn) {
+        try {
+          fn(presenting);
+        } catch (err) {
+          // One bad listener must never leave the library half hidden.
+        }
+      });
+      return presenting;
+    }
+
+    function isPresenting() {
+      return presenting;
+    }
+
+    /** Tell me when the library is hidden or brought back. Returns an unsubscribe. */
+    function onPresent(fn) {
+      if (typeof fn !== "function") throw new TypeError("onPresent: a function is required");
+      presentHandlers.push(fn);
+      return function () {
+        var at = presentHandlers.indexOf(fn);
+        if (at !== -1) presentHandlers.splice(at, 1);
+      };
+    }
+
+    /**
+     * One call, both halves: the surface goes display:none (so the rail, the
+     * pill, the toasts and the boxes go with it) and every page wash is
+     * unregistered. Nothing here is torn down, so coming back is the same call
+     * with the other argument.
+     */
+    function renderPresent() {
+      if (typeof highlights.setHidden === "function") highlights.setHidden(presenting);
+    }
+
     /** Tell me when the rail collapses or opens. Returns an unsubscribe. */
     function onCollapse(fn) {
       if (typeof fn !== "function") throw new TypeError("onCollapse: a function is required");
@@ -13787,10 +15652,975 @@
       if (!dom) return;
       dom.rail.hidden = collapsed;
       dom.pill.hidden = !collapsed;
+      // The toast column stands beside an open rail and in the corner with the
+      // rail closed, so putting the rail away moves it back.
+      publishRailAllowance();
     }
 
     function isCollapsed() {
       return collapsed;
+    }
+
+    // -------------------------------------------------------------------------
+    // Dragging the rail wider
+    // -------------------------------------------------------------------------
+    //
+    // Ken: "some of these responses are getting quite thorough and long, so the
+    // chat rail should be drag-expandable: you should be able to drag the edge
+    // of it to expand it horizontally so you can read more."
+    //
+    // The rail is fixed to the right edge of the viewport, so widening it moves
+    // its LEFT edge and changes nothing about the page underneath (D8). What it
+    // does change is how much room the other surfaces have to leave: the
+    // anchored comment box, the selection pill and the toast column all keep
+    // clear of the rail, and until now they did it against a number typed into
+    // comments.js. The rail publishes the number instead; see
+    // publishRailAllowance.
+
+    function readWidthPreference() {
+      if (!reviewId || !store || typeof store.readUiPreferences !== "function") return null;
+      try {
+        return store.readUiPreferences(reviewId).width || null;
+      } catch (err) {
+        return null;
+      }
+    }
+
+    /** The default width, in pixels, for a viewport. The stylesheet's clamp. */
+    function defaultRailWidth(viewWidth) {
+      if (!isFinite(viewWidth) || viewWidth <= 0) return RAIL_DEFAULT_MAX;
+      var want = (viewWidth * RAIL_DEFAULT_VW) / 100;
+      return Math.min(RAIL_DEFAULT_MAX, Math.max(RAIL_DEFAULT_MIN, want));
+    }
+
+    /** The viewport width the rail is in, or null with nothing on screen. */
+    function railViewWidth() {
+      var view = dom ? viewportOf(dom.rail) : null;
+      return view ? view.w : null;
+    }
+
+    /**
+     * How wide the rail is RIGHT NOW, measured where that is possible.
+     *
+     * Measured rather than computed, because the default width is a CSS clamp
+     * and the browser is the only thing that knows what it came out as. A
+     * collapsed rail cannot be measured (it is display:none), so its width is
+     * computed from the same numbers the stylesheet was built from.
+     */
+    function currentRailWidth() {
+      if (dom && !dom.rail.hidden) {
+        var rect = dom.rail.getBoundingClientRect();
+        if (rect && rect.width > 0) return rect.width;
+      }
+      var view = railViewWidth();
+      var chosen = clampRailWidth(railWidth, view);
+      return chosen === null ? defaultRailWidth(view === null ? NaN : view) : chosen;
+    }
+
+    /**
+     * Tell everything that has to keep clear of the rail how much room it takes.
+     *
+     * ONE NUMBER, ONE PLACE. It goes on the library's one page-level host as a
+     * custom property (highlight.RAIL_ALLOWANCE_PROP), which is the only thing
+     * the rail's closed root and the comment boxes' closed root both touch.
+     * comments.js reads it back for the anchored box and the selection pill;
+     * the toast column is the rail's own, so it is moved here.
+     */
+    function publishRailAllowance() {
+      if (!dom) return null;
+      var allowance = Math.round(currentRailWidth() + RAIL_EDGE_GAP);
+      if (dom.surfaceHost && dom.surfaceHost.style) {
+        dom.surfaceHost.style.setProperty(highlightModule.RAIL_ALLOWANCE_PROP, allowance + "px");
+      }
+      placeToasts(allowance);
+      widthHandlers.forEach(function (fn) {
+        try {
+          fn(allowance);
+        } catch (err) {
+          // One bad listener must never leave a drag half applied.
+        }
+      });
+      return allowance;
+    }
+
+    /**
+     * The toast column, clear of the rail it used to sit on top of.
+     *
+     * It was top-right and overlapped the open rail deliberately: a toast is on
+     * screen for seconds and the rail was a known width. A rail the reviewer
+     * can drag to most of the window makes that a toast landing on the card it
+     * is telling them about, so with the rail OPEN the column now stands beside
+     * it. With the rail collapsed nothing is in the way and the column goes
+     * back to the corner, which is the case the toast exists for.
+     */
+    function placeToasts(allowance) {
+      if (!dom || !dom.toastHost) return;
+      if (collapsed) {
+        dom.toastHost.style.right = "";
+        dom.toastHost.style.maxWidth = "";
+        return;
+      }
+      var view = railViewWidth();
+      var right = allowance + TOAST_RAIL_GAP;
+      dom.toastHost.style.right = right + "px";
+      // The stylesheet's own min(480px, 100vw - 32px) does not know about the
+      // offset, so a wide rail would push the column off the left edge.
+      if (view !== null) {
+        dom.toastHost.style.maxWidth = Math.max(TOAST_MIN_WIDTH, view - right - RAIL_EDGE_GAP) + "px";
+      }
+    }
+
+    /** What the grip says about itself, once the width is known. */
+    function paintGrip() {
+      if (!dom || !dom.grip) return;
+      var view = railViewWidth();
+      var width = Math.round(currentRailWidth());
+      var max = clampRailWidth(view === null ? RAIL_MIN_WIDTH : view, view);
+      dom.grip.setAttribute("aria-valuenow", String(width));
+      dom.grip.setAttribute("aria-valuemax", String(max === null ? width : max));
+      dom.grip.setAttribute("aria-valuetext", width + " pixels wide");
+    }
+
+    /**
+     * Put the chosen width on the rail.
+     *
+     * Clamped HERE rather than when it was stored, so a window that shrank
+     * gives back a rail that fits and a window that grows again gives back the
+     * width the reviewer actually chose.
+     */
+    function applyRailWidth() {
+      if (!dom) return null;
+      var want = clampRailWidth(railWidth, railViewWidth());
+      // "" and not a number: an untouched rail keeps the stylesheet's clamp,
+      // which is the thing a reset goes back to.
+      dom.rail.style.width = want === null ? "" : want + "px";
+      publishRailAllowance();
+      paintGrip();
+      return want;
+    }
+
+    /**
+     * Set the rail's width. null is "back to the default".
+     *
+     * @param {number|null} next    the width in pixels, or null for the default
+     * @param {Object} [options]    persist:false for a width mid-drag
+     */
+    function setRailWidth(next, options) {
+      var opts = options || {};
+      railWidth = next === null || next === undefined ? null : clampRailWidth(next, railViewWidth());
+      var applied = applyRailWidth();
+      if (opts.persist !== false) persistCollapsedPreference();
+      return applied;
+    }
+
+    /** The rail's own width in pixels, measured. */
+    function width() {
+      return dom ? Math.round(currentRailWidth()) : null;
+    }
+
+    /** How much room from the right edge is the rail's, in pixels. */
+    function railAllowance() {
+      return Math.round(currentRailWidth() + RAIL_EDGE_GAP);
+    }
+
+    /** Tell me when the rail's width changes. Returns an unsubscribe. */
+    function onWidth(fn) {
+      if (typeof fn !== "function") throw new TypeError("onWidth: a function is required");
+      widthHandlers.push(fn);
+      return function () {
+        var at = widthHandlers.indexOf(fn);
+        if (at !== -1) widthHandlers.splice(at, 1);
+      };
+    }
+
+    function endGripDrag(event) {
+      if (!gripDrag) return;
+      if (event && event.pointerId !== undefined && event.pointerId !== gripDrag.id) return;
+      if (dom && dom.grip) {
+        dom.grip.removeAttribute("data-lahe-dragging");
+        try {
+          if (typeof dom.grip.releasePointerCapture === "function") {
+            dom.grip.releasePointerCapture(gripDrag.id);
+          }
+        } catch (err) {
+          // The capture is already gone, which is the state we wanted.
+        }
+      }
+      if (dom) dom.rail.removeAttribute("data-lahe-resizing");
+      gripDrag = null;
+      persistCollapsedPreference();
+    }
+
+    /** Escape: the width goes back to what it was when the drag started. */
+    function cancelGripDrag() {
+      if (!gripDrag) return false;
+      railWidth = gripDrag.was;
+      applyRailWidth();
+      endGripDrag();
+      return true;
+    }
+
+    function stepRailWidth(by) {
+      setRailWidth(currentRailWidth() + by);
+    }
+
+    function onGripKey(event) {
+      var key = event.key;
+      if (key === "ArrowLeft") {
+        // LEFT GROWS. The rail's left edge is the one that moves, so left is
+        // the direction the reviewer drags to make it wider.
+        stepRailWidth(RAIL_KEY_STEP);
+      } else if (key === "ArrowRight") {
+        stepRailWidth(-RAIL_KEY_STEP);
+      } else if (key === "Home") {
+        setRailWidth(RAIL_MIN_WIDTH);
+      } else if (key === "End") {
+        var view = railViewWidth();
+        setRailWidth(view === null ? RAIL_MIN_WIDTH : view);
+      } else if (key === "Escape") {
+        if (!cancelGripDrag()) return;
+      } else {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    function bindGrip(grip, shadow) {
+      // POINTER EVENTS AND CAPTURE, and nothing bound on the page's document.
+      // The library is a guest here (D8): the drag has to survive the pointer
+      // outrunning an 8px strip without the page carrying a listener of ours.
+      grip.addEventListener("pointerdown", function (event) {
+        if (event.button !== undefined && event.button !== 0) return;
+        if (!dom) return;
+        var at = now();
+        var doubled = at - gripPressedAt < GRIP_DOUBLE_MS;
+        gripPressedAt = at;
+        if (doubled) {
+          // The second press of a double press: back to the default width, and
+          // no drag, so the reviewer does not resize by a pixel on the way.
+          endGripDrag();
+          setRailWidth(null);
+          event.preventDefault();
+          return;
+        }
+        gripDrag = { id: event.pointerId, from: event.clientX, was: railWidth, width: currentRailWidth() };
+        try {
+          if (typeof grip.setPointerCapture === "function") grip.setPointerCapture(event.pointerId);
+        } catch (err) {
+          // No capture is a worse drag, not a broken one: the moves that land
+          // on the grip still resize.
+        }
+        grip.setAttribute("data-lahe-dragging", "");
+        dom.rail.setAttribute("data-lahe-resizing", "");
+        // Stops the press becoming a text selection that runs across the page
+        // the moment the pointer leaves the rail.
+        event.preventDefault();
+        // ...which also stops the press focusing the grip, so the focus is
+        // moved by hand. Escape has to reach a keydown handler of ours to
+        // abandon the drag, and a keyboard left on the page reaches none.
+        try {
+          grip.focus();
+        } catch (err) {
+          // A grip that cannot take focus still drags.
+        }
+      });
+
+      grip.addEventListener("pointermove", function (event) {
+        if (!gripDrag || event.pointerId !== gripDrag.id) return;
+        // Leftwards is wider: the distance the pointer has travelled from where
+        // the press landed, added to the width the rail had then.
+        setRailWidth(gripDrag.width + (gripDrag.from - event.clientX), { persist: false });
+        event.preventDefault();
+      });
+
+      grip.addEventListener("pointerup", endGripDrag);
+      grip.addEventListener("pointercancel", endGripDrag);
+      grip.addEventListener("keydown", onGripKey);
+      // A browser that does deliver a dblclick here gets the same answer. Both
+      // paths end at one width, so arriving twice costs nothing.
+      grip.addEventListener("dblclick", function (event) {
+        setRailWidth(null);
+        event.preventDefault();
+      });
+
+      // Escape anywhere in the rail's own root ends a drag, because the pointer
+      // is down on the grip and the keyboard is wherever the reviewer left it.
+      shadow.addEventListener("keydown", function (event) {
+        if (event.key !== "Escape") return;
+        if (cancelGripDrag()) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      });
+    }
+
+    /**
+     * What the grip is, for a caller outside the closed root: the specs' way in,
+     * and the coordinates a real press uses.
+     */
+    function gripInfo() {
+      if (!dom || !dom.grip) return { present: false, dragging: false, rect: null };
+      var rect = dom.grip.getBoundingClientRect();
+      return {
+        present: true,
+        dragging: !!gripDrag,
+        label: dom.grip.getAttribute("aria-label"),
+        role: dom.grip.getAttribute("role"),
+        orientation: dom.grip.getAttribute("aria-orientation"),
+        valueNow: Number(dom.grip.getAttribute("aria-valuenow")),
+        valueMin: Number(dom.grip.getAttribute("aria-valuemin")),
+        valueMax: Number(dom.grip.getAttribute("aria-valuemax")),
+        focused: dom.shadow.activeElement === dom.grip,
+        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+      };
+    }
+
+    /** Put the keyboard on the grip, for a caller that cannot reach into it. */
+    function focusGrip() {
+      if (!dom || !dom.grip) return false;
+      dom.grip.focus();
+      return dom.shadow.activeElement === dom.grip;
+    }
+
+    // -------------------------------------------------------------------------
+    // Toasts
+    // -------------------------------------------------------------------------
+    //
+    // WHY THERE IS A TOAST AT ALL. Ken works with the rail collapsed, because
+    // the rail is in the way of the page he is reviewing. That is the tool
+    // working as designed, and it has one cost: an answer arriving on a card
+    // behind a closed rail is an answer nobody reads. He told us what that cost
+    // is in practice: "I forget to go look for answers and end up asking the
+    // same questions again."
+    //
+    // So this file draws a small thing on the page when something arrives that
+    // is worth stopping for. It knows nothing about replies: WHAT is worth
+    // stopping for is decided in tab_done.js, by the same rule the tab badge
+    // already uses, so there is one notion of important and not two.
+    //
+    // Three rules it will not bend:
+    //
+    //   ONE PER KEY     a toast is shown once. The caller passes the key (an
+    //                   item plus which reply it is), so a reload replaying the
+    //                   same folded reply cannot toast it a second time.
+    //   THREE AT MOST   the rest collapse into "+N more". A column of toasts is
+    //                   a second rail, which is the thing the reviewer closed.
+    //   A QUESTION WAITS  sticky toasts have no timer at all. Everything else
+    //                   leaves on its own after toastMs.
+    //
+    // -------------------------------------------------------------------------
+    // WHAT THIS PROMISES THE PAGE UNDERNEATH
+    // -------------------------------------------------------------------------
+    //
+    // Ken: "we need to be careful of it interacting with and preventing other
+    // JavaScript on the page in a website." The tool is a guest, and a guest
+    // that eats clicks or steals focus on somebody's real application is worse
+    // than no notification at all. Six promises, each with the thing that keeps
+    // it true, because a promise with no mechanism is a comment:
+    //
+    //  1. THE PAGE STAYS CLICKABLE. `.toasts` is pointer-events:none and only
+    //     `.toast` turns it back on, so every pixel of the container that is not
+    //     a toast box passes clicks straight through. `.toast__more` is a count
+    //     with nothing to press, so it stays none too, and a toast mid-fade is
+    //     set pointer-events:none the moment it starts leaving.
+    //  2. FOCUS IS NEVER TAKEN. Nothing here calls focus(). A toast appearing
+    //     leaves document.activeElement exactly where it was, so a half-typed
+    //     form field on the page keeps the caret. Focus reaches a toast only if
+    //     the reviewer tabs or clicks into one.
+    //  3. NO DOCUMENT OR WINDOW LISTENERS. Every handler (click, keydown,
+    //     mouseenter, mouseleave) is bound on the toast node itself. Escape is
+    //     the one worth naming: the handler is on the toast, so it can only run
+    //     with focus inside a toast, and the page's own Escape and an open
+    //     comment box's Escape never reach it. preventDefault and
+    //     stopPropagation are called only on events that started inside a toast.
+    //  4. NO LAYOUT, NO SCROLL, NO OBSERVER. The container is position:fixed
+    //     inside the closed shadow root, and the animation moves opacity and
+    //     transform only. Nothing here scrolls anything, resizes anything, or
+    //     touches the page host's size or attributes, so the page's own resize
+    //     handlers and MutationObservers never see a toast arrive.
+    //  5. NOTHING IS TOUCHED OUTSIDE THE SHADOW ROOT. Every node created and
+    //     removed here is a child of dom.toastHost, which is inside the rail's
+    //     own closed root.
+    //  6. A DISMISSED TOAST IS GONE. It is removed from the DOM at the end of
+    //     its fade (TOAST_OUT_MS), never left sitting at opacity 0 over page
+    //     content.
+    //  7. A SWIPE NEVER REACHES THE PAGE. All four pointer handlers are on the
+    //     toast node, and the gesture is held with setPointerCapture on that
+    //     same node, so a drag that outruns the toast still belongs to the
+    //     toast and never becomes a drag, a selection, or a click on whatever
+    //     is underneath. Nothing is bound to the document for it. The "+N more"
+    //     line has no handlers at all and is pointer-events:none, so a swipe
+    //     across it does nothing to anything.
+
+    var toasts = [];
+    var toastSeq = 0;
+    var toastKeys = Object.create(null);
+    // Nodes part way through their going-away fade. They are out of `toasts`
+    // already, so they count for nothing; they are held only so the render pass
+    // leaves them where they are instead of yanking them out mid-fade.
+    var toastLeaving = [];
+    // The live duration, so a test can shorten it. TOAST_MS is the only place
+    // the real number is written.
+    var toastMs = TOAST_MS;
+
+    /**
+     * Put a toast on the page.
+     *
+     * @param {object} spec
+     * @param {string} spec.key     shown once per key, for the life of the rail
+     * @param {string} spec.label   the short status word ("Question")
+     * @param {string} spec.text    what the agent said, already bounded
+     * @param {string} [spec.about] the words the item is about, one line
+     * @param {boolean} [spec.sticky] true stays until clicked or dismissed
+     * @param {function} [spec.onOpen] run when the reviewer clicks the toast
+     * @returns {string|null} the toast id, or null when the key was already used
+     */
+    function showToast(spec) {
+      var s = spec || {};
+      toastSeq += 1;
+      var key = s.key ? String(s.key) : "toast-" + String(toastSeq);
+      if (toastKeys[key]) return null;
+      toastKeys[key] = true;
+      var toast = {
+        id: "toast-" + String(toastSeq),
+        key: key,
+        label: String(s.label || ""),
+        text: String(s.text || ""),
+        about: String(s.about || ""),
+        sticky: s.sticky === true,
+        onOpen: typeof s.onOpen === "function" ? s.onOpen : null,
+        // Told WHY it left, because the caller cares about the difference: a
+        // reviewer who presses the X has dealt with it, and a toast that ran
+        // out of time has not been dealt with by anyone.
+        onGone: typeof s.onGone === "function" ? s.onGone : null,
+        node: null,
+        timer: null,
+        paused: false,
+        // The swipe: the gesture in progress, and whether the last press turned
+        // into one (which is how the click handler knows not to open the card).
+        drag: null,
+        dragged: false
+      };
+      // Newest first, which is newest on top.
+      toasts.unshift(toast);
+      // The clock starts when it is VISIBLE, not when it is created (see
+      // renderToasts), so a toast waiting its turn behind three others cannot
+      // expire before anyone has laid eyes on it.
+      renderToasts();
+      return toast.id;
+    }
+
+    function toastById(id) {
+      for (var i = 0; i < toasts.length; i += 1) {
+        if (toasts[i].id === id) return toasts[i];
+      }
+      return null;
+    }
+
+    function clearToastTimer(toast) {
+      var view = doc && doc.defaultView;
+      if (toast.timer && view && typeof view.clearTimeout === "function") view.clearTimeout(toast.timer);
+      toast.timer = null;
+    }
+
+    function armToast(toast) {
+      clearToastTimer(toast);
+      if (toast.sticky || toast.paused) return null;
+      var view = doc && doc.defaultView;
+      if (!view || typeof view.setTimeout !== "function") return null;
+      // harness-allow-timer: a toast's own life, pinned at TOAST_MS. It is the
+      // duration itself rather than a wait for something to happen, so there is
+      // no condition to poll instead.
+      toast.timer = view.setTimeout(function () {
+        toast.timer = null;
+        dismissToast(toast.id, TOAST_GONE.TIMEOUT);
+      }, toastMs);
+      return toast.timer;
+    }
+
+    /** The toast follows the pointer, and fades as it goes. */
+    function paintToastDrag(node, dx) {
+      node.style.transform = "translateX(" + Math.round(dx) + "px)";
+      // Gone by about the point it would be released as a dismissal, so the
+      // gesture tells the reviewer what it is going to do before they let go.
+      var span = Math.max(1, toastSwipeThreshold(node.offsetWidth || 0));
+      var fade = dx > 0 ? Math.min(0.75, dx / (span * 1.4)) : 0;
+      node.style.opacity = String(1 - fade);
+    }
+
+    function releaseToastPointer(node, pointerId) {
+      if (typeof node.releasePointerCapture !== "function") return false;
+      try {
+        node.releasePointerCapture(pointerId);
+        return true;
+      } catch (err) {
+        return false;
+      }
+    }
+
+    /** Not far enough, and not fast enough: it goes back where it was. */
+    function springToastBack(node) {
+      node.style.transition = reducedMotion()
+        ? "none"
+        : "transform " + String(TOAST_SPRING_MS) + "ms cubic-bezier(.2,.7,.3,1), opacity " +
+          String(TOAST_SPRING_MS) + "ms ease-out";
+      node.style.transform = "";
+      node.style.opacity = "";
+      return true;
+    }
+
+    /**
+     * Thrown away: off the right edge it came in from, and gone.
+     *
+     * The SAME meaning as the X, deliberately. A reviewer who pushes a message
+     * off the screen has dealt with it; if the tool treated that as "ignored"
+     * the reply would come back later as neglect, which is the tool arguing
+     * with a decision it just watched them make.
+     */
+    function flingToast(toast) {
+      var node = toast.node;
+      if (node && !reducedMotion()) {
+        node.style.transition =
+          "transform " + String(TOAST_OUT_MS) + "ms ease-out, opacity " + String(TOAST_OUT_MS) + "ms ease-out";
+        node.style.transform = "translateX(" + String(Math.round((node.offsetWidth || 0) + 48)) + "px)";
+        node.style.opacity = "0";
+      }
+      return dismissToast(toast.id, TOAST_GONE.USER);
+    }
+
+    /** Has this machine asked for less movement? */
+    function reducedMotion() {
+      var view = doc && doc.defaultView;
+      if (!view || typeof view.matchMedia !== "function") return false;
+      try {
+        return view.matchMedia("(prefers-reduced-motion: reduce)").matches === true;
+      } catch (err) {
+        return false;
+      }
+    }
+
+    /** Hovering holds it. The reviewer reading it is not the reviewer ignoring it. */
+    function pauseToast(toast) {
+      toast.paused = true;
+      clearToastTimer(toast);
+    }
+
+    function resumeToast(toast) {
+      if (!toast.paused) return;
+      toast.paused = false;
+      armToast(toast);
+    }
+
+    function dismissToast(id, reason) {
+      var toast = toastById(id);
+      if (!toast) return false;
+      var why = reason || TOAST_GONE.USER;
+      clearToastTimer(toast);
+      var at = toasts.indexOf(toast);
+      if (at !== -1) toasts.splice(at, 1);
+      var node = toast.node;
+      toast.node = null;
+      if (toast.onGone) {
+        try {
+          toast.onGone(why);
+        } catch (err) {
+          // A bad listener must never leave a toast stuck on the page.
+        }
+      }
+      // Out of the count at once, off the screen a fade later. The node stops
+      // taking clicks the instant it starts leaving (the CSS sets
+      // pointer-events:none), so the page under it is clickable through the
+      // whole fade, and it is REMOVED at the end rather than left transparent.
+      fadeOutNode(node);
+      renderToasts();
+      return true;
+    }
+
+    function fadeOutNode(node) {
+      if (!node) return false;
+      if (!node.parentNode) return false;
+      var view = doc && doc.defaultView;
+      if (!view || typeof view.setTimeout !== "function") {
+        node.parentNode.removeChild(node);
+        return true;
+      }
+      node.setAttribute("data-lahe-leaving", "true");
+      toastLeaving.push(node);
+      // harness-allow-timer: the going-away fade, pinned at TOAST_OUT_MS to
+      // match the CSS transition. It is when to take the node out of the DOM,
+      // not a wait for anything to happen.
+      view.setTimeout(function () {
+        dropLeavingNode(node);
+      }, TOAST_OUT_MS);
+      return true;
+    }
+
+    function dropLeavingNode(node) {
+      var at = toastLeaving.indexOf(node);
+      if (at !== -1) toastLeaving.splice(at, 1);
+      if (node.parentNode) node.parentNode.removeChild(node);
+      // The container hides itself again once the last node has actually gone,
+      // so an emptied stack leaves nothing at all over the page.
+      renderToasts();
+      return true;
+    }
+
+    /** The reviewer pressed it: run what it was for, then take it away. */
+    function openToast(id) {
+      var toast = toastById(id);
+      if (!toast) return false;
+      var run = toast.onOpen;
+      dismissToast(id);
+      if (run) {
+        try {
+          run();
+        } catch (err) {
+          // A toast that cannot navigate must still go away when pressed.
+        }
+      }
+      return true;
+    }
+
+    function clearToasts() {
+      toasts.slice().forEach(function (toast) {
+        clearToastTimer(toast);
+        if (toast.node && toast.node.parentNode) toast.node.parentNode.removeChild(toast.node);
+        toast.node = null;
+      });
+      toasts = [];
+      toastLeaving.slice().forEach(dropLeavingNode);
+      renderToasts();
+      return true;
+    }
+
+    /** The dom went with the old root; the toasts did not. Draw them again. */
+    function remountToasts() {
+      toastLeaving = [];
+      toasts.forEach(function (toast) {
+        toast.node = null;
+        toast.paused = false;
+      });
+      // renderToasts arms what is visible and leaves the queue cold, so there
+      // is nothing to arm by hand here.
+      renderToasts();
+      return toasts.length;
+    }
+
+    function toastNodeFor(toast) {
+      if (toast.node) return toast.node;
+      var node = el("div", "toast");
+      markers.markChrome(node);
+      node.setAttribute("role", "status");
+      node.setAttribute("data-lahe-toast", toast.id);
+      node.setAttribute("data-lahe-sticky", toast.sticky ? "true" : "false");
+      node.tabIndex = 0;
+
+      var body = el("span", "toast__body");
+      body.appendChild(el("span", "toast__label", toast.label));
+      body.appendChild(el("span", "toast__text", toast.text));
+      body.appendChild(el("span", "toast__about", toast.about));
+      node.appendChild(body);
+
+      var close = el("button", "toast__x", "×");
+      close.setAttribute("type", "button");
+      close.setAttribute("aria-label", "Dismiss");
+      close.addEventListener("click", function (event) {
+        event.stopPropagation();
+        dismissToast(toast.id);
+      });
+      node.appendChild(close);
+
+      node.addEventListener("click", function () {
+        // A swipe ends in a click, because the pointer went down and up on the
+        // same element. Without this the reviewer pushes the toast away and the
+        // rail opens on the card for their trouble. The flag is cleared on the
+        // NEXT pointerdown rather than here, so nothing else can clear it early.
+        if (toast.dragged) return;
+        openToast(toast.id);
+      });
+
+      // --- the swipe ----------------------------------------------------------
+      //
+      // Pointer events, so the mouse and the finger are one set of handlers,
+      // and all four of them are on THIS node. Capture keeps the gesture alive
+      // when the pointer outruns the toast; nothing is ever bound to the
+      // document, so a swipe cannot reach the page underneath.
+      node.addEventListener("pointerdown", function (event) {
+        if (event.button !== undefined && event.button !== 0) return;
+        // The X is a button and stays one. A press on it is not a gesture.
+        if (event.target && typeof event.target.closest === "function" && event.target.closest(".toast__x")) return;
+        toast.dragged = false;
+        toast.drag = {
+          id: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          dx: 0,
+          lastX: event.clientX,
+          lastAt: now(),
+          velocity: 0,
+          moved: false
+        };
+        if (typeof node.setPointerCapture === "function") {
+          try {
+            node.setPointerCapture(event.pointerId);
+          } catch (err) {
+            // Not fatal: without capture a fast drag off the node simply ends.
+          }
+        }
+      });
+
+      node.addEventListener("pointermove", function (event) {
+        var drag = toast.drag;
+        if (!drag || event.pointerId !== drag.id) return;
+        var dx = event.clientX - drag.startX;
+        var dy = event.clientY - drag.startY;
+        if (!drag.moved) {
+          if (Math.abs(dx) <= TOAST_SWIPE_SLOP) return;
+          // A mostly vertical drag is the reviewer scrolling the page with the
+          // pointer over a toast. The page keeps it.
+          if (Math.abs(dy) > Math.abs(dx)) {
+            toast.drag = null;
+            return;
+          }
+          drag.moved = true;
+          toast.dragged = true;
+          // The arrival animation fills forwards, and a filled animation beats
+          // an inline transform, so it has to be out of the way before the
+          // toast can follow the pointer at all.
+          node.style.animation = "none";
+          node.style.transition = "none";
+          node.setAttribute("data-lahe-dragging", "true");
+          // A toast being handled is not a toast being ignored.
+          pauseToast(toast);
+        }
+        var at = now();
+        var since = Math.max(1, at - drag.lastAt);
+        drag.velocity = (event.clientX - drag.lastX) / since;
+        drag.lastX = event.clientX;
+        drag.lastAt = at;
+        // Rightward is the gesture. Leftward gives a little and no more, so the
+        // toast feels attached to the pointer rather than nailed down, without
+        // ever suggesting there is something to find over there.
+        drag.dx = dx > 0 ? dx : Math.max(-14, dx * 0.2);
+        paintToastDrag(node, drag.dx);
+        if (typeof event.preventDefault === "function") event.preventDefault();
+      });
+
+      node.addEventListener("pointerup", function (event) {
+        var drag = toast.drag;
+        if (!drag || event.pointerId !== drag.id) return;
+        toast.drag = null;
+        releaseToastPointer(node, event.pointerId);
+        node.removeAttribute("data-lahe-dragging");
+        // Never past the dead zone: that was a click, and the click handler is
+        // about to run and open the card, which is what it has always done.
+        if (!drag.moved) return;
+        if (shouldDismissSwipe({ dx: drag.dx, velocity: drag.velocity, width: node.offsetWidth || 0 })) {
+          flingToast(toast);
+          return;
+        }
+        springToastBack(node);
+        resumeToast(toast);
+      });
+
+      node.addEventListener("pointercancel", function (event) {
+        var drag = toast.drag;
+        if (!drag || event.pointerId !== drag.id) return;
+        toast.drag = null;
+        releaseToastPointer(node, event.pointerId);
+        node.removeAttribute("data-lahe-dragging");
+        springToastBack(node);
+        resumeToast(toast);
+      });
+
+      node.addEventListener("keydown", function (event) {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openToast(toast.id);
+          return;
+        }
+        // ESCAPE IS THE PAGE'S FIRST. This handler is on the toast, so it only
+        // ever runs with focus inside one: a comment box's Escape and the
+        // page's own Escape never reach here.
+        if (event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          dismissToast(toasts.length ? toasts[0].id : toast.id);
+        }
+      });
+      node.addEventListener("mouseenter", function () {
+        pauseToast(toast);
+      });
+      node.addEventListener("mouseleave", function () {
+        resumeToast(toast);
+      });
+
+      toast.node = node;
+      return node;
+    }
+
+    /**
+     * Put the stack in order, moving as little as possible.
+     *
+     * A NODE ALREADY IN PLACE IS NEVER MOVED. Re-parenting an element restarts
+     * its CSS animation, so a rebuild-everything render made every standing
+     * toast slide in again each time a new one arrived, and it would rip a
+     * toast out from under its own fade. Newest first, inserted ahead of the
+     * one it is newer than; everything else stays put.
+     *
+     * Everything this touches is a child of dom.toastHost, inside the closed
+     * root. Nothing outside the shadow root is read or written.
+     */
+    function renderToasts() {
+      if (!dom || !dom.toastHost) return false;
+      var host = dom.toastHost;
+      var shown = toasts.slice(0, TOAST_MAX);
+      // THE STACK CYCLES. A toast queued behind the cap has no clock, and gets
+      // one the moment it comes into view, so every message is eventually seen
+      // rather than three being shown and the rest quietly expiring off screen.
+      toasts.forEach(function (toast, index) {
+        if (index < TOAST_MAX) {
+          if (!toast.timer && !toast.sticky && !toast.paused) armToast(toast);
+        } else {
+          clearToastTimer(toast);
+        }
+      });
+      var live = [];
+      // The count line is created once and lives at the end, so it is the thing
+      // the oldest visible toast is inserted before.
+      var anchor = dom.toastMore;
+      for (var i = shown.length - 1; i >= 0; i -= 1) {
+        var node = toastNodeFor(shown[i]);
+        if (node.parentNode !== host) host.insertBefore(node, anchor);
+        anchor = node;
+        live.push(node);
+      }
+      // Anything left that is neither live, nor fading, nor the count line is a
+      // toast that has been pushed past the cap.
+      Array.prototype.slice.call(host.childNodes).forEach(function (child) {
+        if (child === dom.toastMore) return;
+        if (live.indexOf(child) !== -1) return;
+        if (toastLeaving.indexOf(child) !== -1) return;
+        host.removeChild(child);
+      });
+      var hidden = toasts.length - shown.length;
+      dom.toastMore.textContent = hidden > 0 ? "+" + String(hidden) + " more" : "";
+      dom.toastMore.hidden = hidden < 1;
+      host.hidden = toasts.length === 0 && toastLeaving.length === 0;
+      return true;
+    }
+
+    /**
+     * What is on screen, for a spec that cannot reach into a closed root.
+     *
+     * Geometry as well as text, so a test clicks the real thing at real
+     * coordinates rather than calling openToast and proving nothing about
+     * whether the toast was clickable.
+     */
+    function toastInfo() {
+      return {
+        count: toasts.length,
+        more: Math.max(0, toasts.length - TOAST_MAX),
+        toasts: toasts.map(function (toast, index) {
+          var rect = toast.node && typeof toast.node.getBoundingClientRect === "function"
+            ? toast.node.getBoundingClientRect()
+            : null;
+          // The close control's own geometry. A spec presses the X the way a
+          // reviewer does, at real coordinates, rather than calling the
+          // dismissal and proving nothing about whether the button was there.
+          var closeNode = toast.node ? toast.node.querySelector(".toast__x") : null;
+          var closeRect = closeNode ? closeNode.getBoundingClientRect() : null;
+          return {
+            closeRect: closeRect
+              ? { x: closeRect.x, y: closeRect.y, width: closeRect.width, height: closeRect.height }
+              : null,
+            id: toast.id,
+            key: toast.key,
+            label: toast.label,
+            text: toast.text,
+            about: toast.about,
+            sticky: toast.sticky,
+            paused: toast.paused,
+            armed: !!toast.timer,
+            visible: index < TOAST_MAX,
+            rect: rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null
+          };
+        })
+      };
+    }
+
+    /** Read the auto-dismiss duration, or set it. A test shortens it; nothing else does. */
+    function toastDuration(ms) {
+      if (typeof ms === "number" && ms > 0) toastMs = ms;
+      return toastMs;
+    }
+
+    // -------------------------------------------------------------------------
+    // Carrying the rail across a reload the tool itself started
+    // -------------------------------------------------------------------------
+    //
+    // Ken clicked a toast, the rail opened on the card, and two seconds later
+    // the agent rebuilt the page for a different review. LAHE reloaded, the rail
+    // came back in its default state, and the card he was reading "disappeared
+    // out from in front of me".
+    //
+    // The reload is right and the scroll position is already carried (see
+    // sync.js's viewport marker). This is the same promise for the rail: what
+    // was open stays open, on the same tab, scrolled to the same place, with the
+    // same card focused. It is the LIVE state, not the stored preference: a rail
+    // opened by a toast is open whatever the reviewer's usual choice is.
+    //
+    // A reviewer's own reload is untouched. Only the marker sync.js writes on
+    // the way out is consumed, and only once.
+
+    /** What is on screen right now, as plain data. */
+    function railState() {
+      var pane = dom && dom.panes ? dom.panes[activeTab] : null;
+      return {
+        collapsed: collapsed,
+        tab: activeTab,
+        scroll: pane && typeof pane.scrollTop === "number" ? Math.round(pane.scrollTop) : 0,
+        focused: focusedCardId()
+      };
+    }
+
+    /**
+     * Put it back, exactly.
+     *
+     * The collapse is applied WITHOUT persisting: this is restoring what was on
+     * screen, not recording a new decision, and writing it back as a preference
+     * would turn "a toast opened the rail once" into "the rail is open now".
+     *
+     * @param {object} state from railState, across a reload
+     * @returns {object} what could actually be applied
+     */
+    function applyRailState(state) {
+      var s = state || {};
+      var done = { collapsed: false, tab: null, scroll: false, focused: null };
+      if (typeof s.collapsed === "boolean") {
+        setCollapsed(s.collapsed, false);
+        done.collapsed = true;
+      }
+      if (s.tab && TABS.indexOf(s.tab) !== -1) {
+        selectTab(s.tab);
+        done.tab = s.tab;
+      }
+      var pane = dom && dom.panes ? dom.panes[activeTab] : null;
+      if (pane && typeof s.scroll === "number" && s.scroll >= 0) {
+        pane.scrollTop = s.scroll;
+        done.scroll = true;
+      }
+      if (s.focused) {
+        var node = cardNode(s.focused);
+        if (node && typeof node.focus === "function") {
+          node.tabIndex = -1;
+          if (typeof node.scrollIntoView === "function") node.scrollIntoView({ block: "nearest" });
+          node.focus();
+          done.focused = s.focused;
+        }
+      }
+      return done;
     }
 
     // Rects for both, plus the overlap answer, because "never overlaps" is a
@@ -13858,7 +16688,22 @@
       collapse: collapse,
       isCollapsed: isCollapsed,
       onCollapse: onCollapse,
+      // Present mode: the whole library off the screen, and still working.
+      PRESENT: PRESENT,
+      setPresenting: setPresenting,
+      isPresenting: isPresenting,
+      onPresent: onPresent,
+      // The rail's width, and the room everything else leaves for it.
+      width: width,
+      setWidth: setRailWidth,
+      railAllowance: railAllowance,
+      onWidth: onWidth,
+      gripInfo: gripInfo,
+      focusGrip: focusGrip,
       geometry: geometry,
+      // What is on screen, and putting it back after a reload the tool started.
+      railState: railState,
+      applyRailState: applyRailState,
       selectTab: selectTab,
       currentTab: currentTab,
       onTabSelect: onTabSelect,
@@ -13907,6 +16752,18 @@
         dom.endBtn.click();
         return true;
       },
+      // The toast surface. What is worth toasting is not decided here; see the
+      // Toasts section above.
+      showToast: showToast,
+      dismissToast: dismissToast,
+      openToast: openToast,
+      clearToasts: clearToasts,
+      toastInfo: toastInfo,
+      toastDuration: toastDuration,
+      TOAST_MS: TOAST_MS,
+      TOAST_MAX: TOAST_MAX,
+      TOAST_OUT_MS: TOAST_OUT_MS,
+      TOAST_GONE: TOAST_GONE,
       openMenu: openMenu,
       closeMenu: closeMenu,
       showRefusal: showRefusal,
@@ -13924,6 +16781,7 @@
   var shared = createRail();
 
   return {
+    PRESENT: PRESENT,
     TAB: TAB,
     TABS: TABS,
     STATUS: STATUS,
@@ -13932,10 +16790,29 @@
     AGENT_STATE: AGENT_STATE,
     AGENT_TEXT: AGENT_TEXT,
     LIMIT_SEPARATE_STORAGE_NO_HELPER: LIMIT_SEPARATE_STORAGE_NO_HELPER,
+    TOAST_MS: TOAST_MS,
+    TOAST_MAX: TOAST_MAX,
+    TOAST_OUT_MS: TOAST_OUT_MS,
+    TOAST_GONE: TOAST_GONE,
+    // Swipe to dismiss: the numbers, and the one decision, pure so the feel can
+    // be argued about in a unit test rather than by dragging things.
+    TOAST_SWIPE_SLOP: TOAST_SWIPE_SLOP,
+    TOAST_SWIPE_FRACTION: TOAST_SWIPE_FRACTION,
+    TOAST_SWIPE_MAX_PX: TOAST_SWIPE_MAX_PX,
+    TOAST_FLING_SPEED: TOAST_FLING_SPEED,
+    toastSwipeThreshold: toastSwipeThreshold,
+    shouldDismissSwipe: shouldDismissSwipe,
     END_REVIEW: END_REVIEW,
     endReviewCounts: endReviewCounts,
     unfinishedSentence: unfinishedSentence,
     SHEET_ATTR: SHEET_ATTR,
+    RAIL_MIN_WIDTH: RAIL_MIN_WIDTH,
+    RAIL_MAX_FRACTION: RAIL_MAX_FRACTION,
+    RAIL_MAX_MARGIN: RAIL_MAX_MARGIN,
+    RAIL_EDGE_GAP: RAIL_EDGE_GAP,
+    RAIL_KEY_STEP: RAIL_KEY_STEP,
+    RAIL_GRIP_LABEL: RAIL_GRIP_LABEL,
+    clampRailWidth: clampRailWidth,
     timestampLabel: timestampLabel,
     paneForItem: paneForItem,
     createRail: createRail,
@@ -14963,12 +17840,12 @@
    * answered again has to read as new the second time, so the mark has to name
    * WHICH reply was read: the time it landed, plus the revision it answered.
    * Returns null when there is no reply to have seen.
+   *
+   * Spelled in record.js, because the page check stamps the same string onto the
+   * record and the two must not drift.
    */
   function replyStamp(item) {
-    var reply = item && item[record.FIELD.REPLY];
-    if (!reply) return null;
-    var rev = item[record.FIELD.REV];
-    return String(reply.at || "") + "@" + String(rev === undefined || rev === null ? "" : rev);
+    return record.replyStamp(item);
   }
 
   /**
@@ -14980,7 +17857,8 @@
    *
    *   THE AGENT SAID SO   user_needs_to_see_reply on the reply line, which the
    *                       contract asks for on an answer, a caveat, or a change
-   *                       made differently than asked
+   *                       made differently than asked, AND words to read in
+   *                       text or reason
    *   THE STATUS SAYS SO  question and not_handled, always, flag or no flag: a
    *                       question needs an answer and a refusal needs its
    *                       reason read, and neither is the agent's call
@@ -14988,13 +17866,35 @@
    * Everything else still lands on its card in Done, whole, with its text and
    * its timestamp. It simply arrives already read.
    *
+   * THE FLAG NEEDS WORDS BEHIND IT. All three things the contract asks the flag
+   * for, an answer, a caveat, a change made differently than asked, are things
+   * an agent says in words. A flagged reply carrying neither text nor reason
+   * has nothing to read, so the card falls through to the wordless line
+   * `agentMessageFor` writes: "claude handled this." Counting that is a badge
+   * that sends the reviewer to a card to learn nothing, and it happens in runs:
+   * an agent that flags one wordless confirmation flags twelve, and the number
+   * on the rail stops meaning anything. Ken hit exactly this (2026-09-04). The
+   * agent asked for attention it had no use for, so the ask is refused here
+   * rather than trusted; the reply is not hidden, only already read.
+   *
+   * `question` and `not_handled` are deliberately NOT held to this. A refusal
+   * with no reason and a question with no text are both worth fixing, but the
+   * status alone is the signal there, and swallowing a wordless refusal would
+   * leave the reviewer thinking their item was done.
+   *
    * @param {object} reply the reply as it sits on a record
    */
   function needsToSeeReply(reply) {
     if (!reply) return false;
     if (reply.status === record.REPLY_STATUS.QUESTION) return true;
     if (reply.status === record.REPLY_STATUS.NOT_HANDLED) return true;
-    return reply.user_needs_to_see_reply === true;
+    if (reply.user_needs_to_see_reply !== true) return false;
+    return hasWords(reply.text) || hasWords(reply.reason);
+  }
+
+  /** Is there anything here for a person to actually read? */
+  function hasWords(value) {
+    return typeof value === "string" && value.trim() !== "";
   }
 
   /**
@@ -15048,6 +17948,194 @@
     return out;
   }
 
+  // ---------------------------------------------------------------------------
+  // The toast: telling the reviewer an answer arrived, on the page
+  // ---------------------------------------------------------------------------
+  //
+  // The rail is where answers live, and Ken works with the rail closed, because
+  // an open rail covers the page he came to review. That is the tool working as
+  // intended, and the cost is real: "I forget to go look for answers and end up
+  // asking the same questions again."
+  //
+  // So an answer worth stopping for says so on the page. Three things keep this
+  // from becoming noise, and they are the whole design:
+  //
+  //   ONE NOTION OF IMPORTANT   needsToSeeReply, unchanged, is the test. The
+  //                             badge and the toast agree by construction, and
+  //                             a routine "carried this into the source" gets
+  //                             neither.
+  //   NOT IF THEY ARE LOOKING   a reply landing on the tab the reviewer already
+  //                             has open is on screen. A toast would be telling
+  //                             them about something they can see.
+  //   NOT WHEN THEY CANNOT ACT  a refused (read-only) window writes nothing and
+  //                             answers nothing, so it interrupts with nothing.
+  //
+  // ---------------------------------------------------------------------------
+  // THE MESSAGE, NOT A COUNT (Ken, after a day of using it)
+  // ---------------------------------------------------------------------------
+  //
+  // "toasts that just say one message is waiting, and then another toast comes
+  // up while it's still there and says two messages are waiting. I don't want
+  // those. I want the message."
+  //
+  // He was right twice over. A count is a notification about a notification: it
+  // costs the same interruption and carries none of the information, so the
+  // reviewer still has to go and look. And the counts multiplied, because the
+  // summary was keyed by the set of ids it named: every remount recomputed that
+  // set, a set that had grown by one produced a brand-new key, the rail's
+  // per-key dedupe saw a key it had never met, and a second count stood up
+  // beside the first. On an SPA that remounts on every hash change, that is a
+  // fresh count every few seconds.
+  //
+  // The rules now:
+  //
+  //   1. A LIVE REPLY IS ITS OWN TOAST, with its words. Always. Ten arriving at
+  //      once is ten toasts through the stack (three visible, the rest queued
+  //      with no clock until they come into view), never one count.
+  //   2. THE X MEANS READ. Dismissing a toast marks that reply seen, exactly as
+  //      clicking through to the card does. It never comes back, in a toast or
+  //      in a summary. Timing out is NOT dismissing: nobody decided anything.
+  //   3. NEGLECT BRINGS THE WORDS BACK, NOT A NUMBER. A reply that was toasted,
+  //      was neither opened nor dismissed, timed out, and is still unread
+  //      NEGLECT_MS later comes back as itself, sticky. Only when more than a
+  //      stackful are waiting does it become a count, because that is the one
+  //      case where the words will not fit. A new count REPLACES the standing
+  //      one rather than joining it.
+  //   4. AFTER A RELOAD, recent unread replies are toasted as themselves, and
+  //      the ones already older than NEGLECT_MS come back under rule 3.
+  //   5. ONCE PER PAGE LIFE. What has been announced is remembered across
+  //      remounts (see pageLife below), so a hash navigation announces nothing
+  //      a second time.
+
+  // How long a reply the reviewer never touched has to sit unread before the
+  // tool says so with a count. Two minutes: long enough that it is neglect
+  // rather than "they are reading it", short enough to still be the same piece
+  // of work. One number, named once.
+  var NEGLECT_MS = 120000;
+
+  // What has already been said on this page, per review, kept OUTSIDE
+  // createDoneTab on purpose.
+  //
+  // A client-side navigation tears the Done tab down and builds a new one
+  // (index.js's remount), so anything held in the factory's closure is
+  // forgotten several times a session, and "have I already announced this?"
+  // then answers no every time. The module outlives every remount and dies with
+  // the page, which is exactly the lifetime this question has.
+  var pageLife = Object.create(null);
+
+  function lifeFor(reviewId) {
+    var key = String(reviewId);
+    if (!pageLife[key]) {
+      pageLife[key] = {
+        // id -> true, every reply this page has already put on screen
+        announced: Object.create(null),
+        // id -> true, toasted and then ignored until it timed out
+        neglected: Object.create(null),
+        // the standing count, so a new one can replace it rather than join it
+        summaryToast: null
+      };
+    }
+    return pageLife[key];
+  }
+
+  /** Only the tests need this: a fresh page, without a fresh browser. */
+  function forgetPageLife(reviewId) {
+    if (reviewId === undefined) pageLife = Object.create(null);
+    else delete pageLife[String(reviewId)];
+    return true;
+  }
+
+  // The plain note is labeled with who said it ("claude says"), because "Note"
+  // told Ken nothing about where the words came from. The name is the reply's
+  // own agent field, the same one the card shows.
+  var TOAST_LABEL = {
+    question: "Question",
+    not_handled: "Not handled",
+    says: " says"
+  };
+
+  // The whole answer, and one line of context. The toast grows to fit the text,
+  // so this is not a display clamp; it is the ceiling on what is CARRIED, so a
+  // very long agent answer cannot turn the toast into a wall. An answer longer
+  // than this is cut on a word, and the card has the rest.
+  var TOAST_TEXT_MAX = 1200;
+  var TOAST_ABOUT_MAX = 120;
+
+  /** The short word at the top of the toast. */
+  function toastLabelFor(reply) {
+    var status = reply && reply.status;
+    if (status === record.REPLY_STATUS.QUESTION) return TOAST_LABEL.question;
+    if (status === record.REPLY_STATUS.NOT_HANDLED) return TOAST_LABEL.not_handled;
+    return ((reply && reply.agent) || "agent") + TOAST_LABEL.says;
+  }
+
+  /** Cut to length on a word where it can, with the ellipsis saying it was cut. */
+  function clip(text, max) {
+    var value = String(text === undefined || text === null ? "" : text).replace(/\s+/g, " ").trim();
+    if (value.length <= max) return value;
+    var cut = value.slice(0, max);
+    var space = cut.lastIndexOf(" ");
+    if (space > max * 0.6) cut = cut.slice(0, space);
+    return cut + "...";
+  }
+
+  /**
+   * Should this reply interrupt the reviewer?
+   *
+   * Pure, and the whole decision: given the reply, whether the reviewer is
+   * already looking at the tab its card is in, whether this window can act at
+   * all, and whether this browser had already folded this same reply before
+   * (a reload re-delivers the backlog, and an answer read yesterday is not news
+   * today).
+   *
+   * @param {object} options
+   * @param {object} options.reply       the reply as it sits on the record
+   * @param {boolean} [options.watching] the rail is open on the card's own tab
+   * @param {boolean} [options.readOnly] this window is refused
+   * @param {boolean} [options.known]    this browser already held this reply
+   */
+  function shouldToastReply(options) {
+    var o = options || {};
+    if (o.readOnly === true) return false;
+    if (o.known === true) return false;
+    if (o.watching === true) return false;
+    return needsToSeeReply(o.reply);
+  }
+
+  /** How many replies are waiting, and how many of those are questions. */
+  function replyWaitCounts(items, marks) {
+    var byId = Object.create(null);
+    (items || []).forEach(function (item) {
+      byId[item[record.FIELD.ID]] = item;
+    });
+    var counts = { total: 0, questions: 0 };
+    unseenReplyIds(items, marks).forEach(function (id) {
+      var reply = byId[id] && byId[id][record.FIELD.REPLY];
+      counts.total += 1;
+      if (reply && reply.status === record.REPLY_STATUS.QUESTION) counts.questions += 1;
+    });
+    return counts;
+  }
+
+  /**
+   * The one sentence a summary toast says. Plain words, and no jargon: it is
+   * read at a glance by someone who was doing something else.
+   */
+  function waitingSentence(counts) {
+    var c = counts || {};
+    var total = c.total || 0;
+    var questions = c.questions || 0;
+    if (total < 1) return "";
+    if (total === 1) {
+      return questions ? "1 reply is waiting, and it is a question." : "1 reply is waiting.";
+    }
+    var head = String(total) + " replies are waiting";
+    if (!questions) return head + ".";
+    if (questions === 1) return head + ", 1 of them is a question.";
+    if (questions === total) return head + ", and they are all questions.";
+    return head + ", " + String(questions) + " of them are questions.";
+  }
+
   /**
    * The marks after the reviewer has looked at a set of replies.
    *
@@ -15099,7 +18187,11 @@
     "." + ROW_CLASS + " .cardacts:empty{display:none}",
     ".lahe-thread{display:flex;flex-direction:column;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}",
     ".lahe-thread-round{display:flex;flex-direction:column;gap:5px}",
-    ".lahe-thread-turn{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12.5px;line-height:1.45}",
+    // The reviewer's own turns are context; the agent's turns are the reading.
+    // So the agent's words get full ink and the card body's size, and the
+    // reviewer's stay smaller and softer (Ken, 2026-09-11).
+    ".lahe-thread-turn{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12.5px;line-height:1.45;color:var(--ink-soft)}",
+    ".lahe-thread-turn[data-lahe-turn='agent']{font-size:14px;line-height:1.55;color:var(--ink)}",
     ".lahe-thread-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}",
     ".lahe-thread-turn strong{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint)}",
     ".lahe-thread-time,.lahe-ask-time{font-size:10px;color:var(--ink-faint);font-variant-numeric:tabular-nums;white-space:nowrap}",
@@ -15158,6 +18250,12 @@
     var sync = opts.sync || null;
     var onContinued = typeof opts.onContinued === "function" ? opts.onContinued : function () {};
     var isReadOnly = typeof opts.isReadOnly === "function" ? opts.isReadOnly : function () { return false; };
+    // Present mode: the library is hidden while the reviewer presents the page.
+    // Replies still arrive and still fold; what must not happen is a toast
+    // appearing over a slide. They are not lost: nothing announced while hidden
+    // is marked announced, so the ordinary waiting path (toastWaiting) puts
+    // them back the moment the reviewer comes out of it.
+    var isHidden = typeof opts.isHidden === "function" ? opts.isHidden : function () { return false; };
     var doc = Object.prototype.hasOwnProperty.call(opts, "document")
       ? opts.document
       : typeof document !== "undefined"
@@ -15193,6 +18291,13 @@
     var markedNow = Object.create(null);
     var dropTabWatch = null;
     var dropCollapseWatch = null;
+    // What this PAGE has already said, which outlives this tab: a remount
+    // builds a new Done tab and must not start announcing from scratch.
+    var life = lifeFor(reviewId);
+    // The live neglect delay, so a test can shorten it. NEGLECT_MS is the only
+    // place the real number is written.
+    var neglectMs = NEGLECT_MS;
+    var neglectTimer = null;
 
     function el(tag, className, text) {
       var node = doc.createElement(tag);
@@ -15256,15 +18361,46 @@
           visitTab(tab);
         });
       }
-      // Collapsing the rail ends the visit, so the cards the reviewer was given
-      // a second look at go back to ordinary. Opening it again is a new visit,
-      // and a new visit to an already-read tab has nothing fresh in it.
+      // OPENING THE RAIL IS ALSO THE READING, and missing that is what kept
+      // toasting Ken about answers he had already read (2026-09-09). He works
+      // with the rail collapsed, expands it onto the tab it was already on,
+      // reads every card, and puts it away. No tab was ever SELECTED in that,
+      // so nothing was ever marked read, and the next reload found the same
+      // replies "unseen" and announced them again. On an SPA that rebuilds
+      // often, that is every few minutes.
+      //
+      // Collapsing still ends the visit, so the cards the reviewer was given a
+      // second look at go back to ordinary.
       if (!dropCollapseWatch && typeof rail.onCollapse === "function") {
-        dropCollapseWatch = rail.onCollapse(function () {
+        dropCollapseWatch = rail.onCollapse(function (collapsed) {
+          if (collapsed === false) {
+            // A refused window has the rail forced open so its remedy is
+            // visible. That is the tool talking, not the reviewer reading.
+            if (!isReadOnly()) visitTab(rail.currentTab());
+            return;
+          }
           clearFresh();
         });
       }
       refresh();
+      // A rail that is ALREADY open on this load is being read too, for the
+      // same reason. Nothing selects a tab on boot and nothing collapses, so
+      // without this the one state the reviewer spends most of a session in
+      // (rail open, one tab, reading) writes no marks at all.
+      // A HIDDEN RAIL IS NOT A RAIL ANYONE IS READING. Present mode leaves the
+      // rail "open" in its own state while the whole surface is off the screen,
+      // so without this a remount mid-talk would mark every waiting reply read
+      // and the reviewer would come back to a badge of nothing.
+      if (!isReadOnly() && !isHidden() && typeof rail.isCollapsed === "function" && rail.isCollapsed() !== true) {
+        visitTab(rail.currentTab());
+      }
+      // A load that arrives with answers already waiting says so once. See
+      // toastWaiting: recent answers get their words, an old backlog gets one
+      // count, and nothing this page already said is said again.
+      toastWaiting();
+      // A remount cancelled the pending sweep on the way out; the neglect it
+      // was going to report is still neglect.
+      if (Object.keys(life.neglected).length) scheduleNeglect();
       return api;
     }
 
@@ -15348,7 +18484,38 @@
           rail.setTabNewCount(tab, (grouped[tab] || []).length);
         });
       }
+      // The standing "N replies are waiting" is about unread replies. There are
+      // none, so it is about nothing, and a reminder that outlives the thing it
+      // reminds you of is how a surface stops being believed.
+      if (!ids.length && life.summaryToast && typeof rail.dismissToast === "function") {
+        rail.dismissToast(life.summaryToast, "replaced");
+      }
+      dismissReadWaiting(next);
       return ids;
+    }
+
+    /**
+     * Take away a sticky "still waiting" toast once its reply has been read.
+     *
+     * These do not time out, so nothing else ever removes them, and a reminder
+     * about an answer the reviewer has now read is the surface lying. The
+     * arrival toasts are left alone: they are transient and already going.
+     *
+     * @param {object} unread id -> true, as the paint just worked it out
+     */
+    function dismissReadWaiting(unread) {
+      if (typeof rail.toastInfo !== "function" || typeof rail.dismissToast !== "function") return 0;
+      var gone = 0;
+      rail.toastInfo().toasts.forEach(function (toast) {
+        var parts = String(toast.key || "").split(":");
+        // reply:<id>:<stamp>:waiting, and the stamp carries colons of its own,
+        // so the suffix is read off the end rather than by position.
+        if (parts[0] !== "reply" || parts[parts.length - 1] !== "waiting") return;
+        if (unread[parts[1]]) return;
+        rail.dismissToast(toast.id, "replaced");
+        gone += 1;
+      });
+      return gone;
     }
 
     /**
@@ -15578,7 +18745,7 @@
         // The reply's own fields are kept as they came, so nothing reading the
         // card's model loses what the agent actually said in which field. Only
         // `text` is what gets DRAWN, which is what makes it one carrier.
-        reason: reviewFormat.boundData(reply.reason, reviewFormat.CONTEXT_MAX),
+        reason: reviewFormat.boundData(reply.reason, reviewFormat.REPLY_TEXT_MAX),
         // The wordless fallback is kind-aware: "made this change" was written
         // for hand edits and read strangely under a handled COMMENT, where the
         // agent made a change the card never shows (Ken, 2026-08-18).
@@ -15623,19 +18790,20 @@
       record.chronologicalThread(item).forEach(function (round) {
         var pair = el("div", "lahe-thread-round");
         var reviewer = round.reviewer || {};
-        if (reviewer.note) appendTurn(pair, "Reviewer note", reviewer.note, reviewer.at);
-        if (reviewer.change) appendTurn(pair, "Reviewer change", reviewer.change, reviewer.at);
+        if (reviewer.note) appendTurn(pair, "Reviewer note", reviewer.note, reviewer.at, "reviewer");
+        if (reviewer.change) appendTurn(pair, "Reviewer change", reviewer.change, reviewer.at, "reviewer");
         var agent = round.agent || {};
-        if (agent.text) appendTurn(pair, agent.agent || "Agent", agent.text, agent.at);
-        if (agent.reason) appendTurn(pair, (agent.agent || "Agent") + " reason", agent.reason, agent.at);
-        if (!agent.text && !agent.reason) appendTurn(pair, agent.agent || "Agent", agent.status || "", agent.at);
+        if (agent.text) appendTurn(pair, agent.agent || "Agent", agent.text, agent.at, "agent");
+        if (agent.reason) appendTurn(pair, (agent.agent || "Agent") + " reason", agent.reason, agent.at, "agent");
+        if (!agent.text && !agent.reason) appendTurn(pair, agent.agent || "Agent", agent.status || "", agent.at, "agent");
         node.appendChild(pair);
       });
       return node;
     }
 
-    function appendTurn(host, who, text, at) {
+    function appendTurn(host, who, text, at, side) {
       var line = el("p", "lahe-thread-turn");
+      line.setAttribute("data-lahe-turn", side === "agent" ? "agent" : "reviewer");
       var head = el("span", "lahe-thread-head");
       head.appendChild(el("strong", null, who));
       if (at) {
@@ -15768,7 +18936,7 @@
 
     /** Agent text, bounded by review_format's own bound, marker visible. */
     function boundedText(text) {
-      return reviewFormat.boundData(text, reviewFormat.BEFORE_MAX);
+      return reviewFormat.boundData(text, reviewFormat.REPLY_TEXT_MAX);
     }
 
     // -------------------------------------------------------------------------
@@ -15788,6 +18956,17 @@
      * reviewer is not looking at and therefore has to say why on the card. The
      * button in this file passes neither, so the reviewer's own reopen is
      * unchanged: same rev bump, same event, same rail behavior.
+     *
+     * TWO THINGS THE CHECK'S REOPEN DOES THAT THE BUTTON DOES NOT, both from
+     * the loop of 2026-09-10 (see record.js, "The page check's stamp"):
+     *
+     *   the sentence lands at most once   record.appendNoteOnce. Thirteen
+     *                                     reopens appended thirteen copies of
+     *                                     the same sentence to one note.
+     *   the reopen is stamped             `options.pageCheck` records which
+     *                                     revision the check created, so the
+     *                                     check can recognize its own reopen
+     *                                     coming back and stay quiet.
      */
     function reopenItem(id, options) {
       var opts = options || {};
@@ -15804,11 +18983,14 @@
       // and an offline reopen arrives at a rev the store has never seen, so
       // merge's BROWSER_NEWER_REV protects it instead of it being discarded at
       // equal rev (STATE/REPLY are not content fields).
-      var reopened = record.reopenIssue(item);
-      if (typeof opts.note === "string" && opts.note.trim()) {
-        var carried = reopened[record.FIELD.NOTE];
-        reopened[record.FIELD.NOTE] =
-          typeof carried === "string" && carried.trim() ? carried + "\n\n" + opts.note : opts.note;
+      var reopened;
+      if (opts.pageCheck) {
+        reopened = record.pageCheckReopenOf(item, opts.note, null);
+      } else {
+        reopened = record.reopenIssue(item);
+        if (typeof opts.note === "string" && opts.note.trim()) {
+          reopened[record.FIELD.NOTE] = record.appendNoteOnce(reopened[record.FIELD.NOTE], opts.note);
+        }
       }
       counters.reopened += 1;
       return continueItem(
@@ -15871,7 +19053,324 @@
         applied.push(foldedReply(event));
       });
       refresh();
-      return applied.filter(Boolean);
+      var settled = applied.filter(Boolean);
+      // EVERY ANSWER GETS ITS WORDS. A batch used to collapse into "3 replies
+      // are waiting", which is an interruption that tells the reviewer nothing
+      // and still makes them go and look. The stack is what handles a crowd:
+      // three stand at a time and the rest wait their turn with no clock
+      // running, so a batch of ten is ten messages read one after another.
+      settled.forEach(function (result) {
+        if (result.toast === true) toastReply(result.item);
+      });
+      return settled;
+    }
+
+    // -------------------------------------------------------------------------
+    // What the toast says, and what pressing it does
+    // -------------------------------------------------------------------------
+
+    function canToast() {
+      return typeof rail.showToast === "function" && !isReadOnly() && !isHidden();
+    }
+
+    /** The words the item is about: the passage, or the edit's own sentence. */
+    function aboutWords(item) {
+      if (!item) return "";
+      var context = item[record.FIELD.CONTEXT] || {};
+      if (record.isHandEdit(item)) return item[record.FIELD.CHANGE] || context.quote || "";
+      return context.quote || item[record.FIELD.NOTE] || item[record.FIELD.CHANGE] || "";
+    }
+
+    /**
+     * What the agent said, bounded as agent text always is before it is drawn.
+     *
+     * A question or a refusal can arrive with no words at all (the status alone
+     * is the signal, which is why needsToSeeReply lets them through). The toast
+     * still has to say something, so it says what happened.
+     */
+    function toastText(item) {
+      var reply = item[record.FIELD.REPLY] || {};
+      var said = reply.text || reply.reason;
+      if (hasWords(said)) return clip(boundedText(said), TOAST_TEXT_MAX);
+      if (reply.status === record.REPLY_STATUS.QUESTION) return agentName(reply) + " has a question about this.";
+      if (reply.status === record.REPLY_STATUS.NOT_HANDLED) return agentName(reply) + " did not do this one.";
+      return agentName(reply) + " answered this.";
+    }
+
+    /**
+     * One reply, on its own toast, with what the agent actually said.
+     *
+     * The key is the item plus WHICH reply, so the rail's own dedupe stops the
+     * same answer being shown twice however many times a remount or a replayed
+     * backlog asks for it.
+     */
+    function toastReply(id, options) {
+      if (!canToast()) return null;
+      var o = options || {};
+      var item = itemById(id);
+      if (!item || !item[record.FIELD.REPLY]) return null;
+      var reply = item[record.FIELD.REPLY];
+      var shown = rail.showToast({
+        key: "reply:" + id + ":" + String(replyStamp(item)) + (o.keySuffix || ""),
+        label: toastLabelFor(reply),
+        text: toastText(item),
+        about: clip(aboutWords(item), TOAST_ABOUT_MAX),
+        // A QUESTION WAITS. An agent asking is an agent stopped, so the one
+        // thing on screen that says so does not time out. So does a reply the
+        // reviewer has already let time out once: see showWaiting.
+        sticky: o.sticky === true || reply.status === record.REPLY_STATUS.QUESTION,
+        onOpen: function () {
+          jumpToCard(id);
+        },
+        onGone: function (why) {
+          // THE X MEANS READ. The reviewer looked at the words, decided they
+          // needed nothing, and put them away: that is a decision about this
+          // reply, and it must not come back as a toast or inside a count.
+          // Timing out is the opposite: nobody decided anything, so it starts
+          // the neglect clock instead.
+          if (why === "timeout") noteNeglected(id);
+          else if (why === "user") markOneSeen(id);
+        }
+      });
+      if (shown) life.announced[id] = true;
+      return shown;
+    }
+
+    /**
+     * What a reviewer who has not read these should see, now that waiting is
+     * the point rather than arrival.
+     *
+     * IF IT FITS ON SCREEN, IT IS THE MESSAGE. Ken, looking at a sticky "1 reply
+     * is waiting" he could not dismiss by reading it: "if we're going to have a
+     * persistent toast on the page that doesn't go away and there's only one
+     * message, then why wouldn't it just be that message? Just tell me what it
+     * is." A count that costs the same space as the answer and the same
+     * permanence, and carries none of the words, is the worst of both.
+     *
+     * So up to a stackful (TOAST_MAX) come back as themselves, sticky, with
+     * their words: the X still means read and pressing one still jumps to its
+     * card. Only a pile too big for the stack collapses into a number, because
+     * that is the one case where the words genuinely will not fit.
+     *
+     * @param {string[]} ids the unread replies to put back in front of them
+     */
+    function showWaiting(ids) {
+      if (!canToast() || !ids || !ids.length) return null;
+      if (ids.length > toastRoom()) return showSummary(ids);
+      ids.forEach(function (id) {
+        // A suffixed key, because this same reply already had its arrival toast
+        // and the rail shows one toast per key for the life of the page. This
+        // is a second, different thing to say about it: it is still waiting.
+        toastReply(id, { sticky: true, keySuffix: ":waiting" });
+      });
+      return ids.length;
+    }
+
+    /** How many messages the stack can hold at once. The rail owns the number. */
+    function toastRoom() {
+      return typeof overlayModule.TOAST_MAX === "number" ? overlayModule.TOAST_MAX : 3;
+    }
+
+    /**
+     * The count, and the ONLY thing that is ever a count: replies the reviewer
+     * was shown, did not touch, and has still not read NEGLECT_MS later.
+     *
+     * One at a time. A second neglected reply REPLACES the standing summary,
+     * because "1 waiting" sitting next to "2 waiting" is exactly the pile Ken
+     * asked us to take away. No key is passed: this file owns the one-at-a-time
+     * rule, so the rail's per-key dedupe must not also refuse a legitimately
+     * new count.
+     */
+    function showSummary(ids) {
+      if (!canToast() || !ids || !ids.length) return null;
+      var wanted = Object.create(null);
+      ids.forEach(function (id) {
+        wanted[id] = true;
+      });
+      var counts = { total: 0, questions: 0 };
+      itemsNow().forEach(function (item) {
+        if (!wanted[item[record.FIELD.ID]]) return;
+        var reply = item[record.FIELD.REPLY];
+        counts.total += 1;
+        if (reply && reply.status === record.REPLY_STATUS.QUESTION) counts.questions += 1;
+      });
+      if (!counts.total) return null;
+      if (life.summaryToast && typeof rail.dismissToast === "function") {
+        rail.dismissToast(life.summaryToast, "replaced");
+      }
+      life.summaryToast = rail.showToast({
+        label: "Waiting",
+        text: waitingSentence(counts),
+        about: "Open the review to read them.",
+        // IT DOES NOT TIME OUT. This toast exists because a message already
+        // timed out unread; letting the reminder do the same thing is the tool
+        // forgetting on the reviewer's behalf. It carries an X, and reading the
+        // replies takes it away (see paintUnseen).
+        sticky: true,
+        onOpen: function () {
+          openTabFor(ids);
+        },
+        onGone: function () {
+          life.summaryToast = null;
+        }
+      });
+      return life.summaryToast;
+    }
+
+    /**
+     * On boot: recent answers get their words, old ones get a count.
+     *
+     * A reply that landed a minute before the reload is news the reviewer has
+     * not had yet, and Ken wants the message. One that has been sitting unread
+     * since yesterday is a backlog, and a backlog replayed one toast at a time
+     * is a stack of things they already know about.
+     *
+     * Anything already announced on this page is skipped, whatever a remount
+     * thinks. Replies on the tab the reviewer is looking at are skipped for the
+     * same reason a live one is: they are on screen.
+     */
+    function toastWaiting() {
+      if (!canToast()) return null;
+      var now = Date.now();
+      var recent = [];
+      var stale = [];
+      unseenReplyIds(itemsNow(), readSeen()).forEach(function (id) {
+        if (life.announced[id]) return;
+        var item = itemById(id);
+        if (!item || watchingTab(paneOf(item))) return;
+        if (replyAge(item, now) >= neglectMs) stale.push(id);
+        else recent.push(id);
+      });
+      recent.forEach(function (id) {
+        toastReply(id);
+      });
+      if (stale.length) {
+        stale.forEach(function (id) {
+          life.announced[id] = true;
+        });
+        showWaiting(stale);
+      }
+      return recent.length + (stale.length ? 1 : 0);
+    }
+
+    /** How long this reply has been sitting there. Unknown counts as brand new. */
+    function replyAge(item, atMs) {
+      var reply = item && item[record.FIELD.REPLY];
+      var at = reply && reply.at ? Date.parse(reply.at) : NaN;
+      if (isNaN(at)) return 0;
+      return Math.max(0, atMs - at);
+    }
+
+    // -------------------------------------------------------------------------
+    // Neglect
+    // -------------------------------------------------------------------------
+
+    /** This reply was shown, ignored, and ran out of time. Start the clock. */
+    function noteNeglected(id) {
+      life.neglected[id] = true;
+      return scheduleNeglect();
+    }
+
+    /**
+     * One pending sweep at a time.
+     *
+     * A second reply that times out while a sweep is already pending joins that
+     * sweep rather than booking its own, which is a little early for it and is
+     * the right trade: two sweeps a few seconds apart would put up two counts,
+     * and one count is the whole point.
+     */
+    function scheduleNeglect() {
+      var view = doc && doc.defaultView;
+      if (!view || typeof view.setTimeout !== "function") return null;
+      if (neglectTimer) return neglectTimer;
+      // harness-allow-timer: how long neglect has to last before the tool says
+      // so, pinned at NEGLECT_MS. It is a duration, not a wait on a condition.
+      neglectTimer = view.setTimeout(function () {
+        neglectTimer = null;
+        sweepNeglected();
+      }, neglectMs);
+      return neglectTimer;
+    }
+
+    /** Which of the ignored replies are still unread, and still off screen. */
+    function sweepNeglected() {
+      if (!canToast()) return null;
+      var unread = unseenReplyIds(itemsNow(), readSeen());
+      var onScreen = toastedIdsOnScreen();
+      var ids = Object.keys(life.neglected).filter(function (id) {
+        return unread.indexOf(id) !== -1 && onScreen.indexOf(id) === -1;
+      });
+      if (!ids.length) return null;
+      return showWaiting(ids);
+    }
+
+    /**
+     * The item ids whose own toast is standing right now.
+     *
+     * A count must never talk about something the reviewer can read in full a
+     * few pixels away. The toast keys carry the id, which is the only thing the
+     * rail knows about a reply and all this needs.
+     */
+    function toastedIdsOnScreen() {
+      if (typeof rail.toastInfo !== "function") return [];
+      return rail.toastInfo().toasts.reduce(function (out, toast) {
+        var parts = String(toast.key || "").split(":");
+        if (parts[0] === "reply" && parts[1]) out.push(parts[1]);
+        return out;
+      }, []);
+    }
+
+    /** One reply, read, durably. The same path a tab visit writes through. */
+    function markOneSeen(id) {
+      writeSeen(
+        seenMarksFor(itemsNow(), readSeen(), function (candidate) {
+          return candidate[record.FIELD.ID] === id;
+        })
+      );
+      delete life.neglected[id];
+      paintUnseen();
+      return true;
+    }
+
+    /**
+     * The way in, from the toast: open the rail, go to the card, and count the
+     * reply as read, because the reviewer is now looking at it.
+     *
+     * It uses the rail's own seams and adds none: collapse, selectTab (which is
+     * what tells this file to mark the tab's replies seen) and the card node.
+     */
+    function jumpToCard(id) {
+      var item = itemById(id);
+      if (!item) return false;
+      var tab = paneOf(item);
+      if (typeof rail.collapse === "function") rail.collapse(false);
+      if (typeof rail.selectTab === "function") rail.selectTab(tab);
+      var node = rail.cardNode(id);
+      if (node) {
+        if (typeof node.scrollIntoView === "function") node.scrollIntoView({ block: "nearest" });
+        node.tabIndex = -1;
+        if (typeof node.focus === "function") node.focus();
+      }
+      markRepliesSeen(tab);
+      return true;
+    }
+
+    /** The summary toast's way in: the tab holding the most of what is waiting. */
+    function openTabFor(ids) {
+      var grouped = Object.create(null);
+      (ids || []).forEach(function (id) {
+        var item = itemById(id);
+        if (!item) return;
+        var tab = paneOf(item);
+        grouped[tab] = (grouped[tab] || 0) + 1;
+      });
+      var best = null;
+      Object.keys(grouped).forEach(function (tab) {
+        if (!best || grouped[tab] > grouped[best]) best = tab;
+      });
+      if (typeof rail.collapse === "function") rail.collapse(false);
+      if (best && typeof rail.selectTab === "function") rail.selectTab(best);
+      return best;
     }
 
     /**
@@ -15953,6 +19452,31 @@
       }
 
       counters.folded += 1;
+      // WHAT THIS BROWSER ALREADY KNEW. The reply cursor starts at zero on
+      // every load, so a reload re-delivers every folded reply the helper has.
+      // Re-applying them is harmless and correct; toasting them again is the
+      // reviewer being told about yesterday's answers every time they refresh.
+      // The stamp names WHICH reply, so an identical one is not news.
+      var hadStamp = replyStamp(item);
+      // A SUPERSEDED DUPLICATE IS NOT NEWS EITHER. An agent can answer the same
+      // revision twice (rde58be04d90e, 2026-09-10: two lines for one item,
+      // fifteen seconds apart). Every load replays both folds in order, and the
+      // older one differs from the stamp this browser holds, so it read as a
+      // fresh reply and toasted an answer Ken had read half an hour before, on
+      // every reload. A fold for the revision this record already answers,
+      // carrying an older timestamp than the reply it holds, is left exactly as
+      // it is: not applied, not announced.
+      var heldReply = item[record.FIELD.REPLY];
+      var foldAt = event[protocol.EVENT_FIELD.TS] || null;
+      if (
+        heldReply &&
+        heldReply.at &&
+        foldAt &&
+        Number(replyRev) === Number(item[record.FIELD.REV]) &&
+        foldAt < heldReply.at
+      ) {
+        return { kind: "superseded", item: id, state: item[record.FIELD.STATE], toast: false };
+      }
       var next = Object.assign({}, item);
       next[record.FIELD.STATE] = event.state || item[record.FIELD.STATE];
       next[record.FIELD.REPLY] = {
@@ -15994,13 +19518,33 @@
       // repaints, so neither can turn up unread later. Every other case leaves
       // it unseen and the badge appears on the next paint, on the tab the card
       // is in.
-      if (watchingTab(paneOf(next)) || !needsToSeeReply(next[record.FIELD.REPLY])) {
-        var marks = readSeen();
-        marks[id] = replyStamp(next);
-        writeSeen(marks);
+      var watching = watchingTab(paneOf(next));
+      if (watching || !needsToSeeReply(next[record.FIELD.REPLY])) {
+        // DURABLE, not just quiet. Suppressing the toast and the badge is only
+        // half of "the reviewer has seen this": the mark has to reach storage,
+        // or the next load finds it unread and announces it all over again.
+        // Scoped to this one item, so nothing else's mark is touched.
+        writeSeen(
+          seenMarksFor(itemsNow(), readSeen(), function (candidate) {
+            return candidate[record.FIELD.ID] === id;
+          })
+        );
       }
 
-      return { kind: "folded", item: id, state: next[record.FIELD.STATE], status: reply.status };
+      return {
+        kind: "folded",
+        item: id,
+        state: next[record.FIELD.STATE],
+        status: reply.status,
+        // Decided here, where the "was the reviewer watching" answer is true,
+        // and acted on in applyReplies once every event in the batch is folded.
+        toast: shouldToastReply({
+          reply: next[record.FIELD.REPLY],
+          watching: watching,
+          readOnly: isReadOnly(),
+          known: hadStamp === replyStamp(next)
+        })
+      };
     }
 
     // -------------------------------------------------------------------------
@@ -16079,6 +19623,12 @@
       dropTabWatch = null;
       if (dropCollapseWatch) dropCollapseWatch();
       dropCollapseWatch = null;
+      // The pending neglect sweep belongs to this tab. The page's memory of
+      // what it has announced does not, and stays where it is (see pageLife).
+      if (neglectTimer && doc && doc.defaultView && typeof doc.defaultView.clearTimeout === "function") {
+        doc.defaultView.clearTimeout(neglectTimer);
+      }
+      neglectTimer = null;
       Object.keys(markedNow).forEach(function (id) {
         markUnseenCard(id, false);
       });
@@ -16154,6 +19704,23 @@
         return unseenByTab(itemsNow(), readSeen(), paneOf);
       },
       markRepliesSeen: markRepliesSeen,
+      // The toast seams, for boot and for a spec: what a load found waiting,
+      // the jump a pressed toast makes, and the neglect sweep.
+      toastWaiting: toastWaiting,
+      jumpToCard: jumpToCard,
+      sweepNeglected: sweepNeglected,
+      /** Read the neglect delay, or set it. A test shortens it; nothing else does. */
+      neglectDelay: function (ms) {
+        if (typeof ms === "number" && ms > 0) neglectMs = ms;
+        return neglectMs;
+      },
+      /** What this page has already put on screen, for a spec that asks. */
+      announcedIds: function () {
+        return Object.keys(life.announced);
+      },
+      neglectedIds: function () {
+        return Object.keys(life.neglected);
+      },
       rowCount: function () {
         return Object.keys(rows).length;
       },
@@ -16173,6 +19740,16 @@
     UNSEEN_ATTR: UNSEEN_ATTR,
     STALE_NOTICE: STALE_NOTICE,
     STYLE: STYLE,
+    TOAST_LABEL: TOAST_LABEL,
+    NEGLECT_MS: NEGLECT_MS,
+    forgetPageLife: forgetPageLife,
+    TOAST_TEXT_MAX: TOAST_TEXT_MAX,
+    TOAST_ABOUT_MAX: TOAST_ABOUT_MAX,
+    toastLabelFor: toastLabelFor,
+    shouldToastReply: shouldToastReply,
+    replyWaitCounts: replyWaitCounts,
+    waitingSentence: waitingSentence,
+    clip: clip,
     replyStamp: replyStamp,
     needsToSeeReply: needsToSeeReply,
     unseenReplyIds: unseenReplyIds,
@@ -17591,16 +21168,35 @@
   var browser = typeof window !== "undefined" && !!window.document;
   if (browser) {
     root.LAHE = root.LAHE || {};
-    root.LAHE.sync = factory(root.LAHE.protocol, root.LAHE.failures, root.LAHE.record, root.LAHE.overlay);
+    root.LAHE.sync = factory(
+      root.LAHE.protocol,
+      root.LAHE.failures,
+      root.LAHE.record,
+      root.LAHE.overlay,
+      root.LAHE.normalize,
+      root.LAHE.markers,
+      root.LAHE.selection
+    );
   } else {
     module.exports = factory(
       require("../shared/protocol.js"),
       require("../shared/failures.js"),
       require("../shared/record.js"),
-      require("./overlay.js")
+      require("./overlay.js"),
+      require("../shared/normalize.js"),
+      require("../shared/markers.js"),
+      require("./selection.js")
     );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (protocol, failures, record, overlay) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (
+  protocol,
+  failures,
+  record,
+  overlay,
+  normalize,
+  markers,
+  selection
+) {
   "use strict";
 
   var STATE = {
@@ -17628,6 +21224,33 @@
   // scheduleRetry's, and they keep going forever.
   var DRAIN_ATTEMPTS = 3;
 
+  // THE HELPER GETS REPLACED UNDER A LIVE PAGE. Any command that needs a helper
+  // newer than the running one stops it and starts another, and on a day when
+  // code is landing that happens several times an hour. For the second or two
+  // that takes, this page's requests fail and its heartbeat is answered by a
+  // process that has not read the session table yet. Both used to be acted on at
+  // once: the page dropped to read-only, which closes every comment box the
+  // reviewer has open, and it blamed the page's address for not being
+  // registered when the real answer was "wait a moment" (reviews r4915e2d5d632
+  // and r929a3d60b3cb, 2026-09-10 and 2026-09-11).
+  //
+  // So an ambiguous refusal has to REPEAT before the page believes it. Three
+  // consecutive misses, retried faster than the heartbeat so the three take
+  // about three seconds rather than half a minute. Any answer at all resets the
+  // count. The one refusal that is never waited out is a window deposed by an
+  // explicit Review here instead: that is a person deciding, not a machine
+  // restarting, and it says so on the wire.
+  var CLAIM_MISSES_BEFORE_READ_ONLY = 3;
+  var CLAIM_RETRY_MS = 1200;
+
+  // How long after the last answered request a failing page is given the benefit
+  // of the doubt about WHY it is failing. Inside this window a failure reads as
+  // the helper being down, which during a restart it is; past it the origin
+  // diagnosis runs as before. A page that has never had an answer is not in any
+  // window and is diagnosed on its first failure, which is the page whose origin
+  // really was never registered.
+  var RESTART_GRACE_MS = 6000;
+
   // The library's own poll of the helper. A visible review stays responsive;
   // a hidden document needs only a low-frequency safety check because it polls
   // immediately when it becomes visible again. The cursor is
@@ -17637,6 +21260,12 @@
 
   function pollIntervalFor(doc) {
     return doc && doc.hidden === true ? HIDDEN_POLL_INTERVAL_MS : POLL_INTERVAL_MS;
+  }
+
+  // One reading of the wall clock, in one place, so a test that wants to move it
+  // has one thing to move.
+  function nowMs() {
+    return Date.now();
   }
 
   // -------------------------------------------------------------------------
@@ -17679,6 +21308,19 @@
   // boot, never by inject.js's SPA, Turbo, popstate, or bfcache remounts.
   var VIEWPORT_MARKER_VERSION = 1;
   var VIEWPORT_MARKER_KEY = "lahe.viewport.v1";
+
+  // The rail's own marker, beside the viewport one and never inside it: the
+  // viewport marker is about where the PAGE was, this is about what the TOOL
+  // was showing, they are written by different owners, and a malformed or
+  // missing one of these must not cost the reviewer the other.
+  //
+  // Why it exists: Ken clicked a toast, the rail opened on the card, and two
+  // seconds later a rebuild for a different review reloaded the page. The rail
+  // came back in its default state and the card he was reading "disappeared out
+  // from in front of me". A reload the tool starts on its own must give the
+  // reviewer back exactly what it took.
+  var RAIL_MARKER_VERSION = 1;
+  var RAIL_MARKER_KEY = "lahe.rail.v1";
 
   function removeViewportMarker(storage) {
     try {
@@ -17734,6 +21376,822 @@
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // A reload that lands where the reviewer was looking
+  // ---------------------------------------------------------------------------
+  //
+  // The pixel offset alone is not where the reviewer was. A rebuilt page whose
+  // content grew or shrank ABOVE the viewport puts the same number of pixels on
+  // a different sentence, and late-drawn content (mermaid, an image with no
+  // dimensions, a webfont swapping in) moves the layout again after the restore
+  // has already run. Both read as the page jumping under them.
+  //
+  // So the marker carries what the reviewer was looking AT, not only how far
+  // down it was: the normalized text of the topmost visible block and that
+  // block's offset from the top of the viewport. On the way back in, the block
+  // is found by its text and put back at the same offset, and the pixel pair is
+  // still there as the fallback for every case the text cannot answer.
+  //
+  // The honesty rule is the anchor ladder's, deliberately: a text that matches
+  // once is the block, and a text that matches zero or several times is not an
+  // answer, so it falls back to pixels rather than guessing.
+
+  // Blocks, as selection.js means them. One notion of "this paragraph" across
+  // the library: the gesture that makes a block editable and the block this
+  // scrolls to are the same element.
+  var BLOCK_SELECTOR = selection.BLOCK_TAGS.join(",");
+
+  // A bound on the scan, so a pathological document cannot turn a reload into a
+  // long synchronous walk. Also the snapshot cap below.
+  //
+  // The scan collects ONE MORE than the cap on purpose. A list truncated at the
+  // cap looks like a complete list of a smaller page, and every block past the
+  // cut would then read as removed on one side and new on the other. The extra
+  // entry is the overflow signal: a caller that sees more than the cap knows the
+  // page is too big and sits the comparison out rather than painting nonsense.
+  var MAX_BLOCKS_SCANNED = 4000;
+
+  /**
+   * The blocks a reviewer would point at, in document order.
+   *
+   * LEAF BLOCKS ONLY. Every wrapper div is a block by tag, and counting them
+   * would make the topmost "visible block" the one holding the whole page. A
+   * block whose next block in document order is inside it is a container, since
+   * descendants always follow their ancestor in document order, so this is the
+   * leaf test and it is linear rather than pairwise.
+   *
+   * The cost: a container holding text of its own AND a nested block loses its
+   * own words here. That is the right trade for this job, where the question is
+   * which single element the reviewer's eye was on.
+   *
+   * @returns {Array<{el: Element, text: string}>}
+   */
+  function blockCandidates(doc) {
+    if (!doc || typeof doc.querySelectorAll !== "function") return [];
+    var found;
+    try {
+      found = doc.querySelectorAll(BLOCK_SELECTOR);
+    } catch (error) {
+      return [];
+    }
+    var withText = [];
+    for (var i = 0; i < found.length && withText.length <= MAX_BLOCKS_SCANNED; i += 1) {
+      var el = found[i];
+      if (markers.isInsideOverlay(el)) continue;
+      // A live region, a hidden region, or anything announcing that it is a
+      // copy rather than the page. See isInsideMirror.
+      if (isInsideMirror(el)) continue;
+      var text = "";
+      try {
+        text = normalize.normalizeText(el.textContent || "");
+      } catch (error) {
+        text = "";
+      }
+      if (!text) continue;
+      withText.push({ el: el, text: text });
+    }
+    var out = [];
+    for (var j = 0; j < withText.length; j += 1) {
+      var next = withText[j + 1];
+      var el2 = withText[j].el;
+      if (next && typeof el2.contains === "function" && el2.contains(next.el)) continue;
+      out.push(withText[j]);
+    }
+    return out;
+  }
+
+  // ---------------------------------------------------------------------------
+  // A MIRROR OF THE PAGE'S TEXT IS NOT A CHANGE
+  // ---------------------------------------------------------------------------
+  //
+  // reveal.js keeps an off-screen announcer, `div.aria-status` with
+  // aria-live="polite", and copies the current slide's words into it for screen
+  // readers. So an agent rewording the slide the presenter is standing on
+  // changes the page in two places, and the change mark painted both: the
+  // paragraph, and a copy of the paragraph nobody can see. The reveal spec used
+  // to sidestep it by editing a slide the deck was not sitting on, which is a
+  // test walking around a bug rather than reporting it.
+  //
+  // Anything a page keeps as a copy of its own text announces itself the same
+  // way, because the copy exists for assistive technology and has to say so:
+  //
+  //   aria-live (any value)      a region that announces its own changes
+  //   role=status|alert|log      the three roles that are live by definition
+  //
+  // "HIDDEN" IS NOT ON THAT LIST, and reveal is the reason for both spellings of
+  // it. A deck marks every slide that is not the current one with BOTH the
+  // hidden attribute and aria-hidden="true", which is correct of it: a slide off
+  // screen is not part of the accessible page right now. But it is still the
+  // reviewer's document, and most of what an agent changes is not on screen at
+  // the moment it lands, so reading either one as "this is a copy, ignore it"
+  // blinds the mark to nearly every real edit in a deck. Measured: with the
+  // hidden attribute on the list, a six slide deck offered six blocks to the
+  // comparison, all of them on the slide in front of the reviewer.
+  //
+  // A copy that is hidden and NOT a live region is caught at paint time instead,
+  // by its box: see isVisuallyHidden.
+  //
+  // The check walks ancestors, because the attribute is on the region and the
+  // text is in a block inside it. It runs at scan time, so a mirror is out of
+  // BOTH readings of the old page and out of the new one: it can neither be
+  // painted nor make anything else look like it moved.
+  var LIVE_ROLES = ["status", "alert", "log"];
+
+  function isInsideMirror(el) {
+    var node = el;
+    var guard = 0;
+    while (node && node.nodeType === 1 && guard < 60) {
+      if (typeof node.hasAttribute === "function") {
+        if (node.hasAttribute("aria-live")) return true;
+        var role = node.getAttribute("role");
+        if (role && LIVE_ROLES.indexOf(String(role).toLowerCase()) !== -1) return true;
+      }
+      node = node.parentNode;
+      guard += 1;
+    }
+    return false;
+  }
+
+  /**
+   * The other half of the same rule: the `.sr-only` convention.
+   *
+   * A screen-reader-only copy is a real, laid-out element one pixel square with
+   * its overflow clipped, so it has a box and the box is tiny. That is the test,
+   * and it is deliberately NOT "is this element invisible": a slide reveal has
+   * taken out of layout with display:none has no box at all, and the agent's
+   * edit to it is real news the reviewer should see when they navigate to it.
+   * getClientRects tells the two apart: none at all means out of layout, one
+   * tiny one means hidden on purpose.
+   *
+   * Cost is why this is not in the scan: it is a layout read, so it runs only
+   * for a block that is about to be painted, never for every block on the page.
+   */
+  function isVisuallyHidden(el) {
+    if (!el || typeof el.getBoundingClientRect !== "function") return false;
+
+    try {
+      if (typeof el.getClientRects === "function" && el.getClientRects().length === 0) return false;
+      var rect = el.getBoundingClientRect();
+      return rect.width <= 1 && rect.height <= 1;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Where a block SITS, written so it survives a rebuild.
+   *
+   * Tag names and sibling positions from the body down: "MAIN[0]/P[3]". A bare
+   * index into the block list does not survive, and that is not a theory. The
+   * reviewer edits a paragraph, so that paragraph is one of the blocks that
+   * differ between the old page's two readings; the agent then adds a paragraph
+   * above it; and the added paragraph lands on the index the edited one used to
+   * hold, so the one thing the reviewer most needs to see is the one thing that
+   * gets suppressed. A structural path moves only when the structure above the
+   * element moves, which is the right sensitivity for "this is the same slide
+   * number in the same corner of the page".
+   *
+   * @returns {string} the path, or "" when it cannot be computed
+   */
+  function blockPath(el) {
+    if (!el || el.nodeType !== 1) return "";
+    var parts = [];
+    var node = el;
+    var guard = 0;
+    while (node && node.nodeType === 1 && node.tagName !== "BODY" && guard < 40) {
+      var index = 0;
+      var sibling = node.previousElementSibling;
+      while (sibling) {
+        if (sibling.tagName === node.tagName) index += 1;
+        sibling = sibling.previousElementSibling;
+      }
+      parts.push(node.tagName + "[" + index + "]");
+      node = node.parentElement;
+      guard += 1;
+    }
+    return parts.reverse().join("/");
+  }
+
+  /** Every leaf block's normalized text, in document order. */
+  function blockTextsIn(doc) {
+    return blockCandidates(doc).map(function (entry) {
+      return entry.text;
+    });
+  }
+
+  /**
+   * The topmost block the reviewer can see, and how far below the viewport's
+   * top edge it sits. Partly visible counts: a paragraph running off the top of
+   * the screen is still the one being read.
+   */
+  function topBlockAnchor(win) {
+    var doc = win && win.document;
+    if (!doc || typeof win.innerHeight !== "number") return null;
+    var blocks = blockCandidates(doc);
+    for (var i = 0; i < blocks.length; i += 1) {
+      var el = blocks[i].el;
+      if (typeof el.getBoundingClientRect !== "function") continue;
+      var rect = el.getBoundingClientRect();
+      if (!rect) continue;
+      if (rect.width === 0 && rect.height === 0) continue;
+      if (rect.bottom <= 0) continue;
+      if (rect.top >= win.innerHeight) continue;
+      return { text: blocks[i].text, offset: rect.top };
+    }
+    return null;
+  }
+
+  /**
+   * The one block whose text is this text, or null.
+   *
+   * Null for zero matches and null for several: an ambiguous match is not an
+   * answer, and the caller falls back to the pixel offset rather than scrolling
+   * to whichever copy came first.
+   */
+  function findUniqueBlock(doc, text) {
+    if (!doc || typeof text !== "string" || !text) return null;
+    var blocks = blockCandidates(doc);
+    var hit = null;
+    for (var i = 0; i < blocks.length; i += 1) {
+      if (blocks[i].text !== text) continue;
+      if (hit) return null;
+      hit = blocks[i].el;
+    }
+    return hit;
+  }
+
+  /**
+   * Put the marker's block back where it was, or fall back to the pixels.
+   *
+   * @returns {{byBlock: boolean, text: string|null, offset: number|null}}
+   */
+  function scrollToMarker(win, marker) {
+    var el = typeof marker.blockText === "string" ? findUniqueBlock(win.document, marker.blockText) : null;
+    if (el && typeof el.getBoundingClientRect === "function" && typeof win.scrollY === "number") {
+      var rect = el.getBoundingClientRect();
+      var top = win.scrollY + rect.top - marker.blockOffset;
+      if (Number.isFinite(top)) {
+        win.scrollTo({ left: marker.x, top: Math.max(0, Math.round(top)), behavior: "instant" });
+        return { byBlock: true, text: marker.blockText, offset: marker.blockOffset };
+      }
+    }
+    win.scrollTo({ left: marker.x, top: marker.y, behavior: "instant" });
+    return { byBlock: false, text: null, offset: null };
+  }
+
+  // What the last restore on this page did. index.js reads it to decide whether
+  // there is a block worth re-asserting as the page finishes drawing itself.
+  var lastRestore = null;
+
+  function lastReloadRestore() {
+    return lastRestore;
+  }
+
+  // ---------------------------------------------------------------------------
+  // What changed: the page's block texts, across a reload
+  // ---------------------------------------------------------------------------
+  //
+  // After a reload the reviewer is looking at a page that is different in some
+  // way they asked for and cannot see. So the outgoing page writes down what its
+  // blocks said, and the incoming page compares. index.js paints the difference.
+  //
+  // Stored beside the viewport marker and read once, because a snapshot that
+  // outlives its reload would paint a second page's changes onto a first page's
+  // text.
+  var BLOCK_SNAPSHOT_VERSION = 1;
+  var BLOCK_SNAPSHOT_KEY = "lahe.blocks.v1";
+
+  // WHY THE REASON IS STORED, and why it gates the whole comparison.
+  //
+  // The mark means "the agent changed this". A reload that happened for any
+  // other reason (the helper healing the script line back in, a second window
+  // taking over, the reviewer pressing reload themselves) has no agent edit
+  // behind it, so there is nothing to report and the comparison does not run.
+  // Only the reload LAHE fires because the reviewed file's mtime moved carries
+  // this reason, and takeBlockSnapshot refuses anything else.
+  var RELOAD_REASON = { REBUILT: "target_mtime" };
+
+  // The cap, in two numbers, and what happens at it: nothing is stored and the
+  // feature sits out that one reload. A page big enough to hit this is a page
+  // where the diff would cost more than the paint is worth, and a highlight that
+  // did not appear is a smaller failure than a reload that stalls.
+  var SNAPSHOT_MAX_BLOCKS = MAX_BLOCKS_SCANNED;
+  var SNAPSHOT_MAX_BYTES = 1048576;
+
+  // A PAGE THAT CHANGES ITSELF IS NOT THE AGENT, and this is the whole of that
+  // rule.
+  //
+  // Ken, on a reveal.js deck: "that countdown timer is automatically dynamic.
+  // The agent is not changing it, but the highlight is applying to it because
+  // it's changing. I'm seeing that on page number changes as well. That's not
+  // how the highlight should work. It should only be things that the agent
+  // changed, not anything that changes."
+  //
+  // So the old page is read TWICE before it goes away: once when it has settled
+  // after boot, and once at reload time. Anything whose words moved between
+  // those two readings moved on its own, because no rebuild happened in between.
+  // A clock, a countdown, a slide number, a hit counter: all of them announce
+  // themselves that way, and all of them are excluded from the comparison the
+  // next page runs.
+  //
+  // The exclusion is by POSITION and by TEXT, because either one alone leaks:
+  // the block may sit at a different index after the rebuild, and the text it
+  // shows may be a third value by then.
+
+  // The reading taken when this page settled. Set by index.js at boot and again
+  // at the end of replay's settling window, so a reload that beats the settle
+  // still has a baseline to compare against.
+  var stableBlockTexts = null;
+
+  function noteStableBlocks(texts) {
+    stableBlockTexts = Array.isArray(texts) ? texts.slice() : null;
+    return stableBlockTexts;
+  }
+
+  function stableBlocks() {
+    return stableBlockTexts;
+  }
+
+  /**
+   * Which blocks moved on their own between two readings of the SAME page.
+   *
+   * Positional, deliberately. Nothing rebuilt between the two readings, so a
+   * block that is at a different index is a block the page added or removed by
+   * itself, and a page doing that is a page whose comparison cannot be trusted
+   * anyway. The result there is conservative: many positions differ, many
+   * exclusions, and the next page paints little or nothing. Painting nothing is
+   * the right failure for a mark that means "the agent did this".
+   *
+   * @returns {{indexes: Array<number>, texts: Array<string>}}
+   */
+  function selfChangingBlocks(baseline, current) {
+    var indexes = [];
+    var texts = [];
+    if (!Array.isArray(baseline) || !Array.isArray(current)) return { indexes: indexes, texts: texts };
+    var span = Math.max(baseline.length, current.length);
+    for (var i = 0; i < span; i += 1) {
+      var was = baseline[i];
+      var now = current[i];
+      if (was === now) continue;
+      indexes.push(i);
+      if (typeof was === "string" && texts.indexOf(was) === -1) texts.push(was);
+      if (typeof now === "string" && texts.indexOf(now) === -1) texts.push(now);
+    }
+    return { indexes: indexes, texts: texts };
+  }
+
+  // A block this short that is only digits and the punctuation counters are
+  // written with is almost certainly a counter: "12:04", "3 / 40", "87%",
+  // "2 of 9".
+  var COUNTER_TEXT_MAX = 12;
+
+  /**
+   * A GUARD, NOT THE RULE. The rule is the two readings above, and it catches a
+   * counter that actually ticked. This catches the one that happened to hold
+   * still across both readings and then ticked after the reload, which would
+   * otherwise be painted as the agent's work. It is deliberately narrow: short,
+   * and nothing in it but digits, the separators counters use, and the word
+   * "of". Any real sentence fails it.
+   */
+  function looksLikeACounter(text) {
+    if (typeof text !== "string") return false;
+    if (!text || text.length >= COUNTER_TEXT_MAX) return false;
+    if (!/\d/.test(text)) return false;
+    return text.replace(/of/gi, "").replace(/[\d\s:/%.,-]/g, "") === "";
+  }
+
+  /**
+   * The stored form, or null when it is over the cap.
+   *
+   * @returns {string|null} the JSON to store
+   */
+  function snapshotPayload(review, href, texts, excluded, reason) {
+    if (!Array.isArray(texts) || texts.length === 0) return null;
+    if (texts.length > SNAPSHOT_MAX_BLOCKS) return null;
+    var json;
+    try {
+      json = JSON.stringify({
+        version: BLOCK_SNAPSHOT_VERSION,
+        exactHref: href,
+        review: review,
+        reason: reason || RELOAD_REASON.REBUILT,
+        texts: texts,
+        excludedPaths: (excluded && excluded.paths) || [],
+        excludedTexts: (excluded && excluded.texts) || []
+      });
+    } catch (error) {
+      return null;
+    }
+    if (json.length > SNAPSHOT_MAX_BYTES) return null;
+    return json;
+  }
+
+  /** Write down what this page says, for the page that replaces it. */
+  function saveBlockSnapshot(win, review, reason) {
+    if (!win || !win.location || !review) return false;
+    var storage = null;
+    try {
+      storage = win.sessionStorage;
+    } catch (error) {
+      return false;
+    }
+    if (!storage || typeof storage.setItem !== "function") return false;
+    var href = typeof win.location.href === "string" ? win.location.href : "";
+    var json = null;
+    try {
+      var entries = blockCandidates(win.document);
+      var texts = entries.map(function (entry) {
+        return entry.text;
+      });
+      var moving = selfChangingBlocks(stableBlockTexts, texts);
+      var excluded = { paths: [], texts: moving.texts };
+      moving.indexes.forEach(function (index) {
+        var entry = entries[index];
+        var path = entry ? blockPath(entry.el) : "";
+        if (path && excluded.paths.indexOf(path) === -1) excluded.paths.push(path);
+      });
+      json = snapshotPayload(review, href, texts, excluded, reason);
+    } catch (error) {
+      json = null;
+    }
+    try {
+      if (!json) {
+        if (typeof storage.removeItem === "function") storage.removeItem(BLOCK_SNAPSHOT_KEY);
+        return false;
+      }
+      storage.setItem(BLOCK_SNAPSHOT_KEY, json);
+    } catch (error) {
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Read the outgoing page's blocks, ONCE. The key is removed on the way past
+   * whatever the answer is, so a snapshot is never used twice.
+   *
+   * @returns {{texts: Array<string>, excludedPaths: Array<string>,
+   *            excludedTexts: Array<string>}|null}
+   */
+  function takeBlockSnapshot(win, review) {
+    if (!win || !win.location || !review) return null;
+    var raw = null;
+    try {
+      var storage = win.sessionStorage;
+      if (!storage || typeof storage.getItem !== "function") return null;
+      raw = storage.getItem(BLOCK_SNAPSHOT_KEY);
+      if (raw !== null && typeof storage.removeItem === "function") storage.removeItem(BLOCK_SNAPSHOT_KEY);
+    } catch (error) {
+      return null;
+    }
+    if (!raw) return null;
+    var stored = null;
+    try {
+      stored = JSON.parse(raw);
+    } catch (error) {
+      return null;
+    }
+    var href = typeof win.location.href === "string" ? win.location.href : "";
+    if (!stored || stored.version !== BLOCK_SNAPSHOT_VERSION) return null;
+    if (stored.review !== review || stored.exactHref !== href) return null;
+    // Only the agent's rebuild has anything to report. See RELOAD_REASON.
+    if (stored.reason !== RELOAD_REASON.REBUILT) return null;
+    if (!Array.isArray(stored.texts)) return null;
+    return {
+      texts: stored.texts,
+      excludedPaths: Array.isArray(stored.excludedPaths) ? stored.excludedPaths : [],
+      excludedTexts: Array.isArray(stored.excludedTexts) ? stored.excludedTexts : []
+    };
+  }
+
+  /**
+   * Which blocks of the new page are new or different, minus the ones that were
+   * never the agent's doing.
+   *
+   * A MULTISET DIFFERENCE, not a longest common subsequence. LCS is the textbook
+   * answer and it is the wrong one here: it is O(n*m), which at the 4000-block
+   * cap is sixteen million cells to fill in on the main thread of a page the
+   * reviewer is trying to read. The multiset is one pass over each side.
+   *
+   * What it buys and what it costs, plainly:
+   *
+   *   a block whose text is not in the old page at all      painted
+   *   a block whose text was edited (so the new text is new)painted
+   *   a block that only MOVED                               not painted, which
+   *                                                         is right: nothing
+   *                                                         about it changed
+   *   a paragraph that now appears twice where it appeared   the second copy is
+   *   once                                                  painted, because the
+   *                                                         count is tracked
+   *   a block the old page was already changing by itself    never painted; see
+   *                                                          selfChangingBlocks
+   *
+   * REMOVALS ARE NOT PAINTED, and that is deliberate rather than missing. Text
+   * that is gone has nothing to paint, and marking the block that now sits where
+   * it used to be would put a change highlight on words that did not change,
+   * which is worse than saying nothing.
+   *
+   * @param {Object|Array<string>|null} before the snapshot the old page stored,
+   *        or just its texts
+   * @param {Array<string>} after  the new page's block texts, in order
+   * @returns {Array<number>} indexes into `after`
+   */
+  function diffBlockTexts(before, after) {
+    var changed = [];
+    if (!Array.isArray(after) || after.length === 0) return changed;
+    var snapshot = Array.isArray(before) ? { texts: before } : before || {};
+    var texts = Array.isArray(snapshot.texts) ? snapshot.texts : null;
+    // No baseline is not "everything changed". A first load has nothing to
+    // compare against, and lighting the whole page up would be noise.
+    if (!texts || texts.length === 0) return changed;
+    var counts = Object.create(null);
+    for (var i = 0; i < texts.length; i += 1) {
+      var key = "t:" + texts[i];
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    for (var j = 0; j < after.length; j += 1) {
+      var k = "t:" + after[j];
+      if (counts[k] > 0) counts[k] -= 1;
+      else changed.push(j);
+    }
+    return changed;
+  }
+
+  /**
+   * Should this block be left alone, however different it looks?
+   *
+   * Three reasons, and the first two are the rule: the page was already
+   * changing this block by itself (its path, or one of the texts it wore), or it
+   * reads as a counter. The caller has the element, which is why the path is
+   * passed in rather than looked up here.
+   *
+   * @param {Object|null} snapshot from takeBlockSnapshot
+   * @param {string} text the block's normalized text now
+   * @param {string} path blockPath(el)
+   * @returns {boolean}
+   */
+  function isExcludedBlock(snapshot, text, path) {
+    if (looksLikeACounter(text)) return true;
+    if (!snapshot) return false;
+    var texts = Array.isArray(snapshot.excludedTexts) ? snapshot.excludedTexts : [];
+    if (texts.indexOf(text) !== -1) return true;
+    var paths = Array.isArray(snapshot.excludedPaths) ? snapshot.excludedPaths : [];
+    return !!path && paths.indexOf(path) !== -1;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Holding the page still while it finishes arriving
+  // ---------------------------------------------------------------------------
+
+  // How long the incoming page may be held invisible before it is shown no
+  // matter what. Short: this is cover for the first correction, not a loading
+  // screen, and a page held longer than this reads as a stall rather than as
+  // steadiness. Never longer than replay's settling window.
+  var STEADY_HIDE_MS = 300;
+
+  // The fade back in. Long enough to read as a fade, short enough that the
+  // reviewer is looking at the page rather than at the fade.
+  var STEADY_FADE_MS = 120;
+
+  // Below this, a correction would move the page for no reason a reviewer could
+  // see. Sub-pixel layout differences land here every time.
+  var STEADY_DRIFT_PX = 2;
+
+  // The default window over which late rendering is still expected. index.js
+  // passes replay.SETTLE_MS; this is the answer when nobody says.
+  var STEADY_SETTLE_MS = 2000;
+
+  function prefersReducedMotion(win) {
+    try {
+      if (!win || typeof win.matchMedia !== "function") return false;
+      return !!win.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Keep the reloaded page on its block while the page finishes arriving, and
+   * hide the moving about until it has.
+   *
+   * THE PAGE IS NEVER LEFT HIDDEN. The style goes on in a try/finally, a hard
+   * timeout removes it whatever else happens, and reveal() is idempotent. The
+   * inline style is the one transient write this makes to the page's own DOM,
+   * it is made inside an epoch so replay does not read its own reflection, and
+   * the element's previous style attribute is put back exactly as it was.
+   *
+   * THE REVIEWER ALWAYS WINS. A scroll, a key, a wheel or a touch ends the
+   * corrections on the spot: the page is theirs the moment they act on it, and
+   * a tool that scrolls them back is worse than one that never scrolled at all.
+   *
+   * @param {Window} win
+   * @param {Object} options {text, offset, settleMs}
+   * @returns {Object} a handle for tests: {correct, reveal, stop, state}
+   */
+  function steadyAfterReload(win, options) {
+    var opts = options || {};
+    var handle = null;
+    var doc = win && win.document;
+    var root = doc && doc.documentElement;
+    var settleMs = typeof opts.settleMs === "number" && opts.settleMs > 0 ? opts.settleMs : STEADY_SETTLE_MS;
+    var reduced = prefersReducedMotion(win);
+    var timers = [];
+    var unbinders = [];
+    var revealed = false;
+    var stopped = false;
+    var corrections = 0;
+    var expectedY = typeof win.scrollY === "number" ? win.scrollY : null;
+    var previousStyle = null;
+    var hidden = false;
+
+    // THE ONE WRITE THIS MAKES TO THE PAGE, and why it is not inside an epoch.
+    //
+    // The epoch rule exists so the library's own DOM writes do not retrigger
+    // the observers watching the page. No observer here can see this write:
+    // index.js watches body for childList and characterData, protect and inject
+    // watch documentElement for the same two, and not one of them asks for
+    // attributes. So an inline style on documentElement reaches nothing.
+    //
+    // Wrapping it anyway costs something real, which is how this was found. The
+    // hide happens at the very top of boot, and an epoch's depth only unwinds in
+    // a microtask, so the epoch stays OPEN for the whole of the rest of boot,
+    // including replay's first scheduled pass. That pass sees a write epoch in
+    // progress and declines, and the reviewer's committed edits are never
+    // re-applied to the page that just reloaded (caught by
+    // test/browser/paragraph_break.spec.js).
+    function writeToRoot(reason, fn) {
+      return fn();
+    }
+
+    function later(fn, ms) {
+      if (!win || typeof win.setTimeout !== "function") return null;
+      var id = win.setTimeout(fn, ms);
+      timers.push(id);
+      return id;
+    }
+
+    function hide() {
+      if (!root || typeof root.setAttribute !== "function") return false;
+      if (reduced) return false;
+      try {
+        previousStyle = root.getAttribute("style");
+        writeToRoot("sync.steady-reload-hide", function () {
+          root.setAttribute("style", (previousStyle ? previousStyle + ";" : "") + "opacity:0");
+        });
+        hidden = true;
+      } finally {
+        // The page is shown again even if the line above threw halfway.
+        later(reveal, STEADY_HIDE_MS);
+      }
+      return hidden;
+    }
+
+    function restoreStyle() {
+      writeToRoot("sync.steady-reload-show", function () {
+        if (previousStyle === null) root.removeAttribute("style");
+        else root.setAttribute("style", previousStyle);
+      });
+    }
+
+    function reveal() {
+      if (revealed) return false;
+      revealed = true;
+      if (!hidden || !root) return true;
+      if (reduced) {
+        restoreStyle();
+        return true;
+      }
+      writeToRoot("sync.steady-reload-fade", function () {
+        root.setAttribute(
+          "style",
+          (previousStyle ? previousStyle + ";" : "") +
+            "opacity:1;transition:opacity " +
+            STEADY_FADE_MS +
+            "ms linear"
+        );
+      });
+      // The transition property is temporary too: it goes with the rest of the
+      // inline style as soon as the fade is over, so the page is left exactly as
+      // the page's own stylesheet drew it.
+      later(restoreStyle, STEADY_FADE_MS + 20);
+      return true;
+    }
+
+    /** Re-find the block and correct the scroll if it drifted. */
+    function correct() {
+      if (stopped || !doc) return false;
+      var moved = false;
+      try {
+        var el = findUniqueBlock(doc, opts.text);
+        if (el && typeof el.getBoundingClientRect === "function" && typeof win.scrollY === "number") {
+          var delta = el.getBoundingClientRect().top - opts.offset;
+          if (Math.abs(delta) > STEADY_DRIFT_PX && typeof win.scrollTo === "function") {
+            var top = Math.max(0, Math.round(win.scrollY + delta));
+            expectedY = top;
+            win.scrollTo({ left: win.scrollX, top: top, behavior: "instant" });
+            corrections += 1;
+            moved = true;
+          }
+        }
+      } catch (error) {
+        // A correction that throws is a correction not made. It must never cost
+        // the reviewer a page stuck at opacity 0.
+      } finally {
+        reveal();
+      }
+      return moved;
+    }
+
+    function stop() {
+      if (stopped) return false;
+      stopped = true;
+      unbinders.splice(0).forEach(function (off) {
+        try {
+          off();
+        } catch (error) {
+          // Nothing to do about a listener that will not come off.
+        }
+      });
+      // The corrections are over, so the browser gets its own scroll
+      // restoration back. restoreViewportAfterReload held it at manual for
+      // exactly this window; see the note there.
+      restoreNativeScrollingAfterPageShow(win);
+      reveal();
+      return true;
+    }
+
+    function bind(name, handler, opts2) {
+      if (!win || typeof win.addEventListener !== "function") return;
+      win.addEventListener(name, handler, opts2 || false);
+      unbinders.push(function () {
+        if (typeof win.removeEventListener === "function") win.removeEventListener(name, handler);
+      });
+    }
+
+    // Our own scrollTo fires a scroll event, so "the reviewer scrolled" cannot
+    // be "a scroll event happened". A scroll that lands where we just put it is
+    // ours; anything else is theirs.
+    function onScroll() {
+      if (expectedY !== null && typeof win.scrollY === "number" && Math.abs(win.scrollY - expectedY) <= 1) return;
+      stop();
+    }
+    function onReviewer() {
+      stop();
+    }
+
+    if (typeof opts.text === "string" && opts.text && typeof opts.offset === "number") {
+      hide();
+      bind("scroll", onScroll, { passive: true });
+      bind("keydown", onReviewer, true);
+      bind("pointerdown", onReviewer, true);
+      bind("wheel", onReviewer, { passive: true });
+      bind("touchstart", onReviewer, { passive: true });
+
+      if (typeof win.requestAnimationFrame === "function") win.requestAnimationFrame(correct);
+      else later(correct, 0);
+
+      if (doc.readyState !== "complete") bind("load", correct, { once: true });
+
+      try {
+        if (doc.fonts && doc.fonts.ready && typeof doc.fonts.ready.then === "function") {
+          doc.fonts.ready.then(function () {
+            correct();
+          }, function () {});
+        }
+      } catch (error) {
+        // A document with no font loading API has nothing to wait for.
+      }
+
+      later(function () {
+        correct();
+        stop();
+      }, settleMs + 50);
+    } else {
+      // No block to hold on to: the pixel restore already happened and there is
+      // nothing to correct, so nothing is hidden and nothing is listened for.
+      revealed = true;
+    }
+
+    handle = {
+      correct: correct,
+      reveal: reveal,
+      stop: stop,
+      state: function () {
+        return { corrections: corrections, revealed: revealed, stopped: stopped, hidden: hidden, reduced: reduced };
+      }
+    };
+    lastSteadyHandle = handle;
+    return handle;
+  }
+
+  // The controller the last reload built, so a browser test can ask what it did
+  // rather than inferring it from pixels. Nothing in the library reads it.
+  var lastSteadyHandle = null;
+
+  function lastSteady() {
+    return lastSteadyHandle;
+  }
+
   /**
    * Remember the viewport for the reload LAHE is about to initiate.
    *
@@ -17766,6 +22224,19 @@
     if (!href || !Number.isFinite(x) || !Number.isFinite(y)) return false;
 
     var marker = { version: VIEWPORT_MARKER_VERSION, exactHref: href, review: review, x: x, y: y };
+    // The content anchor, when the page has one to give. Absent rather than
+    // null when there is none, so a marker from a page with no visible block is
+    // the same shape it always was and the pixel path is the whole story.
+    var top = null;
+    try {
+      top = topBlockAnchor(win);
+    } catch (error) {
+      top = null;
+    }
+    if (top && typeof top.offset === "number" && Number.isFinite(top.offset)) {
+      marker.blockText = top.text;
+      marker.blockOffset = Math.round(top.offset);
+    }
     try {
       storage.setItem(VIEWPORT_MARKER_KEY, JSON.stringify(marker));
     } catch (error) {
@@ -17778,6 +22249,91 @@
       return false;
     }
     return true;
+  }
+
+  /**
+   * Remember what the rail was showing, for the reload LAHE is about to start.
+   *
+   * A sibling of saveViewportForReload, deliberately not a change to it. Same
+   * moment, same storage, its own key: this one can fail (or be absent, on a
+   * page with no rail state worth keeping) without touching the scroll restore,
+   * and the scroll restore's own rules about fragments and history mode are
+   * none of this one's business.
+   *
+   * @param {Window} win
+   * @param {string} review
+   * @param {object} state from overlay's railState()
+   */
+  function saveRailForReload(win, review, state) {
+    if (!win || !win.location || !review || !state) return false;
+    var storage = null;
+    try {
+      storage = win.sessionStorage;
+    } catch (error) {
+      return false;
+    }
+    if (!storage || typeof storage.setItem !== "function") return false;
+
+    var href = typeof win.location.href === "string" ? win.location.href : "";
+    if (!href) return false;
+    try {
+      storage.setItem(
+        RAIL_MARKER_KEY,
+        JSON.stringify({
+          version: RAIL_MARKER_VERSION,
+          exactHref: href,
+          review: review,
+          collapsed: state.collapsed === true,
+          tab: state.tab || null,
+          scroll: typeof state.scroll === "number" && Number.isFinite(state.scroll) ? state.scroll : 0,
+          focused: state.focused || null
+        })
+      );
+    } catch (error) {
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Consume the rail marker, once, on the next boot of the same page.
+   *
+   * Same match rules as the viewport marker for the same reason: a stale marker
+   * from another page or another review must not rearrange the rail on a page
+   * the reviewer navigated to themselves. Removed on read whatever the verdict,
+   * so it can never apply twice.
+   *
+   * @returns {object|null} the state to hand to overlay's applyRailState
+   */
+  function restoreRailAfterReload(win, review) {
+    if (!win || !win.location || !review) return null;
+    var raw = null;
+    try {
+      var storage = win.sessionStorage;
+      if (!storage || typeof storage.getItem !== "function") return null;
+      raw = storage.getItem(RAIL_MARKER_KEY);
+      if (raw !== null && typeof storage.removeItem === "function") storage.removeItem(RAIL_MARKER_KEY);
+    } catch (error) {
+      return null;
+    }
+    if (!raw) return null;
+
+    var marker = null;
+    try {
+      marker = JSON.parse(raw);
+    } catch (error) {
+      return null;
+    }
+    var href = typeof win.location.href === "string" ? win.location.href : "";
+    if (!marker || marker.version !== RAIL_MARKER_VERSION) return null;
+    if (marker.exactHref !== href || marker.review !== review) return null;
+    if (navigationType(win) === "back_forward") return null;
+    return {
+      collapsed: marker.collapsed === true,
+      tab: marker.tab || null,
+      scroll: typeof marker.scroll === "number" ? marker.scroll : 0,
+      focused: marker.focused || null
+    };
   }
 
   /**
@@ -17836,14 +22392,36 @@
       setScrollRestoration(win, "auto");
       return false;
     }
+    var holdManual = false;
     try {
       if (typeof win.scrollTo !== "function") return false;
-      win.scrollTo({ left: marker.x, top: marker.y, behavior: "instant" });
+      var landed = scrollToMarker(win, marker);
+      lastRestore = { ok: true, byBlock: landed.byBlock, text: landed.text, offset: landed.offset };
+      // A BLOCK RESTORE HAS TO KEEP MANUAL MODE, and this is the bug that
+      // taught it. Handing native restoration back at pageshow lets the browser
+      // put its own remembered PIXEL offset on the page a moment later, which is
+      // the very number the block anchor exists to overrule. Worse, that scroll
+      // arrives as a scroll event, which the correction loop reads as the
+      // reviewer taking the page back, so it stands down and the page is left on
+      // the browser's answer. Manual stays on for the settling window and
+      // steadyAfterReload's stop() hands it back.
+      holdManual = landed.byBlock;
       return true;
     } catch (error) {
       return false;
     } finally {
-      restoreNativeScrollingAfterPageShow(win);
+      if (holdManual) {
+        // The safety net, in case nothing ever builds the controller: native
+        // mode comes back on its own a little after the window would have
+        // closed. Setting it twice is harmless.
+        if (typeof win.setTimeout === "function") {
+          win.setTimeout(function () {
+            restoreNativeScrollingAfterPageShow(win);
+          }, STEADY_SETTLE_MS + 500);
+        }
+      } else {
+        restoreNativeScrollingAfterPageShow(win);
+      }
     }
   }
 
@@ -17899,6 +22477,9 @@
     // the moment before the reload, where the rail says so in plain words.
     var isBusy = opts.isBusy || function () { return false; };
     var onPageChanged = opts.onPageChanged || function () {};
+    // What the rail is showing, asked for at the last possible moment before
+    // the document goes away. A caller with no rail simply does not pass it.
+    var railState = typeof opts.railState === "function" ? opts.railState : null;
     var reloadDebounceMs = typeof opts.reloadDebounceMs === "number" ? opts.reloadDebounceMs : RELOAD_DEBOUNCE_MS;
     var reloadNoticeMs = typeof opts.reloadNoticeMs === "number" ? opts.reloadNoticeMs : RELOAD_NOTICE_MS;
     // The window-session state machine (D5, findings 1/2/3/12, NEW-2). onRefused
@@ -17929,6 +22510,13 @@
     // liveness poll (NEW-2), both stopped in sync.stop (finding 13).
     var readOnly = false;
     var sessionSecret = null;
+    // Consecutive heartbeats that were refused or never arrived. Reset by any
+    // answer; read only by the heartbeat path (see CLAIM_MISSES_BEFORE_READ_ONLY).
+    var claimMisses = 0;
+    var claimRetryTimer = null;
+    // When the helper last accepted an authenticated request from this page. 0
+    // means it never has, which is a different situation from having lost it.
+    var lastAnsweredAt = 0;
     var heartbeatTimer = null;
     var livenessTimer = null;
     var heartbeatMs = 10000;
@@ -18052,6 +22640,7 @@
       var was = helperReachable;
       helperReachable = true;
       lastFailure = null;
+      lastAnsweredAt = nowMs();
       if (was !== true) onRecovered("HELPER_UNREACHABLE");
       // Every call site of markReachable is an AUTHENTICATED exchange the
       // helper accepted (an append, a reply poll, a claim); the health probe
@@ -18572,6 +23161,18 @@
       setTimeout(function () {
         if (win && win.location && typeof win.location.reload === "function") {
           saveViewportForReload(win, review);
+          // What the page says right now, so the page that replaces it can show
+          // the reviewer what the agent changed.
+          saveBlockSnapshot(win, review, RELOAD_REASON.REBUILT);
+          // And what the TOOL was showing, so a card the reviewer was reading
+          // is still in front of them afterwards.
+          if (typeof railState === "function") {
+            try {
+              saveRailForReload(win, review, railState());
+            } catch (error) {
+              // A rail that cannot describe itself must not cost the reload.
+            }
+          }
           win.location.reload();
         }
       }, reloadNoticeMs);
@@ -18699,6 +23300,16 @@
      */
     function diagnoseUnreachable() {
       if (cspRefused) return Promise.resolve(null);
+      // A HELPER BEING REPLACED ANSWERS HEALTH AND REFUSES EVERYTHING ELSE, for
+      // a moment, which is indistinguishable from an unregistered origin unless
+      // you know the page was working a second ago. So a page that HAS been
+      // answered recently keeps the "helper is down" reading, which during a
+      // restart is the true one, until the grace runs out. A page that has never
+      // been answered has no such history and is diagnosed at once, which is the
+      // page whose origin genuinely was never registered.
+      if (lastAnsweredAt && nowMs() - lastAnsweredAt < RESTART_GRACE_MS) {
+        return Promise.resolve(null);
+      }
       return probeHealth().then(function (healthAnswered) {
         if (healthAnswered !== true) {
           if (!originDiagnosed) return null;
@@ -18904,7 +23515,15 @@
         }
         originDiagnosed = false;
       }
-      return { granted: false, refused: refused, body: body, error: result.error };
+      return {
+        granted: false,
+        refused: refused,
+        // The one refusal the page acts on immediately: a person in another
+        // window pressed Review here instead. Everything else is waited out.
+        deposed: body.deposed === true,
+        body: body,
+        error: result.error
+      };
     }
 
     // The refusal, with no holder id to read anymore (finding 3): the server
@@ -18975,6 +23594,7 @@
     // stale, granted by the liveness poll) or on the reviewer's Review-here.
     function becomeHolder(parsed) {
       readOnly = false;
+      claimMisses = 0;
       rememberSecret(parsed.sessionSecret, parsed.seq);
       if (parsed.heartbeatSeconds) heartbeatMs = parsed.heartbeatSeconds * 1000;
       lock.acquired = true;
@@ -19064,10 +23684,41 @@
     function stopHeartbeat() {
       if (heartbeatTimer) clearInterval(heartbeatTimer);
       heartbeatTimer = null;
+      if (claimRetryTimer) clearTimeout(claimRetryTimer);
+      claimRetryTimer = null;
+    }
+
+    /**
+     * Give up the review, because another window has it.
+     *
+     * The only path from holding to read-only. It is behind the miss counter for
+     * every refusal except an explicit deposition, because closing the
+     * reviewer's open comment boxes for a helper that is merely being replaced
+     * is the loss this whole debounce exists to stop.
+     */
+    function loseTheReview(reason) {
+      lock.acquired = false;
+      lock.refusedBy = "helper";
+      lock.reason = reason;
+      raise(failures.failure("SECOND_WINDOW_REFUSED", lock.reason));
+      recomputeStatus();
+      enterReadOnly();
+    }
+
+    /** Try the heartbeat again sooner than the next beat, during a bad patch. */
+    function retryHeartbeatSoon() {
+      if (claimRetryTimer || readOnly || !lock.acquired) return null;
+      // harness-allow-timer: the faster retry that makes three consecutive
+      // misses take about three seconds instead of thirty.
+      claimRetryTimer = setTimeout(function () {
+        claimRetryTimer = null;
+        postHeartbeat();
+      }, CLAIM_RETRY_MS);
+      return claimRetryTimer;
     }
 
     function postHeartbeat() {
-      claimRequest({
+      return claimRequest({
         review: requireReview(),
         window_id: store.windowId,
         session_secret: sessionSecret,
@@ -19075,27 +23726,38 @@
       }).then(function (parsed) {
         if (parsed.granted) {
           lock.helperGranted = true;
+          claimMisses = 0;
           if (parsed.sessionSecret) rememberSecret(parsed.sessionSecret, parsed.seq);
           // The helper is covering separate-storage windows again, so the
           // named limit stops being actual and its note comes down.
           onLimit(null);
-          return;
+          return parsed;
         }
+        if (parsed.refused && parsed.deposed) {
+          // A person in another window pressed Review here instead. Nothing
+          // ambiguous about it, and nothing to wait for.
+          claimMisses = 0;
+          loseTheReview(reasonFromBody(parsed.body));
+          return parsed;
+        }
+        claimMisses += 1;
         if (parsed.refused) {
-          // Deposed: another window ran Review-here-instead. Drop to read-only
-          // rather than keep editing a review this window no longer owns.
-          lock.acquired = false;
-          lock.refusedBy = "helper";
-          lock.reason = reasonFromBody(parsed.body);
-          raise(failures.failure("SECOND_WINDOW_REFUSED", lock.reason));
-          recomputeStatus();
-          enterReadOnly();
-          return;
+          if (claimMisses >= CLAIM_MISSES_BEFORE_READ_ONLY) {
+            claimMisses = 0;
+            loseTheReview(reasonFromBody(parsed.body));
+            return parsed;
+          }
+          // A refusal that may just be a helper that has not read the session
+          // table yet. Ask again shortly before believing it.
+          retryHeartbeatSoon();
+          return parsed;
         }
         // Unreachable: keep the heartbeat running and try again next tick. The
         // uncovered case is actual for as long as this lasts, so the note is up.
         lock.helperGranted = false;
         onLimit(overlay.LIMIT_SEPARATE_STORAGE_NO_HELPER);
+        retryHeartbeatSoon();
+        return parsed;
       });
     }
 
@@ -19239,6 +23901,13 @@
       commitOnUnload: commitOnUnload,
       takeover: takeover,
       endReview: endReview,
+      // Exposed so a test can drive one beat instead of waiting ten seconds for
+      // the timer. The harness forbids arbitrary sleeps, and the whole point of
+      // the miss counter is what happens across several beats in a row.
+      heartbeat: postHeartbeat,
+      claimMisses: function () {
+        return claimMisses;
+      },
       isReadOnly: function () {
         return readOnly;
       },
@@ -19268,8 +23937,42 @@
     RELOAD_NOTICE_MS: RELOAD_NOTICE_MS,
     VIEWPORT_MARKER_VERSION: VIEWPORT_MARKER_VERSION,
     VIEWPORT_MARKER_KEY: VIEWPORT_MARKER_KEY,
+    STEADY_HIDE_MS: STEADY_HIDE_MS,
+    STEADY_FADE_MS: STEADY_FADE_MS,
+    STEADY_DRIFT_PX: STEADY_DRIFT_PX,
+    STEADY_SETTLE_MS: STEADY_SETTLE_MS,
+    MAX_BLOCKS_SCANNED: MAX_BLOCKS_SCANNED,
+    blockCandidates: blockCandidates,
+    blockTextsIn: blockTextsIn,
+    BLOCK_SNAPSHOT_KEY: BLOCK_SNAPSHOT_KEY,
+    BLOCK_SNAPSHOT_VERSION: BLOCK_SNAPSHOT_VERSION,
+    SNAPSHOT_MAX_BLOCKS: SNAPSHOT_MAX_BLOCKS,
+    SNAPSHOT_MAX_BYTES: SNAPSHOT_MAX_BYTES,
+    RELOAD_REASON: RELOAD_REASON,
+    COUNTER_TEXT_MAX: COUNTER_TEXT_MAX,
+    looksLikeACounter: looksLikeACounter,
+    selfChangingBlocks: selfChangingBlocks,
+    isExcludedBlock: isExcludedBlock,
+    isInsideMirror: isInsideMirror,
+    isVisuallyHidden: isVisuallyHidden,
+    blockPath: blockPath,
+    noteStableBlocks: noteStableBlocks,
+    stableBlocks: stableBlocks,
+    snapshotPayload: snapshotPayload,
+    saveBlockSnapshot: saveBlockSnapshot,
+    takeBlockSnapshot: takeBlockSnapshot,
+    diffBlockTexts: diffBlockTexts,
+    topBlockAnchor: topBlockAnchor,
+    findUniqueBlock: findUniqueBlock,
     saveViewportForReload: saveViewportForReload,
+    RAIL_MARKER_KEY: RAIL_MARKER_KEY,
+    RAIL_MARKER_VERSION: RAIL_MARKER_VERSION,
+    saveRailForReload: saveRailForReload,
+    restoreRailAfterReload: restoreRailAfterReload,
     restoreViewportAfterReload: restoreViewportAfterReload,
+    lastReloadRestore: lastReloadRestore,
+    steadyAfterReload: steadyAfterReload,
+    lastSteady: lastSteady,
     decideFailureCode: decideFailureCode,
     createSync: createSync
   };
@@ -19618,6 +24321,103 @@
     return have.length <= want.length * PAINT_MAX_TEXT_RATIO;
   }
 
+
+  // ---------------------------------------------------------------------------
+  // The nearest heading above an element
+  // ---------------------------------------------------------------------------
+  //
+  // `context.heading` is the one line in review.json that says WHERE on the page
+  // the reviewer was. The original walk only looked AT earlier siblings, so it
+  // saw an H1-H6 element and nothing else. Built pages almost never lay out that
+  // way: the heading is wrapped, as in
+  //
+  //   <div class="thead"><h2>3. Mark icon</h2></div>
+  //   <div class="wrap"> ... the block the reviewer clicked ... </div>
+  //
+  // and the walk saw a div, skipped it, and reported no heading. The L8 tearsheet
+  // case (docs/ongoing/FINGERPRINTING.md) is what this cost: six treatments of
+  // one blog block, each in a bare `div.wrap`, and the agent had to ask which
+  // treatment the comment was on while a heading two elements up said so.
+  //
+  // So for each earlier sibling the walk now also looks INSIDE it, for the LAST
+  // heading that sibling contains, which is the one nearest the element in
+  // document order. Then up to the parent and the same again, stopping at body.
+  //
+  // Two rules it keeps:
+  //
+  //   the element's OWN descendants are never searched. A heading inside the
+  //   thing being commented on is that thing's content, not the context for it.
+  //
+  //   nearest in document order wins, whatever its level. An H4 one sibling up
+  //   beats an H2 five siblings up: the reviewer was reading the H4.
+  //
+  // The work is capped, because this runs on a click. A page built as one long
+  // wrapper of thousands of nodes must not be able to stall the pick, so the
+  // walk counts the nodes it inspects and gives up at the cap, reporting no
+  // heading rather than hanging.
+  var HEADING_SCAN_CAP = 2000;
+
+  function isHeadingElement(node) {
+    return !!node && node.nodeType === 1 && /^H[1-6]$/.test(String(node.tagName || ""));
+  }
+
+  function headingWords(node) {
+    var text = normalize.normalizeText(node.textContent || "");
+    return text ? text : null;
+  }
+
+  // The last heading inside `node` in document order, or null. Last rather than
+  // first because the walk is moving backwards from the element: of two headings
+  // in one wrapper, the later one is the nearer one.
+  //
+  // `budget` is shared with the caller and counts down across the whole walk.
+  function lastHeadingWithin(node, budget) {
+    var children = node && node.children ? node.children : null;
+    if (!children) return null;
+    for (var i = children.length - 1; i >= 0; i -= 1) {
+      if (budget.left <= 0) return null;
+      budget.left -= 1;
+      var child = children[i];
+      // Descendants first: inside a child, the child's own tag comes before
+      // everything under it, so the deeper heading is the later one.
+      var deeper = lastHeadingWithin(child, budget);
+      if (deeper) return deeper;
+      if (isHeadingElement(child) && headingWords(child)) return child;
+    }
+    return null;
+  }
+
+  function headingTextFor(element, doc) {
+    if (!element) return null;
+    var body = doc ? doc.body : null;
+    var budget = { left: HEADING_SCAN_CAP };
+    var current = element;
+    while (current) {
+      var sibling = current.previousElementSibling;
+      while (sibling) {
+        if (budget.left <= 0) return null;
+        budget.left -= 1;
+        if (isHeadingElement(sibling)) {
+          var own = headingWords(sibling);
+          if (own) return own;
+        } else {
+          var inside = lastHeadingWithin(sibling, budget);
+          if (inside) return headingWords(inside);
+        }
+        sibling = sibling.previousElementSibling;
+      }
+      var parent = current.parentElement;
+      if (!parent || parent === body || parent === doc) return null;
+      // Named-tag stop as well as the identity stop: a walk given no document
+      // (the unit harness, a detached tree) still has to end at the page root
+      // rather than climbing out of it.
+      var tag = String(parent.tagName || "").toUpperCase();
+      if (tag === "BODY" || tag === "HTML") return null;
+      current = parent;
+    }
+    return null;
+  }
+
   // ---------------------------------------------------------------------------
   // The selection popover
   // ---------------------------------------------------------------------------
@@ -19642,6 +24442,17 @@
   // loses the pill with the rest of the gestures. An affordance offering to do
   // something the window cannot do is worse than no affordance.
 
+  // NOT WHILE THE REVIEWER IS STILL DRAGGING, and this is why. Ken, highlighting
+  // a passage from the bottom line upward: the pill appeared as soon as the drag
+  // paused, right next to the cursor, and the cursor was still climbing through
+  // the text he wanted. He dragged over the word Comment, the selection jittered,
+  // the direction flipped, and the rest of the page below got selected instead.
+  // He could not finish the highlight. So three rules: the pill waits for the
+  // button to come up before it appears at all; the pill and the rest of the
+  // library's chrome are never selectable and never a selection target; and the
+  // pill lands on the side of the passage the cursor is NOT on, which for an
+  // upward drag is the top of the selection, not the bottom.
+  //
   // How long after the last selectionchange the pill appears. A drag fires the
   // event on every mouse move, and a pill that chased the cursor through a drag
   // would be the loudest thing on the page.
@@ -19692,9 +24503,18 @@
     "  font: 12.5px/1 ui-sans-serif, system-ui, -apple-system, sans-serif;",
     "  color: #15171c;",
     "  pointer-events: auto;",
+    // Not selectable, and not something a drag can extend a selection into. The
+    // reviewer dragging upward crosses the pill's own rectangle; without this
+    // the browser treats it as text and the selection runs away to the end of
+    // the page.
+    "  user-select: none;",
+    "  -webkit-user-select: none;",
     "  z-index: 3;",
     "}",
     "." + PILL_CLASS + "[data-lahe-shown='true'] { display: flex; }",
+    // Belt and braces for the rule above: while a button is held, a drag passes
+    // straight through the pill even if one is somehow on screen.
+    "." + PILL_CLASS + "[data-lahe-drag='true'] { pointer-events: none; }",
     "." + PILL_BTN_CLASS + " {",
     "  border: 0;",
     "  background: transparent;",
@@ -19705,6 +24525,10 @@
     "  color: inherit;",
     "  cursor: pointer;",
     "  white-space: nowrap;",
+    // Said again on the button: a form control carries its own UA rule for this
+    // and does not always take the one it inherits.
+    "  user-select: none;",
+    "  -webkit-user-select: none;",
     "}",
     "." + PILL_BTN_CLASS + ":hover { background: rgba(60, 86, 165, 0.10); color: #2c3f7d; }",
     "." + PILL_BTN_CLASS + ":focus-visible { outline: 2px solid #3c56a5; outline-offset: -1px; }",
@@ -20086,10 +24910,14 @@
     var listenerHandles = [];
     var listenersState = [];
     var pick = { active: false, element: null };
-    // How much room the rail is assumed to take on the right. The rail's real
-    // width is 1B's; this is only a clamp for box placement, so being generous
-    // costs nothing.
-    var RAIL_ALLOWANCE = 340;
+    // How much room the rail takes on the right, when nothing has said.
+    //
+    // The rail is drag-resizable now, so its width is not a number this file
+    // can know: the rail PUBLISHES it, as a custom property on the library's
+    // one page-level host (highlight.RAIL_ALLOWANCE_PROP), and railAllowance()
+    // below reads it back. This constant is what a page with no rail on it
+    // falls back to, which is what the number always really was.
+    var RAIL_ALLOWANCE_DEFAULT = 340;
     var outlineNode = null;
     var surfaceRoot = null;
     // The selection popover. `pill` holds the nodes; the rest is what it is
@@ -20100,6 +24928,10 @@
     var pillShown = false;
     var pillPlacement = "above";
     var pillTipFor = null;
+    // True while a mouse or touch button is held down on the page: the reviewer
+    // is dragging out a selection and nothing of the pill may appear until they
+    // let go. See the note at the top of the popover section.
+    var pointerHeld = false;
     // The cards' own note nodes, by item id, and whether this window may type in
     // them. A window that loses the review goes read-only by unbinding this
     // group (index.js), and an editable node left editable there would be an
@@ -20170,6 +25002,30 @@
       surfaceRoot = got.root || got.host;
       highlights.addSurfaceStyle("comments", BOX_STYLE);
       return surfaceRoot;
+    }
+
+    /**
+     * How much room from the right edge of the viewport belongs to the rail.
+     *
+     * Read off the library's one page-level host, where the rail writes it
+     * whenever its width changes. Found by id rather than through surface()
+     * above, because asking a geometry question must not CREATE the host: a
+     * page being measured before anything is drawn on it would end up with a
+     * surface it never needed.
+     *
+     * Falls back to the old fixed number whenever there is nothing to read: no
+     * document, no host yet, or a value that is not a length. A box placed
+     * against the fallback is where it has always been, which is the right kind
+     * of wrong.
+     */
+    function railAllowance() {
+      if (!doc || !win || typeof win.getComputedStyle !== "function") return RAIL_ALLOWANCE_DEFAULT;
+      var host = doc.getElementById(highlightModule.SURFACE_ID);
+      if (!host) return RAIL_ALLOWANCE_DEFAULT;
+      var raw = win.getComputedStyle(host).getPropertyValue(highlightModule.RAIL_ALLOWANCE_PROP);
+      var px = parseFloat(raw);
+      if (!isFinite(px) || px < 0) return RAIL_ALLOWANCE_DEFAULT;
+      return px;
     }
 
     // A box the rail hosts lives in the RAIL's root, not in the surface root
@@ -20970,7 +25826,7 @@
       var vw = win.innerWidth || 1024;
       var vh = win.innerHeight || 768;
       var rect = range && typeof range.getBoundingClientRect === "function" ? range.getBoundingClientRect() : null;
-      var rightLimit = Math.max(16, vw - BOX_WIDTH - 16 - RAIL_ALLOWANCE);
+      var rightLimit = Math.max(16, vw - BOX_WIDTH - 16 - railAllowance());
       var top;
       var left;
 
@@ -21051,7 +25907,7 @@
         range: range,
         element: null,
         region: regionFor(element, range),
-        heading: headingTextFor(element)
+        heading: headingFor(element)
       });
       // The reviewer's selection has done its job; leaving it painted under the
       // highlight reads as two overlapping colors.
@@ -21098,7 +25954,7 @@
         range: range,
         element: element,
         region: regionFor(element, range),
-        heading: headingTextFor(element)
+        heading: headingFor(element)
       });
       handle.focus();
       return handle;
@@ -21146,15 +26002,11 @@
       return outermostSvg || el;
     }
 
-    function headingTextFor(element) {
-      if (!element) return null;
-      var el = element.previousElementSibling;
-      while (el) {
-        if (/^H[1-6]$/.test(el.tagName)) return normalize.normalizeText(el.textContent || "");
-        el = el.previousElementSibling;
-      }
-      var parent = element.parentElement;
-      return parent && parent !== doc.body ? headingTextFor(parent) : null;
+    // The walk itself is module level (and exported), so the unit suite can hold
+    // it without a browser. This is the closure's binding of it to the reviewed
+    // document.
+    function headingFor(element) {
+      return headingTextFor(element, doc);
     }
 
     // Mints the durable reference through 1C's engine and pins a display label
@@ -21226,6 +26078,7 @@
       node.setAttribute("role", "toolbar");
       node.setAttribute("aria-label", "What to do with this selection");
       node.setAttribute("data-lahe-placement", "above");
+      node.setAttribute("data-lahe-drag", pointerHeld ? "true" : "false");
       markers.markChrome(node);
 
       var tip = doc.createElement("span");
@@ -21387,11 +26240,17 @@
       // A selection that is gone goes NOW. Waiting out the debounce would leave
       // the pill sitting over a page the reviewer has already moved on from.
       if (!selectionWorthOffering()) return hidePopover();
+      // A held button means the reviewer is still dragging. The release path
+      // (onPointerUp) schedules, so the pill arrives once the highlight is
+      // finished and never under the moving cursor. A keyboard selection holds
+      // no button, so shift+arrow still gets the pill after the delay.
+      if (pointerHeld) return null;
       pillTimer = win.setTimeout(evaluatePopover, POPOVER_DELAY_MS);
       return pillTimer;
     }
 
     function showPopover(range) {
+      if (pointerHeld) return null;
       var made = ensurePill();
       if (!made) return null;
       made.node.setAttribute("data-lahe-shown", "true");
@@ -21413,18 +26272,53 @@
     }
 
     /**
-     * Places the pill at the END of the selection, above it when there is room
-     * and below it when there is not.
+     * Did the drag finish at the TOP of the selection?
      *
-     * The end rather than the middle, because that is where the reviewer's
-     * pointer finished; above rather than below, because below is where the next
-     * line of the page is and the pill would sit on the words they are about to
-     * read.
+     * The selection knows where the reviewer's hand stopped: focusNode is the
+     * end they were moving, anchorNode the end they started from. When the focus
+     * sits before the anchor in the document, the reviewer dragged upward and
+     * their cursor is at the start of the range, not the end.
+     *
+     * @returns {boolean} true when the cursor finished at the start of the range
+     */
+    function focusAtRangeStart() {
+      if (!doc || !win || !win.getSelection) return false;
+      var selection = win.getSelection();
+      if (!selection || !selection.anchorNode || !selection.focusNode) return false;
+      if (typeof doc.createRange !== "function") return false;
+      try {
+        var probe = doc.createRange();
+        probe.setStart(selection.anchorNode, selection.anchorOffset);
+        probe.setEnd(selection.anchorNode, selection.anchorOffset);
+        if (typeof probe.comparePoint !== "function") return false;
+        return probe.comparePoint(selection.focusNode, selection.focusOffset) < 0;
+      } catch (err) {
+        // Nodes in different roots, or an offset the range will not take. An
+        // unknown direction is the old behavior, which is the safe default.
+        return false;
+      }
+    }
+
+    /**
+     * Places the pill at the end of the selection the reviewer's cursor is NOT
+     * on, above it when there is room and below it when there is not.
+     *
+     * A downward drag finishes at the bottom, so the pill goes to the last
+     * rectangle, as it always has. An upward drag finishes at the TOP, and the
+     * pill goes to the first rectangle instead: put it at the bottom there and
+     * it sits in the path of the next upward drag, which is the jitter that
+     * flipped the selection and ran it to the end of the page.
+     *
+     * Above rather than below, either way, because below is where the next line
+     * of the page is and the pill would sit on the words they are about to read.
      */
     function positionPill(range) {
       if (!pill || !win) return null;
       var rects = typeof range.getClientRects === "function" ? range.getClientRects() : null;
-      var end = rects && rects.length ? rects[rects.length - 1] : range.getBoundingClientRect();
+      var upward = focusAtRangeStart();
+      var end;
+      if (rects && rects.length) end = upward ? rects[0] : rects[rects.length - 1];
+      else end = range.getBoundingClientRect();
       var size = pill.node.getBoundingClientRect();
       var vw = win.innerWidth || 1024;
       var vh = win.innerHeight || 768;
@@ -21437,10 +26331,12 @@
       }
       if (top > vh - size.height - POPOVER_GAP) top = Math.max(POPOVER_GAP, vh - size.height - POPOVER_GAP);
 
-      var left = end.right - size.width / 2;
+      // Centred on the corner the drag ended away from: the right edge of the
+      // last line going down, the left edge of the first line coming up.
+      var left = (upward ? end.left : end.right) - size.width / 2;
       // Clear of the rail, the same allowance the comment box uses, so the pill
       // is never drawn underneath it.
-      var railLimit = vw - RAIL_ALLOWANCE - size.width - POPOVER_GAP;
+      var railLimit = vw - railAllowance() - size.width - POPOVER_GAP;
       var rightLimit = railLimit > POPOVER_GAP ? railLimit : vw - size.width - POPOVER_GAP;
       if (left > rightLimit) left = rightLimit;
       if (left < POPOVER_GAP) left = POPOVER_GAP;
@@ -21482,6 +26378,33 @@
           keys: visible && pillTipFor ? keysFor(pillTipFor) : null,
           text: tipRect ? String(pill.tip.textContent) : null
         }
+      };
+    }
+
+    /**
+     * The pill's own computed user-select, read from inside the closed root.
+     *
+     * A spec cannot query a closed root and neither can the page, so the one
+     * rule that keeps a drag from selecting the library's chrome would otherwise
+     * be untestable and free to rot.
+     *
+     * @returns {{userSelect: string|null, drag: string|null, buttons: string[]}}
+     */
+    function selectionPopoverStyles() {
+      var node = pill && pill.node ? pill.node : null;
+      if (!node || !win || typeof win.getComputedStyle !== "function") {
+        return { userSelect: null, drag: null, buttons: [] };
+      }
+      var read = function (el) {
+        var style = win.getComputedStyle(el);
+        return style.userSelect || style.webkitUserSelect || null;
+      };
+      return {
+        userSelect: read(node),
+        drag: node.getAttribute("data-lahe-drag"),
+        buttons: pill.buttons.map(function (b) {
+          return read(b.node);
+        })
       };
     }
 
@@ -21944,10 +26867,19 @@
       // offers. A remount re-registers the group, and the pill comes back with
       // the reviewer's next selection, which is the whole of its state.
       listenerHandles.push(listeners.on(target, "selectionchange", onSelectionChange, false, LISTENER_GROUP));
+      // The drag gate, in the same group for the same reason. pointerdown and
+      // pointerup cover mouse, pen and touch; mouseup is the fallback for a
+      // browser that fired no pointer event, and pointercancel plus the window's
+      // blur catch a release the window never hears about.
+      listenerHandles.push(listeners.on(target, "pointerdown", onPointerDown, true, LISTENER_GROUP));
+      listenerHandles.push(listeners.on(target, "pointerup", onPointerUp, true, LISTENER_GROUP));
+      listenerHandles.push(listeners.on(target, "pointercancel", onPointerLost, true, LISTENER_GROUP));
+      listenerHandles.push(listeners.on(target, "mouseup", onPointerUp, true, LISTENER_GROUP));
       if (win) {
         // Scrolling moves the passage out from under the pill. Hiding is honest
         // and cheap; a pill that chases the page during a scroll is neither.
         listenerHandles.push(listeners.on(win, "scroll", onScroll, true, LISTENER_GROUP));
+        listenerHandles.push(listeners.on(win, "blur", onPointerLost, false, LISTENER_GROUP));
       }
       // RE-DERIVED FROM STATE, NOT LEFT TO THE NEXT EVENT. A remount unbinds and
       // rebinds this group, and the reviewer's selection survives that: on the
@@ -21970,6 +26902,9 @@
         handle.off();
       });
       listenerHandles = [];
+      // The gate goes with its listeners. Left true, a window that unbound
+      // mid-drag would never offer the pill again after it rebinds.
+      setPointerHeld(false);
       hidePopover();
       gesturesBound = false;
       // Read-only, so the words stay readable and stop being an input. Without
@@ -22001,6 +26936,38 @@
 
     function onScroll() {
       hidePopover();
+    }
+
+    // The drag gate. A button going down on the page starts a selection the
+    // reviewer has not finished yet, so the pill goes away and stays away until
+    // the button comes up. The pill's own buttons are not that: pressing Comment
+    // is a press ON the library, and hiding there would take the pill out from
+    // under the finger.
+    function setPointerHeld(held) {
+      pointerHeld = held === true;
+      if (pill && pill.node) pill.node.setAttribute("data-lahe-drag", pointerHeld ? "true" : "false");
+      return pointerHeld;
+    }
+
+    function onPointerDown(event) {
+      if (markers.isInsideOverlay(event.target)) return;
+      setPointerHeld(true);
+      hidePopover();
+    }
+
+    function onPointerUp() {
+      if (!pointerHeld) return;
+      setPointerHeld(false);
+      // Now that the highlight is finished, the ordinary path: the same debounce
+      // the keyboard gets, and the same checks on what is worth offering.
+      schedulePopover();
+    }
+
+    // A release the window never hears about: the reviewer let go outside the
+    // window, or a touch was cancelled. Without this the flag stays true and the
+    // pill never comes back.
+    function onPointerLost() {
+      onPointerUp();
     }
 
     function onKeydown(event) {
@@ -22095,6 +27062,7 @@
       exitPickMode: exitPickMode,
       pickMode: pickState,
       selectionPopover: selectionPopover,
+      selectionPopoverStyles: selectionPopoverStyles,
       hideSelectionPopover: hidePopover,
       highlights: highlights,
       bind: bind,
@@ -22131,6 +27099,9 @@
     rawIndexOfCollapsed: rawIndexOfCollapsed,
     soleIndexOf: soleIndexOf,
     paintableSize: paintableSize,
+    // The heading walk's pure half, exported for test/unit/comments_surface.test.js.
+    HEADING_SCAN_CAP: HEADING_SCAN_CAP,
+    headingTextFor: headingTextFor,
     createComments: createComments
   };
 });
@@ -22269,6 +27240,10 @@
       root.LAHE.highlight,
       root.LAHE.listeners,
       root.LAHE.protect,
+      // comments.js loads before this file (manifest order), and its heading
+      // walk is the one an edit's context.heading uses too, so the two record
+      // kinds cannot disagree about which heading a block sits under.
+      root.LAHE.comments,
       // replay.js loads AFTER this file (it depends on everything), so it is
       // resolved when a pass is scheduled rather than when this module loads.
       function () {
@@ -22290,6 +27265,7 @@
       require("./highlight.js"),
       require("./listeners.js"),
       require("./protect.js"),
+      require("./comments.js"),
       function () {
         return require("./replay.js");
       }
@@ -22309,6 +27285,7 @@
   highlightModule,
   listeners,
   protect,
+  commentsModule,
   replayRef
 ) {
   "use strict";
@@ -23169,7 +28146,17 @@
       // and the agent is left reading the data-class `after`/`before`. `before`
       // is pinned at first touch, so this states the change against the page's
       // original wording, whichever session committed it.
-      var changeText = record.editChangeText(verdict.kind, open.before ? open.before.text : null, after.text);
+      // The markup goes in beside the text: bold and italic the reviewer changed
+      // live only in the two html fields, and a change sentence built from the
+      // text alone tells the agent nothing about them (2026-09-11, the edit
+      // whose italics and bold were applied as plain words and replied handled).
+      var changeText = record.editChangeText(
+        verdict.kind,
+        open.before ? open.before.text : null,
+        after.text,
+        open.before ? open.before.html : null,
+        after.html
+      );
 
       var committed;
       if (record.isDraft(item)) {
@@ -23863,8 +28850,15 @@
       return region;
     }
 
+    // ONE WALK FOR BOTH RECORD KINDS. comments.js owns the heading walk (it
+    // looks inside earlier siblings, not only at them, since 2026-09-11); an
+    // edit's context.heading comes from the same function so a comment and a
+    // hand edit on one block can never name different headings.
     function headingTextFor(element) {
       if (!element) return null;
+      if (commentsModule && typeof commentsModule.headingTextFor === "function") {
+        return commentsModule.headingTextFor(element, doc);
+      }
       var el = element.previousElementSibling;
       while (el) {
         if (/^H[1-6]$/.test(el.tagName)) return normalize.normalizeText(el.textContent || "");
@@ -24441,7 +29435,9 @@
       root.LAHE.failures,
       root.LAHE.anchor,
       root.LAHE.protect,
-      root.LAHE.markers
+      root.LAHE.markers,
+      root.LAHE.pointing,
+      root.LAHE.highlight
     );
   } else {
     module.exports = factory(
@@ -24452,7 +29448,9 @@
       require("../shared/failures.js"),
       require("./anchor.js"),
       require("./protect.js"),
-      require("../shared/markers.js")
+      require("../shared/markers.js"),
+      require("./pointing.js"),
+      require("./highlight.js")
     );
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function (
@@ -24463,7 +29461,9 @@
   failures,
   anchorEngine,
   protectModule,
-  markers
+  markers,
+  pointingModule,
+  highlightModule
 ) {
   "use strict";
 
@@ -24501,7 +29501,9 @@
     regionsConflicted: 0, // branch four: flagged, nothing written
     regionsLost: 0, // the anchor bound to zero matches, or to more than one
     regionsLostDeferred: 0, // a lost verdict held back while the page was still settling
-    regionsLostCleared: 0 // a later pass found the anchor, so the lost state ended
+    regionsLostCleared: 0, // a later pass found the anchor, so the lost state ended
+    regionsProbable: 0, // a lost comment was pointed at its probable place instead
+    regionsProbableCleared: 0 // a later pass found it for certain, so the guess ended
   };
 
   function resetCounters() {
@@ -24606,6 +29608,11 @@
   //             fold_replies, merge_store, retire_handled, update_rail. A
   //             missing hook is a no-op and is reported as one in the summary,
   //             never silently skipped
+  //   pointing  the POINT ladder (1C's pointing.js), used for one thing: where
+  //             a comment whose words are gone should point. It never places a
+  //             write. Injected so a test can hand over a fake verdict
+  //   highlights the paint surface (1D's highlight.js shared instance). Only
+  //             the probable paint goes through it from here
   var context = {
     root: null,
     items: null,
@@ -24615,7 +29622,9 @@
     document: null,
     editing: null,
     persist: null,
-    hooks: null
+    hooks: null,
+    pointing: null,
+    highlights: null
   };
 
   /** Write one record back to durable storage, when a caller gave us the seam. */
@@ -24655,6 +29664,7 @@
     });
     if (!merged.anchor) merged.anchor = anchorEngine;
     if (!merged.protect) merged.protect = protectModule;
+    if (!merged.pointing) merged.pointing = pointingModule || null;
     if (!merged.document && typeof document !== "undefined") merged.document = document;
     if (!merged.root && merged.document) merged.root = merged.document;
     return merged;
@@ -24879,9 +29889,12 @@
    * @param {Object} item the record
    * @param {string} domText the region's current text (or markup, for a
    *                 format-only record, which compares on structure)
+   * @param {string} [domHtml] the region's current markup, when the caller
+   *                 holds it. Only read to answer the formatting question
+   *                 below; a caller without it gets the text comparison alone
    * @returns {Object} {branch, earlierAfter}
    */
-  function compare(item, domText) {
+  function compare(item, domText, domHtml) {
     var mode = record.comparisonMode(item);
     var F = record.FIELD;
     // A format-only record compares on its MARKUP fields: its `after` text is
@@ -24910,6 +29923,11 @@
     }
 
     if (typeof item[fields.after] === "string" && normalize.equalsInMode(mode, domText, item[fields.after])) {
+      // The words are the reviewer's. The EMPHASIS still might not be, and the
+      // text comparison above is built to ignore exactly that.
+      if (formattingLost(item, domHtml)) {
+        return { branch: BRANCH.REAPPLY, earlierAfter: null, formatting: true };
+      }
       return { branch: BRANCH.ALREADY_APPLIED, earlierAfter: null };
     }
     if (typeof item[fields.before] === "string" && normalize.equalsInMode(mode, domText, item[fields.before])) {
@@ -24937,6 +29955,92 @@
     return { branch: BRANCH.CONTENT_CHANGED, earlierAfter: null };
   }
 
+  // ---------------------------------------------------------------------------
+  // The formatting half of branch one (2026-09-11)
+  // ---------------------------------------------------------------------------
+  //
+  // An edit compares on TEXT, which is right for wording and blind to the one
+  // thing normalizeText exists to ignore. The reviewer made a word italic and a
+  // clause bold inside a rewrite; the agent carried the words into a Markdown
+  // source and not the emphasis; the rebuilt page came back with the right
+  // words in plain type; and this compare read the text, called it idempotent
+  // and wrote nothing. The reviewer's formatting was gone from the page and
+  // nothing anywhere said so.
+  //
+  // WHAT IS COMPARED: the bold and italic runs the record's after_html asks
+  // for, read through normalize.emphasisRuns, whose vocabulary is the closed
+  // list strong, em, not-bold, not-italic. A run is on the page when the page
+  // has the same tag over the same words; a not-bold or not-italic run is on
+  // the page when the page does NOT have that emphasis over those words, which
+  // is what the reset tags mean.
+  //
+  // WHAT IS IGNORED: everything else in the markup. Links, spans, code, the
+  // page's own classes and attributes, whitespace, and the way a framework
+  // reserialized the block are all dropped by the same key. So is emphasis the
+  // page has and the record never asked for: a page that adds its own <em> is
+  // rendering, not losing anything, and writing over it every pass would be the
+  // fight this tool exists to remove.
+  //
+  // ONE GUARD BEYOND THAT: writeRegion only uses after_html while it still says
+  // the record's after text (markupSaysAfter). Asking for a write the writer
+  // will not make is a pass that re-decides the same thing forever.
+  function formattingLost(item, domHtml) {
+    if (typeof domHtml !== "string") return false;
+    if (!item || item[record.FIELD.KIND] !== record.KIND.EDIT) return false;
+    if (!markupSaysAfter(item)) return false;
+    return missingEmphasis(item[record.FIELD.AFTER_HTML], domHtml);
+  }
+
+  // Which emphasis tag each reset tag denies.
+  var DENIES = {};
+  DENIES[normalize.NOT_BOLD_TAG] = "strong";
+  DENIES[normalize.NOT_ITALIC_TAG] = "em";
+
+  /**
+   * Does `html` fail to say what `afterHtml` says about bold and italic?
+   *
+   * Asymmetric on purpose, per the note above: only the runs after_html asks
+   * for are looked for, and emphasis `html` has of its own is not a difference.
+   */
+  function missingEmphasis(afterHtml, html) {
+    if (typeof afterHtml !== "string" || !afterHtml) return false;
+    var wanted = normalize.emphasisRuns(afterHtml);
+    if (!wanted.length) return false;
+    var have = normalize.emphasisRuns(html);
+    for (var i = 0; i < wanted.length; i += 1) {
+      var run = wanted[i];
+      if (Object.prototype.hasOwnProperty.call(DENIES, run.tag)) {
+        if (coversAny(have, DENIES[run.tag], run.text)) return true;
+        continue;
+      }
+      if (!coversAny(have, run.tag, run.text)) return true;
+    }
+    return false;
+  }
+
+  // Is any run of this tag over these words? Containment rather than equality,
+  // so a page that emphasizes a longer phrase still counts as emphasizing the
+  // words inside it.
+  function coversAny(runs, tag, text) {
+    for (var i = 0; i < runs.length; i += 1) {
+      if (runs[i].tag !== tag) continue;
+      if (runs[i].text.indexOf(text) !== -1) return true;
+    }
+    return false;
+  }
+
+  // Does this record's markup still say its text? The markup is used only when
+  // it does: a record whose text was reworded without its markup would
+  // otherwise write an older wording back onto the page, which is worse than
+  // losing the emphasis. When they disagree, the text is the reviewer's answer.
+  function markupSaysAfter(item) {
+    var afterText = item[record.FIELD.AFTER];
+    var afterHtml = item[record.FIELD.AFTER_HTML];
+    if (typeof afterHtml !== "string" || !afterHtml) return false;
+    if (typeof afterText !== "string") return false;
+    return normalize.blockText(afterHtml) === normalize.normalizeBlockText(afterText);
+  }
+
   // Has the reviewer already said "keep mine" about the page looking like this?
   function matchesAcceptedPageState(item, mode, domText) {
     if (typeof domText !== "string") return false;
@@ -24959,9 +30063,12 @@
   // page just quietly reads the way it did before they touched it.
   //
   // The check runs once per page load, after the settling window closes, and it
-  // reopens the item so the change becomes ready work again. The wake feed
-  // already wakes on a reopen, so the agent is told without the reviewer having
-  // to notice anything.
+  // reopens the item so the change becomes ready work again. It reopens any one
+  // item ONCE: an agent that answers handled again while the page still reads
+  // the same way is telling the check the rendering is intended, not inviting
+  // another round. See the stamp rule below and record.js. The wake feed already
+  // wakes on a reopen, so the agent is told without the reviewer having to
+  // notice anything.
   //
   // BOTH HALVES ARE REQUIRED, and that is the whole design.
   //
@@ -24983,45 +30090,183 @@
   // paragraph has not reverted anything, and a substring compare on raw text
   // would say it had.
 
-  // The sentence the reopened item carries. It is tool-generated, and it says so
-  // in its own first words, because the record shape has no field that could
-  // carry "this text is not the reviewer's". It names no page content: the item
-  // already carries the before and after text, and repeating page text into the
-  // note would push page content into the intent channel (D12).
-  var REVERTED_EDIT_NOTE =
-    "Reopened by the page check: this handled change is no longer on the page and the original text is back. " +
-    "Reapply it, or reply not_handled saying why.";
+  // The sentence the reopened item carries. Authored in record.js beside the
+  // rest of the tool-generated note text; named here too because this is where
+  // it is used and where every test looks for it.
+  var REVERTED_EDIT_NOTE = record.PAGE_CHECK_NOTE;
+
+  // The check's other sentence: the words landed and the bold or italic did
+  // not. Authored in record.js beside the first one, for the same reason.
+  var FORMATTING_LOST_NOTE = record.PAGE_CHECK_FORMAT_NOTE;
+
+  // And the third: the words landed and the id did not. Same reason again.
+  var STAMP_LOST_NOTE = record.PAGE_CHECK_STAMP_NOTE;
+
+  // The backstop, independent of the stamp rule below. Two checks that both look
+  // at the same item cannot reopen it twice inside this window, whatever they
+  // each believe about the record. Sixty seconds because the loop that caused
+  // this ran roughly three times a minute, and a genuine revert is a thing a
+  // build did minutes or hours ago, so nothing honest is lost by waiting.
+  var CHECK_REOPEN_COOLDOWN_MS = 60000;
 
   /**
    * Has this handled hand edit been reverted on the page?
    *
-   * Pure: a record and the page's current text in, a boolean out.
+   * Pure: a record and the page's current text in, a boolean out. `options.now`
+   * is the clock, in milliseconds, so the cooldown can be tested without waiting
+   * a minute.
+   *
+   * TWO THINGS HOLD IT BACK, and they answer different questions.
+   *
+   *   the stamp rule    has the agent already answered the revision this check
+   *                     itself created? Then the reply in hand is the agent
+   *                     saying "this is how it renders now", and reopening again
+   *                     is the loop. See record.answeredPageCheckReopen.
+   *   the cooldown      did any check reopen this item in the last minute? Then
+   *                     not again, whatever the record says.
    *
    * @param {Object} item the record
    * @param {string} pageText the reviewed page's current text, the library's own
    *                 chrome excluded (see pageTextOf)
+   * @param {Object} [options] {now}
    * @returns {boolean}
    */
-  function isRevertedHandledEdit(item, pageText) {
-    if (!item || typeof pageText !== "string") return false;
-    if (!record.isHandEdit(item)) return false;
-    if (item[record.FIELD.STATE] !== record.STATE.HANDLED) return false;
+  function isRevertedHandledEdit(item, pageText, options) {
+    return pageCheckReasonFor(item, pageText, options) !== null;
+  }
+
+  // The three things the check can find, and the sentence each one carries. A
+  // caller that only wants a yes or no asks isRevertedHandledEdit; one that has
+  // to write the note asks pageCheckNoteFor.
+  var CHECK_REASON = { REVERTED: "reverted", FORMATTING: "formatting", STAMP: "stamp" };
+
+  /**
+   * Why the page check would reopen this item, or null.
+   *
+   * @returns {string|null} CHECK_REASON.REVERTED, CHECK_REASON.FORMATTING, or null
+   */
+  function pageCheckReasonFor(item, pageText, options) {
+    if (!item || typeof pageText !== "string") return null;
+    if (!record.isHandEdit(item)) return null;
+    if (item[record.FIELD.STATE] !== record.STATE.HANDLED) return null;
+    if (record.answeredPageCheckReopen(item)) return null;
+    if (withinCheckCooldown(item, options)) return null;
 
     var after = item[record.FIELD.AFTER];
     var before = item[record.FIELD.BEFORE];
-    if (typeof after !== "string" || typeof before !== "string") return false;
+    if (typeof after !== "string" || typeof before !== "string") return null;
 
     var afterKey = normalize.normalizeText(after);
     var beforeKey = normalize.normalizeText(before);
     // An edit whose after text was never page text (a delete, an empty region)
-    // has nothing to go missing, and an edit whose before and after read the
-    // same cannot be both gone and back.
-    if (!afterKey || !beforeKey || afterKey === beforeKey) return false;
+    // has nothing to go missing.
+    if (!afterKey) return null;
 
     var pageKey = normalize.normalizeText(pageText);
-    if (!pageKey) return false;
-    if (pageKey.indexOf(afterKey) !== -1) return false;
-    return pageKey.indexOf(beforeKey) !== -1;
+    if (!pageKey) return null;
+    if (pageKey.indexOf(afterKey) === -1) {
+      // The revert half. An edit whose before and after read the same cannot be
+      // both gone and back, which is why this test lives here and not above:
+      // a format-only change is exactly that edit, and its formatting half is
+      // still worth asking about.
+      if (!beforeKey || beforeKey === afterKey) return null;
+      return pageKey.indexOf(beforeKey) !== -1 ? CHECK_REASON.REVERTED : null;
+    }
+    // The reviewer's words ARE on the page. Their bold and italic may not be,
+    // and a handled change that is only half on the page is still not on the
+    // page. Compared and ignored: exactly what formattingLost compares and
+    // ignores, over the whole document's markup rather than one block's.
+    if (formattingMissingFromPage(item, options)) return CHECK_REASON.FORMATTING;
+    // The words landed and the ID DID NOT. See stampMissingFromPage.
+    return stampMissingFromPage(item, options) ? CHECK_REASON.STAMP : null;
+  }
+
+  /** The sentence a page-check reopen of this item should carry, or null. */
+  function pageCheckNoteFor(item, pageText, options) {
+    var reason = pageCheckReasonFor(item, pageText, options);
+    if (reason === CHECK_REASON.REVERTED) return REVERTED_EDIT_NOTE;
+    if (reason === CHECK_REASON.FORMATTING) return FORMATTING_LOST_NOTE;
+    if (reason === CHECK_REASON.STAMP) return STAMP_LOST_NOTE;
+    return null;
+  }
+
+  // What the rail says on the card when a check reopens an item, one line per
+  // sentence. It lives beside the sentences rather than in the caller, so a
+  // fourth reason cannot ship with the wrong notice on it.
+  var CHECK_NOTICES = {};
+  CHECK_NOTICES[REVERTED_EDIT_NOTE] = "This change was undone on the page. The item is open again.";
+  CHECK_NOTICES[FORMATTING_LOST_NOTE] =
+    "The bold or italic in this change is not on the page. The item is open again.";
+  CHECK_NOTICES[STAMP_LOST_NOTE] = "The id for this element is not in the source. The item is open again.";
+
+  /** The rail's line for a page-check note, defaulting to the revert one. */
+  function pageCheckNoticeFor(note) {
+    return CHECK_NOTICES[note] || CHECK_NOTICES[REVERTED_EDIT_NOTE];
+  }
+
+  /**
+   * The stamp this record was minted with, or null.
+   *
+   * The reference's shape belongs to the anchor engine, and record.js keeps it
+   * opaque on purpose, so the one place replay reaches into it is here.
+   */
+  function stampOf(item) {
+    var region = item && item[record.FIELD.REGION];
+    var ref = region && region.ref;
+    var stamp = ref && ref.stamp;
+    return typeof stamp === "string" && stamp ? stamp : null;
+  }
+
+  /**
+   * THE CHANGE LANDED AND THE ID DID NOT (S7).
+   *
+   * The reviewer's page wrote `data-lahe-id` onto the element the moment they
+   * touched it, and the agent editing the source is asked to carry it across so
+   * the next build reproduces it. An agent that edits the words and drops the
+   * attribute leaves a page that reads correctly and can only be found by its
+   * words again, which is the thing the stamp exists to stop.
+   *
+   * Three things hold it back, and each one is a case where saying nothing is
+   * the honest answer:
+   *
+   *   no stamp list   the caller could not read the document (pageCheckOptions
+   *                   was handed no root), so the absence is not evidence.
+   *   no stamp        the record was minted before the element was ever
+   *                   stamped. There is nothing to have gone missing.
+   *   stamp present   an element carries it, which is the whole ask.
+   */
+  function stampMissingFromPage(item, options) {
+    var opts = options || {};
+    var stamps = opts.stamps && typeof opts.stamps === "object" ? opts.stamps : null;
+    if (!stamps) return false;
+    var stamp = stampOf(item);
+    if (!stamp) return false;
+    return !Object.prototype.hasOwnProperty.call(stamps, stamp);
+  }
+
+  // Is the emphasis this edit asks for absent from the whole page's markup?
+  // The caller passes the document's markup as `options.pageHtml`
+  // (pageCheckOptions reads it off the body once per sweep).
+  function formattingMissingFromPage(item, options) {
+    var opts = options || {};
+    var html = typeof opts.pageHtml === "string" ? opts.pageHtml : null;
+    // Nothing to read is not evidence of anything: a check that guessed would
+    // reopen every handled edit on the page.
+    if (html === null) return false;
+    if (item[record.FIELD.KIND] !== record.KIND.EDIT) return false;
+    if (!markupSaysAfter(item)) return false;
+    return missingEmphasis(item[record.FIELD.AFTER_HTML], html);
+  }
+
+  /** Did a check reopen this item less than CHECK_REOPEN_COOLDOWN_MS ago? */
+  function withinCheckCooldown(item, options) {
+    var stamp = record.pageCheckReopen(item);
+    if (!stamp || typeof stamp.at !== "string") return false;
+    var then = Date.parse(stamp.at);
+    if (!Number.isFinite(then)) return false;
+    var opts = options || {};
+    var now = typeof opts.now === "number" ? opts.now : Date.now();
+    return now - then < CHECK_REOPEN_COOLDOWN_MS;
   }
 
   /**
@@ -25041,13 +30286,14 @@
    * built for: a rebuild that quietly dropped an applied fix, where nobody asked
    * for anything.
    */
-  function revertedHandledEditIds(items, pageText) {
+  function revertedHandledEditIds(items, pageText, options) {
     var list = Array.isArray(items) ? items : [];
     var takenBack = record.takenBackIds(list);
+    var opts = options || {};
     var out = [];
     for (var i = 0; i < list.length; i += 1) {
       if (takenBack[list[i][record.FIELD.ID]]) continue;
-      if (isRevertedHandledEdit(list[i], pageText)) out.push(list[i][record.FIELD.ID]);
+      if (isRevertedHandledEdit(list[i], pageText, opts)) out.push(list[i][record.FIELD.ID]);
     }
     return out;
   }
@@ -25070,6 +30316,41 @@
   function pageTextOf(root) {
     if (!root) return "";
     return normalize.blockTextFromNode(root, { skip: markers.isToolNode });
+  }
+
+  /**
+   * The page-check options for a whole sweep: the document's markup, read once.
+   *
+   * The tool's own chrome goes out of it the way it goes out of pageTextOf: the
+   * rail lives in a closed shadow root, and cleanMarkup drops any chrome node
+   * that ever lands in the light DOM on the way through emphasisRuns.
+   */
+  function pageCheckOptions(root, options) {
+    var opts = options || {};
+    var out = { pageHtml: root && typeof root.innerHTML === "string" ? root.innerHTML : null };
+    // Every id the document carries, read once for the whole sweep the way the
+    // markup is. A document that cannot be queried hands back null, which
+    // stampMissingFromPage reads as "no evidence" rather than as "missing".
+    out.stamps = stampsOn(root);
+    if (typeof opts.now === "number") out.now = opts.now;
+    return out;
+  }
+
+  /** The set of data-lahe-id values in the document, or null if none was read. */
+  function stampsOn(root) {
+    if (!root || typeof root.querySelectorAll !== "function") return null;
+    var found = {};
+    var nodes;
+    try {
+      nodes = root.querySelectorAll("[" + markers.STAMP_ATTR + "]");
+    } catch (err) {
+      return null;
+    }
+    for (var i = 0; i < nodes.length; i += 1) {
+      var value = nodes[i].getAttribute(markers.STAMP_ATTR);
+      if (typeof value === "string" && value) found[value] = true;
+    }
+    return found;
   }
 
   // What the card says when branch three fires. Written once here so the
@@ -25434,6 +30715,200 @@
   // node is not the protected one.
   var lastElement = Object.create(null);
 
+  // ---------------------------------------------------------------------------
+  // The probable place: the point ladder, for the reviewer only
+  // ---------------------------------------------------------------------------
+  //
+  // TWO LADDERS, AND THEY SERVE DIFFERENT PEOPLE. The write ladder (the anchor
+  // engine, above) serves the AGENT: it decides where an edit may be written,
+  // and it refuses unless exactly one element is certainly the right one,
+  // because a wrong write destroys somebody's words. The point ladder
+  // (pointing.js) serves the REVIEWER: it decides where a comment should point
+  // on the page in front of them, and it is allowed a best guess, because a
+  // wrong guess costs a mark in the wrong place and nothing else.
+  //
+  // So a probable place changes what the reviewer SEES and nothing else. The
+  // record keeps its lost stamp, review.json still says lost, and the agent is
+  // still told the passage could not be matched: the agent must not write on a
+  // guess (the build doc's S8). Only the page shows it, in a visibly weaker
+  // paint, with the word "probable" on the card.
+  //
+  // Comments and notes only. An edit, a delete and a format-only record all
+  // exist to change text, and pointing one at a guess is one accepted click
+  // away from writing on it. They refuse and stay refused.
+  var GUESSABLE_KINDS = {};
+  GUESSABLE_KINDS[record.KIND.COMMENT] = 1;
+  GUESSABLE_KINDS[record.KIND.NOTE] = 1;
+
+  // Card copy. The word first, always, so the reviewer reads "probable" before
+  // they read why.
+  var PROBABLE_NOTICE = "probable";
+
+  // id -> {element, reason}. What the page is showing a guess for right now.
+  var probable = Object.create(null);
+
+  // The assertion behind S8, in code rather than in a comment. Everything that
+  // reaches the page's text (writeRegion) refuses while this is set, so a
+  // future edit that lets the probable path fall through into a write fails
+  // loudly here instead of quietly rewriting a paragraph nobody matched.
+  var guessing = false;
+
+  /** Short, plain words for why this element is the probable one. */
+  function probableReason(guess) {
+    if (!guess) return "";
+    // The ladder could not tell the candidates apart on identity and used the
+    // remembered place to break the tie. That is exactly the reworded-passage
+    // case, so say it the way the reviewer would.
+    if (guess.via === "position") return "same place, words changed";
+    var reasons = (guess.reasons || []).slice(0, 2);
+    if (!reasons.length) return "closest match on the page";
+    return reasons.join(" and ") + " match, words changed";
+  }
+
+  function highlightsIn(ctx) {
+    if (ctx && ctx.highlights) return ctx.highlights;
+    var shared = highlightModule && highlightModule.shared;
+    if (!shared || typeof shared.paint !== "function") return null;
+    if (typeof shared.supported === "function" && !shared.supported()) return null;
+    return shared;
+  }
+
+  function rangeOver(ctx, element) {
+    var doc = ctx.document || (typeof document !== "undefined" ? document : null);
+    if (!doc || typeof doc.createRange !== "function" || !element) return null;
+    var range = doc.createRange();
+    range.selectNodeContents(element);
+    return range;
+  }
+
+  function paintAs(ctx, id, element, name) {
+    var highlights = highlightsIn(ctx);
+    if (!highlights) return false;
+    var range = rangeOver(ctx, element);
+    if (!range) return false;
+    highlights.paint(id, range, name);
+    return true;
+  }
+
+  /**
+   * Point this record at its probable place, when it has one.
+   *
+   * Called only from the branch that is about to stamp the record lost, and it
+   * does not change that: the lost stamp is the agent's answer and it stands.
+   *
+   * @returns {Object|null} {element, reason} when a guess was painted
+   */
+  function bindProbable(item, ref, ctx) {
+    var id = item[record.FIELD.ID];
+    if (!ref || !GUESSABLE_KINDS[item[record.FIELD.KIND]]) return null;
+    var ladder = ctx.pointing;
+    if (!ladder || typeof ladder.bestGuess !== "function") return null;
+    var guess;
+    guessing = true;
+    try {
+      // The floor and the margin are pointing's own, and they are not restated
+      // here: a second threshold in this file would be a second opinion about
+      // how sure the ladder is. An element back means it cleared its own bar.
+      guess = ladder.bestGuess(ref, ctx.root);
+    } finally {
+      guessing = false;
+    }
+    if (!guess || !guess.element) {
+      clearProbable(ctx, id, null);
+      return null;
+    }
+    var standing = probable[id];
+    var reason = probableReason(guess);
+    probable[id] = { element: guess.element, reason: reason };
+    if (!standing || standing.element !== guess.element) counters.regionsProbable += 1;
+    paintAs(ctx, id, guess.element, highlightModule.NAME.PROBABLE);
+    callCard(ctx, "setCardNotice", id, PROBABLE_NOTICE + ": " + reason);
+    return probable[id];
+  }
+
+  /**
+   * The guess ends, because the region was found for certain.
+   *
+   * The certain find is what the stamp buys: the agent carried data-lahe-id
+   * into the source, the page rebuilt with it, and the write ladder bound
+   * without asking anyone to guess. So the weaker paint goes, the word
+   * "probable" comes off the card, and the passage is painted like any other
+   * commented passage.
+   *
+   * @param {Element|null} element the element that WAS found, when there is one
+   */
+  function clearProbable(ctx, id, element) {
+    if (!probable[id]) return false;
+    delete probable[id];
+    counters.regionsProbableCleared += 1;
+    callCard(ctx, "setCardNotice", id, null);
+    if (element) paintAs(ctx, id, element, highlightModule.NAME.COMMENT);
+    else {
+      var highlights = highlightsIn(ctx);
+      if (highlights && typeof highlights.clear === "function") highlights.clear(id);
+    }
+    return true;
+  }
+
+  /**
+   * The element the agent's stamp names, when the write ladder refused it only
+   * because the words under it changed.
+   *
+   * THIS IS THE CASE THE STAMP WAS ADDED FOR. The reviewer comments on a
+   * sentence, the agent rewrites that sentence (which is what they asked for)
+   * and carries `data-lahe-id` into the source with the rewrite, and the page
+   * rebuilds. The words are gone, on purpose, and the id is still there on the
+   * one element that used to hold them. Ken, deciding this on 2026-09-11: the
+   * rebuilt page is "found with certainty, not probability".
+   *
+   * The write ladder still says no, and it is right to: the anchor engine's own
+   * note on that refusal is "a write may not land on a maybe", because a stamp
+   * over different words can also mean the agent stamped the wrong twin (S2).
+   * A comment writes nothing, so it is not a maybe for a comment. It is where
+   * the comment lives, and this is the only place that difference is drawn.
+   *
+   * Comments and notes only, one element only. Two elements carrying the id is
+   * S1's ambiguity and gets no answer here either.
+   *
+   * @returns {Element|null}
+   */
+  function stampedPlace(item, ref, verdict, ctx) {
+    if (!ref || !GUESSABLE_KINDS[item[record.FIELD.KIND]]) return null;
+    if (!verdict || verdict.via !== "stamp" || verdict.element) return null;
+    var engine = ctx.anchor || anchorEngine;
+    if (!engine || typeof engine.findByStamp !== "function" || typeof engine.scopeOf !== "function") return null;
+    if (!engine.STAMP_REASON || verdict.reason !== engine.STAMP_REASON.TEXT_MOVED) return null;
+    var scope = engine.scopeOf(ctx.root, null);
+    if (!scope) return null;
+    var found = engine.findByStamp(scope, ref.stamp);
+    return found.length === 1 ? found[0] : null;
+  }
+
+  /**
+   * Paint a certain find that nothing else will paint.
+   *
+   * The ordinary repaint (comments.js) resolves the record's words against the
+   * page, so a passage whose words the agent rewrote comes back bare however
+   * certainly the stamp identified it. An existing mark is never disturbed: an
+   * open comment box paints its own passage louder, and that is the reviewer's
+   * current place.
+   */
+  function paintCertain(ctx, item, element) {
+    var id = item[record.FIELD.ID];
+    if (!GUESSABLE_KINDS[item[record.FIELD.KIND]]) return false;
+    var highlights = highlightsIn(ctx);
+    if (!highlights) return false;
+    if (typeof highlights.rangeFor === "function" && highlights.rangeFor(id)) return false;
+    return paintAs(ctx, id, element, highlightModule.NAME.COMMENT);
+  }
+
+  /** The probable element this record is pointing at, when it is still here. */
+  function probableElement(id) {
+    var standing = probable[id];
+    if (!standing || !standing.element) return null;
+    return standing.element.isConnected === false ? null : standing.element;
+  }
+
   /**
    * Where on the page does this record point, right now?
    *
@@ -25443,9 +30918,12 @@
    * needs it, because a handled item has no highlight left to scroll to (R37):
    * its region ref and its before/after context are all that remain.
    *
-   * A record whose anchor is LOST returns null rather than a best guess.
-   * Scrolling somewhere wrong is worse than not scrolling: the card already
-   * carries the notice saying the passage could not be found.
+   * A record whose anchor is LOST returns its PROBABLE place when the point
+   * ladder found one, and null otherwise. That is not a softening of the write
+   * ladder: nothing here is written, and the card the reviewer clicked already
+   * says "probable", so they are being taken somewhere the tool has told them
+   * it is guessing about. With no guess the old answer stands, because
+   * scrolling somewhere arbitrary is worse than not scrolling.
    *
    * @param {string} id  the record's id
    * @param {Object} [override] context override, as everywhere else here
@@ -25456,7 +30934,7 @@
     var item = itemWithId(ctx, id);
     if (!item) return null;
     var region = item[record.FIELD.REGION] || null;
-    if (region && region.lost) return null;
+    if (region && region.lost) return probableElement(id);
     // The node the last pass bound, when it is still in the document. This is
     // what carries an element pick whose text the matcher can never re-find.
     var bound = lastElement[id];
@@ -25544,6 +31022,14 @@
   // matches and several matches are the same verdict (nothing is written) and
   // they are DIFFERENT situations, so they do not get the same sentence.
   function lostReason(verdict) {
+    // THE STAMP'S OWN TWO SENTENCES (S1, S2). An id on two elements and an id
+    // over different words are both refusals the text ladder has no words for,
+    // and the engine already wrote each one for the reviewer to read. Passing
+    // them through is what keeps the card from saying "could not be matched"
+    // over a page where the id was found and was the problem.
+    if (verdict && verdict.via === "stamp" && isStampReason(verdict.reason)) {
+      return verdict.reason + ", so nothing was written or moved";
+    }
     if (verdict.reason === uniqueness.REASON.AMBIGUOUS) {
       return (
         "more than one place on this page matches this item (" +
@@ -25555,6 +31041,18 @@
       return "a structurally similar place is still present, but its text does not match, so nothing was written or moved";
     }
     return "this feedback could not be safely matched to the current page, so nothing was written or moved";
+  }
+
+  // Is this one of the engine's stamp refusals rather than a text verdict? Read
+  // off the engine's own table, so a third sentence there needs nothing here.
+  function isStampReason(reason) {
+    var table = anchorEngine && anchorEngine.STAMP_REASON;
+    if (!table || typeof reason !== "string") return false;
+    var names = Object.keys(table);
+    for (var i = 0; i < names.length; i += 1) {
+      if (table[names[i]] === reason) return true;
+    }
+    return false;
   }
 
   // Spelled once, in failures.js, because tab_done clears the same badges when
@@ -25836,13 +31334,35 @@
       var bound = lastElement[id];
       if (bound && bound.isConnected) {
         clearLost(ctx, item);
+        clearProbable(ctx, id, bound);
         element = bound;
       } else {
-        return markLost(item, verdict, ctx);
+        // The stamp, for a record that writes nothing: certain, so it is not
+        // lost and it is not a guess. See stampedPlace.
+        var stamped = stampedPlace(item, ref, verdict, ctx);
+        if (stamped) {
+          clearLost(ctx, item);
+          clearProbable(ctx, id, stamped);
+          paintCertain(ctx, item, stamped);
+          element = stamped;
+        } else {
+          // The write ladder has failed, and this is where the point ladder
+          // gets its only turn. It runs BEFORE markLost and its result is
+          // ignored by markLost, on purpose: a comment can be shown its
+          // probable place and still be reported lost, because those two facts
+          // are told to two different people. See "The probable place" above.
+          bindProbable(item, ref, ctx);
+          return markLost(item, verdict, ctx);
+        }
       }
     }
 
     lastElement[id] = element;
+
+    // Found for certain, which on a rebuilt page is what the stamp buys: the
+    // weaker paint and the word "probable" both come off, and the passage is
+    // painted like any other commented passage.
+    clearProbable(ctx, id, element);
 
     if (isProtectedNow(ctx, element)) {
       counters.regionsSkippedProtected += 1;
@@ -25887,7 +31407,9 @@
     }
 
     var domValue = domValueOf(element, item);
-    var verdictBranch = compare(item, domValue);
+    // The markup goes in beside the text so branch one can see emphasis the
+    // text comparison is built to ignore (formattingLost).
+    var verdictBranch = compare(item, domValue, typeof element.innerHTML === "string" ? element.innerHTML : null);
     var branch = verdictBranch.branch;
 
     if (branch === BRANCH.ALREADY_APPLIED) {
@@ -25984,6 +31506,20 @@
   // commit and then the next replay pass flattened the block back to one line.
   function writeRegion(element, item) {
     var kind = item[record.FIELD.KIND];
+    // S8, as an assertion rather than as a promise in a comment. A probable
+    // place is the point ladder's guess, and the one thing a guess may never
+    // receive is a write. Both halves are checked: nothing writes while the
+    // ladder is being asked, and nothing writes into the element it answered
+    // with. If a later change lets the probable path reach here, this throws in
+    // the reviewer's face instead of quietly rewriting a paragraph the tool
+    // never matched.
+    var standing = probable[item[record.FIELD.ID]];
+    if (guessing || (standing && standing.element === element)) {
+      throw new Error(
+        "replay: a probable place never receives a write. The point ladder serves the reviewer, " +
+          "the write ladder serves the agent, and this record is still lost for the agent."
+      );
+    }
     if (kind === record.KIND.DELETE) {
       if (typeof element.remove === "function") {
         element.remove();
@@ -25996,22 +31532,14 @@
       element.innerHTML = item[record.FIELD.AFTER_HTML];
       return;
     }
-    var afterText = item[record.FIELD.AFTER];
-    var afterHtml = item[record.FIELD.AFTER_HTML];
-    // The markup is used only when it still SAYS the record's after text. A
-    // record whose text was reworded without its markup would otherwise write
-    // an older wording back onto the page, which is worse than losing the
-    // emphasis. When they disagree, the text is the reviewer's answer.
-    if (
-      typeof afterHtml === "string" &&
-      afterHtml &&
-      typeof afterText === "string" &&
-      normalize.blockText(afterHtml) === normalize.normalizeBlockText(afterText)
-    ) {
-      element.innerHTML = afterHtml;
+    // The markup is used only when it still says the record's after text
+    // (markupSaysAfter, which the compare asks the same question of, so it can
+    // never ask for a write this will not make).
+    if (markupSaysAfter(item)) {
+      element.innerHTML = item[record.FIELD.AFTER_HTML];
       return;
     }
-    writeTextWithBreaks(element, afterText);
+    writeTextWithBreaks(element, item[record.FIELD.AFTER]);
   }
 
   // A record with no markup of its own, written so its breaks survive. Built
@@ -26048,11 +31576,14 @@
     REASONS: REASONS,
     PASS_ORDER: PASS_ORDER,
     BRANCH: BRANCH,
+    formattingLost: formattingLost,
     BRANCHES: BRANCHES,
     EARLIER_REVISION_MESSAGE: EARLIER_REVISION_MESSAGE,
     counters: counters,
     resetCounters: resetCounters,
     SETTLE_MS: SETTLE_MS,
+    PROBABLE_NOTICE: PROBABLE_NOTICE,
+    probableElement: probableElement,
     noteSettling: noteSettling,
     isSettling: isSettling,
     // The creation-time seed for the still-bound rule: an item made ON an
@@ -26069,9 +31600,17 @@
     compare: compare,
     applyRecord: applyRecord,
     REVERTED_EDIT_NOTE: REVERTED_EDIT_NOTE,
+    FORMATTING_LOST_NOTE: FORMATTING_LOST_NOTE,
+    STAMP_LOST_NOTE: STAMP_LOST_NOTE,
+    CHECK_REOPEN_COOLDOWN_MS: CHECK_REOPEN_COOLDOWN_MS,
     isRevertedHandledEdit: isRevertedHandledEdit,
+    pageCheckReasonFor: pageCheckReasonFor,
+    pageCheckNoteFor: pageCheckNoteFor,
+    pageCheckNoticeFor: pageCheckNoticeFor,
+    PAGE_CHECK_REASON: CHECK_REASON,
     revertedHandledEditIds: revertedHandledEditIds,
     pageTextOf: pageTextOf,
+    pageCheckOptions: pageCheckOptions,
     uniqueness: uniqueness
   };
 });
@@ -26540,7 +32079,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.1.0+b16a5f47ce2b";
+  var VERSION = "0.1.0+5bbaec317248";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -26553,6 +32092,16 @@
   // is a development tool that only ever runs on a page whose author added its
   // script tag, so there is nothing here to hide behind a flag.
   var GLOBAL = "__lahe";
+
+  // How long after the reviewer last touched anything a LAHE reload waits.
+  //
+  // Ken clicked a toast, the rail opened on the card, and two seconds later a
+  // rebuild reloaded the page: the card "disappeared out from in front of me".
+  // The open-edit and open-box checks did not catch it, because reading is not
+  // typing. A reload is never urgent, and ten seconds of stillness is a cheap
+  // way to be sure nobody is mid-thought. The reload is deferred, not
+  // cancelled: every poll re-asks, so it lands as soon as they stop.
+  var INTERACTION_BUSY_MS = 10000;
 
   // ---------------------------------------------------------------------------
   // Configuration
@@ -26575,11 +32124,15 @@
       tag = doc.querySelector(protocol.SCRIPT_SELECTOR);
       from = tag ? "selector" : null;
     }
-    if (!tag) return { review: null, token: null, helper: null, from: null };
+    if (!tag) return { review: null, token: null, helper: null, frames: null, start: null, from: null };
     return {
       review: tag.getAttribute(attr.REVIEW) || null,
       token: tag.getAttribute(attr.TOKEN) || null,
       helper: tag.getAttribute(attr.HELPER) || null,
+      // The two opt-ins (protocol.SCRIPT_ATTR): boot in a frame anyway, and
+      // start with nothing of the library's on screen.
+      frames: tag.getAttribute(attr.FRAMES) || null,
+      start: tag.getAttribute(attr.START) || null,
       from: from
     };
   }
@@ -26592,8 +32145,80 @@
       review: opts.review || fromTag.review,
       token: opts.token !== undefined ? opts.token : fromTag.token,
       helper: opts.helper || fromTag.helper || protocol.DEFAULT_HELPER_ORIGIN,
+      frames: opts.frames !== undefined ? opts.frames : fromTag.frames,
+      start: opts.start !== undefined ? opts.start : fromTag.start,
       from: opts.review ? "options" : fromTag.from
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // A page inside a frame is not a page to review
+  // ---------------------------------------------------------------------------
+  //
+  // reveal.js's speaker-notes window is what found this. Pressing S on a deck
+  // opens a second window whose job is to show the notes, and the way it shows
+  // the current slide is to embed THE SAME DECK in an iframe (older versions
+  // load plugin/notes/notes.html, newer ones write an inline document; both
+  // frame the deck with a `?receiver` style query and talk to the real window
+  // over postMessage). That embedded copy carries the deck's own script tags,
+  // so the library booted a second time, on the same review, in a window the
+  // reviewer never asked to review anything in.
+  //
+  // What the reviewer then saw was the two windows fighting over the review's
+  // window claim: refusal panels, a read-only rail, and a heartbeat churning
+  // between them. Ken, presenting: "something is happening when I pull up
+  // speaker notes where LAHE is trying to interact with them."
+  //
+  // So a framed document boots NOTHING: no rail, no pill, no sync, no
+  // listeners, no storage writes. It is not an error and it is not announced on
+  // the page, because the page is the notes window's business and the reviewer
+  // is looking at the real one. The decision is readable afterwards as
+  // LAHE.layer.skipped, which is how a test and a curious developer tell "the
+  // library was framed" from "the script tag is wrong".
+  //
+  // A page that genuinely wants to review an embedded document opts back in
+  // with data-lahe-frames="allow" on the script tag.
+
+  var SKIPPED_FRAMED = "framed";
+
+  var FRAMED_REASON =
+    "this document is inside a frame, so the library did not boot. The window that framed it owns the review. " +
+    'Add ' + protocol.SCRIPT_ATTR.FRAMES + '="' + protocol.FRAMES_ALLOW + '" to the script tag to review a framed document anyway.';
+
+  /**
+   * Are we inside a frame?
+   *
+   * Pure over a window-shaped object, so the rule is unit-testable with no
+   * browser. A cross-origin top THROWS on access, and that throw is itself the
+   * answer: only a framed document can have a top it is not allowed to read.
+   *
+   * @param {Object} win anything with a `top`
+   * @returns {boolean}
+   */
+  function isFramed(win) {
+    if (!win) return false;
+    try {
+      if (!win.top) return false;
+      return win.top !== win;
+    } catch (error) {
+      return true;
+    }
+  }
+
+  /**
+   * Should this document boot?
+   *
+   * @param {Object} win
+   * @param {string|null} [frames] the script tag's data-lahe-frames value
+   * @returns {{framed: boolean, skip: boolean, reason: (string|null)}}
+   */
+  function frameDecision(win, frames) {
+    var framed = isFramed(win);
+    if (!framed) return { framed: false, skip: false, reason: null };
+    if (String(frames || "").toLowerCase() === protocol.FRAMES_ALLOW) {
+      return { framed: true, skip: false, reason: null };
+    }
+    return { framed: true, skip: true, reason: SKIPPED_FRAMED };
   }
 
   // ---------------------------------------------------------------------------
@@ -26601,6 +32226,14 @@
   // ---------------------------------------------------------------------------
 
   var current = null;
+  // Set once, by a boot that decided not to boot. Published on the module's own
+  // handle (LAHE.layer.skipped) rather than on the page global, because the page
+  // global is the library reporting on a review it is running and there is none.
+  var skipped = null;
+  // Assigned at the bottom of this file. Named here because boot() may run
+  // before it exists (nothing does today) and writing to a missing binding is a
+  // ReferenceError in strict mode.
+  var api = null;
 
   /**
    * Wire the library onto this page.
@@ -26622,6 +32255,17 @@
     }
 
     var config = resolveConfig(doc, opts, opts.script || ownScript);
+
+    // BEFORE the missing-review throw, and before anything is bound, mounted or
+    // written: a framed document is not this library's business at all, and a
+    // frame with no review id on it should be silent rather than loud.
+    var frames = frameDecision(win, config.frames);
+    if (frames.skip) {
+      skipped = frames.reason;
+      if (api) api.skipped = frames.reason;
+      return { booted: false, skipped: frames.reason, reason: FRAMED_REASON, version: VERSION };
+    }
+
     if (!config.review) {
       // Fails closed and LOUD. A page with the library on it and no review id
       // is a misconfiguration, and a quiet no-op here is a reviewer typing into
@@ -26643,9 +32287,35 @@
     // Consume it before mounting the rail, merging records, or replaying edits,
     // all of which are avoidable layout work. This call only lives on boot, so
     // an SPA/Turbo remount and a bfcache restore never apply numeric scrolling.
-    ns.sync.restoreViewportAfterReload(win, reviewId);
+    if (ns.sync.restoreViewportAfterReload(win, reviewId)) {
+      // The restore put the reviewer's block back under their eye. The page is
+      // not finished arriving yet, though: mermaid has not drawn, images with no
+      // dimensions have not reserved their space, and a webfont may still swap.
+      // Each of those moves the layout after the restore, which is the jump the
+      // reviewer sees. So the block is re-asserted across the same window replay
+      // defers a lost verdict over, and the page is held invisible for the first
+      // few hundred milliseconds of it so the correcting does not read as jitter.
+      var landing = ns.sync.lastReloadRestore();
+      if (landing && landing.byBlock) {
+        ns.sync.steadyAfterReload(win, {
+          text: landing.text,
+          offset: landing.offset,
+          settleMs: ns.replay.SETTLE_MS
+        });
+      }
+    }
     var store = opts.store || ns.store.createStore();
-    var rail = opts.rail || ns.overlay.createRail({ store: store, reviewId: reviewId });
+    var rail =
+      opts.rail ||
+      ns.overlay.createRail({
+        store: store,
+        reviewId: reviewId,
+        // data-lahe-start="hidden": a page that is presented more often than it
+        // is reviewed comes up with nothing of the library's on screen. The
+        // reviewer's own stored choice does the same job on an ordinary page;
+        // the rail reads that one itself.
+        present: String(config.start || "").toLowerCase() === protocol.START_HIDDEN
+      });
     rail.mount();
 
     // The page in front of the reviewer RIGHT NOW, re-read rather than pinned at
@@ -26758,6 +32428,37 @@
     var comments = opts.comments || ns.comments.createComments({ store: scopedStore, reviewId: reviewId, page: page });
     comments.bind({ page: page });
 
+    // -------------------------------------------------------------------------
+    // Is the reviewer in the middle of something?
+    // -------------------------------------------------------------------------
+    //
+    // One timestamp, four event types, bound once on the document in the
+    // capture phase. Capture on the document is enough for both halves of the
+    // question: an event inside the rail's closed shadow root still propagates
+    // out to the document (retargeted, which does not matter here, since only
+    // the TIME is wanted), so this sees a click on a card and a click on the
+    // page through the same handler, with no listener inside the rail at all.
+    //
+    // isTrusted is the whole of "not our own synthetic events": every event the
+    // library dispatches itself is untrusted by construction, so nothing the
+    // tool does to the page can make the tool think the reviewer is busy.
+    var lastInteractionAt = 0;
+    var interactionBusyMs = INTERACTION_BUSY_MS;
+
+    function noteInteraction(event) {
+      if (event && event.isTrusted === false) return;
+      lastInteractionAt = Date.now();
+    }
+
+    function sinceInteraction() {
+      if (!lastInteractionAt) return Infinity;
+      return Date.now() - lastInteractionAt;
+    }
+
+    ["pointerdown", "keydown", "wheel", "touchstart"].forEach(function (type) {
+      ns.listeners.shared.on(doc, type, noteInteraction, { capture: true, passive: true }, ns.listeners.GROUP.INTERACTION);
+    });
+
     // The Active tab's contents live INSIDE the rail's own Active pane, so
     // there is one rail on the page and one host under it.
     var tab = createTab();
@@ -26793,6 +32494,13 @@
         },
         isReadOnly: function () {
           return readOnlyActive;
+        },
+        // Present mode. A reply that folds while the reviewer is presenting
+        // must not toast over a slide, and must still be waiting for them when
+        // they come back: see the onPresent handler below, which asks the Done
+        // tab for exactly that on the way out.
+        isHidden: function () {
+          return rail.isPresenting();
         }
       });
       made.mount();
@@ -26803,7 +32511,7 @@
     // revertChecks counts the check having RUN on this load, which is what a
     // test waits on: "the check ran and reopened nothing" is a real result and
     // an arbitrary sleep is the only other way to observe it.
-    var counters = { merges: 0, cardsDrawn: 0, revertChecks: 0, revertReopens: 0 };
+    var counters = { merges: 0, cardsDrawn: 0, revertChecks: 0, revertReopens: 0, changesPainted: 0 };
 
     // The window-session state machine's boot half (D5, findings 1/12, NEW-2). A
     // window that loses the claim goes READ-ONLY: its edit and comment handlers
@@ -26839,9 +32547,14 @@
     function exitReadOnly() {
       if (!readOnlyActive) return;
       readOnlyActive = false;
-      comments.bind({ page: page });
-      editing.bind({ page: page });
-      if (tab && typeof tab.ensureNoteBox === "function") tab.ensureNoteBox();
+      // NOT WHILE PRESENTING. Getting the claim back is not a reason to put
+      // comment and edit handlers back on a page the reviewer is showing a
+      // room; leaving present mode re-arms them (see applyPresent).
+      if (!rail.isPresenting()) {
+        comments.bind({ page: page });
+        editing.bind({ page: page });
+        if (tab && typeof tab.ensureNoteBox === "function") tab.ensureNoteBox();
+      }
       done.setReadOnly();
       rail.hideRefusal();
       // The condition ended, so its chip goes too (clear, not dismiss: dismiss
@@ -26901,7 +32614,16 @@
         // busyBoxes, not openBoxes: the rail's page-note box is open for the
         // whole session, and counting it deferred the reload forever.
         if (comments && typeof comments.busyBoxes === "function" && comments.busyBoxes().length > 0) return true;
+        // READING IS WORK TOO. See INTERACTION_BUSY_MS: a reviewer who just
+        // clicked a card is looking at it, and swapping the page under them is
+        // the same injury as swapping it under a half-typed sentence.
+        if (sinceInteraction() < interactionBusyMs) return true;
         return false;
+      },
+      // What the rail is showing, read at the last moment before the document
+      // goes away, so the page that replaces it can put it back.
+      railState: function () {
+        return rail.railState();
       },
       // Said before the document goes away, so the reload is announced rather
       // than a surprise. The reviewer's outstanding work is replayed onto the
@@ -26996,6 +32718,103 @@
     // rows can exist puts it where it belongs on the first paint the reviewer
     // sees.
     done.refresh();
+
+    // R36's reload already gives the reviewer their scroll position back. This
+    // gives them the RAIL back: open or closed as it actually was, the same
+    // tab, the same scroll offset, the same card focused. Consumed once, and
+    // only when this tool wrote it on its own way out, so a reload the reviewer
+    // asked for themselves is untouched. Here, because every tab has drawn its
+    // cards by now and the card to focus exists to be focused.
+    var railBack = ns.sync.restoreRailAfterReload(win, reviewId);
+    if (railBack) rail.applyRailState(railBack);
+
+    // -------------------------------------------------------------------------
+    // Present mode
+    // -------------------------------------------------------------------------
+    //
+    // Ken: "sometimes during a presentation there will not be LAHE on there, but
+    // during class it's nice if I can talk to the AI through the deck. I might
+    // want a way to hide the pill for the chat rail."
+    //
+    // HIDDEN, NOT OFF, and the difference is the whole design. The rail owns
+    // what is on screen (rail.setPresenting hides the surface and every wash on
+    // the page in one call). This is the other half: the gestures.
+    //
+    //   hidden   commenting and hand-editing are disarmed, so a stray
+    //            Cmd-Shift-C in front of a room does nothing
+    //   still on sync keeps polling and folding, so no reply is lost; the
+    //            window claim and its heartbeat carry on, so present mode is
+    //            never mistaken for a window that went away; the reload guard
+    //            still holds a rebuild off while the reviewer is mid-work
+    //   coming back  the handlers are re-armed, the reviewer's marks are
+    //            painted again, and anything that answered during the talk is
+    //            put in front of them through the ordinary waiting path (up to
+    //            three as messages, a bigger pile as one count)
+    //
+    // The way out is one chord, gestures.TOGGLE_PRESENT, bound below. It is the
+    // only listener of ours a hidden library leaves armed, which is why it is
+    // bound in its own group that no remount clears.
+
+    function applyPresent(presenting) {
+      if (presenting) {
+        comments.closeAll();
+        comments.unbind();
+        editing.teardown();
+        return;
+      }
+      if (readOnlyActive) return;
+      comments.bind({ page: page });
+      editing.bind({ page: page });
+      if (tab && typeof tab.ensureNoteBox === "function") tab.ensureNoteBox();
+    }
+
+    rail.onPresent(function (presenting) {
+      applyPresent(presenting);
+      if (presenting) return;
+      // Back on screen: the reviewer's own marks first (nothing repainted them
+      // while they were unregistered), then whatever answered during the talk.
+      repaintHighlights(refreshItems());
+      if (!done) return;
+      // Two different piles, and both of them are the reviewer's:
+      //   toastWaiting    answers that arrived during the talk and have never
+      //                   been on screen
+      //   sweepNeglected  answers that were on screen before the talk and timed
+      //                   out unread while the library was hidden, which the
+      //                   sweep could not report at the time
+      if (typeof done.toastWaiting === "function") done.toastWaiting();
+      if (typeof done.sweepNeglected === "function") done.sweepNeglected();
+    });
+
+    // The chord, in the capture phase on the document, in its own listener
+    // group. Capture matters twice: it beats the page's own handlers to the key
+    // on a deck that binds everything, and it sees a press inside the rail's
+    // closed root before the root's own typing fence stops it.
+    ns.listeners.shared.on(
+      doc,
+      "keydown",
+      function (event) {
+        var decided = ns.gestures.gestureFor({
+          type: "keydown",
+          key: event.key,
+          metaKey: event.metaKey === true,
+          ctrlKey: event.ctrlKey === true,
+          shiftKey: event.shiftKey === true
+        });
+        // EXACTLY THIS CHORD AND NOTHING ELSE. Every other key, in either mode,
+        // is the page's, which is what makes leaving this listener armed while
+        // the library is hidden honest.
+        if (decided.gesture !== ns.gestures.GESTURE.TOGGLE_PRESENT) return;
+        if (decided.preventDefault) event.preventDefault();
+        rail.setPresenting(!rail.isPresenting());
+      },
+      { capture: true },
+      ns.listeners.GROUP.PRESENT
+    );
+
+    // A page that boots hidden (the reviewer's own stored choice, or
+    // data-lahe-start="hidden") has to have its gestures disarmed too: the
+    // surfaces above were mounted and bound before this line.
+    if (rail.isPresenting()) applyPresent(true);
 
     // -------------------------------------------------------------------------
     // End review (D10)
@@ -27155,6 +32974,13 @@
     var TOOK_BACK_NOTICE = "You took this back. The agent is asked to remove it from the source.";
 
     editing.onChange(function (item) {
+      // The reviewer just changed a block, so the reading this page compares
+      // against has to include it. Without this their own edit looks like a
+      // block the page changed by itself, it lands in the exclusion set, and
+      // whatever occupies that position after the rebuild is silently not
+      // painted: the agent's new paragraph, most often, which is the one thing
+      // they most need to see.
+      ns.sync.noteStableBlocks(ns.sync.blockTextsIn(doc));
       // No sync call here: editing posts through the sync it was handed, on the
       // same act that wrote the record, and posts the delete on the act that
       // removes one (its unpersist, reached from undo and retire). And NO replay pass here either. The pass
@@ -27256,6 +33082,14 @@
         store.write(reviewId, item);
         refreshItems();
         rail.upsertCard(item);
+        // AND THE HELPER HEARS IT TOO. The lost stamp is the reviewer's answer
+        // on the card and the AGENT'S answer in review.json, and until this
+        // call the second half never left the browser: a record replay knew it
+        // could not place read as healthy in the file the agent works from
+        // (RF19, and the quiet failure Ken named on 2026-09-11). Replay only
+        // persists on a transition, never per pass, so this is one post when
+        // something actually changed.
+        if (sync && typeof sync.recordItem === "function") sync.recordItem(item);
       }
     });
 
@@ -27317,6 +33151,109 @@
 
     // "The page changed, so replay gets a pass."
     //
+    // -------------------------------------------------------------------------
+    // What the agent changed, lit up for a moment
+    // -------------------------------------------------------------------------
+    //
+    // Ken, on the reload: "New things appearing or disappearing in a doc should
+    // use the highlight and fade micro interaction so that we can see them
+    // better... When text changes on the page, give it a highlight and fade. Not
+    // the grey-blue highlight that the cursor does, but a highlighter attention
+    // highlight."
+    //
+    // The reviewer asked for something, the agent edited the source, the page
+    // rebuilt, and LAHE reloaded it under them. Without this they are looking at
+    // a page that is different in a way they cannot see, and finding the change
+    // is their job. This makes it the tool's job: the blocks whose words are new
+    // or different wear a highlighter mark for a couple of seconds and then it
+    // is gone.
+    //
+    // WHY THE COMPARISON IS FAIR. The reviewer's own outstanding edits are on
+    // both sides of it. The page that left had replay's records applied to it,
+    // and the snapshot here is taken after replay's boot pass has applied them
+    // to the page that arrived, so a re-applied edit is identical on both sides
+    // and cancels. What is left is what the agent did.
+
+    // A MUTATING PAGE IS NOT AN AGENT EDIT, and this mark only ever means the
+    // agent. An earlier version of this also painted changes that landed with
+    // no reload, on the theory that a dev server hot-swapping a block was the
+    // same event. It is not, and a reveal.js deck showed why: a countdown timer
+    // and a slide number both rewrite themselves every second, and both lit up.
+    // There is no way to tell a self-changing element from a hot swap from
+    // inside the page, so the whole path is gone. The comparison runs once, on
+    // the reload LAHE fired because the agent rebuilt the file.
+
+    /**
+     * Is the reviewer in this block right now?
+     *
+     * Two ways they can be, and both mean hands off: the block is protected
+     * (2B has it open for an edit), or a comment box is open on words inside it.
+     * A mark over text someone is working in is noise at best, and at worst it
+     * reads as the tool having changed what they were typing.
+     */
+    function blockIsBusy(el) {
+      try {
+        if (protect && typeof protect.isProtected === "function" && protect.isProtected(el)) return true;
+        var boxes = typeof comments.openBoxes === "function" ? comments.openBoxes() : [];
+        for (var i = 0; i < boxes.length; i += 1) {
+          var range = comments.highlights ? comments.highlights.rangeFor(boxes[i].id) : null;
+          var node = range ? range.commonAncestorContainer : null;
+          if (node && (el === node || (typeof el.contains === "function" && el.contains(node)))) return true;
+        }
+      } catch (error) {
+        // A check that throws is not a licence to paint over someone's work.
+        return true;
+      }
+      return false;
+    }
+
+    /**
+     * Paint every block whose text is new or different, against the snapshot the
+     * page that left wrote down.
+     *
+     * @param {Object|null} before the snapshot from sync.takeBlockSnapshot,
+     *        which carries the old page's texts AND the blocks it was already
+     *        changing on its own
+     * @returns {number} how many blocks were marked
+     */
+    function paintWhatChanged(before) {
+      if (!comments.highlights || typeof doc.createRange !== "function") return 0;
+      var entries = ns.sync.blockCandidates(doc);
+      // Over the cap the scan is truncated, so the list is not a description of
+      // this page and comparing it would light up everything past the cut. The
+      // feature sits this page out, which is what the cap is for.
+      if (entries.length > ns.sync.SNAPSHOT_MAX_BLOCKS) return 0;
+      var texts = entries.map(function (entry) {
+        return entry.text;
+      });
+      var changed = ns.sync.diffBlockTexts(before, texts);
+      var marked = 0;
+      changed.forEach(function (index) {
+        var el = entries[index].el;
+        if (!el || !el.isConnected) return;
+        // The page's own moving parts: a clock, a slide number, a status line
+        // that rewrites itself. The old page said which ones those were, by
+        // where they sit and by the text they wore. See sync.isExcludedBlock.
+        if (ns.sync.isExcludedBlock(before, entries[index].text, ns.sync.blockPath(el))) return;
+        // The screen-reader copy, checked here rather than in the scan because
+        // it is a layout read: one per block about to be painted, not one per
+        // block on the page. See sync.isVisuallyHidden.
+        if (ns.sync.isVisuallyHidden(el)) return;
+        if (blockIsBusy(el)) return;
+        var range = doc.createRange();
+        range.selectNodeContents(el);
+        // Keyed by position and text together, so two blocks that now say the
+        // same thing are two marks rather than one overwriting the other.
+        if (comments.highlights.markChanged(index + ":" + entries[index].text, range)) marked += 1;
+      });
+      // This page's reading, for the snapshot it will write down if it is
+      // reloaded. Taken after the settling window, so what it holds is the page
+      // standing still rather than the page still arriving.
+      ns.sync.noteStableBlocks(texts);
+      counters.changesPainted += marked;
+      return marked;
+    }
+
     // The ORDINARY coalescing path, deliberately: no {immediate: true} anywhere
     // in this file. replay.schedule races the frame against a 50ms timer, so a
     // page that is not painting still runs its pass; forcing a pass immediate
@@ -27397,7 +33334,7 @@
         // read-only tab re-armed Cmd-Shift-C on its first Turbo navigation and
         // opened comment boxes that could do nothing (first-real-use bug,
         // 2026-08-14). exitReadOnly re-binds when the window becomes holder.
-        if (!readOnlyActive) {
+        if (!readOnlyActive && !rail.isPresenting()) {
           comments.bind({ page: page });
           editing.bind({ page: page });
         }
@@ -27427,6 +33364,13 @@
     // was reloaded, so it runs on boot and not only on a later repaint.
     ns.replay.schedule(ns.replay.REASON.BOOT);
 
+    // The first reading of this page's blocks, so that a rebuild landing before
+    // the settling window closes still has something to compare the reload-time
+    // reading against. The settled reading replaces it below; this is the one a
+    // fast rebuild falls back to. Two readings of the same page are what tells a
+    // countdown timer from an agent's edit.
+    ns.sync.noteStableBlocks(ns.sync.blockTextsIn(doc));
+
     // The reviewer's marks get the same second chance replay's lost verdicts
     // get. A page that finishes drawing itself after load (mermaid rendering a
     // diagram over a section, a chart library swapping a figure in) throws away
@@ -27448,6 +33392,11 @@
         if (!handle || current !== handle) return;
         repaintHighlights(refreshItems());
         runRevertCheck();
+        // And what the agent changed, now that the page has finished drawing
+        // itself and replay has put the reviewer's own records back. Both sides
+        // of the comparison therefore include those records, which is what
+        // keeps a re-applied edit from being reported as news.
+        paintWhatChanged(ns.sync.takeBlockSnapshot(win, reviewId));
       }, ns.replay.SETTLE_MS + 100);
     }
 
@@ -27460,24 +33409,69 @@
      * through the same path the reviewer's own Reopen issue button uses, and the
      * wake feed already wakes on a reopen.
      *
-     * Once, not in a loop. An item the agent answers again without actually
-     * fixing the page is caught on the next load, which is the right cadence: it
-     * is one more piece of ready work, not a live watcher fighting the page.
+     * ONCE PER ITEM PER LOAD, and never a loop.
+     *
+     * The check and the agent can answer each other. On 2026-09-10 they did:
+     * the reviewer's edit was applied in a shape the check could not see, so the
+     * check reopened, the agent replied handled, the check read the same page
+     * and reopened again, thirteen times in thirty six minutes. Three things
+     * hold it now, and the first two are the ones that matter:
+     *
+     *   the stamp   the record remembers which revision the check created, so a
+     *               handled reply answering that revision is the agent saying
+     *               "this is how it renders now" and is left alone
+     *               (record.answeredPageCheckReopen)
+     *   the cooldown  no item is reopened by a check twice inside a minute
+     *               (replay.CHECK_REOPEN_COOLDOWN_MS)
+     *   this set    and no item is reopened by a check twice in one page load,
+     *               however many times this function is called
      */
+    var checkReopened = {};
+
     function runRevertCheck() {
       if (readOnlyActive) return [];
       var body = doc && doc.body;
       if (!body) return [];
       var pageText = ns.replay.pageTextOf(body);
-      var ids = ns.replay.revertedHandledEditIds(refreshItems(), pageText);
+      // The page's markup goes in beside its text: a handled edit whose words
+      // landed and whose bold or italic did not is also a change that is not on
+      // the page, and text alone cannot see that (2026-09-11).
+      var options = ns.replay.pageCheckOptions(body);
+      var items = refreshItems();
+      var ids = ns.replay.revertedHandledEditIds(items, pageText, options).filter(function (id) {
+        return !checkReopened[id];
+      });
       counters.revertChecks += 1;
       ids.forEach(function (id) {
+        checkReopened[id] = true;
+        var item = null;
+        for (var i = 0; i < items.length; i += 1) {
+          if (items[i][ns.record.FIELD.ID] === id) item = items[i];
+        }
+        // Which of the check's sentences this item gets, and the line the card
+        // shows with it. Both come from replay, so a new reason arrives here
+        // already carrying its own words rather than needing a branch added.
+        var note = ns.replay.pageCheckNoteFor(item, pageText, options) || ns.replay.REVERTED_EDIT_NOTE;
         done.reopen(id, {
-          note: ns.replay.REVERTED_EDIT_NOTE,
-          notice: "This change was undone on the page. The item is open again."
+          note: note,
+          notice: ns.replay.pageCheckNoticeFor(note),
+          pageCheck: true
         });
         counters.revertReopens += 1;
       });
+      // A reopened item is outstanding again, so its region gets compared
+      // again. That is what puts the reviewer's bold or italic back on a page
+      // whose rebuild dropped it: replay writes the record's markup, and an
+      // item is only replayed while it is outstanding.
+      //
+      // The refresh is the load-bearing half. Replay reads the `items` CACHE,
+      // and this function filled that cache before the reopens, so a pass
+      // scheduled without it reads every reopened item as still handled and
+      // skips it ("not outstanding").
+      if (ids.length) {
+        refreshItems();
+        ns.replay.schedule(ns.replay.REASON.REPLY, { immediate: true });
+      }
       return ids;
     }
 
@@ -27507,6 +33501,30 @@
       // The revert check the settling window runs on its own. Exposed so a test
       // can run it at a known moment rather than racing the timer.
       revertCheck: runRevertCheck,
+      /** Hidden for a presentation? Read it, or set it, the way the chord does. */
+      present: function (next) {
+        if (next !== undefined) rail.setPresenting(!!next);
+        return rail.isPresenting();
+      },
+      /**
+       * How long a LAHE reload waits after the reviewer last touched anything.
+       *
+       * Read it, or set it. A browser test shortens it rather than sitting out
+       * ten real seconds; INTERACTION_BUSY_MS is the only place the real number
+       * is written.
+       */
+      interactionBusy: function (ms) {
+        if (typeof ms === "number" && ms >= 0) interactionBusyMs = ms;
+        return interactionBusyMs;
+      },
+      /** How long ago that was, so a spec can see the guard is actually armed. */
+      sinceInteraction: sinceInteraction,
+      // The change marks, as the library sees them: the keys wearing one right
+      // now, and a way to run the comparison at a known moment.
+      changedBlocks: function () {
+        return comments.highlights ? comments.highlights.changedKeys() : [];
+      },
+      paintWhatChanged: paintWhatChanged,
       sync: sync,
       exporter: exporter,
       editing: editing,
@@ -27651,6 +33669,14 @@
       // The rail, which is inside a closed shadow root and cannot be reached
       // with a selector.
       rail: handle.rail,
+      // Present mode, read or set: a spec (and a reviewer's own console) asks
+      // the same way the chord and the menu item do.
+      present: handle.present,
+      // The reload guard's clock: a spec shortens the window rather than
+      // sitting out ten real seconds, and can see how long ago the reviewer
+      // last touched anything.
+      interactionBusy: handle.interactionBusy,
+      sinceInteraction: handle.sinceInteraction,
       status: function () {
         return handle.rail.getStatusLine();
       },
@@ -27759,9 +33785,15 @@
     return boot({ script: ownScript });
   }
 
-  var api = {
+  api = {
     VERSION: VERSION,
     GLOBAL: GLOBAL,
+    // Why this page has no rail on it, or null when it has one. The ONLY value
+    // it takes today is SKIPPED_FRAMED, and it is static: nothing sets it back.
+    skipped: skipped,
+    SKIPPED_FRAMED: SKIPPED_FRAMED,
+    isFramed: isFramed,
+    frameDecision: frameDecision,
     boot: boot,
     booted: function () {
       return current;
