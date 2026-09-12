@@ -131,6 +131,10 @@
       root.LAHE.highlight,
       root.LAHE.listeners,
       root.LAHE.protect,
+      // comments.js loads before this file (manifest order), and its heading
+      // walk is the one an edit's context.heading uses too, so the two record
+      // kinds cannot disagree about which heading a block sits under.
+      root.LAHE.comments,
       // replay.js loads AFTER this file (it depends on everything), so it is
       // resolved when a pass is scheduled rather than when this module loads.
       function () {
@@ -152,6 +156,7 @@
       require("./highlight.js"),
       require("./listeners.js"),
       require("./protect.js"),
+      require("./comments.js"),
       function () {
         return require("./replay.js");
       }
@@ -171,6 +176,7 @@
   highlightModule,
   listeners,
   protect,
+  commentsModule,
   replayRef
 ) {
   "use strict";
@@ -1735,8 +1741,15 @@
       return region;
     }
 
+    // ONE WALK FOR BOTH RECORD KINDS. comments.js owns the heading walk (it
+    // looks inside earlier siblings, not only at them, since 2026-09-11); an
+    // edit's context.heading comes from the same function so a comment and a
+    // hand edit on one block can never name different headings.
     function headingTextFor(element) {
       if (!element) return null;
+      if (commentsModule && typeof commentsModule.headingTextFor === "function") {
+        return commentsModule.headingTextFor(element, doc);
+      }
       var el = element.previousElementSibling;
       while (el) {
         if (/^H[1-6]$/.test(el.tagName)) return normalize.normalizeText(el.textContent || "");
