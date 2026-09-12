@@ -312,6 +312,9 @@
     for (var i = 0; i < found.length && withText.length <= MAX_BLOCKS_SCANNED; i += 1) {
       var el = found[i];
       if (markers.isInsideOverlay(el)) continue;
+      // A live region, a hidden region, or anything announcing that it is a
+      // copy rather than the page. See isInsideMirror.
+      if (isInsideMirror(el)) continue;
       var text = "";
       try {
         text = normalize.normalizeText(el.textContent || "");
@@ -329,6 +332,84 @@
       out.push(withText[j]);
     }
     return out;
+  }
+
+  // ---------------------------------------------------------------------------
+  // A MIRROR OF THE PAGE'S TEXT IS NOT A CHANGE
+  // ---------------------------------------------------------------------------
+  //
+  // reveal.js keeps an off-screen announcer, `div.aria-status` with
+  // aria-live="polite", and copies the current slide's words into it for screen
+  // readers. So an agent rewording the slide the presenter is standing on
+  // changes the page in two places, and the change mark painted both: the
+  // paragraph, and a copy of the paragraph nobody can see. The reveal spec used
+  // to sidestep it by editing a slide the deck was not sitting on, which is a
+  // test walking around a bug rather than reporting it.
+  //
+  // Anything a page keeps as a copy of its own text announces itself the same
+  // way, because the copy exists for assistive technology and has to say so:
+  //
+  //   aria-live (any value)      a region that announces its own changes
+  //   role=status|alert|log      the three roles that are live by definition
+  //
+  // "HIDDEN" IS NOT ON THAT LIST, and reveal is the reason for both spellings of
+  // it. A deck marks every slide that is not the current one with BOTH the
+  // hidden attribute and aria-hidden="true", which is correct of it: a slide off
+  // screen is not part of the accessible page right now. But it is still the
+  // reviewer's document, and most of what an agent changes is not on screen at
+  // the moment it lands, so reading either one as "this is a copy, ignore it"
+  // blinds the mark to nearly every real edit in a deck. Measured: with the
+  // hidden attribute on the list, a six slide deck offered six blocks to the
+  // comparison, all of them on the slide in front of the reviewer.
+  //
+  // A copy that is hidden and NOT a live region is caught at paint time instead,
+  // by its box: see isVisuallyHidden.
+  //
+  // The check walks ancestors, because the attribute is on the region and the
+  // text is in a block inside it. It runs at scan time, so a mirror is out of
+  // BOTH readings of the old page and out of the new one: it can neither be
+  // painted nor make anything else look like it moved.
+  var LIVE_ROLES = ["status", "alert", "log"];
+
+  function isInsideMirror(el) {
+    var node = el;
+    var guard = 0;
+    while (node && node.nodeType === 1 && guard < 60) {
+      if (typeof node.hasAttribute === "function") {
+        if (node.hasAttribute("aria-live")) return true;
+        var role = node.getAttribute("role");
+        if (role && LIVE_ROLES.indexOf(String(role).toLowerCase()) !== -1) return true;
+      }
+      node = node.parentNode;
+      guard += 1;
+    }
+    return false;
+  }
+
+  /**
+   * The other half of the same rule: the `.sr-only` convention.
+   *
+   * A screen-reader-only copy is a real, laid-out element one pixel square with
+   * its overflow clipped, so it has a box and the box is tiny. That is the test,
+   * and it is deliberately NOT "is this element invisible": a slide reveal has
+   * taken out of layout with display:none has no box at all, and the agent's
+   * edit to it is real news the reviewer should see when they navigate to it.
+   * getClientRects tells the two apart: none at all means out of layout, one
+   * tiny one means hidden on purpose.
+   *
+   * Cost is why this is not in the scan: it is a layout read, so it runs only
+   * for a block that is about to be painted, never for every block on the page.
+   */
+  function isVisuallyHidden(el) {
+    if (!el || typeof el.getBoundingClientRect !== "function") return false;
+
+    try {
+      if (typeof el.getClientRects === "function" && el.getClientRects().length === 0) return false;
+      var rect = el.getBoundingClientRect();
+      return rect.width <= 1 && rect.height <= 1;
+    } catch (error) {
+      return false;
+    }
   }
 
   /**
@@ -2746,6 +2827,8 @@
     looksLikeACounter: looksLikeACounter,
     selfChangingBlocks: selfChangingBlocks,
     isExcludedBlock: isExcludedBlock,
+    isInsideMirror: isInsideMirror,
+    isVisuallyHidden: isVisuallyHidden,
     blockPath: blockPath,
     noteStableBlocks: noteStableBlocks,
     stableBlocks: stableBlocks,

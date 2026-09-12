@@ -237,3 +237,73 @@ test("only the agent's rebuild is read back: any other reload reports nothing", 
     "and refused on the way in, because no agent edit is behind it"
   );
 });
+
+// ---------------------------------------------------------------------------
+// A mirror of the page's text is not a change
+// ---------------------------------------------------------------------------
+//
+// reveal.js copies the current slide's words into an off-screen aria-live
+// region for screen readers. An agent rewording that slide changes the page in
+// two places, and only one of them is somewhere a person is looking.
+
+function fakeElement(attrs, parent) {
+  const values = attrs || {};
+  return {
+    nodeType: 1,
+    tagName: "DIV",
+    parentNode: parent || null,
+    hasAttribute: (name) => Object.prototype.hasOwnProperty.call(values, name),
+    getAttribute: (name) => (Object.prototype.hasOwnProperty.call(values, name) ? values[name] : null)
+  };
+}
+
+test("a block inside a live region, or a hidden one, is not the page changing", () => {
+  const cases = [
+    { "aria-live": "polite" },
+    { "aria-live": "assertive" },
+    { role: "status" },
+    { role: "alert" },
+    { role: "log" }
+  ];
+  cases.forEach((attrs) => {
+    const announcer = fakeElement(attrs, fakeElement({}, null));
+    const block = fakeElement({}, announcer);
+    assert.equal(sync.isInsideMirror(block), true, JSON.stringify(attrs) + " marks a copy, not the page");
+  });
+});
+
+test("an off-screen slide is the page, not a copy of it", () => {
+  const main = fakeElement({}, null);
+  assert.equal(sync.isInsideMirror(fakeElement({}, main)), false);
+  assert.equal(sync.isInsideMirror(fakeElement({ role: "main" }, main)), false);
+  assert.equal(sync.isInsideMirror(null), false);
+  // reveal marks every slide that is not the current one with BOTH the hidden
+  // attribute and aria-hidden. Those are the reviewer's own slides, and most of
+  // what an agent changes is not on screen when it lands, so neither spelling
+  // may read as a mirror.
+  const offScreenSlide = fakeElement({ "aria-hidden": "true", hidden: "" }, main);
+  assert.equal(sync.isInsideMirror(fakeElement({}, offScreenSlide)), false);
+});
+
+test("a one pixel box is a screen-reader copy; no box at all is a hidden slide", () => {
+  const srOnly = {
+    getClientRects: () => [{ width: 1, height: 1 }],
+    getBoundingClientRect: () => ({ width: 1, height: 1 })
+  };
+  const takenOutOfLayout = {
+    getClientRects: () => [],
+    getBoundingClientRect: () => ({ width: 0, height: 0 })
+  };
+  const realParagraph = {
+    getClientRects: () => [{ width: 600, height: 48 }],
+    getBoundingClientRect: () => ({ width: 600, height: 48 })
+  };
+
+  assert.equal(sync.isVisuallyHidden(srOnly), true);
+  assert.equal(
+    sync.isVisuallyHidden(takenOutOfLayout),
+    false,
+    "a slide reveal has taken out of layout still carries news worth painting"
+  );
+  assert.equal(sync.isVisuallyHidden(realParagraph), false);
+});

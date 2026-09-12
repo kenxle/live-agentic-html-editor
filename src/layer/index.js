@@ -1222,6 +1222,10 @@
         // that rewrites itself. The old page said which ones those were, by
         // where they sit and by the text they wore. See sync.isExcludedBlock.
         if (ns.sync.isExcludedBlock(before, entries[index].text, ns.sync.blockPath(el))) return;
+        // The screen-reader copy, checked here rather than in the scan because
+        // it is a layout read: one per block about to be painted, not one per
+        // block on the page. See sync.isVisuallyHidden.
+        if (ns.sync.isVisuallyHidden(el)) return;
         if (blockIsBusy(el)) return;
         var range = doc.createRange();
         range.selectNodeContents(el);

@@ -634,6 +634,30 @@ test.describe("the speaker-notes window does not start a second review", () => {
   });
 });
 
+/**
+ * Wait until the deck has been read twice: once at boot, once when replay's
+ * settling window closed. Everything the deck redraws by itself gives itself
+ * away between those two readings.
+ */
+async function readTwice(page) {
+  await pollPage(page, () => window.LAHE.sync.stableBlocks() !== null, undefined, {
+    message: "the deck to be read once at boot"
+  });
+  const firstReading = await page.evaluate(() => window.LAHE.sync.stableBlocks().join("|"));
+  await pollPage(
+    page,
+    (was) => {
+      const now = window.LAHE.sync.stableBlocks();
+      return !!now && now.join("|") !== was;
+    },
+    firstReading,
+    {
+      message: "the settled reading to catch the deck moving on its own",
+      timeoutMs: replayModule.SETTLE_MS + 10000
+    }
+  );
+}
+
 // ---------------------------------------------------------------------------
 // The rebuild: what the agent changed, and what the deck changes by itself
 // ---------------------------------------------------------------------------
@@ -641,6 +665,9 @@ test.describe("the speaker-notes window does not start a second review", () => {
 const REBUILT_PARA = "Measure the days you ran. The miles take care of themselves once the days are steady, and they will be.";
 const ADDED_HEADING = "One more thing";
 const ADDED_PARA = "A slide the agent added in answer to the comment, which makes this deck seven slides long instead of six.";
+// The slide the deck opens on, which is the one reveal's announcer is carrying.
+const SUBTITLE_BEFORE = "A six slide deck, reviewed live.";
+const SUBTITLE_AFTER = "A six slide deck, reviewed live while the presenter is standing on this very slide.";
 
 test.describe("a rebuilt deck paints the agent's paragraph and nothing the deck redraws itself", () => {
   let staged;
@@ -648,15 +675,17 @@ test.describe("a rebuilt deck paints the agent's paragraph and nothing the deck 
   let service;
   let token;
 
-  // The rebuild marker is the document TITLE, not anything on a slide.
+  // The rebuild marker is the document TITLE, not anything on a slide, so that
+  // what the mark paints is only ever the agent's edit and never the marker.
   //
-  // The first version of this test marked the editions on the deck's subtitle,
-  // and reveal painted two extra things: the subtitle itself, correctly, and
-  // reveal's own `.aria-status` live region, which mirrors the text of whatever
-  // slide the presenter is on. Both are honest answers to a changed subtitle,
-  // and neither is what this test is asking about. Marking the title keeps the
-  // question to one paragraph, and the paragraph is on slide four while the
-  // deck sits on slide one, so the announcer is not carrying it either.
+  // The announcer is the thing this pair of tests is really about. reveal keeps
+  // a `div.aria-status` with aria-live="polite" and copies the current slide's
+  // words into it for screen readers, so an agent rewording the slide the
+  // presenter is standing on changes the page in TWO places. The second test
+  // below does exactly that and asks for exactly one mark. The first one edits a
+  // slide the deck is not sitting on, which the announcer is not carrying, and
+  // that case is kept because it is the ordinary one: most of what an agent
+  // changes is not on screen at the moment it lands.
   function edition(html, marker, paragraph) {
     const withEdition = html.replace(
       "<title>A real reveal.js deck, under review</title>",
@@ -679,6 +708,16 @@ test.describe("a rebuilt deck paints the agent's paragraph and nothing the deck 
           "</p>\n" +
           "      </section>\n\n    </div>\n  </div>"
       );
+  }
+
+  /**
+   * The other rebuild: reword the paragraph on the slide the deck is SITTING
+   * ON, and change nothing else. One paragraph in, one mark expected.
+   */
+  function editionOnThisSlide(html, marker, paragraph) {
+    return html
+      .replace("<title>A real reveal.js deck, under review</title>", "<title>" + marker + "</title>")
+      .replace(/<p id="deck-subtitle">[^<]*<\/p>/, '<p id="deck-subtitle">' + paragraph + "</p>");
   }
 
   function write(filePath, html) {
@@ -730,26 +769,11 @@ test.describe("a rebuilt deck paints the agent's paragraph and nothing the deck 
       message: "the first poll to establish the baseline mtime"
     });
 
-    // The page has to be read TWICE before the rebuild: once at boot, once when
+    // The deck has to be read TWICE before the rebuild: once at boot, once when
     // the settling window closes. The second reading is what gives the deck's
     // own moving parts away, and there are three of them here: the countdown,
     // the status line, and reveal's own slide number.
-    await pollPage(page, () => window.LAHE.sync.stableBlocks() !== null, undefined, {
-      message: "the deck to be read once at boot"
-    });
-    const firstReading = await page.evaluate(() => window.LAHE.sync.stableBlocks().join("|"));
-    await pollPage(
-      page,
-      (was) => {
-        const now = window.LAHE.sync.stableBlocks();
-        return !!now && now.join("|") !== was;
-      },
-      firstReading,
-      {
-        message: "the settled reading to catch the deck moving on its own",
-        timeoutMs: replayModule.SETTLE_MS + 10000
-      }
-    );
+    await readTwice(page);
 
     write(staged.pagePath, edition(tagged, "Second edition", REBUILT_PARA));
     await pollPage(page, () => document.title === "Second edition", undefined, {
@@ -786,5 +810,58 @@ test.describe("a rebuilt deck paints the agent's paragraph and nothing the deck 
     }));
     expect(stillMoving.slideNumber, "the deck is seven slides long after the rebuild").toContain("7");
     expect(stillMoving.clock, "and the countdown is still counting").not.toBe("0:00");
+  });
+  test("the slide the presenter is standing on is marked once, not once per copy of it", async ({ page }) => {
+    const tagged = deckWithScriptTag(FIXTURE_HTML, service.url, token);
+    write(staged.pagePath, editionOnThisSlide(tagged, "Subtitle first edition", SUBTITLE_BEFORE));
+
+    await page.goto(pages.origin + staged.pageUrlPath);
+    await deckReady(page);
+    await pollPage(page, () => !!(window.__lahe && window.__lahe.booted), undefined, {
+      message: "the layer to boot from the deck's script tag"
+    });
+    await pollPage(page, () => !!window.__lahe.handle.sync.status().targetMtime, undefined, {
+      message: "the first poll to establish the baseline mtime"
+    });
+
+    // reveal really is carrying the words of the slide in front of us. If this
+    // ever stops being true, the test below stops asking anything and this line
+    // is what says so.
+    await pollPage(
+      page,
+      (text) => {
+        const announcer = document.querySelector(".aria-status");
+        return !!announcer && announcer.textContent.indexOf(text) !== -1;
+      },
+      SUBTITLE_BEFORE,
+      { message: "reveal's announcer to be carrying the current slide's words" }
+    );
+
+    await readTwice(page);
+
+    write(staged.pagePath, editionOnThisSlide(tagged, "Subtitle second edition", SUBTITLE_AFTER));
+    await pollPage(page, () => document.title === "Subtitle second edition", undefined, {
+      message: "the deck to reload itself onto the rebuilt file",
+      timeoutMs: 20000
+    });
+    await deckReady(page);
+    await pollPage(page, () => !!(window.__lahe && window.__lahe.booted), undefined, {
+      message: "the layer to boot again after the reload"
+    });
+    await pollPage(page, () => window.__lahe.handle.changedBlocks().length > 0, undefined, {
+      message: "the changed block to be marked",
+      timeoutMs: replayModule.SETTLE_MS + 10000
+    });
+
+    // ONE mark, on the paragraph. The announcer holds the same new sentence and
+    // is not a second thing the agent changed.
+    expect(await paintedLabels(page, CHANGED_NAMES), "the subtitle, once").toEqual(["#deck-subtitle"]);
+    expect(
+      await page.evaluate(
+        (text) => document.querySelector(".aria-status").textContent.indexOf(text) !== -1,
+        SUBTITLE_AFTER
+      ),
+      "and the announcer really did carry the new words too"
+    ).toBe(true);
   });
 });
