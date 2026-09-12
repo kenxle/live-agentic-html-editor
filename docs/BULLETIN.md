@@ -5,6 +5,47 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
+- [ ] @anyone 2026-09-11 LAHE-default-doc-style -- **The St. Clair AI documentation
+  style becomes the default look for new documents LAHE puts in front of Ken.**
+  After the fingerprinting build (docs/ongoing/FINGERPRINTING_BUILD.md) lands.
+  Ken: "Lately I've been getting a lot of brand new documents generated just to
+  throw things in front of me to look at and comment on, and I love it. I want
+  the St. Clair AI style for documents to be the default for those new ones.
+  Anything that's already styled is already styled; we don't touch that."
+
+  The style source is `~/Documents/workspace/personal/projects/agent_storefront/STYLE_GUIDE.md`
+  (summary, 2026-09-09) with `brand/BRAND_KIT.md` and `site/index.html` as the
+  reference implementation. Colors: ink #1f1e1a, ink faint #6b6860, white ground,
+  purple #46188c as the one accent, cobalt #0760c7 for structure, cobalt tint
+  #e6effc for code blocks and table headers, sage #8fb5a0 bullets, sage tint
+  #e7f1ed for blockquote panels, link #6d28d9. Type: Schibsted Grotesk 600/700
+  headings in sentence case, Hanken Grotesk 400/500 body at 17 to 18px, line
+  height 1.55 to 1.6, measure 62 to 68ch. Tables over callouts, full borders,
+  tinted header row, no zebra. Never: em dashes, pills, gradients, single-side
+  colored borders, shadows, all caps, stretched type.
+
+  Two surfaces, and the rule for each:
+
+  1. The Markdown renderer (`src/service/markdown.js`, the inline stylesheet
+     around line 135). Every `.md` LAHE renders gets the style. This is the
+     default for an unstyled document, so it is the whole of "new documents"
+     for Markdown.
+  2. Agent-authored HTML review pages. The lahe skill tells an agent that a page
+     it writes to put in front of Ken links one stylesheet the helper serves
+     (a `/lahe-doc.css` route, or a copy under a shared-assets skill; decide
+     which survives the zero-dependency rule and a page later saved to disk).
+     A page that already carries its own styles is never touched: the rule is
+     only for pages the agent is about to author.
+
+  Constraints: zero runtime dependencies and no network at runtime, so the two
+  fonts are either vendored under `vendor/` (both are OFL) with a system fallback
+  stack, or the default uses the fallback stack and the fonts load only when the
+  page can reach them. Decide, and say which in the README. Light and dark:
+  the guide is light-only; the renderer currently supports `prefers-color-scheme`
+  dark, so either derive a dark palette from the guide's ink and tints or keep
+  dark as the current system look and document that the brand style is light.
+  Mermaid diagrams keep working. The rail's own chrome is not part of this.
+
 - [ ] @ken 2026-09-11 LAHE-organic-discovery -- **Someone found LAHE on their own,
   days after launch.** A student in Ken's Columbia class searched, found the tool,
   and brought it up in class. Nobody pointed them to it. Ken: "i just launched it,
