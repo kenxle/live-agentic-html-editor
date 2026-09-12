@@ -460,3 +460,146 @@ test("a character of the collapsed text can be pointed back at where it came fro
   assert.equal(commentsModule.rawIndexOfCollapsed(raw, text.length + 5), -1);
   assert.equal(commentsModule.rawIndexOfCollapsed(raw, -1), -1);
 });
+
+// ---------------------------------------------------------------------------
+// The heading walk
+// ---------------------------------------------------------------------------
+//
+// Why a hand-built DOM and not jsdom: jsdom is banned repo-wide (scripts/lint.js
+// enforces it) and the walk asks a node five things only, all written out below.
+// The real-DOM half is test/browser/comments_highlights.spec.js.
+
+function node(tag, opts) {
+  const options = opts || {};
+  const el = {
+    nodeType: 1,
+    tagName: String(tag).toUpperCase(),
+    children: [],
+    parentElement: null,
+    ownText: typeof options.text === "string" ? options.text : ""
+  };
+  Object.defineProperty(el, "textContent", {
+    get() {
+      if (!this.children.length) return this.ownText;
+      return this.children.map((child) => child.textContent).join(" ");
+    }
+  });
+  Object.defineProperty(el, "previousElementSibling", {
+    get() {
+      const parent = this.parentElement;
+      if (!parent) return null;
+      const at = parent.children.indexOf(this);
+      return at <= 0 ? null : parent.children[at - 1];
+    }
+  });
+  (options.children || []).forEach((child) => {
+    child.parentElement = el;
+    el.children.push(child);
+  });
+  return el;
+}
+
+/** A page whose body holds `children`, shaped the way the walk reads a document. */
+function pageOf(children) {
+  const body = node("body", { children });
+  return { body, doc: { body } };
+}
+
+test("a heading wrapped in a sibling div is still the heading above the block", () => {
+  // The L8 tearsheet shape: the treatment's title sits inside its own wrapper,
+  // so the old walk saw a div, skipped it, and reported no heading at all.
+  const wrap = node("div", { text: "Nine clients checked in this week." });
+  const page = pageOf([
+    node("div", { children: [node("h2", { text: "3. Mark icon" })] }),
+    wrap
+  ]);
+
+  assert.equal(commentsModule.headingTextFor(wrap, page.doc), "3. Mark icon");
+});
+
+test("a heading several levels down inside an earlier sibling is found", () => {
+  const wrap = node("div", { text: "The block the reviewer clicked." });
+  const page = pageOf([
+    node("div", { children: [node("div", { children: [node("h3", { text: "Treatment two" })] })] }),
+    wrap
+  ]);
+
+  assert.equal(commentsModule.headingTextFor(wrap, page.doc), "Treatment two");
+});
+
+test("the nearest heading in document order wins, whatever its level", () => {
+  // An H4 one sibling up beats an H2 further back: the reviewer was reading
+  // the H4, and the level says nothing about how near it is.
+  const wrap = node("div", { text: "A paragraph." });
+  const page = pageOf([
+    node("h2", { text: "Section" }),
+    node("div", { children: [node("h4", { text: "The nearer one" })] }),
+    wrap
+  ]);
+
+  assert.equal(commentsModule.headingTextFor(wrap, page.doc), "The nearer one");
+});
+
+test("of two headings in one wrapper, the later one is the nearer one", () => {
+  const wrap = node("div", { text: "A paragraph." });
+  const page = pageOf([
+    node("div", {
+      children: [node("h2", { text: "First" }), node("div", { children: [node("h3", { text: "Second" })] })]
+    }),
+    wrap
+  ]);
+
+  assert.equal(commentsModule.headingTextFor(wrap, page.doc), "Second");
+});
+
+test("a sectioning ancestor's own first-child heading is the context", () => {
+  // <section><h2>Title</h2><div class="state"><div class="wrap"> : the element
+  // has no earlier sibling of its own, and neither does its parent, so the walk
+  // has to climb to the section before the heading is in reach.
+  const wrap = node("div", { text: "Nine clients checked in this week." });
+  const page = pageOf([
+    node("section", {
+      children: [node("h2", { text: "6. Blog block" }), node("div", { children: [wrap] })]
+    })
+  ]);
+
+  assert.equal(commentsModule.headingTextFor(wrap, page.doc), "6. Blog block");
+});
+
+test("the element's own heading is its content, not its context", () => {
+  const wrap = node("div", { children: [node("h2", { text: "Blog" }), node("p", { text: "Words." })] });
+  const page = pageOf([wrap]);
+
+  assert.equal(commentsModule.headingTextFor(wrap, page.doc), null);
+});
+
+test("a page with no heading above the element reports none", () => {
+  const wrap = node("div", { text: "A paragraph." });
+  const page = pageOf([node("div", { children: [node("p", { text: "Not a heading." })] }), wrap]);
+
+  assert.equal(commentsModule.headingTextFor(wrap, page.doc), null);
+  // Nothing to walk from is not a failure either.
+  assert.equal(commentsModule.headingTextFor(null, page.doc), null);
+});
+
+test("the walk is capped, so a huge page cannot stall a click", () => {
+  // One earlier sibling holding more nodes than the cap, with the heading at the
+  // very front of it: reaching it would mean inspecting every node in between.
+  const deep = [node("h2", { text: "Too far back" })];
+  for (let i = 0; i < commentsModule.HEADING_SCAN_CAP + 50; i += 1) {
+    deep.push(node("p", { text: "filler " + i }));
+  }
+  const wrap = node("div", { text: "A paragraph." });
+  const page = pageOf([node("div", { children: deep }), wrap]);
+
+  assert.equal(commentsModule.HEADING_SCAN_CAP, 2000);
+  assert.equal(commentsModule.headingTextFor(wrap, page.doc), null);
+
+  // The same page under the cap does find it, so the null above is the cap
+  // talking and not a broken walk.
+  const few = [node("h2", { text: "In reach" })];
+  for (let i = 0; i < 10; i += 1) few.push(node("p", { text: "filler " + i }));
+  const near = node("div", { text: "A paragraph." });
+  const small = pageOf([node("div", { children: few }), near]);
+  assert.equal(commentsModule.headingTextFor(near, small.doc), "In reach");
+});

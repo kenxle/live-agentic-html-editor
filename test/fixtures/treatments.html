@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Blog block, two treatments</title>
+  <style>
+    body { font: 16px/1.5 system-ui, sans-serif; margin: 2rem; }
+    .tcase { margin: 0 0 3rem; }
+    .thead h2 { margin: 0 0 0.5rem; font-size: 1.1rem; }
+    .wrap { border: 1px solid #d8dee8; padding: 1rem; }
+  </style>
+</head>
+<body>
+  <!--
+    The L8 tearsheet, reduced to what broke (docs/ongoing/FINGERPRINTING.md).
+
+    One blog block shown several ways, one treatment per section, and the block
+    itself is a bare <div class="wrap"> whose text is the same in every one of
+    them. The reviewer clicked the second treatment's wrapper and the agent had
+    to ask which treatment he meant, because the only line in review.json that
+    could have said so, context.heading, was null: each treatment's title sits
+    INSIDE a sibling <div class="thead">, and the heading walk only ever looked
+    at siblings, never into them.
+  -->
+  <h1>Blog block</h1>
+
+  <section class="tcase t1" id="t1">
+    <div class="thead"><h2>1. Ink on white</h2></div>
+    <div class="state">
+      <div class="wrap">
+        <h2>Blog</h2>
+        <p>Nine clients checked in this week.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="tcase t2" id="t2">
+    <div class="thead"><h2>2. Mark icon</h2></div>
+    <div class="state">
+      <div class="wrap">
+        <h2>Blog</h2>
+        <p>Nine clients checked in this week.</p>
+      </div>
+    </div>
+  </section>
+</body>
+</html>
