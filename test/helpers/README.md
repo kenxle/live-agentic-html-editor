@@ -58,6 +58,7 @@ into, and because a real CSP is a response header.
 | `css-reset.html` | An aggressive reset that hides list markers and strips link styling. The D12 case: the tool does not fix the page's appearance, and the artifact keeps looking like the artifact. |
 | `csp-probe.html` | Served with a real `Content-Security-Policy` header. Two variants: `block-connect` and `block-script`. |
 | `attacker.html` | A page on a second origin, offering the three shapes an attacker actually has. |
+| `reveal-deck.html` | A real reveal.js deck, loaded from `vendor/reveal.js`. Six slides, the speaker-notes plugin on, the slide number on, and a countdown in the corner. It is the only fixture that reaches OUT of `test/fixtures/` (into `vendor/`), so it is served from the repo root rather than the fixture root: `startStaticServer({ root: REPO_ROOT })`. See `test/browser/reveal_deck.spec.js`. |
 
 Every element a test may target carries `data-region`. The repaint targets carry
 `data-repaint-target`.

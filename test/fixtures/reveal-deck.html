@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>A real reveal.js deck, under review</title>
+
+  <!--
+    The real library, not a stand-in.
+
+    Four bugs came out of Ken reviewing a reveal deck with this tool, and each
+    one was first fixed against a fixture that imitated one of reveal's habits:
+    its document-level keydown listener, its speaker-notes window, its slide
+    number redrawing itself. Those fixtures state the condition and are worth
+    keeping. This one loads reveal itself, so a future release that changes how
+    the deck listens for keys fails here instead of in a live presentation.
+
+    Paths are relative and climb out of test/fixtures/ into vendor/, so this
+    page is served from the REPO ROOT, not from the usual fixture root:
+
+      startStaticServer({ root: REPO_ROOT })
+      server.urlFor("test/fixtures/reveal-deck.html")
+
+    See test/browser/reveal_deck.spec.js.
+  -->
+  <link rel="stylesheet" href="../../vendor/reveal.js/dist/reset.css" />
+  <link rel="stylesheet" href="../../vendor/reveal.js/dist/reveal.css" />
+  <link rel="stylesheet" href="../../vendor/reveal.js/dist/theme/serif.css" />
+
+  <style>
+    /* The countdown and the status line sit in a corner the way a presenter's
+       clock does, outside the slides, redrawing themselves forever. Together
+       with reveal's own slide number they are what the change mark must never
+       mistake for the agent's work. */
+    #deck-clock-strip {
+      position: fixed;
+      left: 12px;
+      bottom: 12px;
+      z-index: 40;
+      font: 14px/1.4 system-ui, sans-serif;
+      color: #333;
+      background: rgba(255, 255, 255, 0.85);
+      padding: 6px 10px;
+      border-radius: 6px;
+    }
+    #deck-clock-strip p { margin: 0; }
+  </style>
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+
+      <section id="slide-title">
+        <h1 id="deck-title">Coming back from a layoff</h1>
+        <p id="deck-subtitle">A six slide deck, reviewed live.</p>
+      </section>
+
+      <!-- The slide the reviewer talks about: a paragraph long enough to wrap
+           over several lines at reveal's type size, so an upward drag has real
+           line boundaries to pause at, and a list beside it. -->
+      <section id="slide-passage">
+        <h2 id="passage-heading">The third week</h2>
+        <p id="passage-para">Runners come back too fast after a layoff, and the third week is where it shows, because the legs feel ready a good while before the tendons agree with them.</p>
+        <ul id="passage-list">
+          <li id="passage-item-1">Start at half the old volume.</li>
+          <li id="passage-item-2">Add ten percent a week, not more.</li>
+          <li id="passage-item-3">Walk the first mile every time.</li>
+        </ul>
+        <aside class="notes" id="passage-notes">Say the tendon line slowly. It is the one people remember, and it is the one they argue with.</aside>
+      </section>
+
+      <section id="slide-three">
+        <h2 id="three-heading">What the first month looks like</h2>
+        <p id="three-para">The first month is not training. It is showing up often enough that the body stops treating a run as an emergency.</p>
+      </section>
+
+      <section id="slide-four">
+        <h2 id="four-heading">What to measure</h2>
+        <p id="four-para">Measure the days you ran, not the miles you ran. The miles take care of themselves once the days are steady.</p>
+      </section>
+
+      <section id="slide-five">
+        <h2 id="five-heading">The pace band</h2>
+        <p id="five-para">A pace band is a range, not a number, and the range is wide on purpose while the legs are still deciding.</p>
+      </section>
+
+      <section id="slide-six">
+        <h2 id="six-heading">Where to start tomorrow</h2>
+        <p id="six-para">Twenty minutes, easy, and the willingness to stop at twenty minutes even when it feels good.</p>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- The page's own moving parts. ticking-counter.js rewrites #clock and
+       #status forever; it also rewrites #pagenum when one exists, and this deck
+       deliberately has none, because reveal draws the real slide number and the
+       real one is what the test wants to watch. -->
+  <div id="deck-clock-strip">
+    <p id="clock">0:00</p>
+    <p id="status">Recalculating the pace band for this week right now.</p>
+  </div>
+
+  <script src="../../vendor/reveal.js/dist/reveal.js"></script>
+  <script src="../../vendor/reveal.js/plugin/notes/notes.js"></script>
+  <script src="assets/ticking-counter.js"></script>
+  <script>
+    // hash: true is the real configuration Ken presents with, and it is the one
+    // that makes "did the slide change" readable from outside: the URL carries
+    // the answer as well as Reveal.getIndices().
+    // transition: none keeps the assertions about what is on screen free of an
+    // animation frame's worth of guessing.
+    // slideNumber "c/t" is current over total, so the display carries the deck's
+    // LENGTH as well as the presenter's position. A rebuild that adds a slide
+    // therefore rewrites it, which is what makes "the change mark never paints
+    // the slide number" a claim with teeth rather than a claim about an element
+    // that happened to sit still.
+    Reveal.initialize({
+      hash: true,
+      slideNumber: "c/t",
+      transition: "none",
+      plugins: [RevealNotes]
+    }).then(function () {
+      window.__deckReady = true;
+    });
+  </script>
+</body>
+</html>
