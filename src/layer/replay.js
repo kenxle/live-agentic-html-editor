@@ -78,7 +78,9 @@
       root.LAHE.failures,
       root.LAHE.anchor,
       root.LAHE.protect,
-      root.LAHE.markers
+      root.LAHE.markers,
+      root.LAHE.pointing,
+      root.LAHE.highlight
     );
   } else {
     module.exports = factory(
@@ -89,7 +91,9 @@
       require("../shared/failures.js"),
       require("./anchor.js"),
       require("./protect.js"),
-      require("../shared/markers.js")
+      require("../shared/markers.js"),
+      require("./pointing.js"),
+      require("./highlight.js")
     );
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function (
@@ -100,7 +104,9 @@
   failures,
   anchorEngine,
   protectModule,
-  markers
+  markers,
+  pointingModule,
+  highlightModule
 ) {
   "use strict";
 
@@ -138,7 +144,9 @@
     regionsConflicted: 0, // branch four: flagged, nothing written
     regionsLost: 0, // the anchor bound to zero matches, or to more than one
     regionsLostDeferred: 0, // a lost verdict held back while the page was still settling
-    regionsLostCleared: 0 // a later pass found the anchor, so the lost state ended
+    regionsLostCleared: 0, // a later pass found the anchor, so the lost state ended
+    regionsProbable: 0, // a lost comment was pointed at its probable place instead
+    regionsProbableCleared: 0 // a later pass found it for certain, so the guess ended
   };
 
   function resetCounters() {
@@ -243,6 +251,11 @@
   //             fold_replies, merge_store, retire_handled, update_rail. A
   //             missing hook is a no-op and is reported as one in the summary,
   //             never silently skipped
+  //   pointing  the POINT ladder (1C's pointing.js), used for one thing: where
+  //             a comment whose words are gone should point. It never places a
+  //             write. Injected so a test can hand over a fake verdict
+  //   highlights the paint surface (1D's highlight.js shared instance). Only
+  //             the probable paint goes through it from here
   var context = {
     root: null,
     items: null,
@@ -252,7 +265,9 @@
     document: null,
     editing: null,
     persist: null,
-    hooks: null
+    hooks: null,
+    pointing: null,
+    highlights: null
   };
 
   /** Write one record back to durable storage, when a caller gave us the seam. */
@@ -292,6 +307,7 @@
     });
     if (!merged.anchor) merged.anchor = anchorEngine;
     if (!merged.protect) merged.protect = protectModule;
+    if (!merged.pointing) merged.pointing = pointingModule || null;
     if (!merged.document && typeof document !== "undefined") merged.document = document;
     if (!merged.root && merged.document) merged.root = merged.document;
     return merged;
@@ -1261,6 +1277,200 @@
   // node is not the protected one.
   var lastElement = Object.create(null);
 
+  // ---------------------------------------------------------------------------
+  // The probable place: the point ladder, for the reviewer only
+  // ---------------------------------------------------------------------------
+  //
+  // TWO LADDERS, AND THEY SERVE DIFFERENT PEOPLE. The write ladder (the anchor
+  // engine, above) serves the AGENT: it decides where an edit may be written,
+  // and it refuses unless exactly one element is certainly the right one,
+  // because a wrong write destroys somebody's words. The point ladder
+  // (pointing.js) serves the REVIEWER: it decides where a comment should point
+  // on the page in front of them, and it is allowed a best guess, because a
+  // wrong guess costs a mark in the wrong place and nothing else.
+  //
+  // So a probable place changes what the reviewer SEES and nothing else. The
+  // record keeps its lost stamp, review.json still says lost, and the agent is
+  // still told the passage could not be matched: the agent must not write on a
+  // guess (the build doc's S8). Only the page shows it, in a visibly weaker
+  // paint, with the word "probable" on the card.
+  //
+  // Comments and notes only. An edit, a delete and a format-only record all
+  // exist to change text, and pointing one at a guess is one accepted click
+  // away from writing on it. They refuse and stay refused.
+  var GUESSABLE_KINDS = {};
+  GUESSABLE_KINDS[record.KIND.COMMENT] = 1;
+  GUESSABLE_KINDS[record.KIND.NOTE] = 1;
+
+  // Card copy. The word first, always, so the reviewer reads "probable" before
+  // they read why.
+  var PROBABLE_NOTICE = "probable";
+
+  // id -> {element, reason}. What the page is showing a guess for right now.
+  var probable = Object.create(null);
+
+  // The assertion behind S8, in code rather than in a comment. Everything that
+  // reaches the page's text (writeRegion) refuses while this is set, so a
+  // future edit that lets the probable path fall through into a write fails
+  // loudly here instead of quietly rewriting a paragraph nobody matched.
+  var guessing = false;
+
+  /** Short, plain words for why this element is the probable one. */
+  function probableReason(guess) {
+    if (!guess) return "";
+    // The ladder could not tell the candidates apart on identity and used the
+    // remembered place to break the tie. That is exactly the reworded-passage
+    // case, so say it the way the reviewer would.
+    if (guess.via === "position") return "same place, words changed";
+    var reasons = (guess.reasons || []).slice(0, 2);
+    if (!reasons.length) return "closest match on the page";
+    return reasons.join(" and ") + " match, words changed";
+  }
+
+  function highlightsIn(ctx) {
+    if (ctx && ctx.highlights) return ctx.highlights;
+    var shared = highlightModule && highlightModule.shared;
+    if (!shared || typeof shared.paint !== "function") return null;
+    if (typeof shared.supported === "function" && !shared.supported()) return null;
+    return shared;
+  }
+
+  function rangeOver(ctx, element) {
+    var doc = ctx.document || (typeof document !== "undefined" ? document : null);
+    if (!doc || typeof doc.createRange !== "function" || !element) return null;
+    var range = doc.createRange();
+    range.selectNodeContents(element);
+    return range;
+  }
+
+  function paintAs(ctx, id, element, name) {
+    var highlights = highlightsIn(ctx);
+    if (!highlights) return false;
+    var range = rangeOver(ctx, element);
+    if (!range) return false;
+    highlights.paint(id, range, name);
+    return true;
+  }
+
+  /**
+   * Point this record at its probable place, when it has one.
+   *
+   * Called only from the branch that is about to stamp the record lost, and it
+   * does not change that: the lost stamp is the agent's answer and it stands.
+   *
+   * @returns {Object|null} {element, reason} when a guess was painted
+   */
+  function bindProbable(item, ref, ctx) {
+    var id = item[record.FIELD.ID];
+    if (!ref || !GUESSABLE_KINDS[item[record.FIELD.KIND]]) return null;
+    var ladder = ctx.pointing;
+    if (!ladder || typeof ladder.bestGuess !== "function") return null;
+    var guess;
+    guessing = true;
+    try {
+      // The floor and the margin are pointing's own, and they are not restated
+      // here: a second threshold in this file would be a second opinion about
+      // how sure the ladder is. An element back means it cleared its own bar.
+      guess = ladder.bestGuess(ref, ctx.root);
+    } finally {
+      guessing = false;
+    }
+    if (!guess || !guess.element) {
+      clearProbable(ctx, id, null);
+      return null;
+    }
+    var standing = probable[id];
+    var reason = probableReason(guess);
+    probable[id] = { element: guess.element, reason: reason };
+    if (!standing || standing.element !== guess.element) counters.regionsProbable += 1;
+    paintAs(ctx, id, guess.element, highlightModule.NAME.PROBABLE);
+    callCard(ctx, "setCardNotice", id, PROBABLE_NOTICE + ": " + reason);
+    return probable[id];
+  }
+
+  /**
+   * The guess ends, because the region was found for certain.
+   *
+   * The certain find is what the stamp buys: the agent carried data-lahe-id
+   * into the source, the page rebuilt with it, and the write ladder bound
+   * without asking anyone to guess. So the weaker paint goes, the word
+   * "probable" comes off the card, and the passage is painted like any other
+   * commented passage.
+   *
+   * @param {Element|null} element the element that WAS found, when there is one
+   */
+  function clearProbable(ctx, id, element) {
+    if (!probable[id]) return false;
+    delete probable[id];
+    counters.regionsProbableCleared += 1;
+    callCard(ctx, "setCardNotice", id, null);
+    if (element) paintAs(ctx, id, element, highlightModule.NAME.COMMENT);
+    else {
+      var highlights = highlightsIn(ctx);
+      if (highlights && typeof highlights.clear === "function") highlights.clear(id);
+    }
+    return true;
+  }
+
+  /**
+   * The element the agent's stamp names, when the write ladder refused it only
+   * because the words under it changed.
+   *
+   * THIS IS THE CASE THE STAMP WAS ADDED FOR. The reviewer comments on a
+   * sentence, the agent rewrites that sentence (which is what they asked for)
+   * and carries `data-lahe-id` into the source with the rewrite, and the page
+   * rebuilds. The words are gone, on purpose, and the id is still there on the
+   * one element that used to hold them. Ken, deciding this on 2026-09-11: the
+   * rebuilt page is "found with certainty, not probability".
+   *
+   * The write ladder still says no, and it is right to: the anchor engine's own
+   * note on that refusal is "a write may not land on a maybe", because a stamp
+   * over different words can also mean the agent stamped the wrong twin (S2).
+   * A comment writes nothing, so it is not a maybe for a comment. It is where
+   * the comment lives, and this is the only place that difference is drawn.
+   *
+   * Comments and notes only, one element only. Two elements carrying the id is
+   * S1's ambiguity and gets no answer here either.
+   *
+   * @returns {Element|null}
+   */
+  function stampedPlace(item, ref, verdict, ctx) {
+    if (!ref || !GUESSABLE_KINDS[item[record.FIELD.KIND]]) return null;
+    if (!verdict || verdict.via !== "stamp" || verdict.element) return null;
+    var engine = ctx.anchor || anchorEngine;
+    if (!engine || typeof engine.findByStamp !== "function" || typeof engine.scopeOf !== "function") return null;
+    if (!engine.STAMP_REASON || verdict.reason !== engine.STAMP_REASON.TEXT_MOVED) return null;
+    var scope = engine.scopeOf(ctx.root, null);
+    if (!scope) return null;
+    var found = engine.findByStamp(scope, ref.stamp);
+    return found.length === 1 ? found[0] : null;
+  }
+
+  /**
+   * Paint a certain find that nothing else will paint.
+   *
+   * The ordinary repaint (comments.js) resolves the record's words against the
+   * page, so a passage whose words the agent rewrote comes back bare however
+   * certainly the stamp identified it. An existing mark is never disturbed: an
+   * open comment box paints its own passage louder, and that is the reviewer's
+   * current place.
+   */
+  function paintCertain(ctx, item, element) {
+    var id = item[record.FIELD.ID];
+    if (!GUESSABLE_KINDS[item[record.FIELD.KIND]]) return false;
+    var highlights = highlightsIn(ctx);
+    if (!highlights) return false;
+    if (typeof highlights.rangeFor === "function" && highlights.rangeFor(id)) return false;
+    return paintAs(ctx, id, element, highlightModule.NAME.COMMENT);
+  }
+
+  /** The probable element this record is pointing at, when it is still here. */
+  function probableElement(id) {
+    var standing = probable[id];
+    if (!standing || !standing.element) return null;
+    return standing.element.isConnected === false ? null : standing.element;
+  }
+
   /**
    * Where on the page does this record point, right now?
    *
@@ -1270,9 +1480,12 @@
    * needs it, because a handled item has no highlight left to scroll to (R37):
    * its region ref and its before/after context are all that remain.
    *
-   * A record whose anchor is LOST returns null rather than a best guess.
-   * Scrolling somewhere wrong is worse than not scrolling: the card already
-   * carries the notice saying the passage could not be found.
+   * A record whose anchor is LOST returns its PROBABLE place when the point
+   * ladder found one, and null otherwise. That is not a softening of the write
+   * ladder: nothing here is written, and the card the reviewer clicked already
+   * says "probable", so they are being taken somewhere the tool has told them
+   * it is guessing about. With no guess the old answer stands, because
+   * scrolling somewhere arbitrary is worse than not scrolling.
    *
    * @param {string} id  the record's id
    * @param {Object} [override] context override, as everywhere else here
@@ -1283,7 +1496,7 @@
     var item = itemWithId(ctx, id);
     if (!item) return null;
     var region = item[record.FIELD.REGION] || null;
-    if (region && region.lost) return null;
+    if (region && region.lost) return probableElement(id);
     // The node the last pass bound, when it is still in the document. This is
     // what carries an element pick whose text the matcher can never re-find.
     var bound = lastElement[id];
@@ -1663,13 +1876,35 @@
       var bound = lastElement[id];
       if (bound && bound.isConnected) {
         clearLost(ctx, item);
+        clearProbable(ctx, id, bound);
         element = bound;
       } else {
-        return markLost(item, verdict, ctx);
+        // The stamp, for a record that writes nothing: certain, so it is not
+        // lost and it is not a guess. See stampedPlace.
+        var stamped = stampedPlace(item, ref, verdict, ctx);
+        if (stamped) {
+          clearLost(ctx, item);
+          clearProbable(ctx, id, stamped);
+          paintCertain(ctx, item, stamped);
+          element = stamped;
+        } else {
+          // The write ladder has failed, and this is where the point ladder
+          // gets its only turn. It runs BEFORE markLost and its result is
+          // ignored by markLost, on purpose: a comment can be shown its
+          // probable place and still be reported lost, because those two facts
+          // are told to two different people. See "The probable place" above.
+          bindProbable(item, ref, ctx);
+          return markLost(item, verdict, ctx);
+        }
       }
     }
 
     lastElement[id] = element;
+
+    // Found for certain, which on a rebuilt page is what the stamp buys: the
+    // weaker paint and the word "probable" both come off, and the passage is
+    // painted like any other commented passage.
+    clearProbable(ctx, id, element);
 
     if (isProtectedNow(ctx, element)) {
       counters.regionsSkippedProtected += 1;
@@ -1813,6 +2048,20 @@
   // commit and then the next replay pass flattened the block back to one line.
   function writeRegion(element, item) {
     var kind = item[record.FIELD.KIND];
+    // S8, as an assertion rather than as a promise in a comment. A probable
+    // place is the point ladder's guess, and the one thing a guess may never
+    // receive is a write. Both halves are checked: nothing writes while the
+    // ladder is being asked, and nothing writes into the element it answered
+    // with. If a later change lets the probable path reach here, this throws in
+    // the reviewer's face instead of quietly rewriting a paragraph the tool
+    // never matched.
+    var standing = probable[item[record.FIELD.ID]];
+    if (guessing || (standing && standing.element === element)) {
+      throw new Error(
+        "replay: a probable place never receives a write. The point ladder serves the reviewer, " +
+          "the write ladder serves the agent, and this record is still lost for the agent."
+      );
+    }
     if (kind === record.KIND.DELETE) {
       if (typeof element.remove === "function") {
         element.remove();
@@ -1875,6 +2124,8 @@
     counters: counters,
     resetCounters: resetCounters,
     SETTLE_MS: SETTLE_MS,
+    PROBABLE_NOTICE: PROBABLE_NOTICE,
+    probableElement: probableElement,
     noteSettling: noteSettling,
     isSettling: isSettling,
     // The creation-time seed for the still-bound rule: an item made ON an

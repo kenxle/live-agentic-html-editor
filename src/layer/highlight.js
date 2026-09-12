@@ -86,7 +86,12 @@
     // The two names after it are the same mark, fading: see CHANGED_STEPS.
     CHANGED: PREFIX + "changed",
     CHANGED_FADING: PREFIX + "changed-fading",
-    CHANGED_FAINT: PREFIX + "changed-faint"
+    CHANGED_FAINT: PREFIX + "changed-faint",
+    // "This is probably where your comment went." The point ladder's best
+    // guess, when the words a comment was made on are no longer on the page and
+    // no stamp identifies the element. It is a guess, so it must not look like
+    // a find: see the rule beside its style below.
+    PROBABLE: PREFIX + "comment-probable"
   };
   var NAMES = [
     NAME.COMMENT,
@@ -94,7 +99,8 @@
     NAME.EMPHASIS,
     NAME.CHANGED,
     NAME.CHANGED_FADING,
-    NAME.CHANGED_FAINT
+    NAME.CHANGED_FAINT,
+    NAME.PROBABLE
   ];
 
   // How long the "here it is" wash stays up. Long enough to find with the eye
@@ -222,6 +228,29 @@
     "}",
     "::highlight(" + NAME.CHANGED_FAINT + ") {",
     "  background-color: rgba(250, 204, 21, 0.14);",
+    "  color: inherit;",
+    "}",
+    // A GUESS MUST NOT LOOK LIKE A FIND. This is the comment wash at less than
+    // half its strength with a dashed underline through it, so a reviewer
+    // scanning the page can tell at a glance which marks the tool is sure of.
+    // The card says the word "probable" beside it; this is the same statement
+    // made on the page.
+    //
+    // Two properties and no more. A ::highlight() rule only honours a short
+    // list, and the list is not the same in every engine: background-color and
+    // text-decoration are the two that Chromium, Firefox and WebKit all paint,
+    // so the whole treatment is built from those. Anything else (a border, an
+    // outline, a box-shadow) is ignored by at least one of them and would leave
+    // the guess looking exactly like a find there.
+    //
+    // No dark-scheme twin, for the same reason none of the rules above has one:
+    // these are translucent washes over the page's own text, and the text keeps
+    // its own colour, so the mark reads the same over a white page and a black
+    // one. The scheme switch (SCHEME_ATTR) is for the surfaces the library
+    // draws itself, which have their own backgrounds to get wrong.
+    "::highlight(" + NAME.PROBABLE + ") {",
+    "  background-color: rgba(60, 86, 165, 0.06);",
+    "  text-decoration: underline dashed rgba(60, 86, 165, 0.7);",
     "  color: inherit;",
     "}",
     "}",

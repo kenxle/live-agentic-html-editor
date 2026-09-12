@@ -776,3 +776,262 @@ test("formattingLost: what it compares, and what it ignores", () => {
   // Nothing to read, nothing to say.
   assert.equal(replay.formattingLost(item, null), false);
 });
+
+// ---------------------------------------------------------------------------
+// The probable place: the point ladder, for the reviewer only
+// ---------------------------------------------------------------------------
+//
+// The decision under test is "probable or lost", and it is made on the point
+// ladder's verdict, not on a threshold this file invents. So the ladder is
+// faked here: what these assert is what replay DOES with a verdict, which is
+// the half that can be wrong in a way the reviewer sees.
+
+/** A point ladder that always answers with this element, or with nothing. */
+function fakePointing(element, via) {
+  const asked = [];
+  return {
+    asked: asked,
+    bestGuess: function (ref) {
+      asked.push(ref);
+      if (!element) return { element: null };
+      return { element: element, via: via || "identity", reasons: ["classes", "parents"] };
+    }
+  };
+}
+
+/** A paint surface that records what was painted under which name. */
+function fakeHighlights() {
+  const painted = {};
+  return {
+    painted: painted,
+    supported: function () {
+      return true;
+    },
+    paint: function (id, range, name) {
+      painted[id] = { range: range, name: name };
+    },
+    clear: function (id) {
+      delete painted[id];
+      return true;
+    }
+  };
+}
+
+/** Enough of a document for a range over an element. Nothing else is used. */
+function fakeDocument() {
+  return {
+    createRange: function () {
+      const range = { node: null };
+      range.selectNodeContents = function (node) {
+        range.node = node;
+      };
+      return range;
+    }
+  };
+}
+
+test("a comment whose words are gone points at its probable place, and stays lost for the agent", () => {
+  const item = fixtures.comment();
+  const page = pageOf(["Before it.", "The trainer writes the plan every week.", "After it."]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+  const highlights = fakeHighlights();
+  const cards = fakeCards();
+  const context = {
+    root: page.root,
+    items: [anchoredItem],
+    cards: cards,
+    document: fakeDocument(),
+    highlights: highlights,
+    pointing: fakePointing(page.blocks[1], "position")
+  };
+
+  replay.resetCounters();
+  replay.noteSettling(0);
+  // The agent reworded the very sentence the comment was made on, which is the
+  // whole point of the comment. Its words are not on the page any more.
+  page.blocks[1].textContent = "Every week, the plan is written by the trainer.";
+
+  const outcome = replay.runPass(replay.REASON.MUTATION, context).results[0];
+
+  assert.equal(outcome.wrote, false, "a comment writes nothing, probable or not");
+  assert.equal(outcome.lost, true, "the agent is still told this could not be matched");
+  assert.ok(anchoredItem.region.lost, "and review.json will say so: the stamp stands");
+  assert.equal(replay.counters.regionsProbable, 1);
+
+  assert.equal(highlights.painted[item.id].name, "lahe-comment-probable", "painted weaker, on the page");
+  assert.equal(highlights.painted[item.id].range.node, page.blocks[1], "and on the reworded paragraph");
+  assert.equal(
+    cards.notices[item.id],
+    "probable: same place, words changed",
+    "the word first, then the short reason the ladder gave"
+  );
+  assert.equal(replay.locate(item.id, context), page.blocks[1], "so clicking the card goes there too");
+});
+
+test("a point ladder with no confident answer leaves the record lost and the page unmarked", () => {
+  const item = fixtures.comment();
+  const page = pageOf(["Before it.", "The trainer writes the plan every week.", "After it."]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+  const highlights = fakeHighlights();
+  const cards = fakeCards();
+  const context = {
+    root: page.root,
+    items: [anchoredItem],
+    cards: cards,
+    document: fakeDocument(),
+    highlights: highlights,
+    // Below its own floor, or two candidates inside its own margin. Either way
+    // the ladder says nothing, and replay does not second-guess it with a
+    // threshold of its own.
+    pointing: fakePointing(null)
+  };
+
+  replay.resetCounters();
+  replay.noteSettling(0);
+  page.blocks[1].textContent = "Every week, the plan is written by the trainer.";
+
+  replay.runPass(replay.REASON.MUTATION, context);
+
+  assert.equal(replay.counters.regionsLost, 1);
+  assert.equal(replay.counters.regionsProbable, 0);
+  assert.equal(highlights.painted[item.id], undefined, "nothing on the page claims to be this comment");
+  assert.equal(cards.notices[item.id], undefined, "and nothing on the card says probable");
+  assert.equal(replay.locate(item.id, context), null, "there is nowhere honest to jump to");
+});
+
+test("an edit is never pointed at a probable place, however sure the ladder is", () => {
+  const item = fixtures.edit();
+  const page = pageOf(["Before it.", item.before, "After it."]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+  const highlights = fakeHighlights();
+  const cards = fakeCards();
+  const ladder = fakePointing(page.blocks[1], "identity");
+  const context = {
+    root: page.root,
+    items: [anchoredItem],
+    cards: cards,
+    document: fakeDocument(),
+    highlights: highlights,
+    pointing: ladder
+  };
+
+  replay.resetCounters();
+  replay.noteSettling(0);
+  const before = page.blocks[1].textContent;
+  page.blocks[1].textContent = "Nothing here resembles the region any more.";
+
+  replay.runPass(replay.REASON.MUTATION, context);
+
+  assert.equal(ladder.asked.length, 0, "the ladder is not even asked for a record that writes");
+  assert.equal(replay.counters.regionsProbable, 0);
+  assert.equal(replay.counters.regionsWritten, 0, "and nothing was written");
+  assert.equal(page.blocks[1].textContent, "Nothing here resembles the region any more.", "the page is untouched");
+  assert.notEqual(page.blocks[1].textContent, before);
+  assert.equal(highlights.painted[item.id], undefined);
+  assert.equal(cards.notices[item.id], undefined);
+  assert.ok(anchoredItem.region.lost, "an edit refuses and stays refused");
+});
+
+test("a later pass that finds the passage for certain takes the guess back off", () => {
+  const item = fixtures.comment();
+  const page = pageOf(["Before it.", "The trainer writes the plan every week.", "After it."]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+  const highlights = fakeHighlights();
+  const cards = fakeCards();
+  const context = {
+    root: page.root,
+    items: [anchoredItem],
+    cards: cards,
+    document: fakeDocument(),
+    highlights: highlights,
+    pointing: fakePointing(page.blocks[1], "identity")
+  };
+
+  replay.resetCounters();
+  replay.noteSettling(0);
+  const original = page.blocks[1].textContent;
+  page.blocks[1].textContent = "Every week, the plan is written by the trainer.";
+  replay.runPass(replay.REASON.MUTATION, context);
+  assert.equal(highlights.painted[item.id].name, "lahe-comment-probable");
+
+  // What the stamp buys: the agent carried data-lahe-id into the source, the
+  // page rebuilt, and the write ladder binds without anyone guessing.
+  page.blocks[1].textContent = original;
+  replay.runPass(replay.REASON.MUTATION, context);
+
+  assert.equal(anchoredItem.region.lost, null, "found for certain, so the lost stamp ends");
+  assert.equal(highlights.painted[item.id].name, "lahe-comment", "painted like any other commented passage");
+  assert.equal(cards.notices[item.id], null, "and the word probable comes off the card");
+  assert.equal(replay.counters.regionsProbableCleared, 1);
+});
+
+test("a comment whose element still carries the agent's stamp is found, not guessed", () => {
+  const item = fixtures.comment();
+  // The stamp is already on the element, which is what a rebuild from a source
+  // the agent carried `data-lahe-id` into looks like. (The simulated DOM has no
+  // setAttribute, so the mint reads this one rather than writing its own.)
+  const page = pageOf([
+    "Before it.",
+    { text: "The trainer writes the plan every week.", attrs: { "data-lahe-id": "e-stamped" } },
+    "After it."
+  ]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+  assert.equal(anchoredItem.region.ref.stamp, "e-stamped", "the reference carries the id on the element");
+
+  const highlights = fakeHighlights();
+  const cards = fakeCards();
+  const ladder = fakePointing(page.blocks[2], "identity");
+  const context = {
+    root: page.root,
+    items: [anchoredItem],
+    cards: cards,
+    document: fakeDocument(),
+    highlights: highlights,
+    pointing: ladder
+  };
+
+  replay.resetCounters();
+  replay.noteSettling(0);
+  // The agent did what the comment asked: it rewrote the sentence, and it kept
+  // the id on the element while doing it.
+  page.blocks[1].textContent = "Every week, the plan is written by the trainer.";
+
+  const outcome = replay.runPass(replay.REASON.MUTATION, context).results[0];
+
+  assert.equal(outcome.element, page.blocks[1], "the id says which element, and it is certain");
+  assert.equal(anchoredItem.region.lost, null, "so nothing is lost");
+  assert.equal(ladder.asked.length, 0, "and nothing is guessed");
+  assert.equal(highlights.painted[item.id].name, "lahe-comment", "painted normally");
+  assert.equal(cards.notices[item.id], undefined, "with nothing on the card");
+});
+
+test("an edit whose stamp points at different words is still refused", () => {
+  const item = fixtures.edit();
+  const page = pageOf([
+    "Before it.",
+    { text: item.before, attrs: { "data-lahe-id": "e-stamped-edit" } },
+    "After it."
+  ]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+  const cards = fakeCards();
+  const context = {
+    root: page.root,
+    items: [anchoredItem],
+    cards: cards,
+    document: fakeDocument(),
+    highlights: fakeHighlights(),
+    pointing: fakePointing(page.blocks[1], "identity")
+  };
+
+  replay.resetCounters();
+  replay.noteSettling(0);
+  // S2: the id is where it was and the words under it are not the reviewer's.
+  // A write may not land on a maybe, whatever the id says.
+  page.blocks[1].textContent = "Words nobody in this record has ever seen.";
+
+  replay.runPass(replay.REASON.MUTATION, context);
+
+  assert.equal(replay.counters.regionsWritten, 0);
+  assert.equal(page.blocks[1].textContent, "Words nobody in this record has ever seen.");
+  assert.ok(anchoredItem.region.lost, "the record says so, and the agent is told");
+});
