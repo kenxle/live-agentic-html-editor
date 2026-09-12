@@ -41,7 +41,32 @@ in a live review (see the "Open questions, now decided" section there).
 | 2 | Heading walk sees inside earlier siblings | nothing | a treatment heading wrapped in a sibling div reaches `context.heading` |
 | 3 | The rail uses the point ladder | 1 | a comment whose exact match is gone jumps to and paints its probable place, weaker, with "probable" on the card; a stamped element is found with certainty and painted normally |
 | 4 | reveal.js fixture in the suite | nothing | a real reveal deck fixture; comment box, rail fields, selection pill, and change highlight all pass on it |
-| 5 | Release | 1 to 4 | `dist/lahe-layer.js` rebuilt and committed; `gate:all` green on all three lanes; version bumped; the board row closed |
+| 5 | Release | 1 to 4, 6 | `dist/lahe-layer.js` rebuilt and committed; `gate:all` green on all three lanes; version bumped; the board row closed |
+| 6 | The graceful-failure net | 1 | every case in the list below refuses and reports lost; none writes; run as unit tests on the gate and as browser tests on a rebuilt page |
+
+## Task 6 in detail: graceful, never destructive
+
+Ken, 2026-09-11: "I would much rather have graceful failures than quiet
+failures or destroying work." The stamp adds new ways to be confidently wrong
+that the existing 22 cases do not cover. Each of these must REFUSE the write,
+stamp the record lost with a reason the reviewer reads, and leave the page and
+the source untouched. Quiet success on any of them is the bug.
+
+| # | The hazard | Must happen |
+| --- | --- | --- |
+| S1 | the same stamp on two elements (copy-paste in the source) | refuse; lost says "two elements carry this id" |
+| S2 | the agent stamped the wrong twin: stamp found, but its text is not the record's before and not any after in its history | refuse; lost says the stamp points at different words |
+| S3 | a stale stamp: the stamped element was deleted and a rebuild reused nothing; stamp absent, text absent | lost, as today |
+| S4 | stamp absent, text present more than once | refuse (D9), exactly as before the stamp existed |
+| S5 | stamp absent, text present once, but the tie-breakers disagree (different tag, different parent) | write only if the text is unique in the document; tie-breakers corroborate, never overrule |
+| S6 | a stamp inside a protected block (the reviewer is editing it) | never written to by replay; the conflict branch, as today |
+| S7 | an agent reply says handled but the stamp is not in the rebuilt source | the page check reopens once (the existing check_reopen guard), and the note says the stamp did not land |
+| S8 | a point-ladder guess (probable place) | never receives a write; paint and card only |
+
+Plus the negative of the whole list: the 22 existing cases stay green
+unchanged, and a record with a valid unique stamp on an element whose text
+matches writes exactly as before. The reviewer must never see a silent
+drop: every refusal is a lost stamp on the card and in review.json.
 
 Frozen files (`manifest.js`, `review_format.js`, `layer/selection.js`) may be
 edited by the task that needs them; the orchestrator authorized it here.
