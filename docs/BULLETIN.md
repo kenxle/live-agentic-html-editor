@@ -5,6 +5,17 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
+- [ ] @anyone 2026-09-14 LAHE-serve-restart-detaches -- **`lahe serve --restart`
+  runs the new helper in the caller's foreground; it should spawn it detached the
+  way `lahe session` does (child_process.spawn with detached and unref).** Found
+  restarting the helper onto 0.2.0 on 2026-09-14: the replacement helper was a
+  child of the orchestrator's shell and would have died with the session. Note
+  for anyone doing it by hand: macOS has no `setsid`; use the CLI's own spawn
+  path (session.js startHelper). Also: a stop that takes longer than 30 s drops
+  every persisted window holder as quiet (`windows.json` restore), so the
+  replacement should start within that window; `--restart` should stop and start
+  in one process so the gap is milliseconds.
+
 - [ ] @anyone 2026-09-11 LAHE-default-doc-style -- **The St. Clair AI documentation
   style becomes the default look for new documents LAHE puts in front of Ken.**
   After the fingerprinting build (docs/ongoing/FINGERPRINTING_BUILD.md) lands.
