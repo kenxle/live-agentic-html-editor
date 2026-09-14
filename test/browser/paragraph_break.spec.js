@@ -327,8 +327,13 @@ test.describe("a paragraph break the reviewer types is kept", () => {
 
     const item = (await items(page))[0];
     expect(item.after).toBe(ONE_PARAGRAPH + "\n\n" + TAIL);
-    expect(item.change, "the change line names the break and the words").toContain(record.BREAK_ADDED_PARAGRAPH);
-    expect(item.change).toContain(TAIL);
+    // Everything the block said is still there, in one piece, with the typed
+    // sentence as a new paragraph under it. The change line says that plainly
+    // rather than as a break sentence plus a long quotation (2026-09-14).
+    expect(item.change, "the change line says a paragraph was added, and where").toContain(
+      "Added a paragraph after"
+    );
+    expect(item.change, "and it names the words").toContain(TAIL);
     expect(await pageBlockText(page, "#split")).toBe(ONE_PARAGRAPH + "\n\n" + TAIL);
   });
 

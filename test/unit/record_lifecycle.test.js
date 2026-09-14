@@ -690,3 +690,90 @@ test("a follow-up carries the change sentence, so every revision still says what
   assert.equal(next.change, answered.change, "rev 4 of the 2026-09-11 item carried an empty change sentence");
   assert.equal(next.note, "i think you lost my bolding and italics. did they not come through?");
 });
+
+// ---------------------------------------------------------------------------
+// The change sentence never starts or ends inside a word (2026-09-14)
+// ---------------------------------------------------------------------------
+//
+// Review r9d5cbe5ebc64. The reviewer pasted a new paragraph above one that
+// began "A friend asked me last week". Both start with the letter A, so the
+// shared prefix was that letter and the shared suffix was everything after it,
+// and the sentence the agent reads reported the addition as
+// 'rticle drop! ... A'. Cosmetic on the card, wrong in the one line that tells
+// the agent what the reviewer did.
+
+const EXISTING = "A friend asked me last week how I actually work with AI.";
+const PASTED =
+  "Article drop! Some thoughts on how collaborating with AI can move beyond the chat window, " +
+  "complete with an open source tool for doing so. https://www.stclair.ai/blog/the-chat-window.html";
+
+test("a paragraph pasted above another is said as that, naming the one it sits against", () => {
+  const said = record.editChangeText(record.KIND.EDIT, EXISTING, PASTED + "\n\n" + EXISTING);
+  assert.equal(said, 'Added a paragraph before "' + EXISTING + '": "' + PASTED + '".');
+  // The old sentence began mid-word and ended on a stray letter.
+  assert.equal(said.indexOf('"rticle'), -1, "no quoted fragment starting mid-word");
+  assert.equal(said.indexOf(' A".'), -1, "and none ending on a stray letter");
+});
+
+test("a paragraph added below is said the same way", () => {
+  const added = "A second thought, written underneath.";
+  const said = record.editChangeText(record.KIND.EDIT, EXISTING, EXISTING + "\n\n" + added);
+  assert.equal(said, 'Added a paragraph after "' + EXISTING + '": "' + added + '".');
+});
+
+test("the paragraph it sits against is named, not repeated in full", () => {
+  const long =
+    "The trainer writes the plan every week, and the athlete reads it on a Sunday night before the first session.";
+  const said = record.editChangeText(record.KIND.EDIT, long, "A new opening line.\n\n" + long);
+  assert.equal(said.indexOf('Added a paragraph before "The trainer writes the plan every week, and'), 0);
+  assert.equal(said.indexOf("..."), said.indexOf('": "') - 3, "the quoted lead is cut short, at a space");
+  assert.equal(said.indexOf('"A new opening line."') !== -1, true, "and the new words are quoted in full");
+});
+
+test("splitting one paragraph in two is still a break, not a paragraph added", () => {
+  const head = "Runners come back too fast after a layoff. ";
+  const tail = "Most of them know it while they are doing it.";
+  assert.equal(
+    record.editChangeText(record.KIND.EDIT, head + tail, head.trim() + "\n\n" + tail),
+    record.BREAK_ADDED_PARAGRAPH
+  );
+  assert.equal(record.paragraphAddition(head + tail, head.trim() + "\n\n" + tail), null);
+});
+
+test("a shared letter at the front no longer splits a word", () => {
+  assert.deepEqual(record.changedSpan("A friend asked", "Article drop!\n\nA friend asked"), {
+    removed: "",
+    added: "Article drop!\n\n"
+  });
+  assert.equal(record.editChangeText(record.KIND.EDIT, "the cat sat", "the caterpillar sat"), 'Changed "cat" to "caterpillar".');
+});
+
+test("a word the two strings share the END of is reported whole", () => {
+  // "abc" and "zbc" share "bc", which is the middle of one word on both sides.
+  assert.deepEqual(record.changedSpan("xy abc", "xy zbc"), { removed: "abc", added: "zbc" });
+  assert.equal(record.editChangeText(record.KIND.EDIT, "running fast", "runs fast"), 'Changed "running" to "runs".');
+});
+
+test("an insertion mid-sentence is still reported at word boundaries", () => {
+  assert.equal(
+    record.editChangeText(record.KIND.EDIT, "The trainer writes the plan every week.", "The trainer writes the whole plan every week."),
+    'Added "whole ".'
+  );
+  // The inserted word sharing its first letters with the word after it.
+  assert.equal(
+    record.editChangeText(record.KIND.EDIT, "the plan is short", "the planned plan is short"),
+    'Added "planned ".'
+  );
+});
+
+test("a paragraph added above with emphasis in it still says the emphasis", () => {
+  const said = record.editChangeText(
+    record.KIND.EDIT,
+    EXISTING,
+    "Article drop!\n\n" + EXISTING,
+    EXISTING,
+    "<p><strong>Article drop!</strong></p><p>" + EXISTING + "</p>"
+  );
+  assert.equal(said.indexOf('Added a paragraph before'), 0);
+  assert.equal(said.indexOf('Made "Article drop!" bold.') !== -1, true);
+});

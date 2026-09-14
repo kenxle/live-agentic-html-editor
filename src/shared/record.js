@@ -972,22 +972,126 @@
   // it is intent, and (like every intent field) it is carried verbatim and never
   // truncated.
 
+  // What counts as being inside a word. Letters, digits and the apostrophes a
+  // word carries; everything else (space, punctuation, a break) is a boundary.
+  var WORD_CHAR = /[A-Za-z0-9_\u00C0-\u024F\u0370-\u1FFF\u2C00-\uD7FF'\u2019]/;
+
+  function isWordChar(ch) {
+    return !!ch && WORD_CHAR.test(ch);
+  }
+
   // The changed span between two strings: the shared prefix and suffix trimmed
   // away, leaving what was removed and what was added. Pure, so editing.js and a
   // test agree on the same answer.
+  //
+  // THE SPAN IS WIDENED TO WHOLE WORDS, and that is not cosmetic. On
+  // 2026-09-14 (review r9d5cbe5ebc64) the reviewer pasted a new paragraph above
+  // one that began "A friend asked me last week". Both start with "A", so the
+  // shared prefix was that letter and the shared suffix was " friend asked...",
+  // and the sentence the agent reads reported the addition as
+  // 'rticle drop! ... A': it began mid-word and ended on a stray letter.
+  // Retreating each boundary to the nearest non-word character costs a few
+  // characters of precision and buys a sentence that says what happened.
   function changedSpan(before, after) {
     var b = typeof before === "string" ? before : "";
     var a = typeof after === "string" ? after : "";
     var start = 0;
     var maxStart = Math.min(b.length, a.length);
     while (start < maxStart && b.charAt(start) === a.charAt(start)) start += 1;
+    // Back the prefix out of a word it split, BEFORE the suffix is measured:
+    // moving start left keeps the two strings equal in front of it, and it
+    // gives the suffix scan below the room to take in the rest of that word.
+    while (start > 0 && isWordChar(b.charAt(start - 1)) && (isWordChar(b.charAt(start)) || isWordChar(a.charAt(start)))) {
+      start -= 1;
+    }
     var endB = b.length;
     var endA = a.length;
     while (endB > start && endA > start && b.charAt(endB - 1) === a.charAt(endA - 1)) {
       endB -= 1;
       endA -= 1;
     }
+    // And push the suffix out of a word it split, the same way.
+    while (
+      endB < b.length &&
+      endA < a.length &&
+      isWordChar(b.charAt(endB)) &&
+      (isWordChar(b.charAt(endB - 1)) || isWordChar(a.charAt(endA - 1)))
+    ) {
+      endB += 1;
+      endA += 1;
+    }
     return { removed: b.slice(start, endB), added: a.slice(start, endA) };
+  }
+
+  // ---------------------------------------------------------------------------
+  // A whole paragraph added above or below, said as that
+  // ---------------------------------------------------------------------------
+  //
+  // The gesture from the same report: the reviewer wrote a new paragraph above
+  // an existing one and changed nothing else. A span diff can only describe
+  // that as a long addition beside a paragraph break, which is two sentences
+  // for one plain thing. This says the plain thing, and it names the paragraph
+  // the new one sits against so the agent knows WHERE to put it in the source.
+  //
+  // It fires only when the block's whole previous text is still there, in one
+  // piece, with a paragraph break between it and the new words. A split, a
+  // reword, or an insertion in the middle is not this, and falls through to the
+  // span diff.
+  var PARAGRAPH_BREAK_HEAD = /^\n{2,}/;
+  var PARAGRAPH_BREAK_TAIL = /\n{2,}$/;
+
+  // How much of the existing paragraph the sentence quotes. It is there to say
+  // which paragraph, not to repeat it: the record's own before and after carry
+  // the full text, and the agent is reading them beside this line.
+  var QUOTE_LEAD_MAX = 60;
+
+  function quoteLead(text) {
+    var s = String(text).replace(/\s+/g, " ").trim();
+    if (s.length <= QUOTE_LEAD_MAX) return s;
+    var cut = s.slice(0, QUOTE_LEAD_MAX);
+    var space = cut.lastIndexOf(" ");
+    if (space > QUOTE_LEAD_MAX / 3) cut = cut.slice(0, space);
+    return cut + "...";
+  }
+
+  /**
+   * A paragraph added before or after everything the block already said.
+   *
+   * @returns {?{where: string, text: string}} null when this is not that edit
+   */
+  function paragraphAddition(before, after) {
+    var b = typeof before === "string" ? before.trim() : "";
+    var a = typeof after === "string" ? after.trim() : "";
+    if (!b || !a || a === b || a.length <= b.length) return null;
+    if (a.slice(0, b.length) === b) {
+      var tail = a.slice(b.length);
+      var head = PARAGRAPH_BREAK_HEAD.exec(tail);
+      if (head) {
+        var below = tail.slice(head[0].length).trim();
+        if (below) return { where: "after", text: below };
+      }
+    }
+    if (a.slice(a.length - b.length) === b) {
+      var lead = a.slice(0, a.length - b.length);
+      var joint = PARAGRAPH_BREAK_TAIL.exec(lead);
+      if (joint) {
+        var above = lead.slice(0, lead.length - joint[0].length).trim();
+        if (above) return { where: "before", text: above };
+      }
+    }
+    return null;
+  }
+
+  function paragraphChangeText(addition, existing) {
+    return (
+      'Added a paragraph ' +
+      addition.where +
+      ' "' +
+      quoteLead(existing) +
+      '": "' +
+      addition.text +
+      '".'
+    );
   }
 
   // A break the reviewer typed, said in words. Quoting it would print a
@@ -1100,6 +1204,15 @@
   function editChangeText(kind, before, after, beforeHtml, afterHtml) {
     if (kind === KIND.DELETE) return "Deleted this block.";
     if (kind === KIND.FORMAT_ONLY) return "Changed the emphasis in this block; the words are the same.";
+    // A whole paragraph added above or below is one plain sentence, not a
+    // break sentence plus a long quotation.
+    var addition = paragraphAddition(before, after);
+    if (addition) {
+      var lines = [paragraphChangeText(addition, before)];
+      var addedEmphasis = formattingChangeText(beforeHtml, afterHtml);
+      if (addedEmphasis) lines.push(addedEmphasis);
+      return lines.join(" ");
+    }
     var span = changedSpan(before, after);
     var breakLine = breakChangeText(span);
     var added = span.added;
@@ -1366,6 +1479,7 @@
     pageCheckReopenOf: pageCheckReopenOf,
     collapsePageCheckNote: collapsePageCheckNote,
     changedSpan: changedSpan,
+    paragraphAddition: paragraphAddition,
     formattingChangeText: formattingChangeText,
     editChangeText: editChangeText,
     REVERT_EDIT: REVERT_EDIT,
