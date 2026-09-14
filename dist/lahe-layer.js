@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.1.0+5bbaec317248
+ * version 0.2.0+186d844807f4
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.1.0+5bbaec317248";
+  g.LAHE.version = "0.2.0+186d844807f4";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -1959,6 +1959,75 @@
     return { origin: null, path: null, title: null, seq: null, source_hint: null };
   }
 
+  // ---------------------------------------------------------------------------
+  // Can this page's SOURCE hold a data-lahe-id at all?
+  // ---------------------------------------------------------------------------
+  //
+  // FOUND BY DOGFOODING, 2026-09-14, within an hour of the helper picking up
+  // 0.2.0. An agent on a Markdown review answered: the source is plain
+  // Markdown, which has no place for an attribute, and the renderer builds the
+  // page from it. It is right, and two things were wrong because of it. The
+  // contract asked every agent for something impossible on a .md review, and
+  // the page check's stamp rule (S7) would have reopened every handled edit of
+  // every Markdown review once, with a note asking for an attribute that source
+  // cannot carry. On the tool's most common document type that is a reopen
+  // storm.
+  //
+  // So the stamp is EXPECTED only where the source is markup with attributes.
+  // The list is extensions rather than a guess about content, because a path is
+  // the only thing both the page check and the projection reliably have.
+  var STAMP_SOURCE_EXTENSIONS = [
+    "html", "htm", "xhtml", "svg", "vue", "svelte", "astro", "jsx", "tsx",
+    "erb", "ejs", "njk", "hbs", "liquid", "php", "mustache", "twig", "jinja", "j2"
+  ];
+
+  /** The lowercased extension of a path, or "" when it has none. */
+  function extensionOf(path) {
+    if (typeof path !== "string" || !path) return "";
+    var clean = path.split("#")[0].split("?")[0];
+    var last = clean.split("/").pop() || "";
+    var dot = last.lastIndexOf(".");
+    if (dot <= 0 || dot === last.length - 1) return "";
+    return last.slice(dot + 1).toLowerCase();
+  }
+
+  /**
+   * Could an agent write `data-lahe-id` into the source behind this path?
+   *
+   * Markdown, plain text, reStructuredText, JSON and a path with no extension
+   * at all are all "no": there is nowhere in that file to put an attribute.
+   * The caller passes the SOURCE's path when the review knows one (the page's
+   * source_hint) and the page's own path when it does not.
+   */
+  function sourceCanCarryStamp(path) {
+    var ext = extensionOf(path);
+    if (!ext) return false;
+    return STAMP_SOURCE_EXTENSIONS.indexOf(ext) !== -1;
+  }
+
+  /**
+   * The same question for a whole page: its source if the review knows one,
+   * otherwise the page's own path.
+   *
+   * @param {Object} page {path, source_hint} or a record's page fields
+   */
+  function pageCanCarryStamp(page) {
+    if (!page || typeof page !== "object") return false;
+    var hint = page.source_hint;
+    var hinted = hint && typeof hint === "object" ? hint.path : hint;
+    if (typeof hinted === "string" && hinted) return sourceCanCarryStamp(hinted);
+    return sourceCanCarryStamp(page.path);
+  }
+
+  /** And for one record, which carries both its page path and its source hint. */
+  function itemCanCarryStamp(item) {
+    if (!item || typeof item !== "object") return false;
+    return pageCanCarryStamp({
+      path: item[FIELD.PAGE_PATH],
+      source_hint: item[FIELD.SOURCE_HINT]
+    });
+  }
+
   // The group key for review.json. ORIGIN plus PATH, never path alone.
   function pageKey(item) {
     if (!item || typeof item !== "object") throw new TypeError("pageKey expects an item");
@@ -2661,22 +2730,126 @@
   // it is intent, and (like every intent field) it is carried verbatim and never
   // truncated.
 
+  // What counts as being inside a word. Letters, digits and the apostrophes a
+  // word carries; everything else (space, punctuation, a break) is a boundary.
+  var WORD_CHAR = /[A-Za-z0-9_\u00C0-\u024F\u0370-\u1FFF\u2C00-\uD7FF'\u2019]/;
+
+  function isWordChar(ch) {
+    return !!ch && WORD_CHAR.test(ch);
+  }
+
   // The changed span between two strings: the shared prefix and suffix trimmed
   // away, leaving what was removed and what was added. Pure, so editing.js and a
   // test agree on the same answer.
+  //
+  // THE SPAN IS WIDENED TO WHOLE WORDS, and that is not cosmetic. On
+  // 2026-09-14 (review r9d5cbe5ebc64) the reviewer pasted a new paragraph above
+  // one that began "A friend asked me last week". Both start with "A", so the
+  // shared prefix was that letter and the shared suffix was " friend asked...",
+  // and the sentence the agent reads reported the addition as
+  // 'rticle drop! ... A': it began mid-word and ended on a stray letter.
+  // Retreating each boundary to the nearest non-word character costs a few
+  // characters of precision and buys a sentence that says what happened.
   function changedSpan(before, after) {
     var b = typeof before === "string" ? before : "";
     var a = typeof after === "string" ? after : "";
     var start = 0;
     var maxStart = Math.min(b.length, a.length);
     while (start < maxStart && b.charAt(start) === a.charAt(start)) start += 1;
+    // Back the prefix out of a word it split, BEFORE the suffix is measured:
+    // moving start left keeps the two strings equal in front of it, and it
+    // gives the suffix scan below the room to take in the rest of that word.
+    while (start > 0 && isWordChar(b.charAt(start - 1)) && (isWordChar(b.charAt(start)) || isWordChar(a.charAt(start)))) {
+      start -= 1;
+    }
     var endB = b.length;
     var endA = a.length;
     while (endB > start && endA > start && b.charAt(endB - 1) === a.charAt(endA - 1)) {
       endB -= 1;
       endA -= 1;
     }
+    // And push the suffix out of a word it split, the same way.
+    while (
+      endB < b.length &&
+      endA < a.length &&
+      isWordChar(b.charAt(endB)) &&
+      (isWordChar(b.charAt(endB - 1)) || isWordChar(a.charAt(endA - 1)))
+    ) {
+      endB += 1;
+      endA += 1;
+    }
     return { removed: b.slice(start, endB), added: a.slice(start, endA) };
+  }
+
+  // ---------------------------------------------------------------------------
+  // A whole paragraph added above or below, said as that
+  // ---------------------------------------------------------------------------
+  //
+  // The gesture from the same report: the reviewer wrote a new paragraph above
+  // an existing one and changed nothing else. A span diff can only describe
+  // that as a long addition beside a paragraph break, which is two sentences
+  // for one plain thing. This says the plain thing, and it names the paragraph
+  // the new one sits against so the agent knows WHERE to put it in the source.
+  //
+  // It fires only when the block's whole previous text is still there, in one
+  // piece, with a paragraph break between it and the new words. A split, a
+  // reword, or an insertion in the middle is not this, and falls through to the
+  // span diff.
+  var PARAGRAPH_BREAK_HEAD = /^\n{2,}/;
+  var PARAGRAPH_BREAK_TAIL = /\n{2,}$/;
+
+  // How much of the existing paragraph the sentence quotes. It is there to say
+  // which paragraph, not to repeat it: the record's own before and after carry
+  // the full text, and the agent is reading them beside this line.
+  var QUOTE_LEAD_MAX = 60;
+
+  function quoteLead(text) {
+    var s = String(text).replace(/\s+/g, " ").trim();
+    if (s.length <= QUOTE_LEAD_MAX) return s;
+    var cut = s.slice(0, QUOTE_LEAD_MAX);
+    var space = cut.lastIndexOf(" ");
+    if (space > QUOTE_LEAD_MAX / 3) cut = cut.slice(0, space);
+    return cut + "...";
+  }
+
+  /**
+   * A paragraph added before or after everything the block already said.
+   *
+   * @returns {?{where: string, text: string}} null when this is not that edit
+   */
+  function paragraphAddition(before, after) {
+    var b = typeof before === "string" ? before.trim() : "";
+    var a = typeof after === "string" ? after.trim() : "";
+    if (!b || !a || a === b || a.length <= b.length) return null;
+    if (a.slice(0, b.length) === b) {
+      var tail = a.slice(b.length);
+      var head = PARAGRAPH_BREAK_HEAD.exec(tail);
+      if (head) {
+        var below = tail.slice(head[0].length).trim();
+        if (below) return { where: "after", text: below };
+      }
+    }
+    if (a.slice(a.length - b.length) === b) {
+      var lead = a.slice(0, a.length - b.length);
+      var joint = PARAGRAPH_BREAK_TAIL.exec(lead);
+      if (joint) {
+        var above = lead.slice(0, lead.length - joint[0].length).trim();
+        if (above) return { where: "before", text: above };
+      }
+    }
+    return null;
+  }
+
+  function paragraphChangeText(addition, existing) {
+    return (
+      'Added a paragraph ' +
+      addition.where +
+      ' "' +
+      quoteLead(existing) +
+      '": "' +
+      addition.text +
+      '".'
+    );
   }
 
   // A break the reviewer typed, said in words. Quoting it would print a
@@ -2789,6 +2962,15 @@
   function editChangeText(kind, before, after, beforeHtml, afterHtml) {
     if (kind === KIND.DELETE) return "Deleted this block.";
     if (kind === KIND.FORMAT_ONLY) return "Changed the emphasis in this block; the words are the same.";
+    // A whole paragraph added above or below is one plain sentence, not a
+    // break sentence plus a long quotation.
+    var addition = paragraphAddition(before, after);
+    if (addition) {
+      var lines = [paragraphChangeText(addition, before)];
+      var addedEmphasis = formattingChangeText(beforeHtml, afterHtml);
+      if (addedEmphasis) lines.push(addedEmphasis);
+      return lines.join(" ");
+    }
     var span = changedSpan(before, after);
     var breakLine = breakChangeText(span);
     var added = span.added;
@@ -3027,6 +3209,10 @@
     pageFrom: pageFrom,
     pageKey: pageKey,
     pageKeyFor: pageKeyFor,
+    STAMP_SOURCE_EXTENSIONS: STAMP_SOURCE_EXTENSIONS,
+    sourceCanCarryStamp: sourceCanCarryStamp,
+    pageCanCarryStamp: pageCanCarryStamp,
+    itemCanCarryStamp: itemCanCarryStamp,
     samePage: samePage,
     basenameOf: basenameOf,
     shortPath: shortPath,
@@ -3055,6 +3241,7 @@
     pageCheckReopenOf: pageCheckReopenOf,
     collapsePageCheckNote: collapsePageCheckNote,
     changedSpan: changedSpan,
+    paragraphAddition: paragraphAddition,
     formattingChangeText: formattingChangeText,
     editChangeText: editChangeText,
     REVERT_EDIT: REVERT_EDIT,
@@ -4935,8 +5122,10 @@
         "agent rebuilt the page and the library reloads it",
       request: "?review=<id>&since=<seq>&page_path=<location.pathname>",
       response:
-        "{events: [event...], seq, target_mtime, agent_liveness}; target_mtime is the requesting page's ISO mtime, " +
-        "or null when its retained target cannot be identified or the file is missing. agent_liveness is " +
+        "{events: [event...], seq, target_mtime, stamp_carriable, agent_liveness}; target_mtime is the requesting page's ISO mtime, " +
+        "or null when its retained target cannot be identified or the file is missing. stamp_carriable says whether " +
+        "the SOURCE behind this page could hold a data-lahe-id attribute at all: false for a Markdown or plain-text " +
+        "source, which is what stops the page check asking an agent for an id that source cannot carry. agent_liveness is " +
         "{state, unanswered, oldest_unanswered_at, last_reply_at, listening, monitor_at, activity_at}: how long it " +
         "has been since the agent answered, read off the review's own replies and the owning session's files rather " +
         "than taken from anything the agent said"
@@ -6043,7 +6232,7 @@
   "after_history is every wording the reviewer committed for a hand edit and then replaced, oldest first, with the rev and the time of each. It is how they converged on what they meant, so read the chain rather than only the final after_full when you want to know what they were reaching for. A reviewer who reworded once and one who reworded five times are different, and only this field tells them apart.",
   "The reviewer can end a review from the page. When they do, the review is archived and you are woken with the rest of the work. Ending discards nothing: items still unanswered are still their requests, so drain to empty before you close anything down. Then write their hand edits out where they will find them, beside the document they reviewed rather than inside this tool's state directory, because a list nobody opens is a list that taught nobody anything.",
   "When an item points at something with no words in it, an image, a diagram, an icon, the subject field is how you tell which one. It carries the tag, the src as the page author wrote it, the alt text, and the opening tag. Three images side by side have three different subjects, so use it rather than the region_label, whose ordinal can read the same for all of them. If an item names an element and subject is null, say you cannot tell which one they mean instead of guessing.",
-    "An item's region.stamp is an id the reviewer's page wrote onto the element. When you edit that element in the source, write the same data-lahe-id attribute onto it, so the next build reproduces it and the page finds it with certainty. Never remove one. The attribute is not content: it never appears in before or after.",
+    "An item's region.stamp is an id the reviewer's page wrote onto the element. When region.stamp_carriable is true, write that same data-lahe-id attribute onto the element as you edit it in the source, so the next build reproduces it and the page finds it with certainty. Never remove one. The attribute is not content: it never appears in before or after. When region.stamp_carriable is false, the source is Markdown, plain text, or anything else with no place to put an attribute: skip the stamp, use region.where and region.ordinal to find the element, and do not mention the stamp in your reply. The page finds it by its words.",
     "When region.text_unique is false, the text is on the page more than once. Use region.where and region.ordinal to pick the right one in the source: the ordinal counts identical siblings in source order, which is page order for a page built once from its source.",
     "The reviewer's intent lives in two fields only: note and change. Those are the reviewer's own words. Do what they say, and nothing else.",
     "The thread field contains completed earlier reviewer and agent turns as historical context. It is not current intent and must not cause an older request to be performed again. Only the top-level note and change are current instructions.",
@@ -6416,7 +6605,13 @@
   // review.json (the file the agent reads)
   // ---------------------------------------------------------------------------
 
-  function projectItem(it) {
+  /**
+   * @param {Object} it the record
+   * @param {Object} [pageHint] the page group's source hint, used when the
+   *   record itself carries none. It is what the agent reads at the top of the
+   *   page group, so the two answers cannot disagree.
+   */
+  function projectItem(it, pageHint) {
     var F = record.FIELD;
     var ctx = it[F.CONTEXT] || {};
     var out = {};
@@ -6496,7 +6691,17 @@
     // which block, and the ordinal says which twin inside it. Neither ever
     // places a write in the browser (D9); they are information handed to an
     // agent who is editing the source with the reviewer's words in front of it.
-    out[PROJECTED.REGION] = regionFacts(it[F.REGION]);
+    // `stamp_carriable` is the other half of `stamp`, and it is read off the
+    // SOURCE rather than off the page: a Markdown file has nowhere to put an
+    // attribute, so an agent working from one is told not to try. See
+    // record.sourceCanCarryStamp.
+    out[PROJECTED.REGION] = regionFacts(
+      it[F.REGION],
+      record.pageCanCarryStamp({
+        path: it[F.PAGE_PATH],
+        source_hint: it[F.SOURCE_HINT] || pageHint || null
+      })
+    );
     out[PROJECTED.AFTER_HISTORY] = boundHistory(it[F.AFTER_HISTORY]);
 
     // A HANDLED ITEM HAS NO LOST ANCHOR. The fix an agent reported was expected
@@ -6534,8 +6739,8 @@
     return out;
   }
 
-  /** The four locating facts, defaulted so every item carries the same shape. */
-  function regionFacts(region) {
+  /** The five locating facts, defaulted so every item carries the same shape. */
+  function regionFacts(region, carriable) {
     var ref = (region && region.ref) || null;
     var ordinal = (ref && ref.ordinal) || null;
     var index = ordinal && typeof ordinal.index === "number" ? ordinal.index : 1;
@@ -6546,7 +6751,10 @@
       ordinal: { index: index, of: of },
       // Absent reads as true, which is what a reference minted before this
       // existed was: findable by its words until something proved otherwise.
-      text_unique: !(ref && ref.text_unique === false)
+      text_unique: !(ref && ref.text_unique === false),
+      // Can the source behind this page hold the attribute at all? False for
+      // Markdown, plain text, and anything else with no place to put one.
+      stamp_carriable: carriable === true
     };
   }
 
@@ -6587,7 +6795,9 @@
           // rather than (or in addition to) the served origin above, so a
           // half-configured review is visible instead of silent.
           file_origin_seen: !!g.file_origin_seen,
-          items: g.items.map(projectItem)
+          items: g.items.map(function (it) {
+            return projectItem(it, g.hint || review.source_hint || null);
+          })
         };
       })
     };
@@ -22543,6 +22753,7 @@
     // string comparison rather than a deep one on every poll.
     var agentLiveness = null;
     var agentLivenessKey = null;
+    var stampCarriable = null;
     var reloadPending = false;
     var reloadTimer = null;
     var reloadsFired = 0;
@@ -22669,14 +22880,33 @@
     // Minting events
     // -------------------------------------------------------------------------
 
-    function eventTypeFor(item) {
+    /**
+     * Which event this post is.
+     *
+     * `existing` is the caller saying THIS RECORD ALREADY EXISTS and nothing
+     * about the reviewer's commitment changed: replay re-stamping a record it
+     * found in the store is the only caller, and what it changed is a field the
+     * reviewer never typed (the lost stamp). Both of the other answers would be
+     * a lie there, and one of them is a noisy lie:
+     *
+     *   item.created   `seenItems` is IN-MEMORY, so after a page reload the
+     *                  first post for an item the helper has held for hours
+     *                  reads as a creation. Seen live on 2026-09-14 (review
+     *                  r9d5cbe5ebc64): item.created for an item at rev 3 in
+     *                  state not_handled.
+     *   item.ready     wakes the agent (routes.js WAKE_EVENTS). A lost stamp is
+     *                  not the reviewer committing anything, so it must not
+     *                  reach for anybody's attention.
+     */
+    function eventTypeFor(item, existing) {
+      if (existing) return protocol.EVENT.ITEM_CONTENT;
       if (item[record.FIELD.STATE] === record.STATE.READY) return protocol.EVENT.ITEM_READY;
       if (!seenItems[item[record.FIELD.ID]]) return protocol.EVENT.ITEM_CREATED;
       return protocol.EVENT.ITEM_CONTENT;
     }
 
-    function eventFor(item) {
-      var type = eventTypeFor(item);
+    function eventFor(item, options) {
+      var type = eventTypeFor(item, !!(options && options.existing));
       seenItems[item[record.FIELD.ID]] = true;
       return protocol.newEvent({
         event: type,
@@ -22736,7 +22966,9 @@
      * browser storage in this task, and the network happens later or never.
      *
      * @param {Object} item the record as stored
-     * @param {{immediate?: string}} [options] one of protocol.FLUSH.IMMEDIATE_ON
+     * @param {{immediate?: string, existing?: boolean}} [options] `immediate` is
+     *   one of protocol.FLUSH.IMMEDIATE_ON; `existing` says this record already
+     *   exists and only its content changed. See eventTypeFor.
      */
     function recordItem(item, options) {
       // A refused window is READ-ONLY (finding 1): it writes nothing to the
@@ -22745,7 +22977,7 @@
       // nothing calls this; the guard is the belt to that suspenders.
       if (readOnly) return null;
       var opts2 = options || {};
-      var event = eventFor(item);
+      var event = eventFor(item, opts2);
       store.queueEvent(requireReview(), event);
       if (opts2.immediate) {
         if (protocol.FLUSH.IMMEDIATE_ON.indexOf(opts2.immediate) === -1) {
@@ -23041,6 +23273,7 @@
           var events = (result.body && result.body.events) || [];
           if (typeof (result.body && result.body.seq) === "number") cursor = result.body.seq;
           noteTargetMtime(result.body && result.body.target_mtime);
+          noteStampCarriable(result.body && result.body.stamp_carriable);
           noteAgentLiveness(result.body && result.body.agent_liveness);
           if (events.length) {
             repliesSeen = repliesSeen.concat(events).slice(-REPLIES_KEPT);
@@ -23104,6 +23337,22 @@
         value[f.UNANSWERED],
         value[f.OLDEST_UNANSWERED_AT]
       ].join("|");
+    }
+
+    /**
+     * Can the SOURCE behind this page hold a data-lahe-id? The helper's answer.
+     *
+     * Only the helper knows the source: a Markdown review renders to HTML, so
+     * the page in the browser is .html while the file an agent edits is .md,
+     * with nowhere to put an attribute. Null or missing leaves it unknown, and
+     * an unknown falls back to what the record itself can say (replay's
+     * stampMissingFromPage). An old helper that never sends the field therefore
+     * behaves exactly as it did.
+     */
+    function noteStampCarriable(value) {
+      if (typeof value !== "boolean") return false;
+      stampCarriable = value;
+      return true;
     }
 
     function noteTargetMtime(value) {
@@ -23874,6 +24123,7 @@
         queued: pendingCount(),
         cursor: cursor,
         targetMtime: targetMtime,
+        stampCarriable: stampCarriable,
         agentLiveness: agentLiveness,
         reloadPending: reloadPending,
         reloadsFired: reloadsFired,
@@ -23894,6 +24144,10 @@
       start: start,
       stop: stop,
       recordItem: recordItem,
+      /** The helper's answer, or null while nothing has been heard. */
+      stampCarriable: function () {
+        return stampCarriable;
+      },
       deleteItem: deleteItem,
       eventFor: eventFor,
       flush: flush,
@@ -30226,7 +30480,7 @@
    * attribute leaves a page that reads correctly and can only be found by its
    * words again, which is the thing the stamp exists to stop.
    *
-   * Three things hold it back, and each one is a case where saying nothing is
+   * Four things hold it back, and each one is a case where saying nothing is
    * the honest answer:
    *
    *   no stamp list   the caller could not read the document (pageCheckOptions
@@ -30234,11 +30488,25 @@
    *   no stamp        the record was minted before the element was ever
    *                   stamped. There is nothing to have gone missing.
    *   stamp present   an element carries it, which is the whole ask.
+   *   THE SOURCE CANNOT HOLD ONE. A Markdown source has nowhere to put an
+   *                   attribute, so the id was never going to survive the
+   *                   build and asking for it is asking for the impossible.
+   *                   Found live on 2026-09-14, an hour after 0.2.0 reached
+   *                   the helper: without this, every handled edit of every
+   *                   Markdown review reopens once. See
+   *                   record.sourceCanCarryStamp.
    */
   function stampMissingFromPage(item, options) {
     var opts = options || {};
     var stamps = opts.stamps && typeof opts.stamps === "object" ? opts.stamps : null;
     if (!stamps) return false;
+    // The helper's answer when it gave one, because only the helper knows the
+    // source: a Markdown review renders to HTML, so the page's own path says
+    // .html while the file the agent edits is .md. The record is the fallback,
+    // which is what an older helper and the unit suite have.
+    var carriable =
+      typeof opts.stampCarriable === "boolean" ? opts.stampCarriable : record.itemCanCarryStamp(item);
+    if (!carriable) return false;
     var stamp = stampOf(item);
     if (!stamp) return false;
     return !Object.prototype.hasOwnProperty.call(stamps, stamp);
@@ -30332,6 +30600,7 @@
     // markup is. A document that cannot be queried hands back null, which
     // stampMissingFromPage reads as "no evidence" rather than as "missing".
     out.stamps = stampsOn(root);
+    if (typeof opts.stampCarriable === "boolean") out.stampCarriable = opts.stampCarriable;
     if (typeof opts.now === "number") out.now = opts.now;
     return out;
   }
@@ -32079,7 +32348,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.1.0+5bbaec317248";
+  var VERSION = "0.2.0+186d844807f4";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -33089,7 +33358,12 @@
         // (RF19, and the quiet failure Ken named on 2026-09-11). Replay only
         // persists on a transition, never per pass, so this is one post when
         // something actually changed.
-        if (sync && typeof sync.recordItem === "function") sync.recordItem(item);
+        // `existing` because this record is never new here: replay only ever
+        // re-stamps a record it found in the store. Without it the post reads
+        // as item.created after every reload (sync's seenItems is in-memory),
+        // or as item.ready, which wakes the agent for a field the reviewer
+        // never typed. Both were live on 2026-09-14.
+        if (sync && typeof sync.recordItem === "function") sync.recordItem(item, { existing: true });
       }
     });
 
@@ -33436,7 +33710,13 @@
       // The page's markup goes in beside its text: a handled edit whose words
       // landed and whose bold or italic did not is also a change that is not on
       // the page, and text alone cannot see that (2026-09-11).
-      var options = ns.replay.pageCheckOptions(body);
+      // Plus the helper's answer about the SOURCE. A Markdown review renders to
+      // HTML, so the page cannot tell on its own that its source has nowhere to
+      // put a data-lahe-id, and a check that assumed it could reopened every
+      // handled edit of every Markdown review once (2026-09-14).
+      var options = ns.replay.pageCheckOptions(body, {
+        stampCarriable: typeof sync.stampCarriable === "function" ? sync.stampCarriable() : null
+      });
       var items = refreshItems();
       var ids = ns.replay.revertedHandledEditIds(items, pageText, options).filter(function (id) {
         return !checkReopened[id];
