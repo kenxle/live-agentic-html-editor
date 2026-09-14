@@ -270,6 +270,75 @@
     return { origin: null, path: null, title: null, seq: null, source_hint: null };
   }
 
+  // ---------------------------------------------------------------------------
+  // Can this page's SOURCE hold a data-lahe-id at all?
+  // ---------------------------------------------------------------------------
+  //
+  // FOUND BY DOGFOODING, 2026-09-14, within an hour of the helper picking up
+  // 0.2.0. An agent on a Markdown review answered: the source is plain
+  // Markdown, which has no place for an attribute, and the renderer builds the
+  // page from it. It is right, and two things were wrong because of it. The
+  // contract asked every agent for something impossible on a .md review, and
+  // the page check's stamp rule (S7) would have reopened every handled edit of
+  // every Markdown review once, with a note asking for an attribute that source
+  // cannot carry. On the tool's most common document type that is a reopen
+  // storm.
+  //
+  // So the stamp is EXPECTED only where the source is markup with attributes.
+  // The list is extensions rather than a guess about content, because a path is
+  // the only thing both the page check and the projection reliably have.
+  var STAMP_SOURCE_EXTENSIONS = [
+    "html", "htm", "xhtml", "svg", "vue", "svelte", "astro", "jsx", "tsx",
+    "erb", "ejs", "njk", "hbs", "liquid", "php", "mustache", "twig", "jinja", "j2"
+  ];
+
+  /** The lowercased extension of a path, or "" when it has none. */
+  function extensionOf(path) {
+    if (typeof path !== "string" || !path) return "";
+    var clean = path.split("#")[0].split("?")[0];
+    var last = clean.split("/").pop() || "";
+    var dot = last.lastIndexOf(".");
+    if (dot <= 0 || dot === last.length - 1) return "";
+    return last.slice(dot + 1).toLowerCase();
+  }
+
+  /**
+   * Could an agent write `data-lahe-id` into the source behind this path?
+   *
+   * Markdown, plain text, reStructuredText, JSON and a path with no extension
+   * at all are all "no": there is nowhere in that file to put an attribute.
+   * The caller passes the SOURCE's path when the review knows one (the page's
+   * source_hint) and the page's own path when it does not.
+   */
+  function sourceCanCarryStamp(path) {
+    var ext = extensionOf(path);
+    if (!ext) return false;
+    return STAMP_SOURCE_EXTENSIONS.indexOf(ext) !== -1;
+  }
+
+  /**
+   * The same question for a whole page: its source if the review knows one,
+   * otherwise the page's own path.
+   *
+   * @param {Object} page {path, source_hint} or a record's page fields
+   */
+  function pageCanCarryStamp(page) {
+    if (!page || typeof page !== "object") return false;
+    var hint = page.source_hint;
+    var hinted = hint && typeof hint === "object" ? hint.path : hint;
+    if (typeof hinted === "string" && hinted) return sourceCanCarryStamp(hinted);
+    return sourceCanCarryStamp(page.path);
+  }
+
+  /** And for one record, which carries both its page path and its source hint. */
+  function itemCanCarryStamp(item) {
+    if (!item || typeof item !== "object") return false;
+    return pageCanCarryStamp({
+      path: item[FIELD.PAGE_PATH],
+      source_hint: item[FIELD.SOURCE_HINT]
+    });
+  }
+
   // The group key for review.json. ORIGIN plus PATH, never path alone.
   function pageKey(item) {
     if (!item || typeof item !== "object") throw new TypeError("pageKey expects an item");
@@ -1451,6 +1520,10 @@
     pageFrom: pageFrom,
     pageKey: pageKey,
     pageKeyFor: pageKeyFor,
+    STAMP_SOURCE_EXTENSIONS: STAMP_SOURCE_EXTENSIONS,
+    sourceCanCarryStamp: sourceCanCarryStamp,
+    pageCanCarryStamp: pageCanCarryStamp,
+    itemCanCarryStamp: itemCanCarryStamp,
     samePage: samePage,
     basenameOf: basenameOf,
     shortPath: shortPath,

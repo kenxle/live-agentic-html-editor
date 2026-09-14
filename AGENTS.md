@@ -87,7 +87,7 @@ edits generated HTML that the next build throws away.
 
 | What your human is looking at | Open it with | Where your edits go | What `handled` needs |
 | --- | --- | --- | --- |
-| A Markdown file, on its own | `lahe review path/to/file.md` | the `.md` itself | rerun the same `lahe review` command, then check the rendered page shows it |
+| A Markdown file, on its own | `lahe review path/to/file.md` | the `.md` itself | rerun the same `lahe review` command, then check the rendered page shows it. Markdown has nowhere to put an attribute, so `region.stamp_carriable` is false on these items: skip the stamp and use `region.where` and `region.ordinal` |
 | HTML that IS the source: a hand-written one-pager, a mockup | `lahe review path/to/page.html` | that HTML file | the change is in the file and on their screen |
 | HTML that is BUILD OUTPUT | `lahe review path/to/page.html --source path/to/generator` | the generator, never the page | rerun the build, grep the built HTML for the change, then reply |
 | A document built from several sources: many `.md`, templates, citations | run the project's real build first, then `lahe review path/to/build/report.html --source path/to/build-entrypoint` | the source fragment the item points at | the canonical build, rerun and verified |
@@ -519,10 +519,16 @@ Inside the review folder:
   `question` naming the conflict.
 
   **The stamp, and the twin.** An item's `region.stamp` is an id the
-  reviewer's page wrote onto the element. When you edit that element in the
-  source, write the same `data-lahe-id` attribute onto it, so the next build
-  reproduces it and the page finds it with certainty. Never remove one. The
-  attribute is not content: it never appears in `before` or `after`.
+  reviewer's page wrote onto the element. When `region.stamp_carriable` is
+  true, write that same `data-lahe-id` attribute onto the element as you edit
+  it in the source, so the next build reproduces it and the page finds it with
+  certainty. Never remove one. The attribute is not content: it never appears
+  in `before` or `after`.
+
+  When `region.stamp_carriable` is false, the source is Markdown, plain text,
+  or anything else with no place to put an attribute. Skip the stamp, use
+  `region.where` and `region.ordinal` to find the element, and do not mention
+  the stamp in your reply. The page finds it by its words.
 
   When `region.text_unique` is false, the text is on the page more than once.
   Use `region.where` and `region.ordinal` to pick the right one in the source:

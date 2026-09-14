@@ -1417,6 +1417,7 @@
     // string comparison rather than a deep one on every poll.
     var agentLiveness = null;
     var agentLivenessKey = null;
+    var stampCarriable = null;
     var reloadPending = false;
     var reloadTimer = null;
     var reloadsFired = 0;
@@ -1543,14 +1544,33 @@
     // Minting events
     // -------------------------------------------------------------------------
 
-    function eventTypeFor(item) {
+    /**
+     * Which event this post is.
+     *
+     * `existing` is the caller saying THIS RECORD ALREADY EXISTS and nothing
+     * about the reviewer's commitment changed: replay re-stamping a record it
+     * found in the store is the only caller, and what it changed is a field the
+     * reviewer never typed (the lost stamp). Both of the other answers would be
+     * a lie there, and one of them is a noisy lie:
+     *
+     *   item.created   `seenItems` is IN-MEMORY, so after a page reload the
+     *                  first post for an item the helper has held for hours
+     *                  reads as a creation. Seen live on 2026-09-14 (review
+     *                  r9d5cbe5ebc64): item.created for an item at rev 3 in
+     *                  state not_handled.
+     *   item.ready     wakes the agent (routes.js WAKE_EVENTS). A lost stamp is
+     *                  not the reviewer committing anything, so it must not
+     *                  reach for anybody's attention.
+     */
+    function eventTypeFor(item, existing) {
+      if (existing) return protocol.EVENT.ITEM_CONTENT;
       if (item[record.FIELD.STATE] === record.STATE.READY) return protocol.EVENT.ITEM_READY;
       if (!seenItems[item[record.FIELD.ID]]) return protocol.EVENT.ITEM_CREATED;
       return protocol.EVENT.ITEM_CONTENT;
     }
 
-    function eventFor(item) {
-      var type = eventTypeFor(item);
+    function eventFor(item, options) {
+      var type = eventTypeFor(item, !!(options && options.existing));
       seenItems[item[record.FIELD.ID]] = true;
       return protocol.newEvent({
         event: type,
@@ -1610,7 +1630,9 @@
      * browser storage in this task, and the network happens later or never.
      *
      * @param {Object} item the record as stored
-     * @param {{immediate?: string}} [options] one of protocol.FLUSH.IMMEDIATE_ON
+     * @param {{immediate?: string, existing?: boolean}} [options] `immediate` is
+     *   one of protocol.FLUSH.IMMEDIATE_ON; `existing` says this record already
+     *   exists and only its content changed. See eventTypeFor.
      */
     function recordItem(item, options) {
       // A refused window is READ-ONLY (finding 1): it writes nothing to the
@@ -1619,7 +1641,7 @@
       // nothing calls this; the guard is the belt to that suspenders.
       if (readOnly) return null;
       var opts2 = options || {};
-      var event = eventFor(item);
+      var event = eventFor(item, opts2);
       store.queueEvent(requireReview(), event);
       if (opts2.immediate) {
         if (protocol.FLUSH.IMMEDIATE_ON.indexOf(opts2.immediate) === -1) {
@@ -1915,6 +1937,7 @@
           var events = (result.body && result.body.events) || [];
           if (typeof (result.body && result.body.seq) === "number") cursor = result.body.seq;
           noteTargetMtime(result.body && result.body.target_mtime);
+          noteStampCarriable(result.body && result.body.stamp_carriable);
           noteAgentLiveness(result.body && result.body.agent_liveness);
           if (events.length) {
             repliesSeen = repliesSeen.concat(events).slice(-REPLIES_KEPT);
@@ -1978,6 +2001,22 @@
         value[f.UNANSWERED],
         value[f.OLDEST_UNANSWERED_AT]
       ].join("|");
+    }
+
+    /**
+     * Can the SOURCE behind this page hold a data-lahe-id? The helper's answer.
+     *
+     * Only the helper knows the source: a Markdown review renders to HTML, so
+     * the page in the browser is .html while the file an agent edits is .md,
+     * with nowhere to put an attribute. Null or missing leaves it unknown, and
+     * an unknown falls back to what the record itself can say (replay's
+     * stampMissingFromPage). An old helper that never sends the field therefore
+     * behaves exactly as it did.
+     */
+    function noteStampCarriable(value) {
+      if (typeof value !== "boolean") return false;
+      stampCarriable = value;
+      return true;
     }
 
     function noteTargetMtime(value) {
@@ -2748,6 +2787,7 @@
         queued: pendingCount(),
         cursor: cursor,
         targetMtime: targetMtime,
+        stampCarriable: stampCarriable,
         agentLiveness: agentLiveness,
         reloadPending: reloadPending,
         reloadsFired: reloadsFired,
@@ -2768,6 +2808,10 @@
       start: start,
       stop: stop,
       recordItem: recordItem,
+      /** The helper's answer, or null while nothing has been heard. */
+      stampCarriable: function () {
+        return stampCarriable;
+      },
       deleteItem: deleteItem,
       eventFor: eventFor,
       flush: flush,

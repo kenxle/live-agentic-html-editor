@@ -869,7 +869,7 @@
    * attribute leaves a page that reads correctly and can only be found by its
    * words again, which is the thing the stamp exists to stop.
    *
-   * Three things hold it back, and each one is a case where saying nothing is
+   * Four things hold it back, and each one is a case where saying nothing is
    * the honest answer:
    *
    *   no stamp list   the caller could not read the document (pageCheckOptions
@@ -877,11 +877,25 @@
    *   no stamp        the record was minted before the element was ever
    *                   stamped. There is nothing to have gone missing.
    *   stamp present   an element carries it, which is the whole ask.
+   *   THE SOURCE CANNOT HOLD ONE. A Markdown source has nowhere to put an
+   *                   attribute, so the id was never going to survive the
+   *                   build and asking for it is asking for the impossible.
+   *                   Found live on 2026-09-14, an hour after 0.2.0 reached
+   *                   the helper: without this, every handled edit of every
+   *                   Markdown review reopens once. See
+   *                   record.sourceCanCarryStamp.
    */
   function stampMissingFromPage(item, options) {
     var opts = options || {};
     var stamps = opts.stamps && typeof opts.stamps === "object" ? opts.stamps : null;
     if (!stamps) return false;
+    // The helper's answer when it gave one, because only the helper knows the
+    // source: a Markdown review renders to HTML, so the page's own path says
+    // .html while the file the agent edits is .md. The record is the fallback,
+    // which is what an older helper and the unit suite have.
+    var carriable =
+      typeof opts.stampCarriable === "boolean" ? opts.stampCarriable : record.itemCanCarryStamp(item);
+    if (!carriable) return false;
     var stamp = stampOf(item);
     if (!stamp) return false;
     return !Object.prototype.hasOwnProperty.call(stamps, stamp);
@@ -975,6 +989,7 @@
     // markup is. A document that cannot be queried hands back null, which
     // stampMissingFromPage reads as "no evidence" rather than as "missing".
     out.stamps = stampsOn(root);
+    if (typeof opts.stampCarriable === "boolean") out.stampCarriable = opts.stampCarriable;
     if (typeof opts.now === "number") out.now = opts.now;
     return out;
   }

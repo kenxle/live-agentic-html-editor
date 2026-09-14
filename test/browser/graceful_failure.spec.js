@@ -215,36 +215,30 @@ async function claim(page) {
 }
 
 /** Cmd-Shift-E, select the block, retype it. Left OPEN: the caller commits. */
-async function startEdit(page, blockId, text) {
+async function startEdit(page, selector, text) {
   await claim(page);
-  await placeCaret(page, { selector: "#" + blockId, offset: 0 });
+  await placeCaret(page, { selector: selector, offset: 0 });
   await page.keyboard.press("ControlOrMeta+Shift+KeyE");
-  await pollPage(
-    page,
-    (id) => {
-      const state = window.__lahe.editState();
-      return state.open && state.blockId === id;
-    },
-    blockId,
-    { message: "Cmd-Shift-E to put #" + blockId + " into edit state" }
-  );
-  await page.evaluate((id) => {
-    const el = document.getElementById(id);
+  await pollPage(page, () => window.__lahe.editState().open, undefined, {
+    message: "Cmd-Shift-E to put " + selector + " into edit state"
+  });
+  await page.evaluate((sel) => {
+    const el = document.querySelector(sel);
     const range = document.createRange();
     range.selectNodeContents(el);
     const selection = window.getSelection();
     selection.removeAllRanges();
     selection.addRange(range);
-  }, blockId);
+  }, selector);
   await page.keyboard.type(text, { delay: 5 });
 }
 
 /** A whole hand edit: retype the block and commit it. */
-async function handEdit(page, blockId, text) {
-  await startEdit(page, blockId, text);
+async function handEdit(page, selector, text) {
+  await startEdit(page, selector, text);
   await page.keyboard.press("Escape");
   await pollPage(page, () => window.__lahe.isEditing() === false, undefined, {
-    message: "Esc to commit the hand edit on #" + blockId
+    message: "Esc to commit the hand edit on " + selector
   });
   await page.evaluate(() => window.__lahe.handle.comments.closeAll());
   await pollPage(
@@ -253,17 +247,21 @@ async function handEdit(page, blockId, text) {
     text,
     { message: "the hand edit to land as a ready record" }
   );
-  return page.evaluate((after) => {
-    const found = window.__lahe.items().find((item) => item.kind === "edit" && item.after === after);
-    return {
-      id: found.id,
-      rev: found.rev,
-      // The id the reviewer's page wrote onto the element. An agent editing the
-      // source is asked to carry this across; these tests carry it, or move it,
-      // or duplicate it, which is the whole suite.
-      stamp: document.getElementById("p").getAttribute("data-lahe-id")
-    };
-  }, text);
+  return page.evaluate(
+    (args) => {
+      const found = window.__lahe.items().find((item) => item.kind === "edit" && item.after === args.after);
+      const el = document.querySelector(args.selector);
+      return {
+        id: found.id,
+        rev: found.rev,
+        // The id the reviewer's page wrote onto the element. An agent editing
+        // the source is asked to carry this across; these tests carry it, or
+        // move it, or duplicate it, which is the whole suite.
+        stamp: el ? el.getAttribute("data-lahe-id") : null
+      };
+    },
+    { after: text, selector: selector }
+  );
 }
 
 /** The page's own text, which is the thing that must not change. */
@@ -319,6 +317,63 @@ async function lostVerdict(page, id) {
   return itemOn(page, id);
 }
 
+// ---------------------------------------------------------------------------
+// The Markdown review, where there is nowhere to put an attribute at all
+// ---------------------------------------------------------------------------
+
+const MD_BEFORE = "The trainer writes the plan every week.";
+const MD_AFTER = "The trainer writes the plan each week.";
+
+function markdownDoc(passage) {
+  return ["# Plan", "", passage, "", "Runners come back too fast after a layoff.", ""].join("\n");
+}
+
+/** `lahe review file.md`, which renders the Markdown and serves the result. */
+async function openMarkdownReview() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-graceful-md-"));
+  const stateDir = path.join(root, "state");
+  const work = path.join(root, "work");
+  fs.mkdirSync(work, { recursive: true });
+  const sourcePath = path.join(work, "scratch.md");
+  fs.writeFileSync(sourcePath, markdownDoc(MD_BEFORE));
+
+  const env = Object.assign({}, process.env, { LAHE_STATE_DIR: stateDir });
+  delete env.XDG_STATE_HOME;
+  const port = await freePort();
+  const world = { stateDir: stateDir, sourcePath: sourcePath, env: env, port: port };
+  render(world);
+  return world;
+}
+
+/**
+ * The documented Markdown rebuild: rerun the same review command. There is no
+ * other one, and `lahe review` prints that instruction itself.
+ */
+function render(world) {
+  const output = execFileSync(
+    process.execPath,
+    [CLI, "review", world.sourcePath, "--port", String(world.port)],
+    { cwd: REPO_ROOT, env: world.env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
+  );
+  world.session = labelled(output, "session") || world.session;
+  world.review = labelled(output, "review") || world.review;
+  world.open = labelled(output, "open") || world.open;
+  world.reviewJson = path.join(world.stateDir, "reviews", world.review, "review.json");
+  world.repliesPath = path.join(world.stateDir, "reviews", world.review, "replies.jsonl");
+  return world;
+}
+
+/** Every event the helper has stored for this review, in order. */
+function events(world) {
+  const file = path.join(path.dirname(world.reviewJson), "events.jsonl");
+  if (!fs.existsSync(file)) return [];
+  return fs
+    .readFileSync(file, "utf8")
+    .split("\n")
+    .filter((line) => line.trim())
+    .map((line) => JSON.parse(line));
+}
+
 test.describe("the stamp's graceful failures: nothing written, and the reviewer is told", () => {
   let world = null;
 
@@ -335,7 +390,7 @@ test.describe("the stamp's graceful failures: nothing written, and the reviewer 
     await page.goto(world.open);
     await booted(page);
     await prime(page, world, startBlocks());
-    const made = await handEdit(page, "p", MINE);
+    const made = await handEdit(page, "#p", MINE);
     expect(made.stamp, "the hand edit stamped the paragraph").toBeTruthy();
 
     // THE COPY-PASTE. A rebuild duplicated the block and the attribute with it,
@@ -368,6 +423,24 @@ test.describe("the stamp's graceful failures: nothing written, and the reviewer 
     expect(agentSees.lost.reason, "review.json says the same thing the card does").toContain(
       "two elements carry this id"
     );
+
+    // AND THE POST THAT CARRIED IT IS NOT A CREATION. The lost stamp reaches
+    // the helper through replay's persist hook, and the client's memory of what
+    // it has already sent does not survive a reload, so the post used to read as
+    // item.created for a record the helper had held for hours. Seen live on
+    // 2026-09-14. A reload here is the exact shape that produced it.
+    await page.reload();
+    await booted(page);
+    await lostVerdict(page, made.id);
+    const mine = events(world).filter((event) => event.item === made.id);
+    const committed = mine.findIndex((event) => event.event === "item.ready");
+    expect(committed, "the edit was committed, which is the moment the record exists").toBeGreaterThan(-1);
+    const laterCreations = mine
+      .slice(committed + 1)
+      .filter((event) => event.event === "item.created");
+    expect(laterCreations.length, "an existing record is never re-posted as a creation").toBe(0);
+    const content = mine.slice(committed + 1).filter((event) => event.event === "item.content");
+    expect(content.length, "it posts as content, which is what changed").toBeGreaterThan(0);
   });
 
   test("S2: the id over somebody else's words writes nothing, even where the words still are", async ({
@@ -376,7 +449,7 @@ test.describe("the stamp's graceful failures: nothing written, and the reviewer 
     await page.goto(world.open);
     await booted(page);
     await prime(page, world, startBlocks());
-    const made = await handEdit(page, "p", MINE);
+    const made = await handEdit(page, "#p", MINE);
 
     // THE WRONG TWIN. The agent put the attribute on the wrong element. The
     // reviewer's own paragraph is still sitting there, findable by its words,
@@ -410,7 +483,7 @@ test.describe("the stamp's graceful failures: nothing written, and the reviewer 
     await page.goto(world.open);
     await booted(page);
     await prime(page, world, startBlocks());
-    const made = await handEdit(page, "p", MINE);
+    const made = await handEdit(page, "#p", MINE);
 
     // The rebuild dropped the attribute AND duplicated the block. Symmetric all
     // the way out: the same neighbour above and below each copy, so widening
@@ -448,7 +521,7 @@ test.describe("the stamp's graceful failures: nothing written, and the reviewer 
 
     // The reviewer is mid-edit IN THE BLOCK: the box is open and the words are
     // typed, not committed. This is the moment the feature could do real harm.
-    await startEdit(page, "p", MINE);
+    await startEdit(page, "#p", MINE);
     expect(await page.evaluate(() => window.__lahe.isEditing()), "the edit is open").toBe(true);
 
     const theirs = [block(LEAD), block(THEIRS, { id: "p" }), block(TRAIL)];
@@ -510,11 +583,95 @@ test.describe("the stamp's graceful failures: nothing written, and the reviewer 
     expect(state.lost, "a collision is not a lost anchor: the block was found").toBe(null);
   });
 
+  test("S7: a Markdown source is never asked for an id it cannot hold", async ({ page }) => {
+    // FOUND BY DOGFOODING, 2026-09-14, an hour after the helper picked up
+    // 0.2.0. On review r9d5cbe5ebc64 every handled edit was reopened by the
+    // page check with the stamp note within about fifteen seconds of the fold,
+    // the agent answered not_handled each time explaining that Markdown has no
+    // place for an attribute, and the cards sat Not handled with every change
+    // already in the file. The agent was right, and the tool was asking for
+    // something impossible.
+    //
+    // The page cannot work this out on its own: a Markdown review RENDERS to
+    // HTML, so the page's own path ends in .html. The helper knows the source
+    // and says so on every poll.
+    closeReview(world);
+    world = await openMarkdownReview();
+    const paragraph = "main p:nth-of-type(1)";
+
+    await page.goto(world.open);
+    await booted(page);
+    await pollPage(page, () => window.__lahe.handle.sync.status().stampCarriable === false, undefined, {
+      message: "the helper's poll to tell the page its source cannot carry an id",
+      timeoutMs: 20000
+    });
+
+    const made = await handEdit(page, paragraph, MD_AFTER);
+    expect(made.stamp, "the page still stamps the element: that is real, and the point ladder uses it").toBeTruthy();
+
+    // The agent edits the Markdown and reruns the review command, which is the
+    // whole of a Markdown rebuild. The rendered page carries the new words and
+    // no attribute, because there was nowhere in the source to write one.
+    fs.writeFileSync(world.sourcePath, markdownDoc(MD_AFTER));
+    render(world);
+    await page.reload();
+    await booted(page);
+    await pollPage(page, (want) => document.querySelector("main").textContent.indexOf(want) !== -1, MD_AFTER, {
+      message: "the page to come back on the rewritten Markdown",
+      timeoutMs: 20000
+    });
+    expect(
+      await page.evaluate((sel) => document.querySelector(sel).getAttribute("data-lahe-id"), paragraph),
+      "and the rebuilt page carries no id, which is the whole situation"
+    ).toBe(null);
+
+    reply(world, made.id, made.rev);
+    await pollPage(
+      page,
+      (id) => {
+        const found = window.__lahe.items().find((item) => item.id === id);
+        return !!found && found.state === "handled";
+      },
+      made.id,
+      { message: "the agent's reply to fold and move the item to Done", timeoutMs: 20000 }
+    );
+
+    // The page check runs, and says nothing. This is the assertion the storm
+    // would have failed.
+    await page.reload();
+    await booted(page);
+    await pollPage(page, () => window.__lahe.counters.revertChecks >= 1, undefined, {
+      message: "the page check to run once the settling window closes",
+      timeoutMs: 25000
+    });
+    expect(
+      await page.evaluate(() => window.__lahe.counters.revertReopens),
+      "nothing is reopened: the source could never have carried the id"
+    ).toBe(0);
+    expect((await itemOn(page, made.id)).state, "the item stays in Done").toBe("handled");
+
+    // And the agent is told the same thing in its own file, per item.
+    const agentSees = await pollUntil(
+      () => {
+        if (!fs.existsSync(world.reviewJson)) return null;
+        const file = JSON.parse(fs.readFileSync(world.reviewJson, "utf8"));
+        for (const group of file.pages || []) {
+          const found = (group.items || []).find((item) => item.id === made.id);
+          if (found) return found;
+        }
+        return null;
+      },
+      { message: "review.json to carry the item", timeoutMs: 20000 }
+    );
+    expect(agentSees.region.stamp_carriable, "review.json says not to try").toBe(false);
+    expect(agentSees.region.stamp, "while the id itself is still real and still carried").toBeTruthy();
+  });
+
   test("S7: handled, and the id never reached the source: reopened once, and once only", async ({ page }) => {
     await page.goto(world.open);
     await booted(page);
     await prime(page, world, startBlocks());
-    const made = await handEdit(page, "p", MINE);
+    const made = await handEdit(page, "#p", MINE);
 
     // The agent applies the words and drops the attribute. The page READS
     // right, which is why nothing else catches this: the only thing missing is

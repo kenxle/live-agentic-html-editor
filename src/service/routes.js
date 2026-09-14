@@ -308,6 +308,18 @@ var HANDLERS = {
         events: events,
         seq: deps.log.currentSeq(request.review),
         target_mtime: deps.reviews.targetMtime(request.review, request.query.page_path || null),
+        // CAN THE SOURCE BEHIND THIS PAGE HOLD A data-lahe-id AT ALL? The
+        // browser cannot work this out: a Markdown review renders to HTML, so
+        // the page's own path says .html while the file an agent edits is .md
+        // with nowhere to put an attribute. Only the helper knows the source,
+        // so only the helper can answer, and it answers with the same function
+        // review.json's region.stamp_carriable is written from. Without it the
+        // page check reopened every handled edit of every Markdown review once,
+        // asking for an id that source could never carry (2026-09-14).
+        stamp_carriable: record.pageCanCarryStamp({
+          path: request.query.page_path || null,
+          source_hint: typeof deps.reviews.sourcePath === "function" ? deps.reviews.sourcePath(request.review) : null
+        }),
         // GROUND TRUTH ABOUT THE AGENT, not the agent's claim about itself. The
         // rail used to show what a chat said it was doing, which is how "the
         // monitor is running" sat over seven unanswered items. Every field here

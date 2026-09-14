@@ -70,6 +70,37 @@ test("the first event for an item is created, the next is content, ready is read
   assert.equal(sync.eventFor(ready).event, protocol.EVENT.ITEM_READY);
 });
 
+test("a record that already exists posts as content, whatever state it is in", () => {
+  // FOUND LIVE, 2026-09-14 (review r9d5cbe5ebc64): the log showed item.created
+  // for an item at rev 3 in state not_handled, minutes after a page reload. The
+  // cause is that `seenItems` is in-memory, so a reload makes every item look
+  // new to this client. Replay's persist hook posts records the store has held
+  // for hours, so it says so.
+  const { sync } = harness();
+  const answered = Object.assign({}, draft("one"), {
+    state: record.STATE.NOT_HANDLED,
+    rev: 3,
+    reply: { status: "not_handled", agent: "claude", at: "2026-09-14T20:25:00.000Z" }
+  });
+  assert.equal(sync.eventFor(answered, { existing: true }).event, protocol.EVENT.ITEM_CONTENT);
+
+  // A READY item too. item.ready is what wakes the agent (routes.js
+  // WAKE_EVENTS), and a lost stamp is not the reviewer committing anything.
+  const ready = Object.assign({}, draft("two"), { state: record.STATE.READY, note: "two" });
+  assert.equal(sync.eventFor(ready, { existing: true }).event, protocol.EVENT.ITEM_CONTENT);
+  assert.equal(sync.eventFor(ready).event, protocol.EVENT.ITEM_READY, "and the ordinary path is untouched");
+});
+
+test("recordItem carries `existing` through to the event it queues", (t) => {
+  const { store, sync } = harness();
+  t.after(() => sync.stop());
+  const answered = Object.assign({}, draft("one"), { state: record.STATE.READY, rev: 2 });
+  sync.recordItem(answered, { existing: true });
+  const queued = store.pendingEvents("review-1");
+  assert.equal(queued.length, 1);
+  assert.equal(queued[0].event, protocol.EVENT.ITEM_CONTENT, "not a creation, and not a wake");
+});
+
 test("every event carries its own id, because idempotence is by event_id", () => {
   const { sync } = harness();
   const item = draft("one");

@@ -247,8 +247,10 @@
         "agent rebuilt the page and the library reloads it",
       request: "?review=<id>&since=<seq>&page_path=<location.pathname>",
       response:
-        "{events: [event...], seq, target_mtime, agent_liveness}; target_mtime is the requesting page's ISO mtime, " +
-        "or null when its retained target cannot be identified or the file is missing. agent_liveness is " +
+        "{events: [event...], seq, target_mtime, stamp_carriable, agent_liveness}; target_mtime is the requesting page's ISO mtime, " +
+        "or null when its retained target cannot be identified or the file is missing. stamp_carriable says whether " +
+        "the SOURCE behind this page could hold a data-lahe-id attribute at all: false for a Markdown or plain-text " +
+        "source, which is what stops the page check asking an agent for an id that source cannot carry. agent_liveness is " +
         "{state, unanswered, oldest_unanswered_at, last_reply_at, listening, monitor_at, activity_at}: how long it " +
         "has been since the agent answered, read off the review's own replies and the owning session's files rather " +
         "than taken from anything the agent said"

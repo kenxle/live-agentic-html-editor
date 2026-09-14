@@ -562,9 +562,32 @@ names the test that proves it, so this table and the gate cannot drift apart.
 | S7 | the agent replied handled and the id never reached the source | unit `reverted_edit.test.js`: the seven tests beginning "S7:". Browser `graceful_failure.spec.js`: "S7: handled, and the id never reached the source: reopened once, and once only" |
 | S8 | a probable place (the point ladder's guess) | unit `anchor_cases.test.js`: "S8: every shape that produces a guess produces a refusal from the write ladder" and "S8: a guess is not shaped like a verdict, so no caller can read one as the other" |
 
+| S7 (Markdown) | the source has nowhere to put an attribute | unit `reverted_edit.test.js`: "S7: a Markdown source is never asked for a stamp it cannot hold" and the two beside it. Browser `graceful_failure.spec.js`: "S7: a Markdown source is never asked for an id it cannot hold" |
+
 Plus the negative of the whole list: `anchor_cases.test.js`'s "S1/S2 negative: a
 unique id over the right words writes, as it always did", and every case above
 it in the file, unchanged.
+
+**A Markdown source cannot carry the stamp, and that is not a failure.** Found
+by dogfooding on 2026-09-14, an hour after the helper picked up 0.2.0: an agent
+on a Markdown review answered that its source is plain Markdown, which has no
+place for a `data-lahe-id`, and that the renderer builds the page from it. It
+was right. Every handled edit on that review had been reopened by the page check
+asking for the id, and every one was answered not_handled.
+
+So the stamp is expected only where the source is markup with attributes
+(`record.STAMP_SOURCE_EXTENSIONS`: html, erb, jsx, vue, and the rest). Anywhere
+else:
+
+- the browser still stamps the element, because the stamp is real in the page
+  and the point ladder uses it;
+- `review.json` says `region.stamp_carriable: false` per item, and the contract
+  tells the agent to skip the stamp and use `region.where` and `region.ordinal`;
+- the page check never mentions the stamp, so nothing is reopened for it.
+
+The page cannot decide this on its own, because a Markdown review renders to
+HTML and its page path ends in `.html`. The helper knows the source, and answers
+on every reply poll (`stamp_carriable`).
 
 Case 4b in the table above is closed by the same work. The browser stamped a
 record lost and the agent never heard: replay's persist hook now posts the

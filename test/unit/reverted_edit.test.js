@@ -490,7 +490,14 @@ test("a stored note holding many copies of either sentence collapses to one of e
 function stampedEdit(stamp, overrides) {
   return handledEdit(
     Object.assign(
-      { region: { ref: { id: "ref_edit", probe: null, stamp: stamp }, label: "Stamped region", lost: null } },
+      {
+        region: { ref: { id: "ref_edit", probe: null, stamp: stamp }, label: "Stamped region", lost: null },
+        // A page whose SOURCE can hold an attribute. The fixture's default path
+        // has no extension at all, which is itself a source that cannot carry
+        // one, so saying this out loud is the only way the test means what it
+        // says.
+        page_path: "/doc.html"
+      },
       overrides || {}
     )
   );
@@ -613,4 +620,121 @@ test("pageCheckOptions reads the document's ids once, beside its markup", () => 
   // A document with no way to be queried says nothing rather than guessing.
   assert.equal(replay.pageCheckOptions({ innerHTML: "<p>x</p>" }).stamps, null);
   assert.equal(replay.pageCheckOptions(null).stamps, null);
+});
+
+// ---------------------------------------------------------------------------
+// S7 and a source that has nowhere to put an attribute
+// ---------------------------------------------------------------------------
+//
+// FOUND BY DOGFOODING, 2026-09-14, an hour after the helper picked up 0.2.0. An
+// agent on a Markdown review answered: the source is plain Markdown, which has
+// no place for a data-lahe-id attribute, and the renderer builds the page from
+// it. Right on both counts. Without the rule below, the stamp check would have
+// reopened every handled edit of every Markdown review once, each with a note
+// asking for something that file cannot hold: a reopen storm on the tool's most
+// common document type.
+
+test("S7: a Markdown source is never asked for a stamp it cannot hold", () => {
+  const item = stampedEdit("e-1a2b3c", { page_path: "/scratch.md" });
+  assert.equal(replay.pageCheckReasonFor(item, page(AFTER), rebuilt(AFTER, [])), null);
+  assert.equal(replay.pageCheckNoteFor(item, page(AFTER), rebuilt(AFTER, [])), null);
+  assert.equal(replay.isRevertedHandledEdit(item, page(AFTER), rebuilt(AFTER, [])), false);
+});
+
+test("S7: the rendered page's own path does not decide it, the SOURCE does", () => {
+  // The review's own case: a .md opened with `lahe review file.md` renders as
+  // HTML, so the page path can say .html while the file the agent edits cannot
+  // hold an attribute. The source hint is the answer whenever the review has
+  // one.
+  const fromMarkdown = stampedEdit("e-1a2b3c", {
+    page_path: "/rendered.html",
+    source_hint: { known: true, path: "docs/drafts/scratch.md" }
+  });
+  assert.equal(replay.pageCheckReasonFor(fromMarkdown, page(AFTER), rebuilt(AFTER, [])), null);
+
+  // And the other direction: a page served at a path with no extension, built
+  // from an .erb the agent really can stamp.
+  const fromTemplate = stampedEdit("e-1a2b3c", {
+    page_path: "/dashboard",
+    source_hint: { known: true, path: "app/views/home.html.erb" }
+  });
+  assert.equal(
+    replay.pageCheckReasonFor(fromTemplate, page(AFTER), rebuilt(AFTER, [])),
+    replay.PAGE_CHECK_REASON.STAMP
+  );
+});
+
+test("a revert and lost formatting are not about the stamp, so Markdown still gets both", () => {
+  // Only the stamp rule is held back. A Markdown review whose handled change was
+  // taken back out of the source is still a revert, and it still reopens.
+  const item = stampedEdit("e-1a2b3c", { page_path: "/scratch.md" });
+  assert.equal(
+    replay.pageCheckReasonFor(item, page(BEFORE), rebuilt(BEFORE, [])),
+    replay.PAGE_CHECK_REASON.REVERTED
+  );
+
+  const formatted = stampedEdit("e-1a2b3c", {
+    page_path: "/scratch.md",
+    after: ITALIC_AFTER,
+    after_html: ITALIC_AFTER_HTML
+  });
+  assert.equal(
+    replay.pageCheckReasonFor(formatted, page(ITALIC_AFTER), rebuilt(ITALIC_AFTER, [])),
+    replay.PAGE_CHECK_REASON.FORMATTING
+  );
+});
+
+test("which sources can hold a stamp, said once and read by everyone who asks", () => {
+  // The projection and the page check ask the same function, so review.json's
+  // stamp_carriable and the check's silence can never disagree.
+  ["page.html", "a/b/page.htm", "index.xhtml", "logo.svg", "App.vue", "Card.jsx", "Card.tsx",
+   "home.html.erb", "list.ejs", "page.njk", "row.hbs", "block.liquid", "index.php", "x.mustache",
+   "t.twig", "t.jinja", "t.j2", "App.svelte", "page.astro"].forEach((path) => {
+    assert.equal(record.sourceCanCarryStamp(path), true, path + " holds markup with attributes");
+  });
+
+  ["scratch.md", "NOTES.markdown", "readme.txt", "guide.rst", "doc.adoc", "notes.org", "rows.csv",
+   "data.json", "config.yaml", "/dashboard", "", null, undefined].forEach((path) => {
+    assert.equal(record.sourceCanCarryStamp(path), false, String(path) + " has nowhere to put one");
+  });
+
+  // Query strings and fragments are not extensions.
+  assert.equal(record.sourceCanCarryStamp("/page.html?tab=2"), true);
+  assert.equal(record.sourceCanCarryStamp("/page.md#top"), false);
+  // And the case of the extension is not a fact about the file.
+  assert.equal(record.sourceCanCarryStamp("/PAGE.HTML"), true);
+});
+
+test("S7: the helper's answer about the source outranks the record's own guess", () => {
+  // A Markdown review renders to HTML, so the page's path says .html and the
+  // record has no hint. The browser cannot work this out on its own; the helper
+  // knows the source and says so on every poll (routes.js stamp_carriable).
+  const item = stampedEdit("e-1a2b3c", { page_path: "/rendered.html" });
+  const built = rebuilt(AFTER, []);
+  assert.equal(replay.pageCheckReasonFor(item, page(AFTER), built), replay.PAGE_CHECK_REASON.STAMP);
+
+  const toldMarkdown = Object.assign({}, built, { stampCarriable: false });
+  assert.equal(replay.pageCheckReasonFor(item, page(AFTER), toldMarkdown), null);
+
+  // And the other way: a page path with no extension, whose source is an ERB
+  // template the agent really can stamp.
+  const templated = stampedEdit("e-1a2b3c", { page_path: "/dashboard" });
+  assert.equal(replay.pageCheckReasonFor(templated, page(AFTER), built), null, "the record alone says no");
+  const toldTemplate = Object.assign({}, built, { stampCarriable: true });
+  assert.equal(
+    replay.pageCheckReasonFor(templated, page(AFTER), toldTemplate),
+    replay.PAGE_CHECK_REASON.STAMP
+  );
+});
+
+test("pageCheckOptions carries the helper's answer through, and omits it when there is none", () => {
+  const body = { innerHTML: "<p>x</p>", querySelectorAll: () => [] };
+  assert.equal(replay.pageCheckOptions(body, { stampCarriable: false }).stampCarriable, false);
+  assert.equal(replay.pageCheckOptions(body, { stampCarriable: true }).stampCarriable, true);
+  // Nothing heard yet is not an answer, and it must not read as one.
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(replay.pageCheckOptions(body, { stampCarriable: null }), "stampCarriable"),
+    false
+  );
+  assert.equal(Object.prototype.hasOwnProperty.call(replay.pageCheckOptions(body), "stampCarriable"), false);
 });

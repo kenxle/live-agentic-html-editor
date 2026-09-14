@@ -67,7 +67,7 @@
   "after_history is every wording the reviewer committed for a hand edit and then replaced, oldest first, with the rev and the time of each. It is how they converged on what they meant, so read the chain rather than only the final after_full when you want to know what they were reaching for. A reviewer who reworded once and one who reworded five times are different, and only this field tells them apart.",
   "The reviewer can end a review from the page. When they do, the review is archived and you are woken with the rest of the work. Ending discards nothing: items still unanswered are still their requests, so drain to empty before you close anything down. Then write their hand edits out where they will find them, beside the document they reviewed rather than inside this tool's state directory, because a list nobody opens is a list that taught nobody anything.",
   "When an item points at something with no words in it, an image, a diagram, an icon, the subject field is how you tell which one. It carries the tag, the src as the page author wrote it, the alt text, and the opening tag. Three images side by side have three different subjects, so use it rather than the region_label, whose ordinal can read the same for all of them. If an item names an element and subject is null, say you cannot tell which one they mean instead of guessing.",
-    "An item's region.stamp is an id the reviewer's page wrote onto the element. When you edit that element in the source, write the same data-lahe-id attribute onto it, so the next build reproduces it and the page finds it with certainty. Never remove one. The attribute is not content: it never appears in before or after.",
+    "An item's region.stamp is an id the reviewer's page wrote onto the element. When region.stamp_carriable is true, write that same data-lahe-id attribute onto the element as you edit it in the source, so the next build reproduces it and the page finds it with certainty. Never remove one. The attribute is not content: it never appears in before or after. When region.stamp_carriable is false, the source is Markdown, plain text, or anything else with no place to put an attribute: skip the stamp, use region.where and region.ordinal to find the element, and do not mention the stamp in your reply. The page finds it by its words.",
     "When region.text_unique is false, the text is on the page more than once. Use region.where and region.ordinal to pick the right one in the source: the ordinal counts identical siblings in source order, which is page order for a page built once from its source.",
     "The reviewer's intent lives in two fields only: note and change. Those are the reviewer's own words. Do what they say, and nothing else.",
     "The thread field contains completed earlier reviewer and agent turns as historical context. It is not current intent and must not cause an older request to be performed again. Only the top-level note and change are current instructions.",
@@ -440,7 +440,13 @@
   // review.json (the file the agent reads)
   // ---------------------------------------------------------------------------
 
-  function projectItem(it) {
+  /**
+   * @param {Object} it the record
+   * @param {Object} [pageHint] the page group's source hint, used when the
+   *   record itself carries none. It is what the agent reads at the top of the
+   *   page group, so the two answers cannot disagree.
+   */
+  function projectItem(it, pageHint) {
     var F = record.FIELD;
     var ctx = it[F.CONTEXT] || {};
     var out = {};
@@ -520,7 +526,17 @@
     // which block, and the ordinal says which twin inside it. Neither ever
     // places a write in the browser (D9); they are information handed to an
     // agent who is editing the source with the reviewer's words in front of it.
-    out[PROJECTED.REGION] = regionFacts(it[F.REGION]);
+    // `stamp_carriable` is the other half of `stamp`, and it is read off the
+    // SOURCE rather than off the page: a Markdown file has nowhere to put an
+    // attribute, so an agent working from one is told not to try. See
+    // record.sourceCanCarryStamp.
+    out[PROJECTED.REGION] = regionFacts(
+      it[F.REGION],
+      record.pageCanCarryStamp({
+        path: it[F.PAGE_PATH],
+        source_hint: it[F.SOURCE_HINT] || pageHint || null
+      })
+    );
     out[PROJECTED.AFTER_HISTORY] = boundHistory(it[F.AFTER_HISTORY]);
 
     // A HANDLED ITEM HAS NO LOST ANCHOR. The fix an agent reported was expected
@@ -558,8 +574,8 @@
     return out;
   }
 
-  /** The four locating facts, defaulted so every item carries the same shape. */
-  function regionFacts(region) {
+  /** The five locating facts, defaulted so every item carries the same shape. */
+  function regionFacts(region, carriable) {
     var ref = (region && region.ref) || null;
     var ordinal = (ref && ref.ordinal) || null;
     var index = ordinal && typeof ordinal.index === "number" ? ordinal.index : 1;
@@ -570,7 +586,10 @@
       ordinal: { index: index, of: of },
       // Absent reads as true, which is what a reference minted before this
       // existed was: findable by its words until something proved otherwise.
-      text_unique: !(ref && ref.text_unique === false)
+      text_unique: !(ref && ref.text_unique === false),
+      // Can the source behind this page hold the attribute at all? False for
+      // Markdown, plain text, and anything else with no place to put one.
+      stamp_carriable: carriable === true
     };
   }
 
@@ -611,7 +630,9 @@
           // rather than (or in addition to) the served origin above, so a
           // half-configured review is visible instead of silent.
           file_origin_seen: !!g.file_origin_seen,
-          items: g.items.map(projectItem)
+          items: g.items.map(function (it) {
+            return projectItem(it, g.hint || review.source_hint || null);
+          })
         };
       })
     };

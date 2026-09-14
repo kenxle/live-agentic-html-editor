@@ -65,7 +65,7 @@ HTML that the next build throws away.
 
 | What they are looking at | Open it with | Your edits go to |
 | --- | --- | --- |
-| a Markdown file | `lahe review file.md` | the `.md`, then rerun the same command |
+| a Markdown file | `lahe review file.md` | the `.md`, then rerun the same command. `region.stamp_carriable` is false here: Markdown has nowhere for the stamp, so skip it and use `region.where` and `region.ordinal` |
 | HTML that IS the source | `lahe review page.html` | that HTML file |
 | HTML that is build output | `lahe review page.html --source <generator>` | the generator, never the page |
 | a doc built from many sources | run the real build, then review its output with `--source` | the source fragment |
@@ -210,11 +210,16 @@ handled edit's after text, apply the rest of the sweep, leave that one spot
 alone, and reply `question` naming the conflict.
 
 **The stamp is how the page finds the element again.** An item's
-`region.stamp` is an id the reviewer's page wrote onto the element. When you
-edit that element in the source, write the same `data-lahe-id` attribute onto
-it, so the next build reproduces it and the page finds it with certainty.
-Never remove one. The attribute is not content: it never appears in `before`
-or `after`.
+`region.stamp` is an id the reviewer's page wrote onto the element. When
+`region.stamp_carriable` is true, write that same `data-lahe-id` attribute onto
+the element as you edit it in the source, so the next build reproduces it and
+the page finds it with certainty. Never remove one. The attribute is not
+content: it never appears in `before` or `after`.
+
+When `region.stamp_carriable` is false, the source is Markdown, plain text, or
+anything else with no place to put an attribute. Skip the stamp, use
+`region.where` and `region.ordinal` to find the element, and do not mention the
+stamp in your reply. The page finds it by its words.
 
 When `region.text_unique` is false, the text is on the page more than once.
 Use `region.where` and `region.ordinal` to pick the right one in the source:

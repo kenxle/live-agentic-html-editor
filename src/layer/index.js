@@ -1084,7 +1084,12 @@
         // (RF19, and the quiet failure Ken named on 2026-09-11). Replay only
         // persists on a transition, never per pass, so this is one post when
         // something actually changed.
-        if (sync && typeof sync.recordItem === "function") sync.recordItem(item);
+        // `existing` because this record is never new here: replay only ever
+        // re-stamps a record it found in the store. Without it the post reads
+        // as item.created after every reload (sync's seenItems is in-memory),
+        // or as item.ready, which wakes the agent for a field the reviewer
+        // never typed. Both were live on 2026-09-14.
+        if (sync && typeof sync.recordItem === "function") sync.recordItem(item, { existing: true });
       }
     });
 
@@ -1431,7 +1436,13 @@
       // The page's markup goes in beside its text: a handled edit whose words
       // landed and whose bold or italic did not is also a change that is not on
       // the page, and text alone cannot see that (2026-09-11).
-      var options = ns.replay.pageCheckOptions(body);
+      // Plus the helper's answer about the SOURCE. A Markdown review renders to
+      // HTML, so the page cannot tell on its own that its source has nowhere to
+      // put a data-lahe-id, and a check that assumed it could reopened every
+      // handled edit of every Markdown review once (2026-09-14).
+      var options = ns.replay.pageCheckOptions(body, {
+        stampCarriable: typeof sync.stampCarriable === "function" ? sync.stampCarriable() : null
+      });
       var items = refreshItems();
       var ids = ns.replay.revertedHandledEditIds(items, pageText, options).filter(function (id) {
         return !checkReopened[id];

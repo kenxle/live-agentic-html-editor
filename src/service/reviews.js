@@ -540,6 +540,21 @@ function createReviews(options) {
   }
 
   /**
+   * The SOURCE this review's page is built from, as `add --source` recorded it,
+   * or null.
+   *
+   * Read by the reply poll so the browser can be told whether that source could
+   * hold a `data-lahe-id` at all. A Markdown source cannot, and a page check
+   * that did not know it reopened every handled edit of every Markdown review
+   * once (2026-09-14).
+   */
+  function sourcePath(reviewId) {
+    var review = get(reviewId);
+    if (!review) return null;
+    return typeof review.source_path === "string" && review.source_path ? review.source_path : null;
+  }
+
+  /**
    * Every page recorded for this review, newest last.
    *
    * The source template is NOT one of them: it is what the page is built FROM,
@@ -1120,6 +1135,7 @@ function createReviews(options) {
     touch: touch,
     lastSeenAt: lastSeenAt,
     targetMtime: targetMtime,
+    sourcePath: sourcePath,
     lastHealAt: lastHealAt,
     config: config,
     writeReadyFile: writeReadyFile,

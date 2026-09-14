@@ -385,6 +385,52 @@ test("a re-post of the same revision does not resurrect ready over handled", () 
   assert.equal(now.reply.agent, "claude");
 });
 
+test("a lost stamp re-posted as content leaves a not_handled item not_handled", () => {
+  // THE LIVE CASE, 2026-09-14 (review r9d5cbe5ebc64). Replay stamps a record
+  // lost and posts it so review.json stops calling the item healthy. The item
+  // had already been answered not_handled, and the browser's copy of it is not
+  // allowed to move the lifecycle back: the helper folded that reply and the
+  // helper owns the answer (D5).
+  const { log } = setup();
+  const item = post(log, itemOf({ id: "itm_lost_repost", note: "say which week" }));
+  log.append(REVIEW, [
+    protocol.newEvent({
+      event: protocol.EVENT.REPLY_FOLDED,
+      event_id: "evt_nh",
+      review: REVIEW,
+      item: item.id,
+      rev: 1,
+      payload: {
+        accepted: true,
+        state: record.STATE.NOT_HANDLED,
+        file: "replies.jsonl",
+        reply: { status: "not_handled", agent: "claude", reason: "the source is Markdown" }
+      }
+    })
+  ]);
+  assert.equal(allItems(projectOf(log))[0].state, "not_handled");
+
+  // The browser's copy still says ready, because a page that reloaded before
+  // the reply folded has never seen the answer. It posts as CONTENT, at the
+  // same revision, carrying the lost stamp.
+  const stamped = Object.assign({}, item);
+  stamped[record.FIELD.REGION] = Object.assign({}, item[record.FIELD.REGION] || {}, {
+    lost: { code: "ANCHOR_AMBIGUOUS", reason: "two elements carry this id", at: "2026-09-14T20:25:25.000Z" }
+  });
+  post(log, stamped, protocol.EVENT.ITEM_CONTENT);
+
+  const now = allItems(projectOf(log))[0];
+  assert.equal(now.state, "not_handled", "the answer stands: this post was content, not a lifecycle event");
+  assert.equal(now.reply.agent, "claude");
+  assert.equal(now.rev, 1, "and it is still the same revision");
+  // And the thing the post was FOR arrives: the agent's file now says the
+  // region could not be placed, in the words the reviewer reads on the card.
+  // (A handled item would project no lost stamp, because the fix was expected
+  // to rewrite that passage. A not_handled one is still open.)
+  assert.equal(now.lost.code, "ANCHOR_AMBIGUOUS");
+  assert.equal(now.lost.reason, "two elements carry this id");
+});
+
 // --- ranked test 35, the projection half -------------------------------------
 
 test("an untethered note, an element comment and a selection comment all reach the file", () => {
