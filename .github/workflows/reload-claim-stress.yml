@@ -1,0 +1,50 @@
+name: reload-claim-stress
+
+# Temporary: a hand-fired stress run for the reload_claim flake on
+# ci/reload-claim. Delete before the branch merges.
+on:
+  push:
+    branches: [ci/reload-claim]
+  workflow_dispatch:
+    inputs:
+      repeats:
+        description: "playwright --repeat-each for reload_claim.spec.js"
+        default: "20"
+
+jobs:
+  # The file on its own, many times over. Cheap, and it catches anything that
+  # is purely the reload sequence racing itself.
+  file:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test test/browser/reload_claim.spec.js --repeat-each=${{ github.event.inputs.repeats || '20' }}
+
+  # The whole browser suite, three times, which is how the flake was actually
+  # seen: the contention of every other spec running beside it is part of it.
+  suite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: repeat the browser suite
+        run: |
+          fails=0
+          for i in 1 2 3; do
+            echo "::group::browser suite run $i"
+            npx playwright test || fails=$((fails+1))
+            echo "::endgroup::"
+          done
+          echo "failed runs: $fails"
+          test "$fails" -eq 0

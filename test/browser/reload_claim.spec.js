@@ -72,6 +72,96 @@ function refusalState(page) {
   }));
 }
 
+
+// TEMPORARY DIAGNOSTIC (ci/reload-claim). Records every window.claim and
+// window.release this tab makes, across reloads, in sessionStorage, so a
+// failure can be read as a sequence rather than a snapshot.
+const CLAIM_TRACE = `
+(function () {
+  var KEY = "lahe.diag.claimtrace";
+  function push(entry) {
+    try {
+      var all = JSON.parse(window.sessionStorage.getItem(KEY) || "[]");
+      all.push(entry);
+      window.sessionStorage.setItem(KEY, JSON.stringify(all));
+    } catch (err) {}
+  }
+  var real = window.fetch;
+  window.fetch = function (input, init) {
+    var url = typeof input === "string" ? input : (input && input.url) || "";
+    var watched = url.indexOf("/window/") !== -1 || url.indexOf("window.claim") !== -1 || url.indexOf("/window") !== -1;
+    if (!watched) return real.apply(this, arguments);
+    var at = Date.now();
+    var body = (init && init.body) || null;
+    push({ t: at, dir: "->", url: url, body: String(body).slice(0, 300), doc: window.__laheDiagDoc });
+    return real.apply(this, arguments).then(
+      function (response) {
+        var clone = null;
+        try { clone = response.clone(); } catch (err) {}
+        if (clone) {
+          clone.text().then(function (text) {
+            push({ t: at, at2: Date.now(), dir: "<-", url: url, status: response.status, body: text.slice(0, 300), doc: window.__laheDiagDoc });
+          }, function () {});
+        }
+        return response;
+      },
+      function (error) {
+        push({ t: at, at2: Date.now(), dir: "<x", url: url, error: String(error && error.message), doc: window.__laheDiagDoc });
+        throw error;
+      }
+    );
+  };
+})();
+`;
+
+async function traceOf(page) {
+  return page.evaluate(() => {
+    try {
+      return JSON.parse(window.sessionStorage.getItem("lahe.diag.claimtrace") || "[]");
+    } catch (err) {
+      return [];
+    }
+  });
+}
+
+async function dumpDiagnostics(page, service, label) {
+  let pageState = null;
+  try {
+    pageState = await page.evaluate(() => ({
+      failures: window.__lahe.failures(),
+      lock: window.__lahe.handle.sync.lockState(),
+      status: window.__lahe.handle.sync.status(),
+      claimMisses: window.__lahe.handle.sync.claimMisses ? window.__lahe.handle.sync.claimMisses() : null,
+      secret: (window.sessionStorage.getItem("lahe.session.v1:reload-claim") || "").slice(0, 8),
+      session: Object.keys(window.sessionStorage).map((k) => k + "=" + String(window.sessionStorage.getItem(k)).slice(0, 120))
+    }));
+  } catch (err) {
+    pageState = { error: String(err && err.message) };
+  }
+  const trace = await traceOf(page).catch(() => []);
+  let helperLog = "";
+  try {
+    helperLog = fs.readFileSync(path.join(service.stateDir, "helper.log"), "utf8");
+  } catch (err) {
+    helperLog = "(no helper log: " + err.message + ")";
+  }
+  let windows = "";
+  try {
+    windows = fs.readFileSync(path.join(service.stateDir, "windows.json"), "utf8");
+  } catch (err) {
+    windows = "(no windows.json: " + err.message + ")";
+  }
+  // eslint-disable-next-line no-console
+  console.log(
+    "\n===== LAHE DIAG " + label + " =====\n" +
+      "page: " + JSON.stringify(pageState, null, 2) + "\n" +
+      "claim trace:\n" + trace.map((e) => JSON.stringify(e)).join("\n") + "\n" +
+      "windows.json: " + windows + "\n" +
+      "helper.log tail:\n" + helperLog.split("\n").slice(-60).join("\n") + "\n" +
+      "===== END DIAG =====\n"
+  );
+}
+
 async function commentOnBody(page, text) {
   await page.evaluate(() => {
     const el = document.querySelector("#body");
@@ -118,6 +208,7 @@ test.describe("a reload is the same window, not a second one", () => {
   });
 
   test("reloading the page over and over never refuses it, and it stays writable", async ({ page }) => {
+    await page.addInitScript(CLAIM_TRACE);
     await page.goto(pages.origin + "/" + PAGE_FILE);
     await booted(page);
 
@@ -130,6 +221,9 @@ test.describe("a reload is the same window, not a second one", () => {
         message: "the window claim to be decided after the reload"
       });
       const state = await refusalState(page);
+      if (state.chips.includes("SECOND_WINDOW_REFUSED") || state.readOnly || state.refusalShown) {
+        await dumpDiagnostics(page, service, "reload " + (i + 1));
+      }
       expect(state.chips, "no second-window chip after reload " + (i + 1)).not.toContain("SECOND_WINDOW_REFUSED");
       expect(state.readOnly, "and the window is not read-only").toBe(false);
       expect(state.refusalShown, "and the refusal panel is not shown").toBe(false);
