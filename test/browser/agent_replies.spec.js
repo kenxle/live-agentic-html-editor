@@ -714,8 +714,11 @@ test.describe("3A: an agent answers by appending one line", () => {
       const historyTimes = await page.evaluate((id) => {
         const item = window.__lahe.itemById(id);
         return {
-          rendered: Array.from(window.__lahe.handle.doneTab().thread(id).querySelectorAll(".lahe-thread-time"))
-            .map((node) => node.getAttribute("datetime")),
+          // The turns, not the round's own folded line, which restates the
+          // first turn's time on the control that opens it.
+          rendered: Array.from(
+            window.__lahe.handle.doneTab().thread(id).querySelectorAll(".lahe-round-turns .lahe-thread-time")
+          ).map((node) => node.getAttribute("datetime")),
           expected: [item.thread[0].reviewer.at, item.thread[0].agent.at]
         };
       }, item.id);
@@ -1367,7 +1370,11 @@ test.describe("adding another message before the agent has answered", () => {
           there: !!add && !add.hidden,
           // The card keeps exactly one action, and this box does not spend a
           // second one on a gesture the footer already advertises.
-          buttonsOnCard: Array.from(card.querySelectorAll("button")).map((b) => b.textContent).sort(),
+          // Not the head's disclosure, which folds the card to one line: it is
+          // chrome on every card in every tab, not an action on this comment.
+          buttonsOnCard: Array.from(card.querySelectorAll("button:not(.carddisclose)"))
+            .map((b) => b.textContent)
+            .sort(),
           cardActs: Array.from(card.querySelectorAll("[data-lahe-act]")).map((b) =>
             b.getAttribute("data-lahe-act")
           )

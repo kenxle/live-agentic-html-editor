@@ -323,6 +323,54 @@
     return Math.round(want);
   }
 
+  // ---------------------------------------------------------------------------
+  // Folding a card down to one line
+  // ---------------------------------------------------------------------------
+  //
+  // Ken, 2026-09-15: "I'm scrolling through comments a lot now. We should make
+  // individual comments in a thread collapsible, so I can close them down to a
+  // single line when I'm doing a lot of chatting across lots of different
+  // things."
+  //
+  // A collapsed card is a card that is STILL THERE, not one that is hidden: it
+  // keeps its place in the pane, its state chip, its time, and both of the marks
+  // that say something on it is worth reading. What goes away is the reading:
+  // the quote, the body, the agent's answer, the composer.
+  //
+  // THE ONE READING RULE THIS CHANGES. A collapsed card does not count as
+  // looked at, so opening the tab it sits in does not mark its reply read.
+  // Expanding it does. Everything else about unseen, badges, toasts and neglect
+  // is untouched; see tab_done.js, which owns all of it.
+  //
+  // These four are declared above the stylesheet because the stylesheet is built
+  // from them, and a var read before its line runs is `undefined` in a selector.
+
+  // The plain chevron the disclosure controls wear, in the card head and on a
+  // thread round. Drawn rather than vendored: it is two strokes, and shipping a
+  // second icon file to say "there is more under here" is not worth the
+  // provenance note it would need.
+  var CHEVRON_ICON =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+    '<path d="M9 5l7 7-7 7"/>' +
+    "</svg>";
+
+  // The card attribute that says it is folded. On the CARD rather than on a
+  // child, so one attribute puts away every block the rail and the three tab
+  // owners draw inside it, and nothing has to be told.
+  var CARD_COLLAPSED_ATTR = "data-lahe-collapsed";
+  // The two marks a folded card still has to show. tab_done.js SETS both of
+  // these; the rail only reads them, which is what lets a folded card say "1
+  // new" without this file knowing what a reply is. Spelled here so there is one
+  // spelling: tab_done.js takes its own constants from these.
+  var CARD_UNSEEN_ATTR = "data-lahe-unseen";
+  var CARD_ASKING_ATTR = "data-lahe-asking";
+
+  // How much of what a card is about fits on its folded line. Long enough to
+  // recognize the passage, short enough that every folded card is one row at
+  // rail width.
+  var COLLAPSED_LINE_MAX = 60;
+
   var CSS = [
     // all: initial stops every inheritable property of the host page (font,
     // color, line-height, letter-spacing) from reaching the rail. A closed
@@ -475,6 +523,52 @@
     ".card__top{display:flex;align-items:center;gap:8px}",
     ".card__kind{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;",
     "color:var(--ink-faint)}",
+
+    // --- folding a card to one line -----------------------------------------
+    //
+    // The chevron is the same quiet weight as the head it sits in, and its TAP
+    // TARGET IS 44px while its drawn box is not: the negative margins pull the
+    // hit area out over the card's own padding, which is space nothing else
+    // wants, so a thumb gets a real target and the head keeps its height.
+    ".carddisclose{flex:none;position:relative;z-index:1;display:inline-flex;",
+    "align-items:center;justify-content:center;width:44px;height:44px;",
+    "margin:-12px -10px -12px -12px;padding:0;border:0;background:none;",
+    "color:var(--ink-faint);cursor:pointer}",
+    ".carddisclose:hover{color:var(--ink-soft)}",
+    ".carddisclose:focus-visible{outline:2px solid var(--accent);outline-offset:-10px;border-radius:7px}",
+    // Pointing right when the card is folded, a quarter turn down when it is
+    // open. 120ms, which is long enough to read as a turn and short enough that
+    // it never delays the reading underneath it.
+    ".carddisclose svg{width:13px;height:13px;transform:rotate(90deg);",
+    "transition:transform 120ms ease}",
+    ".card[" + CARD_COLLAPSED_ATTR + "='true'] .carddisclose svg{transform:rotate(0deg)}",
+    "@media (prefers-reduced-motion:reduce){.carddisclose svg{transition:none}}",
+    // The folded line itself. Drawn always, shown only when the card is folded,
+    // so nothing is built at the moment of the click.
+    ".card__line{display:none;align-items:baseline;gap:7px;min-width:0}",
+    ".card[" + CARD_COLLAPSED_ATTR + "='true'] .card__line{display:flex}",
+    ".card__linetext{flex:1;min-width:0;font-size:12.5px;color:var(--ink-soft);",
+    "white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+    // The tag that keeps a folded card honest: something on it is worth reading
+    // and the words for it are off the screen. Driven entirely by the two marks
+    // tab_done already sets on the card, so it can never disagree with them.
+    ".card__tag{flex:none;display:none;font-size:10px;font-weight:700;line-height:1;",
+    "letter-spacing:.06em;text-transform:uppercase;border-radius:999px;padding:3px 6px;",
+    "color:#fff;background:var(--accent)}",
+    ":host([data-lahe-scheme='dark']) .card__tag{color:#12151a}",
+    ".card[" + CARD_COLLAPSED_ATTR + "='true'][" + CARD_UNSEEN_ATTR + "='true'] .card__tag--new{display:inline-block}",
+    ".card[" + CARD_COLLAPSED_ATTR + "='true'][" + CARD_ASKING_ATTR + "='true'] .card__tag--ask{display:inline-block}",
+    // A card that is both is a question, which is the louder of the two.
+    ".card[" + CARD_COLLAPSED_ATTR + "='true'][" + CARD_ASKING_ATTR + "='true'] .card__tag--new{display:none}",
+    // Everything a folded card puts away. The card keeps its head (kind, time,
+    // state chip) and gains the line above; the reading goes.
+    ".card[" + CARD_COLLAPSED_ATTR + "='true'] > .card__quote,",
+    ".card[" + CARD_COLLAPSED_ATTR + "='true'] > .card__body,",
+    ".card[" + CARD_COLLAPSED_ATTR + "='true'] > .card__badges,",
+    ".card[" + CARD_COLLAPSED_ATTR + "='true'] > .agent,",
+    ".card[" + CARD_COLLAPSED_ATTR + "='true'] > .card__continuation,",
+    ".card[" + CARD_COLLAPSED_ATTR + "='true'] > .card__notice{display:none}",
+    ".card[" + CARD_COLLAPSED_ATTR + "='true']{gap:6px;padding-bottom:10px}",
     ".card__top .spacer{flex:1}",
     ".card__time,.agent__time{font-size:10px;color:var(--ink-faint);font-variant-numeric:tabular-nums;white-space:nowrap}",
     ".card__state{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;",
@@ -874,9 +968,17 @@
     MENU_LABEL: "Hide for presenting (Cmd-Shift-X)"
   };
 
+  // Folding every card at once, like Present below, is the rail acting on
+  // ITSELF: there is no work for boot to do and no action for a caller to
+  // register, so these two are handled where they are drawn. They act on the
+  // tab that is open, because that is the list the reviewer is looking at.
+  var FOLD_ALL = { COLLAPSE: "collapse-cards", EXPAND: "expand-cards" };
+
   var MENU_ITEMS = [
     { action: "copy", label: "Copy review" },
     { action: "export", label: "Export review to file" },
+    { action: FOLD_ALL.COLLAPSE, label: "Collapse all cards" },
+    { action: FOLD_ALL.EXPAND, label: "Expand all cards" },
     { action: PRESENT.ACTION, label: PRESENT.MENU_LABEL }
   ];
 
@@ -937,6 +1039,73 @@
     'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
     '<path d="' + EXIT_ICON_PATH + '"/>' +
     "</svg>";
+
+  /** One line: no newlines, no runs of spaces, nothing on either end. */
+  function oneLine(value) {
+    return String(value === null || value === undefined ? "" : value)
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  /**
+   * Cut a sentence to length, at a word.
+   *
+   * At a word because the alternative reads as a typo: "cut this to one senten"
+   * looks like something went wrong, and the reviewer stops to work out what.
+   * A single word longer than the whole line still has to end somewhere, so that
+   * one case is cut where it lands.
+   *
+   * @param {string} text
+   * @param {number} max the most characters to keep, before the ellipsis
+   * @returns {string}
+   */
+  function clipAtWord(text, max) {
+    var value = oneLine(text);
+    var limit = typeof max === "number" && max > 0 ? max : COLLAPSED_LINE_MAX;
+    if (value.length <= limit) return value;
+    var head = value.slice(0, limit + 1);
+    var space = head.lastIndexOf(" ");
+    var kept = space > 0 ? head.slice(0, space) : value.slice(0, limit);
+    return kept.replace(/[\s,.;:!?-]+$/, "") + "…";
+  }
+
+  /**
+   * What a folded card says it is about, from the record alone.
+   *
+   * ONE SOURCE PER KIND, and the reason is that the reviewer is scanning:
+   *
+   *   a comment      the QUOTE. The passage is what they are looking for; their
+   *                  own note is what they wrote about it, and they already know
+   *                  what they wrote
+   *   an edit        the CHANGE sentence, which is the edit said in words. The
+   *                  before-and-after is the detail, and detail is what folding
+   *                  puts away
+   *   a page note    the NOTE, because a note tethered to nothing has no quote
+   *                  to stand in for it
+   *
+   * Each falls through to the others rather than to nothing: a card with an
+   * empty line is a card the reviewer cannot tell from the one above it.
+   *
+   * Pure: item in, one line out, no card and no document required.
+   *
+   * @param {object} item the record
+   * @param {number} [max] characters, before the ellipsis
+   * @returns {string}
+   */
+  function collapsedLineText(item, max) {
+    if (!item) return "";
+    var kind = item[record.FIELD.KIND];
+    var context = item[record.FIELD.CONTEXT] || {};
+    var quote = oneLine(context.quote);
+    var change = oneLine(item[record.FIELD.CHANGE]);
+    var note = oneLine(item[record.FIELD.NOTE]);
+    var picked;
+    if (kind === record.KIND.NOTE) picked = note || quote || change;
+    else if (kind === record.KIND.EDIT || kind === record.KIND.FORMAT_ONLY || kind === record.KIND.DELETE) {
+      picked = change || quote || note;
+    } else picked = quote || note || change;
+    return clipAtWord(picked, max);
+  }
 
   /**
    * What is unfinished, counted off the reviewer's own records.
@@ -1045,6 +1214,15 @@
     // selection); what to DO about it, which is finding the passage on the page,
     // belongs to whoever knows about anchors. See onCardActivate.
     var cardActivateHandlers = [];
+    // Who wants to know a card was folded or opened. Same seam as onTabSelect,
+    // and there for the same reason: EXPANDING A CARD IS READING IT, and the
+    // Done tab is the file that knows what that means for a reply.
+    var cardCollapseHandlers = [];
+    // id -> true for the cards the reviewer folded to one line. Only the folded
+    // ones are held; an absent id is an open card, which is also the right
+    // answer for a card that does not exist yet. Read from the review's own
+    // preferences, so a reload finds the same shape of list.
+    var collapsedCards = readCardCollapsePreference();
     // Where the pointer went down, so a drag that ends inside a card is read as
     // a drag and not as a click.
     var pressPoint = null;
@@ -1236,6 +1414,10 @@
           // beside it are work only boot knows how to do, and this one is not.
           if (entry.action === PRESENT.ACTION) {
             setPresenting(true);
+            return;
+          }
+          if (entry.action === FOLD_ALL.COLLAPSE || entry.action === FOLD_ALL.EXPAND) {
+            setCardsCollapsed(currentTab(), entry.action === FOLD_ALL.COLLAPSE);
             return;
           }
           runAction(entry.action);
@@ -1748,12 +1930,18 @@
       // A rail told which review it is showing reads that review's own choice
       // about being hidden, the way it reads the other three.
       presenting = readPresentPreference();
+      // Folds are per review as well, so a rail told it is showing a different
+      // review does not carry the last one's folded list onto these cards.
+      collapsedCards = readCardCollapsePreference();
       loadChips();
       if (dom) {
         dom.rail.querySelector(".review").textContent = id || "";
         renderChips();
         renderCollapsed();
         renderPresent();
+        Object.keys(cards).forEach(function (id) {
+          applyCardCollapsed(cards[id]);
+        });
         applyPillSpot();
         applyRailWidth();
         if (refusalInfo) setCollapsed(false, false);
@@ -1911,6 +2099,116 @@
       };
     }
 
+    // -------------------------------------------------------------------------
+    // Folding a card to one line
+    // -------------------------------------------------------------------------
+
+    /** Was this click on the card's head strip rather than in its contents? */
+    function withinHead(node, cardNodeEl) {
+      var current = node;
+      while (current && current !== cardNodeEl) {
+        if (current.nodeType === 1 && current.getAttribute && current.getAttribute("data-lahe-card-head") !== null) {
+          return true;
+        }
+        current = current.parentNode;
+      }
+      return false;
+    }
+
+    function isCardCollapsed(id) {
+      return collapsedCards[id] === true;
+    }
+
+    /** The ids currently folded, for a caller that wants the whole list. */
+    function collapsedCardIds() {
+      return Object.keys(collapsedCards);
+    }
+
+    /**
+     * Paint one card's fold. Writes attributes and text into nodes that already
+     * exist; it never rebuilds anything, which is this file's own law.
+     */
+    function applyCardCollapsed(card) {
+      if (!card || !card.node || !card.parts) return false;
+      var folded = isCardCollapsed(card.id);
+      if (folded) card.node.setAttribute(CARD_COLLAPSED_ATTR, "true");
+      else card.node.removeAttribute(CARD_COLLAPSED_ATTR);
+      card.parts.disclose.setAttribute("aria-expanded", folded ? "false" : "true");
+      var label = folded ? "Expand this card" : "Collapse this card";
+      card.parts.disclose.setAttribute("aria-label", label);
+      card.parts.disclose.title = label;
+      // Kept up to date whether the card is folded or not, so the line is
+      // already right the instant it is shown.
+      card.parts.lineText.textContent = collapsedLineText(card.item, COLLAPSED_LINE_MAX);
+      return folded;
+    }
+
+    /**
+     * Fold this card, or open it.
+     *
+     * @param {string} id item id
+     * @param {boolean} collapsed true to fold it down to one line
+     * @returns {object|null} the card handle, or null when there is no such card
+     */
+    function setCardCollapsed(id, collapsed) {
+      if (!cards[id]) return null;
+      var want = collapsed === true;
+      if (isCardCollapsed(id) === want) return handleFor(id);
+      if (want) collapsedCards[id] = true;
+      else delete collapsedCards[id];
+      applyCardCollapsed(cards[id]);
+      persistCollapsedPreference();
+      cardCollapseHandlers.forEach(function (fn) {
+        try {
+          fn(id, want);
+        } catch (err) {
+          // One bad listener must never make a chevron feel broken to press.
+        }
+      });
+      return handleFor(id);
+    }
+
+    function toggleCardCollapsed(id) {
+      return setCardCollapsed(id, !isCardCollapsed(id));
+    }
+
+    /**
+     * Fold, or open, every card in one tab.
+     *
+     * The head menu's two items. A tab rather than the whole rail, because the
+     * reviewer asking for this is looking at one list and means that one.
+     *
+     * @param {string} tab one of TABS
+     * @param {boolean} collapsed
+     * @returns {string[]} the ids that actually changed
+     */
+    function setCardsCollapsed(tab, collapsed) {
+      var changed = [];
+      Object.keys(cards).forEach(function (id) {
+        if (tab && cards[id].pane !== tab) return;
+        if (isCardCollapsed(id) === (collapsed === true)) return;
+        setCardCollapsed(id, collapsed);
+        changed.push(id);
+      });
+      return changed;
+    }
+
+    /**
+     * Tell me when a card is folded or opened.
+     *
+     * @param {function(string, boolean)} fn called with the item id and whether
+     *   it is now folded
+     * @returns {function} unsubscribe
+     */
+    function onCardCollapse(fn) {
+      if (typeof fn !== "function") throw new TypeError("onCardCollapse: a function is required");
+      cardCollapseHandlers.push(fn);
+      return function () {
+        var at = cardCollapseHandlers.indexOf(fn);
+        if (at !== -1) cardCollapseHandlers.splice(at, 1);
+      };
+    }
+
     function buildCardNode(card) {
       if (!dom || card.node) return card.node;
       var node = el("article", "card");
@@ -1925,10 +2223,30 @@
         if (isInteractiveTarget(event.target, node)) return;
         if (press && Math.abs(event.clientX - press.x) + Math.abs(event.clientY - press.y) > CLICK_SLOP) return;
         if (selectionInside(node)) return;
+        // THE HEAD FOLDS, THE BODY JUMPS. The rules above are untouched: a
+        // control, a drag and a selection are still not a gesture at all. This
+        // only splits what is left in two, and the head is the half that was
+        // doing the least: a kind label, a time and a state chip are things to
+        // read rather than things to press, so the strip they sit on is where
+        // the fold belongs.
+        if (withinHead(event.target, node)) {
+          toggleCardCollapsed(card.id);
+          return;
+        }
         activateCard(card.id);
       });
 
       var top = el("div", "card__top");
+      top.setAttribute("data-lahe-card-head", "true");
+      // The disclosure, first in the head, so the chevrons line up down the pane
+      // whatever the cards under them say.
+      var disclose = el("button", "carddisclose");
+      disclose.setAttribute("type", "button");
+      disclose.innerHTML = CHEVRON_ICON;
+      disclose.addEventListener("click", function () {
+        toggleCardCollapsed(card.id);
+      });
+      top.appendChild(disclose);
       var kind = el("span", "card__kind");
       top.appendChild(kind);
       top.appendChild(el("span", "spacer"));
@@ -1937,6 +2255,15 @@
       var state = el("span", "card__state");
       top.appendChild(state);
       node.appendChild(top);
+
+      // The one line a folded card shows. Built once with the card, like every
+      // other part: nothing here is created at the moment of a click.
+      var line = el("div", "card__line");
+      var lineText = el("span", "card__linetext");
+      line.appendChild(lineText);
+      line.appendChild(el("span", "card__tag card__tag--new", "1 new"));
+      line.appendChild(el("span", "card__tag card__tag--ask", "question"));
+      node.appendChild(line);
 
       var quote = el("div", "card__quote");
       node.appendChild(quote);
@@ -1959,7 +2286,21 @@
       card.node = node;
       card.bodyNode = body;
       card.continuationNode = continuation;
-      card.parts = { kind: kind, time: time, state: state, quote: quote, badges: badges, agent: agent, continuation: continuation, notice: notice };
+      card.parts = {
+        head: top,
+        disclose: disclose,
+        line: line,
+        lineText: lineText,
+        kind: kind,
+        time: time,
+        state: state,
+        quote: quote,
+        badges: badges,
+        agent: agent,
+        continuation: continuation,
+        notice: notice
+      };
+      applyCardCollapsed(card);
       // A remount rebuilds the card's node, so anything a tab owner attached
       // goes back into the new body rather than being silently dropped.
       (card.attachedBefore || []).forEach(function (attachedNode) {
@@ -2094,6 +2435,9 @@
       }
 
       p.notice.textContent = card.notice || "";
+
+      // Last, so the folded line is written from the item this paint just used.
+      applyCardCollapsed(card);
     }
 
     function getCard(id) {
@@ -3429,6 +3773,36 @@
       }
     }
 
+    /**
+     * Which cards this review had folded last time, as an id -> true map.
+     *
+     * Best effort, like every other read in this bucket: a denied or corrupt
+     * storage costs the reviewer their folds, which come back with one click,
+     * and never a word of their own work.
+     */
+    function readCardCollapsePreference() {
+      var out = Object.create(null);
+      if (!reviewId || !store || typeof store.readUiPreferences !== "function") return out;
+      try {
+        var got = store.readUiPreferences(reviewId).cards || {};
+        Object.keys(got).forEach(function (id) {
+          if (got[id] === true) out[id] = true;
+        });
+      } catch (err) {
+        return Object.create(null);
+      }
+      return out;
+    }
+
+    /** The folded ids as a plain object, which is what the store writes. */
+    function collapsedCardsValue() {
+      var out = {};
+      Object.keys(collapsedCards).forEach(function (id) {
+        out[id] = true;
+      });
+      return out;
+    }
+
     function persistCollapsedPreference() {
       if (!reviewId || !store || typeof store.writeUiPreferences !== "function") return false;
       try {
@@ -3440,7 +3814,8 @@
           collapsed: preferredCollapsed,
           pill: pillSpot,
           width: railWidth,
-          present: presenting
+          present: presenting,
+          cards: collapsedCardsValue()
         });
         return true;
       } catch (err) {
@@ -4685,6 +5060,13 @@
       onTabSelect: onTabSelect,
       onCardActivate: onCardActivate,
       activateCard: activateCard,
+      // Folding a card to one line, and the seam that says it happened.
+      isCardCollapsed: isCardCollapsed,
+      setCardCollapsed: setCardCollapsed,
+      toggleCardCollapsed: toggleCardCollapsed,
+      setCardsCollapsed: setCardsCollapsed,
+      collapsedCardIds: collapsedCardIds,
+      onCardCollapse: onCardCollapse,
       setTabNewCount: setTabNewCount,
       tabNewCount: tabNewCount,
       pillNewCount: pillNewCount,
@@ -4758,6 +5140,16 @@
 
   return {
     PRESENT: PRESENT,
+    // Folding a card to one line: the attributes the rule is written in, the
+    // icon both disclosures wear, and the pure line builder.
+    FOLD_ALL: FOLD_ALL,
+    CARD_COLLAPSED_ATTR: CARD_COLLAPSED_ATTR,
+    CARD_UNSEEN_ATTR: CARD_UNSEEN_ATTR,
+    CARD_ASKING_ATTR: CARD_ASKING_ATTR,
+    COLLAPSED_LINE_MAX: COLLAPSED_LINE_MAX,
+    CHEVRON_ICON: CHEVRON_ICON,
+    collapsedLineText: collapsedLineText,
+    clipAtWord: clipAtWord,
     TAB: TAB,
     TABS: TABS,
     STATUS: STATUS,

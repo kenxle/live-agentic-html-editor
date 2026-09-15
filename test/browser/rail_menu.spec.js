@@ -185,11 +185,14 @@ test.describe("the review's actions live in the head's menu", () => {
         return got.open ? got : null;
       }, { message: "the menu to open on a real click" });
       expect(info.expanded).toBe("true");
-      // Two review-level actions, plus present mode, which is the rail putting
-      // itself away for a talk rather than work for boot to do.
+      // Two review-level actions, plus the three the rail does to ITSELF:
+      // folding every card on the open tab either way, and present mode, which
+      // is the rail putting itself away for a talk rather than work for boot.
       expect(info.items.map((one) => one.label)).toEqual([
         "Copy review",
         "Export review to file",
+        "Collapse all cards",
+        "Expand all cards",
         "Hide for presenting (Cmd-Shift-X)"
       ]);
       info.items.forEach((one) => {

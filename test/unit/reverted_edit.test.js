@@ -510,7 +510,11 @@ function rebuilt(passage, stamps) {
     stamps: (stamps || []).reduce(function (set, id) {
       set[id] = true;
       return set;
-    }, {})
+    }, {}),
+    // The helper's answer: this page's source can hold an attribute. The check
+    // never guesses it from the record any more (2026-09-15), so a test about
+    // a missing stamp has to say the source is one that could carry it.
+    stampCarriable: true
   };
 }
 
@@ -610,7 +614,7 @@ test("pageCheckOptions reads the document's ids once, beside its markup", () => 
     innerHTML: pageHtml("<p>" + AFTER + "</p>"),
     querySelectorAll: () => [stamped, blank]
   };
-  const options = replay.pageCheckOptions(body);
+  const options = Object.assign(replay.pageCheckOptions(body), { stampCarriable: true });
   assert.deepEqual(options.stamps, { "e-1a2b3c": true }, "an empty attribute is not an id");
   assert.equal(replay.pageCheckReasonFor(stampedEdit("e-1a2b3c"), page(AFTER), options), null);
   assert.equal(
@@ -635,32 +639,37 @@ test("pageCheckOptions reads the document's ids once, beside its markup", () => 
 // common document type.
 
 test("S7: a Markdown source is never asked for a stamp it cannot hold", () => {
+  // The helper says the source cannot hold an attribute. Whatever the record's
+  // own path or hint says, the check does not fire.
   const item = stampedEdit("e-1a2b3c", { page_path: "/scratch.md" });
-  assert.equal(replay.pageCheckReasonFor(item, page(AFTER), rebuilt(AFTER, [])), null);
-  assert.equal(replay.pageCheckNoteFor(item, page(AFTER), rebuilt(AFTER, [])), null);
-  assert.equal(replay.isRevertedHandledEdit(item, page(AFTER), rebuilt(AFTER, [])), false);
+  const told = Object.assign(rebuilt(AFTER, []), { stampCarriable: false });
+  assert.equal(replay.pageCheckReasonFor(item, page(AFTER), told), null);
+  assert.equal(replay.pageCheckNoteFor(item, page(AFTER), told), null);
+  assert.equal(replay.isRevertedHandledEdit(item, page(AFTER), told), false);
 });
 
 test("S7: the rendered page's own path does not decide it, the SOURCE does", () => {
   // The review's own case: a .md opened with `lahe review file.md` renders as
-  // HTML, so the page path can say .html while the file the agent edits cannot
-  // hold an attribute. The source hint is the answer whenever the review has
-  // one.
+  // HTML, so the page path says .html while the file the agent edits cannot
+  // hold an attribute. Only the helper knows the source, so only its answer
+  // decides; the record's hint and path never do (2026-09-15).
   const fromMarkdown = stampedEdit("e-1a2b3c", {
     page_path: "/rendered.html",
     source_hint: { known: true, path: "docs/drafts/scratch.md" }
   });
-  assert.equal(replay.pageCheckReasonFor(fromMarkdown, page(AFTER), rebuilt(AFTER, [])), null);
-
-  // And the other direction: a page served at a path with no extension, built
-  // from an .erb the agent really can stamp.
   const fromTemplate = stampedEdit("e-1a2b3c", {
     page_path: "/dashboard",
     source_hint: { known: true, path: "app/views/home.html.erb" }
   });
+  const saysNo = Object.assign(rebuilt(AFTER, []), { stampCarriable: false });
+  const saysYes = Object.assign(rebuilt(AFTER, []), { stampCarriable: true });
+  assert.equal(replay.pageCheckReasonFor(fromMarkdown, page(AFTER), saysNo), null);
+  assert.equal(replay.pageCheckReasonFor(fromTemplate, page(AFTER), saysNo), null, "the answer outranks the hint");
+  assert.equal(replay.pageCheckReasonFor(fromTemplate, page(AFTER), saysYes), replay.PAGE_CHECK_REASON.STAMP);
   assert.equal(
-    replay.pageCheckReasonFor(fromTemplate, page(AFTER), rebuilt(AFTER, [])),
-    replay.PAGE_CHECK_REASON.STAMP
+    replay.pageCheckReasonFor(fromMarkdown, page(AFTER), saysYes),
+    replay.PAGE_CHECK_REASON.STAMP,
+    "and the other way: the answer outranks a Markdown hint too"
   );
 });
 
@@ -705,26 +714,19 @@ test("which sources can hold a stamp, said once and read by everyone who asks", 
   assert.equal(record.sourceCanCarryStamp("/PAGE.HTML"), true);
 });
 
-test("S7: the helper's answer about the source outranks the record's own guess", () => {
-  // A Markdown review renders to HTML, so the page's path says .html and the
-  // record has no hint. The browser cannot work this out on its own; the helper
-  // knows the source and says so on every poll (routes.js stamp_carriable).
+test("S7: the helper's answer about the source is the only evidence; no answer means no reopen", () => {
+  // With NO answer yet (the boot pass runs before the first poll returns), the
+  // check declines rather than guessing from the page's path: on 2026-09-15
+  // that guess reopened a handled edit on a Markdown review three seconds
+  // after a reload.
   const item = stampedEdit("e-1a2b3c", { page_path: "/rendered.html" });
-  const built = rebuilt(AFTER, []);
-  assert.equal(replay.pageCheckReasonFor(item, page(AFTER), built), replay.PAGE_CHECK_REASON.STAMP);
-
-  const toldMarkdown = Object.assign({}, built, { stampCarriable: false });
-  assert.equal(replay.pageCheckReasonFor(item, page(AFTER), toldMarkdown), null);
-
-  // And the other way: a page path with no extension, whose source is an ERB
-  // template the agent really can stamp.
-  const templated = stampedEdit("e-1a2b3c", { page_path: "/dashboard" });
-  assert.equal(replay.pageCheckReasonFor(templated, page(AFTER), built), null, "the record alone says no");
-  const toldTemplate = Object.assign({}, built, { stampCarriable: true });
-  assert.equal(
-    replay.pageCheckReasonFor(templated, page(AFTER), toldTemplate),
-    replay.PAGE_CHECK_REASON.STAMP
-  );
+  const answeredYes = rebuilt(AFTER, []);
+  assert.equal(replay.pageCheckReasonFor(item, page(AFTER), answeredYes), replay.PAGE_CHECK_REASON.STAMP);
+  const unanswered = Object.assign({}, answeredYes);
+  delete unanswered.stampCarriable;
+  assert.equal(replay.pageCheckReasonFor(item, page(AFTER), unanswered), null, "no answer, no reopen");
+  const answeredNo = Object.assign({}, answeredYes, { stampCarriable: false });
+  assert.equal(replay.pageCheckReasonFor(item, page(AFTER), answeredNo), null, "answered no, no reopen");
 });
 
 test("pageCheckOptions carries the helper's answer through, and omits it when there is none", () => {

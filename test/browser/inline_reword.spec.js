@@ -320,7 +320,9 @@ test.describe("the note is the input: rewording without a button", () => {
         const card = window.__lahe.rail.cardNode(id);
         const pane = window.__lahe.rail.tabBody("active");
         return {
-          onCard: Array.from(card.querySelectorAll("button")).map((b) => b.textContent),
+          // Not the head's disclosure, which folds the card to one line: it is
+          // chrome on every card in every tab, not an action on this comment.
+          onCard: Array.from(card.querySelectorAll("button:not(.carddisclose)")).map((b) => b.textContent),
           // The card's ACTIONS, which is what this test is about: things that
           // act on the comment, in its action row. A send button belonging to a
           // text box is not one of them, any more than the follow-up composer's

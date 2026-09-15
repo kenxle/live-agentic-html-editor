@@ -1339,6 +1339,7 @@
     // up should come from the helper, on a request the page already makes.
     // Raised only on CHANGE, so a calm rail is not repainted every two seconds.
     var onAgentLiveness = opts.onAgentLiveness || function () {};
+    var onStampCarriable = opts.onStampCarriable || function () {};
     var onFailure = opts.onFailure || function () {};
     // The mirror of onFailure: a standing failure whose condition ENDED. The
     // rail clears that chip (clear, not dismiss, so the next real failure still
@@ -2015,7 +2016,12 @@
      */
     function noteStampCarriable(value) {
       if (typeof value !== "boolean") return false;
+      var first = stampCarriable === null;
       stampCarriable = value;
+      // The first answer is what the page check was waiting for (see replay's
+      // stampMissingFromPage): it declines while the answer is unknown, so
+      // boot tells it to run once the answer is in hand.
+      if (first) onStampCarriable(value);
       return true;
     }
 

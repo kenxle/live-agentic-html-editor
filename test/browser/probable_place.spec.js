@@ -320,9 +320,11 @@ test.describe("a comment whose words are gone points at its probable place", () 
     const rect = await page.evaluate((id) => {
       const node = window.__lahe.rail.cardNode(id);
       const r = node.getBoundingClientRect();
-      return { x: r.x, y: r.y, width: r.width };
+      return { x: r.x, y: r.y, width: r.width, height: r.height };
     }, made.id);
-    await page.mouse.click(rect.x + rect.width / 2, rect.y + 6);
+    // The card's own padding, below its head. A press on the head folds the card
+    // to one line instead of jumping; the contents are the jump gesture.
+    await page.mouse.click(rect.x + rect.width / 2, rect.y + rect.height - 4);
     await pollPage(
       page,
       () => {

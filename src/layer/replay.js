@@ -889,13 +889,18 @@
     var opts = options || {};
     var stamps = opts.stamps && typeof opts.stamps === "object" ? opts.stamps : null;
     if (!stamps) return false;
-    // The helper's answer when it gave one, because only the helper knows the
-    // source: a Markdown review renders to HTML, so the page's own path says
-    // .html while the file the agent edits is .md. The record is the fallback,
-    // which is what an older helper and the unit suite have.
-    var carriable =
-      typeof opts.stampCarriable === "boolean" ? opts.stampCarriable : record.itemCanCarryStamp(item);
-    if (!carriable) return false;
+    // The helper's answer, and ONLY the helper's answer, because only the
+    // helper knows the source: a Markdown review renders to HTML, so the
+    // page's own path says .html while the file the agent edits is .md. No
+    // answer yet means no evidence, and the check does not fire. It used to
+    // fall back to the record's own guess, and on 2026-09-15 that guess ran
+    // three seconds after a reload, before the first poll had answered, and
+    // reopened a handled edit on a Markdown review asking for a stamp its
+    // source could never carry (r2dde40d43973). index.js runs this check
+    // again the moment the answer first arrives, so an HTML source is still
+    // checked; it is just never checked on a guess.
+    if (typeof opts.stampCarriable !== "boolean") return false;
+    if (!opts.stampCarriable) return false;
     var stamp = stampOf(item);
     if (!stamp) return false;
     return !Object.prototype.hasOwnProperty.call(stamps, stamp);
