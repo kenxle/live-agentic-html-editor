@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+43266fedd68b
+ * version 0.2.0+d4bce32ec63a
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+43266fedd68b";
+  g.LAHE.version = "0.2.0+d4bce32ec63a";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -24136,25 +24136,26 @@
       var fo = flushOptions || {};
       if (flushing) return Promise.resolve({ sent: 0, remaining: pendingCount(), busy: true });
       if (cspRefused) return Promise.resolve({ sent: 0, remaining: pendingCount(), refused: true });
-      // ONCE THE DOCUMENT IS LEAVING, THE ONLY TRANSPORT IS THE KEEPALIVE POST.
+      // ONCE THE DOCUMENT IS LEAVING, EVERY FLUSH IS AN UNLOAD FLUSH.
       //
-      // An ordinary fetch raced the document's teardown, which is exactly the
-      // transport this design says not to rely on, and it has a second cost
-      // beyond the race: it carries no size cap, so a body the keepalive path
-      // refuses for being oversize went out anyway whenever the ordinary flush
-      // happened to win. That is not a hypothetical. Committing on navigation
-      // queues its event with the ordinary 750ms debounce (deliberately: an
-      // immediate flush here would be the same mistake), and a navigation that
-      // takes longer than that to fetch its next page leaves the old document
-      // alive with the timer still running. On a loaded CI box it fired, and
-      // editing_navigation's "a body past the keepalive cap does not go out at
-      // unload" found a 70KB edit on the helper's disk.
+      // The cap and the keepalive header belong to the MOMENT, not to the
+      // caller. The unload flush had them and an ordinary flush did not, so a
+      // body the unload path refused for being oversize went out anyway
+      // whenever an ordinary flush happened to run in the same window. That is
+      // not hypothetical. Committing on navigation queues its event on the
+      // ordinary 750ms debounce (deliberately: asking for an immediate flush
+      // there would be the same mistake), and a document stays alive from
+      // beforeunload until the browser has fetched the next page. Slower than
+      // the debounce and the timer fired, and editing_navigation's "a body past
+      // the keepalive cap does not go out at unload" found a 70KB edit on the
+      // helper's disk, twice on CI in one day.
       //
-      // Nothing is lost by refusing: every event is already in browser storage,
-      // and the next load posts whatever the helper never acknowledged.
-      if (unloading && !fo.unload) {
-        return Promise.resolve({ sent: 0, remaining: pendingCount(), unloading: true });
-      }
+      // Refusing the ordinary flush outright was the first fix and it was too
+      // blunt: it took away the one delivery a small edit committed by a link
+      // click had left, on a page whose next address carries no credential to
+      // re-post from. So the flush still runs; it just runs under the unload
+      // path's rules.
+      var leaving = !!fo.unload || unloading;
 
       var events = store.pendingEvents(requireReview());
       if (!events.length) {
@@ -24167,7 +24168,7 @@
       // The unload path. Keepalive carries the headers D11 requires, which
       // sendBeacon cannot; oversize is a delay, never a loss, because the
       // events are already in browser storage.
-      if (fo.unload && !protocol.fitsKeepalive(body)) {
+      if (leaving && !protocol.fitsKeepalive(body)) {
         return Promise.resolve({ sent: 0, remaining: events.length, oversize: true });
       }
 
@@ -24176,7 +24177,10 @@
       counters.posts += 1;
 
       var init = { method: "POST", body: body };
-      if (fo.unload) init.keepalive = true;
+      // Keepalive on any flush leaving with the document, not only the one the
+      // unload path asked for: an ordinary fetch started here dies with the
+      // page otherwise.
+      if (leaving) init.keepalive = true;
 
       var posted = request("events.append", init).then(function (result) {
         flushing = false;
@@ -24211,7 +24215,7 @@
           }
           recomputeStatus();
           var remaining = pendingCount();
-          if (remaining > 0 && !fo.unload) scheduleFlush(0);
+          if (remaining > 0 && !leaving) scheduleFlush(0);
           return { sent: accepted.length, remaining: remaining };
         }
 
@@ -24231,7 +24235,7 @@
         // a refused preflight looks like. Ask the second question.
         if (result.status === undefined) diagnoseUnreachable();
         recomputeStatus();
-        if (!fo.unload) scheduleRetry();
+        if (!leaving) scheduleRetry();
         return { sent: 0, remaining: pendingCount(), failed: true };
       });
       flushInFlight = posted;
@@ -24304,12 +24308,6 @@
 
     function scheduleFlush(delayMs) {
       if (debounceTimer) clearTimeout(debounceTimer);
-      // See flush(): a document on its way out posts through keepalive or not at
-      // all. Arming a timer here would only wake up inside the guard there.
-      if (unloading) {
-        debounceTimer = null;
-        return;
-      }
       // harness-allow-timer: protocol.FLUSH's 750ms typing-idle debounce. This
       // is the ONLY debounce in the design and it is on the post to the helper,
       // never on the write to browser storage.
@@ -25179,16 +25177,11 @@
     }
 
     function commitOnUnload() {
+      // The flag goes up FIRST. The editing surface commits the open edit before
+      // it calls in here, and that commit queues its event on the ordinary
+      // debounce; whenever that timer fires, flush() has to already know the
+      // document is leaving so the cap and the keepalive header apply to it.
       unloading = true;
-      // The editing surface commits the open edit BEFORE it calls in here, and
-      // that commit queues its event on the ordinary debounce. The timer is
-      // already armed by the time this line runs, so setting `unloading` is not
-      // enough on its own: the timer has to go too, or a navigation slower than
-      // the debounce fires an ordinary post the keepalive cap never saw.
-      if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = null;
-      if (retryTimer) clearTimeout(retryTimer);
-      retryTimer = null;
       var flushed = flush({ unload: true });
       // AFTER the flush is started, not before. The reviewer's last keystrokes
       // are the thing that must not be lost; the goodbye is a courtesy to the
@@ -25202,9 +25195,8 @@
     // is a live document again: real failures have to be audible from here on.
     function onPageShow() {
       unloading = false;
-      // The document is alive after all, and the guard above held its queue back
-      // and cleared its timer. Give the queue a way out again, or a reviewer who
-      // cancelled a navigation keeps typing into a client that never posts.
+      // The document is alive after all. Anything the unload rules held back
+      // (an oversize body) gets an ordinary flush again, with no cap on it.
       if (pendingCount() > 0) scheduleFlush(0);
     }
 
@@ -33543,7 +33535,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+43266fedd68b";
+  var VERSION = "0.2.0+d4bce32ec63a";
 
   var protocol = ns.protocol;
   var record = ns.record;
