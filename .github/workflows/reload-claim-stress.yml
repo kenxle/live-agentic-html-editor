@@ -9,7 +9,7 @@ on:
     inputs:
       repeats:
         description: "playwright --repeat-each for reload_claim.spec.js"
-        default: "20"
+        default: "40"
 
 jobs:
   # The file on its own, many times over. Cheap, and it catches anything that
@@ -24,7 +24,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npx playwright test test/browser/reload_claim.spec.js --repeat-each=${{ github.event.inputs.repeats || '20' }}
+      - run: npx playwright test test/browser/reload_claim.spec.js --repeat-each=${{ github.event.inputs.repeats || '40' }}
 
   # The whole browser suite, three times, which is how the flake was actually
   # seen: the contention of every other spec running beside it is part of it.

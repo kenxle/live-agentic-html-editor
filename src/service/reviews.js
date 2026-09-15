@@ -81,6 +81,12 @@ var STALE_AFTER_MS = 30 * 1000;
 // number.
 var LIVE_WINDOW_MS = 120 * 1000;
 
+// How long a released secret is still recognized as the one that just said
+// goodbye. See `released` below: this only has to outlast the requests that
+// were already on the wire when the release went out, which is milliseconds on
+// a quiet machine and a good deal longer on a loaded one.
+var RELEASE_GRACE_MS = 5 * 1000;
+
 // A REVIEW MINTED AFTER THIS HELPER STARTED IS ON DISK BUT NOT IN MEMORY, and
 // there is no create-review route to tell the helper about it (on purpose). The
 // helper therefore looks on disk once for a review it is asked about and does
@@ -150,6 +156,42 @@ function createReviews(options) {
   var reviews = Object.create(null);
   // id -> { window_id, since, last_seen }
   var sessions = Object.create(null);
+
+  // THE SECRET OF THE WINDOW THAT JUST SAID GOODBYE, id -> { secret, at }.
+  //
+  // A page unloading sends its goodbye and dies, and whatever it already had on
+  // the wire lands afterwards. The helper used to read one of those late
+  // arrivals, a heartbeat carrying the secret of the holder it had just
+  // removed, as a stranger asking for a review nobody held, and granted it with
+  // a FRESH secret. Nobody alive had that secret: the window it was minted for
+  // was already gone, so the next page in that tab presented the secret it had
+  // inherited, did not match, and was refused as a second window with one
+  // window open. It is D5's own failure mode, arriving through a request that
+  // was sent before the goodbye and processed after it.
+  //
+  // So a release leaves this behind for a moment. A claim carrying the released
+  // secret is the same session either way, the dying page or the one that
+  // replaced it in the same tab, and it is re-seated with THAT SAME SECRET
+  // rather than a new one, so both halves of the pair still recognize it. The
+  // secret is never disclosed to anyone but the holder, so nothing else can
+  // present it.
+  //
+  // In memory only, like the liveness facts beside it. A helper that restarts
+  // holds no sessions at all, so the first window to ask is granted anyway.
+  var released = Object.create(null);
+
+  /**
+   * Is this the secret of the window that released the review a moment ago?
+   */
+  function wasJustReleased(reviewId, secret) {
+    var mark = released[reviewId];
+    if (!mark) return false;
+    if (clock() - mark.at > RELEASE_GRACE_MS) {
+      delete released[reviewId];
+      return false;
+    }
+    return secretsMatch(mark.secret, secret);
+  }
 
   function metaFor(reviewId) {
     return stateDir.metaPath(dir, reviewId);
@@ -977,6 +1019,23 @@ function createReviews(options) {
       return granted(holder, false, null);
     }
 
+    if (!holder && wasJustReleased(reviewId, req.session_secret)) {
+      // A request that was already on the wire when the goodbye went out, or the
+      // page that replaced the one which sent it. Same session, same secret: it
+      // is seated again as the holder rather than handed a new secret that only
+      // a dying document would ever read (see `released`).
+      sessions[reviewId] = {
+        window_id: windowId,
+        session_secret: req.session_secret,
+        since: new Date(at).toISOString(),
+        since_ms: at,
+        last_seen: at,
+        deposed_secret: null
+      };
+      saveSessions();
+      return granted(sessions[reviewId], false, null);
+    }
+
     var wantsTakeover = req.takeover === true;
 
     if (holder && !holderIsStale(holder) && !wantsTakeover) {
@@ -1071,6 +1130,10 @@ function createReviews(options) {
     if (!holder) return { released: false };
     if (!secretsMatch(holder.session_secret, req.session_secret)) return { released: false };
     delete sessions[reviewId];
+    // Remembered for a moment, so anything this window already had on the wire,
+    // and the page replacing it in the same tab, are still recognized as this
+    // session rather than read as a stranger (see `released`).
+    released[reviewId] = { secret: holder.session_secret, at: clock() };
     saveSessions();
     log.helperLog("review " + reviewId + ": window " + holder.window_id + " released it on the way out");
     return { released: true };
