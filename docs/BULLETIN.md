@@ -5,6 +5,16 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
+- [ ] @anyone 2026-09-15 LAHE-cross-browser-lanes-red -- **Five browser tests fail on
+  Firefox and WebKit and pass on Chromium: in card_collapse, rail_hotkey and
+  reply_toast.** Found by the keep-mine builder running the three lanes locally
+  on 2026-09-15; identical five against main at 1ecbcae, so they predate that
+  branch. The collapsible cards and the rail hotkey were gated on Chromium only.
+  The gate:all rule for a release means a v0.2.1 tag waits on this. Run one
+  lane at a time (all three together starved the machine on 2026-09-11); fix
+  the product where it is a product difference, the test where it is a test
+  assumption; never a browser-conditional skip.
+
 - [x] @claude 2026-09-15 LAHE-reload-claim-flake (done 2026-09-15 in PR #6: a release now
   leaves its secret behind for five seconds, and a claim carrying it is seated again
   with that same secret) -- **test/browser/reload_claim.spec.js "reloading the page over
