@@ -1,0 +1,47 @@
+name: flake-stress
+
+# TEMPORARY. Runs the two CP2 flakes many times over on a CI box, and is how the
+# 064ae58 bisect is run. Deleted before this branch ships.
+on:
+  push:
+    branches: [ci/cp2-a, ci/cp2-b, fix/cp2-owed-pass]
+  workflow_dispatch:
+
+jobs:
+  cp2-walk:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: cp2 walk, ten times, on a loaded box
+        run: |
+          (for i in $(seq 1 240); do yes > /dev/null & done) ; sleep 1
+          npx playwright test test/browser/cp2_walk.spec.js --repeat-each=10 --workers=2 2>&1 | tail -400
+
+  keepalive-cap:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: editing navigation, ten times, on a loaded box
+        run: |
+          (for i in $(seq 1 240); do yes > /dev/null & done) ; sleep 1
+          npx playwright test test/browser/editing_navigation.spec.js --repeat-each=10 --workers=2 2>&1 | tail -400
