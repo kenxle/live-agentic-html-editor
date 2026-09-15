@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+3385aee028c3
+ * version 0.2.0+9ab982a3c52d
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+3385aee028c3";
+  g.LAHE.version = "0.2.0+9ab982a3c52d";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -13390,9 +13390,50 @@
   // pixel per millisecond is 500px a second, which is a deliberate throw and
   // not a slow drag that changed its mind.
   var TOAST_FLING_SPEED = 0.5;
+  // And how far it has to have gone before speed is allowed to decide anything.
+  //
+  // The flick is a shortcut past the full throw, not a way to dismiss a message
+  // with a twitch. A hand that moves twenty pixels and stops has changed its
+  // mind, however fast those twenty pixels were, and reading that as a throw
+  // loses an answer the reviewer never saw. Four times the dead zone is the
+  // distance at which a push is plainly a push.
+  var TOAST_FLING_MIN_PX = 24;
+  // The shortest stretch of travel a speed can honestly be read off.
+  //
+  // Pointer moves do not arrive one per frame. They are coalesced, and how they
+  // are coalesced is the engine's business: WebKit and Firefox both deliver
+  // several inside the same millisecond. Dividing one of those deltas by the
+  // millisecond it took says 4px per ms for a hand that moved 20px in total and
+  // then stopped, which is how a drag a reviewer changed their mind about got
+  // read as a throw. Measuring across a frame's worth of time instead makes the
+  // number mean what it says, and a gesture too short to hold a frame simply
+  // has no speed: the distance decides it, which is the honest answer.
+  var SWIPE_VELOCITY_WINDOW_MS = 12;
   // The slide off the edge, matched to TOAST_OUT_MS so the node is taken out of
   // the DOM exactly as it finishes leaving.
   var TOAST_SPRING_MS = 160;
+
+  /**
+   * Fold one pointer move into the running speed of a swipe.
+   *
+   * Pure apart from the sampler it is handed: it keeps the last sample that was
+   * far enough back in time to divide by, and leaves the speed alone until the
+   * next one is. A sampler is { lastX, lastAt, velocity }.
+   *
+   * @param {object} sampler  carried across the moves of one gesture
+   * @param {number} x        where the pointer is now, in client px
+   * @param {number} at       when, in ms
+   * @returns {number} the speed to judge the gesture by, px per ms
+   */
+  function sampleSwipeVelocity(sampler, x, at) {
+    if (!sampler) return 0;
+    var since = at - sampler.lastAt;
+    if (!(since >= SWIPE_VELOCITY_WINDOW_MS)) return sampler.velocity || 0;
+    sampler.velocity = (x - sampler.lastX) / since;
+    sampler.lastX = x;
+    sampler.lastAt = at;
+    return sampler.velocity;
+  }
 
   /** How far this toast has to travel to count as thrown away. */
   function toastSwipeThreshold(width) {
@@ -13421,6 +13462,7 @@
     var dx = typeof g.dx === "number" ? g.dx : 0;
     if (dx <= TOAST_SWIPE_SLOP) return false;
     if (dx >= toastSwipeThreshold(g.width)) return true;
+    if (dx < TOAST_FLING_MIN_PX) return false;
     var velocity = typeof g.velocity === "number" ? g.velocity : 0;
     return velocity >= TOAST_FLING_SPEED;
   }
@@ -16571,6 +16613,32 @@
      *
      * @returns {(object|null)} null when the rail holds no focus at all
      */
+    /**
+     * Take the keyboard out of the rail, by name.
+     *
+     * Hiding the rail usually blurs whatever was inside it, and "usually" is the
+     * whole problem. Firefox leaves the focus where it was while its own window
+     * is in the background, and a closed root reports its HOST as the page's
+     * activeElement, so the caller that puts the panel away cannot even tell
+     * that the keyboard is still in it: the reviewer's next keystroke goes to
+     * the library rather than to the page. The root itself names the node that
+     * holds the focus, so blurring that node is the one reading that does not
+     * depend on the engine.
+     *
+     * @returns {boolean} true when this actually took the focus off something
+     */
+    function releaseFocus() {
+      if (!dom || !dom.shadow) return false;
+      var node = dom.shadow.activeElement;
+      if (!node || typeof node.blur !== "function") return false;
+      try {
+        node.blur();
+      } catch (err) {
+        return false;
+      }
+      return dom.shadow.activeElement !== node;
+    }
+
     function focusedControl() {
       if (!dom || !dom.shadow) return null;
       var node = dom.shadow.activeElement;
@@ -17316,11 +17384,7 @@
           // A toast being handled is not a toast being ignored.
           pauseToast(toast);
         }
-        var at = now();
-        var since = Math.max(1, at - drag.lastAt);
-        drag.velocity = (event.clientX - drag.lastX) / since;
-        drag.lastX = event.clientX;
-        drag.lastAt = at;
+        sampleSwipeVelocity(drag, event.clientX, now());
         // Rightward is the gesture. Leftward gives a little and no more, so the
         // toast feels attached to the pointer rather than nailed down, without
         // ever suggesting there is something to find over there.
@@ -17616,6 +17680,7 @@
       onCollapse: onCollapse,
       focusFirstControl: focusFirstControl,
       focusedControl: focusedControl,
+      releaseFocus: releaseFocus,
       // Present mode: the whole library off the screen, and still working.
       PRESENT: PRESENT,
       setPresenting: setPresenting,
@@ -17742,6 +17807,9 @@
     // Swipe to dismiss: the numbers, and the one decision, pure so the feel can
     // be argued about in a unit test rather than by dragging things.
     TOAST_SWIPE_SLOP: TOAST_SWIPE_SLOP,
+    TOAST_FLING_MIN_PX: TOAST_FLING_MIN_PX,
+    SWIPE_VELOCITY_WINDOW_MS: SWIPE_VELOCITY_WINDOW_MS,
+    sampleSwipeVelocity: sampleSwipeVelocity,
     TOAST_SWIPE_FRACTION: TOAST_SWIPE_FRACTION,
     TOAST_SWIPE_MAX_PX: TOAST_SWIPE_MAX_PX,
     TOAST_FLING_SPEED: TOAST_FLING_SPEED,
@@ -33400,7 +33468,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+3385aee028c3";
+  var VERSION = "0.2.0+9ab982a3c52d";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -34148,12 +34216,24 @@
     function pageFocusHolder() {
       var node = doc.activeElement;
       if (!node || node === doc.body || node === doc.documentElement) return null;
+      // The library's own surfaces are not the page. A closed shadow root
+      // reports its HOST as the page's activeElement, so without this the panel
+      // remembers itself as the place the keyboard came from and hands it
+      // straight back to itself on the way out.
+      if (markers.isInsideOverlay(node)) return null;
       return node;
     }
 
     function returnFocusToPage() {
       var back = railFocusReturn;
       railFocusReturn = null;
+      // FIRST, and unconditionally. Hiding the rail is not the same thing as
+      // blurring what was inside it: Firefox leaves the focus on the hidden
+      // control while its window is in the background, and from out here that
+      // reads as the library's own host holding the keyboard. The rail takes
+      // the focus off its own control by name, and only then is there a page to
+      // give it back to.
+      rail.releaseFocus();
       if (back && back.isConnected === true && typeof back.focus === "function") {
         try {
           back.focus();
@@ -34162,9 +34242,6 @@
           // A node that refuses the focus falls through to the body below.
         }
       }
-      // The rail going away already blurred anything inside it in every engine,
-      // but saying so leaves document.activeElement at the body rather than at
-      // whatever the engine chose.
       var held = doc.activeElement;
       if (held && held !== doc.body && typeof held.blur === "function") held.blur();
       if (doc.body && typeof doc.body.focus === "function") doc.body.focus();
