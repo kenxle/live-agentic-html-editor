@@ -5,7 +5,7 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
-- [ ] @anyone 2026-09-15 LAHE-keep-mine-morph-flake -- **test/browser/keep_mine_live_page.spec.js
+- [>] @claude 2026-09-15 LAHE-keep-mine-morph-flake (recurred on main run 34999862248 at morph pass 13; a builder is reproducing it under 20x repeat on CI) -- **test/browser/keep_mine_live_page.spec.js
   "Keep mine survives every later morph pass" failed once on Linux CI at morph pass
   14 (PR #5's first run), passed on rerun and 3 for 3 locally.** Nothing in that PR
   touched morph, replay, or collisions. One sighting only; if it recurs, treat it
