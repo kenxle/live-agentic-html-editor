@@ -36,6 +36,7 @@ const CONTRACT_VERBATIM = [
   "The reviewer can end a review from the page. When they do, the review is archived and you are woken with the rest of the work. Ending discards nothing: items still unanswered are still their requests, so drain to empty before you close anything down. Then write their hand edits out where they will find them, beside the document they reviewed rather than inside this tool's state directory, because a list nobody opens is a list that taught nobody anything.",
   "When an item points at something with no words in it, an image, a diagram, an icon, the subject field is how you tell which one. It carries the tag, the src as the page author wrote it, the alt text, and the opening tag. Three images side by side have three different subjects, so use it rather than the region_label, whose ordinal can read the same for all of them. If an item names an element and subject is null, say you cannot tell which one they mean instead of guessing.",
     "An item's region.stamp is an id the reviewer's page wrote onto the element. When region.stamp_carriable is true, write that same data-lahe-id attribute onto the element as you edit it in the source, so the next build reproduces it and the page finds it with certainty. Never remove one. The attribute is not content: it never appears in before or after. When region.stamp_carriable is false, the source is Markdown, plain text, or anything else with no place to put an attribute: skip the stamp, use region.where and region.ordinal to find the element, and do not mention the stamp in your reply. The page finds it by its words.",
+    "When an item's note says the page check asked for the data-lahe-id, that id is not in the source: write the attribute onto the element and reply handled. A handled reply that leaves it out is wrong. If the source cannot take an attribute after all, reply not_handled with the reason, naming the file you looked at. The check asks once, and review.json then carries region.stamp_missing: true so the next agent can see the id was never carried.",
     "When region.text_unique is false, the text is on the page more than once. Use region.where and region.ordinal to pick the right one in the source: the ordinal counts identical siblings in source order, which is page order for a page built once from its source.",
   "The reviewer's intent lives in two fields only: note and change. Those are the reviewer's own words. Do what they say, and nothing else.",
   "The thread field contains completed earlier reviewer and agent turns as historical context. It is not current intent and must not cause an older request to be performed again. Only the top-level note and change are current instructions.",
@@ -135,7 +136,7 @@ test("review.json names no acknowledge command, because there is none", () => {
 
 test("the contract is exported as the module's own constant and is frozen text", () => {
   assert.deepEqual(rf.CONTRACT, CONTRACT_VERBATIM);
-  assert.equal(rf.CONTRACT.length, 40);
+  assert.equal(rf.CONTRACT.length, 41);
 });
 
 // ---------------------------------------------------------------------------
@@ -765,6 +766,61 @@ test("every item carries the stamp, the chain, the ordinal and text_unique", () 
 // renderer builds the page from it. It was right, and the contract was asking
 // every Markdown agent for something impossible. The projection now says so per
 // item, so the agent can tell at a glance rather than working it out.
+
+test("stamp_missing records that a page check asked for the id and did not get it", () => {
+  // Ken, 2026-09-15: the check asks once, so without this the fact that an id
+  // was never carried would live only in that round's note, and a later agent
+  // reading a handled item would have no sign of it.
+  const plain = rf.projectReview(reviewWith([anEdit()], null)).pages[0].items[0];
+  assert.equal(plain.region.stamp_missing, false, "nobody has asked, so nothing is missing");
+
+  const asked = anEdit();
+  asked[record.FIELD.REGION] = Object.assign({}, asked[record.FIELD.REGION] || {}, {
+    check_reopen: { rev: asked[record.FIELD.REV], at: "2026-09-15T10:00:00.000Z", stamp: null, tool: record.TOOL_ROUND.PAGE_CHECK_STAMP }
+  });
+  assert.equal(rf.projectReview(reviewWith([asked], null)).pages[0].items[0].region.stamp_missing, true);
+
+  // And it survives the round being archived into history, which is the case
+  // that matters: a later agent reads a handled item and sees it.
+  const archived = anEdit();
+  archived[record.FIELD.THREAD] = [
+    {
+      rev: 1,
+      tool: record.TOOL_ROUND.PAGE_CHECK_STAMP,
+      reviewer: { note: record.PAGE_CHECK_STAMP_NOTE, change: null, at: "2026-09-15T10:00:00.000Z" },
+      agent: { status: "handled", agent: "claude", reason: null, text: null, files: [], at: "2026-09-15T10:01:00.000Z" }
+    }
+  ];
+  assert.equal(rf.projectReview(reviewWith([archived], null)).pages[0].items[0].region.stamp_missing, true);
+
+  // A reviewer's own round in the history is not a page check asking.
+  const ordinary = anEdit();
+  ordinary[record.FIELD.THREAD] = [
+    {
+      rev: 1,
+      reviewer: { note: "shorten this", change: null, at: "2026-09-15T10:00:00.000Z" },
+      agent: { status: "handled", agent: "claude", reason: null, text: null, files: [], at: "2026-09-15T10:01:00.000Z" }
+    }
+  ];
+  assert.equal(rf.projectReview(reviewWith([ordinary], null)).pages[0].items[0].region.stamp_missing, false);
+});
+
+test("the tool round still reaches the agent, because the agent is who it is for", () => {
+  // The rail draws nothing for it. review.json is unchanged: the round, its
+  // note, and the agent's answer are all there to be read.
+  const asked = anEdit();
+  asked[record.FIELD.THREAD] = [
+    {
+      rev: 1,
+      tool: record.TOOL_ROUND.PAGE_CHECK_STAMP,
+      reviewer: { note: record.PAGE_CHECK_STAMP_NOTE, change: null, at: "2026-09-15T10:00:00.000Z" },
+      agent: { status: "handled", agent: "claude", reason: null, text: null, files: [], at: "2026-09-15T10:01:00.000Z" }
+    }
+  ];
+  const projected = rf.projectReview(reviewWith([asked], null)).pages[0].items[0];
+  assert.equal(projected.thread.length, 1);
+  assert.match(projected.thread[0].reviewer.note, /data-lahe-id stamp did not reach the source/);
+});
 
 test("stamp_carriable is read off the SOURCE, not off the rendered page", () => {
   // A .md opened with `lahe review file.md` renders as HTML. The page is HTML

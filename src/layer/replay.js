@@ -848,6 +848,21 @@
   }
 
   /**
+   * Is this reopen an exchange the REVIEWER is part of, or one they are not?
+   *
+   * The revert and formatting sentences are about the reviewer's own words
+   * going missing from the page, so their card says so. The stamp sentence is
+   * about an attribute the reviewer never typed and cannot act on: it is the
+   * tool talking to the agent, and the rail draws none of it (record.TOOL_ROUND,
+   * and Ken on 2026-09-15: "This should not be showing up in my chat rail").
+   *
+   * @returns {string|null} the tool round's name, or null for a reviewer round
+   */
+  function pageCheckToolFor(note) {
+    return note === STAMP_LOST_NOTE ? record.TOOL_ROUND.PAGE_CHECK_STAMP : null;
+  }
+
+  /**
    * The stamp this record was minted with, or null.
    *
    * The reference's shape belongs to the anchor engine, and record.js keeps it
@@ -2270,6 +2285,7 @@
     pageCheckReasonFor: pageCheckReasonFor,
     pageCheckNoteFor: pageCheckNoteFor,
     pageCheckNoticeFor: pageCheckNoticeFor,
+    pageCheckToolFor: pageCheckToolFor,
     PAGE_CHECK_REASON: CHECK_REASON,
     revertedHandledEditIds: revertedHandledEditIds,
     pageTextOf: pageTextOf,

@@ -485,7 +485,7 @@ capped at `AFTER_HISTORY_MAX` (50) keeping the NEWEST, and the kept entries' own
 what makes a drop legible.
 
 **`region`** is how the agent finds the element in the SOURCE, as opposed to reading it on the page.
-Five fields, on every item.
+Six fields, on every item.
 
 - `region.stamp`: the id the reviewer's page wrote onto the element (`data-lahe-id`,
   `markers.STAMP_ATTR`), or null. An agent editing that element writes the same attribute into the
@@ -500,6 +500,12 @@ Five fields, on every item.
 - `region.text_unique`: false when the region's own words are on the page more than once, so text
   alone will not place a write later. The reference is still good: `where` and `ordinal` are what
   tell the twins apart.
+- `region.stamp_missing`: true once a page check asked this item for its `data-lahe-id` and the
+  reply did not bring it. The check asks once (`record.answeredPageCheckReopen`), so without this
+  the fact would live only in that round's note and a later agent reading a handled item would have
+  no sign of it. Nothing clears it: it records what happened, not what the source says now. That
+  round is a TOOL ROUND: `review.json` carries it and its note, and the reviewer's rail draws none
+  of it, because the id is plumbing they never typed.
 - `region.stamp_carriable`: can the SOURCE behind this page hold the attribute at all? True for
   markup with attributes (`.html`, `.erb`, `.jsx`, `.vue` and the rest of `record.STAMP_SOURCE_EXTENSIONS`),
   false for Markdown, plain text, and anything else with nowhere to put one. It is read off the
@@ -539,6 +545,7 @@ copy in `test/unit/review_format.test.js`:
   "The reviewer can end a review from the page. When they do, the review is archived and you are woken with the rest of the work. Ending discards nothing: items still unanswered are still their requests, so drain to empty before you close anything down. Then write their hand edits out where they will find them, beside the document they reviewed rather than inside this tool's state directory, because a list nobody opens is a list that taught nobody anything.",
   "When an item points at something with no words in it, an image, a diagram, an icon, the subject field is how you tell which one. It carries the tag, the src as the page author wrote it, the alt text, and the opening tag. Three images side by side have three different subjects, so use it rather than the region_label, whose ordinal can read the same for all of them. If an item names an element and subject is null, say you cannot tell which one they mean instead of guessing.",
     "An item's region.stamp is an id the reviewer's page wrote onto the element. When region.stamp_carriable is true, write that same data-lahe-id attribute onto the element as you edit it in the source, so the next build reproduces it and the page finds it with certainty. Never remove one. The attribute is not content: it never appears in before or after. When region.stamp_carriable is false, the source is Markdown, plain text, or anything else with no place to put an attribute: skip the stamp, use region.where and region.ordinal to find the element, and do not mention the stamp in your reply. The page finds it by its words.",
+    "When an item's note says the page check asked for the data-lahe-id, that id is not in the source: write the attribute onto the element and reply handled. A handled reply that leaves it out is wrong. If the source cannot take an attribute after all, reply not_handled with the reason, naming the file you looked at. The check asks once, and review.json then carries region.stamp_missing: true so the next agent can see the id was never carried.",
     "When region.text_unique is false, the text is on the page more than once. Use region.where and region.ordinal to pick the right one in the source: the ordinal counts identical siblings in source order, which is page order for a page built once from its source.",
   "The reviewer's intent lives in two fields only: note and change. Those are the reviewer's own words. Do what they say, and nothing else.",
   "The thread field contains completed earlier reviewer and agent turns as historical context. It is not current intent and must not cause an older request to be performed again. Only the top-level note and change are current instructions.",

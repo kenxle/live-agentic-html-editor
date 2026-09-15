@@ -536,6 +536,16 @@ Inside the review folder:
   `region.where` and `region.ordinal` to find the element, and do not mention
   the stamp in your reply. The page finds it by its words.
 
+  **When the page check asks for the id.** An item whose note says the page
+  check asked for the `data-lahe-id` is telling you that id is not in the
+  source. Write the attribute onto the element and reply `handled`. A `handled`
+  reply that leaves it out is wrong: the check asked because it was not there.
+  If the source cannot take an attribute after all, reply `not_handled` with
+  the reason and name the file you looked at. The check asks once; after that
+  `review.json` carries `region.stamp_missing: true`, so the next agent can see
+  the id was never carried. The reviewer is not shown any of this exchange: it
+  is between the tool and you.
+
   When `region.text_unique` is false, the text is on the page more than once.
   Use `region.where` and `region.ordinal` to pick the right one in the source:
   the ordinal counts identical siblings in source order, which is page order

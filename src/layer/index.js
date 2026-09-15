@@ -1555,9 +1555,14 @@
         // shows with it. Both come from replay, so a new reason arrives here
         // already carrying its own words rather than needing a branch added.
         var note = ns.replay.pageCheckNoteFor(item, pageText, options) || ns.replay.REVERTED_EDIT_NOTE;
+        // A TOOL ROUND draws nothing on the rail: the stamp request is between
+        // the tool and the agent, about an attribute the reviewer never typed.
+        // replay decides which reopens are which, beside the sentences.
+        var tool = ns.replay.pageCheckToolFor(note);
         done.reopen(id, {
           note: note,
-          notice: ns.replay.pageCheckNoticeFor(note),
+          notice: tool ? null : ns.replay.pageCheckNoticeFor(note),
+          tool: tool,
           pageCheck: true
         });
         counters.revertReopens += 1;

@@ -34,7 +34,7 @@ const net = require("node:net");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 
-const { test, expect, pollPage, placeCaret } = require("../helpers");
+const { test, expect, pollPage, pollUntil, placeCaret } = require("../helpers");
 
 const REPO_ROOT = path.join(__dirname, "..", "..");
 const CLI = path.join(REPO_ROOT, "bin", "lahe.js");
@@ -152,6 +152,27 @@ test.describe("an edit's bold and italic survive the rebuild that dropped them",
     fs.appendFileSync(
       path.join(world.reviewDir, "replies.jsonl"),
       JSON.stringify({ item: itemId, rev: rev, status: "handled", agent: "tester", files: ["doc.html"] }) + "\n"
+    );
+  }
+
+  /**
+   * The helper has to hold the revision an answer names before the answer is
+   * written, or the fold refuses it as stale and the test waits forever. The
+   * page bumps a revision in its own store first and posts it a beat later;
+   * a real agent reads the revision from review.json, which is this wait.
+   * (Same race as reverted_edit.spec.js, CI run 34999057598, 2026-09-15.)
+   */
+  async function helperHasRev(itemId, rev) {
+    await pollUntil(
+      () => {
+        try {
+          const projected = JSON.parse(fs.readFileSync(path.join(world.reviewDir, "review.json"), "utf8"));
+          return projected.pages.some((page) => page.items.some((item) => item.id === itemId && item.rev === rev));
+        } catch (err) {
+          return false;
+        }
+      },
+      { message: "review.json to hold " + itemId + " at rev " + rev, timeoutMs: 20000 }
     );
   }
 
@@ -276,6 +297,7 @@ test.describe("an edit's bold and italic survive the rebuild that dropped them",
     // What the agent did: carried the words into the source and not the
     // emphasis, then replied handled.
     rebuild(P_AFTER_PLAIN_HTML);
+    await helperHasRev(made.id, made.rev);
     reply(made.id, made.rev);
     await pollPage(
       page,
@@ -320,6 +342,7 @@ test.describe("an edit's bold and italic survive the rebuild that dropped them",
     // The agent answers handled again with the page unchanged, which is it
     // saying the rendering is intended. That has to end it: reopening again is
     // the loop of 2026-09-10 wearing different clothes.
+    await helperHasRev(made.id, reopened.rev);
     reply(made.id, reopened.rev);
     await pollPage(
       page,
@@ -367,6 +390,7 @@ test.describe("an edit's bold and italic survive the rebuild that dropped them",
     const stamp = await page.evaluate(() => document.getElementById("p").getAttribute("data-lahe-id"));
     expect(stamp, "the reviewer's hand edit stamped the paragraph").toBeTruthy();
     rebuild(P_AFTER_ITALIC_HTML, stamp);
+    await helperHasRev(made.id, made.rev);
     reply(made.id, made.rev);
     await pollPage(
       page,

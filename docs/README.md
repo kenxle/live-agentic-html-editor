@@ -15,6 +15,8 @@ The README is the short version. Everything longer lives here.
 ## For people working on the tool
 
 - [BULLETIN.md](BULLETIN.md): the task board. Append-only, newest first.
+- [tests/index.html](tests/index.html): every test in the suite, what it claims,
+  and the three gates. Regenerate it with `npm run docs:tests`.
 - [features/20260818.01_release_readiness/04_progress_release_readiness.md](features/20260818.01_release_readiness/04_progress_release_readiness.md):
   the release-readiness progress record, which is where the current push toward
   a public release is tracked.

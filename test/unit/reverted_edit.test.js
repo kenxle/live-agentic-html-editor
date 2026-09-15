@@ -740,3 +740,72 @@ test("pageCheckOptions carries the helper's answer through, and omits it when th
   );
   assert.equal(Object.prototype.hasOwnProperty.call(replay.pageCheckOptions(body), "stampCarriable"), false);
 });
+
+// ---------------------------------------------------------------------------
+// The tool's sentence is the tool's, not the reviewer's
+// ---------------------------------------------------------------------------
+//
+// Ken, 2026-09-15: "This should not be showing up in my chat rail." The check
+// appends its sentence to the note, because the record has no other field that
+// reaches the agent. review.json needs that. The card must not have it.
+
+test("the reviewer's note is their own words, with the stamp sentence taken back out", () => {
+  const asked = record.pageCheckReopenOf(
+    handledEdit({ note: "shorten this heading" }),
+    record.PAGE_CHECK_STAMP_NOTE,
+    "2026-09-15T10:00:00.000Z",
+    record.TOOL_ROUND.PAGE_CHECK_STAMP
+  );
+  assert.match(asked[record.FIELD.NOTE], /data-lahe-id/, "the agent still reads it in review.json");
+  assert.equal(record.reviewerNote(asked), "shorten this heading", "and the card shows only theirs");
+  assert.equal(record.toolRoundOf(asked), record.TOOL_ROUND.PAGE_CHECK_STAMP);
+
+  // A note that was ONLY the tool's sentence leaves nothing to show.
+  const bare = record.pageCheckReopenOf(
+    handledEdit({ note: null }),
+    record.PAGE_CHECK_STAMP_NOTE,
+    "2026-09-15T10:00:00.000Z",
+    record.TOOL_ROUND.PAGE_CHECK_STAMP
+  );
+  assert.equal(record.reviewerNote(bare), null);
+});
+
+test("the revert and formatting sentences stay: those rounds are the reviewer's", () => {
+  // Their own words went missing from the page, which is theirs to know about.
+  const reverted = record.pageCheckReopenOf(
+    handledEdit({ note: "shorten this heading" }),
+    record.PAGE_CHECK_NOTE,
+    "2026-09-15T10:00:00.000Z",
+    null
+  );
+  assert.equal(record.toolRoundOf(reverted), null);
+  assert.match(record.reviewerNote(reverted), /no longer on the page/);
+  assert.equal(record.displayState(reverted), record.STATE.READY, "so the card really does reopen");
+});
+
+test("which reopens are the tool's, decided once, beside the sentences", () => {
+  assert.equal(replay.pageCheckToolFor(replay.STAMP_LOST_NOTE), record.TOOL_ROUND.PAGE_CHECK_STAMP);
+  assert.equal(replay.pageCheckToolFor(replay.REVERTED_EDIT_NOTE), null);
+  assert.equal(replay.pageCheckToolFor(replay.FORMATTING_LOST_NOTE), null);
+  assert.equal(replay.pageCheckToolFor(null), null);
+});
+
+test("a tool round reads as handled to the reviewer and as ready to everyone else", () => {
+  const asked = record.pageCheckReopenOf(
+    handledEdit(),
+    record.PAGE_CHECK_STAMP_NOTE,
+    "2026-09-15T10:00:00.000Z",
+    record.TOOL_ROUND.PAGE_CHECK_STAMP
+  );
+  assert.equal(asked[record.FIELD.STATE], record.STATE.READY, "the agent has work, and that is true");
+  assert.equal(record.displayState(asked), record.STATE.HANDLED, "the reviewer decided this, and still has");
+
+  // The reviewer's own next revision ends the tool round: the stamp names an
+  // older rev, so everything goes back to ordinary. (The agent answers first,
+  // because a round is only archived once it has both halves.)
+  const answered = answeredHandled(asked, "2026-09-15T10:02:00.000Z");
+  const followed = record.followUp(answered, "one more thing");
+  assert.equal(record.toolRoundOf(followed), null);
+  assert.equal(record.displayState(followed), record.STATE.READY);
+  assert.equal(record.isToolRound(record.threadOf(followed).pop()), true, "and the tool's round travels marked");
+});

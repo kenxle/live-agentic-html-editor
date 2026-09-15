@@ -194,6 +194,14 @@ function reply(world, itemId, rev) {
   );
 }
 
+/** The agent saying it cannot, with a reason. */
+function refuse(world, itemId, rev, reason) {
+  fs.appendFileSync(
+    world.repliesPath,
+    JSON.stringify({ item: itemId, rev: rev, status: "not_handled", agent: "tester", reason: reason }) + "\n"
+  );
+}
+
 async function booted(page) {
   await pollPage(page, () => !!(window.__lahe && window.__lahe.booted), undefined, {
     message: "the layer to boot from its own script tag",
@@ -361,6 +369,29 @@ function render(world) {
   world.reviewJson = path.join(world.stateDir, "reviews", world.review, "review.json");
   world.repliesPath = path.join(world.stateDir, "reviews", world.review, "replies.jsonl");
   return world;
+}
+
+/** What the REVIEWER can see about one card, in one task. */
+function railView(page, id) {
+  return page.evaluate((itemId) => {
+    const rail = window.__lahe.rail;
+    const card = rail.getCard(itemId);
+    const node = rail.cardNode(itemId);
+    const done = window.__lahe.handle.doneTab();
+    return {
+      pane: card ? card.pane : null,
+      state: card ? card.state : null,
+      notice: card ? card.notice : null,
+      agentMessage: card ? card.agentMessage : null,
+      text: node ? node.textContent : "",
+      rounds: node ? node.querySelectorAll("[data-lahe-round]").length : 0,
+      unseenAttr: node ? node.getAttribute("data-lahe-unseen") : null,
+      unseen: done.unseenIds(),
+      toasts: rail.toastInfo().toasts.length,
+      announced: done.announcedIds(),
+      doneRows: done.rowCount()
+    };
+  }, id);
 }
 
 /** Every event the helper has stored for this review, in order. */
@@ -717,8 +748,28 @@ test.describe("the stamp's graceful failures: nothing written, and the reviewer 
     expect(reopened.note, "and what to do about it").toContain("Write the stamp onto that element");
     expect(reopened.note.split("Reopened by the page check:").length - 1, "one sentence, not two").toBe(1);
     expect(reopened.stamp.rev, "the reopen stamped the revision it created").toBe(reopened.rev);
+    expect(reopened.stamp.tool, "and it is marked as the tool's own round").toBe("page_check_stamp");
     expect(await page.evaluate(() => window.__lahe.counters.revertReopens), "one reopen on this load").toBe(1);
     expect(await mainText(page), "and the page itself was not touched").toBe(textOf(applied));
+
+    // THE REVIEWER IS NOT PART OF THIS. Ken, 2026-09-15, pasting one of these
+    // cards: "This should not be showing up in my chat rail." The check is
+    // asking the agent for an attribute the reviewer never typed, so their card
+    // says exactly what it said when they last looked at it.
+    const asked = await railView(page, made.id);
+    expect(asked.pane, "the card stays in Done").toBe("done");
+    expect(asked.state, "still reading handled").toBe("handled");
+    expect(asked.notice, "with no notice").toBe(null);
+    // One round is drawn, and it is the reviewer's OWN exchange: their edit and
+    // the agent's answer to it, which the reopen moved into history. Nothing of
+    // the tool's round is on the card, in any of the places a card can speak.
+    expect(asked.rounds, "no round is drawn for the tool's question").toBe(1);
+    expect(asked.text, "the check's sentence is nowhere on the card").not.toContain("data-lahe-id");
+    expect(asked.text, "not in the note either").not.toContain("Reopened by the page check");
+    expect(asked.unseen, "nothing unread").not.toContain(made.id);
+    expect(asked.unseenAttr, "so no mark and no 1 new tag").not.toBe("true");
+    expect(asked.toasts, "and nothing on the page").toBe(0);
+    expect(asked.doneRows, "the Done row is still there").toBe(1);
 
     // The agent answers handled again with the page unchanged, which is it
     // saying the rendering is intended. That has to end it.
@@ -750,5 +801,101 @@ test.describe("the stamp's graceful failures: nothing written, and the reviewer 
     expect(settled.state, "the item stays handled").toBe("handled");
     expect(settled.rev, "and no second reopen bumped the rev again").toBe(reopened.rev);
     expect(await mainText(page), "the page is still exactly as the agent built it").toBe(textOf(applied));
+
+    // And the agent's answer to the tool's question is not news either.
+    const answered = await railView(page, made.id);
+    expect(answered.pane).toBe("done");
+    expect(answered.state).toBe("handled");
+    expect(answered.notice, "no notice for a handled answer").toBe(null);
+    expect(answered.agentMessage, "and no agent block for it").toBe(null);
+    expect(answered.rounds, "still only the reviewer's own").toBe(1);
+    expect(answered.text, "and still nothing of the tool's").not.toContain("data-lahe-id");
+    expect(answered.unseen).not.toContain(made.id);
+    expect(answered.announced, "nothing was ever toasted about it").not.toContain(made.id);
+    expect(answered.toasts).toBe(0);
+
+    // THE AGENT'S FILE IS UNCHANGED, because the agent is who the round is for.
+    const agentSees = await pollUntil(
+      () => {
+        if (!fs.existsSync(world.reviewJson)) return null;
+        const file = JSON.parse(fs.readFileSync(world.reviewJson, "utf8"));
+        for (const group of file.pages || []) {
+          const found = (group.items || []).find((item) => item.id === made.id);
+          if (found && found.region && found.region.stamp_missing) return found;
+        }
+        return null;
+      },
+      { message: "review.json to mark the id as never carried", timeoutMs: 20000 }
+    );
+    expect(agentSees.region.stamp_missing, "so a later agent can see the id was never carried").toBe(true);
+    expect(agentSees.note, "and the round's own words are still there to read").toContain(
+      "the data-lahe-id stamp did not reach the source"
+    );
+  });
+
+  test("S7: a refusal is the one thing the tool's round says to the reviewer", async ({ page }) => {
+    // The agent answering not_handled is saying the id cannot go into the
+    // source. Whether that is acceptable is a person's call, so it reaches the
+    // card as one quiet line: no round, no badge, no toast.
+    await page.goto(world.open);
+    await booted(page);
+    await prime(page, world, startBlocks());
+    const made = await handEdit(page, "#p", MINE);
+
+    const applied = [block(LEAD), block(MINE, { id: "p" }), block(TRAIL)];
+    rebuild(world, applied);
+    await pollPage(page, (want) => document.querySelector("main").textContent === want, textOf(applied), {
+      message: "the page to reload itself onto the agent's rewrite",
+      timeoutMs: 20000
+    });
+    await booted(page);
+    reply(world, made.id, made.rev);
+    await pollPage(
+      page,
+      (id) => {
+        const found = window.__lahe.items().find((item) => item.id === id);
+        return !!found && found.state === "handled";
+      },
+      made.id,
+      { message: "the agent's reply to fold", timeoutMs: 20000 }
+    );
+
+    await page.reload();
+    await booted(page);
+    await pollPage(
+      page,
+      (id) => {
+        const found = window.__lahe.items().find((item) => item.id === id);
+        return !!found && found.state === "ready";
+      },
+      made.id,
+      { message: "the page check to reopen the item on this load", timeoutMs: 25000 }
+    );
+    const reopened = await page.evaluate((id) => {
+      const found = window.__lahe.items().find((item) => item.id === id);
+      return { rev: found.rev };
+    }, made.id);
+
+    refuse(world, made.id, reopened.rev, "the page is generated by a plugin I cannot edit");
+    await pollPage(
+      page,
+      (id) => {
+        const found = window.__lahe.items().find((item) => item.id === id);
+        return !!found && found.state === "not_handled";
+      },
+      made.id,
+      { message: "the refusal to fold", timeoutMs: 20000 }
+    );
+
+    const view = await railView(page, made.id);
+    expect(view.notice, "the reviewer is told, in one line").toContain(
+      "The agent could not carry the id into the source"
+    );
+    expect(view.notice, "with the agent's own reason").toContain("generated by a plugin");
+    expect(view.rounds, "and no round drawn for the tool's exchange").toBe(1);
+    expect(view.text, "whose words are still nowhere on the card").not.toContain("data-lahe-id");
+    expect(view.agentMessage, "and no agent block").toBe(null);
+    expect(view.unseen, "a notice, not an alarm").not.toContain(made.id);
+    expect(view.toasts).toBe(0);
   });
 });
