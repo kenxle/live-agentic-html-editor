@@ -11,10 +11,10 @@ on:
     inputs:
       unit_repeats:
         description: "How many times to run test/unit/add_command.test.js"
-        default: "30"
+        default: "40"
       deck_repeats:
         description: "playwright --repeat-each for reveal_deck.spec.js"
-        default: "8"
+        default: "20"
 
 jobs:
   unit:
@@ -32,7 +32,7 @@ jobs:
       - name: repeat the unit suite
         run: |
           fails=0
-          for i in $(seq 1 ${{ github.event.inputs.unit_repeats || '25' }}); do
+          for i in $(seq 1 ${{ github.event.inputs.unit_repeats || '40' }}); do
             echo "::group::unit suite run $i"
             npm run test:unit || fails=$((fails+1))
             echo "::endgroup::"
@@ -50,4 +50,4 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npx playwright test test/browser/reveal_deck.spec.js --repeat-each=${{ github.event.inputs.deck_repeats || '12' }}
+      - run: npx playwright test test/browser/reveal_deck.spec.js --repeat-each=${{ github.event.inputs.deck_repeats || '20' }}
