@@ -276,6 +276,8 @@ test.describe("the reviewer ends the review from the rail", () => {
     expect(menu.items.map((one) => one.label)).toEqual([
       "Copy review",
       "Export review to file",
+      "Collapse all cards",
+      "Expand all cards",
       "Hide for presenting (Cmd-Shift-X)"
     ]);
     await page.evaluate(() => window.__lahe.rail.closeMenu(false));

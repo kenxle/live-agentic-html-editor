@@ -498,22 +498,49 @@
       return width;
     }
 
+    /**
+     * Which cards the reviewer folded down to one line, as an id -> true map.
+     *
+     * ONLY THE COLLAPSED ONES ARE WRITTEN. An expanded card is the default, so
+     * storing `false` for it would grow this map by one entry per card the
+     * reviewer ever opened and never shrink it. A card whose id is absent is
+     * open, which is also the right answer for an id that no longer exists.
+     *
+     * Same best-effort contract as the rest of this bucket: a shape that cannot
+     * be trusted is dropped, and every card comes back open.
+     */
+    function readCardStates(got) {
+      var map = got && typeof got === "object" ? got.cards : null;
+      if (!map || typeof map !== "object" || Array.isArray(map)) return {};
+      var out = {};
+      Object.keys(map).forEach(function (id) {
+        if (map[id] === true) out[id] = true;
+      });
+      return out;
+    }
+
+    function emptyUiPreferences() {
+      return { collapsed: false, pill: null, width: null, present: false, cards: {} };
+    }
+
     function readUiPreferences(reviewId) {
       try {
         var raw = backing.getItem(uiKey(reviewId));
-        if (!raw) return { collapsed: false, pill: null, width: null, present: false };
+        if (!raw) return emptyUiPreferences();
         var got = JSON.parse(raw);
-        if (!got || typeof got !== "object") return { collapsed: false, pill: null, width: null, present: false };
+        if (!got || typeof got !== "object") return emptyUiPreferences();
         return {
           collapsed: got.collapsed === true,
           pill: readPillSpot(got),
           width: readRailWidth(got),
           // Present mode: the reviewer chose to hide the whole library, and a
           // reload in the middle of a talk has to keep it hidden.
-          present: got.present === true
+          present: got.present === true,
+          // Which cards are folded to one line. Per review, per card id.
+          cards: readCardStates(got)
         };
       } catch (err) {
-        return { collapsed: false, pill: null, width: null, present: false };
+        return emptyUiPreferences();
       }
     }
 
@@ -524,7 +551,8 @@
         collapsed: !!(value && value.collapsed),
         pill: readPillSpot(value),
         width: readRailWidth(value),
-        present: !!(value && value.present)
+        present: !!(value && value.present),
+        cards: readCardStates(value)
       };
       try {
         backing.setItem(uiKey(reviewId), JSON.stringify(next));

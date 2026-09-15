@@ -136,12 +136,35 @@ function cardRect(page, id) {
   }, id);
 }
 
-/** A click on the card itself: the top strip, which holds no control. */
+/**
+ * A click on the card's CONTENTS, which is the jump gesture.
+ *
+ * Not the head strip any more. The head holds the disclosure that folds a card
+ * down to one line, so a press there folds it rather than jumping (overlay.js,
+ * withinHead). The bottom edge of the card is the card's own padding, so this
+ * lands on the card node itself and never on a control a tab owner drew.
+ */
 async function clickCard(page, id) {
-  const rect = await cardRect(page, id);
-  expect(rect, "the card to be on screen").toBeTruthy();
-  expect(rect.width, "the card to be in the tab the reviewer is looking at").toBeGreaterThan(0);
-  await page.mouse.click(rect.x + rect.width / 2, rect.y + 6);
+  const at = await page.evaluate((itemId) => {
+    const node = window.__lahe.rail.cardNode(itemId);
+    if (!node) return null;
+    node.scrollIntoView({ block: "nearest" });
+    const card = node.getBoundingClientRect();
+    const head = node.querySelector("[data-lahe-card-head]").getBoundingClientRect();
+    // Just under the head, which on a short viewport is the part of the card
+    // that is reliably on screen. The quote sits here, and a quote is text
+    // rather than a control, so the press reaches the card's own handler.
+    return {
+      x: card.x + card.width / 2,
+      y: Math.min(head.bottom + 6, card.bottom - 4),
+      width: card.width,
+      inView: head.bottom + 6 < window.innerHeight
+    };
+  }, id);
+  expect(at, "the card to be on screen").toBeTruthy();
+  expect(at.width, "the card to be in the tab the reviewer is looking at").toBeGreaterThan(0);
+  expect(at.inView, "the point being pressed to be inside the window").toBe(true);
+  await page.mouse.click(at.x, at.y);
 }
 
 async function clickCardButton(page, id, label) {

@@ -80,9 +80,16 @@
 
   var ROW_CLASS = "lahe-done-row";
   var ASK_CLASS = "lahe-ask";
-  var ASKING_ATTR = "data-lahe-asking";
+  // The two marks this file puts on a card. Taken from the rail rather than
+  // typed again: a folded card shows a "question" or "1 new" tag off these same
+  // attributes, so a second spelling here would be a tag that silently stops
+  // appearing.
+  var ASKING_ATTR = overlayModule.CARD_ASKING_ATTR;
   // A card holding a reply the reviewer has not read yet.
-  var UNSEEN_ATTR = "data-lahe-unseen";
+  var UNSEEN_ATTR = overlayModule.CARD_UNSEEN_ATTR;
+  // How much of a turn fits on a folded round's line. Shorter than a card's,
+  // because a round's line already spends room on who said it and when.
+  var ROUND_LINE_MAX = 48;
 
   /**
    * Which reply this is, as one string.
@@ -146,6 +153,37 @@
   /** Is there anything here for a person to actually read? */
   function hasWords(value) {
     return typeof value === "string" && value.trim() !== "";
+  }
+
+  /**
+   * Does this round of a thread start open?
+   *
+   * A long exchange is the thing Ken was scrolling through, so an old thread
+   * opens as a list of one-line rounds with the last one showing. Three rules,
+   * in this order:
+   *
+   *   THE NEWEST IS OPEN     it is what the reviewer came back for
+   *   A SHORT THREAD IS OPEN two rounds is not a scroll, and folding half of a
+   *                          two-round exchange hides one turn to save one line
+   *   A ROUND THAT NEEDS AN  a question and a refusal are the two things the
+   *   ANSWER IS OPEN         reviewer has to read to act, so they are never
+   *                          folded away by a rule about length
+   *
+   * Pure: a round, its place, and how many there are. No DOM, no storage. Round
+   * state is NOT persisted anywhere; every draw works it out again from this.
+   *
+   * @param {object} round one entry of record.chronologicalThread(item)
+   * @param {number} index its place, oldest first
+   * @param {number} total how many rounds the thread has
+   * @returns {boolean}
+   */
+  function roundStartsExpanded(round, index, total) {
+    if (index === total - 1) return true;
+    if (total <= 2) return true;
+    var agent = (round && round.agent) || {};
+    if (agent.status === record.REPLY_STATUS.QUESTION) return true;
+    if (agent.status === record.REPLY_STATUS.NOT_HANDLED) return true;
+    return false;
   }
 
   /**
@@ -438,6 +476,28 @@
     "." + ROW_CLASS + " .cardacts:empty{display:none}",
     ".lahe-thread{display:flex;flex-direction:column;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}",
     ".lahe-thread-round{display:flex;flex-direction:column;gap:5px}",
+    // --- one round, folded to a line ----------------------------------------
+    //
+    // The same gesture as a card's, one level down, so an old exchange is a
+    // short list of who-said-what and the reviewer opens the one they want.
+    // The control is a button and carries the whole summary, which is what makes
+    // the line pressable and keeps the round reachable from the keyboard with
+    // nothing extra wired up.
+    ".lahe-round-toggle{display:flex;align-items:baseline;gap:6px;width:100%;",
+    "min-height:24px;padding:3px 0;border:0;background:none;text-align:left;",
+    "font:inherit;color:var(--ink-faint);cursor:pointer}",
+    ".lahe-round-toggle:hover .lahe-round-line{color:var(--ink-soft)}",
+    ".lahe-round-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:5px}",
+    ".lahe-round-chev{flex:none;display:inline-flex;align-self:center;color:var(--ink-faint)}",
+    ".lahe-round-chev svg{width:11px;height:11px;transform:rotate(90deg);transition:transform 120ms ease}",
+    ".lahe-thread-round[data-lahe-open='false'] .lahe-round-chev svg{transform:rotate(0deg)}",
+    "@media (prefers-reduced-motion:reduce){.lahe-round-chev svg{transition:none}}",
+    ".lahe-round-who{flex:none;font-size:10px;font-weight:600;letter-spacing:.06em;",
+    "text-transform:uppercase;color:var(--ink-faint)}",
+    ".lahe-round-line{flex:1;min-width:0;font-size:12px;color:var(--ink-faint);",
+    "white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+    ".lahe-thread-round[data-lahe-open='false'] .lahe-round-turns{display:none}",
+    ".lahe-round-turns{display:flex;flex-direction:column;gap:5px}",
     // The reviewer's own turns are context; the agent's turns are the reading.
     // So the agent's words get full ink and the card body's size, and the
     // reviewer's stay smaller and softer (Ken, 2026-09-11).
@@ -524,6 +584,11 @@
     var rows = Object.create(null);
     var asks = Object.create(null);
     var threads = Object.create(null);
+    // id -> {total, byIndex} for rounds the reviewer opened or shut BY HAND this
+    // session. Never persisted: a reload derives every round from newest and
+    // needs-an-answer again (roundStartsExpanded). It exists only so a repaint,
+    // which redraws the whole thread, does not shut a round mid-read.
+    var roundState = Object.create(null);
     var composers = Object.create(null);
     // id -> the Reopen button. Held separately from its row because on a
     // hand-edit card the button does not live in that row: it moves next to
@@ -542,6 +607,7 @@
     var markedNow = Object.create(null);
     var dropTabWatch = null;
     var dropCollapseWatch = null;
+    var dropCardCollapseWatch = null;
     // What this PAGE has already said, which outlives this tab: a remount
     // builds a new Done tab and must not start announcing from scratch.
     var life = lifeFor(reviewId);
@@ -631,6 +697,20 @@
             return;
           }
           clearFresh();
+        });
+      }
+      // OPENING A FOLDED CARD IS THE READING. A card folded to one line keeps
+      // its unseen mark through a tab visit (see markRepliesSeen), so this is
+      // where that reply finally gets marked read: the reviewer pressed the
+      // chevron and the words are now on the screen.
+      if (!dropCardCollapseWatch && typeof rail.onCardCollapse === "function") {
+        dropCardCollapseWatch = rail.onCardCollapse(function (id, folded) {
+          if (folded) {
+            paintUnseen();
+            return;
+          }
+          if (isReadOnly() || isHidden()) return;
+          markOneSeen(id);
         });
       }
       refresh();
@@ -824,13 +904,24 @@
      * @param {string} [tab] the tab the reviewer just opened
      */
     function markRepliesSeen(tab) {
-      var inTab = tab
-        ? function (item) {
-            return paneOf(item) === tab;
-          }
-        : null;
-      writeSeen(seenMarksFor(itemsNow(), readSeen(), inTab));
+      var read = function (item) {
+        // A FOLDED CARD IS NOT A CARD ANYONE HAS READ. Its words are off the
+        // screen, so arriving on the tab it sits in says nothing about them.
+        // The card still wears its unseen mark and still carries its "1 new"
+        // tag, and opening it is what marks it read (see the onCardCollapse
+        // watch in mount). This is the ONLY thing folding changes about reading
+        // state: the badge, the toasts and the neglect sweep are untouched.
+        if (cardIsFolded(item[record.FIELD.ID])) return false;
+        if (!tab) return true;
+        return paneOf(item) === tab;
+      };
+      writeSeen(seenMarksFor(itemsNow(), readSeen(), read));
       return paintUnseen();
+    }
+
+    /** Is this card folded down to one line? Asked of the rail, which owns it. */
+    function cardIsFolded(id) {
+      return typeof rail.isCardCollapsed === "function" ? rail.isCardCollapsed(id) === true : false;
     }
 
     /** Is the reviewer looking at this tab as the reply lands? */
@@ -1038,23 +1129,90 @@
       var node = threads[id];
       while (node.firstChild) node.removeChild(node.firstChild);
       ensureStyle(node);
-      record.chronologicalThread(item).forEach(function (round) {
-        var pair = el("div", "lahe-thread-round");
-        var reviewer = round.reviewer || {};
-        if (reviewer.note) appendTurn(pair, "Reviewer note", reviewer.note, reviewer.at, "reviewer");
-        if (reviewer.change) appendTurn(pair, "Reviewer change", reviewer.change, reviewer.at, "reviewer");
-        var agent = round.agent || {};
-        if (agent.text) appendTurn(pair, agent.agent || "Agent", agent.text, agent.at, "agent");
-        if (agent.reason) appendTurn(pair, (agent.agent || "Agent") + " reason", agent.reason, agent.at, "agent");
-        if (!agent.text && !agent.reason) appendTurn(pair, agent.agent || "Agent", agent.status || "", agent.at, "agent");
-        node.appendChild(pair);
+      var rounds = record.chronologicalThread(item);
+      // A thread whose length changed is a different thread, so the reviewer's
+      // hand-opened rounds from the old one do not apply to it.
+      if (!roundState[id] || roundState[id].total !== rounds.length) {
+        roundState[id] = { total: rounds.length, byIndex: Object.create(null) };
+      }
+      rounds.forEach(function (round, index) {
+        node.appendChild(buildRound(id, round, index, rounds.length));
       });
       return node;
+    }
+
+    /**
+     * One completed exchange, foldable.
+     *
+     * The turns are built first, because the folded line is the FIRST of them:
+     * who spoke, what they said, and when. Nothing is summarized twice.
+     */
+    function buildRound(id, round, index, total) {
+      var pair = el("div", "lahe-thread-round");
+      pair.setAttribute("data-lahe-round", String(index));
+      var turns = el("div", "lahe-round-turns");
+
+      var reviewer = round.reviewer || {};
+      if (reviewer.note) appendTurn(turns, "Reviewer note", reviewer.note, reviewer.at, "reviewer");
+      if (reviewer.change) appendTurn(turns, "Reviewer change", reviewer.change, reviewer.at, "reviewer");
+      var agent = round.agent || {};
+      if (agent.text) appendTurn(turns, agent.agent || "Agent", agent.text, agent.at, "agent");
+      if (agent.reason) appendTurn(turns, (agent.agent || "Agent") + " reason", agent.reason, agent.at, "agent");
+      if (!agent.text && !agent.reason) appendTurn(turns, agent.agent || "Agent", agent.status || "", agent.at, "agent");
+
+      var first = turns.firstChild;
+      var toggle = el("button", "lahe-round-toggle");
+      toggle.setAttribute("type", "button");
+      var chev = el("span", "lahe-round-chev");
+      chev.innerHTML = overlayModule.CHEVRON_ICON;
+      toggle.appendChild(chev);
+      toggle.appendChild(el("span", "lahe-round-who", first ? first.getAttribute("data-lahe-who") || "" : ""));
+      toggle.appendChild(
+        el("span", "lahe-round-line", first ? first.getAttribute("data-lahe-said") || "" : "")
+      );
+      var firstAt = first ? first.getAttribute("data-lahe-at") : null;
+      if (firstAt) {
+        var time = el("time", "lahe-thread-time", overlayModule.timestampLabel(firstAt));
+        time.setAttribute("datetime", firstAt);
+        time.setAttribute("title", new Date(firstAt).toLocaleString());
+        toggle.appendChild(time);
+      }
+
+      var byHand = roundState[id].byIndex[index];
+      var open = byHand === undefined ? roundStartsExpanded(round, index, total) : byHand === true;
+      pair.appendChild(toggle);
+      pair.appendChild(turns);
+      applyRound(pair, open);
+      toggle.addEventListener("click", function () {
+        var next = pair.getAttribute("data-lahe-open") !== "true";
+        // SESSION MEMORY, NOT STORAGE. The defaults above are worked out again
+        // on every draw, which is the rule; this only stops a repaint from
+        // shutting a round the reviewer opened a second ago.
+        roundState[id].byIndex[index] = next;
+        applyRound(pair, next);
+      });
+      return pair;
+    }
+
+    function applyRound(pair, open) {
+      pair.setAttribute("data-lahe-open", open ? "true" : "false");
+      var toggle = pair.querySelector(".lahe-round-toggle");
+      if (!toggle) return open;
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+      var who = toggle.querySelector(".lahe-round-who");
+      var label = (who && who.textContent) || "this exchange";
+      toggle.setAttribute("aria-label", (open ? "Collapse " : "Expand ") + label);
+      return open;
     }
 
     function appendTurn(host, who, text, at, side) {
       var line = el("p", "lahe-thread-turn");
       line.setAttribute("data-lahe-turn", side === "agent" ? "agent" : "reviewer");
+      // What the round's folded line reads off this turn, stamped here so the
+      // summary is taken from the turn itself rather than rebuilt beside it.
+      line.setAttribute("data-lahe-who", String(who || ""));
+      line.setAttribute("data-lahe-said", overlayModule.clipAtWord(text, ROUND_LINE_MAX));
+      if (at) line.setAttribute("data-lahe-at", at);
       var head = el("span", "lahe-thread-head");
       head.appendChild(el("strong", null, who));
       if (at) {
@@ -1072,6 +1230,7 @@
       var node = threads[id];
       if (node) rail.detachCardNode(id, node);
       delete threads[id];
+      delete roundState[id];
     }
 
     function drawComposer(item) {
@@ -1596,6 +1755,10 @@
       var tab = paneOf(item);
       if (typeof rail.collapse === "function") rail.collapse(false);
       if (typeof rail.selectTab === "function") rail.selectTab(tab);
+      // A folded card is opened on the way in. Pressing a toast is the reviewer
+      // saying "show me that one", and landing them on a one-line card they then
+      // have to press again is the trip this path exists to save.
+      if (typeof rail.setCardCollapsed === "function") rail.setCardCollapsed(id, false);
       var node = rail.cardNode(id);
       if (node) {
         if (typeof node.scrollIntoView === "function") node.scrollIntoView({ block: "nearest" });
@@ -1874,6 +2037,8 @@
       dropTabWatch = null;
       if (dropCollapseWatch) dropCollapseWatch();
       dropCollapseWatch = null;
+      if (dropCardCollapseWatch) dropCardCollapseWatch();
+      dropCardCollapseWatch = null;
       // The pending neglect sweep belongs to this tab. The page's memory of
       // what it has announced does not, and stays where it is (see pageLife).
       if (neglectTimer && doc && doc.defaultView && typeof doc.defaultView.clearTimeout === "function") {
@@ -1892,6 +2057,7 @@
       Object.keys(rows).forEach(dropRow);
       Object.keys(asks).forEach(clearQuestion);
       Object.keys(threads).forEach(clearThread);
+      roundState = Object.create(null);
       Object.keys(composers).forEach(clearComposer);
       rows = Object.create(null);
       asks = Object.create(null);
@@ -2003,6 +2169,8 @@
     clip: clip,
     replyStamp: replyStamp,
     needsToSeeReply: needsToSeeReply,
+    roundStartsExpanded: roundStartsExpanded,
+    ROUND_LINE_MAX: ROUND_LINE_MAX,
     unseenReplyIds: unseenReplyIds,
     unseenByTab: unseenByTab,
     seenMarksFor: seenMarksFor,
