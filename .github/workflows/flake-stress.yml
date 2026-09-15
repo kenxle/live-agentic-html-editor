@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -25,14 +25,14 @@ jobs:
       - name: cp2 walk, twenty times, on a loaded box
         run: |
           (for i in $(seq 1 8); do yes > /dev/null & done) ; sleep 1
-          npx playwright test test/browser/cp2_walk.spec.js --repeat-each=20 --workers=2 2>&1 | tail -400
+          npx playwright test test/browser/cp2_walk.spec.js --repeat-each=30 --workers=2 2>&1 | tail -400
 
   keepalive-cap:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
