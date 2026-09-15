@@ -81,7 +81,25 @@ function runAdd(args, env) {
   return result;
 }
 
-/** The helper `add` started, stopped the way a user's Ctrl-C would. */
+/**
+ * The helper `add` started, stopped the way a user's Ctrl-C would.
+ *
+ * WAIT ON THE PROCESS TABLE, NOT ON AN HTTP PROBE. This used to poll
+ * service.probeHealth until the helper stopped answering, which asks a server
+ * that has just been sent SIGTERM to keep taking calls until it cannot. That
+ * was the whole of the Linux CI flake. At that moment the fetch is the only
+ * thing holding this process's event loop up (the diagnostic that caught it
+ * reported exactly two live handles, both stdio pipes, and neither of those
+ * keeps the loop alive), so a probe that lands while the helper is tearing the
+ * connection down leaves a promise with nothing behind it. node:test then sees
+ * beforeExit with a test still running and cancels the rest of the file, which
+ * is why tests 2 through 28 died together with "Promise resolution is still
+ * pending but the event loop has already resolved".
+ *
+ * A signal-0 kill asks the kernel instead. "The helper is gone" is a fact about
+ * a process, and the only timer left in the wait is pollUntil's own, which
+ * always keeps the loop up.
+ */
 async function stopHelper(stateDir) {
   const readyPath = path.join(stateDir, "service.json");
   if (!fs.existsSync(readyPath)) return;
@@ -95,14 +113,20 @@ async function stopHelper(stateDir) {
   try {
     process.kill(ready.pid, "SIGTERM");
   } catch (err) {
-    if (err.code !== "ESRCH") throw err;
+    // Already gone is the state this function exists to reach.
+    if (err.code === "ESRCH") return;
+    throw err;
   }
   await pollUntil(
-    async function () {
-      const up = await service.probeHealth("127.0.0.1", ready.port);
-      return up ? null : true;
+    function () {
+      try {
+        process.kill(ready.pid, 0);
+        return null;
+      } catch (err) {
+        return err.code === "ESRCH" ? true : null;
+      }
     },
-    { message: "the helper add started to stop answering" }
+    { message: "the helper add started to leave the process table" }
   );
 }
 

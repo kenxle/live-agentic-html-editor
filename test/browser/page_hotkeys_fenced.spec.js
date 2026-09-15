@@ -283,6 +283,55 @@ test.describe("page hotkeys are fenced out of the library's text fields", () => 
     expect(await focusedRailText(page, item.id)).toContain("s and a space here too");
   });
 
+  // The fence only ever covers the field the reviewer is IN. Anything that takes
+  // the caret out of that field mid-sentence hands the rest of the sentence to
+  // the page, and the page's hotkeys are waiting for it.
+  //
+  // The one that bit us: comments.bind() used to begin with unbind(), which
+  // turns every card note read-only, and a browser drops focus out of an element
+  // the moment it stops being editable. bind() put the note back a few lines
+  // later, so nothing looked wrong afterwards: the attribute was right, the node
+  // was the same node, and the caret was in the page. Every remount went through
+  // that path, so a reviewer correcting a comment on a page that morphs under
+  // them lost the rest of what they typed to the page's own shortcuts. On a
+  // reveal deck it changed slides, opened the overview and went fullscreen.
+  test("a remount while the reviewer is typing in a card note leaves the caret where it was", async ({
+    page
+  }) => {
+    await page.goto(server.urlFor(FIXTURE));
+    await bootLayer(page);
+
+    const item = await commitComment(page, "#hk-intro", "first pass at this");
+    const before = await counters(page);
+
+    const focused = await focusRailField(page, "card-note", item.id);
+    expect(focused.focused, "the card's note takes focus").toBe(true);
+
+    const survived = await page.evaluate(function (id) {
+      var node = window.__h.rail.cardNode(id);
+      var field = node.querySelector(".lahe-rail-note");
+      var remounted = window.__h.remount();
+      return {
+        remounted: !!remounted,
+        sameNode: window.__h.rail.cardNode(id) === node,
+        editable: field.getAttribute("contenteditable"),
+        focused: field.getRootNode().activeElement === field
+      };
+    }, item.id);
+    expect(survived.remounted, "the remount ran").toBe(true);
+    expect(survived.sameNode, "and it kept the card it had").toBe(true);
+    expect(survived.editable, "the note is still an input").not.toBe("false");
+    expect(survived.focused, "and the caret is still in it").toBe(true);
+
+    // The proof that matters is not the attribute: it is that the rest of the
+    // sentence goes where the reviewer is looking.
+    await page.keyboard.type(" and a second thought");
+    await page.keyboard.press("ArrowRight");
+
+    expect(await counters(page), "the page saw none of it").toEqual(before);
+    expect(await focusedRailText(page, item.id)).toContain("and a second thought");
+  });
+
   test("a key aimed at the rail's buttons still reaches the page", async ({ page }) => {
     await page.goto(server.urlFor(FIXTURE));
     await bootLayer(page);

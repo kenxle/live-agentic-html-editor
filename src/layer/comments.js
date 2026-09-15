@@ -2469,9 +2469,20 @@
       }
     }
 
+    /**
+     * Turn one card's note into an input, or back into words.
+     *
+     * NEVER WRITES THE ATTRIBUTE IT ALREADY SAYS. A browser drops focus out of
+     * an element the moment it stops being editable, and a note that is set to
+     * the value it already carries is a write nobody asked for. Reading first
+     * costs nothing and takes a whole class of caret loss off the table.
+     */
     function setNoteEditable(entry, editable) {
       if (!entry || !entry.node) return null;
-      entry.node.setAttribute("contenteditable", editable ? EDITABLE : "false");
+      var wanted = editable ? EDITABLE : "false";
+      if (entry.node.getAttribute("contenteditable") !== wanted) {
+        entry.node.setAttribute("contenteditable", wanted);
+      }
       return entry.node;
     }
 
@@ -2876,7 +2887,19 @@
       var target = src.document || doc;
       if (!target) return { bound: false, reason: "no document" };
       if (src.page) setPage(src.page);
-      unbind();
+      // releaseListeners, NOT unbind. unbind ALSO turns every card note
+      // read-only, and a browser throws the caret out of an element that stops
+      // being editable. bind() begins by clearing what it is about to
+      // re-register, and every remount goes through it, so the old call meant a
+      // reviewer mid-sentence in a card note lost their caret to the page every
+      // time the page morphed under them. On a reveal deck the rest of the
+      // sentence then drove the slides. bind puts the notes back as editable a
+      // few lines down, which is the state they were already in; what has to go
+      // is the flicker through read-only in between.
+      //
+      // The two callers that MEAN it, a refused window and present mode, still
+      // call unbind and still get the read-only notes they are asking for.
+      releaseListeners();
 
       listenerHandles.push(listeners.on(target, "keydown", onKeydown, true, LISTENER_GROUP));
       listenerHandles.push(listeners.on(target, "mousemove", onMouseMove, true, LISTENER_GROUP));
@@ -2916,7 +2939,14 @@
       return { bound: true, listeners: listenerHandles.length };
     }
 
-    function unbind() {
+    /**
+     * Drop the listeners and the transient gesture state, and nothing else.
+     *
+     * This is the half of unbind that bind needs: clearing what is about to be
+     * registered again. It says nothing about whether this window may comment,
+     * which is what separates a remount from a refusal.
+     */
+    function releaseListeners() {
       listenerHandles.forEach(function (handle) {
         handle.off();
       });
@@ -2925,6 +2955,10 @@
       // mid-drag would never offer the pill again after it rebinds.
       setPointerHeld(false);
       hidePopover();
+    }
+
+    function unbind() {
+      releaseListeners();
       gesturesBound = false;
       // Read-only, so the words stay readable and stop being an input. Without
       // this the refused window still offered a caret in every comment on
