@@ -154,14 +154,25 @@ async function bootLayer(page) {
   }, REVIEW);
 }
 
-/** Everything about the deck a stray key would move. */
+/**
+ * Everything about the deck a stray key would move.
+ *
+ * Read from reveal's own indices rather than from location.hash. The hash says
+ * the same thing, but reveal writes it on its own schedule a beat AFTER the
+ * slide moves, so a state captured right after a programmatic move can carry
+ * the previous slide's hash and compare unequal to itself moments later. That
+ * is a clock, not a stray key. The fragment index is in here in its place: it
+ * is the within-slide movement the hash was standing in for, and it is written
+ * at the same moment as h and v. The hash itself is still asserted, in the test
+ * that arrows the deck along and polls for it.
+ */
 function deckState(page) {
   return page.evaluate(function () {
     const indices = Reveal.getIndices();
     return {
       h: indices.h,
       v: indices.v,
-      hash: location.hash,
+      f: typeof indices.f === "number" ? indices.f : null,
       overview: Reveal.isOverview(),
       fullscreen: !!document.fullscreenElement
     };
@@ -335,6 +346,7 @@ test.describe("a real reveal.js deck under review", () => {
     await blurEverything(page);
 
     const before = await deckState(page);
+    const hashBefore = await page.evaluate(() => location.hash);
     expect(before.h, "the deck opens on the first slide").toBe(0);
 
     await page.keyboard.press("ArrowRight");
@@ -348,7 +360,7 @@ test.describe("a real reveal.js deck under review", () => {
     // reveal writes the URL on its own schedule rather than inside the keydown,
     // so this is a poll and not a read: the hash is the deck's record of where
     // the presenter is, and it catches up a beat later.
-    await pollPage(page, (was) => location.hash !== was, before.hash, {
+    await pollPage(page, (was) => location.hash !== was, hashBefore, {
       message: "reveal to write the new slide into the URL, because hash is on"
     });
   });

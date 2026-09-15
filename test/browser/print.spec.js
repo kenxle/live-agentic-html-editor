@@ -22,6 +22,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { test, expect } = require("../helpers");
 const { startStaticServer } = require("../helpers/servers");
+const { pixelDiff, expectSamePixels, expectDifferentPixels, describeDiff } = require("../helpers/pixels");
 const manifest = require("../../src/shared/manifest.js");
 
 const REPO_ROOT = path.join(__dirname, "..", "..");
@@ -222,20 +223,21 @@ test.describe("print: a reviewed page prints as the document, not the document p
 
       const screenBare = await barePage.screenshot({ clip: clip });
       const screenLayer = await layerPage.screenshot({ clip: clip });
-      expect(
-        Buffer.compare(screenBare, screenLayer),
-        "on screen, the painted passage is not pixel-identical to the bare page"
-      ).not.toBe(0);
+      const onScreen = await pixelDiff(layerPage, screenBare, screenLayer);
+      console.log("[pixels] on screen: " + describeDiff(onScreen));
+      expectDifferentPixels(onScreen, "on screen, the painted passage is not pixel-identical to the bare page");
 
       await barePage.emulateMedia({ media: "print" });
       await layerPage.emulateMedia({ media: "print" });
 
       const printBare = await barePage.screenshot({ clip: clip });
       const printLayer = await layerPage.screenshot({ clip: clip });
-      expect(
-        Buffer.compare(printBare, printLayer),
+      const underPrint = await pixelDiff(layerPage, printBare, printLayer);
+      console.log("[pixels] under print: " + describeDiff(underPrint));
+      expectSamePixels(
+        underPrint,
         "under print, the same passage is pixel-identical to the bare page: no wash reaches the printed page"
-      ).toBe(0);
+      );
     } finally {
       await bare.close();
       await withLayer.close();

@@ -14,6 +14,7 @@ const bridge = require("./bridge");
 const counters = require("./counters");
 const caret = require("./caret");
 const mutations = require("./mutations");
+const pixels = require("./pixels");
 const repaint = require("./repaint");
 const typing = require("./typing");
 const assertions = require("./assertions");
@@ -29,6 +30,7 @@ module.exports = Object.assign(
   counters,
   caret,
   mutations,
+  pixels,
   repaint,
   typing,
   assertions,

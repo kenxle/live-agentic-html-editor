@@ -25,6 +25,7 @@ const fs = require("node:fs");
 const { test, expect } = require("../helpers");
 const { startStaticServer } = require("../helpers/servers");
 const { pollPage, pollUntil } = require("../helpers/poll");
+const { pixelDiff, expectSamePixels, describeDiff } = require("../helpers/pixels");
 const { startService, readEventLog, SERVICE_ENTRY } = require("../helpers");
 const { startAppServer } = require("../fixtures/app/server");
 const manifest = require("../../src/shared/manifest.js");
@@ -381,7 +382,9 @@ test.describe("the selection popover", () => {
       const bareShot = await barePage.screenshot({ clip: clip });
       const layerShot = await layerPage.screenshot({ clip: clip });
       expect(bareShot.length, "the bare page really rendered").toBeGreaterThan(0);
-      expect(Buffer.compare(bareShot, layerShot), "no selection, no pixel of difference").toBe(0);
+      const diff = await pixelDiff(layerPage, bareShot, layerShot);
+      console.log("[pixels] no selection: " + describeDiff(diff));
+      expectSamePixels(diff, "no selection, nothing visibly different");
     } finally {
       await bare.close();
       await withLayer.close();

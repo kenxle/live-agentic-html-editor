@@ -26,6 +26,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { test, expect } = require("../helpers");
 const { startStaticServer } = require("../helpers/servers");
+const { pixelDiff, expectSamePixels, describeDiff } = require("../helpers/pixels");
 const manifest = require("../../src/shared/manifest.js");
 
 const REPO_ROOT = path.join(__dirname, "..", "..");
@@ -649,7 +650,9 @@ test.describe("1D: comments, gestures, and highlights", () => {
             clip: clip,
             mask: [layerPage.locator("#reset-intro")]
           });
-          expect(Buffer.compare(bareShot, layerShot), "zero diff outside the rail's bounds").toBe(0);
+          const diff = await pixelDiff(layerPage, bareShot, layerShot);
+          console.log("[pixels] " + width + "px rail " + (collapsed ? "collapsed" : "open") + ": " + describeDiff(diff));
+          expectSamePixels(diff, "zero visible diff outside the rail's bounds");
         } finally {
           await bare.close();
           await withLayer.close();
