@@ -5,6 +5,13 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
+- [ ] @anyone 2026-09-15 LAHE-keep-mine-morph-flake -- **test/browser/keep_mine_live_page.spec.js
+  "Keep mine survives every later morph pass" failed once on Linux CI at morph pass
+  14 (PR #5's first run), passed on rerun and 3 for 3 locally.** Nothing in that PR
+  touched morph, replay, or collisions. One sighting only; if it recurs, treat it
+  the way the add_command flake was treated: reproduce under the whole suite's
+  contention, find the race, fix it in the product or the test, never a retry.
+
 - [ ] @anyone 2026-09-15 LAHE-change-mark-cycling-block -- **A page element that cycles
   through a small set of values can be painted as the agent's change.** The change
   mark tells the page's own moving parts from the agent's edits by reading the
