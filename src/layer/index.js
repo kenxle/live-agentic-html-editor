@@ -822,12 +822,24 @@
     function pageFocusHolder() {
       var node = doc.activeElement;
       if (!node || node === doc.body || node === doc.documentElement) return null;
+      // The library's own surfaces are not the page. A closed shadow root
+      // reports its HOST as the page's activeElement, so without this the panel
+      // remembers itself as the place the keyboard came from and hands it
+      // straight back to itself on the way out.
+      if (markers.isInsideOverlay(node)) return null;
       return node;
     }
 
     function returnFocusToPage() {
       var back = railFocusReturn;
       railFocusReturn = null;
+      // FIRST, and unconditionally. Hiding the rail is not the same thing as
+      // blurring what was inside it: Firefox leaves the focus on the hidden
+      // control while its window is in the background, and from out here that
+      // reads as the library's own host holding the keyboard. The rail takes
+      // the focus off its own control by name, and only then is there a page to
+      // give it back to.
+      rail.releaseFocus();
       if (back && back.isConnected === true && typeof back.focus === "function") {
         try {
           back.focus();
@@ -836,9 +848,6 @@
           // A node that refuses the focus falls through to the body below.
         }
       }
-      // The rail going away already blurred anything inside it in every engine,
-      // but saying so leaves document.activeElement at the body rather than at
-      // whatever the engine chose.
       var held = doc.activeElement;
       if (held && held !== doc.body && typeof held.blur === "function") held.blur();
       if (doc.body && typeof doc.body.focus === "function") doc.body.focus();

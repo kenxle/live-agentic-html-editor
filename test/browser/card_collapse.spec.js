@@ -137,6 +137,32 @@ function cardShape(page, id) {
   }, id);
 }
 
+/**
+ * Wait until the card is drawn where the reviewer is looking.
+ *
+ * A card whose reply just landed moves from Active to Done on the rail's next
+ * repaint, and until that repaint the one card node is still parented in a pane
+ * the tab strip has already left. A pane that is not the current one is
+ * display:none, so everything measured inside it is zero and everything read
+ * off it is the card as it was. Chromium happened to run that repaint before
+ * the next read and the other two do not, which is a race rather than a
+ * difference: the move lands inside a frame in all three. So the wait is for
+ * the card to be ON SCREEN, which is the state the assertions below are about.
+ */
+function cardOnScreen(page, id) {
+  return pollPage(
+    page,
+    (cardId) => {
+      const node = window.__lahe.rail.cardNode(cardId);
+      if (!node) return false;
+      const box = node.getBoundingClientRect();
+      return box.width > 0 && box.height > 0;
+    },
+    id,
+    { message: "the card to be drawn on the tab the reviewer is looking at" }
+  );
+}
+
 /** The chevron's own geometry, so the press below is a real click on it. */
 async function clickChevron(page, id) {
   const rect = await page.evaluate((itemId) => {
@@ -347,9 +373,7 @@ test.describe("a folded card is not a card anyone has read", () => {
 
       // THE POINT. The reviewer has now visited the tab the card is on, and the
       // answer is still unread: its words were never on the screen.
-      await pollPage(page, (id) => window.__lahe.rail.cardNode(id) !== null, item.id, {
-        message: "the card to land in Done"
-      });
+      await cardOnScreen(page, item.id);
       const waiting = await cardShape(page, item.id);
       expect(waiting.folded, "it stayed folded when the reply arrived").toBe(true);
       expect(waiting.newTag, "and it says there is something to read").toBe(true);
@@ -453,6 +477,7 @@ test.describe("a round of a thread folds too", () => {
       }
 
       await page.evaluate(() => window.__lahe.rail.selectTab("done"));
+      await cardOnScreen(page, item.id);
       const rounds = await page.evaluate((id) => {
         const thread = window.__lahe.handle.doneTab().thread(id);
         return Array.prototype.map.call(thread.querySelectorAll(".lahe-thread-round"), (node) => {

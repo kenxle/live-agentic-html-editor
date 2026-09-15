@@ -559,10 +559,50 @@ test("a patient drag most of the way across is a dismissal", () => {
 test("a quick flick counts even when it was let go early", () => {
   assert.equal(overlay.shouldDismissSwipe({ dx: 30, velocity: overlay.TOAST_FLING_SPEED, width: 560 }), true);
   assert.equal(
+    overlay.shouldDismissSwipe({ dx: overlay.TOAST_FLING_MIN_PX - 1, velocity: 9, width: 560 }),
+    false,
+    "a twitch is not a throw, however fast it was"
+  );
+  assert.equal(
+    overlay.shouldDismissSwipe({ dx: overlay.TOAST_FLING_MIN_PX, velocity: overlay.TOAST_FLING_SPEED, width: 560 }),
+    true,
+    "and the shortcut opens exactly where the push becomes a push"
+  );
+  assert.equal(
     overlay.shouldDismissSwipe({ dx: 30, velocity: overlay.TOAST_FLING_SPEED - 0.1, width: 560 }),
     false,
     "a slow drag that changed its mind is not a throw"
   );
+});
+
+test("the speed of a swipe is read across a frame, not across whatever arrived", () => {
+  // The engine's own coalescing decides how many moves a gesture arrives in and
+  // how close together they land. WebKit hands the same 20px drag over as four
+  // moves inside four milliseconds, and dividing one of those by its own
+  // millisecond says the hand was moving at four pixels per ms: a throw, on a
+  // gesture the reviewer plainly changed their mind about.
+  var sampler = { lastX: 100, lastAt: 1000, velocity: 0 };
+  assert.equal(overlay.sampleSwipeVelocity(sampler, 110, 1006), 0, "6ms is not a stretch to divide by");
+  assert.equal(overlay.sampleSwipeVelocity(sampler, 113, 1008), 0);
+  assert.equal(overlay.sampleSwipeVelocity(sampler, 120, 1011), 0, "and the whole gesture is still inside one");
+  assert.equal(
+    overlay.shouldDismissSwipe({ dx: 20, velocity: sampler.velocity, width: 560 }),
+    false,
+    "so the distance decides it, and 20px is a hand that changed its mind"
+  );
+
+  // A real flick covers ground over a stretch long enough to divide by, and is
+  // still a throw.
+  var flick = { lastX: 100, lastAt: 1000, velocity: 0 };
+  assert.equal(overlay.sampleSwipeVelocity(flick, 140, 1020), 2, "40px in 20ms is two pixels a millisecond");
+  assert.equal(overlay.shouldDismissSwipe({ dx: 40, velocity: flick.velocity, width: 560 }), true);
+
+  // A hand that dragged and then held still for a moment before letting go is
+  // read at the speed it was actually going: nearly none.
+  assert.equal(overlay.sampleSwipeVelocity(flick, 141, 1100), 0.0125);
+  assert.equal(overlay.shouldDismissSwipe({ dx: 41, velocity: flick.velocity, width: 560 }), false);
+
+  assert.equal(overlay.sampleSwipeVelocity(null, 10, 1000), 0, "nonsense in, no speed out");
 });
 
 test("a press, a shake, and a leftward drag are none of them dismissals", () => {
