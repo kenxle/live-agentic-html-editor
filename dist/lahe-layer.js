@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+d4bce32ec63a
+ * version 0.2.0+924294c142fc
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+d4bce32ec63a";
+  g.LAHE.version = "0.2.0+924294c142fc";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -25187,8 +25187,24 @@
       // are the thing that must not be lost; the goodbye is a courtesy to the
       // next window, and a release that beat the flush out the door would hand
       // the review on while this page still had words to send.
-      releaseOnUnload();
-      return flushed;
+      var released = releaseOnUnload();
+      // BOTH HALVES IN THE RETURNED PROMISE, and the flush's own answer is
+      // still what it resolves to. The pagehide listener ignores the return, so
+      // a real unload is unchanged: nothing is awaited and nothing is delayed.
+      // The one caller that CAN wait is the browser harness, which says the
+      // page's goodbye for it at teardown because a browser context torn down
+      // by the driver never fires pagehide, and the review then stays held for
+      // the full staleness clock while the next spec is refused as a second
+      // window. A rejected goodbye is swallowed: the words are the promise's
+      // subject, and a helper that is already gone is not a lost edit.
+      var settled = released && typeof released.catch === "function"
+        ? released.catch(function () {
+            return null;
+          })
+        : released;
+      return Promise.all([flushed, settled]).then(function (both) {
+        return both[0];
+      });
     }
 
     // A page restored from the bfcache, or a beforeunload the reviewer cancelled,
@@ -33535,7 +33551,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+d4bce32ec63a";
+  var VERSION = "0.2.0+924294c142fc";
 
   var protocol = ns.protocol;
   var record = ns.record;
