@@ -50,4 +50,4 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npx playwright test test/browser/reveal_deck.spec.js -g "four fields" --repeat-each=${{ github.event.inputs.deck_repeats || '40' }}
+      - run: npx playwright test test/browser/reveal_deck.spec.js --repeat-each=${{ github.event.inputs.deck_repeats || '12' }}
