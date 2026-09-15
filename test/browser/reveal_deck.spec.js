@@ -249,6 +249,9 @@ function focusRailField(page, which, itemId) {
         if (field) field.focus();
       }
       const active = root.activeElement;
+      // Kept for the chain reader below: the rail's root is closed, so this is
+      // the only handle the test has on the node it just focused.
+      window.__lahe_focused_field = field || null;
       if (!field || active !== field) {
         return { focused: false, wanted: args.which, active: active ? active.tagName : null };
       }
@@ -256,6 +259,52 @@ function focusRailField(page, which, itemId) {
     },
     { which: which, id: itemId }
   );
+}
+
+/**
+ * Where focus REALLY is, root by root, from the rail outwards.
+ *
+ * focusRailField reads one shadow root's activeElement. That is necessary and
+ * not sufficient: a root reports an activeElement for the node inside it that
+ * last took focus, and the composed answer is only "the field" when every root
+ * out to the document agrees. This walks that chain so a failure says which
+ * link broke instead of leaving "the keys leaked" to be guessed at.
+ *
+ * @returns {{atField: boolean, chain: string[]}}
+ */
+function railFocusChain(page, itemId) {
+  return page.evaluate(function (id) {
+    function name(el) {
+      if (!el) return "null";
+      var text = el.tagName;
+      if (el.id) text += "#" + el.id;
+      if (el.className && typeof el.className === "string") {
+        text += "." + el.className.trim().split(/\s+/).join(".");
+      }
+      if (el.isContentEditable) text += "[contenteditable]";
+      return text;
+    }
+    var node = window.__h.rail.cardNode(id);
+    var root = node ? node.getRootNode() : null;
+    if (!root) return { atField: false, chain: ["no card node"] };
+    var field = window.__lahe_focused_field || null;
+    var atField = !!field && root.activeElement === field;
+    var chain = [];
+    var current = root;
+    var expected = field;
+    while (current && current.host) {
+      chain.push(name(current.activeElement) + " (in " + name(current.host) + "'s root)");
+      // A root only hands focus outwards when its own host is the active
+      // element of the root ABOVE it. That is the link this is looking for: one
+      // broken rung and the page, not the field, is where the keys land.
+      if (current.activeElement !== expected) atField = false;
+      expected = current.host;
+      current = current.host.getRootNode();
+    }
+    chain.push(name(document.activeElement) + " (document)");
+    if (document.activeElement !== expected) atField = false;
+    return { atField: atField, wanted: name(field), chain: chain };
+  }, itemId);
 }
 
 /** Fold an agent reply in, so the Done tab grows its follow-up composer. */
@@ -423,9 +472,23 @@ test.describe("a real reveal.js deck under review", () => {
     for (const which of ["card-note", "composer", "page-note"]) {
       const focused = await focusRailField(page, which, item.id);
       expect(focused.focused, "the " + which + " field takes focus").toBe(true);
+
+      // Say out loud, BEFORE a key is pressed, that the composed active element
+      // is the field. Without this a leak reads as "the fence is broken" when
+      // the real story is that focus was somewhere else by the time the keys
+      // arrived, and the two need different fixes.
+      const aimed = await railFocusChain(page, item.id);
+      expect(
+        aimed.atField,
+        "the keys about to be typed are aimed at " + which + ", not at " + JSON.stringify(aimed.chain)
+      ).toBe(true);
+
       for (const key of DECK_KEYS) await page.keyboard.press(key === " " ? "Space" : key);
       await page.keyboard.press("ArrowRight");
-      expect(await deckState(page), "keys typed in " + which + " stayed in the rail").toEqual(before);
+
+      const landed = await railFocusChain(page, item.id);
+      expect(await deckState(page), "keys typed in " + which + " stayed in the rail. Focus ended at " +
+        JSON.stringify(landed.chain)).toEqual(before);
       expect(popups, "and " + which + " opened no notes window").toHaveLength(0);
     }
 
@@ -434,10 +497,17 @@ test.describe("a real reveal.js deck under review", () => {
 
     const followup = await focusRailField(page, "followup", item.id);
     expect(followup.focused, "the follow-up composer takes focus").toBe(true);
+    const aimedFollowup = await railFocusChain(page, item.id);
+    expect(
+      aimedFollowup.atField,
+      "the keys are aimed at the follow-up composer, not at " + JSON.stringify(aimedFollowup.chain)
+    ).toBe(true);
     for (const key of DECK_KEYS) await page.keyboard.press(key === " " ? "Space" : key);
     await page.keyboard.press("ArrowRight");
 
-    expect(await deckState(page), "keys typed in the follow-up stayed in the rail").toEqual(before);
+    const landedFollowup = await railFocusChain(page, item.id);
+    expect(await deckState(page), "keys typed in the follow-up stayed in the rail. Focus ended at " +
+      JSON.stringify(landedFollowup.chain)).toEqual(before);
     expect(popups, "and the follow-up opened no notes window").toHaveLength(0);
   });
 

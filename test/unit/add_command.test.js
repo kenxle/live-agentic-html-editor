@@ -14,7 +14,7 @@
 
 "use strict";
 
-const test = require("node:test");
+const nodeTest = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -28,6 +28,39 @@ const service = require("../../src/service/index.js");
 
 const REPO_ROOT = path.join(__dirname, "..", "..");
 const BIN = path.join(REPO_ROOT, "bin", "lahe.js");
+
+// TEMPORARY DIAGNOSTIC (branch ci/flakes). This file dies on Linux CI with
+// "Promise resolution is still pending but the event loop has already
+// resolved", which is node:test saying beforeExit fired while a test was still
+// awaiting. The only thing that can tell us WHICH await was open is the
+// process itself, so it says so on the way out.
+let phase = "(module load)";
+function at(label) {
+  phase = label;
+}
+process.on("beforeExit", function () {
+  process._rawDebug(
+    "LAHE-FLAKE beforeExit during " +
+      phase +
+      " resources=" +
+      JSON.stringify(
+        typeof process.getActiveResourcesInfo === "function" ? process.getActiveResourcesInfo() : "n/a"
+      )
+  );
+});
+
+// Every test names itself, so the dump above points at one line rather than a
+// file. The wrapper is the same shape node:test's own `test` has.
+function test(name, fn) {
+  return nodeTest(name, async function (t) {
+    at(name + " :: body");
+    try {
+      return await fn(t);
+    } finally {
+      at(name + " :: finished");
+    }
+  });
+}
 
 const PAGE = [
   "<!doctype html>",
@@ -48,6 +81,7 @@ function tempDir(prefix) {
 
 /** A port nothing is listening on right now. */
 function freePort() {
+  at(phase + " > freePort");
   return new Promise(function (resolve, reject) {
     const server = net.createServer();
     server.once("error", reject);
@@ -67,6 +101,7 @@ function freePort() {
  */
 function runAdd(args, env) {
   const result = { code: 0, stdout: "", stderr: "" };
+  at(phase + " > runAdd");
   try {
     result.stdout = execFileSync(process.execPath, [BIN, "add"].concat(args), {
       env: Object.assign({}, process.env, env || {}),
@@ -83,6 +118,7 @@ function runAdd(args, env) {
 
 /** The helper `add` started, stopped the way a user's Ctrl-C would. */
 async function stopHelper(stateDir) {
+  at(phase + " > stopHelper");
   const readyPath = path.join(stateDir, "service.json");
   if (!fs.existsSync(readyPath)) return;
   let ready;
@@ -97,8 +133,10 @@ async function stopHelper(stateDir) {
   } catch (err) {
     if (err.code !== "ESRCH") throw err;
   }
+  at(phase + " > stopHelper:poll");
   await pollUntil(
     async function () {
+      at(phase.replace(/ > probe.*$/, "") + " > probe");
       const up = await service.probeHealth("127.0.0.1", ready.port);
       return up ? null : true;
     },
