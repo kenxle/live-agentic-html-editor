@@ -1727,6 +1727,25 @@
       var fo = flushOptions || {};
       if (flushing) return Promise.resolve({ sent: 0, remaining: pendingCount(), busy: true });
       if (cspRefused) return Promise.resolve({ sent: 0, remaining: pendingCount(), refused: true });
+      // ONCE THE DOCUMENT IS LEAVING, THE ONLY TRANSPORT IS THE KEEPALIVE POST.
+      //
+      // An ordinary fetch raced the document's teardown, which is exactly the
+      // transport this design says not to rely on, and it has a second cost
+      // beyond the race: it carries no size cap, so a body the keepalive path
+      // refuses for being oversize went out anyway whenever the ordinary flush
+      // happened to win. That is not a hypothetical. Committing on navigation
+      // queues its event with the ordinary 750ms debounce (deliberately: an
+      // immediate flush here would be the same mistake), and a navigation that
+      // takes longer than that to fetch its next page leaves the old document
+      // alive with the timer still running. On a loaded CI box it fired, and
+      // editing_navigation's "a body past the keepalive cap does not go out at
+      // unload" found a 70KB edit on the helper's disk.
+      //
+      // Nothing is lost by refusing: every event is already in browser storage,
+      // and the next load posts whatever the helper never acknowledged.
+      if (unloading && !fo.unload) {
+        return Promise.resolve({ sent: 0, remaining: pendingCount(), unloading: true });
+      }
 
       var events = store.pendingEvents(requireReview());
       if (!events.length) {
@@ -1876,6 +1895,12 @@
 
     function scheduleFlush(delayMs) {
       if (debounceTimer) clearTimeout(debounceTimer);
+      // See flush(): a document on its way out posts through keepalive or not at
+      // all. Arming a timer here would only wake up inside the guard there.
+      if (unloading) {
+        debounceTimer = null;
+        return;
+      }
       // harness-allow-timer: protocol.FLUSH's 750ms typing-idle debounce. This
       // is the ONLY debounce in the design and it is on the post to the helper,
       // never on the write to browser storage.
@@ -2746,6 +2771,15 @@
 
     function commitOnUnload() {
       unloading = true;
+      // The editing surface commits the open edit BEFORE it calls in here, and
+      // that commit queues its event on the ordinary debounce. The timer is
+      // already armed by the time this line runs, so setting `unloading` is not
+      // enough on its own: the timer has to go too, or a navigation slower than
+      // the debounce fires an ordinary post the keepalive cap never saw.
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = null;
+      if (retryTimer) clearTimeout(retryTimer);
+      retryTimer = null;
       var flushed = flush({ unload: true });
       // AFTER the flush is started, not before. The reviewer's last keystrokes
       // are the thing that must not be lost; the goodbye is a courtesy to the
@@ -2759,6 +2793,10 @@
     // is a live document again: real failures have to be audible from here on.
     function onPageShow() {
       unloading = false;
+      // The document is alive after all, and the guard above held its queue back
+      // and cleared its timer. Give the queue a way out again, or a reviewer who
+      // cancelled a navigation keeps typing into a client that never posts.
+      if (pendingCount() > 0) scheduleFlush(0);
     }
 
     function stop() {
