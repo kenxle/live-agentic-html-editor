@@ -1,0 +1,30 @@
+name: flake-stress
+
+# TEMPORARY. Runs the keep-mine spec twenty times over on a CI box to reproduce
+# a flake that only shows on Linux. Deleted when the flake is fixed.
+on:
+  push:
+    branches: [ci/keep-mine]
+  workflow_dispatch:
+
+jobs:
+  stress:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # One worker so the box is not the variable; the flake wants a slow box,
+      # so a second job runs a load generator alongside it.
+      - name: keep-mine, twenty times
+        run: |
+          (for i in $(seq 1 240); do yes > /dev/null & done) ; sleep 1
+          npx playwright test test/browser/keep_mine_live_page.spec.js --repeat-each=20 --workers=2 2>&1 | tail -400

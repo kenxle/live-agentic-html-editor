@@ -262,6 +262,42 @@ test.describe("the reviewer's decision on a collision, on a page that keeps repa
     //
     // Sampled continuously rather than read once at the end: "it was right when
     // I looked" is what the one-shot write also produced, for about 150ms.
+
+    // TEMPORARY FLAKE PROBE (removed before this branch merges). Records a
+    // ground-truth timeline in the page so a failing morph pass can be told
+    // apart from a sampling gap.
+    await page.evaluate(() => {
+      const probe = (window.__probe = { events: [] });
+      const note = () => {
+        const el = document.querySelector("#coach-note");
+        return el ? el.textContent : null;
+      };
+      const stamp = (kind, extra) =>
+        Object.assign(
+          {
+            t: Math.round(performance.now()),
+            kind: kind,
+            text: note(),
+            morphPasses: window.__app.counters.morphPasses,
+            replayPasses: window.__lahe.counters.replayPasses
+          },
+          extra || {}
+        );
+      document.addEventListener("app:morph", () => probe.events.push(stamp("morph")));
+      new MutationObserver(() => probe.events.push(stamp("dom"))).observe(document.body, {
+        childList: true,
+        characterData: true,
+        subtree: true
+      });
+      const realSchedule = window.LAHE.replay.schedule;
+      window.LAHE.replay.schedule = function (reason) {
+        const writing = window.LAHE.epoch.isWriting();
+        const accepted = realSchedule.apply(this, arguments);
+        probe.events.push(stamp("schedule", { reason: reason, writing: writing, accepted: accepted }));
+        return accepted;
+      };
+    });
+
     const answered = await snapshot(page, id);
     const samples = [];
     // The wait is for eight passes THIS TEST ACTUALLY SAW, not for the counter
@@ -297,6 +333,19 @@ test.describe("the reviewer's decision on a collision, on a page that keeps repa
     });
     const passesAfter = [...buckets.keys()].filter((n) => n > answered.passes);
     expect(passesAfter.length, "at least eight morph passes after the press").toBeGreaterThanOrEqual(8);
+    const bad = passesAfter.filter((n) => buckets.get(n).indexOf(MINE) === -1);
+    if (bad.length) {
+      const events = await page.evaluate(() => window.__probe.events);
+      const lo = Math.min(...bad) - 1;
+      const hi = Math.max(...bad) + 1;
+      const near = events.filter((e) => e.morphPasses >= lo && e.morphPasses <= hi);
+      const counts = {};
+      passesAfter.forEach((n) => (counts[n] = buckets.get(n).length));
+      console.log("FLAKE PROBE failing passes: " + JSON.stringify(bad));
+      console.log("FLAKE PROBE samples per pass: " + JSON.stringify(counts));
+      console.log("FLAKE PROBE buckets: " + JSON.stringify(bad.map((n) => [n, buckets.get(n)])));
+      console.log("FLAKE PROBE timeline:\n" + near.map((e) => JSON.stringify(e)).join("\n"));
+    }
     passesAfter.forEach(function (n) {
       expect(buckets.get(n), "morph pass " + n + " ends with the reviewer's sentence on the page").toContain(MINE);
     });
