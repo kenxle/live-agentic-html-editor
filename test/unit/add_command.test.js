@@ -116,7 +116,23 @@ function runAdd(args, env) {
   return result;
 }
 
-/** The helper `add` started, stopped the way a user's Ctrl-C would. */
+/**
+ * The helper `add` started, stopped the way a user's Ctrl-C would.
+ *
+ * WAIT ON THE PROCESS TABLE, NOT ON AN HTTP PROBE. This used to poll
+ * service.probeHealth until the helper stopped answering, which asks a server
+ * that is being killed to keep answering the phone until it cannot. That is
+ * the whole of the Linux CI flake: fetch is the only thing holding the event
+ * loop up at that moment, undici unrefs an idle pooled socket, and a probe that
+ * lands in the window where the helper is tearing the connection down leaves a
+ * promise nothing is keeping alive. node:test sees beforeExit with a test still
+ * running and cancels the rest of the file, which is why tests 2 through 28 all
+ * died together with "Promise resolution is still pending but the event loop
+ * has already resolved".
+ *
+ * A signal-0 kill asks the kernel instead, and the only timer involved is
+ * pollUntil's own, which always keeps the loop up.
+ */
 async function stopHelper(stateDir) {
   at(phase + " > stopHelper");
   const readyPath = path.join(stateDir, "service.json");
@@ -131,16 +147,21 @@ async function stopHelper(stateDir) {
   try {
     process.kill(ready.pid, "SIGTERM");
   } catch (err) {
-    if (err.code !== "ESRCH") throw err;
+    // Already gone is the state this function exists to reach.
+    if (err.code === "ESRCH") return;
+    throw err;
   }
   at(phase + " > stopHelper:poll");
   await pollUntil(
-    async function () {
-      at(phase.replace(/ > probe.*$/, "") + " > probe");
-      const up = await service.probeHealth("127.0.0.1", ready.port);
-      return up ? null : true;
+    function () {
+      try {
+        process.kill(ready.pid, 0);
+        return null;
+      } catch (err) {
+        return err.code === "ESRCH" ? true : null;
+      }
     },
-    { message: "the helper add started to stop answering" }
+    { message: "the helper add started to leave the process table" }
   );
 }
 
