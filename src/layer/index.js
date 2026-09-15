@@ -572,6 +572,20 @@
       onAgentLiveness: function (liveness) {
         rail.setAgentLiveness(liveness);
       },
+      // The helper's first word on whether this page's source can carry a
+      // stamp. The page check declines to run its stamp half until it has
+      // this, so the first answer is the moment to run the check once.
+      onStampCarriable: function () {
+        // Only after the settle pass has run: before it, the pass itself will
+        // read the answer (it arrives within the settle window on any live
+        // helper). Running the check early, ahead of replay's boot pass, is
+        // not the fix for a check that ran on a guess.
+        if (!settledOnce || typeof win.setTimeout !== "function") return;
+        win.setTimeout(function () {
+          if (!handle || current !== handle) return;
+          runRevertCheck();
+        }, 0);
+      },
       onFailure: function (failure) {
         rail.failures.add(failure);
       },
@@ -1391,6 +1405,7 @@
         // A torn-down library paints nothing: teardown drops `current`.
         if (!handle || current !== handle) return;
         repaintHighlights(refreshItems());
+        settledOnce = true;
         runRevertCheck();
         // And what the agent changed, now that the page has finished drawing
         // itself and replay has put the reviewer's own records back. Both sides
@@ -1427,6 +1442,9 @@
      *               however many times this function is called
      */
     var checkReopened = {};
+    // Set by the settle pass; the first stamp_carriable answer runs the page
+    // check only once this is true (see onStampCarriable in the sync options).
+    var settledOnce = false;
 
     function runRevertCheck() {
       if (readOnlyActive) return [];
