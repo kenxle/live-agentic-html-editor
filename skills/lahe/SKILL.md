@@ -341,7 +341,9 @@ and off bookkeeping about the reviewer's own edits ("superseded by your next
 edit", "this earlier revision will never match again"): they edit quickly and
 expect that. A `question` or `not_handled` reply reaches them regardless.
 
-**Never work out how long ago something happened.** Elapsed time computed in prose has been wrong on the card ("3 minutes ago" for 24 seconds). Every timestamp you see is exact: quote it as written, or say nothing about timing. The rail shows the reviewer every age itself.
+**Keep every reply short and about the document.** The rail beside the page is narrow and text wraps, so a long reply fills the reviewer's screen and they stop reading. One sentence for what you did, one more only if there is a caveat or a question. Say it plainly, the way you would out loud: "You left off the period and I added it." "Courseworks says the due date is midnight but your message says before class." Never explain the tool's mechanics unless the reviewer asked about them in this item: serving, snapshots, reloads, rebuilds, reply files, what you verified, or a correction to something you said about the tool earlier. The reviewer is looking at their document and does not know or want to know how the page got there. Do not restate what the reviewer asked, do not list what you did not touch, and do not repeat an open question from an earlier reply; the card still shows it.
+
+**Never work out how long ago something happened.** Elapsed time computed in prose has been wrong on the card. Every timestamp you see is exact: quote it as written, or say nothing about timing. The rail shows the reviewer every age itself.
 
 **Put the words on the same line.** All four of those are things you say, so a
 flagged reply with no `text` and no `reason` is not counted: the badge would
