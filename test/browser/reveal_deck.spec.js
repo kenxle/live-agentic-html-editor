@@ -283,15 +283,26 @@ function watchTheField(page, itemId) {
       return text;
     }
     var field = window.__lahe_focused_field;
-    window.__watch = { leaks: [], blurs: [], mutations: [], connected: [] };
-    document.addEventListener(
-      "keydown",
-      function (event) {
-        window.__watch.leaks.push({ key: event.key, active: name(document.activeElement) });
-      },
-      true
-    );
+    window.__watch = { leaks: [], atFence: [], blurs: [], mutations: [], connected: [] };
+    // BUBBLING, not capture. A capture listener here sees every key on the way
+    // down and says nothing about the fence; a bubbling one fires only for keys
+    // the fence let out of the rail, which is the leak itself.
+    document.addEventListener("keydown", function (event) {
+      window.__watch.leaks.push({ key: event.key, active: name(document.activeElement) });
+    });
     if (field) {
+      // Registered on the rail's own root after the fence, so it runs in the
+      // same phase one beat later and reads what the fence just read.
+      field.getRootNode().addEventListener("keydown", function (event) {
+        var path = event.composedPath();
+        window.__watch.atFence.push({
+          key: event.key,
+          target: name(path[0]),
+          attribute: field.getAttribute("contenteditable"),
+          isContentEditable: field.isContentEditable,
+          focused: field.getRootNode().activeElement === field
+        });
+      });
       field.addEventListener("blur", function (event) {
         window.__watch.blurs.push({
           afterKeys: window.__watch.leaks.length,

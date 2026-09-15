@@ -26,12 +26,15 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - name: repeat the add command file
+      # The WHOLE unit suite, the way the gate runs it. node --test puts every
+      # file in its own process at once, so add_command.test.js runs under the
+      # CPU contention it has on the gate, and the flake is a timing one.
+      - name: repeat the unit suite
         run: |
           fails=0
-          for i in $(seq 1 ${{ github.event.inputs.unit_repeats || '60' }}); do
-            echo "::group::add_command run $i"
-            node --test test/unit/add_command.test.js || fails=$((fails+1))
+          for i in $(seq 1 ${{ github.event.inputs.unit_repeats || '25' }}); do
+            echo "::group::unit suite run $i"
+            npm run test:unit || fails=$((fails+1))
             echo "::endgroup::"
           done
           echo "failed runs: $fails"
