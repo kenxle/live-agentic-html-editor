@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+fdd9de2cc1d5
+ * version 0.2.0+3385aee028c3
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+fdd9de2cc1d5";
+  g.LAHE.version = "0.2.0+3385aee028c3";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -4840,6 +4840,13 @@
 //      shouldScheduleReplay() is the seam: Task 2B fills in the classification
 //      of which records were the tool's and which were not.
 //
+//      And the owed pass has to be RUN, not just remembered. The epoch calls its
+//      onIdle listeners the moment the depth unwinds to zero with a mutation
+//      owed, whichever caller opened the epoch. Leaving that to replay's own
+//      pass end covered only replay's own writes; a repaint colliding with an
+//      edit session, a format command, an undo, or protect's restore was
+//      remembered and never run. See onIdle below.
+//
 // The counter also exposes a monotonic epoch number. Replay stamps the epoch it
 // last ran at, so a pass that wakes with no new epoch and no external mutation
 // can no-op without touching the DOM at all.
@@ -4864,6 +4871,7 @@
     var current = 0;
     var pendingExternal = false;
     var reasons = [];
+    var idleListeners = [];
 
     function isWriting() {
       return depth > 0;
@@ -4898,7 +4906,39 @@
 
     function close() {
       if (depth > 0) depth -= 1;
-      if (depth === 0) reasons.length = 0;
+      if (depth !== 0) return;
+      reasons.length = 0;
+      // The epoch just closed with a pass owed. Tell whoever is listening NOW,
+      // rather than leaving the flag for the end of the next replay pass.
+      //
+      // Why this lives here and not in replay. The flag is set by the observer
+      // when it is refused, and it is refused for whichever epoch happens to be
+      // open: replay's own write, yes, but also editing.enter, a format command,
+      // an undo, or protect's snapshot restore. Replay consumed the flag at the
+      // end of its own passes, so a repaint that collided with ANY OTHER epoch
+      // left a pass owed that nobody ran, and the page kept whatever the repaint
+      // put there until an unrelated mutation happened along. The epoch is the
+      // only place that knows every one of its own openings, so the wake-up
+      // belongs to it.
+      if (!pendingExternal) return;
+      for (var i = 0; i < idleListeners.length; i += 1) idleListeners[i]();
+    }
+
+    /**
+     * Register a function to run when the epoch closes with an external
+     * mutation owed. The listener is expected to call takePendingExternal and
+     * decide for itself; this only says "now is the time to ask".
+     *
+     * @param {Function} fn
+     * @returns {Function} removes the listener
+     */
+    function onIdle(fn) {
+      if (typeof fn !== "function") throw new TypeError("epoch.onIdle: fn must be a function");
+      idleListeners.push(fn);
+      return function () {
+        var at = idleListeners.indexOf(fn);
+        if (at !== -1) idleListeners.splice(at, 1);
+      };
     }
 
     // Called by the observer when it early-returns during a tool write but saw
@@ -4924,6 +4964,7 @@
       epoch: epoch,
       noteExternalMutation: noteExternalMutation,
       takePendingExternal: takePendingExternal,
+      onIdle: onIdle,
       currentReasons: currentReasons
     };
   }
@@ -4943,6 +4984,9 @@
     },
     epoch: function () {
       return shared.epoch();
+    },
+    onIdle: function (fn) {
+      return shared.onIdle(fn);
     }
   };
 
@@ -30994,6 +31038,29 @@
     });
   }
 
+  /**
+   * The other half of finding 9: the epoch that was owed a pass was not one of
+   * replay's.
+   *
+   * scheduleOwedPass above runs at the end of a replay pass, which covers the
+   * case it was written for (a repaint landing in the same batch as replay's own
+   * write). It covers nothing else. The observer is refused for whichever epoch
+   * is open, and the library opens epochs from several places that are not
+   * replay: entering and leaving an edit session, a format command, an undo, and
+   * protect's snapshot restore after a repaint. A repaint that collides with one
+   * of those had its pass refused and remembered, and then nothing ran it: the
+   * page kept whatever the repaint wrote, and the reviewer's committed sentence
+   * stayed off the page until some unrelated mutation scheduled the next pass.
+   *
+   * So replay also listens to the epoch itself. epoch.onIdle fires when the
+   * depth unwinds to zero with a pass owed, whoever opened it.
+   */
+  if (epoch.shared && typeof epoch.shared.onIdle === "function") {
+    epoch.shared.onIdle(function () {
+      if (epoch.shared.takePendingExternal()) schedule(REASON.MUTATION);
+    });
+  }
+
   function defer(fn) {
     var done = false;
     var frame = null;
@@ -33333,7 +33400,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+fdd9de2cc1d5";
+  var VERSION = "0.2.0+3385aee028c3";
 
   var protocol = ns.protocol;
   var record = ns.record;

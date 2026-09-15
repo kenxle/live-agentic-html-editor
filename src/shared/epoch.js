@@ -33,6 +33,13 @@
 //      shouldScheduleReplay() is the seam: Task 2B fills in the classification
 //      of which records were the tool's and which were not.
 //
+//      And the owed pass has to be RUN, not just remembered. The epoch calls its
+//      onIdle listeners the moment the depth unwinds to zero with a mutation
+//      owed, whichever caller opened the epoch. Leaving that to replay's own
+//      pass end covered only replay's own writes; a repaint colliding with an
+//      edit session, a format command, an undo, or protect's restore was
+//      remembered and never run. See onIdle below.
+//
 // The counter also exposes a monotonic epoch number. Replay stamps the epoch it
 // last ran at, so a pass that wakes with no new epoch and no external mutation
 // can no-op without touching the DOM at all.
@@ -57,6 +64,7 @@
     var current = 0;
     var pendingExternal = false;
     var reasons = [];
+    var idleListeners = [];
 
     function isWriting() {
       return depth > 0;
@@ -91,7 +99,39 @@
 
     function close() {
       if (depth > 0) depth -= 1;
-      if (depth === 0) reasons.length = 0;
+      if (depth !== 0) return;
+      reasons.length = 0;
+      // The epoch just closed with a pass owed. Tell whoever is listening NOW,
+      // rather than leaving the flag for the end of the next replay pass.
+      //
+      // Why this lives here and not in replay. The flag is set by the observer
+      // when it is refused, and it is refused for whichever epoch happens to be
+      // open: replay's own write, yes, but also editing.enter, a format command,
+      // an undo, or protect's snapshot restore. Replay consumed the flag at the
+      // end of its own passes, so a repaint that collided with ANY OTHER epoch
+      // left a pass owed that nobody ran, and the page kept whatever the repaint
+      // put there until an unrelated mutation happened along. The epoch is the
+      // only place that knows every one of its own openings, so the wake-up
+      // belongs to it.
+      if (!pendingExternal) return;
+      for (var i = 0; i < idleListeners.length; i += 1) idleListeners[i]();
+    }
+
+    /**
+     * Register a function to run when the epoch closes with an external
+     * mutation owed. The listener is expected to call takePendingExternal and
+     * decide for itself; this only says "now is the time to ask".
+     *
+     * @param {Function} fn
+     * @returns {Function} removes the listener
+     */
+    function onIdle(fn) {
+      if (typeof fn !== "function") throw new TypeError("epoch.onIdle: fn must be a function");
+      idleListeners.push(fn);
+      return function () {
+        var at = idleListeners.indexOf(fn);
+        if (at !== -1) idleListeners.splice(at, 1);
+      };
     }
 
     // Called by the observer when it early-returns during a tool write but saw
@@ -117,6 +157,7 @@
       epoch: epoch,
       noteExternalMutation: noteExternalMutation,
       takePendingExternal: takePendingExternal,
+      onIdle: onIdle,
       currentReasons: currentReasons
     };
   }
@@ -136,6 +177,9 @@
     },
     epoch: function () {
       return shared.epoch();
+    },
+    onIdle: function (fn) {
+      return shared.onIdle(fn);
     }
   };
 

@@ -24,12 +24,27 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
   30 for 30 locally under load. Nothing in that PR touches the flush or the cap. If it
   recurs, find what commits and posts the edit before the unload path runs.
 
-- [>] @claude 2026-09-15 LAHE-keep-mine-morph-flake (recurred on main run 34999862248 at morph pass 13; a builder is reproducing it under 20x repeat on CI) -- **test/browser/keep_mine_live_page.spec.js
-  "Keep mine survives every later morph pass" failed once on Linux CI at morph pass
-  14 (PR #5's first run), passed on rerun and 3 for 3 locally.** Nothing in that PR
-  touched morph, replay, or collisions. One sighting only; if it recurs, treat it
-  the way the add_command flake was treated: reproduce under the whole suite's
-  contention, find the race, fix it in the product or the test, never a retry.
+- [x] @claude 2026-09-15 LAHE-keep-mine-morph-flake (done 2026-09-15 in PR #8) -- **test/browser/keep_mine_live_page.spec.js
+  "Keep mine survives every later morph pass" failed on Linux CI at morph pass 14
+  (PR #5) and pass 13 (main run 34999862248), and passed on rerun both times.**
+  Reproduced once in sixty CI runs with a probe attached, and the probe named it:
+  the morph landed at t=4237 and replay put the reviewer's sentence back at
+  t=4246, nine milliseconds later, and the test's one sample of that pass was
+  taken inside those nine milliseconds. A test race, not a product one.
+
+  The gap was structural rather than unlucky. The spec sampled the page every
+  20ms, bucketed by the fixture's morph counter, and stopped as soon as it had
+  seen eight passes, so the LAST bucket always held exactly one sample and was
+  then asserted like the others. Every sighting failed on the last bucket. The
+  fix drives the morphs one at a time and reads the page's own morph event for
+  what each morph left behind, so nothing about the claim depends on when the
+  test looked.
+
+  Found on the way: a repaint whose replay pass was refused during a write epoch
+  that was NOT replay's own (an edit session, a format command, an undo,
+  protect's restore) had its pass remembered and never run. Fixed in the same PR
+  by giving the epoch an onIdle listener. Not the cause of this flake, since
+  protect's observer is inert once the edit session closes, but real.
 
 - [ ] @anyone 2026-09-15 LAHE-change-mark-cycling-block -- **A page element that cycles
   through a small set of values can be painted as the agent's change.** The change
