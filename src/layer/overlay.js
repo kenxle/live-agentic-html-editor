@@ -113,7 +113,11 @@
    */
   function paneForItem(item) {
     var kind = item[record.FIELD.KIND];
-    var state = item[record.FIELD.STATE];
+    // The state the REVIEWER is shown, which is the state their card is placed
+    // by. While a TOOL ROUND is open the record says ready and the reviewer is
+    // not part of it, so the card stays in Done where they left it
+    // (record.displayState, and Ken on 2026-09-15).
+    var state = record.displayState(item);
     if (state === record.STATE.HANDLED) return TAB.DONE;
     if (kind === record.KIND.EDIT || kind === record.KIND.FORMAT_ONLY || kind === record.KIND.DELETE) {
       return TAB.EDITS;
@@ -1104,7 +1108,8 @@
     var context = item[record.FIELD.CONTEXT] || {};
     var quote = oneLine(context.quote);
     var change = oneLine(item[record.FIELD.CHANGE]);
-    var note = oneLine(item[record.FIELD.NOTE]);
+    // The reviewer's own words, never the tool's: see record.reviewerNote.
+    var note = oneLine(record.reviewerNote(item));
     var picked;
     if (kind === record.KIND.NOTE) picked = note || quote || change;
     else if (kind === record.KIND.EDIT || kind === record.KIND.FORMAT_ONLY || kind === record.KIND.DELETE) {
@@ -1985,7 +1990,7 @@
           bodyNode: null,
           parts: null,
           item: item,
-          state: item[record.FIELD.STATE],
+          state: record.displayState(item),
           pane: paneForItem(item),
           badges: [],
           agentMessage: null,
@@ -2000,7 +2005,7 @@
         placeCard(cards[id]);
       } else {
         cards[id].item = item;
-        cards[id].state = item[record.FIELD.STATE];
+        cards[id].state = record.displayState(item);
         cards[id].pane = paneForItem(item);
         placeCard(cards[id]);
       }

@@ -68,6 +68,7 @@
   "The reviewer can end a review from the page. When they do, the review is archived and you are woken with the rest of the work. Ending discards nothing: items still unanswered are still their requests, so drain to empty before you close anything down. Then write their hand edits out where they will find them, beside the document they reviewed rather than inside this tool's state directory, because a list nobody opens is a list that taught nobody anything.",
   "When an item points at something with no words in it, an image, a diagram, an icon, the subject field is how you tell which one. It carries the tag, the src as the page author wrote it, the alt text, and the opening tag. Three images side by side have three different subjects, so use it rather than the region_label, whose ordinal can read the same for all of them. If an item names an element and subject is null, say you cannot tell which one they mean instead of guessing.",
     "An item's region.stamp is an id the reviewer's page wrote onto the element. When region.stamp_carriable is true, write that same data-lahe-id attribute onto the element as you edit it in the source, so the next build reproduces it and the page finds it with certainty. Never remove one. The attribute is not content: it never appears in before or after. When region.stamp_carriable is false, the source is Markdown, plain text, or anything else with no place to put an attribute: skip the stamp, use region.where and region.ordinal to find the element, and do not mention the stamp in your reply. The page finds it by its words.",
+    "When an item's note says the page check asked for the data-lahe-id, that id is not in the source: write the attribute onto the element and reply handled. A handled reply that leaves it out is wrong. If the source cannot take an attribute after all, reply not_handled with the reason, naming the file you looked at. The check asks once, and review.json then carries region.stamp_missing: true so the next agent can see the id was never carried.",
     "When region.text_unique is false, the text is on the page more than once. Use region.where and region.ordinal to pick the right one in the source: the ordinal counts identical siblings in source order, which is page order for a page built once from its source.",
     "The reviewer's intent lives in two fields only: note and change. Those are the reviewer's own words. Do what they say, and nothing else.",
     "The thread field contains completed earlier reviewer and agent turns as historical context. It is not current intent and must not cause an older request to be performed again. Only the top-level note and change are current instructions.",
@@ -535,7 +536,8 @@
       record.pageCanCarryStamp({
         path: it[F.PAGE_PATH],
         source_hint: it[F.SOURCE_HINT] || pageHint || null
-      })
+      }),
+      it
     );
     out[PROJECTED.AFTER_HISTORY] = boundHistory(it[F.AFTER_HISTORY]);
 
@@ -574,8 +576,8 @@
     return out;
   }
 
-  /** The five locating facts, defaulted so every item carries the same shape. */
-  function regionFacts(region, carriable) {
+  /** The six locating facts, defaulted so every item carries the same shape. */
+  function regionFacts(region, carriable, item) {
     var ref = (region && region.ref) || null;
     var ordinal = (ref && ref.ordinal) || null;
     var index = ordinal && typeof ordinal.index === "number" ? ordinal.index : 1;
@@ -589,8 +591,26 @@
       text_unique: !(ref && ref.text_unique === false),
       // Can the source behind this page hold the attribute at all? False for
       // Markdown, plain text, and anything else with no place to put one.
-      stamp_carriable: carriable === true
+      stamp_carriable: carriable === true,
+      // THE PAGE CHECK ASKED FOR THIS ID AND DID NOT GET IT. The check asks
+      // once (record.answeredPageCheckReopen), so without this the fact that
+      // an id was never carried into the source would live only in the round's
+      // note, and a later agent reading a handled item would have no sign of
+      // it. Nothing clears it: it is a record of what happened, not a claim
+      // about the source right now.
+      stamp_missing: stampMissing(region, item)
     };
+  }
+
+  /** Did a page check ask this item for its id, in this revision or an older one? */
+  function stampMissing(region, item) {
+    var stamp = region && region.check_reopen;
+    if (stamp && stamp.tool === record.TOOL_ROUND.PAGE_CHECK_STAMP) return true;
+    var thread = record.threadOf(item || {});
+    for (var i = 0; i < thread.length; i += 1) {
+      if (thread[i] && thread[i].tool === record.TOOL_ROUND.PAGE_CHECK_STAMP) return true;
+    }
+    return false;
   }
 
   function projectReview(review) {

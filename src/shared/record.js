@@ -621,7 +621,7 @@
    * @param {string|null} stamp the reply stamp the check acted on
    * @param {string} at ISO time of the reopen
    */
-  function stampPageCheckReopen(item, stamp, at) {
+  function stampPageCheckReopen(item, stamp, at, tool) {
     if (!item) return null;
     var region = item[FIELD.REGION] || emptyRegion();
     var next = {};
@@ -631,10 +631,90 @@
     next.check_reopen = {
       rev: item[FIELD.REV],
       at: at || nowIso(),
-      stamp: typeof stamp === "string" ? stamp : null
+      stamp: typeof stamp === "string" ? stamp : null,
+      // Which round this is, when it is one the reviewer is not part of. See
+      // TOOL_ROUNDS.
+      tool: TOOL_ROUNDS.indexOf(tool) === -1 ? null : tool
     };
     item[FIELD.REGION] = next;
     return next.check_reopen;
+  }
+
+  // ---------------------------------------------------------------------------
+  // A TOOL ROUND: an exchange the reviewer is not part of
+  // ---------------------------------------------------------------------------
+  //
+  // Ken, 2026-09-15, pasting a card from review rec7752d7cefe: "This should not
+  // be showing up in my chat rail." The card showed the page check asking for a
+  // data-lahe-id, and under it the agent's bare "handled". Both were correct:
+  // the source was HTML, the agent had carried three other ids into that file
+  // and skipped this one, and the check was right to ask. It was still the
+  // wrong thing to put in front of a person. That exchange is between the tool
+  // and the agent, about plumbing the reviewer never typed and cannot act on.
+  //
+  // So a revision the TOOL created for the AGENT says so, and the rail draws
+  // nothing for it: no round in the thread, no notice, no unseen mark, no
+  // toast, and the card stays in the tab the reviewer last saw it in. The
+  // agent's own file is unchanged: review.json still carries the round and its
+  // note, because the agent is who the round is for.
+  //
+  // The revert and formatting reopens are NOT tool rounds. Those are about the
+  // reviewer's own words going missing from the page, which is theirs to know.
+  var TOOL_ROUND = {
+    // The check asked for an id the agent did not carry into the source (S7).
+    PAGE_CHECK_STAMP: "page_check_stamp"
+  };
+  var TOOL_ROUNDS = [TOOL_ROUND.PAGE_CHECK_STAMP];
+
+  /**
+   * Is the item's CURRENT revision one a tool opened? The tool's name, or null.
+   *
+   * It stays true once the agent answers, because the answer belongs to the
+   * round that asked: the reviewer is not shown the question or the reply. Any
+   * later revision (a reviewer rewording, their own Reopen, another check) moves
+   * the rev past the stamp and this goes back to null.
+   */
+  function toolRoundOf(item) {
+    var stamp = pageCheckReopen(item);
+    if (!stamp || typeof stamp.rev !== "number" || stamp.rev !== item[FIELD.REV]) return null;
+    return TOOL_ROUNDS.indexOf(stamp.tool) === -1 ? null : stamp.tool;
+  }
+
+  /** The same question about an archived round in a thread. */
+  function isToolRound(round) {
+    return !!(round && typeof round.tool === "string" && TOOL_ROUNDS.indexOf(round.tool) !== -1);
+  }
+
+  /**
+   * The note as the REVIEWER wrote it: the tool's own sentence taken back out.
+   *
+   * The page check appends its sentence to the note, because the record shape
+   * has no other field that reaches the agent. That is right for review.json
+   * and wrong for the card: Ken's screenshot on 2026-09-15 was this sentence,
+   * on his own card, above the agent's "handled". The revert and formatting
+   * sentences are NOT stripped: those rounds are the reviewer's business.
+   *
+   * @returns {string|null} null when nothing of the reviewer's is left
+   */
+  function reviewerNote(item) {
+    var note = item && item[FIELD.NOTE];
+    if (typeof note !== "string" || !note) return null;
+    var out = note.split(PAGE_CHECK_STAMP_NOTE).join("").replace(/\n{3,}/g, "\n\n").trim();
+    return out || null;
+  }
+
+  /**
+   * What the REVIEWER is shown as this item's state.
+   *
+   * The record says ready while a tool round is open, and that is true: the
+   * agent has work. The reviewer decided this item and their decision has not
+   * changed, so their card still says handled and still sits where they left
+   * it. One rule, read by the rail's pane placement and by its state chip, so
+   * the two cannot disagree.
+   */
+  function displayState(item) {
+    if (!item) return null;
+    return toolRoundOf(item) ? STATE.HANDLED : item[FIELD.STATE];
   }
 
   /**
@@ -714,13 +794,13 @@
    * @param {string} note the sentence the reopened item carries
    * @param {string} [at] ISO time of the reopen
    */
-  function pageCheckReopenOf(item, note, at) {
+  function pageCheckReopenOf(item, note, at, tool) {
     var stamp = replyStamp(item);
     var next = reopenIssue(item);
     if (typeof note === "string" && note.trim()) {
       next[FIELD.NOTE] = appendNoteOnce(next[FIELD.NOTE], note);
     }
-    stampPageCheckReopen(next, stamp, at);
+    stampPageCheckReopen(next, stamp, at, tool);
     return next;
   }
 
@@ -946,7 +1026,7 @@
     if (!item || !item[FIELD.REPLY]) {
       throw new Error("completedRound: an item needs an agent reply before it can be archived");
     }
-    return {
+    var round = {
       rev: item[FIELD.REV],
       reviewer: {
         note: typeof item[FIELD.NOTE] === "string" ? item[FIELD.NOTE] : null,
@@ -955,6 +1035,12 @@
       },
       agent: copyReply(item[FIELD.REPLY])
     };
+    // A round the tool opened travels as one, so the rail still knows not to
+    // draw it once it is history. The key is absent on every other round, which
+    // is every round made before this existed.
+    var tool = toolRoundOf(item);
+    if (tool) round.tool = tool;
+    return round;
   }
 
   /**
@@ -1543,6 +1629,12 @@
     PAGE_CHECK_NOTE: PAGE_CHECK_NOTE,
     PAGE_CHECK_FORMAT_NOTE: PAGE_CHECK_FORMAT_NOTE,
     PAGE_CHECK_STAMP_NOTE: PAGE_CHECK_STAMP_NOTE,
+    TOOL_ROUND: TOOL_ROUND,
+    TOOL_ROUNDS: TOOL_ROUNDS,
+    toolRoundOf: toolRoundOf,
+    isToolRound: isToolRound,
+    displayState: displayState,
+    reviewerNote: reviewerNote,
     PAGE_CHECK_NOTES: PAGE_CHECK_NOTES,
     pageCheckReopen: pageCheckReopen,
     stampPageCheckReopen: stampPageCheckReopen,
