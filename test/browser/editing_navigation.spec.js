@@ -278,7 +278,20 @@ test.describe("2A: an edit open at navigation is delivered (R1)", () => {
       // test. The timer's only door is asked for directly instead: an ordinary
       // flush, the exact call that timer makes when it fires. It is refused,
       // and the reason names the rule.
-      const refused = await page.evaluate(() => window.__laheEdit.flush());
+      //
+      // The poll is for one state only, and it is not the answer: a post that
+      // was already in flight when beforeunload fired answers "busy" until it
+      // settles, which is true and says nothing about the rule. That post
+      // carries the DRAFT events queued before the commit, never the ready one,
+      // so nothing oversize can leave by it either. Twice in eighty on a loaded
+      // CI box, which is why the shape is polled rather than assumed.
+      const refused = await pollUntil(
+        async () => {
+          const result = await page.evaluate(() => window.__laheEdit.flush());
+          return result && !result.busy ? result : null;
+        },
+        { message: "the ordinary flush to answer for itself rather than report one already in flight" }
+      );
       expect(refused.unloading, "an ordinary flush is refused while the document is leaving").toBe(true);
       expect(refused.sent, "so nothing went out by it").toBe(0);
 
