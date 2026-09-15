@@ -2778,8 +2778,24 @@
       // are the thing that must not be lost; the goodbye is a courtesy to the
       // next window, and a release that beat the flush out the door would hand
       // the review on while this page still had words to send.
-      releaseOnUnload();
-      return flushed;
+      var released = releaseOnUnload();
+      // BOTH HALVES IN THE RETURNED PROMISE, and the flush's own answer is
+      // still what it resolves to. The pagehide listener ignores the return, so
+      // a real unload is unchanged: nothing is awaited and nothing is delayed.
+      // The one caller that CAN wait is the browser harness, which says the
+      // page's goodbye for it at teardown because a browser context torn down
+      // by the driver never fires pagehide, and the review then stays held for
+      // the full staleness clock while the next spec is refused as a second
+      // window. A rejected goodbye is swallowed: the words are the promise's
+      // subject, and a helper that is already gone is not a lost edit.
+      var settled = released && typeof released.catch === "function"
+        ? released.catch(function () {
+            return null;
+          })
+        : released;
+      return Promise.all([flushed, settled]).then(function (both) {
+        return both[0];
+      });
     }
 
     // A page restored from the bfcache, or a beforeunload the reviewer cancelled,

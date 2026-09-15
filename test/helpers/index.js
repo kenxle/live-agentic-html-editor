@@ -8,7 +8,7 @@
 
 "use strict";
 
-const { test, expect } = require("./test");
+const { test, expect, handBackTheReview } = require("./test");
 const poll = require("./poll");
 const bridge = require("./bridge");
 const counters = require("./counters");
@@ -24,7 +24,7 @@ const contexts = require("./contexts");
 const stub = require("./stub");
 
 module.exports = Object.assign(
-  { test: test, expect: expect },
+  { test: test, expect: expect, handBackTheReview: handBackTheReview },
   poll,
   bridge,
   counters,
