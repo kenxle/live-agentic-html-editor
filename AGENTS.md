@@ -215,6 +215,12 @@ Do not add an icon to a page you did not write. The fallback reaches every
 served page; it does not reach the `file://` fallback or the dev-server row,
 because on those two nothing of LAHE's sits between the page and the browser.
 
+**Cmd-Shift-1 opens and closes the review panel.** Left hand only, and unbound in
+every major browser, so a reviewer can put the panel away to read the page and
+bring it back without reaching for the mouse. The choice is remembered per review,
+the same as clicking the collapse arrow or the pill. While the tool is hidden for
+presenting the chord does nothing.
+
 **A reviewer who is also presenting can hide the tool.** Cmd-Shift-X (also in
 the rail's menu) takes every LAHE surface off the screen and brings it back;
 replies still fold while it is hidden and are waiting when they return. Nothing

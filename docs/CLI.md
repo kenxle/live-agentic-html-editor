@@ -105,6 +105,10 @@ session. The helper asks with `lsof`, cached for 15 seconds and off the poll pat
 A machine that cannot answer says so, and the line falls back to the wait, which
 is always knowable.
 
+**Cmd-Shift-1 opens and closes the review panel.** The collapsed pill names the
+chord on hover, and the choice is remembered per review the way the collapse arrow
+and the pill remember it.
+
 **A reviewer presenting the page can hide the whole tool.** The rail's menu
 carries "Hide for presenting (Cmd-Shift-X)", and that chord toggles it either
 way: hidden, nothing of LAHE is on the screen and its gestures do nothing, while
