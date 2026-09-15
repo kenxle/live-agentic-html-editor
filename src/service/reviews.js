@@ -1177,6 +1177,9 @@ function createReviews(options) {
       })
     ]);
     delete sessions[reviewId];
+    // The goodbye grace goes with it: the review is over, so there is no session
+    // left for a late request to be seated back into.
+    delete released[reviewId];
     saveSessions();
     log.helperLog("review " + reviewId + " archived");
     return { ended_at: endedAt };
