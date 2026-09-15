@@ -14,7 +14,7 @@
 
 "use strict";
 
-const nodeTest = require("node:test");
+const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -28,39 +28,6 @@ const service = require("../../src/service/index.js");
 
 const REPO_ROOT = path.join(__dirname, "..", "..");
 const BIN = path.join(REPO_ROOT, "bin", "lahe.js");
-
-// TEMPORARY DIAGNOSTIC (branch ci/flakes). This file dies on Linux CI with
-// "Promise resolution is still pending but the event loop has already
-// resolved", which is node:test saying beforeExit fired while a test was still
-// awaiting. The only thing that can tell us WHICH await was open is the
-// process itself, so it says so on the way out.
-let phase = "(module load)";
-function at(label) {
-  phase = label;
-}
-process.on("beforeExit", function () {
-  process._rawDebug(
-    "LAHE-FLAKE beforeExit during " +
-      phase +
-      " resources=" +
-      JSON.stringify(
-        typeof process.getActiveResourcesInfo === "function" ? process.getActiveResourcesInfo() : "n/a"
-      )
-  );
-});
-
-// Every test names itself, so the dump above points at one line rather than a
-// file. The wrapper is the same shape node:test's own `test` has.
-function test(name, fn) {
-  return nodeTest(name, async function (t) {
-    at(name + " :: body");
-    try {
-      return await fn(t);
-    } finally {
-      at(name + " :: finished");
-    }
-  });
-}
 
 const PAGE = [
   "<!doctype html>",
@@ -81,7 +48,6 @@ function tempDir(prefix) {
 
 /** A port nothing is listening on right now. */
 function freePort() {
-  at(phase + " > freePort");
   return new Promise(function (resolve, reject) {
     const server = net.createServer();
     server.once("error", reject);
@@ -101,7 +67,6 @@ function freePort() {
  */
 function runAdd(args, env) {
   const result = { code: 0, stdout: "", stderr: "" };
-  at(phase + " > runAdd");
   try {
     result.stdout = execFileSync(process.execPath, [BIN, "add"].concat(args), {
       env: Object.assign({}, process.env, env || {}),
@@ -121,20 +86,21 @@ function runAdd(args, env) {
  *
  * WAIT ON THE PROCESS TABLE, NOT ON AN HTTP PROBE. This used to poll
  * service.probeHealth until the helper stopped answering, which asks a server
- * that is being killed to keep answering the phone until it cannot. That is
- * the whole of the Linux CI flake: fetch is the only thing holding the event
- * loop up at that moment, undici unrefs an idle pooled socket, and a probe that
- * lands in the window where the helper is tearing the connection down leaves a
- * promise nothing is keeping alive. node:test sees beforeExit with a test still
- * running and cancels the rest of the file, which is why tests 2 through 28 all
- * died together with "Promise resolution is still pending but the event loop
- * has already resolved".
+ * that has just been sent SIGTERM to keep taking calls until it cannot. That
+ * was the whole of the Linux CI flake. At that moment the fetch is the only
+ * thing holding this process's event loop up (the diagnostic that caught it
+ * reported exactly two live handles, both stdio pipes, and neither of those
+ * keeps the loop alive), so a probe that lands while the helper is tearing the
+ * connection down leaves a promise with nothing behind it. node:test then sees
+ * beforeExit with a test still running and cancels the rest of the file, which
+ * is why tests 2 through 28 died together with "Promise resolution is still
+ * pending but the event loop has already resolved".
  *
- * A signal-0 kill asks the kernel instead, and the only timer involved is
- * pollUntil's own, which always keeps the loop up.
+ * A signal-0 kill asks the kernel instead. "The helper is gone" is a fact about
+ * a process, and the only timer left in the wait is pollUntil's own, which
+ * always keeps the loop up.
  */
 async function stopHelper(stateDir) {
-  at(phase + " > stopHelper");
   const readyPath = path.join(stateDir, "service.json");
   if (!fs.existsSync(readyPath)) return;
   let ready;
@@ -151,7 +117,6 @@ async function stopHelper(stateDir) {
     if (err.code === "ESRCH") return;
     throw err;
   }
-  at(phase + " > stopHelper:poll");
   await pollUntil(
     function () {
       try {
