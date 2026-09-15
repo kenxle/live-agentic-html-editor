@@ -5,6 +5,14 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
+- [ ] @anyone 2026-09-15 LAHE-graceful-failure-review-timeout -- **graceful_failure.spec.js
+  S7 flaked once on main's gate: `lahe review` timed out waiting for its own
+  helper on a free port.** One sighting, during the cp2 bisect work. The spec
+  runs the real review walk; on a loaded box the spawned helper took longer
+  than the command's ready wait. If it recurs: measure the ready wait against
+  the helper's startup under load and raise it in the command (or make the wait
+  process-table based, the way stopHelper now is), never a retry.
+
 - [x] @claude 2026-09-15 LAHE-cross-browser-lanes-red (done in PR #10: two product fixes, closing the rail now blurs its focused control and never hands focus back to the library host; toast swipe velocity is sampled over a frame and a fling needs real distance; three test races on pane moves) -- **Five browser tests fail on
   Firefox and WebKit and pass on Chromium: in card_collapse, rail_hotkey and
   reply_toast.** Found by the keep-mine builder running the three lanes locally
