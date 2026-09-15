@@ -5,6 +5,25 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
+- [ ] @anyone 2026-09-15 LAHE-change-mark-cycling-block -- **A page element that cycles
+  through a small set of values can be painted as the agent's change.** The change
+  mark tells the page's own moving parts from the agent's edits by reading the
+  page twice before a reload and excluding whatever differed between the two
+  readings. A block that alternates between two sentences can hold the same one
+  at both readings and slip through; the short-numeric counter guard does not
+  cover words. Found making CI green on 2026-09-15 (the fixture's status line was
+  a coin flip on Linux; the fixture was changed, the product was not). Options:
+  read three times instead of two, or remember self-changing blocks across
+  reloads per page path (a block seen to change on any earlier load of this page
+  stays excluded). Real on macOS too; timing there is just kinder.
+
+- [ ] @anyone 2026-09-15 LAHE-add-command-test-flake -- **test/unit/add_command.test.js
+  intermittently dies on Linux CI with "Promise resolution is still pending but the
+  event loop has already resolved", cancelling its other 27 tests.** Passes on
+  rerun and 5 for 5 locally. Find the unawaited promise (a spawned helper or a
+  timer left open after the first test) and close it, so the gate stops emailing
+  Ken for a flake.
+
 - [ ] @anyone 2026-09-14 LAHE-serve-restart-detaches -- **`lahe serve --restart`
   runs the new helper in the caller's foreground; it should spawn it detached the
   way `lahe session` does (child_process.spawn with detached and unref).** Found
