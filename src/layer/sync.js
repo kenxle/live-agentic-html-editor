@@ -1727,6 +1727,26 @@
       var fo = flushOptions || {};
       if (flushing) return Promise.resolve({ sent: 0, remaining: pendingCount(), busy: true });
       if (cspRefused) return Promise.resolve({ sent: 0, remaining: pendingCount(), refused: true });
+      // ONCE THE DOCUMENT IS LEAVING, EVERY FLUSH IS AN UNLOAD FLUSH.
+      //
+      // The cap and the keepalive header belong to the MOMENT, not to the
+      // caller. The unload flush had them and an ordinary flush did not, so a
+      // body the unload path refused for being oversize went out anyway
+      // whenever an ordinary flush happened to run in the same window. That is
+      // not hypothetical. Committing on navigation queues its event on the
+      // ordinary 750ms debounce (deliberately: asking for an immediate flush
+      // there would be the same mistake), and a document stays alive from
+      // beforeunload until the browser has fetched the next page. Slower than
+      // the debounce and the timer fired, and editing_navigation's "a body past
+      // the keepalive cap does not go out at unload" found a 70KB edit on the
+      // helper's disk, twice on CI in one day.
+      //
+      // Refusing the ordinary flush outright was the first fix and it was too
+      // blunt: it took away the one delivery a small edit committed by a link
+      // click had left, on a page whose next address carries no credential to
+      // re-post from. So the flush still runs; it just runs under the unload
+      // path's rules.
+      var leaving = !!fo.unload || unloading;
 
       var events = store.pendingEvents(requireReview());
       if (!events.length) {
@@ -1739,7 +1759,7 @@
       // The unload path. Keepalive carries the headers D11 requires, which
       // sendBeacon cannot; oversize is a delay, never a loss, because the
       // events are already in browser storage.
-      if (fo.unload && !protocol.fitsKeepalive(body)) {
+      if (leaving && !protocol.fitsKeepalive(body)) {
         return Promise.resolve({ sent: 0, remaining: events.length, oversize: true });
       }
 
@@ -1748,7 +1768,10 @@
       counters.posts += 1;
 
       var init = { method: "POST", body: body };
-      if (fo.unload) init.keepalive = true;
+      // Keepalive on any flush leaving with the document, not only the one the
+      // unload path asked for: an ordinary fetch started here dies with the
+      // page otherwise.
+      if (leaving) init.keepalive = true;
 
       var posted = request("events.append", init).then(function (result) {
         flushing = false;
@@ -1783,7 +1806,7 @@
           }
           recomputeStatus();
           var remaining = pendingCount();
-          if (remaining > 0 && !fo.unload) scheduleFlush(0);
+          if (remaining > 0 && !leaving) scheduleFlush(0);
           return { sent: accepted.length, remaining: remaining };
         }
 
@@ -1803,7 +1826,7 @@
         // a refused preflight looks like. Ask the second question.
         if (result.status === undefined) diagnoseUnreachable();
         recomputeStatus();
-        if (!fo.unload) scheduleRetry();
+        if (!leaving) scheduleRetry();
         return { sent: 0, remaining: pendingCount(), failed: true };
       });
       flushInFlight = posted;
@@ -2745,6 +2768,10 @@
     }
 
     function commitOnUnload() {
+      // The flag goes up FIRST. The editing surface commits the open edit before
+      // it calls in here, and that commit queues its event on the ordinary
+      // debounce; whenever that timer fires, flush() has to already know the
+      // document is leaving so the cap and the keepalive header apply to it.
       unloading = true;
       var flushed = flush({ unload: true });
       // AFTER the flush is started, not before. The reviewer's last keystrokes
@@ -2759,6 +2786,9 @@
     // is a live document again: real failures have to be audible from here on.
     function onPageShow() {
       unloading = false;
+      // The document is alive after all. Anything the unload rules held back
+      // (an oversize body) gets an ordinary flush again, with no cap on it.
+      if (pendingCount() > 0) scheduleFlush(0);
     }
 
     function stop() {

@@ -225,6 +225,111 @@ test.describe("2A: an edit open at navigation is delivered (R1)", () => {
     }
   });
 
+  test("a navigation slower than the flush debounce still cannot post an oversize body", async ({ page }) => {
+    // The race the test above can only meet by luck, made deterministic.
+    //
+    // Committing on navigation deliberately does NOT ask for an immediate
+    // flush, because an ordinary fetch racing the teardown is the transport
+    // this design refuses to rely on. What it does instead is queue the event
+    // on the ordinary 750ms debounce, and that timer keeps running for as long
+    // as the old document is alive. A navigation is not instant: beforeunload
+    // fires, and only then does the browser go and fetch the next page. On a
+    // loaded CI box that took longer than the debounce, the ordinary flush
+    // fired, and an ordinary flush has no keepalive cap, so the 70KB body the
+    // unload path had just refused went out anyway (seen twice on 2026-09-15).
+    //
+    // Here beforeunload is dispatched on its own and the document is left
+    // standing well past the debounce. No real navigation is involved, so
+    // nothing can rescue the assertion by tearing the page down first.
+    const helper = await startService({
+      entry: SERVICE_ENTRY,
+      args: EPHEMERAL_PORT,
+      reviews: [REVIEW],
+      allowedOrigins: [pages.origin]
+    });
+    const token = helper.tokenFor(REVIEW);
+
+    try {
+      await page.goto(urlFor(pages, { helper: helper.url, token: token, p: 1 }));
+      await openEditAndType(page, TYPED);
+
+      const bulk = await page.evaluate(() => {
+        const filler = "x".repeat(70000);
+        document.execCommand("insertText", false, filler);
+        return filler.length;
+      });
+      expect(bulk).toBe(70000);
+      await page.keyboard.type(FINAL_KEYSTROKE, { delay: 20 });
+      const itemId = await page.evaluate(() => window.__laheEdit.state().itemId);
+
+      // Everything the reviewer typed BEFORE this point is draft state, and
+      // draft events are small and go out normally. The line this test draws is
+      // around the ready event the commit makes, which carries the whole body.
+      const readyBefore = readEventLog(helper.stateDir, REVIEW).filter(
+        (event) => event.item === itemId && event.record && event.record.state === "ready"
+      );
+      expect(readyBefore, "nothing is committed yet").toHaveLength(0);
+
+      // The document says it is leaving, and then does not leave.
+      await page.evaluate(() => window.dispatchEvent(new Event("beforeunload", { cancelable: true })));
+      expect(await page.evaluate(() => window.__laheEdit.isEditing()), "the edit committed").toBe(false);
+
+      // The debounce is not waited out, which would be a sleep dressed as a
+      // test. The timer's only door is asked for directly instead: an ordinary
+      // flush, the exact call that timer makes when it fires. It comes back
+      // refused for size, which is the rule: while the document is leaving, the
+      // cap belongs to the moment and not to the caller.
+      //
+      // The poll is for one state only, and it is not the answer: a post that
+      // was already in flight when beforeunload fired answers "busy" until it
+      // settles, which is true and says nothing about the rule. That post
+      // carries the DRAFT events queued before the commit, never the ready one,
+      // so nothing oversize can leave by it either. Twice in eighty on a loaded
+      // CI box, which is why the shape is polled rather than assumed.
+      const refused = await pollUntil(
+        async () => {
+          const result = await page.evaluate(() => window.__laheEdit.flush());
+          return result && !result.busy ? result : null;
+        },
+        { message: "the ordinary flush to answer for itself rather than report one already in flight" }
+      );
+      expect(refused.oversize, "the keepalive cap applies to an ordinary flush too while unloading").toBe(
+        true
+      );
+      expect(refused.sent, "so nothing went out by it").toBe(0);
+
+      const after = readEventLog(helper.stateDir, REVIEW).filter(
+        (event) => event.item === itemId && event.record && event.record.state === "ready"
+      );
+      expect(after, "a body past the keepalive cap has no flush of any kind to leave by").toHaveLength(0);
+      expect(
+        await page.evaluate(() => window.__laheEdit.pending()),
+        "and it is still queued in browser storage, whole"
+      ).toBeGreaterThan(0);
+
+      // THE CONTROL, so "nothing on disk" cannot pass for the wrong reason. The
+      // navigation is cancelled, the document is alive again, and the very same
+      // body goes out on the very same ordinary flush and lands. The helper was
+      // reachable and the post was postable the whole time; the guard is the
+      // only thing that had been holding it.
+      await page.evaluate(() => window.dispatchEvent(new Event("pageshow")));
+      const log = await pollUntil(
+        () => {
+          const lines = readEventLog(helper.stateDir, REVIEW).filter(
+            (event) => event.item === itemId && event.record && event.record.state === "ready"
+          );
+          return lines.length ? lines : null;
+        },
+        { timeoutMs: 30000, message: "the same oversize body to land once the page turns out to be alive" }
+      );
+      expect(log[0].record.after.length, "whole, not truncated").toBe(
+        (ORIGINAL_ALPHA + TYPED).length + 70000 + FINAL_KEYSTROKE.length
+      );
+    } finally {
+      if (helper.alive()) await helper.kill9();
+    }
+  });
+
   test("clicking a link with an edit open commits it and still follows the link", async ({ page }) => {
     // Browse is native (R13): a click outside the edited block commits the edit
     // AND reaches the page. If the library swallowed the click to commit first,

@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+9ab982a3c52d
+ * version 0.2.0+d4bce32ec63a
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+9ab982a3c52d";
+  g.LAHE.version = "0.2.0+d4bce32ec63a";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -11068,6 +11068,35 @@
     return total;
   }
 
+  /**
+   * The caret the reviewer is actually using, written into the snapshot.
+   *
+   * Used from two places, and it is the same question in both: the caret moved
+   * without the text changing, so the snapshot's caret half is stale and the
+   * live one is right. onSelectionMoved calls it when the browser announces the
+   * move; restore calls it when a mutation arrives before that announcement.
+   *
+   * @param {Element} el the protected block
+   * @param {Object} snap its snapshot
+   * @returns {boolean} true when the live caret is inside this block, and the
+   *                    snapshot now says so
+   */
+  function adoptLiveCaret(el, snap) {
+    if (!el || !snap) return false;
+    var node = selection.caretNode();
+    if (!node) return false;
+    if (!(el === node || (typeof el.contains === "function" && el.contains(node)))) return false;
+    var range = selection.currentRange();
+    if (!range) return false;
+    var startOffset = offsetWithin(el, range.startContainer, range.startOffset);
+    if (startOffset === null) return false;
+    var endOffset = offsetWithin(el, range.endContainer, range.endOffset);
+    snap.startOffset = startOffset;
+    snap.endOffset = endOffset === null ? startOffset : endOffset;
+    snap.collapsed = !selection.hasSelection();
+    return true;
+  }
+
   /** Put the caret back at a character offset, in whatever node now holds it. */
   function placeCaretAt(el, startOffset, endOffset) {
     var doc = ownerDocument(el);
@@ -11193,10 +11222,28 @@
 
     // Nothing was damaged. Not a failure and not a restore: a counter that moved
     // here would let a page where nothing ever happened score full marks.
-    var caretAlreadyRight =
-      snap.startOffset === null ||
-      offsetWithin(el, selection.caretNode(), selection.caretOffset()) === snap.startOffset;
-    if (el.textContent === snap.text && el.isConnected && caretAlreadyRight) return false;
+    //
+    // A LIVE CARET INSIDE AN UNDAMAGED BLOCK OUTRANKS THE SNAPSHOT. This is the
+    // second half of the bug onSelectionMoved below describes, and the half that
+    // handler cannot close. selectionchange is a TASK, and this restore runs
+    // from a MutationObserver callback, which is a microtask. Any mutation
+    // anywhere in the document, in the window between the reviewer putting their
+    // caret somewhere and the browser getting around to announcing it, reached
+    // here with the snapshot still naming the old spot, decided the caret was
+    // "wrong", and moved it back. The reviewer's next sentence then landed
+    // wherever they had been standing before, which on CP2's walk meant the
+    // whole typed fix going in at the front of the paragraph.
+    //
+    // The text is whole and the node survived, so there is nothing to put back.
+    // The caret the reviewer is actually using is the truth, and the snapshot is
+    // the thing that is out of date, so the snapshot takes the correction.
+    if (el.textContent === snap.text && el.isConnected) {
+      if (adoptLiveCaret(el, snap)) return false;
+      // The caret is not in this block at all (focus went elsewhere, or a
+      // repaint outside it cleared the selection). Putting it back is what layer
+      // three is for, so fall through.
+      if (snap.startOffset === null) return false;
+    }
 
     var rebuilt = !!active && active.element !== el && !active.element.isConnected;
     var placed = false;
@@ -11313,19 +11360,9 @@
     function onSelectionMoved() {
       if (!enabled(LAYER.SNAPSHOT_RESTORE) || restoring || !active) return;
       var el = active.element;
-      var node = selection.caretNode();
-      if (!node || !el || typeof el.contains !== "function" || !el.contains(node)) return;
       var snap = snapshots[active.key.value];
-      if (!snap || el.textContent !== snap.text) return;
-      var range = selection.currentRange();
-      if (!range) return;
-      var startOffset = offsetWithin(el, range.startContainer, range.startOffset);
-      var endOffset = offsetWithin(el, range.endContainer, range.endOffset);
-      if (startOffset === null) return;
-      snap.startOffset = startOffset;
-      snap.endOffset = endOffset === null ? startOffset : endOffset;
-      snap.collapsed = !selection.hasSelection();
-      if (active.snapshot === snap) active.snapshot = snap;
+      if (!snap || !el || el.textContent !== snap.text) return;
+      if (adoptLiveCaret(el, snap) && active.snapshot === snap) active.snapshot = snap;
     }
 
     function onTyping(event) {
@@ -24099,6 +24136,26 @@
       var fo = flushOptions || {};
       if (flushing) return Promise.resolve({ sent: 0, remaining: pendingCount(), busy: true });
       if (cspRefused) return Promise.resolve({ sent: 0, remaining: pendingCount(), refused: true });
+      // ONCE THE DOCUMENT IS LEAVING, EVERY FLUSH IS AN UNLOAD FLUSH.
+      //
+      // The cap and the keepalive header belong to the MOMENT, not to the
+      // caller. The unload flush had them and an ordinary flush did not, so a
+      // body the unload path refused for being oversize went out anyway
+      // whenever an ordinary flush happened to run in the same window. That is
+      // not hypothetical. Committing on navigation queues its event on the
+      // ordinary 750ms debounce (deliberately: asking for an immediate flush
+      // there would be the same mistake), and a document stays alive from
+      // beforeunload until the browser has fetched the next page. Slower than
+      // the debounce and the timer fired, and editing_navigation's "a body past
+      // the keepalive cap does not go out at unload" found a 70KB edit on the
+      // helper's disk, twice on CI in one day.
+      //
+      // Refusing the ordinary flush outright was the first fix and it was too
+      // blunt: it took away the one delivery a small edit committed by a link
+      // click had left, on a page whose next address carries no credential to
+      // re-post from. So the flush still runs; it just runs under the unload
+      // path's rules.
+      var leaving = !!fo.unload || unloading;
 
       var events = store.pendingEvents(requireReview());
       if (!events.length) {
@@ -24111,7 +24168,7 @@
       // The unload path. Keepalive carries the headers D11 requires, which
       // sendBeacon cannot; oversize is a delay, never a loss, because the
       // events are already in browser storage.
-      if (fo.unload && !protocol.fitsKeepalive(body)) {
+      if (leaving && !protocol.fitsKeepalive(body)) {
         return Promise.resolve({ sent: 0, remaining: events.length, oversize: true });
       }
 
@@ -24120,7 +24177,10 @@
       counters.posts += 1;
 
       var init = { method: "POST", body: body };
-      if (fo.unload) init.keepalive = true;
+      // Keepalive on any flush leaving with the document, not only the one the
+      // unload path asked for: an ordinary fetch started here dies with the
+      // page otherwise.
+      if (leaving) init.keepalive = true;
 
       var posted = request("events.append", init).then(function (result) {
         flushing = false;
@@ -24155,7 +24215,7 @@
           }
           recomputeStatus();
           var remaining = pendingCount();
-          if (remaining > 0 && !fo.unload) scheduleFlush(0);
+          if (remaining > 0 && !leaving) scheduleFlush(0);
           return { sent: accepted.length, remaining: remaining };
         }
 
@@ -24175,7 +24235,7 @@
         // a refused preflight looks like. Ask the second question.
         if (result.status === undefined) diagnoseUnreachable();
         recomputeStatus();
-        if (!fo.unload) scheduleRetry();
+        if (!leaving) scheduleRetry();
         return { sent: 0, remaining: pendingCount(), failed: true };
       });
       flushInFlight = posted;
@@ -25117,6 +25177,10 @@
     }
 
     function commitOnUnload() {
+      // The flag goes up FIRST. The editing surface commits the open edit before
+      // it calls in here, and that commit queues its event on the ordinary
+      // debounce; whenever that timer fires, flush() has to already know the
+      // document is leaving so the cap and the keepalive header apply to it.
       unloading = true;
       var flushed = flush({ unload: true });
       // AFTER the flush is started, not before. The reviewer's last keystrokes
@@ -25131,6 +25195,9 @@
     // is a live document again: real failures have to be audible from here on.
     function onPageShow() {
       unloading = false;
+      // The document is alive after all. Anything the unload rules held back
+      // (an oversize body) gets an ordinary flush again, with no cap on it.
+      if (pendingCount() > 0) scheduleFlush(0);
     }
 
     function stop() {
@@ -33468,7 +33535,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+9ab982a3c52d";
+  var VERSION = "0.2.0+d4bce32ec63a";
 
   var protocol = ns.protocol;
   var record = ns.record;
