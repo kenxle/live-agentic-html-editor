@@ -100,12 +100,34 @@ function railState(page) {
   }));
 }
 
-/** Wait for a toast to be on screen, and hand back what it says. */
+/**
+ * Wait for a toast to be on screen and to have stopped moving, then hand back
+ * what it says.
+ *
+ * The second half is what makes a click land. A toast slides in from 24px to
+ * the right over 200ms, and these tests press it at the coordinates the rail
+ * reports, because the toast lives in a closed root and has no selector. Read
+ * those coordinates mid-slide and the press lands 24px to the left of where
+ * the control ended up: on a slow machine that put the press on the toast's
+ * body, which opens the rail, rather than on the X, which dismisses it. So the
+ * geometry is polled until two readings agree, and only then is it a place to
+ * click.
+ */
 async function waitForToast(page, message) {
   await pollPage(page, () => window.__lahe.rail.toastInfo().count > 0, undefined, {
     message: message || "a toast to appear"
   });
-  return toastState(page);
+  let previous = null;
+  return pollUntil(
+    async () => {
+      const info = await toastState(page);
+      const geometry = JSON.stringify(info.toasts.map((toast) => [toast.rect, toast.closeRect]));
+      const settled = geometry === previous;
+      previous = geometry;
+      return settled ? info : false;
+    },
+    { message: "the toasts to finish sliding in, so a press lands where the rail says they are" }
+  );
 }
 
 async function bootedPage(page, app, helper, token, query) {

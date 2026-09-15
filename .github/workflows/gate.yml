@@ -1,7 +1,11 @@
 name: gate
 
+# main and pull requests only. A push to a working branch used to run this too,
+# which meant every checkpoint on a branch mailed the pusher a failure for work
+# that was not finished yet; the pull request is where a branch gets its gate.
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
