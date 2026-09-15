@@ -258,103 +258,101 @@ test.describe("the reviewer's decision on a collision, on a page that keeps repa
       }
     );
 
-    // --- and it is still true eight morph passes later ------------------------
+    // --- and it is still true, morph after morph ------------------------------
     //
-    // Sampled continuously rather than read once at the end: "it was right when
-    // I looked" is what the one-shot write also produced, for about 150ms.
-
-    // TEMPORARY FLAKE PROBE (removed before this branch merges). Records a
-    // ground-truth timeline in the page so a failing morph pass can be told
-    // apart from a sampling gap.
-    await page.evaluate(() => {
-      const probe = (window.__probe = { events: [] });
-      const note = () => {
-        const el = document.querySelector("#coach-note");
-        return el ? el.textContent : null;
-      };
-      const stamp = (kind, extra) =>
-        Object.assign(
-          {
-            t: Math.round(performance.now()),
-            kind: kind,
-            text: note(),
-            morphPasses: window.__app.counters.morphPasses,
-            replayPasses: window.__lahe.counters.replayPasses
-          },
-          extra || {}
-        );
-      document.addEventListener("app:morph", () => probe.events.push(stamp("morph")));
-      new MutationObserver(() => probe.events.push(stamp("dom"))).observe(document.body, {
-        childList: true,
-        characterData: true,
-        subtree: true
-      });
-      const realSchedule = window.LAHE.replay.schedule;
-      window.LAHE.replay.schedule = function (reason) {
-        const writing = window.LAHE.epoch.isWriting();
-        const accepted = realSchedule.apply(this, arguments);
-        probe.events.push(stamp("schedule", { reason: reason, writing: writing, accepted: accepted }));
-        return accepted;
-      };
-    });
-
+    // THE MORPHS ARE DRIVEN FROM HERE rather than left on the fixture's timer,
+    // and that is a fix for a flake rather than a convenience.
+    //
+    // The old shape let the timer run, sampled the page every 20ms, bucketed the
+    // samples by the fixture's morph counter, and claimed that every bucket held
+    // the reviewer's sentence somewhere. That is a claim about SAMPLING as much
+    // as about the product. One morph pass is 250 milliseconds wide, one sample
+    // is a round trip into the page, and on a Linux runner with four workers and
+    // no spare core a round trip can eat most of that window. A bucket that
+    // happened to collect one sample, taken in the gap between the morph landing
+    // and the replay pass that answers it, failed a test the product had passed.
+    // It failed at pass 13 and at pass 14, which is where a sampling gap lands
+    // and not where a product bug would.
+    //
+    // Driving the morph removes the sampling from the claim without weakening
+    // it, and the claim gets stronger in one place: the page's own morph event
+    // fires synchronously at the end of the morph, before replay can run, so
+    // what the morph left behind is RECORDED rather than guessed at. Every
+    // iteration therefore proves both halves: the morph really did put the
+    // agent's sentence back on the page, and replay really did put the
+    // reviewer's back over it.
     const answered = await snapshot(page, id);
-    const samples = [];
-    // The wait is for eight passes THIS TEST ACTUALLY SAW, not for the counter
-    // to have moved by eight. One sample is one round trip into the page, and
-    // on a busy machine the counter jumps two or three at a time between
-    // samples, so the old condition finished with six observed passes in hand
-    // and the assertion below then failed on the sampling gap rather than on
-    // the behaviour. Waiting on the same thing the assertion reads makes the
-    // test slower on a loaded machine and never wrong.
-    const seenPasses = new Set();
-    await pollUntil(
-      async () => {
-        const sample = await snapshot(page, id);
-        samples.push(sample);
-        if (sample.passes > answered.passes) seenPasses.add(sample.passes);
-        return seenPasses.size >= 8 && sample.passes >= answered.passes + 8;
-      },
-      {
-        intervalMs: 20,
-        timeoutMs: 20000,
-        message: "eight further morph passes over the answered collision"
-      }
-    );
 
-    // Each pass gets its own bucket. Within one pass the region legitimately
-    // holds the agent's sentence for a moment (the morph writes, then replay
-    // runs), so the claim is that the reviewer's sentence is restored inside
-    // EVERY pass, not that it is the only thing ever readable.
-    const buckets = new Map();
-    samples.forEach(function (sample) {
-      if (!buckets.has(sample.passes)) buckets.set(sample.passes, []);
-      buckets.get(sample.passes).push(sample.text);
+    await page.evaluate(() => {
+      window.__morphLog = [];
+      document.addEventListener("app:morph", (event) => {
+        const el = document.querySelector("#coach-note");
+        window.__morphLog.push({ pass: event.detail.pass, text: el ? el.textContent : null });
+      });
+      window.__app.morph.stop();
     });
-    const passesAfter = [...buckets.keys()].filter((n) => n > answered.passes);
-    expect(passesAfter.length, "at least eight morph passes after the press").toBeGreaterThanOrEqual(8);
-    const bad = passesAfter.filter((n) => buckets.get(n).indexOf(MINE) === -1);
-    if (bad.length) {
-      const events = await page.evaluate(() => window.__probe.events);
-      const lo = Math.min(...bad) - 1;
-      const hi = Math.max(...bad) + 1;
-      const near = events.filter((e) => e.morphPasses >= lo && e.morphPasses <= hi);
-      const counts = {};
-      passesAfter.forEach((n) => (counts[n] = buckets.get(n).length));
-      console.log("FLAKE PROBE failing passes: " + JSON.stringify(bad));
-      console.log("FLAKE PROBE samples per pass: " + JSON.stringify(counts));
-      console.log("FLAKE PROBE buckets: " + JSON.stringify(bad.map((n) => [n, buckets.get(n)])));
-      console.log("FLAKE PROBE timeline:\n" + near.map((e) => JSON.stringify(e)).join("\n"));
+
+    const DRIVEN = 8;
+    for (let i = 0; i < DRIVEN; i += 1) {
+      const nth = i + 1;
+      const before = await snapshot(page, id);
+      // pollNow resolves once the frame has been applied, so the counter has
+      // already moved by the time this returns; the wait after it is belt and
+      // braces for a browser that resolves the evaluate early.
+      await page.evaluate(() => window.__app.morph.pollNow());
+      await pollPage(page, (from) => window.__app.counters.morphPasses > from, before.passes, {
+        message: "driven morph " + nth + " to land"
+      });
+      await pollPage(
+        page,
+        (args) => document.querySelector(args.region).textContent === args.mine,
+        { region: REGION, mine: MINE },
+        { message: "replay to put the reviewer's sentence back after driven morph " + nth }
+      );
+      const after = await snapshot(page, id);
+      expect(after.flagged, "driven morph " + nth + " does not raise the collision again").toBe(false);
+      expect(
+        after.blocked,
+        "and replay counted no new blocked change on driven morph " + nth
+      ).toBe(answered.blocked);
     }
-    passesAfter.forEach(function (n) {
-      expect(buckets.get(n), "morph pass " + n + " ends with the reviewer's sentence on the page").toContain(MINE);
+
+    // What each morph left on the page, read from the page's own event rather
+    // than from a sample. Without this the wait above could be satisfied by a
+    // morph that never touched the region.
+    const morphLog = await page.evaluate(() => window.__morphLog);
+    expect(morphLog.length, "eight morphs were driven").toBe(DRIVEN);
+    morphLog.forEach(function (entry) {
+      expect(
+        entry.text,
+        "morph pass " + entry.pass + " really did put the page's own sentence back, so what follows it is a restore"
+      ).toBe(THEIRS);
     });
 
+    // --- and once more with the timer back on --------------------------------
+    //
+    // Driving the morph is what makes the claim above readable; it is not the
+    // whole claim. A morph landing while replay is mid-pass is the case this
+    // spec exists for, and only the fixture's own timer produces it. So the
+    // timer goes back on for a stretch, and what is asserted afterwards is
+    // where the page SETTLES plus two counters, neither of which depends on
+    // when the test happened to look.
+    const beforeTimer = await snapshot(page, id);
+    await page.evaluate(() => window.__app.morph.start());
+    await pollPage(page, (from) => window.__app.counters.morphPasses >= from + 5, beforeTimer.passes, {
+      message: "five timer-driven morph passes over the answered collision"
+    });
+    await page.evaluate(() => window.__app.morph.stop());
+    await pollPage(page, (args) => document.querySelector(args.region).textContent === args.mine, {
+      region: REGION,
+      mine: MINE
+    }, { message: "the page to settle on the reviewer's sentence once the timer stops" });
+
+    const last = await snapshot(page, id);
     // The conflict is answered and stays answered. The re-raise is the symptom
-    // the walker actually saw, and it is a counter, so it cannot be missed by a
-    // sampling gap.
-    const last = samples[samples.length - 1];
-    expect(samples.some((s) => s.flagged), "the collision is never raised again").toBe(false);
+    // the walker actually saw, and it is a counter, so nothing about it depends
+    // on when the test happened to look.
+    expect(last.flagged, "the collision is never raised again").toBe(false);
     expect(last.blocked - answered.blocked, "and replay never counted another one").toBe(0);
     expect(last.replayPasses, "replay really did keep running").toBeGreaterThan(answered.replayPasses + 4);
     expect(await page.evaluate(() => document.querySelector("#coach-note").textContent)).toBe(MINE);
