@@ -174,6 +174,30 @@ test.describe("a handled hand edit that was reverted reopens itself", () => {
     );
   }
 
+  /**
+   * The helper has to HOLD the revision an answer names before the answer is
+   * written, or the fold refuses it as stale and the test waits forever.
+   *
+   * The page bumps a revision in its own store first and posts it a beat
+   * later; this spec reads the revision off the page, so on a slow box the
+   * reply could reach the helper ahead of the item it answers (CI, 2026-09-15,
+   * run 34999057598). A real agent reads the revision from review.json, which
+   * is exactly the wait this does.
+   */
+  async function helperHasRev(itemId, rev) {
+    await pollUntil(
+      () => {
+        try {
+          const projected = JSON.parse(fs.readFileSync(path.join(world.reviewDir, "review.json"), "utf8"));
+          return projected.pages.some((page) => page.items.some((item) => item.id === itemId && item.rev === rev));
+        } catch (err) {
+          return false;
+        }
+      },
+      { message: "review.json to hold " + itemId + " at rev " + rev, timeoutMs: 20000 }
+    );
+  }
+
   /** A build: the source is rewritten, and the page reloads itself off it. */
   function rebuild(p, q, r, extra) {
     fs.writeFileSync(world.pagePath, docHtml(p, q, "", r, extra));
@@ -280,6 +304,7 @@ test.describe("a handled hand edit that was reverted reopens itself", () => {
 
     // What the agent does: put the change in the source, rebuild, then answer.
     rebuild(p, q);
+    await helperHasRev(made.id, made.rev);
     reply(made.id, made.rev);
     await pollPage(
       page,
@@ -415,6 +440,7 @@ test.describe("a handled hand edit that was reverted reopens itself", () => {
       message: "the page to come back on the agent's rendering",
       timeoutMs: 20000
     });
+    await helperHasRev(made.id, made.rev);
     reply(made.id, made.rev);
     await pollPage(
       page,
@@ -451,6 +477,7 @@ test.describe("a handled hand edit that was reverted reopens itself", () => {
     // The agent answers handled again without changing the page, which is it
     // saying the rendering is intended. In the incident this is where the loop
     // turned over. It has to end here.
+    await helperHasRev(made.id, reopened.rev);
     reply(made.id, reopened.rev);
     await pollPage(
       page,
