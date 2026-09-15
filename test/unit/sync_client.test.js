@@ -621,3 +621,75 @@ test("deleting an item the helper has seen queues item.deleted; a never-sent dra
   assert.equal(queued.length, 2);
   assert.equal(queued[1].event, protocol.EVENT.ITEM_DELETED);
 });
+
+// THE GOODBYE IS PART OF WHAT UNLOADING MEANS, so the promise says so.
+//
+// commitOnUnload does two things: flush the reviewer's last words, then release
+// the window claim so the next window is not made to wait out D5's thirty
+// second staleness clock. It used to resolve on the flush alone, with the
+// release still on the wire. Nothing on the real unload path awaits it, so that
+// cost nothing there; it cost the browser harness, which says the page's
+// goodbye for it at teardown (a context torn down by the driver never fires
+// pagehide) and then opens the next window. A release that had only been SENT
+// lost that race, the helper still had a holder, and the next spec's window was
+// refused as a second window: comment and edit handlers unbound, the hotkey
+// doing nothing at all. That is how multi_page_review and reload_claim failed
+// on 2026-09-15.
+test("commitOnUnload waits for the goodbye to be answered, not only sent", async (t) => {
+  const listeners = {};
+  const fakeWindow = {
+    addEventListener: (type, fn) => {
+      listeners[type] = fn;
+    },
+    removeEventListener: () => {}
+  };
+  const store = storeModule.createStore();
+  let answerTheRelease = null;
+  const releaseSeen = [];
+  const sync = syncModule.createSync({
+    review: "review-1",
+    token: "t",
+    helperOrigin: "http://127.0.0.1:7817",
+    store: store,
+    document: null,
+    window: fakeWindow,
+    fetch: async (url) => {
+      if (String(url).indexOf("/window/release") !== -1) {
+        releaseSeen.push(url);
+        // Held open on purpose: this is the release still on the wire.
+        return new Promise((resolve) => {
+          answerTheRelease = () => resolve({ ok: true, status: 200, json: async () => ({ released: true }) });
+        });
+      }
+      if (String(url).indexOf(protocol.route("window.claim").path) !== -1) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ granted: true, session_secret: "secret-1", heartbeat_seconds: 10 })
+        };
+      }
+      return { ok: true, status: 200, json: async () => ({ accepted: [] }) };
+    }
+  });
+  t.after(() => sync.stop());
+
+  await sync.start();
+  // The claim has to have been granted, or there is no secret and therefore no
+  // goodbye to wait for.
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(sync.lockState().helperGranted, true, "the helper granted this window the review");
+
+  let settled = false;
+  const unloading = sync.commitOnUnload().then(() => {
+    settled = true;
+  });
+  // Several turns of the loop, which is more than enough for a promise that was
+  // only waiting on the flush.
+  for (let i = 0; i < 5; i += 1) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(releaseSeen.length, 1, "the goodbye went out");
+  assert.equal(settled, false, "and commitOnUnload is still waiting for its answer");
+
+  answerTheRelease();
+  await unloading;
+  assert.equal(settled, true, "the answer landed and the unload is finished");
+});
