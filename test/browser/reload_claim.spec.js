@@ -86,6 +86,21 @@ const CLAIM_TRACE = `
       window.sessionStorage.setItem(KEY, JSON.stringify(all));
     } catch (err) {}
   }
+  var ss = window.sessionStorage;
+  var realSet = ss.setItem.bind(ss);
+  var realRemove = ss.removeItem.bind(ss);
+  ss.setItem = function (key, value) {
+    if (String(key).indexOf("lahe.session.v1:") === 0) {
+      push({ t: Date.now(), dir: "set", key: key, value: String(value).slice(0, 12), stack: String(new Error().stack).split("\\n").slice(1, 6).join(" | ") });
+    }
+    return realSet(key, value);
+  };
+  ss.removeItem = function (key) {
+    if (String(key).indexOf("lahe.session.v1:") === 0) {
+      push({ t: Date.now(), dir: "rm", key: key, stack: String(new Error().stack).split("\\n").slice(1, 6).join(" | ") });
+    }
+    return realRemove(key);
+  };
   var real = window.fetch;
   window.fetch = function (input, init) {
     var url = typeof input === "string" ? input : (input && input.url) || "";
@@ -96,6 +111,7 @@ const CLAIM_TRACE = `
     push({ t: at, dir: "->", url: url, body: String(body).slice(0, 300), doc: window.__laheDiagDoc });
     return real.apply(this, arguments).then(
       function (response) {
+        push({ t: at, at2: Date.now(), dir: "<h", url: url, status: response.status });
         var clone = null;
         try { clone = response.clone(); } catch (err) {}
         if (clone) {
