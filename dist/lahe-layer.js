@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+3385aee028c3
+ * version 0.2.0+5513c32c8fef
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+3385aee028c3";
+  g.LAHE.version = "0.2.0+5513c32c8fef";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -11068,6 +11068,35 @@
     return total;
   }
 
+  /**
+   * The caret the reviewer is actually using, written into the snapshot.
+   *
+   * Used from two places, and it is the same question in both: the caret moved
+   * without the text changing, so the snapshot's caret half is stale and the
+   * live one is right. onSelectionMoved calls it when the browser announces the
+   * move; restore calls it when a mutation arrives before that announcement.
+   *
+   * @param {Element} el the protected block
+   * @param {Object} snap its snapshot
+   * @returns {boolean} true when the live caret is inside this block, and the
+   *                    snapshot now says so
+   */
+  function adoptLiveCaret(el, snap) {
+    if (!el || !snap) return false;
+    var node = selection.caretNode();
+    if (!node) return false;
+    if (!(el === node || (typeof el.contains === "function" && el.contains(node)))) return false;
+    var range = selection.currentRange();
+    if (!range) return false;
+    var startOffset = offsetWithin(el, range.startContainer, range.startOffset);
+    if (startOffset === null) return false;
+    var endOffset = offsetWithin(el, range.endContainer, range.endOffset);
+    snap.startOffset = startOffset;
+    snap.endOffset = endOffset === null ? startOffset : endOffset;
+    snap.collapsed = !selection.hasSelection();
+    return true;
+  }
+
   /** Put the caret back at a character offset, in whatever node now holds it. */
   function placeCaretAt(el, startOffset, endOffset) {
     var doc = ownerDocument(el);
@@ -11193,10 +11222,28 @@
 
     // Nothing was damaged. Not a failure and not a restore: a counter that moved
     // here would let a page where nothing ever happened score full marks.
-    var caretAlreadyRight =
-      snap.startOffset === null ||
-      offsetWithin(el, selection.caretNode(), selection.caretOffset()) === snap.startOffset;
-    if (el.textContent === snap.text && el.isConnected && caretAlreadyRight) return false;
+    //
+    // A LIVE CARET INSIDE AN UNDAMAGED BLOCK OUTRANKS THE SNAPSHOT. This is the
+    // second half of the bug onSelectionMoved below describes, and the half that
+    // handler cannot close. selectionchange is a TASK, and this restore runs
+    // from a MutationObserver callback, which is a microtask. Any mutation
+    // anywhere in the document, in the window between the reviewer putting their
+    // caret somewhere and the browser getting around to announcing it, reached
+    // here with the snapshot still naming the old spot, decided the caret was
+    // "wrong", and moved it back. The reviewer's next sentence then landed
+    // wherever they had been standing before, which on CP2's walk meant the
+    // whole typed fix going in at the front of the paragraph.
+    //
+    // The text is whole and the node survived, so there is nothing to put back.
+    // The caret the reviewer is actually using is the truth, and the snapshot is
+    // the thing that is out of date, so the snapshot takes the correction.
+    if (el.textContent === snap.text && el.isConnected) {
+      if (adoptLiveCaret(el, snap)) return false;
+      // The caret is not in this block at all (focus went elsewhere, or a
+      // repaint outside it cleared the selection). Putting it back is what layer
+      // three is for, so fall through.
+      if (snap.startOffset === null) return false;
+    }
 
     var rebuilt = !!active && active.element !== el && !active.element.isConnected;
     var placed = false;
@@ -11313,19 +11360,9 @@
     function onSelectionMoved() {
       if (!enabled(LAYER.SNAPSHOT_RESTORE) || restoring || !active) return;
       var el = active.element;
-      var node = selection.caretNode();
-      if (!node || !el || typeof el.contains !== "function" || !el.contains(node)) return;
       var snap = snapshots[active.key.value];
-      if (!snap || el.textContent !== snap.text) return;
-      var range = selection.currentRange();
-      if (!range) return;
-      var startOffset = offsetWithin(el, range.startContainer, range.startOffset);
-      var endOffset = offsetWithin(el, range.endContainer, range.endOffset);
-      if (startOffset === null) return;
-      snap.startOffset = startOffset;
-      snap.endOffset = endOffset === null ? startOffset : endOffset;
-      snap.collapsed = !selection.hasSelection();
-      if (active.snapshot === snap) active.snapshot = snap;
+      if (!snap || !el || el.textContent !== snap.text) return;
+      if (adoptLiveCaret(el, snap) && active.snapshot === snap) active.snapshot = snap;
     }
 
     function onTyping(event) {
@@ -24031,6 +24068,25 @@
       var fo = flushOptions || {};
       if (flushing) return Promise.resolve({ sent: 0, remaining: pendingCount(), busy: true });
       if (cspRefused) return Promise.resolve({ sent: 0, remaining: pendingCount(), refused: true });
+      // ONCE THE DOCUMENT IS LEAVING, THE ONLY TRANSPORT IS THE KEEPALIVE POST.
+      //
+      // An ordinary fetch raced the document's teardown, which is exactly the
+      // transport this design says not to rely on, and it has a second cost
+      // beyond the race: it carries no size cap, so a body the keepalive path
+      // refuses for being oversize went out anyway whenever the ordinary flush
+      // happened to win. That is not a hypothetical. Committing on navigation
+      // queues its event with the ordinary 750ms debounce (deliberately: an
+      // immediate flush here would be the same mistake), and a navigation that
+      // takes longer than that to fetch its next page leaves the old document
+      // alive with the timer still running. On a loaded CI box it fired, and
+      // editing_navigation's "a body past the keepalive cap does not go out at
+      // unload" found a 70KB edit on the helper's disk.
+      //
+      // Nothing is lost by refusing: every event is already in browser storage,
+      // and the next load posts whatever the helper never acknowledged.
+      if (unloading && !fo.unload) {
+        return Promise.resolve({ sent: 0, remaining: pendingCount(), unloading: true });
+      }
 
       var events = store.pendingEvents(requireReview());
       if (!events.length) {
@@ -24180,6 +24236,12 @@
 
     function scheduleFlush(delayMs) {
       if (debounceTimer) clearTimeout(debounceTimer);
+      // See flush(): a document on its way out posts through keepalive or not at
+      // all. Arming a timer here would only wake up inside the guard there.
+      if (unloading) {
+        debounceTimer = null;
+        return;
+      }
       // harness-allow-timer: protocol.FLUSH's 750ms typing-idle debounce. This
       // is the ONLY debounce in the design and it is on the post to the helper,
       // never on the write to browser storage.
@@ -25050,6 +25112,15 @@
 
     function commitOnUnload() {
       unloading = true;
+      // The editing surface commits the open edit BEFORE it calls in here, and
+      // that commit queues its event on the ordinary debounce. The timer is
+      // already armed by the time this line runs, so setting `unloading` is not
+      // enough on its own: the timer has to go too, or a navigation slower than
+      // the debounce fires an ordinary post the keepalive cap never saw.
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = null;
+      if (retryTimer) clearTimeout(retryTimer);
+      retryTimer = null;
       var flushed = flush({ unload: true });
       // AFTER the flush is started, not before. The reviewer's last keystrokes
       // are the thing that must not be lost; the goodbye is a courtesy to the
@@ -25063,6 +25134,10 @@
     // is a live document again: real failures have to be audible from here on.
     function onPageShow() {
       unloading = false;
+      // The document is alive after all, and the guard above held its queue back
+      // and cleared its timer. Give the queue a way out again, or a reviewer who
+      // cancelled a navigation keeps typing into a client that never posts.
+      if (pendingCount() > 0) scheduleFlush(0);
     }
 
     function stop() {
@@ -33400,7 +33475,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+3385aee028c3";
+  var VERSION = "0.2.0+5513c32c8fef";
 
   var protocol = ns.protocol;
   var record = ns.record;
