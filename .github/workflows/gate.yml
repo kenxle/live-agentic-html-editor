@@ -6,6 +6,12 @@ name: gate
 on:
   push:
     branches: [main]
+    # A docs-only push has nothing for the gate to prove, and every flake it
+    # trips is an email. Code paths still run the whole gate.
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - ".claude-commit*"
   pull_request:
 
 jobs:
