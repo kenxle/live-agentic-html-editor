@@ -29,7 +29,7 @@ jobs:
       - name: repeat the add command file
         run: |
           fails=0
-          for i in $(seq 1 ${{ github.event.inputs.unit_repeats || '40' }}); do
+          for i in $(seq 1 ${{ github.event.inputs.unit_repeats || '60' }}); do
             echo "::group::add_command run $i"
             node --test test/unit/add_command.test.js || fails=$((fails+1))
             echo "::endgroup::"
@@ -47,4 +47,4 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npx playwright test test/browser/reveal_deck.spec.js --repeat-each=${{ github.event.inputs.deck_repeats || '10' }}
+      - run: npx playwright test test/browser/reveal_deck.spec.js -g "four fields" --repeat-each=${{ github.event.inputs.deck_repeats || '10' }}

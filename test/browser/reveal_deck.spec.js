@@ -262,6 +262,73 @@ function focusRailField(page, which, itemId) {
 }
 
 /**
+ * Watch, from inside the page, what happens to the field while keys are typed.
+ *
+ * The chain reader below says where focus WAS and where it ENDED. This says
+ * what moved it: every keydown that reached the document (which is a leak, since
+ * the fence stops one aimed at a field at the rail's root), every blur the field
+ * took, and every mutation to the row the field sits in. A card re-rendered
+ * under a focused note and a fence that missed the note look identical from the
+ * outside and are different bugs.
+ */
+function watchTheField(page, itemId) {
+  return page.evaluate(function (id) {
+    function name(el) {
+      if (!el) return "null";
+      var text = el.tagName || String(el);
+      if (el.id) text += "#" + el.id;
+      if (el.className && typeof el.className === "string") {
+        text += "." + el.className.trim().split(/\s+/).join(".");
+      }
+      return text;
+    }
+    var field = window.__lahe_focused_field;
+    window.__watch = { leaks: [], blurs: [], mutations: [], connected: [] };
+    document.addEventListener(
+      "keydown",
+      function (event) {
+        window.__watch.leaks.push({ key: event.key, active: name(document.activeElement) });
+      },
+      true
+    );
+    if (field) {
+      field.addEventListener("blur", function (event) {
+        window.__watch.blurs.push({
+          afterKeys: window.__watch.leaks.length,
+          to: name(event.relatedTarget),
+          stillConnected: field.isConnected,
+          editable: field.getAttribute("contenteditable")
+        });
+      });
+      var row = field.parentNode;
+      if (row && typeof MutationObserver === "function") {
+        new MutationObserver(function (records) {
+          records.forEach(function (record) {
+            window.__watch.mutations.push({
+              afterKeys: window.__watch.leaks.length,
+              type: record.type,
+              attribute: record.attributeName || null,
+              added: record.addedNodes.length,
+              removed: record.removedNodes.length,
+              fieldStillConnected: field.isConnected
+            });
+          });
+        }).observe(row, { childList: true, attributes: true, subtree: true });
+      }
+    }
+    var node = window.__h.rail.cardNode(id);
+    return !!node;
+  }, itemId);
+}
+
+/** What watchTheField saw. */
+function readWatch(page) {
+  return page.evaluate(function () {
+    return window.__watch || null;
+  });
+}
+
+/**
  * Where focus REALLY is, root by root, from the rail outwards.
  *
  * focusRailField reads one shadow root's activeElement. That is necessary and
@@ -483,12 +550,14 @@ test.describe("a real reveal.js deck under review", () => {
         "the keys about to be typed are aimed at " + which + ", not at " + JSON.stringify(aimed.chain)
       ).toBe(true);
 
+      await watchTheField(page, item.id);
       for (const key of DECK_KEYS) await page.keyboard.press(key === " " ? "Space" : key);
       await page.keyboard.press("ArrowRight");
 
       const landed = await railFocusChain(page, item.id);
+      const watched = await readWatch(page);
       expect(await deckState(page), "keys typed in " + which + " stayed in the rail. Focus ended at " +
-        JSON.stringify(landed.chain)).toEqual(before);
+        JSON.stringify(landed.chain) + ". The page saw " + JSON.stringify(watched)).toEqual(before);
       expect(popups, "and " + which + " opened no notes window").toHaveLength(0);
     }
 
