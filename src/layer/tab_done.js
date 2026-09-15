@@ -202,6 +202,11 @@
     (items || []).forEach(function (item) {
       var stamp = replyStamp(item);
       if (!stamp) return;
+      // AN ANSWER TO A TOOL ROUND IS ROUTINE BY DEFINITION, whatever the agent
+      // put on it. Nobody is badged, marked or toasted for the tool's own
+      // question coming back answered. A refusal still reaches the reviewer,
+      // quietly, as the card's notice (see refresh).
+      if (record.toolRoundOf(item)) return;
       if (!needsToSeeReply(item[record.FIELD.REPLY])) return;
       if (seen[item[record.FIELD.ID]] !== stamp) out.push(item[record.FIELD.ID]);
     });
@@ -947,15 +952,23 @@
       var seen = Object.create(null);
 
       itemsNow().forEach(function (item) {
+        var tool = record.toolRoundOf(item);
         // Historical rounds and a current response can exist in either pane.
         // Ensure the card exists before attaching their nodes on a cold load.
         if (record.threadOf(item).length || item[record.FIELD.REPLY]) {
           rail.upsertCard(item);
-          rail.setCardState(item[record.FIELD.ID], item[record.FIELD.STATE]);
+          rail.setCardState(item[record.FIELD.ID], shownState(item));
         }
         if (record.threadOf(item).length) drawThread(item);
         else clearThread(item[record.FIELD.ID]);
-        if (item[record.FIELD.REPLY]) {
+        if (tool) {
+          // THE TOOL'S OWN ROUND. The reviewer's card carries on saying what it
+          // said when they last looked at it. The only thing that can appear is
+          // a refusal, as one quiet line.
+          rail.setAgentMessage(item[record.FIELD.ID], null);
+          clearQuestion(item[record.FIELD.ID]);
+          rail.setCardNotice(item[record.FIELD.ID], toolRoundNotice(item));
+        } else if (item[record.FIELD.REPLY]) {
           drawComposer(item);
           if (item[record.FIELD.REPLY].status === record.REPLY_STATUS.QUESTION) {
             rail.setAgentMessage(item[record.FIELD.ID], null);
@@ -967,7 +980,7 @@
           clearComposer(item[record.FIELD.ID]);
           clearQuestion(item[record.FIELD.ID]);
         }
-        if (item[record.FIELD.STATE] !== record.STATE.HANDLED) return;
+        if (shownState(item) !== record.STATE.HANDLED) return;
         var id = item[record.FIELD.ID];
         seen[id] = true;
         rail.upsertCard(item);
@@ -977,7 +990,7 @@
         // handled from storage on a fresh load too, and the page it lands on has
         // the same right not to be covered in marks on finished passages.
         unpaintHandled(id);
-        if (item[record.FIELD.REPLY]) rail.setAgentMessage(id, agentMessageFor(item));
+        if (item[record.FIELD.REPLY] && !tool) rail.setAgentMessage(id, agentMessageFor(item));
         if (!rows[id]) {
           rows[id] = buildRow(item);
           ensureStyle(rows[id]);
@@ -1056,7 +1069,8 @@
      * note, so this is also the two panes finally agreeing.
      */
     function saidBy(item) {
-      var note = item[record.FIELD.NOTE];
+      // The reviewer's own words, never the tool's: see record.reviewerNote.
+      var note = record.reviewerNote(item);
       if (record.isHandEdit(item)) return note || "";
       var change = item[record.FIELD.CHANGE];
       if (note && change && note !== change) return note + "\n" + change;
@@ -1065,6 +1079,28 @@
 
     function updateRow(row, item) {
       row.querySelector(".lahe-done-said").textContent = saidBy(item);
+    }
+
+    /**
+     * The one line a tool round is allowed to put in front of the reviewer.
+     *
+     * Nothing, when the agent did what was asked. A REFUSAL is different: the
+     * agent is saying the id cannot go into the source, and whether that is
+     * acceptable is a human's call, so it reaches the card as its quiet notice
+     * rather than as a thread round, a badge or a toast.
+     */
+    function toolRoundNotice(item) {
+      if (!record.toolRoundOf(item)) return null;
+      var reply = item[record.FIELD.REPLY];
+      if (!reply || reply.status !== record.REPLY_STATUS.NOT_HANDLED) return null;
+      var why = hasWords(reply.reason) ? reply.reason : hasWords(reply.text) ? reply.text : null;
+      if (!why) return "The agent could not carry the id into the source.";
+      return "The agent could not carry the id into the source: " + boundedText(why);
+    }
+
+    /** The state the REVIEWER is shown. One rule, in record.js. */
+    function shownState(item) {
+      return record.displayState(item);
     }
 
     /**
@@ -1129,7 +1165,12 @@
       var node = threads[id];
       while (node.firstChild) node.removeChild(node.firstChild);
       ensureStyle(node);
-      var rounds = record.chronologicalThread(item);
+      // A TOOL ROUND IS NOT AN EXCHANGE THE REVIEWER HAD. The page check asking
+      // the agent for a data-lahe-id, and the agent's answer to it, are drawn
+      // nowhere: see record.TOOL_ROUND.
+      var rounds = record.chronologicalThread(item).filter(function (round) {
+        return !record.isToolRound(round);
+      });
       // A thread whose length changed is a different thread, so the reviewer's
       // hand-opened rounds from the old one do not apply to it.
       if (!roundState[id] || roundState[id].total !== rounds.length) {
@@ -1294,7 +1335,15 @@
       delete composers[id];
     }
 
-    function continueItem(item, next, notice) {
+    /**
+     * @param {Object} item the record as it stood
+     * @param {Object} next the new revision
+     * @param {string|null} notice the line the card shows, or null for none
+     * @param {{quiet?: boolean}} [options] `quiet` is a TOOL round: no notice,
+     *   no tab switch, no focus, and the card keeps the state and the pane the
+     *   reviewer last saw. See record.TOOL_ROUND.
+     */
+    function continueItem(item, next, notice, options) {
       if (isReadOnly() || !next || next === item) return item;
       // The full-record event is durable before any record, draft, or UI
       // mutation. A storage refusal therefore leaves the answer and draft
@@ -1307,15 +1356,20 @@
       } catch (err) {
         if (err && err.failure) rail.failures.add(err.failure);
       }
+      var quiet = !!(options && options.quiet);
       rail.upsertCard(next);
-      rail.setCardState(next[record.FIELD.ID], record.STATE.READY);
+      rail.setCardState(next[record.FIELD.ID], quiet ? record.STATE.HANDLED : record.STATE.READY);
       rail.setAgentMessage(next[record.FIELD.ID], null);
-      rail.setCardNotice(next[record.FIELD.ID], notice || null);
+      rail.setCardNotice(next[record.FIELD.ID], quiet ? null : notice || null);
       clearQuestion(next[record.FIELD.ID]);
       clearComposer(next[record.FIELD.ID]);
-      repaintReopened(next[record.FIELD.ID]);
       onContinued(next);
       refresh();
+      // A TOOL ROUND ENDS HERE. Repainting the passage, pulling the reviewer to
+      // another tab and taking their focus are all ways of saying "look at
+      // this", and there is nothing here for them to look at.
+      if (quiet) return next;
+      repaintReopened(next[record.FIELD.ID]);
       rail.selectTab(rail.TAB.ACTIVE);
       var card = rail.cardNode(next[record.FIELD.ID]);
       if (card && typeof card.focus === "function") {
@@ -1395,7 +1449,7 @@
       // equal rev (STATE/REPLY are not content fields).
       var reopened;
       if (opts.pageCheck) {
-        reopened = record.pageCheckReopenOf(item, opts.note, null);
+        reopened = record.pageCheckReopenOf(item, opts.note, null, opts.tool || null);
       } else {
         reopened = record.reopenIssue(item);
         if (typeof opts.note === "string" && opts.note.trim()) {
@@ -1403,10 +1457,12 @@
         }
       }
       counters.reopened += 1;
+      var quiet = !!record.toolRoundOf(reopened);
       return continueItem(
         item,
         reopened,
-        opts.notice || "Issue reopened. The unchanged request is back in front of the agent."
+        opts.notice || "Issue reopened. The unchanged request is back in front of the agent.",
+        { quiet: quiet }
       );
     }
 
@@ -1906,16 +1962,24 @@
       store.write(reviewId, next);
 
       rail.upsertCard(next);
-      rail.setCardState(id, next[record.FIELD.STATE]);
+      rail.setCardState(id, shownState(next));
       rail.setCardNotice(id, null);
       if (next[record.FIELD.STATE] === record.STATE.HANDLED) clearAnchorBadges(id);
 
-      // A QUESTION IS NOT AN AGENT MESSAGE. The rail's own carrier is the quiet
-      // one, and it is right for "I made the change" and for "I could not, and
-      // here is why". A question gets the block below instead, and only that
-      // block: the same sentence in two places on one card is how the loud one
-      // stops reading as loud.
-      if (reply.status === record.REPLY_STATUS.QUESTION) {
+      // THE ANSWER TO A TOOL ROUND. The tool asked, the agent answered, and the
+      // reviewer is in neither half of that, so the card says nothing new. The
+      // one exception is a refusal, which is a decision that may need a person.
+      var toolAnswer = !!record.toolRoundOf(next);
+      if (toolAnswer) {
+        rail.setAgentMessage(id, null);
+        clearQuestion(id);
+        rail.setCardNotice(id, toolRoundNotice(next));
+      } else if (reply.status === record.REPLY_STATUS.QUESTION) {
+        // A QUESTION IS NOT AN AGENT MESSAGE. The rail's own carrier is the
+        // quiet one, and it is right for "I made the change" and for "I could
+        // not, and here is why". A question gets the block below instead, and
+        // only that block: the same sentence in two places on one card is how
+        // the loud one stops reading as loud.
         rail.setAgentMessage(id, null);
         drawQuestion(next);
       } else {
@@ -1933,7 +1997,7 @@
       // it unseen and the badge appears on the next paint, on the tab the card
       // is in.
       var watching = watchingTab(paneOf(next));
-      if (watching || !needsToSeeReply(next[record.FIELD.REPLY])) {
+      if (watching || toolAnswer || !needsToSeeReply(next[record.FIELD.REPLY])) {
         // DURABLE, not just quiet. Suppressing the toast and the badge is only
         // half of "the reviewer has seen this": the mark has to reach storage,
         // or the next load finds it unread and announces it all over again.
@@ -1954,7 +2018,8 @@
         // and acted on in applyReplies once every event in the batch is folded.
         toast: shouldToastReply({
           reply: next[record.FIELD.REPLY],
-          watching: watching,
+          // A tool round is never toasted, whatever the agent put on its reply.
+          watching: watching || toolAnswer,
           readOnly: isReadOnly(),
           known: hadStamp === replyStamp(next)
         })
