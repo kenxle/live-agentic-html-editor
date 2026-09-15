@@ -968,6 +968,12 @@
     MENU_LABEL: "Hide for presenting (Cmd-Shift-X)"
   };
 
+  // What the collapsed pill says on hover. It carries the chord for the same
+  // reason the Present menu item does: the pill is the one control a reviewer
+  // sees when the panel is away, so it is where they find out there is a key
+  // for it.
+  var PILL_TITLE = "Open the review panel (Cmd-Shift-1)";
+
   // Folding every card at once, like Present below, is the rail acting on
   // ITSELF: there is no work for boot to do and no action for a caller to
   // register, so these two are handled where they are drawn. They act on the
@@ -1607,6 +1613,9 @@
 
       var pill = el("button", "pill");
       pill.hidden = true;
+      pill.setAttribute("type", "button");
+      pill.setAttribute("aria-label", PILL_TITLE);
+      pill.title = PILL_TITLE;
       pill.appendChild(el("span", "pill__dot"));
       pill.appendChild(el("span", null, "Review"));
       var pillCount = el("span", "pill__count", "0");
@@ -4013,6 +4022,93 @@
     }
 
     // -------------------------------------------------------------------------
+    // Putting the keyboard in the rail
+    // -------------------------------------------------------------------------
+    //
+    // A reviewer who opened the panel with a chord never touched the mouse, so
+    // leaving the focus out on the page would hand them a panel they then have
+    // to Tab their way into past everything the page has. The first focusable
+    // control in the OPEN TAB is the answer rather than the first in the whole
+    // rail: the tab strip and the head sit above every pane, so focusing the
+    // rail's first control at all would land on the same button whichever list
+    // the reviewer was reading. The pane comes first, and the rail as a whole is
+    // the fallback for a pane with nothing in it yet.
+    var FOCUSABLE = [
+      "a[href]",
+      "button:not([disabled])",
+      "input:not([disabled])",
+      "select:not([disabled])",
+      "textarea:not([disabled])",
+      '[contenteditable="true"]',
+      '[tabindex]:not([tabindex="-1"])'
+    ].join(",");
+
+    /** Is this node actually on screen, rather than inside something hidden? */
+    function isShown(node) {
+      if (!node || node.hidden === true) return false;
+      if (typeof node.getClientRects !== "function") return true;
+      return node.getClientRects().length > 0;
+    }
+
+    function firstFocusableIn(root) {
+      if (!root || typeof root.querySelectorAll !== "function") return null;
+      var found = root.querySelectorAll(FOCUSABLE);
+      for (var i = 0; i < found.length; i += 1) {
+        if (isShown(found[i]) && typeof found[i].focus === "function") return found[i];
+      }
+      return null;
+    }
+
+    /**
+     * Put the keyboard on the first control in the open tab.
+     *
+     * A no-op while the rail is away, because there is nothing to focus and
+     * focusing the pill instead would be the tool answering a question the
+     * reviewer did not ask.
+     *
+     * @returns {boolean} whether anything took the focus
+     */
+    function focusFirstControl() {
+      if (!dom || collapsed || presenting) return false;
+      var pane = dom.panes ? dom.panes[activeTab] : null;
+      var node = firstFocusableIn(pane) || firstFocusableIn(dom.rail);
+      if (!node) return false;
+      try {
+        node.focus();
+      } catch (err) {
+        return false;
+      }
+      return dom.shadow.activeElement === node;
+    }
+
+    /**
+     * What inside the rail holds the keyboard right now, as plain data.
+     *
+     * A closed root has no selector from outside, so a test (and anyone
+     * debugging) can only ask the rail. Same shape as gripInfo and menuInfo and
+     * for the same reason.
+     *
+     * THE RAIL, not the whole surface. The pill, the toasts and the anchored
+     * comment boxes share this root, and a reviewer typing into a comment box is
+     * not a reviewer with the keyboard in the panel: the caller that closes the
+     * panel from a chord reads this to decide whether it has focus to hand back,
+     * and a comment box mid-sentence must not have it taken away.
+     *
+     * @returns {(object|null)} null when the rail holds no focus at all
+     */
+    function focusedControl() {
+      if (!dom || !dom.shadow) return null;
+      var node = dom.shadow.activeElement;
+      if (!node || !dom.rail.contains(node)) return null;
+      return {
+        tag: node.tagName,
+        className: typeof node.className === "string" ? node.className : "",
+        label: node.getAttribute ? node.getAttribute("aria-label") : null,
+        inPane: !!(dom.panes && dom.panes[activeTab] && dom.panes[activeTab].contains(node))
+      };
+    }
+
+    // -------------------------------------------------------------------------
     // Dragging the rail wider
     // -------------------------------------------------------------------------
     //
@@ -4981,6 +5077,7 @@
         return {
           railVisible: false,
           pillVisible: false,
+          pillTitle: "",
           pillCount: "",
           pillJewel: "",
           overlap: false,
@@ -5001,6 +5098,9 @@
       return {
         railVisible: !!railRect,
         pillVisible: !!pillRect,
+        // What the pill says on hover, which is where the chord is taught to a
+        // reviewer looking at a page with the panel away.
+        pillTitle: dom.pill.title || "",
         // The burn-down the pill shows, as the reviewer reads it: "3 (7)", or
         // "" on a page nothing has been written on yet.
         pillCount: dom.pillCount.hidden ? "" : dom.pillCount.textContent,
@@ -5039,6 +5139,8 @@
       collapse: collapse,
       isCollapsed: isCollapsed,
       onCollapse: onCollapse,
+      focusFirstControl: focusFirstControl,
+      focusedControl: focusedControl,
       // Present mode: the whole library off the screen, and still working.
       PRESENT: PRESENT,
       setPresenting: setPresenting,

@@ -38,6 +38,7 @@
     COMMIT_EDIT: "commit_edit",
     CANCEL: "cancel",
     TOGGLE_PRESENT: "toggle_present",
+    TOGGLE_RAIL: "toggle_rail",
     PAGE_DEFAULT: "page_default",
     NONE: "none"
   };
@@ -123,6 +124,15 @@
       requirement: "R13"
     },
     {
+      gesture: GESTURE.TOGGLE_RAIL,
+      keys: "Cmd-Shift-1",
+      when: "always, except while the review is hidden for presenting",
+      hint: "Press Cmd-Shift-1 to open or close the review panel.",
+      passThrough: false,
+      preventDefault: true,
+      requirement: "R43"
+    },
+    {
       gesture: GESTURE.PAGE_DEFAULT,
       keys: "everything else",
       when: "always",
@@ -147,6 +157,38 @@
   // esc, ., n, p, h, j, k, l, v, g, m), so nothing of the deck's answers to it
   // either.
   //
+  // WHY 1, AND NOT A LETTER. Ken asked for a left-hand-only chord for the rail,
+  // and every left-hand letter that reads as a mnemonic is already a browser's
+  // with Cmd/Ctrl-Shift held:
+  //
+  //   A  tab search in Chrome
+  //   B  bookmarks bar
+  //   D  bookmark every open tab
+  //   F  fullscreen, or find
+  //   G  find previous
+  //   Q  log out
+  //   R  hard reload
+  //   S  save
+  //   T  reopen the last closed tab
+  //   V  paste and match style
+  //   W  close the window
+  //   Z  redo
+  //
+  // The digits on the left hand are the next place to look, and there 3, 4 and
+  // 5 are macOS's screenshot keys and the backtick cycles windows. Digit1 is
+  // unbound in Chrome, Safari, Firefox and Edge on macOS and Windows, so the
+  // rail gets 1.
+  //
+  // MATCHED ON THE CODE AS WELL AS THE CHARACTER. Shift changes what
+  // KeyboardEvent.key reports for a digit, and what it changes it to depends on
+  // the layout: "!" on US, and other punctuation elsewhere. event.code is the
+  // physical key and says Digit1 whatever the layout, so the chord is checked
+  // three ways and any one of them is the press.
+  function isDigitOne(e) {
+    if (e.code === "Digit1") return true;
+    return e.key === "1" || e.key === "!";
+  }
+
   // The library's own modifier family, in one place, so the hint lines and the
   // matcher cannot disagree. Cmd on macOS, Ctrl elsewhere: one rule.
   function isPrimaryModifier(e) {
@@ -162,6 +204,8 @@
    *   ctrlKey       boolean
    *   shiftKey      boolean
    *   key           for keydown: the KeyboardEvent.key value
+   *   code          for keydown: the KeyboardEvent.code value, which is the
+   *                 physical key and so survives Shift and the layout
    *   hasSelection  true when a non-collapsed selection exists
    *   inOverlay     true when the event happened inside the library's overlay
    *   pickMode      true when element-pick mode is open
@@ -186,6 +230,14 @@
       // the whole library, and this chord is how the reviewer gets it back.
       if (mod && e.shiftKey === true && isKey(e.key, "x")) {
         return decide(GESTURE.TOGGLE_PRESENT, false, true, "Cmd-Shift-X hides the review for presenting, and shows it again");
+      }
+      // SECOND, and for the same reason the chord above is first: opening the
+      // rail is how a reviewer gets back to the panel from anywhere, including
+      // from inside one of the rail's own fields. Present mode is the one state
+      // that refuses it, and the caller applies that: while the library is
+      // hidden, Cmd-Shift-X is the only way back.
+      if (mod && e.shiftKey === true && isDigitOne(e)) {
+        return decide(GESTURE.TOGGLE_RAIL, false, true, "Cmd-Shift-1 opens the review panel, or closes it");
       }
       if (e.key === "Escape") {
         if (e.editing === true) {

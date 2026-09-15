@@ -262,6 +262,7 @@ it would see without the library (R13, which outranks editing convenience).
 | Cmd-Shift-C | text selected | Comment on the selection |
 | Cmd-Shift-C | nothing selected | Element-pick mode; click an element, Esc cancels |
 | Cmd-Shift-E | cursor or selection in a block | Edit that block, and nothing else |
+| Cmd-Shift-1 | always, unless the review is hidden for presenting | Open the review panel, or close it |
 | Cmd-Enter | in a comment box | Mark ready for the agent |
 | Cmd-Enter | a block is in edit state | Commit the edit |
 | Esc | a block is in edit state | Commit the edit |

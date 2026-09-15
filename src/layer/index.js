@@ -794,10 +794,78 @@
       if (typeof done.sweepNeglected === "function") done.sweepNeglected();
     });
 
-    // The chord, in the capture phase on the document, in its own listener
+    // -------------------------------------------------------------------------
+    // Opening and closing the panel from the keyboard
+    // -------------------------------------------------------------------------
+    //
+    // Ken: "we need a hotkey to toggle the rail. Ideally left hand only, that
+    // doesn't conflict with common hotkeys." Which key, and why that one, is
+    // argued out in the gesture table; this is what the press does.
+    //
+    // THE SAME SEAM THE PILL AND THE COLLAPSE ARROW USE, preference and all.
+    // rail.collapse persists the choice, and that is the point: a reviewer who
+    // pressed a key made a decision, unlike a toast that opened the panel to
+    // show them something. Present mode refuses the chord entirely, because a
+    // panel sliding out in front of a room is the thing present mode exists to
+    // stop, and Cmd-Shift-X is the way back. A read-only window still toggles:
+    // the panel is what carries the refusal, so hiding it would hide the
+    // explanation.
+    //
+    // WHERE THE KEYBOARD GOES. Opening lands it on the first control in the open
+    // tab, so the reviewer who never touched the mouse can work. Closing gives
+    // it back to whatever on the page held it when they opened the panel, and to
+    // the body when that element is gone.
+
+    /** Who had the keyboard on the page before the chord opened the panel. */
+    var railFocusReturn = null;
+
+    function pageFocusHolder() {
+      var node = doc.activeElement;
+      if (!node || node === doc.body || node === doc.documentElement) return null;
+      return node;
+    }
+
+    function returnFocusToPage() {
+      var back = railFocusReturn;
+      railFocusReturn = null;
+      if (back && back.isConnected === true && typeof back.focus === "function") {
+        try {
+          back.focus();
+          return;
+        } catch (err) {
+          // A node that refuses the focus falls through to the body below.
+        }
+      }
+      // The rail going away already blurred anything inside it in every engine,
+      // but saying so leaves document.activeElement at the body rather than at
+      // whatever the engine chose.
+      var held = doc.activeElement;
+      if (held && held !== doc.body && typeof held.blur === "function") held.blur();
+      if (doc.body && typeof doc.body.focus === "function") doc.body.focus();
+    }
+
+    function toggleRail() {
+      if (rail.isCollapsed()) {
+        railFocusReturn = pageFocusHolder();
+        rail.collapse(false);
+        rail.focusFirstControl();
+        return;
+      }
+      // Only the keyboard that was IN the panel is handed back. A reviewer who
+      // put the panel away while writing a comment on the page keeps their
+      // caret exactly where it was.
+      var hadFocus = !!rail.focusedControl();
+      rail.collapse(true);
+      if (hadFocus) returnFocusToPage();
+      else railFocusReturn = null;
+    }
+
+    // The two chords, in the capture phase on the document, in one listener
     // group. Capture matters twice: it beats the page's own handlers to the key
     // on a deck that binds everything, and it sees a press inside the rail's
-    // closed root before the root's own typing fence stops it.
+    // closed root before the root's own typing fence stops it. The fence is on
+    // the bubbling phase, so a reviewer mid-sentence in a comment box still gets
+    // both chords and the page still gets neither.
     ns.listeners.shared.on(
       doc,
       "keydown",
@@ -805,16 +873,27 @@
         var decided = ns.gestures.gestureFor({
           type: "keydown",
           key: event.key,
+          // The physical key, which is what makes the digit chord survive Shift
+          // and the keyboard layout.
+          code: event.code,
           metaKey: event.metaKey === true,
           ctrlKey: event.ctrlKey === true,
           shiftKey: event.shiftKey === true
         });
-        // EXACTLY THIS CHORD AND NOTHING ELSE. Every other key, in either mode,
-        // is the page's, which is what makes leaving this listener armed while
-        // the library is hidden honest.
-        if (decided.gesture !== ns.gestures.GESTURE.TOGGLE_PRESENT) return;
+        // EXACTLY THESE TWO CHORDS AND NOTHING ELSE. Every other key, in either
+        // mode, is the page's, which is what makes leaving this listener armed
+        // while the library is hidden honest.
+        if (decided.gesture === ns.gestures.GESTURE.TOGGLE_PRESENT) {
+          if (decided.preventDefault) event.preventDefault();
+          rail.setPresenting(!rail.isPresenting());
+          return;
+        }
+        if (decided.gesture !== ns.gestures.GESTURE.TOGGLE_RAIL) return;
+        // Hidden means hidden. The press is the page's while the reviewer is
+        // presenting, so it is not even taken from them.
+        if (rail.isPresenting()) return;
         if (decided.preventDefault) event.preventDefault();
-        rail.setPresenting(!rail.isPresenting());
+        toggleRail();
       },
       { capture: true },
       ns.listeners.GROUP.PRESENT
@@ -1759,6 +1838,17 @@
       focusedBoxQuote: function () {
         var box = handle.comments.focusedBox();
         return box ? box.item.context.quote || box.id : null;
+      },
+      // What is actually typed in the focused box. A spec that presses a chord
+      // while a comment is half written has to be able to prove the chord's own
+      // character did not land in the words.
+      focusedBoxText: function () {
+        var box = handle.comments.focusedBox();
+        if (!box || !box.input) return null;
+        // A box is a textarea on the page and an editable node in the rail, so
+        // both shapes answer.
+        if (typeof box.input.value === "string") return box.input.value;
+        return box.input.textContent || "";
       },
       pickMode: function () {
         return handle.comments.pickMode().active;

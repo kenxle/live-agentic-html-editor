@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+e21a7a2169cc
+ * version 0.2.0+93aaaa8b0d67
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+e21a7a2169cc";
+  g.LAHE.version = "0.2.0+93aaaa8b0d67";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -4239,6 +4239,7 @@
     COMMIT_EDIT: "commit_edit",
     CANCEL: "cancel",
     TOGGLE_PRESENT: "toggle_present",
+    TOGGLE_RAIL: "toggle_rail",
     PAGE_DEFAULT: "page_default",
     NONE: "none"
   };
@@ -4324,6 +4325,15 @@
       requirement: "R13"
     },
     {
+      gesture: GESTURE.TOGGLE_RAIL,
+      keys: "Cmd-Shift-1",
+      when: "always, except while the review is hidden for presenting",
+      hint: "Press Cmd-Shift-1 to open or close the review panel.",
+      passThrough: false,
+      preventDefault: true,
+      requirement: "R43"
+    },
+    {
       gesture: GESTURE.PAGE_DEFAULT,
       keys: "everything else",
       when: "always",
@@ -4348,6 +4358,38 @@
   // esc, ., n, p, h, j, k, l, v, g, m), so nothing of the deck's answers to it
   // either.
   //
+  // WHY 1, AND NOT A LETTER. Ken asked for a left-hand-only chord for the rail,
+  // and every left-hand letter that reads as a mnemonic is already a browser's
+  // with Cmd/Ctrl-Shift held:
+  //
+  //   A  tab search in Chrome
+  //   B  bookmarks bar
+  //   D  bookmark every open tab
+  //   F  fullscreen, or find
+  //   G  find previous
+  //   Q  log out
+  //   R  hard reload
+  //   S  save
+  //   T  reopen the last closed tab
+  //   V  paste and match style
+  //   W  close the window
+  //   Z  redo
+  //
+  // The digits on the left hand are the next place to look, and there 3, 4 and
+  // 5 are macOS's screenshot keys and the backtick cycles windows. Digit1 is
+  // unbound in Chrome, Safari, Firefox and Edge on macOS and Windows, so the
+  // rail gets 1.
+  //
+  // MATCHED ON THE CODE AS WELL AS THE CHARACTER. Shift changes what
+  // KeyboardEvent.key reports for a digit, and what it changes it to depends on
+  // the layout: "!" on US, and other punctuation elsewhere. event.code is the
+  // physical key and says Digit1 whatever the layout, so the chord is checked
+  // three ways and any one of them is the press.
+  function isDigitOne(e) {
+    if (e.code === "Digit1") return true;
+    return e.key === "1" || e.key === "!";
+  }
+
   // The library's own modifier family, in one place, so the hint lines and the
   // matcher cannot disagree. Cmd on macOS, Ctrl elsewhere: one rule.
   function isPrimaryModifier(e) {
@@ -4363,6 +4405,8 @@
    *   ctrlKey       boolean
    *   shiftKey      boolean
    *   key           for keydown: the KeyboardEvent.key value
+   *   code          for keydown: the KeyboardEvent.code value, which is the
+   *                 physical key and so survives Shift and the layout
    *   hasSelection  true when a non-collapsed selection exists
    *   inOverlay     true when the event happened inside the library's overlay
    *   pickMode      true when element-pick mode is open
@@ -4387,6 +4431,14 @@
       // the whole library, and this chord is how the reviewer gets it back.
       if (mod && e.shiftKey === true && isKey(e.key, "x")) {
         return decide(GESTURE.TOGGLE_PRESENT, false, true, "Cmd-Shift-X hides the review for presenting, and shows it again");
+      }
+      // SECOND, and for the same reason the chord above is first: opening the
+      // rail is how a reviewer gets back to the panel from anywhere, including
+      // from inside one of the rail's own fields. Present mode is the one state
+      // that refuses it, and the caller applies that: while the library is
+      // hidden, Cmd-Shift-X is the only way back.
+      if (mod && e.shiftKey === true && isDigitOne(e)) {
+        return decide(GESTURE.TOGGLE_RAIL, false, true, "Cmd-Shift-1 opens the review panel, or closes it");
       }
       if (e.key === "Escape") {
         if (e.editing === true) {
@@ -13230,6 +13282,12 @@
     MENU_LABEL: "Hide for presenting (Cmd-Shift-X)"
   };
 
+  // What the collapsed pill says on hover. It carries the chord for the same
+  // reason the Present menu item does: the pill is the one control a reviewer
+  // sees when the panel is away, so it is where they find out there is a key
+  // for it.
+  var PILL_TITLE = "Open the review panel (Cmd-Shift-1)";
+
   // Folding every card at once, like Present below, is the rail acting on
   // ITSELF: there is no work for boot to do and no action for a caller to
   // register, so these two are handled where they are drawn. They act on the
@@ -13869,6 +13927,9 @@
 
       var pill = el("button", "pill");
       pill.hidden = true;
+      pill.setAttribute("type", "button");
+      pill.setAttribute("aria-label", PILL_TITLE);
+      pill.title = PILL_TITLE;
       pill.appendChild(el("span", "pill__dot"));
       pill.appendChild(el("span", null, "Review"));
       var pillCount = el("span", "pill__count", "0");
@@ -16275,6 +16336,93 @@
     }
 
     // -------------------------------------------------------------------------
+    // Putting the keyboard in the rail
+    // -------------------------------------------------------------------------
+    //
+    // A reviewer who opened the panel with a chord never touched the mouse, so
+    // leaving the focus out on the page would hand them a panel they then have
+    // to Tab their way into past everything the page has. The first focusable
+    // control in the OPEN TAB is the answer rather than the first in the whole
+    // rail: the tab strip and the head sit above every pane, so focusing the
+    // rail's first control at all would land on the same button whichever list
+    // the reviewer was reading. The pane comes first, and the rail as a whole is
+    // the fallback for a pane with nothing in it yet.
+    var FOCUSABLE = [
+      "a[href]",
+      "button:not([disabled])",
+      "input:not([disabled])",
+      "select:not([disabled])",
+      "textarea:not([disabled])",
+      '[contenteditable="true"]',
+      '[tabindex]:not([tabindex="-1"])'
+    ].join(",");
+
+    /** Is this node actually on screen, rather than inside something hidden? */
+    function isShown(node) {
+      if (!node || node.hidden === true) return false;
+      if (typeof node.getClientRects !== "function") return true;
+      return node.getClientRects().length > 0;
+    }
+
+    function firstFocusableIn(root) {
+      if (!root || typeof root.querySelectorAll !== "function") return null;
+      var found = root.querySelectorAll(FOCUSABLE);
+      for (var i = 0; i < found.length; i += 1) {
+        if (isShown(found[i]) && typeof found[i].focus === "function") return found[i];
+      }
+      return null;
+    }
+
+    /**
+     * Put the keyboard on the first control in the open tab.
+     *
+     * A no-op while the rail is away, because there is nothing to focus and
+     * focusing the pill instead would be the tool answering a question the
+     * reviewer did not ask.
+     *
+     * @returns {boolean} whether anything took the focus
+     */
+    function focusFirstControl() {
+      if (!dom || collapsed || presenting) return false;
+      var pane = dom.panes ? dom.panes[activeTab] : null;
+      var node = firstFocusableIn(pane) || firstFocusableIn(dom.rail);
+      if (!node) return false;
+      try {
+        node.focus();
+      } catch (err) {
+        return false;
+      }
+      return dom.shadow.activeElement === node;
+    }
+
+    /**
+     * What inside the rail holds the keyboard right now, as plain data.
+     *
+     * A closed root has no selector from outside, so a test (and anyone
+     * debugging) can only ask the rail. Same shape as gripInfo and menuInfo and
+     * for the same reason.
+     *
+     * THE RAIL, not the whole surface. The pill, the toasts and the anchored
+     * comment boxes share this root, and a reviewer typing into a comment box is
+     * not a reviewer with the keyboard in the panel: the caller that closes the
+     * panel from a chord reads this to decide whether it has focus to hand back,
+     * and a comment box mid-sentence must not have it taken away.
+     *
+     * @returns {(object|null)} null when the rail holds no focus at all
+     */
+    function focusedControl() {
+      if (!dom || !dom.shadow) return null;
+      var node = dom.shadow.activeElement;
+      if (!node || !dom.rail.contains(node)) return null;
+      return {
+        tag: node.tagName,
+        className: typeof node.className === "string" ? node.className : "",
+        label: node.getAttribute ? node.getAttribute("aria-label") : null,
+        inPane: !!(dom.panes && dom.panes[activeTab] && dom.panes[activeTab].contains(node))
+      };
+    }
+
+    // -------------------------------------------------------------------------
     // Dragging the rail wider
     // -------------------------------------------------------------------------
     //
@@ -17243,6 +17391,7 @@
         return {
           railVisible: false,
           pillVisible: false,
+          pillTitle: "",
           pillCount: "",
           pillJewel: "",
           overlap: false,
@@ -17263,6 +17412,9 @@
       return {
         railVisible: !!railRect,
         pillVisible: !!pillRect,
+        // What the pill says on hover, which is where the chord is taught to a
+        // reviewer looking at a page with the panel away.
+        pillTitle: dom.pill.title || "",
         // The burn-down the pill shows, as the reviewer reads it: "3 (7)", or
         // "" on a page nothing has been written on yet.
         pillCount: dom.pillCount.hidden ? "" : dom.pillCount.textContent,
@@ -17301,6 +17453,8 @@
       collapse: collapse,
       isCollapsed: isCollapsed,
       onCollapse: onCollapse,
+      focusFirstControl: focusFirstControl,
+      focusedControl: focusedControl,
       // Present mode: the whole library off the screen, and still working.
       PRESENT: PRESENT,
       setPresenting: setPresenting,
@@ -32981,7 +33135,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+e21a7a2169cc";
+  var VERSION = "0.2.0+93aaaa8b0d67";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -33701,10 +33855,78 @@
       if (typeof done.sweepNeglected === "function") done.sweepNeglected();
     });
 
-    // The chord, in the capture phase on the document, in its own listener
+    // -------------------------------------------------------------------------
+    // Opening and closing the panel from the keyboard
+    // -------------------------------------------------------------------------
+    //
+    // Ken: "we need a hotkey to toggle the rail. Ideally left hand only, that
+    // doesn't conflict with common hotkeys." Which key, and why that one, is
+    // argued out in the gesture table; this is what the press does.
+    //
+    // THE SAME SEAM THE PILL AND THE COLLAPSE ARROW USE, preference and all.
+    // rail.collapse persists the choice, and that is the point: a reviewer who
+    // pressed a key made a decision, unlike a toast that opened the panel to
+    // show them something. Present mode refuses the chord entirely, because a
+    // panel sliding out in front of a room is the thing present mode exists to
+    // stop, and Cmd-Shift-X is the way back. A read-only window still toggles:
+    // the panel is what carries the refusal, so hiding it would hide the
+    // explanation.
+    //
+    // WHERE THE KEYBOARD GOES. Opening lands it on the first control in the open
+    // tab, so the reviewer who never touched the mouse can work. Closing gives
+    // it back to whatever on the page held it when they opened the panel, and to
+    // the body when that element is gone.
+
+    /** Who had the keyboard on the page before the chord opened the panel. */
+    var railFocusReturn = null;
+
+    function pageFocusHolder() {
+      var node = doc.activeElement;
+      if (!node || node === doc.body || node === doc.documentElement) return null;
+      return node;
+    }
+
+    function returnFocusToPage() {
+      var back = railFocusReturn;
+      railFocusReturn = null;
+      if (back && back.isConnected === true && typeof back.focus === "function") {
+        try {
+          back.focus();
+          return;
+        } catch (err) {
+          // A node that refuses the focus falls through to the body below.
+        }
+      }
+      // The rail going away already blurred anything inside it in every engine,
+      // but saying so leaves document.activeElement at the body rather than at
+      // whatever the engine chose.
+      var held = doc.activeElement;
+      if (held && held !== doc.body && typeof held.blur === "function") held.blur();
+      if (doc.body && typeof doc.body.focus === "function") doc.body.focus();
+    }
+
+    function toggleRail() {
+      if (rail.isCollapsed()) {
+        railFocusReturn = pageFocusHolder();
+        rail.collapse(false);
+        rail.focusFirstControl();
+        return;
+      }
+      // Only the keyboard that was IN the panel is handed back. A reviewer who
+      // put the panel away while writing a comment on the page keeps their
+      // caret exactly where it was.
+      var hadFocus = !!rail.focusedControl();
+      rail.collapse(true);
+      if (hadFocus) returnFocusToPage();
+      else railFocusReturn = null;
+    }
+
+    // The two chords, in the capture phase on the document, in one listener
     // group. Capture matters twice: it beats the page's own handlers to the key
     // on a deck that binds everything, and it sees a press inside the rail's
-    // closed root before the root's own typing fence stops it.
+    // closed root before the root's own typing fence stops it. The fence is on
+    // the bubbling phase, so a reviewer mid-sentence in a comment box still gets
+    // both chords and the page still gets neither.
     ns.listeners.shared.on(
       doc,
       "keydown",
@@ -33712,16 +33934,27 @@
         var decided = ns.gestures.gestureFor({
           type: "keydown",
           key: event.key,
+          // The physical key, which is what makes the digit chord survive Shift
+          // and the keyboard layout.
+          code: event.code,
           metaKey: event.metaKey === true,
           ctrlKey: event.ctrlKey === true,
           shiftKey: event.shiftKey === true
         });
-        // EXACTLY THIS CHORD AND NOTHING ELSE. Every other key, in either mode,
-        // is the page's, which is what makes leaving this listener armed while
-        // the library is hidden honest.
-        if (decided.gesture !== ns.gestures.GESTURE.TOGGLE_PRESENT) return;
+        // EXACTLY THESE TWO CHORDS AND NOTHING ELSE. Every other key, in either
+        // mode, is the page's, which is what makes leaving this listener armed
+        // while the library is hidden honest.
+        if (decided.gesture === ns.gestures.GESTURE.TOGGLE_PRESENT) {
+          if (decided.preventDefault) event.preventDefault();
+          rail.setPresenting(!rail.isPresenting());
+          return;
+        }
+        if (decided.gesture !== ns.gestures.GESTURE.TOGGLE_RAIL) return;
+        // Hidden means hidden. The press is the page's while the reviewer is
+        // presenting, so it is not even taken from them.
+        if (rail.isPresenting()) return;
         if (decided.preventDefault) event.preventDefault();
-        rail.setPresenting(!rail.isPresenting());
+        toggleRail();
       },
       { capture: true },
       ns.listeners.GROUP.PRESENT
@@ -34666,6 +34899,17 @@
       focusedBoxQuote: function () {
         var box = handle.comments.focusedBox();
         return box ? box.item.context.quote || box.id : null;
+      },
+      // What is actually typed in the focused box. A spec that presses a chord
+      // while a comment is half written has to be able to prove the chord's own
+      // character did not land in the words.
+      focusedBoxText: function () {
+        var box = handle.comments.focusedBox();
+        if (!box || !box.input) return null;
+        // A box is a textarea on the page and an editable node in the rail, so
+        // both shapes answer.
+        if (typeof box.input.value === "string") return box.input.value;
+        return box.input.textContent || "";
       },
       pickMode: function () {
         return handle.comments.pickMode().active;
