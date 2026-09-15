@@ -15,6 +15,24 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
   the product where it is a product difference, the test where it is a test
   assumption; never a browser-conditional skip.
 
+- [x] @claude 2026-09-15 LAHE-cp2-walk-caret-reversal (done 2026-09-15 in PR #9: the
+  reviewer's live caret outranks a snapshot that is one beat out of date) -- **test/browser/cp2_walk.spec.js
+  line 248 failed on main (run 35006451817) with the reviewer's typed sentence at the
+  FRONT of the paragraph instead of the end.** Nothing damaged that block: it sits
+  outside the morph target. What moved the caret was protection's own layer three. The
+  caret is live immediately; selectionchange announces it on a TASK; a MutationObserver
+  callback is a MICROTASK and runs first. So any mutation anywhere in the document,
+  arriving in that window, reached restore() with the snapshot still naming the old spot
+  and put the caret back there. The rule now: the text is whole and the node survived,
+  so nothing was damaged, and the snapshot takes the correction rather than the reviewer.
+
+  064ae58 (an owed replay pass runs when any epoch closes) is NOT the cause and was not
+  reverted. The bisect says so: the new deterministic spec fails on main with 064ae58's
+  src changes reverted exactly as it fails with them in. What 064ae58 did was add replay
+  passes during an open edit session, and every pass repaints the rail, which is one more
+  mutation landing in that window. It is the amplifier, which is why a bug this old first
+  showed on CI this week.
+
 - [x] @claude 2026-09-15 LAHE-reload-claim-flake (done 2026-09-15 in PR #6: a release now
   leaves its secret behind for five seconds, and a claim carrying it is seated again
   with that same secret) -- **test/browser/reload_claim.spec.js "reloading the page over
@@ -26,13 +44,23 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
   browser suites green on the fix; test/unit/window_release_race.test.js replays the
   trace and fails on the old code.
 
-- [ ] @anyone 2026-09-15 LAHE-keepalive-cap-flake -- **test/browser/editing_navigation.spec.js
+- [x] @claude 2026-09-15 LAHE-keepalive-cap-flake (done 2026-09-15 in PR #9: once the
+  document is leaving, the only transport is the keepalive post) -- **test/browser/editing_navigation.spec.js
   "an edit past the keepalive cap is absent at unload and present after the next load"
-  failed once on Linux CI, on "a body past the keepalive cap does not go out at unload":
+  failed twice on Linux CI, on "a body past the keepalive cap does not go out at unload":
   a ready event for the oversize edit was already in events.jsonl when the second page
-  booted.** One sighting, in a stress run of the whole suite three times over (PR #6);
-  30 for 30 locally under load. Nothing in that PR touches the flush or the cap. If it
-  recurs, find what commits and posts the edit before the unload path runs.
+  booted.** The oversize guard was never wrong; it was not the only door. Committing on
+  navigation deliberately asks for no immediate flush, and queues the event on the
+  ordinary 750ms debounce instead. That timer keeps running while the old document is
+  alive, and a document stays alive from beforeunload until the browser has fetched the
+  next page. Slower than 750ms and the ordinary flush fired, and an ordinary flush
+  carries no keepalive cap. Fixed in sync.js in three places: flush refuses a non-unload
+  flush while unloading, scheduleFlush arms no timer, and commitOnUnload clears the timer
+  the commit it follows had just armed. pageshow lifts the flag and lets the held queue
+  out, which a cancelled navigation never had before either. The new spec dispatches
+  beforeunload and leaves the document standing, then asks the timer's own door for
+  itself; its control is pageshow, after which the same body lands on the same ordinary
+  flush, whole.
 
 - [x] @claude 2026-09-15 LAHE-keep-mine-morph-flake (done 2026-09-15 in PR #8) -- **test/browser/keep_mine_live_page.spec.js
   "Keep mine survives every later morph pass" failed on Linux CI at morph pass 14
