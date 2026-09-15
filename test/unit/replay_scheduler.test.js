@@ -175,3 +175,73 @@ test("the frame wins when there is one, and the pass still runs exactly once", a
     else global.cancelAnimationFrame = originalCancel;
   }
 });
+
+// The same seam, for an epoch that was NOT one of replay's.
+//
+// The observer is refused for whichever write epoch is open, and the library
+// opens epochs from several places that are not a replay pass: entering and
+// leaving an edit session, a format command, an undo, and protect's snapshot
+// restore after a repaint. The consumer for the owed flag lived at the end of a
+// replay pass, so a repaint colliding with one of those was remembered and then
+// never run: the page kept what the repaint wrote and the reviewer's committed
+// sentence stayed off it until an unrelated mutation scheduled the next pass.
+//
+// This stages exactly that: an edit session's epoch is open, the page repaints
+// inside it, and no replay pass follows. A pass still has to run.
+test("a repaint refused during someone else's write epoch still gets its pass", async () => {
+  const originalRaf = global.requestAnimationFrame;
+  const originalCancel = global.cancelAnimationFrame;
+  global.requestAnimationFrame = function (fn) {
+    Promise.resolve().then(fn);
+    return 1;
+  };
+  global.cancelAnimationFrame = function () {};
+
+  const ranReasons = [];
+  try {
+    replay.resetCounters();
+    epoch.shared.takePendingExternal();
+    replay.configure({
+      root: null,
+      items: [],
+      cards: null,
+      document: null,
+      hooks: {
+        update_rail: function (ctx, summary) {
+          ranReasons.push(summary.reason);
+        }
+      }
+    });
+
+    // editing.enter, or a format command, or protect putting a snapshot back.
+    // Nothing here is replay, and replay must not have to be the one that
+    // notices.
+    epoch.shared.write("editing.enter", function () {
+      // The page repainted in the same batch. This is what the page observer
+      // does: it asks for a pass and is told the tool is mid-write.
+      assert.equal(
+        replay.schedule(replay.REASON.MUTATION),
+        false,
+        "the observer is refused while the write epoch is open"
+      );
+    });
+
+    await nextTask();
+
+    assert.ok(
+      ranReasons.indexOf(replay.REASON.MUTATION) !== -1,
+      "the pass the repaint was owed ran once the epoch closed"
+    );
+    assert.equal(
+      epoch.shared.takePendingExternal(),
+      false,
+      "and the owed flag was consumed, not left set forever"
+    );
+  } finally {
+    replay.configure({ items: null, hooks: null });
+    if (originalRaf === undefined) delete global.requestAnimationFrame;
+    else global.requestAnimationFrame = originalRaf;
+    if (originalCancel === undefined) delete global.cancelAnimationFrame;
+    else global.cancelAnimationFrame = originalCancel;
+  }
+});

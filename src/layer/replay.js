@@ -419,6 +419,29 @@
     });
   }
 
+  /**
+   * The other half of finding 9: the epoch that was owed a pass was not one of
+   * replay's.
+   *
+   * scheduleOwedPass above runs at the end of a replay pass, which covers the
+   * case it was written for (a repaint landing in the same batch as replay's own
+   * write). It covers nothing else. The observer is refused for whichever epoch
+   * is open, and the library opens epochs from several places that are not
+   * replay: entering and leaving an edit session, a format command, an undo, and
+   * protect's snapshot restore after a repaint. A repaint that collides with one
+   * of those had its pass refused and remembered, and then nothing ran it: the
+   * page kept whatever the repaint wrote, and the reviewer's committed sentence
+   * stayed off the page until some unrelated mutation scheduled the next pass.
+   *
+   * So replay also listens to the epoch itself. epoch.onIdle fires when the
+   * depth unwinds to zero with a pass owed, whoever opened it.
+   */
+  if (epoch.shared && typeof epoch.shared.onIdle === "function") {
+    epoch.shared.onIdle(function () {
+      if (epoch.shared.takePendingExternal()) schedule(REASON.MUTATION);
+    });
+  }
+
   function defer(fn) {
     var done = false;
     var frame = null;
