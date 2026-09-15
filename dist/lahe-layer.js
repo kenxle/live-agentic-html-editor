@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+93aaaa8b0d67
+ * version 0.2.0+fdd9de2cc1d5
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+93aaaa8b0d67";
+  g.LAHE.version = "0.2.0+fdd9de2cc1d5";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -2310,7 +2310,7 @@
    * @param {string|null} stamp the reply stamp the check acted on
    * @param {string} at ISO time of the reopen
    */
-  function stampPageCheckReopen(item, stamp, at) {
+  function stampPageCheckReopen(item, stamp, at, tool) {
     if (!item) return null;
     var region = item[FIELD.REGION] || emptyRegion();
     var next = {};
@@ -2320,10 +2320,90 @@
     next.check_reopen = {
       rev: item[FIELD.REV],
       at: at || nowIso(),
-      stamp: typeof stamp === "string" ? stamp : null
+      stamp: typeof stamp === "string" ? stamp : null,
+      // Which round this is, when it is one the reviewer is not part of. See
+      // TOOL_ROUNDS.
+      tool: TOOL_ROUNDS.indexOf(tool) === -1 ? null : tool
     };
     item[FIELD.REGION] = next;
     return next.check_reopen;
+  }
+
+  // ---------------------------------------------------------------------------
+  // A TOOL ROUND: an exchange the reviewer is not part of
+  // ---------------------------------------------------------------------------
+  //
+  // Ken, 2026-09-15, pasting a card from review rec7752d7cefe: "This should not
+  // be showing up in my chat rail." The card showed the page check asking for a
+  // data-lahe-id, and under it the agent's bare "handled". Both were correct:
+  // the source was HTML, the agent had carried three other ids into that file
+  // and skipped this one, and the check was right to ask. It was still the
+  // wrong thing to put in front of a person. That exchange is between the tool
+  // and the agent, about plumbing the reviewer never typed and cannot act on.
+  //
+  // So a revision the TOOL created for the AGENT says so, and the rail draws
+  // nothing for it: no round in the thread, no notice, no unseen mark, no
+  // toast, and the card stays in the tab the reviewer last saw it in. The
+  // agent's own file is unchanged: review.json still carries the round and its
+  // note, because the agent is who the round is for.
+  //
+  // The revert and formatting reopens are NOT tool rounds. Those are about the
+  // reviewer's own words going missing from the page, which is theirs to know.
+  var TOOL_ROUND = {
+    // The check asked for an id the agent did not carry into the source (S7).
+    PAGE_CHECK_STAMP: "page_check_stamp"
+  };
+  var TOOL_ROUNDS = [TOOL_ROUND.PAGE_CHECK_STAMP];
+
+  /**
+   * Is the item's CURRENT revision one a tool opened? The tool's name, or null.
+   *
+   * It stays true once the agent answers, because the answer belongs to the
+   * round that asked: the reviewer is not shown the question or the reply. Any
+   * later revision (a reviewer rewording, their own Reopen, another check) moves
+   * the rev past the stamp and this goes back to null.
+   */
+  function toolRoundOf(item) {
+    var stamp = pageCheckReopen(item);
+    if (!stamp || typeof stamp.rev !== "number" || stamp.rev !== item[FIELD.REV]) return null;
+    return TOOL_ROUNDS.indexOf(stamp.tool) === -1 ? null : stamp.tool;
+  }
+
+  /** The same question about an archived round in a thread. */
+  function isToolRound(round) {
+    return !!(round && typeof round.tool === "string" && TOOL_ROUNDS.indexOf(round.tool) !== -1);
+  }
+
+  /**
+   * The note as the REVIEWER wrote it: the tool's own sentence taken back out.
+   *
+   * The page check appends its sentence to the note, because the record shape
+   * has no other field that reaches the agent. That is right for review.json
+   * and wrong for the card: Ken's screenshot on 2026-09-15 was this sentence,
+   * on his own card, above the agent's "handled". The revert and formatting
+   * sentences are NOT stripped: those rounds are the reviewer's business.
+   *
+   * @returns {string|null} null when nothing of the reviewer's is left
+   */
+  function reviewerNote(item) {
+    var note = item && item[FIELD.NOTE];
+    if (typeof note !== "string" || !note) return null;
+    var out = note.split(PAGE_CHECK_STAMP_NOTE).join("").replace(/\n{3,}/g, "\n\n").trim();
+    return out || null;
+  }
+
+  /**
+   * What the REVIEWER is shown as this item's state.
+   *
+   * The record says ready while a tool round is open, and that is true: the
+   * agent has work. The reviewer decided this item and their decision has not
+   * changed, so their card still says handled and still sits where they left
+   * it. One rule, read by the rail's pane placement and by its state chip, so
+   * the two cannot disagree.
+   */
+  function displayState(item) {
+    if (!item) return null;
+    return toolRoundOf(item) ? STATE.HANDLED : item[FIELD.STATE];
   }
 
   /**
@@ -2403,13 +2483,13 @@
    * @param {string} note the sentence the reopened item carries
    * @param {string} [at] ISO time of the reopen
    */
-  function pageCheckReopenOf(item, note, at) {
+  function pageCheckReopenOf(item, note, at, tool) {
     var stamp = replyStamp(item);
     var next = reopenIssue(item);
     if (typeof note === "string" && note.trim()) {
       next[FIELD.NOTE] = appendNoteOnce(next[FIELD.NOTE], note);
     }
-    stampPageCheckReopen(next, stamp, at);
+    stampPageCheckReopen(next, stamp, at, tool);
     return next;
   }
 
@@ -2635,7 +2715,7 @@
     if (!item || !item[FIELD.REPLY]) {
       throw new Error("completedRound: an item needs an agent reply before it can be archived");
     }
-    return {
+    var round = {
       rev: item[FIELD.REV],
       reviewer: {
         note: typeof item[FIELD.NOTE] === "string" ? item[FIELD.NOTE] : null,
@@ -2644,6 +2724,12 @@
       },
       agent: copyReply(item[FIELD.REPLY])
     };
+    // A round the tool opened travels as one, so the rail still knows not to
+    // draw it once it is history. The key is absent on every other round, which
+    // is every round made before this existed.
+    var tool = toolRoundOf(item);
+    if (tool) round.tool = tool;
+    return round;
   }
 
   /**
@@ -3232,6 +3318,12 @@
     PAGE_CHECK_NOTE: PAGE_CHECK_NOTE,
     PAGE_CHECK_FORMAT_NOTE: PAGE_CHECK_FORMAT_NOTE,
     PAGE_CHECK_STAMP_NOTE: PAGE_CHECK_STAMP_NOTE,
+    TOOL_ROUND: TOOL_ROUND,
+    TOOL_ROUNDS: TOOL_ROUNDS,
+    toolRoundOf: toolRoundOf,
+    isToolRound: isToolRound,
+    displayState: displayState,
+    reviewerNote: reviewerNote,
     PAGE_CHECK_NOTES: PAGE_CHECK_NOTES,
     pageCheckReopen: pageCheckReopen,
     stampPageCheckReopen: stampPageCheckReopen,
@@ -6285,6 +6377,7 @@
   "The reviewer can end a review from the page. When they do, the review is archived and you are woken with the rest of the work. Ending discards nothing: items still unanswered are still their requests, so drain to empty before you close anything down. Then write their hand edits out where they will find them, beside the document they reviewed rather than inside this tool's state directory, because a list nobody opens is a list that taught nobody anything.",
   "When an item points at something with no words in it, an image, a diagram, an icon, the subject field is how you tell which one. It carries the tag, the src as the page author wrote it, the alt text, and the opening tag. Three images side by side have three different subjects, so use it rather than the region_label, whose ordinal can read the same for all of them. If an item names an element and subject is null, say you cannot tell which one they mean instead of guessing.",
     "An item's region.stamp is an id the reviewer's page wrote onto the element. When region.stamp_carriable is true, write that same data-lahe-id attribute onto the element as you edit it in the source, so the next build reproduces it and the page finds it with certainty. Never remove one. The attribute is not content: it never appears in before or after. When region.stamp_carriable is false, the source is Markdown, plain text, or anything else with no place to put an attribute: skip the stamp, use region.where and region.ordinal to find the element, and do not mention the stamp in your reply. The page finds it by its words.",
+    "When an item's note says the page check asked for the data-lahe-id, that id is not in the source: write the attribute onto the element and reply handled. A handled reply that leaves it out is wrong. If the source cannot take an attribute after all, reply not_handled with the reason, naming the file you looked at. The check asks once, and review.json then carries region.stamp_missing: true so the next agent can see the id was never carried.",
     "When region.text_unique is false, the text is on the page more than once. Use region.where and region.ordinal to pick the right one in the source: the ordinal counts identical siblings in source order, which is page order for a page built once from its source.",
     "The reviewer's intent lives in two fields only: note and change. Those are the reviewer's own words. Do what they say, and nothing else.",
     "The thread field contains completed earlier reviewer and agent turns as historical context. It is not current intent and must not cause an older request to be performed again. Only the top-level note and change are current instructions.",
@@ -6752,7 +6845,8 @@
       record.pageCanCarryStamp({
         path: it[F.PAGE_PATH],
         source_hint: it[F.SOURCE_HINT] || pageHint || null
-      })
+      }),
+      it
     );
     out[PROJECTED.AFTER_HISTORY] = boundHistory(it[F.AFTER_HISTORY]);
 
@@ -6791,8 +6885,8 @@
     return out;
   }
 
-  /** The five locating facts, defaulted so every item carries the same shape. */
-  function regionFacts(region, carriable) {
+  /** The six locating facts, defaulted so every item carries the same shape. */
+  function regionFacts(region, carriable, item) {
     var ref = (region && region.ref) || null;
     var ordinal = (ref && ref.ordinal) || null;
     var index = ordinal && typeof ordinal.index === "number" ? ordinal.index : 1;
@@ -6806,8 +6900,26 @@
       text_unique: !(ref && ref.text_unique === false),
       // Can the source behind this page hold the attribute at all? False for
       // Markdown, plain text, and anything else with no place to put one.
-      stamp_carriable: carriable === true
+      stamp_carriable: carriable === true,
+      // THE PAGE CHECK ASKED FOR THIS ID AND DID NOT GET IT. The check asks
+      // once (record.answeredPageCheckReopen), so without this the fact that
+      // an id was never carried into the source would live only in the round's
+      // note, and a later agent reading a handled item would have no sign of
+      // it. Nothing clears it: it is a record of what happened, not a claim
+      // about the source right now.
+      stamp_missing: stampMissing(region, item)
     };
+  }
+
+  /** Did a page check ask this item for its id, in this revision or an older one? */
+  function stampMissing(region, item) {
+    var stamp = region && region.check_reopen;
+    if (stamp && stamp.tool === record.TOOL_ROUND.PAGE_CHECK_STAMP) return true;
+    var thread = record.threadOf(item || {});
+    for (var i = 0; i < thread.length; i += 1) {
+      if (thread[i] && thread[i].tool === record.TOOL_ROUND.PAGE_CHECK_STAMP) return true;
+    }
+    return false;
   }
 
   function projectReview(review) {
@@ -12427,7 +12539,11 @@
    */
   function paneForItem(item) {
     var kind = item[record.FIELD.KIND];
-    var state = item[record.FIELD.STATE];
+    // The state the REVIEWER is shown, which is the state their card is placed
+    // by. While a TOOL ROUND is open the record says ready and the reviewer is
+    // not part of it, so the card stays in Done where they left it
+    // (record.displayState, and Ken on 2026-09-15).
+    var state = record.displayState(item);
     if (state === record.STATE.HANDLED) return TAB.DONE;
     if (kind === record.KIND.EDIT || kind === record.KIND.FORMAT_ONLY || kind === record.KIND.DELETE) {
       return TAB.EDITS;
@@ -13418,7 +13534,8 @@
     var context = item[record.FIELD.CONTEXT] || {};
     var quote = oneLine(context.quote);
     var change = oneLine(item[record.FIELD.CHANGE]);
-    var note = oneLine(item[record.FIELD.NOTE]);
+    // The reviewer's own words, never the tool's: see record.reviewerNote.
+    var note = oneLine(record.reviewerNote(item));
     var picked;
     if (kind === record.KIND.NOTE) picked = note || quote || change;
     else if (kind === record.KIND.EDIT || kind === record.KIND.FORMAT_ONLY || kind === record.KIND.DELETE) {
@@ -14299,7 +14416,7 @@
           bodyNode: null,
           parts: null,
           item: item,
-          state: item[record.FIELD.STATE],
+          state: record.displayState(item),
           pane: paneForItem(item),
           badges: [],
           agentMessage: null,
@@ -14314,7 +14431,7 @@
         placeCard(cards[id]);
       } else {
         cards[id].item = item;
-        cards[id].state = item[record.FIELD.STATE];
+        cards[id].state = record.displayState(item);
         cards[id].pane = paneForItem(item);
         placeCard(cards[id]);
       }
@@ -18735,6 +18852,11 @@
     (items || []).forEach(function (item) {
       var stamp = replyStamp(item);
       if (!stamp) return;
+      // AN ANSWER TO A TOOL ROUND IS ROUTINE BY DEFINITION, whatever the agent
+      // put on it. Nobody is badged, marked or toasted for the tool's own
+      // question coming back answered. A refusal still reaches the reviewer,
+      // quietly, as the card's notice (see refresh).
+      if (record.toolRoundOf(item)) return;
       if (!needsToSeeReply(item[record.FIELD.REPLY])) return;
       if (seen[item[record.FIELD.ID]] !== stamp) out.push(item[record.FIELD.ID]);
     });
@@ -19480,15 +19602,23 @@
       var seen = Object.create(null);
 
       itemsNow().forEach(function (item) {
+        var tool = record.toolRoundOf(item);
         // Historical rounds and a current response can exist in either pane.
         // Ensure the card exists before attaching their nodes on a cold load.
         if (record.threadOf(item).length || item[record.FIELD.REPLY]) {
           rail.upsertCard(item);
-          rail.setCardState(item[record.FIELD.ID], item[record.FIELD.STATE]);
+          rail.setCardState(item[record.FIELD.ID], shownState(item));
         }
         if (record.threadOf(item).length) drawThread(item);
         else clearThread(item[record.FIELD.ID]);
-        if (item[record.FIELD.REPLY]) {
+        if (tool) {
+          // THE TOOL'S OWN ROUND. The reviewer's card carries on saying what it
+          // said when they last looked at it. The only thing that can appear is
+          // a refusal, as one quiet line.
+          rail.setAgentMessage(item[record.FIELD.ID], null);
+          clearQuestion(item[record.FIELD.ID]);
+          rail.setCardNotice(item[record.FIELD.ID], toolRoundNotice(item));
+        } else if (item[record.FIELD.REPLY]) {
           drawComposer(item);
           if (item[record.FIELD.REPLY].status === record.REPLY_STATUS.QUESTION) {
             rail.setAgentMessage(item[record.FIELD.ID], null);
@@ -19500,7 +19630,7 @@
           clearComposer(item[record.FIELD.ID]);
           clearQuestion(item[record.FIELD.ID]);
         }
-        if (item[record.FIELD.STATE] !== record.STATE.HANDLED) return;
+        if (shownState(item) !== record.STATE.HANDLED) return;
         var id = item[record.FIELD.ID];
         seen[id] = true;
         rail.upsertCard(item);
@@ -19510,7 +19640,7 @@
         // handled from storage on a fresh load too, and the page it lands on has
         // the same right not to be covered in marks on finished passages.
         unpaintHandled(id);
-        if (item[record.FIELD.REPLY]) rail.setAgentMessage(id, agentMessageFor(item));
+        if (item[record.FIELD.REPLY] && !tool) rail.setAgentMessage(id, agentMessageFor(item));
         if (!rows[id]) {
           rows[id] = buildRow(item);
           ensureStyle(rows[id]);
@@ -19589,7 +19719,8 @@
      * note, so this is also the two panes finally agreeing.
      */
     function saidBy(item) {
-      var note = item[record.FIELD.NOTE];
+      // The reviewer's own words, never the tool's: see record.reviewerNote.
+      var note = record.reviewerNote(item);
       if (record.isHandEdit(item)) return note || "";
       var change = item[record.FIELD.CHANGE];
       if (note && change && note !== change) return note + "\n" + change;
@@ -19598,6 +19729,28 @@
 
     function updateRow(row, item) {
       row.querySelector(".lahe-done-said").textContent = saidBy(item);
+    }
+
+    /**
+     * The one line a tool round is allowed to put in front of the reviewer.
+     *
+     * Nothing, when the agent did what was asked. A REFUSAL is different: the
+     * agent is saying the id cannot go into the source, and whether that is
+     * acceptable is a human's call, so it reaches the card as its quiet notice
+     * rather than as a thread round, a badge or a toast.
+     */
+    function toolRoundNotice(item) {
+      if (!record.toolRoundOf(item)) return null;
+      var reply = item[record.FIELD.REPLY];
+      if (!reply || reply.status !== record.REPLY_STATUS.NOT_HANDLED) return null;
+      var why = hasWords(reply.reason) ? reply.reason : hasWords(reply.text) ? reply.text : null;
+      if (!why) return "The agent could not carry the id into the source.";
+      return "The agent could not carry the id into the source: " + boundedText(why);
+    }
+
+    /** The state the REVIEWER is shown. One rule, in record.js. */
+    function shownState(item) {
+      return record.displayState(item);
     }
 
     /**
@@ -19662,7 +19815,12 @@
       var node = threads[id];
       while (node.firstChild) node.removeChild(node.firstChild);
       ensureStyle(node);
-      var rounds = record.chronologicalThread(item);
+      // A TOOL ROUND IS NOT AN EXCHANGE THE REVIEWER HAD. The page check asking
+      // the agent for a data-lahe-id, and the agent's answer to it, are drawn
+      // nowhere: see record.TOOL_ROUND.
+      var rounds = record.chronologicalThread(item).filter(function (round) {
+        return !record.isToolRound(round);
+      });
       // A thread whose length changed is a different thread, so the reviewer's
       // hand-opened rounds from the old one do not apply to it.
       if (!roundState[id] || roundState[id].total !== rounds.length) {
@@ -19827,7 +19985,15 @@
       delete composers[id];
     }
 
-    function continueItem(item, next, notice) {
+    /**
+     * @param {Object} item the record as it stood
+     * @param {Object} next the new revision
+     * @param {string|null} notice the line the card shows, or null for none
+     * @param {{quiet?: boolean}} [options] `quiet` is a TOOL round: no notice,
+     *   no tab switch, no focus, and the card keeps the state and the pane the
+     *   reviewer last saw. See record.TOOL_ROUND.
+     */
+    function continueItem(item, next, notice, options) {
       if (isReadOnly() || !next || next === item) return item;
       // The full-record event is durable before any record, draft, or UI
       // mutation. A storage refusal therefore leaves the answer and draft
@@ -19840,15 +20006,20 @@
       } catch (err) {
         if (err && err.failure) rail.failures.add(err.failure);
       }
+      var quiet = !!(options && options.quiet);
       rail.upsertCard(next);
-      rail.setCardState(next[record.FIELD.ID], record.STATE.READY);
+      rail.setCardState(next[record.FIELD.ID], quiet ? record.STATE.HANDLED : record.STATE.READY);
       rail.setAgentMessage(next[record.FIELD.ID], null);
-      rail.setCardNotice(next[record.FIELD.ID], notice || null);
+      rail.setCardNotice(next[record.FIELD.ID], quiet ? null : notice || null);
       clearQuestion(next[record.FIELD.ID]);
       clearComposer(next[record.FIELD.ID]);
-      repaintReopened(next[record.FIELD.ID]);
       onContinued(next);
       refresh();
+      // A TOOL ROUND ENDS HERE. Repainting the passage, pulling the reviewer to
+      // another tab and taking their focus are all ways of saying "look at
+      // this", and there is nothing here for them to look at.
+      if (quiet) return next;
+      repaintReopened(next[record.FIELD.ID]);
       rail.selectTab(rail.TAB.ACTIVE);
       var card = rail.cardNode(next[record.FIELD.ID]);
       if (card && typeof card.focus === "function") {
@@ -19928,7 +20099,7 @@
       // equal rev (STATE/REPLY are not content fields).
       var reopened;
       if (opts.pageCheck) {
-        reopened = record.pageCheckReopenOf(item, opts.note, null);
+        reopened = record.pageCheckReopenOf(item, opts.note, null, opts.tool || null);
       } else {
         reopened = record.reopenIssue(item);
         if (typeof opts.note === "string" && opts.note.trim()) {
@@ -19936,10 +20107,12 @@
         }
       }
       counters.reopened += 1;
+      var quiet = !!record.toolRoundOf(reopened);
       return continueItem(
         item,
         reopened,
-        opts.notice || "Issue reopened. The unchanged request is back in front of the agent."
+        opts.notice || "Issue reopened. The unchanged request is back in front of the agent.",
+        { quiet: quiet }
       );
     }
 
@@ -20439,16 +20612,24 @@
       store.write(reviewId, next);
 
       rail.upsertCard(next);
-      rail.setCardState(id, next[record.FIELD.STATE]);
+      rail.setCardState(id, shownState(next));
       rail.setCardNotice(id, null);
       if (next[record.FIELD.STATE] === record.STATE.HANDLED) clearAnchorBadges(id);
 
-      // A QUESTION IS NOT AN AGENT MESSAGE. The rail's own carrier is the quiet
-      // one, and it is right for "I made the change" and for "I could not, and
-      // here is why". A question gets the block below instead, and only that
-      // block: the same sentence in two places on one card is how the loud one
-      // stops reading as loud.
-      if (reply.status === record.REPLY_STATUS.QUESTION) {
+      // THE ANSWER TO A TOOL ROUND. The tool asked, the agent answered, and the
+      // reviewer is in neither half of that, so the card says nothing new. The
+      // one exception is a refusal, which is a decision that may need a person.
+      var toolAnswer = !!record.toolRoundOf(next);
+      if (toolAnswer) {
+        rail.setAgentMessage(id, null);
+        clearQuestion(id);
+        rail.setCardNotice(id, toolRoundNotice(next));
+      } else if (reply.status === record.REPLY_STATUS.QUESTION) {
+        // A QUESTION IS NOT AN AGENT MESSAGE. The rail's own carrier is the
+        // quiet one, and it is right for "I made the change" and for "I could
+        // not, and here is why". A question gets the block below instead, and
+        // only that block: the same sentence in two places on one card is how
+        // the loud one stops reading as loud.
         rail.setAgentMessage(id, null);
         drawQuestion(next);
       } else {
@@ -20466,7 +20647,7 @@
       // it unseen and the badge appears on the next paint, on the tab the card
       // is in.
       var watching = watchingTab(paneOf(next));
-      if (watching || !needsToSeeReply(next[record.FIELD.REPLY])) {
+      if (watching || toolAnswer || !needsToSeeReply(next[record.FIELD.REPLY])) {
         // DURABLE, not just quiet. Suppressing the toast and the badge is only
         // half of "the reviewer has seen this": the mark has to reach storage,
         // or the next load finds it unread and announces it all over again.
@@ -20487,7 +20668,8 @@
         // and acted on in applyReplies once every event in the batch is folded.
         toast: shouldToastReply({
           reply: next[record.FIELD.REPLY],
-          watching: watching,
+          // A tool round is never toasted, whatever the agent put on its reply.
+          watching: watching || toolAnswer,
           readOnly: isReadOnly(),
           known: hadStamp === replyStamp(next)
         })
@@ -31241,6 +31423,21 @@
   }
 
   /**
+   * Is this reopen an exchange the REVIEWER is part of, or one they are not?
+   *
+   * The revert and formatting sentences are about the reviewer's own words
+   * going missing from the page, so their card says so. The stamp sentence is
+   * about an attribute the reviewer never typed and cannot act on: it is the
+   * tool talking to the agent, and the rail draws none of it (record.TOOL_ROUND,
+   * and Ken on 2026-09-15: "This should not be showing up in my chat rail").
+   *
+   * @returns {string|null} the tool round's name, or null for a reviewer round
+   */
+  function pageCheckToolFor(note) {
+    return note === STAMP_LOST_NOTE ? record.TOOL_ROUND.PAGE_CHECK_STAMP : null;
+  }
+
+  /**
    * The stamp this record was minted with, or null.
    *
    * The reference's shape belongs to the anchor engine, and record.js keeps it
@@ -32663,6 +32860,7 @@
     pageCheckReasonFor: pageCheckReasonFor,
     pageCheckNoteFor: pageCheckNoteFor,
     pageCheckNoticeFor: pageCheckNoticeFor,
+    pageCheckToolFor: pageCheckToolFor,
     PAGE_CHECK_REASON: CHECK_REASON,
     revertedHandledEditIds: revertedHandledEditIds,
     pageTextOf: pageTextOf,
@@ -33135,7 +33333,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+93aaaa8b0d67";
+  var VERSION = "0.2.0+fdd9de2cc1d5";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -34616,9 +34814,14 @@
         // shows with it. Both come from replay, so a new reason arrives here
         // already carrying its own words rather than needing a branch added.
         var note = ns.replay.pageCheckNoteFor(item, pageText, options) || ns.replay.REVERTED_EDIT_NOTE;
+        // A TOOL ROUND draws nothing on the rail: the stamp request is between
+        // the tool and the agent, about an attribute the reviewer never typed.
+        // replay decides which reopens are which, beside the sentences.
+        var tool = ns.replay.pageCheckToolFor(note);
         done.reopen(id, {
           note: note,
-          notice: ns.replay.pageCheckNoticeFor(note),
+          notice: tool ? null : ns.replay.pageCheckNoticeFor(note),
+          tool: tool,
           pageCheck: true
         });
         counters.revertReopens += 1;
