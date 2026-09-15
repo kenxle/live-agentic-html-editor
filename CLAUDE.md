@@ -124,6 +124,19 @@ Playwright suite has all three lanes (Chromium, Firefox, WebKit) and runs them
 on `npm run gate:all` at every checkpoint; a builder's default run is Chromium,
 which is a loop-speed choice rather than a support statement.
 
+## CI runs mail Ken
+
+GitHub emails the pusher for every failed or cancelled workflow run, and on
+2026-09-15 a flake hunt done as branch pushes sent him seven in six hours. So:
+
+- A stress or bisect workflow never fails the run. Put `continue-on-error: true`
+  on the step, write the verdict to the log or an artifact, and read it there.
+- Never cancel a run by hand, and never push a branch just to trigger a run.
+  Bisect arms are `workflow_dispatch` inputs (a ref to check out), not branches.
+- Main gets a push only after the pull request's gate is green.
+- Remove a temporary workflow before the branch merges, and delete the branch
+  from the remote when the PR closes.
+
 ## Commit conventions
 
 - No em dashes anywhere: not in commit messages, not in code comments, not

@@ -5,6 +5,20 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
+- [x] @claude 2026-09-15 LAHE-ci-failure-email-storm (done 2026-09-15: the throwaway
+  branches are deleted from the remote and the rule below is in the repo CLAUDE.md
+  and in memory) -- **Ken got seven failed-job emails from GitHub in six hours
+  on 2026-09-15 and said so twice.** They came from the afternoon's flake hunt: a
+  temporary stress workflow pushed to five throwaway branches (ci/keep-mine,
+  ci/cp2-a, ci/cp2-b and friends), two bisect arms cancelled by hand, and two
+  main pushes that flaked before the fix landed. GitHub mails the pusher for
+  every failed or cancelled run, so a bisect done as branch pushes is a mailbox
+  full of red. Rule from here: a stress or bisect run never fails the run. The
+  step gets `continue-on-error: true`, the verdict is read from the log or an
+  uploaded artifact, and a run is never cancelled by hand. Bisect arms are
+  workflow_dispatch inputs (a ref to check out), not branches. Main gets a push
+  only after the PR's gate is green.
+
 - [ ] @anyone 2026-09-15 LAHE-graceful-failure-review-timeout -- **graceful_failure.spec.js
   S7 flaked once on main's gate: `lahe review` timed out waiting for its own
   helper on a free port.** One sighting, during the cp2 bisect work. The spec
