@@ -426,6 +426,35 @@
     return total;
   }
 
+  /**
+   * The caret the reviewer is actually using, written into the snapshot.
+   *
+   * Used from two places, and it is the same question in both: the caret moved
+   * without the text changing, so the snapshot's caret half is stale and the
+   * live one is right. onSelectionMoved calls it when the browser announces the
+   * move; restore calls it when a mutation arrives before that announcement.
+   *
+   * @param {Element} el the protected block
+   * @param {Object} snap its snapshot
+   * @returns {boolean} true when the live caret is inside this block, and the
+   *                    snapshot now says so
+   */
+  function adoptLiveCaret(el, snap) {
+    if (!el || !snap) return false;
+    var node = selection.caretNode();
+    if (!node) return false;
+    if (!(el === node || (typeof el.contains === "function" && el.contains(node)))) return false;
+    var range = selection.currentRange();
+    if (!range) return false;
+    var startOffset = offsetWithin(el, range.startContainer, range.startOffset);
+    if (startOffset === null) return false;
+    var endOffset = offsetWithin(el, range.endContainer, range.endOffset);
+    snap.startOffset = startOffset;
+    snap.endOffset = endOffset === null ? startOffset : endOffset;
+    snap.collapsed = !selection.hasSelection();
+    return true;
+  }
+
   /** Put the caret back at a character offset, in whatever node now holds it. */
   function placeCaretAt(el, startOffset, endOffset) {
     var doc = ownerDocument(el);
@@ -551,10 +580,28 @@
 
     // Nothing was damaged. Not a failure and not a restore: a counter that moved
     // here would let a page where nothing ever happened score full marks.
-    var caretAlreadyRight =
-      snap.startOffset === null ||
-      offsetWithin(el, selection.caretNode(), selection.caretOffset()) === snap.startOffset;
-    if (el.textContent === snap.text && el.isConnected && caretAlreadyRight) return false;
+    //
+    // A LIVE CARET INSIDE AN UNDAMAGED BLOCK OUTRANKS THE SNAPSHOT. This is the
+    // second half of the bug onSelectionMoved below describes, and the half that
+    // handler cannot close. selectionchange is a TASK, and this restore runs
+    // from a MutationObserver callback, which is a microtask. Any mutation
+    // anywhere in the document, in the window between the reviewer putting their
+    // caret somewhere and the browser getting around to announcing it, reached
+    // here with the snapshot still naming the old spot, decided the caret was
+    // "wrong", and moved it back. The reviewer's next sentence then landed
+    // wherever they had been standing before, which on CP2's walk meant the
+    // whole typed fix going in at the front of the paragraph.
+    //
+    // The text is whole and the node survived, so there is nothing to put back.
+    // The caret the reviewer is actually using is the truth, and the snapshot is
+    // the thing that is out of date, so the snapshot takes the correction.
+    if (el.textContent === snap.text && el.isConnected) {
+      if (adoptLiveCaret(el, snap)) return false;
+      // The caret is not in this block at all (focus went elsewhere, or a
+      // repaint outside it cleared the selection). Putting it back is what layer
+      // three is for, so fall through.
+      if (snap.startOffset === null) return false;
+    }
 
     var rebuilt = !!active && active.element !== el && !active.element.isConnected;
     var placed = false;
@@ -671,19 +718,9 @@
     function onSelectionMoved() {
       if (!enabled(LAYER.SNAPSHOT_RESTORE) || restoring || !active) return;
       var el = active.element;
-      var node = selection.caretNode();
-      if (!node || !el || typeof el.contains !== "function" || !el.contains(node)) return;
       var snap = snapshots[active.key.value];
-      if (!snap || el.textContent !== snap.text) return;
-      var range = selection.currentRange();
-      if (!range) return;
-      var startOffset = offsetWithin(el, range.startContainer, range.startOffset);
-      var endOffset = offsetWithin(el, range.endContainer, range.endOffset);
-      if (startOffset === null) return;
-      snap.startOffset = startOffset;
-      snap.endOffset = endOffset === null ? startOffset : endOffset;
-      snap.collapsed = !selection.hasSelection();
-      if (active.snapshot === snap) active.snapshot = snap;
+      if (!snap || !el || el.textContent !== snap.text) return;
+      if (adoptLiveCaret(el, snap) && active.snapshot === snap) active.snapshot = snap;
     }
 
     function onTyping(event) {
