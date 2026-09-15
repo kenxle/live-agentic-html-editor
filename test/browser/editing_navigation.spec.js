@@ -276,8 +276,9 @@ test.describe("2A: an edit open at navigation is delivered (R1)", () => {
 
       // The debounce is not waited out, which would be a sleep dressed as a
       // test. The timer's only door is asked for directly instead: an ordinary
-      // flush, the exact call that timer makes when it fires. It is refused,
-      // and the reason names the rule.
+      // flush, the exact call that timer makes when it fires. It comes back
+      // refused for size, which is the rule: while the document is leaving, the
+      // cap belongs to the moment and not to the caller.
       //
       // The poll is for one state only, and it is not the answer: a post that
       // was already in flight when beforeunload fired answers "busy" until it
@@ -292,13 +293,15 @@ test.describe("2A: an edit open at navigation is delivered (R1)", () => {
         },
         { message: "the ordinary flush to answer for itself rather than report one already in flight" }
       );
-      expect(refused.unloading, "an ordinary flush is refused while the document is leaving").toBe(true);
+      expect(refused.oversize, "the keepalive cap applies to an ordinary flush too while unloading").toBe(
+        true
+      );
       expect(refused.sent, "so nothing went out by it").toBe(0);
 
       const after = readEventLog(helper.stateDir, REVIEW).filter(
         (event) => event.item === itemId && event.record && event.record.state === "ready"
       );
-      expect(after, "a body past the keepalive cap has no ordinary flush to leave by").toHaveLength(0);
+      expect(after, "a body past the keepalive cap has no flush of any kind to leave by").toHaveLength(0);
       expect(
         await page.evaluate(() => window.__laheEdit.pending()),
         "and it is still queued in browser storage, whole"
