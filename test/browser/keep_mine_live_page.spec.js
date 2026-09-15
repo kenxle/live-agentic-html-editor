@@ -15,6 +15,12 @@
 // committed record is, even though the page's source still says the agent's
 // sentence.
 //
+// One stretch of it drives the morph by hand instead, and only because reading
+// a 250ms window by sampling it made the TEST the flaky part. The reasoning is
+// at that point in the file. The fixture's own timer is running everywhere else,
+// including for the edit, the collision, the press, and a final stretch after
+// the driven ones.
+//
 // THE SOURCE IS FROZEN, and that is the point rather than a convenience. The app
 // fixture's feed advances a cursor on every poll, so consecutive morphs
 // genuinely differ; a moving source would mean the region's text changed on
