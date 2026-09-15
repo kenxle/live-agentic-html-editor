@@ -612,6 +612,8 @@ reviewer edits quickly and expects that. A `question` or `not_handled`
 reply reaches the reviewer either way, flag or no flag. An unflagged `handled`
 reply still shows on its card in Done; it just does not interrupt.
 
+**Never work out how long ago something happened.** Elapsed time computed in prose has been wrong on the card ("3 minutes ago" for 24 seconds). Every timestamp you see is exact: quote it as written, or say nothing about timing. The rail shows the reviewer every age itself.
+
 **The flag needs words on the same line.** An answer, a caveat, a judgment call
 and a change made differently than asked are all things you say, so a flagged
 reply carrying neither `text` nor `reason` is not counted at all. Nothing is

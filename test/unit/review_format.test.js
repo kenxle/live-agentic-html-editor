@@ -49,6 +49,7 @@ const CONTRACT_VERBATIM = [
   "Every reply line names the item id, the item's rev, and your own agent name. The reviewer sees that name on the card.",
   "status is one of: handled, you made the change; not_handled, you did not, and reason says why in words the reviewer will read; question, you need an answer, and text asks for it.",
   "Add \"user_needs_to_see_reply\": true to a reply the reviewer should read: an answer, a caveat, or a change made differently than asked. All three are things you say in words, so the flag counts only when the same line carries text or reason; flagging a reply with nothing in it sends the reviewer to a card that says nothing. The flag also pops a toast over the page the reviewer is reading, so a flag on a routine confirmation interrupts them for nothing. Leave it off a routine confirmation, and off bookkeeping about the reviewer's own edits: a later edit superseding an earlier one, an earlier revision no longer matching, an item retired by their next change. The reviewer edits quickly and expects that; telling them is not worth a toast. Question and not_handled replies reach the reviewer regardless.",
+  "Never work out how long ago something happened and write it in a reply. Every timestamp you see is exact, and elapsed time computed in prose has been wrong on the card (3 minutes ago for 24 seconds). If timing matters, quote the timestamp as it is written, or say nothing about it; the rail shows the reviewer every age itself.",
   "rev must be the rev carried with the item. If the reviewer reworded the item after you read it, your line is refused and the item stays open. Re-read the item and answer its new rev.",
   "To see what is open right now, run: lahe status --review <id> (add --json for machine-readable lines). It prints the unanswered ready items and whether the reviewer's page is connected.",
   "If the human explicitly asks you to continue a session created by another agent, run: lahe session takeover <agent-session-id>. Find open sessions with: lahe session list. This keeps the reviews together, fences older monitors, and prints the catch-up command plus the four commands for the session. Never infer a takeover or silently reuse another agent's session.",
@@ -136,7 +137,7 @@ test("review.json names no acknowledge command, because there is none", () => {
 
 test("the contract is exported as the module's own constant and is frozen text", () => {
   assert.deepEqual(rf.CONTRACT, CONTRACT_VERBATIM);
-  assert.equal(rf.CONTRACT.length, 41);
+  assert.equal(rf.CONTRACT.length, 42);
 });
 
 // ---------------------------------------------------------------------------

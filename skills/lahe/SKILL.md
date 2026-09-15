@@ -341,6 +341,8 @@ and off bookkeeping about the reviewer's own edits ("superseded by your next
 edit", "this earlier revision will never match again"): they edit quickly and
 expect that. A `question` or `not_handled` reply reaches them regardless.
 
+**Never work out how long ago something happened.** Elapsed time computed in prose has been wrong on the card ("3 minutes ago" for 24 seconds). Every timestamp you see is exact: quote it as written, or say nothing about timing. The rail shows the reviewer every age itself.
+
 **Put the words on the same line.** All four of those are things you say, so a
 flagged reply with no `text` and no `reason` is not counted: the badge would
 send the reviewer to a card reading "claude handled this", and a badge that
