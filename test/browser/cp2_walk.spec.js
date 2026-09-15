@@ -260,13 +260,29 @@ test.describe("CP2: the walk, on a real application, across a reload", () => {
       expect(idsBefore, "three records: a comment and two edits").toHaveLength(3);
 
       // The helper has it, on disk, before anything is reloaded.
+      //
+      // THE COMMITTED ONE, not merely the first one. Every keystroke queues a
+      // draft event, and the 750ms debounce posts a batch of them while the
+      // reviewer is still typing. Waiting for "any event for this item" returned
+      // the moment the first DRAFT landed, and the assertion below then read a
+      // half-typed sentence off disk and called it a truncation:
+      //
+      //   Received  "... Say which one you'll text first, and say"
+      //
+      // Two failures in forty locally, and one of the two cp2_walk failures on
+      // the CI stress of main. A test race, not a product one: the commit's own
+      // event was still in flight, and it arrived a moment later with every
+      // character in it. So the condition is the ready event.
       const logBeforeReload = await pollUntil(
         () => {
           const lines = readEventLog(helper.stateDir, REVIEW);
-          return eventsForItem(lines, fix.id).length > 0 ? lines : null;
+          const ready = eventsForItem(lines, fix.id).filter(
+            (event) => event.record && event.record.state === "ready"
+          );
+          return ready.length > 0 ? lines : null;
         },
         {
-          message: "the fix to reach the helper's events.jsonl",
+          message: "the committed fix to reach the helper's events.jsonl",
           describe: async () => ({
             eventsOnDisk: readEventLog(helper.stateDir, REVIEW).length,
             status: await page.evaluate(() => window.__lahe.status()),
@@ -282,7 +298,8 @@ test.describe("CP2: the walk, on a real application, across a reload", () => {
         }
       );
       const landed = eventsForItem(logBeforeReload, fix.id);
-      expect(landed[landed.length - 1].record.after).toBe(SOURCE.fix + SAID.fix);
+      const committed = landed.filter((event) => event.record && event.record.state === "ready");
+      expect(committed[committed.length - 1].record.after).toBe(SOURCE.fix + SAID.fix);
 
       // --- the reload --------------------------------------------------------
       //
