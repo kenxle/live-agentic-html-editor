@@ -34,6 +34,15 @@
 // own visible additions (a painted highlight, a box, a pill) cover hundreds to
 // thousands of pixels, so anything that large still fails. The intent is
 // intact: the page outside the rail must look identical.
+//
+// What the two machines actually produce, for whoever has to judge a future
+// change to these numbers. macOS: zero differing pixels, in every one of these
+// comparisons. The Linux CI runner: exactly one pixel, at the top corner of the
+// commented paragraph, ivory (255,255,240) without the library and white with
+// it, a difference of 15 in one channel. One pixel of a text edge antialiased
+// down a different path. The wash the same suite calls plainly visible is
+// 21,811 pixels at a difference of 29. Those two are three orders of magnitude
+// apart, which is the room these thresholds sit in.
 
 "use strict";
 
