@@ -5,7 +5,7 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
-- [ ] @anyone 2026-09-15 LAHE-cross-browser-lanes-red -- **Five browser tests fail on
+- [x] @claude 2026-09-15 LAHE-cross-browser-lanes-red (done in PR #10: two product fixes, closing the rail now blurs its focused control and never hands focus back to the library host; toast swipe velocity is sampled over a frame and a fling needs real distance; three test races on pane moves) -- **Five browser tests fail on
   Firefox and WebKit and pass on Chromium: in card_collapse, rail_hotkey and
   reply_toast.** Found by the keep-mine builder running the three lanes locally
   on 2026-09-15; identical five against main at 1ecbcae, so they predate that
