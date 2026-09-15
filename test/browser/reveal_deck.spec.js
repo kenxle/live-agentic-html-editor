@@ -283,7 +283,22 @@ function watchTheField(page, itemId) {
       return text;
     }
     var field = window.__lahe_focused_field;
-    window.__watch = { leaks: [], atFence: [], blurs: [], mutations: [], connected: [] };
+    window.__watch = { leaks: [], atFence: [], blurs: [], mutations: [], disabledBy: [] };
+    if (field) {
+      // setNoteEditable is the ONE line that writes this attribute, and the
+      // question is who called it. The patch is on the instance, so it catches
+      // that call and nothing else in the library.
+      var setAttribute = field.setAttribute;
+      field.setAttribute = function (attribute, value) {
+        if (attribute === "contenteditable" && value === "false") {
+          window.__watch.disabledBy.push({
+            afterKeys: window.__watch.atFence.length,
+            stack: String(new Error().stack).split("\n").slice(1, 8).join(" | ")
+          });
+        }
+        return setAttribute.call(this, attribute, value);
+      };
+    }
     // BUBBLING, not capture. A capture listener here sees every key on the way
     // down and says nothing about the fence; a bubbling one fires only for keys
     // the fence let out of the rail, which is the leak itself.
@@ -311,7 +326,7 @@ function watchTheField(page, itemId) {
           editable: field.getAttribute("contenteditable")
         });
       });
-      var row = field.parentNode;
+      var row = null;
       if (row && typeof MutationObserver === "function") {
         new MutationObserver(function (records) {
           records.forEach(function (record) {
