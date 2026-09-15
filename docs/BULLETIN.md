@@ -26,12 +26,19 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
   and put the caret back there. The rule now: the text is whole and the node survived,
   so nothing was damaged, and the snapshot takes the correction rather than the reviewer.
 
-  064ae58 (an owed replay pass runs when any epoch closes) is NOT the cause and was not
-  reverted. The bisect says so: the new deterministic spec fails on main with 064ae58's
-  src changes reverted exactly as it fails with them in. What 064ae58 did was add replay
-  passes during an open edit session, and every pass repaints the rail, which is one more
-  mutation landing in that window. It is the amplifier, which is why a bug this old first
-  showed on CI this week.
+  064ae58 (an owed replay pass runs when any epoch closes) is the AMPLIFIER, not the
+  cause, and it was not reverted. Both halves of the bisect say so. On CI, cp2_walk
+  failed 2 in 40 on main as it stands and 0 in 40 with 064ae58's src changes reverted,
+  which is what made it fire this week. Locally, the new deterministic spec fails on the
+  reverted arm exactly as it fails on main, which is what says the bug is older than that
+  commit. What 064ae58 did was add replay passes during an open edit session, and every
+  pass repaints the rail, which is one more mutation landing in the window.
+
+  A second, separate failure showed in the same stress and is fixed here too: the walk
+  waited for "any event for this item is on disk", which the first DRAFT satisfies, then
+  read the last event and called a half-typed sentence a truncation. It now waits for
+  the ready event. 90 for 90 on a loaded CI box and 40 for 40 locally on four workers,
+  which is where it was failing.
 
 - [x] @claude 2026-09-15 LAHE-reload-claim-flake (done 2026-09-15 in PR #6: a release now
   leaves its secret behind for five seconds, and a claim carrying it is seated again
@@ -44,8 +51,9 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
   browser suites green on the fix; test/unit/window_release_race.test.js replays the
   trace and fails on the old code.
 
-- [x] @claude 2026-09-15 LAHE-keepalive-cap-flake (done 2026-09-15 in PR #9: once the
-  document is leaving, the only transport is the keepalive post) -- **test/browser/editing_navigation.spec.js
+- [x] @claude 2026-09-15 LAHE-keepalive-cap-flake (done 2026-09-15 in PR #9: while a
+  document is leaving, the keepalive cap belongs to the moment and not to the caller)
+  -- **test/browser/editing_navigation.spec.js
   "an edit past the keepalive cap is absent at unload and present after the next load"
   failed twice on Linux CI, on "a body past the keepalive cap does not go out at unload":
   a ready event for the oversize edit was already in events.jsonl when the second page
@@ -54,13 +62,22 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
   ordinary 750ms debounce instead. That timer keeps running while the old document is
   alive, and a document stays alive from beforeunload until the browser has fetched the
   next page. Slower than 750ms and the ordinary flush fired, and an ordinary flush
-  carries no keepalive cap. Fixed in sync.js in three places: flush refuses a non-unload
-  flush while unloading, scheduleFlush arms no timer, and commitOnUnload clears the timer
-  the commit it follows had just armed. pageshow lifts the flag and lets the held queue
-  out, which a cancelled navigation never had before either. The new spec dispatches
-  beforeunload and leaves the document standing, then asks the timer's own door for
-  itself; its control is pageshow, after which the same body lands on the same ordinary
-  flush, whole.
+  carried no cap.
+
+  The fix: `leaving` is `fo.unload || unloading`, and it decides four things that used
+  to key off the caller alone: the size cap, the keepalive header on the request,
+  whether a partial drain schedules another flush, and whether a failure schedules a
+  retry. An ordinary flush firing during unload now behaves exactly like the unload
+  flush: an oversize body refused, a small one sent with keepalive so it survives the
+  teardown instead of racing it. Refusing the ordinary flush outright was the first
+  attempt and it was too blunt: it cost the link-click case its one delivery, on a page
+  whose next address carries no credential to re-post from.
+
+  The new spec dispatches beforeunload, leaves the document standing, and asks the
+  timer's own door for itself rather than sleeping out the debounce. Its control is
+  pageshow, after which the same body lands on an ordinary flush with no cap on it,
+  whole. 240 for 240 on a loaded CI box; the old code reproduced it there and fails the
+  new spec every time locally.
 
 - [x] @claude 2026-09-15 LAHE-keep-mine-morph-flake (done 2026-09-15 in PR #8) -- **test/browser/keep_mine_live_page.spec.js
   "Keep mine survives every later morph pass" failed on Linux CI at morph pass 14
