@@ -17,7 +17,7 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
   reloads per page path (a block seen to change on any earlier load of this page
   stays excluded). Real on macOS too; timing there is just kinder.
 
-- [ ] @anyone 2026-09-15 LAHE-add-command-test-flake -- **test/unit/add_command.test.js
+- [x] @claude 2026-09-15 LAHE-add-command-test-flake (done 2026-09-15 in PR #4: stopHelper waited on a fetch to a server it had just killed; it now waits on the process table) -- **test/unit/add_command.test.js
   intermittently dies on Linux CI with "Promise resolution is still pending but the
   event loop has already resolved", cancelling its other 27 tests.** Passes on
   rerun and 5 for 5 locally. Find the unawaited promise (a spawned helper or a
