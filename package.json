@@ -33,6 +33,7 @@
     "install-cli": "node scripts/install-cli.js",
     "install-skills": "node scripts/install-skills.js",
     "build:layer": "node scripts/build-layer.js",
+    "docs:tests": "node scripts/test_index.js",
     "check:layer": "node scripts/build-layer.js --check",
     "test:unit": "node --test test/unit/",
     "test:browser": "playwright test",
