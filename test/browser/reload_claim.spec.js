@@ -129,6 +129,22 @@ test.describe("a reload is the same window, not a second one", () => {
       await pollPage(page, () => window.__lahe.handle.sync.lockState().checked === true, undefined, {
         message: "the window claim to be decided after the reload"
       });
+      // AND WAIT FOR THE HELPER'S OWN ANSWER. `checked` flips as soon as the
+      // client lock has answered, while the claim to the helper is still on the
+      // wire, so a page about to be refused reads as a happy one for as long as
+      // that request takes. The reload race this file is about was passing here
+      // and failing on the NEXT reload for exactly that reason (CI, 2026-09-15).
+      // helperGranted is a boolean once the helper has answered either way, and
+      // refusedBy is "helper" on the refusal, which is the third outcome.
+      await pollPage(
+        page,
+        () => {
+          const lock = window.__lahe.handle.sync.lockState();
+          return typeof lock.helperGranted === "boolean" || lock.refusedBy === "helper";
+        },
+        undefined,
+        { message: "the helper's own answer to the claim after the reload" }
+      );
       const state = await refusalState(page);
       expect(state.chips, "no second-window chip after reload " + (i + 1)).not.toContain("SECOND_WINDOW_REFUSED");
       expect(state.readOnly, "and the window is not read-only").toBe(false);

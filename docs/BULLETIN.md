@@ -5,6 +5,25 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
+- [x] @claude 2026-09-15 LAHE-reload-claim-flake (done 2026-09-15 in PR #6: a release now
+  leaves its secret behind for five seconds, and a claim carrying it is seated again
+  with that same secret) -- **test/browser/reload_claim.spec.js "reloading the page over
+  and over never refuses it" failed once on main and 3 in 20 under stress: the window
+  came back read-only with one window open.** The wire trace says a claim from the
+  incoming page landed after the outgoing page's goodbye, was read as a stranger, and
+  was granted a FRESH secret whose answer that dying document never read. Nobody alive
+  held it, so the next page in the tab was refused by D5's guard. 40 repeats and 3 full
+  browser suites green on the fix; test/unit/window_release_race.test.js replays the
+  trace and fails on the old code.
+
+- [ ] @anyone 2026-09-15 LAHE-keepalive-cap-flake -- **test/browser/editing_navigation.spec.js
+  "an edit past the keepalive cap is absent at unload and present after the next load"
+  failed once on Linux CI, on "a body past the keepalive cap does not go out at unload":
+  a ready event for the oversize edit was already in events.jsonl when the second page
+  booted.** One sighting, in a stress run of the whole suite three times over (PR #6);
+  30 for 30 locally under load. Nothing in that PR touches the flush or the cap. If it
+  recurs, find what commits and posts the edit before the unload path runs.
+
 - [x] @claude 2026-09-15 LAHE-keep-mine-morph-flake (done 2026-09-15 in PR #8) -- **test/browser/keep_mine_live_page.spec.js
   "Keep mine survives every later morph pass" failed on Linux CI at morph pass 14
   (PR #5) and pass 13 (main run 34999862248), and passed on rerun both times.**
