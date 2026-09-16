@@ -8,10 +8,10 @@ Board row: `LAHE-static-site-folder` in `docs/BULLETIN.md`. Written 2026-09-16 a
 - `lahe review <folder>` does not mean "review these pages". A folder target falls into the app-in-dev row, which is built for a running app: it registers the app's origin and prints one script line for you to paste into the app's shared template (a Rails or Next layout), the one file every page is rendered through, so one paste reaches every page. A set of wireframes is separate HTML files with no shared template. There is no single place to paste the line, so that row leaves you pasting it into every file by hand, or doing nothing.
 - One review can already span pages. Items carry the page they were made on, the rail shows each page only its own items, and `review.json` lists them all. So the multi-page half of the problem is solved; only the "which pages get the rail" half is missing.
 
-## Why per-page enrolment is the wrong answer
+## Why per-page enrollment is the wrong answer
 
 - A page nobody enrolled has no rail, and the reviewer only finds out by clicking through to it.
-- A page added to the folder after enrolment is missed.
+- A page added to the folder after enrollment is missed.
 - It is a loop the agent has to remember to run. Today's run enrolled 82 pages as 82 separate reviews, and a similar run on Sep 9 made 139. Each one is a folder on disk with its own log, and 166 of the 384 reviews on this machine never received a comment.
 
 ## Option A: a folder is a target
@@ -25,7 +25,7 @@ Board row: `LAHE-static-site-folder` in `docs/BULLETIN.md`. Written 2026-09-16 a
 
 ## Option B: auto-enrol on first visit
 
-Keep per-page reviews, but when the static server serves an HTML file under a session's root that no review has recorded, it enrols the page into the newest review on that server before responding.
+Keep per-page reviews, but when the static server serves an HTML file under a session's root that no review has recorded, it enrolls the page into the newest review on that server before responding.
 
 - Changes: the static server gains a write path into review meta. Today it is read-only against the store, on purpose: it is a separate process and disk is the only thing it shares with the helper.
 - Risk: two processes writing meta.json; a race between the helper recording paths and the server enrolling. It also keeps the one-review-per-page shape that produced 384 reviews.
@@ -47,5 +47,5 @@ Option A, and Option C is welcome on top of it for wireframes specifically. A is
 
 - Confirm with Ken that "every HTML page under the folder gets the rail" is the rule he wants, including the vendored-demo-page case.
 - Decide what the rail's page list looks like for pages that were visited but never commented on. Today `review.json` groups items by page; a visited page with no items may not appear at all, and the reviewer may want to see which pages they have walked.
-- Write the tests first: a folder of three linked pages, enrol the folder once, load each page through the server, the rail is present on all three; comment on page two, the item carries page two's path; a page added to the folder after enrolment also gets the rail.
+- Write the tests first: a folder of three linked pages, enrol the folder once, load each page through the server, the rail is present on all three; comment on page two, the item carries page two's path; a page added to the folder after enrollment also gets the rail.
 - This touches the serving table, so the skill and `AGENTS.md` change together, and the contract text does not (it is about replies, not serving).
