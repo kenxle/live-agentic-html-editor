@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+ced9111bd545
+ * version 0.2.0+f725d22cef0d
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+ced9111bd545";
+  g.LAHE.version = "0.2.0+f725d22cef0d";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -1660,6 +1660,60 @@
     return describe(code).persistent;
   }
 
+  // -------------------------------------------------------------------------
+  // The one failure a keystroke has to survive
+  // -------------------------------------------------------------------------
+  //
+  // src/layer/store.js writes synchronously on every keystroke and throws when
+  // browser storage is full, with the failure stamped onto the error. Before
+  // the 2026-09-16 memory audit that throw came straight back out of the input
+  // handler, so a full storage stopped the block or the comment box taking
+  // keystrokes at all and said nothing the reviewer could see.
+
+  /**
+   * Is this error the store saying there is no room?
+   *
+   * @param {*} err anything a write threw
+   * @returns {boolean}
+   */
+  function isStorageQuota(err) {
+    return !!(err && err.failure && err.failure.code === "STORAGE_QUOTA");
+  }
+
+  /**
+   * Run a durable write that must not take the keystroke down with it.
+   *
+   * A quota failure is reported and swallowed; the reviewer keeps typing and
+   * the rail says what could not be saved. EVERY OTHER ERROR IS RETHROWN, because
+   * a silently dropped bug in the write path is the failure this tool exists to
+   * remove.
+   *
+   * The report is itself guarded, and only against the same failure: the rail
+   * remembers its chips in the SAME browser storage that just refused the write
+   * being reported, so saying "storage is full" can fail the way the write did.
+   * A report that fails for any other reason is a bug and stays loud.
+   *
+   * @param {function()} run the write
+   * @param {function(Object)} [report] where a quota failure is surfaced
+   * @returns {null|Object} the failure, or null when the write went through
+   */
+  function tolerateStorageQuota(run, report) {
+    try {
+      run();
+      return null;
+    } catch (err) {
+      if (!isStorageQuota(err)) throw err;
+      if (typeof report === "function") {
+        try {
+          report(err.failure);
+        } catch (reportErr) {
+          if (!isStorageQuota(reportErr)) throw reportErr;
+        }
+      }
+      return err.failure;
+    }
+  }
+
   var api = {
     SEVERITY: SEVERITY,
     SURFACE: SURFACE,
@@ -1675,7 +1729,9 @@
     isCopyable: isCopyable,
     describe: describe,
     failure: failure,
-    isPersistent: isPersistent
+    isPersistent: isPersistent,
+    isStorageQuota: isStorageQuota,
+    tolerateStorageQuota: tolerateStorageQuota
   };
 
   if (browser) {
@@ -7842,20 +7898,31 @@
   var browser = typeof window !== "undefined" && !!window.document;
   if (browser) {
     root.LAHE = root.LAHE || {};
-    root.LAHE.store = factory(root.LAHE.record, root.LAHE.merge, root.LAHE.failures, root.LAHE.elapsed);
+    root.LAHE.store = factory(
+      root.LAHE.record,
+      root.LAHE.merge,
+      root.LAHE.failures,
+      root.LAHE.elapsed,
+      root.LAHE.protocol
+    );
   } else {
     module.exports = factory(
       require("../shared/record.js"),
       require("../shared/merge.js"),
       require("../shared/failures.js"),
-      require("../shared/elapsed.js")
+      require("../shared/elapsed.js"),
+      require("../shared/protocol.js")
     );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (record, merge, failures, elapsed) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (record, merge, failures, elapsed, protocol) {
   "use strict";
 
   var KEY_PREFIX = "lahe.items.v1:";
   var OUTBOX_PREFIX = "lahe.outbox.v1:";
+  // The STAMP beside a cached list. See "Reading a list without parsing it"
+  // below: the value is opaque and is only ever compared for equality, so a tab
+  // can tell whether the copy it is holding is still the copy in storage.
+  var GEN_PREFIX = "lahe.gen.v1:";
   var CHIPS_PREFIX = "lahe.chips.v1:";
   var ACKED_PREFIX = "lahe.acked.v1:";
   var HOLDER_PREFIX = "lahe.holder.v1:";
@@ -7876,6 +7943,14 @@
   // That is exactly the line the helper session needs: a navigated reload proves
   // it is the holder with the secret it kept, and a second tab has neither.
   var WINDOW_ID_KEY = "lahe.window.id.v1";
+  // The one event type the outbox collapses. Spelled in protocol.js, read here,
+  // never restated: a second spelling of a wire name is how the two drift.
+  var CONTENT_EVENT = protocol.EVENT.ITEM_CONTENT;
+  // How many times a cold read will try to see a list and its stamp hold still
+  // together before it gives up and caches nothing. Three, because the only way
+  // to lose three in a row is another tab writing on every one of them, and at
+  // that point not holding a copy is the right answer anyway.
+  var READ_ATTEMPTS = 3;
   var RECLAIM_DEADLINE_MS = 1500;
   var SESSION_SECRET_PREFIX = "lahe.session.v1:";
 
@@ -7987,33 +8062,176 @@
     // Every durable write in this file goes through here, so there is one place
     // a full disk is reported from and one place that is synchronous.
     function writeJson(key, value) {
+      writeRaw(key, JSON.stringify(value));
+      return value;
+    }
+
+    // The bytes half of writeJson, split out for the one value that is stored as
+    // itself rather than as JSON: the cache stamp below, which is only ever
+    // compared with what getItem hands back.
+    function writeRaw(key, text) {
       try {
-        backing.setItem(key, JSON.stringify(value));
+        backing.setItem(key, text);
       } catch (err) {
         var f = failures.failure("STORAGE_QUOTA", err && err.message);
         var loud = new Error("store: " + f.message + " (key " + key + ")");
         loud.failure = f;
         throw loud;
       }
+      return text;
+    }
+
+    // -----------------------------------------------------------------------
+    // Reading a list without parsing it
+    // -----------------------------------------------------------------------
+    //
+    // The two big buckets, the items and the outbox, were parsed out of storage
+    // on every read. The outbox is read on every poll tick, once a second while
+    // the tab is visible; the items are read and rewritten on every keystroke.
+    // The 2026-09-16 memory audit named both.
+    //
+    // So each of those two buckets is held in memory here. The hazard is that
+    // BROWSER STORAGE IS SHARED BY EVERY TAB ON THE ORIGIN, so a copy in one tab
+    // goes stale the moment another tab writes. Two things could answer that:
+    //
+    //   the `storage` event   correct in a browser, and nothing at all in Node
+    //                         or in a test, where the backing is a plain object.
+    //                         It also means a window listener inside a module
+    //                         that has never touched `window`, and a listener
+    //                         with no unmount is finding 5 of the same audit.
+    //   a stamp in storage    one extra tiny key beside each list, rewritten on
+    //                         every write. A reader compares the stamp it cached
+    //                         with the stamp in storage: equal means no writer
+    //                         has been here since, in this tab or any other.
+    //
+    // The stamp is what this uses. It costs one `getItem` of a short string per
+    // read, which is the cheap half; what it removes is the `JSON.parse` of the
+    // whole list, which is the expensive half and the one the audit measured.
+    // It needs no events, so it is equally correct in a second tab, in Node, and
+    // between two store instances over one backing.
+    var cacheSalt = record.randomId("gen");
+    var cacheTicks = 0;
+    var listCache = Object.create(null);
+
+    function genKeyFor(key) {
+      return GEN_PREFIX + key;
+    }
+
+    /**
+     * The cached list for a storage key, re-parsed only when someone has written
+     * since this store last looked.
+     *
+     * THE STAMP IS READ TWICE, once before the parse and once after, and the
+     * pair is only held when the two agree. A write is two `setItem` calls and
+     * another tab can read between them, so without the second read this store
+     * could hold "this list, under that stamp" for a moment that never existed.
+     * With the list written first (see writeList) that pair is merely one read
+     * out of date rather than wrong, so this is the braces to that belt; it also
+     * saves the next read from parsing again.
+     *
+     * @param {string} key the storage key holding the list
+     * @param {function(Array): Array} [prepare] run once, on a cold parse only
+     * @returns {Array} the cached list itself. Callers do not mutate it.
+     */
+    function readList(key, prepare) {
+      var stamp = backing.getItem(genKeyFor(key));
+      var held = listCache[key];
+      if (held && held.stamp === stamp) return held.value;
+      var value = [];
+      for (var tries = 0; tries < READ_ATTEMPTS; tries += 1) {
+        var parsed = readJson(key, []);
+        value = Array.isArray(parsed) ? parsed : [];
+        if (prepare) value = prepare(value);
+        var after = backing.getItem(genKeyFor(key));
+        if (after === stamp) {
+          listCache[key] = { stamp: stamp, value: value };
+          return value;
+        }
+        stamp = after;
+      }
+      // Somebody wrote during every attempt. Hand back the last parse and hold
+      // nothing, so the next read starts again rather than trusting a pair that
+      // was never seen to hold still.
+      delete listCache[key];
       return value;
     }
 
-    // Everything comes out of storage through here, which is why the repair
-    // below lives here. Records written before the reopen loop was fixed
-    // (2026-09-10) carry the page check's sentence many times over in one note,
-    // once per cycle. Collapsing it on the way out means the reviewer's card
-    // reads right on the next reload, with nobody editing storage by hand, and
-    // the next write of that item persists the collapse.
-    function readAll(reviewId) {
-      var parsed = readJson(keyFor(reviewId), []);
-      if (!Array.isArray(parsed)) return [];
-      return parsed.map(function (item) {
+    /**
+     * Writes a list and stamps it, synchronously, in that order.
+     *
+     * THE LIST MOVES FIRST, and this is the whole of the cross-tab rule. Browser
+     * storage is shared by every tab on the origin and a reader can land between
+     * the two writes. Stamping first would hand that reader the NEW stamp beside
+     * the OLD list, and it would hold that pair until the next write on this key:
+     * its stamp check would agree forever and it would never see this write at
+     * all. Writing the list first means the worst a reader can catch is the new
+     * list under the old stamp, which invalidates on its next read.
+     */
+    function writeList(key, value) {
+      cacheTicks += 1;
+      var stamp = cacheSalt + ":" + cacheTicks;
+      delete listCache[key];
+      writeJson(key, value);
+      try {
+        writeRaw(genKeyFor(key), stamp);
+      } catch (err) {
+        // The list landed and the stamp did not, so nothing in storage says the
+        // list moved and every other tab is holding a copy under the old stamp.
+        // Clearing the stamp says it louder than leaving the old one: no held
+        // copy matches an absent stamp, so every reader goes back to the bytes.
+        try {
+          backing.removeItem(genKeyFor(key));
+        } catch (ignored) {
+          void ignored;
+        }
+        throw err;
+      }
+      listCache[key] = { stamp: stamp, value: value };
+      return value;
+    }
+
+    // THE REPAIR. Records written before the reopen loop was fixed (2026-09-10)
+    // carry the page check's sentence many times over in one note, once per
+    // cycle. Collapsing it means the reviewer's card reads right, with nobody
+    // editing storage by hand.
+    //
+    // It runs on BOTH SIDES, and it has to. A cold parse is the only read that
+    // reaches the bytes, so a repair done only there would be undone the moment
+    // the held copy took over: a record arriving from the helper still carrying
+    // the doubled sentence would read doubled on the card until the next reload.
+    // Running it on the write as well makes the held copy say what a fresh parse
+    // would, and writes the collapse down so it sticks.
+    //
+    // A copy of one record, one level deep. Every caller that changes a record
+    // in this library replaces a top-level field (replay.js and tab_done.js
+    // write item[REGION], overlay.js writes item[STATE]) or builds a new object
+    // with Object.assign, so one level is the whole of what has to be detached.
+    //
+    // It is what keeps the held list below private. Handing a caller the object
+    // this store is holding would mean a change nobody wrote reaching the next
+    // reader, and a write that never happened surviving to the next write.
+    function detach(item) {
+      return Object.assign({}, item);
+    }
+
+    function collapseAll(items) {
+      return items.map(function (item) {
         return record.collapsePageCheckNote(item);
       });
     }
 
+    function readAll(reviewId) {
+      return readList(keyFor(reviewId), collapseAll).map(detach);
+    }
+
     function writeAll(reviewId, items) {
-      return writeJson(keyFor(reviewId), items);
+      writeList(
+        keyFor(reviewId),
+        items.map(function (item) {
+          return detach(record.collapsePageCheckNote(item));
+        })
+      );
+      return items;
     }
 
     // @returns {Array<Object>} every item for this review, in creation order
@@ -8187,27 +8405,85 @@
     }
 
     function pendingEvents(reviewId) {
-      var parsed = readJson(outboxKey(reviewId), []);
-      return Array.isArray(parsed) ? parsed : [];
+      return readList(outboxKey(reviewId)).slice();
     }
 
-    // Appends one event. Same event_id twice replaces rather than duplicates,
-    // so a re-queue after a failed post cannot double-count.
+    // How many events are waiting. The poll loop asks this once a second while
+    // the tab is visible, and it used to parse the whole outbox to answer.
+    function pendingCount(reviewId) {
+      return readList(outboxKey(reviewId)).length;
+    }
+
+    /**
+     * Queues one event.
+     *
+     * TWO REPLACEMENT RULES, and everything else is appended.
+     *
+     *  1. Same event_id replaces, in place. That is a re-queue of an event whose
+     *     post failed; nothing about when it happened has changed.
+     *  2. Same item, same revision, both item.content: the older one is dropped
+     *     and the new one goes to the BACK. This is the keystroke rule. Every
+     *     keystroke used to be its own line carrying the whole record, which is
+     *     the 84 MB log and the 1,515 copies of one item the 2026-09-16 audit
+     *     counted.
+     *
+     * Only item.content. item.created, item.ready, item.deleted and
+     * item.reopened are lifecycle facts, each the only line in the log that says
+     * a thing happened, so each one goes.
+     *
+     * REVISION IS PART OF THE MATCH. The helper composes a continuation against
+     * prev.rev + 1 (src/service/projection.js, itemsFrom), so an event that
+     * carried a revision must not be dropped by an event at a later one.
+     * Keystrokes never move the revision (comments.js type(), editing.js
+     * captureTyping), so this costs the saving nothing.
+     *
+     * THE REPLACEMENT GOES TO THE BACK, never into the old entry's slot. The
+     * projection takes the LAST event for an item in log order, so a fresh
+     * content event left sitting in front of an older item.ready would be folded
+     * as the older one. Queue order is recency order.
+     *
+     * See docs/ongoing/OUTBOX_COALESCING.md.
+     */
     function queueEvent(reviewId, event) {
       if (!event || typeof event.event_id !== "string" || !event.event_id) {
         throw new TypeError("store.queueEvent: an event needs an event_id; idempotence is by event_id");
       }
-      var queue = pendingEvents(reviewId);
+      var queued = detachEvent(event);
+      var queue = readList(outboxKey(reviewId)).slice();
       for (var i = 0; i < queue.length; i += 1) {
-        if (queue[i].event_id === event.event_id) {
-          queue[i] = event;
-          writeJson(outboxKey(reviewId), queue);
-          return queue;
+        if (queue[i].event_id === queued.event_id) {
+          queue[i] = queued;
+          return writeList(outboxKey(reviewId), queue);
         }
       }
-      queue.push(event);
-      writeJson(outboxKey(reviewId), queue);
-      return queue;
+      if (supersedes(queued)) {
+        queue = queue.filter(function (held) {
+          return !supersedes(held) || !sameContentSlot(held, queued);
+        });
+      }
+      queue.push(queued);
+      return writeList(outboxKey(reviewId), queue);
+    }
+
+    // The event as the queue will hold it, detached from the caller. sync.js
+    // builds the event around the record the surface is HOLDING, and the surface
+    // goes on editing that object with the next keystroke. Serializing on every
+    // write used to make the queue immune to that; now that it is also held in
+    // memory, the copy has to be taken here. Two levels, because the record is
+    // the nested thing that keeps changing.
+    function detachEvent(event) {
+      var copy = Object.assign({}, event);
+      if (copy.record && typeof copy.record === "object") copy.record = Object.assign({}, copy.record);
+      return copy;
+    }
+
+    // Which events collapse onto each other, spelled once.
+    function supersedes(event) {
+      return !!event && event.event === CONTENT_EVENT;
+    }
+
+    function sameContentSlot(queued, event) {
+      return queued.item === event.item && queued.rev === event.rev;
     }
 
     // Drops the events the helper said it accepted. Anything it did not name
@@ -8217,11 +8493,10 @@
       (eventIds || []).forEach(function (id) {
         accepted[id] = true;
       });
-      var queue = pendingEvents(reviewId).filter(function (event) {
+      var queue = readList(outboxKey(reviewId)).filter(function (event) {
         return !accepted[event.event_id];
       });
-      writeJson(outboxKey(reviewId), queue);
-      return queue;
+      return writeList(outboxKey(reviewId), queue);
     }
 
     // -------------------------------------------------------------------------
@@ -8663,6 +8938,7 @@
       reviews: reviews,
       mergeWithHelper: mergeWithHelper,
       pendingEvents: pendingEvents,
+      pendingCount: pendingCount,
       queueEvent: queueEvent,
       acknowledge: acknowledge,
       readChips: readChips,
@@ -8689,6 +8965,7 @@
   return {
     KEY_PREFIX: KEY_PREFIX,
     OUTBOX_PREFIX: OUTBOX_PREFIX,
+    GEN_PREFIX: GEN_PREFIX,
     CHIPS_PREFIX: CHIPS_PREFIX,
     HOLDER_PREFIX: HOLDER_PREFIX,
     LOCK_PREFIX: LOCK_PREFIX,
@@ -13865,6 +14142,13 @@
 
     // The DOM, all of it, or all nulls when there is no document (Node).
     var dom = null;
+    // The viewport clamp's two window listeners, held so unmount can take them
+    // off again. They are the rail's, they are bound on mount, and a rail is
+    // rebuilt every time the page throws the overlay root away (index.js's
+    // ensureRoot): two more per rebuild, for the life of the page, was a real
+    // accumulation on a page that rebuilds all session (the 2026-09-16 memory
+    // audit). See mount, where it is bound, and unmount, where it goes.
+    var viewportClamp = null;
     // Cards whose pane changed while they held focus. Re-parenting a focused
     // element blurs it, so the move waits for focus to leave.
     var pendingPlacement = Object.create(null);
@@ -14292,14 +14576,18 @@
       // reviewer's choice, not a new one made on their behalf.
       var pillView = doc && doc.defaultView;
       if (pillView && typeof pillView.addEventListener === "function") {
-        pillView.addEventListener("resize", function () {
-          if (pillSpot) applyPillSpot();
-        });
-        if (typeof pillView.addEventListener === "function") {
-          pillView.addEventListener("orientationchange", function () {
+        // One handler for both events, held on the closure so unmount removes
+        // exactly what this mount bound. Binding happens once per mount:
+        // mount() returns early when the rail is already up, and unmount is the
+        // only other way out, so there is no path that binds twice.
+        viewportClamp = {
+          view: pillView,
+          handler: function () {
             if (pillSpot) applyPillSpot();
-          });
-        }
+          }
+        };
+        pillView.addEventListener("resize", viewportClamp.handler);
+        pillView.addEventListener("orientationchange", viewportClamp.handler);
       }
 
       // A held pane move lands the moment focus leaves the card.
@@ -14418,6 +14706,9 @@
       });
       // A node mid-fade belongs to a root that is going away with it.
       toastLeaving = [];
+      // The viewport clamp is about a pill that is about to stop existing, and
+      // mount binds it again for the pill that replaces it.
+      releaseViewportClamp();
       if (dom && dom.host && dom.host.parentNode) dom.host.parentNode.removeChild(dom.host);
       Object.keys(cards).forEach(function (id) {
         cards[id].node = null;
@@ -14430,6 +14721,18 @@
       // again from renderAgent, so nothing is lost by dropping it here, and a
       // page that navigates away leaves no interval of ours running.
       armAgentAgeTick();
+    }
+
+    /** Take the viewport clamp off the window it was bound to. */
+    function releaseViewportClamp() {
+      if (!viewportClamp) return false;
+      var view = viewportClamp.view;
+      if (view && typeof view.removeEventListener === "function") {
+        view.removeEventListener("resize", viewportClamp.handler);
+        view.removeEventListener("orientationchange", viewportClamp.handler);
+      }
+      viewportClamp = null;
+      return true;
     }
 
     function isMounted() {
@@ -15298,7 +15601,14 @@
 
     function saveChips() {
       if (!store || !reviewId || typeof store.writeChips !== "function") return;
-      store.writeChips(reviewId, { chips: chips, dismissed: Object.keys(dismissed) });
+      // A chip that survives a remount is the nice half. The chip ON SCREEN is
+      // the half that matters, and one of the codes this list carries is
+      // STORAGE_QUOTA: the write below is into the very storage that is full, so
+      // without this the rail throws while trying to say so and the reviewer
+      // sees nothing at all.
+      failuresModule.tolerateStorageQuota(function () {
+        store.writeChips(reviewId, { chips: chips, dismissed: Object.keys(dismissed) });
+      });
     }
 
     // -------------------------------------------------------------------------
@@ -19362,6 +19672,11 @@
     var opts = options || {};
     var rail = opts.overlay || overlayModule.shared;
     var store = opts.store || null;
+    // The whole review, every page of it. `store` above is scoped to the page
+    // the reviewer is on, which is right for everything this tab DRAWS and
+    // wrong for the one question that is about the review rather than the page:
+    // is this record still here at all? See forgetGoneItems.
+    var allStore = opts.allStore || null;
     var reviewId = opts.reviewId || null;
     var comments = opts.comments || null;
     var sync = opts.sync || null;
@@ -19740,6 +20055,7 @@
 
     function refresh() {
       if (!mounted) return api;
+      forgetGoneItems();
       // The unseen count is RECORD truth, not DOM truth. A headless rail (no
       // document, which is the shape the unit tests run in) draws nothing and
       // still has to know how many replies are waiting to be read.
@@ -20531,6 +20847,42 @@
     // -------------------------------------------------------------------------
     // Neglect
     // -------------------------------------------------------------------------
+
+    /**
+     * Forget the records that are no longer in the review.
+     *
+     * The page's memory is two maps keyed by item id, and they are the right
+     * shape for what they answer ("have I already said this?", "did anyone read
+     * it?"). What they had no answer for is an item that GOES: the reviewer
+     * deletes it, undoes it, or answers a collision with "take the page's". The
+     * key then sits there for the life of the page with no record behind it
+     * (the 2026-09-16 memory audit).
+     *
+     * GONE IS ASKED OF THE REVIEW, NOT OF THIS PAGE. A review spans pages and
+     * this tab is handed a page-scoped store, so page A's records read as absent
+     * the moment the reviewer clicks through to page B. Forgetting them there
+     * would re-announce the whole backlog on every round trip, which is exactly
+     * the pile rule 5 (once per page life) exists to prevent. With no unscoped
+     * store to ask, nothing is forgotten: keeping a stale key is a bounded cost
+     * and re-toasting a read reply is not.
+     *
+     * A HANDLED item is not gone either: it is in Done, it is reopenable (R38),
+     * and it must still count as announced.
+     */
+    function forgetGoneItems() {
+      if (!allStore || typeof allStore.read !== "function") return false;
+      var live = Object.create(null);
+      allStore.read(reviewId).forEach(function (item) {
+        live[item[record.FIELD.ID]] = true;
+      });
+      Object.keys(life.announced).forEach(function (id) {
+        if (!live[id]) delete life.announced[id];
+      });
+      Object.keys(life.neglected).forEach(function (id) {
+        if (!live[id]) delete life.neglected[id];
+      });
+      return true;
+    }
 
     /** This reply was shown, ignored, and ran out of time. Start the clock. */
     function noteNeglected(id) {
@@ -23879,7 +24231,7 @@
     }
 
     function recomputeStatus() {
-      var pending = store ? store.pendingEvents(requireReview()).length : 0;
+      var pending = pendingCount();
       // Anything the helper refused, could not take, or never answered means
       // the reviewer's typing is living in this browser and nowhere else.
       if (lastFailure || cspRefused) return setStatus(overlay.STATUS.KEPT_LOCALLY);
@@ -24188,7 +24540,15 @@
         flushing = false;
         if (result.ok) {
           var accepted = (result.body && result.body.accepted) || [];
-          store.acknowledge(requireReview(), accepted);
+          // BOTH OF THESE ARE WRITES INTO BROWSER STORAGE, inside a promise
+          // chain with no catch of its own. A full storage throwing here is an
+          // unhandled rejection raised after `flushing` has already gone back to
+          // false, which leaves the reviewer with a client that looks idle and a
+          // console error nobody sees. Guarded, it is a chip on the rail and the
+          // events simply stay queued for the next flush.
+          failures.tolerateStorageQuota(function () {
+            store.acknowledge(requireReview(), accepted);
+          }, onFailure);
           // Finding 10: beside dropping the accepted events from the outbox,
           // stamp the item acknowledged when the helper named the event carrying
           // its current rev, so merge.js can let the store win at equal rev. The
@@ -24198,14 +24558,16 @@
             accepted.forEach(function (id) {
               acceptedIds[id] = true;
             });
-            events.forEach(function (ev) {
-              if (!acceptedIds[ev.event_id]) return;
-              var itemId = ev[protocol.EVENT_FIELD.ITEM];
-              var rev = ev[protocol.EVENT_FIELD.REV];
-              if (itemId && typeof rev === "number") {
-                store.markAcknowledged(requireReview(), itemId, rev);
-              }
-            });
+            failures.tolerateStorageQuota(function () {
+              events.forEach(function (ev) {
+                if (!acceptedIds[ev.event_id]) return;
+                var itemId = ev[protocol.EVENT_FIELD.ITEM];
+                var rev = ev[protocol.EVENT_FIELD.REV];
+                if (itemId && typeof rev === "number") {
+                  store.markAcknowledged(requireReview(), itemId, rev);
+                }
+              });
+            }, onFailure);
           }
           deliveredOnce = true;
           counters.acknowledged += accepted.length;
@@ -24304,8 +24666,14 @@
       return result.status ? "HTTP " + result.status : null;
     }
 
+    // How many events are waiting. Asked on every poll tick, from here and from
+    // recomputeStatus, so it asks the store for its COUNT rather than for the
+    // queue: the old spelling parsed the whole outbox out of browser storage
+    // once a second per caller (the 2026-09-16 memory audit, finding 1).
     function pendingCount() {
-      return store ? store.pendingEvents(requireReview()).length : 0;
+      if (!store) return 0;
+      if (typeof store.pendingCount === "function") return store.pendingCount(requireReview());
+      return store.pendingEvents(requireReview()).length;
     }
 
     function scheduleFlush(delayMs) {
@@ -25427,7 +25795,8 @@
       root.LAHE.gestures,
       root.LAHE.anchor,
       root.LAHE.highlight,
-      root.LAHE.listeners
+      root.LAHE.listeners,
+      root.LAHE.failures
     );
   } else {
     module.exports = factory(
@@ -25439,7 +25808,8 @@
       require("../shared/gestures.js"),
       require("./anchor.js"),
       require("./highlight.js"),
-      require("./listeners.js")
+      require("./listeners.js"),
+      require("../shared/failures.js")
     );
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function (
@@ -25451,7 +25821,8 @@
   gestures,
   anchor,
   highlightModule,
-  listeners
+  listeners,
+  failuresModule
 ) {
   "use strict";
 
@@ -26285,6 +26656,11 @@
       opts.highlights ||
       (isRealDocument ? highlightModule.shared : doc ? highlightModule.createHighlights({ document: doc }) : null);
     var defaultPage = opts.page || null;
+    // Where a failure this surface cannot act on goes. Boot hands it the rail's
+    // failure list (src/layer/index.js); a caller that builds a surface by hand
+    // gets a no-op, so the write paths below never have to ask whether it is
+    // there.
+    var onFailure = typeof opts.onFailure === "function" ? opts.onFailure : null;
 
     // id -> handle
     var open = Object.create(null);
@@ -26354,15 +26730,50 @@
     // so the bridge lives in index.js rather than here.
     var createdOn = Object.create(null);
 
+    // EACH LISTENER IS GUARDED ON ITS OWN. index.js's listener is the one that
+    // posts the record, into the same browser storage everything else here
+    // writes to, and a quota failure swallowed around the whole loop would skip
+    // every listener registered after it (the Active tab's, among others). One
+    // listener that cannot write is not the rest of the rail going quiet.
     function emit(item, event) {
       var el = createdOn[item && item[record.FIELD.ID]] || null;
-      for (var i = 0; i < listenersState.length; i += 1) listenersState[i](item, event || "changed", el);
+      for (var i = 0; i < listenersState.length; i += 1) {
+        (function (listener) {
+          durably(function () {
+            listener(item, event || "changed", el);
+          });
+        })(listenersState[i]);
+      }
+    }
+
+    /**
+     * A durable write on the typing path.
+     *
+     * Storage is full is the ONE failure that does not come back out of here.
+     * The reviewer keeps typing, the words stay in the box and in the record
+     * this surface is holding, and the rail says what could not be saved. See
+     * failures.js tolerateStorageQuota, and docs/ongoing/OUTBOX_COALESCING.md
+     * for why a full storage is reachable at all.
+     *
+     * @returns {null|Object} the failure, when there was one
+     */
+    function durably(run) {
+      return failuresModule.tolerateStorageQuota(run, onFailure);
     }
 
     // The one write path. Synchronous to storage before anything else happens.
     function persist(item, event) {
-      store.write(requireReview(), item);
-      emit(item, event);
+      var refused = durably(function () {
+        store.write(requireReview(), item);
+      });
+      // NOTHING IS EMITTED FOR A RECORD THE DISK DOES NOT HAVE. index.js posts
+      // from inside this listener chain, and posting a record that was not saved
+      // is how the helper comes to acknowledge a wording the browser will not
+      // have on the next load: sync stamps the item acknowledged at that
+      // revision and merge.js's SAME_REV_ACKED rule then lets the stale record
+      // win. The rail also stays in step with what is actually stored. The next
+      // keystroke that lands carries the newest wording anyway.
+      if (!refused) emit(item, event);
       return item;
     }
 
@@ -27022,14 +27433,22 @@
           next[record.FIELD.STATE] =
             String(text) === committedNote ? record.STATE.READY : record.STATE.DRAFT;
         }
-        store.write(requireReview(), next);
+        // THE KEYSTROKE PATH. A full browser storage used to throw from here,
+        // straight out of the textarea's input handler, and the box stopped
+        // taking keystrokes with nothing on screen to say why.
+        var refused = durably(function () {
+          store.write(requireReview(), next);
+        });
         writeInput(next[record.FIELD.NOTE]);
         // The box fits itself to the words on every keystroke, whether the
         // keystroke came from a keyboard or from a caller driving this handle.
         paintSendable();
         grow();
         paintState(next);
-        emit(next, "typed");
+        // Same rule as persist: a keystroke the disk refused posts nothing, so
+        // the helper never acknowledges a wording this browser will not have on
+        // the next load. The box keeps the words either way.
+        if (!refused) emit(next, "typed");
         return next;
       }
 
@@ -28002,6 +28421,12 @@
       // and the page the deleted item belonged to, and the rail reads the id
       // off it either way.
       if (removed) emit(doomed || { id: id }, "removed");
+      // AFTER the emit, which reads it: the listener is told which node the item
+      // was made on, and this is the last time anyone can be. The node is the
+      // item's, and an item nobody can reach again must not go on holding one: a
+      // creation node the page has since rebuilt keeps its whole old document
+      // tree alive behind it (the 2026-09-16 memory audit).
+      delete createdOn[id];
       return removed;
     }
 
@@ -28452,6 +28877,12 @@
       setReview: setReview,
       setPage: setPage,
       onChange: onChange,
+      // Which items this surface is still holding a creation node for.
+      // Read-only, and for the retention tests: the map is private and "it let
+      // go of that one" is otherwise unobservable from outside.
+      createdOnIds: function () {
+        return Object.keys(createdOn);
+      },
       openBox: openBox,
       openNote: openNote,
       reopen: reopen,
@@ -28659,6 +29090,7 @@
       // walk is the one an edit's context.heading uses too, so the two record
       // kinds cannot disagree about which heading a block sits under.
       root.LAHE.comments,
+      root.LAHE.failures,
       // replay.js loads AFTER this file (it depends on everything), so it is
       // resolved when a pass is scheduled rather than when this module loads.
       function () {
@@ -28681,6 +29113,7 @@
       require("./listeners.js"),
       require("./protect.js"),
       require("./comments.js"),
+      require("../shared/failures.js"),
       function () {
         return require("./replay.js");
       }
@@ -28701,6 +29134,7 @@
   listeners,
   protect,
   commentsModule,
+  failuresModule,
   replayRef
 ) {
   "use strict";
@@ -29013,6 +29447,10 @@
       opts.highlights ||
       (isRealDocument ? highlightModule.shared : doc ? highlightModule.createHighlights({ document: doc }) : null);
     var defaultPage = opts.page || null;
+    // Where a failure this surface cannot act on goes. Boot hands it the rail's
+    // failure list (src/layer/index.js); a caller that builds a surface by hand
+    // gets nothing, and persist below works either way.
+    var onFailure = typeof opts.onFailure === "function" ? opts.onFailure : null;
 
     // The one open session, or null. Edit state is per region and there is one
     // of it: a second Cmd-Shift-E commits the first.
@@ -29077,12 +29515,45 @@
       return null;
     }
 
+    /**
+     * A durable write on the typing path.
+     *
+     * Storage is full is the ONE failure that does not come back out of here.
+     * captureTyping runs on every keystroke, so before this the reviewer's block
+     * stopped taking keystrokes the moment the outbox filled browser storage,
+     * with nothing on screen to say why (the 2026-09-16 memory audit, finding
+     * 1). The reviewer keeps typing, the words stay in the block and in the
+     * record, and the rail says what could not be saved. Every other error is
+     * still loud. See failures.js tolerateStorageQuota.
+     *
+     * @returns {null|Object} the failure, when there was one
+     */
+    function durably(run) {
+      return failuresModule.tolerateStorageQuota(run, onFailure);
+    }
+
     // The one write path. Storage first, synchronously, then everyone else.
     function persist(item, event, immediate) {
-      store.write(requireReview(), item);
-      emit(item, event);
-      if (sync && typeof sync.recordItem === "function") {
-        sync.recordItem(item, immediate ? { immediate: immediate } : undefined);
+      var refused = durably(function () {
+        store.write(requireReview(), item);
+      });
+      durably(function () {
+        emit(item, event);
+      });
+      // THE POST ONLY EVER FOLLOWS A WRITE THAT LANDED.
+      //
+      // Posting a record the disk does not have is worse than not posting at
+      // all. The helper takes it, acknowledges it, and sync stamps that item
+      // acknowledged at that revision; on the next load merge.js's
+      // SAME_REV_ACKED rule lets the store win at equal revision, so the STALE
+      // record still on disk beats the newer one the reviewer typed. Nothing is
+      // lost by waiting: the next keystroke that does land carries the newest
+      // wording, and the surface has been holding it all along.
+      if (!refused && sync && typeof sync.recordItem === "function") {
+        // The queue is a write into the same storage, so it is guarded too.
+        durably(function () {
+          sync.recordItem(item, immediate ? { immediate: immediate } : undefined);
+        });
       }
       return item;
     }
@@ -30200,9 +30671,20 @@
       itemForElement.push({ el: el, id: id });
     }
 
+    // Drops this record's row, and any row whose block is out of the document.
+    //
+    // The retire paths (undo, commit, retire) already call this, so a record
+    // that leaves the review leaves the list with it. What the list used to keep
+    // was the OTHER shape: a block a repaint replaced, still named by a record
+    // that is still outstanding. Nothing can match a detached node again
+    // (itemFor is asked about a block on the page), and holding one holds its
+    // whole old document tree, so it goes on the next pass through here
+    // (the 2026-09-16 memory audit). `!== false` because a fake block in a unit
+    // test has no isConnected at all, and absent is not detached.
     function forget(id) {
       itemForElement = itemForElement.filter(function (row) {
-        return row.id !== id;
+        if (row.id === id) return false;
+        return !!row.el && row.el.isConnected !== false;
       });
     }
 
@@ -31293,10 +31775,97 @@
     }
 
     lastSummary = summary;
+    releaseRetired(ctx);
     // Finding 9: run any pass a colliding repaint owed but that the observer
     // could only remember while replay's own write epoch was open.
     scheduleOwedPass();
     return summary;
+  }
+
+  /**
+   * What this pass no longer has any use for.
+   *
+   * The element memory below is module-level, so it outlives every pass and
+   * every remount. Two things end an entry, and neither of them used to
+   * (the 2026-09-16 memory audit):
+   *
+   *   THE RECORD IS GONE from the review. The reviewer undid it, deleted it, or
+   *   answered a collision with "take the page's". There is nothing left for the
+   *   node to be the node OF, and the collision's card node goes with it.
+   *
+   *   THE NODE IS OUT OF THE DOCUMENT, which is what a repaint does to every
+   *   node it replaces. A detached node holds its parents, so one kept entry
+   *   keeps a whole dead document tree.
+   *
+   * GONE IS ASKED OF THE REVIEW, NEVER OF THIS PASS'S LIST. `ctx.items` is a
+   * page-scoped cache that a change updates after the fact, so a record made a
+   * moment ago (comments.onChange binds the creation node before anything
+   * refreshes) and a record made on another page of the review both read as
+   * absent there. Deleting on that answer is the 2026-08-18 regression:
+   * an element pick has no words for the matcher to re-find, its binding is the
+   * only anchor it has, and the next settle calls it lost while the reviewer is
+   * looking at it. So the question goes to `ctx.hasItem`, which index.js answers
+   * from the UNSCOPED store, and with no such hook nothing is dropped for being
+   * gone.
+   *
+   * THE DETACHED-NODE SWEEP IS NARROW for the same reason. A tab panel, an
+   * accordion or a carousel takes a section out of the document and puts it
+   * back, so "detached" is not "dead". An entry goes only when the record could
+   * be found again from its own words (see refindableByText); for anything else
+   * the binding is kept, because losing it loses the only place the record has.
+   *
+   * A HANDLED RECORD KEEPS ITS ENTRY while its node is live. It is still in the
+   * review, and `locate` is the Done card's click-to-find: a handled item has no
+   * highlight left to scroll to (R37), so its binding is the only thing that
+   * knows where its passage is.
+   */
+  function releaseRetired(ctx) {
+    var known = typeof ctx.hasItem === "function" ? ctx.hasItem : null;
+    var onThisPage = Object.create(null);
+    itemsIn(ctx).forEach(function (item) {
+      onThisPage[item[record.FIELD.ID]] = item;
+    });
+    Object.keys(lastElement).forEach(function (id) {
+      if (known && known(id) !== true) {
+        delete lastElement[id];
+        return;
+      }
+      var element = lastElement[id];
+      if (!element) {
+        delete lastElement[id];
+        return;
+      }
+      if (element.isConnected === false && refindableByText(onThisPage[id])) delete lastElement[id];
+    });
+    if (!known) return;
+    // The probable place is the same shape: one element per record, for the
+    // reviewer's eyes only. It goes when the record does.
+    Object.keys(probable).forEach(function (id) {
+      if (known(id) !== true) delete probable[id];
+    });
+    Object.keys(conflictNodes).forEach(function (id) {
+      if (known(id) === true) return;
+      delete conflicts[id];
+      dropConflictNode(ctx, id);
+    });
+  }
+
+  /**
+   * Could this record be found again from its own words alone?
+   *
+   * True only for a record this pass can SEE (one on this page's list), whose
+   * reference carries text to match on, and whose region is not already stamped
+   * lost. Anything else is answered false, which is the conservative answer
+   * everywhere it is asked: keep the binding.
+   */
+  function refindableByText(item) {
+    if (!item) return false;
+    var region = item[record.FIELD.REGION];
+    if (!region || region.lost) return false;
+    var ref = region.ref;
+    if (!ref || typeof ref.probe !== "string" || !ref.probe) return false;
+    var elementProbe = anchorEngine && anchorEngine.PROBE ? anchorEngine.PROBE.ELEMENT : "element";
+    return ref.probe_kind !== elementProbe;
   }
 
   var lastSummary = null;
@@ -31928,13 +32497,19 @@
       sides.appendChild(sideNode(doc, "theirs", THEIRS_LABEL));
       node.appendChild(sides);
       node.appendChild(decideNode(ctx, doc, id));
-      // The stylesheet rides in with the node, into the rail's own closed root,
-      // the way 3A's Done tab puts its own in. Without it these are attribute
-      // names with nothing behind them and the card that matters most in the
-      // product draws in no system at all.
-      ensureConflictStyle(doc, node);
       conflictNodes[id] = node;
     }
+    // The stylesheet rides in with a node, into the rail's own closed root, the
+    // way 3A's Done tab puts its own in. Without it these are attribute names
+    // with nothing behind them and the card that matters most in the product
+    // draws in no system at all.
+    //
+    // Asked on EVERY call, not only when a node is built: the sheet lives inside
+    // whichever node carried it in, and that node leaves the document when its
+    // own collision clears. A second collision standing at that moment would
+    // otherwise be left drawing in nothing at all. ensureConflictStyle is a
+    // no-op while the sheet is connected, so the repeat costs one property read.
+    ensureConflictStyle(doc, node);
     node.firstChild.textContent = CONFLICT_TITLE;
     writeSide(doc, node, "yours", yours, theirs);
     writeSide(doc, node, "theirs", theirs, yours);
@@ -32146,9 +32721,17 @@
     clearConflict(ctx, id);
   }
 
-  // A conflict that resolved: the node stays where it is (removing it from a
-  // card the reviewer may be in is the churn this file refuses), and it is
-  // emptied and hidden.
+  // A conflict that resolved: the node comes off the card and out of the map.
+  //
+  // It used to be emptied and hidden and then kept, which reads as the churn
+  // rule (a card the reviewer is in must not be rebuilt underneath them) and is
+  // not: nothing is rebuilt here, a warning nobody is being shown any more is
+  // taken away. What the keeping cost was one detached-but-attached node per
+  // item that ever collided, held for the life of the page in the map and in the
+  // card (the 2026-09-16 memory audit). The next collision on the same record
+  // builds a fresh node, which is what makes the removal safe: see
+  // conflictNodeFor, and the stylesheet that rides in with it, which notices it
+  // left the document and comes back with the new node.
   function clearConflict(ctx, id) {
     // A DISPLACED conflict is not cleared by an ordinary pass. It was raised
     // from something the page tried to say and protection took back off, so the
@@ -32159,14 +32742,50 @@
     if (conflicts[id] && conflicts[id].displaced) return;
     if (conflicts[id]) delete conflicts[id];
     callCard(ctx, "clearCardBadge", id, "REPLAY_NEITHER_MATCHES");
+    dropConflictNode(ctx, id);
+  }
+
+  /**
+   * Take one collision's node off the card and out of the map.
+   *
+   * Emptied and hidden FIRST, and unconditionally: the words in it are a
+   * warning that no longer stands, and they must not be readable a moment
+   * longer whether or not the node itself can go yet.
+   *
+   * NOT WHILE THE REVIEWER IS IN THIS CARD. Taking a node out of a card that
+   * holds focus drops the focus to the body, which is the same re-parenting
+   * rule attachCardNode keeps. The blank hidden node is harmless meanwhile, and
+   * every later pass over an already-applied record calls through here again,
+   * so it goes the moment focus leaves.
+   *
+   * detachCardNode, not removeChild: the rail REMEMBERS the nodes a caller
+   * attached and puts them all back whenever it rebuilds the card (see
+   * overlay's render), so a node taken out of the DOM alone reappears at the
+   * next remount. removeChild is the fallback for a caller with no rail, which
+   * is the shape the unit tests run in.
+   */
+  function dropConflictNode(ctx, id) {
     var node = conflictNodes[id];
-    if (!node) return;
+    if (!node) return false;
+    blankConflictNode(node);
+    if (typeof node.setAttribute === "function") node.setAttribute("hidden", "hidden");
+    if (callCard(ctx, "holdsFocus", id) === true) return false;
+    delete conflictNodes[id];
+    if (!callCard(ctx, "detachCardNode", id, node)) {
+      if (node.parentNode && typeof node.parentNode.removeChild === "function") {
+        node.parentNode.removeChild(node);
+      }
+    }
+    return true;
+  }
+
+  /** The title and both sides, emptied. */
+  function blankConflictNode(node) {
     if (node.firstChild) node.firstChild.textContent = "";
     var yours = textIn(node, "yours");
     var theirs = textIn(node, "theirs");
     if (yours) yours.textContent = "";
     if (theirs) theirs.textContent = "";
-    node.setAttribute("hidden", "hidden");
   }
 
   /** What the reviewer's card is showing as a collision right now. */
@@ -33067,6 +33686,12 @@
     bindElement: function (id, element) {
       if (id && element && element.nodeType === 1) lastElement[id] = element;
     },
+    // Which records this file is holding a node for. Read-only, and for the
+    // retention tests: the map is module-level, so "it let go of that one" is
+    // otherwise unobservable from outside.
+    boundIds: function () {
+      return Object.keys(lastElement);
+    },
     locate: locate,
     schedule: schedule,
     runPass: runPass,
@@ -33553,7 +34178,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+ced9111bd545";
+  var VERSION = "0.2.0+f725d22cef0d";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -33899,7 +34524,20 @@
       return wrapper;
     }
 
-    var comments = opts.comments || ns.comments.createComments({ store: scopedStore, reviewId: reviewId, page: page });
+    // A failure the comment surface cannot act on, most of all a browser storage
+    // that is full while the reviewer is typing, goes to the rail's own failure
+    // list. Without somewhere to put it the write path would have to throw, out
+    // of the textarea's input handler, which is what it used to do.
+    var comments =
+      opts.comments ||
+      ns.comments.createComments({
+        store: scopedStore,
+        reviewId: reviewId,
+        page: page,
+        onFailure: function (failure) {
+          rail.failures.add(failure);
+        }
+      });
     comments.bind({ page: page });
 
     // -------------------------------------------------------------------------
@@ -33956,6 +34594,9 @@
     function createDoneTab() {
       var made = ns.tabDone.createDoneTab({
         store: scopedStore,
+        // The whole review, for the one question that is not about this page:
+        // whether a record it already announced is still in the review at all.
+        allStore: store,
         reviewId: reviewId,
         comments: comments,
         overlay: rail,
@@ -33981,7 +34622,14 @@
       return made;
     }
 
+    // Every status the line has shown, newest last, for the browser harness to
+    // assert on. One entry per TRANSITION, and the status line deliberately
+    // holds its reading while work is queued and in flight, so an ordinary
+    // session adds a handful and only a helper going away and coming back adds
+    // more. Capped so an afternoon of that does not grow it without end, the
+    // same way sync.js caps repliesSeen (the 2026-09-16 memory audit).
     var statusLog = [];
+    var STATUS_KEPT = 200;
     // revertChecks counts the check having RUN on this load, which is what a
     // test waits on: "the check ran and reopened nothing" is a real result and
     // an arbitrary sleep is the only other way to observe it.
@@ -34042,7 +34690,7 @@
       helperOrigin: config.helper || undefined,
       store: store,
       onStatus: function (state) {
-        statusLog.push(state);
+        statusLog = statusLog.concat([state]).slice(-STATUS_KEPT);
         rail.setStatusLine(state);
       },
       // Whether an agent is actually listening, from the helper's own files
@@ -34187,7 +34835,12 @@
       store: scopedStore,
       reviewId: reviewId,
       page: page,
-      sync: sync
+      sync: sync,
+      // Same reason as the comment surface above: a full browser storage during
+      // typing is said on the rail rather than thrown at the input handler.
+      onFailure: function (failure) {
+        rail.failures.add(failure);
+      }
     });
     editing.bind({ page: page });
 
@@ -34604,6 +35257,14 @@
       // "closed" is not a change to the record: the state it would post was
       // already posted by the keystroke or by ready.
       if (event === "closed") return;
+      // The cache first, and before the binding below. A record the cache has
+      // not picked up yet is a record the next pass cannot see, and a pass that
+      // cannot see a record used to drop what it holds for it. Replay asks the
+      // store rather than the cache now (its `hasItem`), so this is no longer
+      // load-bearing; it stays because a rail, a replay pass and an exporter
+      // reading a list that is one item behind the store is its own small class
+      // of bug.
+      refreshItems();
       // Creation is a binding: hand replay the node the item was made on, so
       // the still-bound rule covers element picks the text matcher can never
       // re-find (comments loads before replay, so the bridge is here).
@@ -34649,6 +35310,15 @@
       // For one thing only: the conflict card's "take the page's" button, which
       // retires a record and writes nothing. See replay's `context`.
       editing: editing,
+      // Is this record still in the review at all? Replay asks before it lets
+      // go of anything it holds per record, and the answer comes from the
+      // UNSCOPED store rather than from `items` above. `items` is a page-scoped
+      // cache that a change updates afterwards, so it answers "no" for a record
+      // made a moment ago and for every record made on another page of the same
+      // review, and neither of those is gone. See replay's releaseRetired.
+      hasItem: function (id) {
+        return !!store.readItem(reviewId, id);
+      },
       // How a record replay changed gets written down. `items` above is a
       // CACHE, and merge() replaces it from the store on every remount, so a
       // change replay only made in memory dies at the next morph. That is what
