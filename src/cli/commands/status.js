@@ -275,7 +275,12 @@ async function servedVia(dir, agentSessionId, targetPaths) {
       return false;
     }
   });
-  var fallback = pageTargets.length ? "on_disk" : null;
+  // What "not served" means depends on which shape this is. A page review has
+  // its own on-disk line to fall back on. A folder review has nothing: its
+  // pages only ever carried a line in the response, so a dead server means no
+  // rail at all, and saying nothing hid that from the one person who could fix
+  // it by reopening the session.
+  var fallback = pageTargets.length ? "on_disk" : "unserved";
   if (!pageTargets.length && !folderTargets.length) return null;
 
   var servers;
@@ -313,6 +318,9 @@ function servedViaLine(servedViaValue) {
   }
   if (servedViaValue === "on_disk") {
     return "served: the on-disk script line only (file:// review, or no static server is running); a rebuild between one poll and the next can drop the rail until something polls again";
+  }
+  if (servedViaValue === "unserved") {
+    return "served: nothing right now. This is a folder review, whose pages carry no script line on disk, and no static server of this session is rooted at that folder. Reopen the session to start it again: lahe session reopen <id>";
   }
   return null;
 }

@@ -216,14 +216,20 @@ async function run(argv) {
           "\n  open      http://" + staticServer.meta.host + ":" + staticServer.meta.port +
           "/" + encodeURIComponent(openPage) + "\n"
       );
-      if (served === "folder") {
-        // Not "folder": `add` already prints that label for the review's own
-        // directory on disk, and two different folders under one label is how a
-        // reader (or a script) picks the wrong path.
-        process.stdout.write(
-          "  pages     " + target + "  (every page in it is this one review; links between them keep the rail)\n"
-        );
-      }
+      // THE SERVED ROOT, PRINTED. It is not always the folder the reviewer
+      // named: a single page's server is rooted at the page's own directory,
+      // which is what decides whether `../assets/x.png` resolves and what else
+      // on disk is reachable over the link being handed out. Not labelled
+      // "folder": `add` already prints that for the review's own directory in
+      // the state dir, and two different paths under one label is how a reader
+      // (or a script) takes the wrong one.
+      process.stdout.write(
+        "  root      " + staticServer.meta.root +
+          (served === "folder"
+            ? "  (every page in it is this one review; links between them keep the rail)"
+            : "  (the page's own folder, which is everything this server can serve)") +
+          "\n"
+      );
     }
     if (rendered) {
       process.stdout.write(

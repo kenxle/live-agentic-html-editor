@@ -535,28 +535,34 @@ test("servedVia is injected only while this session's static server is actually 
   assert.equal(await status.servedVia(dir, "s_served", [page]), "on_disk", "a stopped server is back on the on-disk line");
 });
 
-test("a folder review reads injected while its server is up, and says nothing once it is down", async (t) => {
+test("a folder review reads injected while its server is up, and unserved once it is down", async (t) => {
   // `lahe review <folder>` records the FOLDER as the review's target, and its
   // server is rooted there. Every page in it carries the rail through the
-  // response and none of them has a line on disk, so "on_disk" would be a lie:
-  // this answer is either injected or nothing at all.
+  // response and none of them has a line on disk, so "on_disk" would be a lie.
+  // "unserved" is the truth when the server is gone: those pages have no rail
+  // at all, and nothing on disk to fall back on.
   const dir = tempState();
   const site = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-status-folder-"));
   fs.writeFileSync(path.join(site, "index.html"), "<html></html>");
 
-  assert.equal(await status.servedVia(dir, "s_folder", [site]), null, "no server yet: nothing to report");
+  assert.equal(await status.servedVia(dir, "s_folder", [site]), "unserved", "no server yet: no rail anywhere");
 
   const server = await staticServersModule.start({ dir, sessionId: "s_folder", root: site });
   t.after(async () => { await staticServersModule.stopAll(dir, "s_folder"); });
   assert.equal(await status.servedVia(dir, "s_folder", [site]), "injected");
   assert.equal(
     await status.servedVia(dir, "s_other_session", [site]),
-    null,
+    "unserved",
     "a static server is a per-session lease, so another session's folder is not ours"
   );
 
   await staticServersModule.stopOne(dir, "s_folder", server.meta);
-  assert.equal(await status.servedVia(dir, "s_folder", [site]), null);
+  assert.equal(await status.servedVia(dir, "s_folder", [site]), "unserved");
+});
+
+test("servedViaLine tells a reviewer with a dead folder server what they are looking at", () => {
+  assert.match(status.servedViaLine("unserved"), /no static server/);
+  assert.match(status.servedViaLine("unserved"), /reopen/);
 });
 
 test("the printed status names the mechanism for a static review with a live server", async (t) => {
