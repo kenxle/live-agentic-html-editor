@@ -147,9 +147,13 @@ slow that day was how the loop ran around them, so:
 - **Reviewer count follows the process.** A whetstone-size change gets one
   reviewer. Feature-forge gets the set its phases define. Security joins when
   the diff touches auth, serving, paths, or tokens.
-- **Write the builder's spec from the file, not from memory.** Open the code
-  and quote how it behaves before describing it. Three specs that day carried
-  a wrong detail each, and each cost a round of the builder arguing back.
+- **A builder's brief points at the docs; it does not restate the code.**
+  `docs/ongoing/` (how a subsystem works now), `docs/diagrams/` (the shape of
+  the system), `docs/CONTRACTS.md`, `docs/CLI.md`, and `AGENTS.md` are what a
+  builder reads first, and the brief names which ones. Paraphrasing the code
+  in a brief is how three specs on 2026-09-16 each carried a wrong detail.
+  When the brief would have to describe code that no doc covers, that is the
+  gap: write the doc, or have the builder's design note become it.
 - **A builder that hits a limit checks in instead of documenting around it.**
   "This cannot be done" in a report is a claim the reviewer will test; a
   one-line question mid-build is cheaper than the fix round.
