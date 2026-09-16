@@ -34,10 +34,13 @@ seventeen lines saying every prefix of it.
 
 ## What is kept
 
-- **Every lifecycle event.** `item.created`, `item.ready`, `item.deleted` and
-  `item.reopened` are never coalesced. Each one is the only line in the log that
-  says a thing happened, and `item.ready` is what wakes the agent
-  (`src/service/routes.js` WAKE_EVENTS).
+- **Every lifecycle event.** Only `item.content` is ever coalesced, so
+  `item.created`, `item.ready` and `item.deleted` all go. Each one is the only
+  line in the log that says a thing happened, and `item.ready` is what wakes the
+  agent (`src/service/routes.js` WAKE_EVENTS). `item.reopened` is in the same
+  rule but the layer never mints one: reopening posts `item.ready` at a new
+  revision (`tab_done.js` `postReady`), and `item.reopened` exists on the
+  helper's side of the wire only.
 - **Every revision.** Revision is part of the match, so a content event at
   revision 2 joins a queued one at revision 1 rather than replacing it. See "Why
   revision is part of the match" below.
@@ -102,6 +105,10 @@ is removed and the new one is appended.
 | The helper accepts some of a batch and not the rest | Unchanged: only the ids it named are dropped | `outbox_coalescing.test.js`, "acknowledge still drops only the ids the helper named" |
 | A flush is in flight and the reviewer types | The event being posted is replaced in the queue, so the helper's acknowledgement names an id that is no longer there and nothing is dropped. The replacement is posted on the next flush. Conservative, which is the safe direction | covered by the same acknowledge test; the behaviour is identical to the old code, which also kept the newer event |
 | Two tabs on one origin | Below | `outbox_coalescing.test.js`, "a second tab's write to the outbox is visible to the first"; `store_item_cache.test.js`, "a second tab's write to the items is visible to the first" |
+| One tab reads while another is mid-write | The list is written before the stamp, so the halfway state a reader can catch is the new list under the old stamp, which invalidates on its next read | `store_item_cache.test.js`, "a tab that reads in the middle of another tab's write does not hold on to the old list" |
+| The list write lands and the stamp write does not | The stamp key is removed, which no held copy matches, so every tab goes back to the bytes | `store_item_cache.test.js`, "a stamp that could not be written leaves no reader trusting the list before it" |
+| Storage has room for the outbox and none for the records | The keystroke posts nothing, so the helper cannot acknowledge a wording the disk does not have | `storage_quota_typing.test.js`, "a comment keystroke whose write was refused does not post" and "committing an edit when storage is full raises the failure and posts nothing" |
+| Storage fills between the post and the helper's answer | The acknowledgement writes are guarded, so it is a chip rather than an unhandled rejection, and the events stay queued | `storage_quota_typing.test.js`, "a helper answer that cannot be written down is a chip, not an unhandled rejection" |
 
 ## The in-memory copies, and the two-tab hazard
 
@@ -127,20 +134,61 @@ is the expensive half and the one the audit measured. It needs no events, so it
 is equally correct in a second tab, in Node, and between two store instances over
 one backing object, which is what the tests drive.
 
-Two details that are load bearing:
+Three details that are load bearing.
 
-- **The stamp moves before the list.** If the list write then fails on a full
-  storage, the stamp in storage matches no held copy, so every reader goes back
-  to the bytes rather than believing a write that never landed.
-- **Records are copied one level on the way in and on the way out.** `replay.js`
-  and `tab_done.js` write a region stamp straight onto an item they got from the
-  store and only then persist it, and `overlay.js` writes a card's state onto its
-  copy and never persists it at all. Without the copy all three would reach the
-  held list with no write behind them.
+**The list is written before the stamp.** A write is two `setItem` calls and
+another tab can read between them. Stamping first hands that reader the NEW stamp
+beside the OLD list, and it holds that pair until the next write on the key: its
+stamp check agrees forever and it never sees the write at all. No failure is
+needed for that; it is just two tabs and ordinary timing. Writing the list first
+means the worst a reader can catch is the new list under the old stamp, which
+invalidates on its next read.
+
+The first draft of this had it the other way round, reasoning only about this
+tab's own quota case (if the list write fails after the stamp, everyone
+re-reads). That case is real but it is a failure path, and it is handled without
+the ordering: when the stamp write fails after the list landed, the stamp key is
+REMOVED, which no held copy matches, so every reader goes back to the bytes.
+
+**The stamp is read twice on a cold read**, once before the parse and once after,
+and the pair is only held when the two agree. With the list written first this is
+belt to that ordering's braces rather than the only guard; what it buys is that
+the pair which gets held is one the storage actually had at one moment, and that
+the next read does not have to parse again. Three attempts, then it hands back
+the parse and holds nothing.
+
+**Records are copied one level on the way in and on the way out.** `replay.js`
+and `tab_done.js` write a region stamp straight onto an item they got from the
+store and only then persist it, and `overlay.js` writes a card's state onto its
+copy and never persists it at all. Without the copy all three would reach the
+held list with no write behind them. Queued events are copied two levels for the
+same reason: `sync.js` builds the event around the record the surface is holding,
+and the surface goes on editing that object.
+
+The `collapsePageCheckNote` repair runs on BOTH sides, the cold parse and the
+write. A cold parse is the only read that reaches the bytes, so a repair done
+only there is undone as soon as the held copy takes over, and a record arriving
+from the helper still carrying the doubled page-check sentence would read doubled
+on the card until the next reload.
 
 The storage format is unchanged, so records and outbox entries written by the old
 code still load. The stamp is simply absent for them, which reads as "nobody has
 stamped this" and costs one parse.
+
+### The one upgrade hazard
+
+A tab that is still running the PREVIOUS bundle writes the items and outbox keys
+without touching the stamp. A tab on the new bundle that has a copy held for the
+same key therefore never learns that the old tab wrote, and serves its copy until
+something on the new bundle writes that key.
+
+This is narrow, because two windows on one review are already refused: the second
+one is read-only and writes nothing to the shared bucket (`SECOND_WINDOW_REFUSED`,
+D5). The case that is left is an old-bundle tab holding the review while a
+new-bundle tab reads it, which is exactly what a long-open tab makes possible, and
+Ken keeps long-open tabs. It ends when the old tab reloads, which it has to do
+anyway to pick up the new bundle. Nothing in the layer can detect it more cheaply
+than re-parsing the list on every read, which is the thing being removed.
 
 ## A full browser storage during typing
 
@@ -162,6 +210,29 @@ its chips in the SAME storage that just refused the write being reported, so
 `saveChips` tolerates a quota failure rather than throwing while painting the chip
 that says storage is full. Losing that chip's durability across a reload is the
 right trade; losing the chip is not.
+
+### The outbox must never run ahead of the disk
+
+Swallowing the record write and letting the post through would be worse than
+throwing. Browser storage can have room for the outbox and none for the records,
+and then the helper takes a record the browser did not save, acknowledges it, and
+`sync.js` stamps that item acknowledged at that revision. On the next load
+`merge.js`'s SAME_REV_ACKED rule lets the store win at equal revision, so the
+STALE record still on disk beats the newer one the reviewer typed.
+
+So a keystroke whose record write was refused posts nothing. `durably` returns the
+failure, and both surfaces read it: `editing.js` skips `sync.recordItem`, and
+`comments.js` skips the emit that `index.js` posts from. Nothing is lost by
+waiting, because the surface has been holding the reviewer's words all along and
+the next keystroke that does land carries them.
+
+Two more writes were on the same footing and are now guarded. `flush` drops the
+accepted events and stamps the item acknowledged inside a promise chain with no
+catch, so a full storage there was an unhandled rejection raised after `flushing`
+had gone back to false: the client looked idle and the only sign was a console
+error. And `comments.js` emits to its listeners one at a time, each guarded on
+its own, because `index.js`'s listener is the one that writes and a failure
+swallowed around the whole loop would skip every listener after it.
 
 ## What this does not do
 

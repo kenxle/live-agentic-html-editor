@@ -92,3 +92,10 @@ Whether any of Ken's long-open LAHE tabs is individually large. The Chrome exten
 - **A full browser storage no longer throws out of the keystroke handler.** `failures.js` gained `isStorageQuota` and `tolerateStorageQuota`; `editing.js` and `comments.js` use them on the typing path, and `index.js` routes the failure to the rail's failure list. The rail's own `saveChips` tolerates it too, since it writes into the same full storage.
 
 The helper, the log format and the projection are untouched. Fix 2 of the list above, the helper re-reading the whole log on every fold, is still open and is the other half of the 84 MB parse.
+
+**Second pass, after two reviews of the branch.** Four things the reviewers found, all fixed on the same branch:
+
+- **The cross-tab write order was backwards.** Stamping before writing the list let another tab read the new stamp beside the old list and hold that pair forever. The list is written first now, and a cold read takes the stamp twice so the pair it holds is one the storage actually had.
+- **The outbox could run ahead of the disk.** A keystroke whose record write was refused still posted. The helper would acknowledge a wording the browser had not saved, and `merge.js`'s SAME_REV_ACKED rule would then let the stale record win on the next load. A refused write now posts nothing.
+- **The page-check repair stopped running on warm reads.** It runs on the write path too now, so a record arriving from the helper with the doubled sentence is repaired without waiting for a reload.
+- **Three smaller ones:** the acknowledgement writes inside `flush` are guarded (a full storage there was an unhandled rejection), `comments.js` guards each listener separately so one that cannot write does not silence the rest, and a queued event is detached from the record the surface is still editing.
