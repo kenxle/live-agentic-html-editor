@@ -19,22 +19,13 @@ Read this section even if you read nothing else. Everything below it is detail.
 These four rules are the ones agents have actually broken in live sessions, and
 each one cost a reviewer their work.
 
-```
-  lahe review <target>          you run this. it serves the page and prints one URL
-          |
-          v
-  hand over the `open` line     one link. verbatim. never a path
-          |
-          v
-  they comment and edit         you are woken; you drain
-          |
-          v
-  edit source, rebuild          verify the change is in the built HTML
-          |
-          v
-  lahe reply ...                only now. handled means it is on their screen
-          |
-          `--------------------> back to drain, until it prints nothing
+```mermaid
+flowchart TD
+    A["lahe review &lt;target&gt;<br/>you run this; it serves the page and prints one URL"] --> B["hand over the open line<br/>one link, verbatim, never a path"]
+    B --> C["they comment and edit<br/>you are woken; you drain"]
+    C --> D["edit the source, rebuild<br/>verify the change is in the built HTML"]
+    D --> E["lahe reply<br/>only now; handled means it is on their screen"]
+    E --> C
 ```
 
 **1. Serve it. Every time.** `lahe review <target>` is the command for every
