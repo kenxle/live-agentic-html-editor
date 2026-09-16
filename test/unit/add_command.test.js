@@ -1051,7 +1051,8 @@ test("the clone line in the docs matches the repository in package.json", () => 
     .replace(/\.git$/, "");
   assert.match(repository, /^https:\/\/github\.com\//, "package.json names an https clone URL");
 
-  for (const doc of ["README.md", "AGENTS.md", path.join("docs", "INSTALL.md")]) {
+  // AGENTS.md points at docs/INSTALL.md instead of carrying the clone line (Ken, 2026-09-16).
+  for (const doc of ["README.md", path.join("docs", "INSTALL.md")]) {
     const text = fs.readFileSync(path.join(REPO_ROOT, doc), "utf8");
     const clones = text.match(/git clone\s+(\S+)/g) || [];
     assert.ok(clones.length > 0, doc + " shows how to clone the repository");
