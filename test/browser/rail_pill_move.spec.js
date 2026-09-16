@@ -141,4 +141,62 @@ test.describe("the collapsed pill can be moved off the page's own furniture", ()
     expect(rect.y, "still on screen vertically").toBeGreaterThanOrEqual(0);
     expect(rect.y + rect.h, "and not below the fold").toBeLessThanOrEqual(640);
   });
+
+  // The clamp above is two window listeners, and a rail is rebuilt every time
+  // the page it lives on throws the overlay root away (index.js's ensureRoot).
+  // Two more per rebuild, on a page that rebuilds all session, is the exact
+  // accumulation the listener registry exists to prevent, and these two were
+  // outside it (the 2026-09-16 memory audit, retention issue 5).
+  test("the viewport clamp's listeners go with the rail it was mounted for", async ({ page }) => {
+    // Installed before anything on the page runs, so the rail's own mount is
+    // counted. Counting by TYPE on window is enough: the assertion is that the
+    // number does not move across a rebuild.
+    await page.addInitScript(() => {
+      window.__winListeners = Object.create(null);
+      const add = window.addEventListener.bind(window);
+      const remove = window.removeEventListener.bind(window);
+      window.addEventListener = function (type, handler, options) {
+        window.__winListeners[type] = (window.__winListeners[type] || 0) + 1;
+        return add(type, handler, options);
+      };
+      window.removeEventListener = function (type, handler, options) {
+        window.__winListeners[type] = (window.__winListeners[type] || 0) - 1;
+        return remove(type, handler, options);
+      };
+    });
+
+    await page.goto(server.urlFor("test/fixtures/rail.html?review=pill-move-f"));
+    await showThePill(page);
+
+    const counted = () => page.evaluate(() => ({
+      resize: window.__winListeners.resize || 0,
+      orientationchange: window.__winListeners.orientationchange || 0
+    }));
+
+    const before = await counted();
+    expect(before.resize, "the mounted rail is listening for the viewport to move").toBeGreaterThanOrEqual(1);
+    expect(before.orientationchange).toBeGreaterThanOrEqual(1);
+
+    // Three rebuilds: unmount, mount, the way ensureRoot does it.
+    for (let i = 0; i < 3; i += 1) {
+      expect(await page.evaluate(() => window.__laheRail.remount()), "the rail remounted").toBe(true);
+    }
+
+    expect(await counted(), "a rebuilt rail listens exactly as much as a fresh one").toEqual(before);
+
+    // And the clamp still works, so this is a removal rather than a rail that
+    // stopped listening.
+    await showThePill(page);
+    await dragPill(page, -600, -500);
+    await page.setViewportSize({ width: 420, height: 640 });
+    await pollPage(
+      page,
+      () => {
+        const g = window.__laheRail.geometry();
+        return !!g.pill && g.pill.right <= 420 && g.pill.bottom <= 640 && g.pill.left >= 0;
+      },
+      undefined,
+      { message: "the clamp, still listening after the rebuilds, to pull the pill back on screen" }
+    );
+  });
 });
