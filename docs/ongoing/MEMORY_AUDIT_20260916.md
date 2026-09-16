@@ -82,14 +82,22 @@ Items 1 and 2 change the event model and deserve a short brief before a builder 
 ## Progress
 
 - **2026-09-16, branch `worktree-agent-adfd555be06ed2870`: fix 3 landed, the layer's retention issues 3 to 6.** What it covers:
-  - `replay.js`: the element memory (`lastElement`) is released when the record leaves the review, and when the node it names is out of the document. A handled record keeps its entry while its node is live, because the Done card's click-to-find (`locate`) is the only thing that knows where a handled item's passage is.
-  - `replay.js`: a resolved conflict's card node is removed from the card and from `conflictNodes` instead of being emptied and hidden. The next collision on the same record builds a fresh one.
+  - `replay.js`: the element memory (`lastElement`) is released when the record leaves the review, and when the node it names is out of the document AND the record could be found again from its own words. Two records keep their binding through a detach: an element pick (an image, a chart) has no words to be re-found by, and a record already stamped lost has nothing else left. A handled record keeps its entry while its node is live, because the Done card's click-to-find (`locate`) is the only thing that knows where a handled item's passage is.
+  - `replay.js`: "gone from the review" is asked of the unscoped store through a `hasItem` hook the library wires in, never of the pass's own page-scoped item list. That list is a cache: a comment made a moment ago and every record made on another page both read as absent in it.
+  - `replay.js`: a resolved conflict's card node is detached from the card (through the rail's `detachCardNode`, so the card stops remembering it) and dropped from `conflictNodes`, instead of being emptied and hidden and kept. It is always emptied and hidden first, and it waits for the reviewer's focus to leave the card before it goes. The next collision on the same record builds a fresh one, and the collision stylesheet is now re-installed on every conflict node rather than only on the first.
   - `overlay.js`: the pill's viewport clamp (`resize` and `orientationchange` on the window) is removed on unmount, so a rail rebuilt by `ensureRoot` ends with two listeners rather than two more.
-  - `index.js`: the status line's history is capped at the newest 200 entries.
-  - `tab_done.js`: `pageLife.announced` and `pageLife.neglected` drop the ids of records that are no longer in the review.
+  - `index.js`: the status line's history is capped at the newest 200 entries, the way `sync.js` caps `repliesSeen`.
+  - `tab_done.js`: `pageLife.announced` and `pageLife.neglected` drop the ids of records that are no longer in the review, asked of the unscoped store for the same reason replay asks it: a review spans pages, and a page-scoped answer would re-announce page A's backlog on every trip back to it.
   - `comments.js`: the node an item was created on is released when the item is deleted.
   - `editing.js`: the block-to-record list already dropped a record on retire; it now also drops rows whose block the page has replaced.
   - `overlay.js` `toastKeys` was left alone on purpose: it is a rule, not a bug. See the note under issue 6 below.
+
+- **2026-09-16, same branch: two reviews said do not merge, and this is what they caught.** All of it is in the bullets above; it is listed separately because each one was a real defect in the first cut, not a polish note.
+  - Reading "is this record gone" from the page-scoped item cache would have deleted a brand new comment's creation binding, which for an element pick is its only anchor. That is the 2026-08-18 regression, and it is now guarded by a unit test.
+  - Removing the conflict node from the DOM alone left it in the card's own list of attached nodes, so the rail put a resolved collision back on the card at the next remount.
+  - Forgetting announced replies from a page-scoped store would have re-announced page A's backlog on every navigation back to it.
+  - The collision stylesheet rides inside the first conflict node built, so dropping that node left any other standing collision drawing in no system at all.
+  - Pruning every detached node would have permanently lost an element-bound record whose node a tab panel or accordion takes out and puts back.
 
   Issue 6's `toastKeys` reading is corrected: the set does not block a later reply on the same item. The key is `reply:<id>:<replyStamp>`, so a new reply is a new key; the neglect re-show adds its own `:waiting` suffix, and the waiting COUNT passes no key at all so the rail cannot refuse a legitimately new one. "Shown once per key, for the life of the rail" is what rules 2 and 5 of the toast contract ask for (the X means read, and once per page life), so deleting a key on dismissal would put a dismissed reply back on screen. It grows by one short string per distinct thing the rail has said, which is bounded by the replies of one session.
 
