@@ -800,6 +800,10 @@ Work stays listed until your reply lands. That is deliberate: it means a wake yo
 miss costs you nothing, because the next drain shows the item again. There is no
 ledger to carry and nothing to keep in sync.
 
+The drain does not carry the contract, because you would read the same few
+thousand tokens on every wake: its first line points at the `contract` field in
+the review's `review.json`, which is where the contract lives.
+
 **Copy the printed commands exactly.** When the reviews live somewhere other than
 the default state directory, every command this tool prints (the drain, the
 monitor, the close, and the `drain` field on each wake line) already carries
