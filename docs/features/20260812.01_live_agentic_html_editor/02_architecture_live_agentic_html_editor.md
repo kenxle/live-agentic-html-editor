@@ -554,6 +554,9 @@ review's feedback, never the machine or another review. The token persists acros
 because rotating it would orphan a page mid-review and violate the never-lose-work posture. A token
 written into a static file can be committed and shared, so the add step says so out loud when the file
 is in a repository, and the snippet it writes for a dev server belongs in a development-only guard.
+A folder review (`lahe review <folder>`, added 2026-09-16) widens this residual by one step: its token
+is served on every HTML file under the folder, not only on pages the review recorded, so any script on
+any of those pages can read it.
 The final boundary is the user account: a process already running as the reviewer can touch the store
 directly, and no local helper can defend against that.
 

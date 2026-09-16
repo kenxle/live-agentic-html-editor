@@ -111,12 +111,15 @@ to enroll. Two things to know:
   means.
 - The open link is `index.html` when the folder has one, else the first page in
   name order. Give them that URL and let them walk from there.
-- **A folder review does not reload their page for them.** A single-page review
-  watches that one file and reloads the reviewer's page when your edit lands. A
-  folder has many files and the review is recorded against the folder, so there
-  is no one file to watch. After you change a page, say so in your reply and ask
-  them to reload it. If the reload loop matters more than the walk, review that
-  one page on its own instead.
+- **Their page reloads itself, the same as a single-page review.** Edit any page
+  in the folder and the page they are standing on reloads when your change
+  lands, with their outstanding comments re-applied. An edit to one page never
+  reloads another.
+- **A page you enrolled on its own keeps its own review.** If `lahe review
+  page.html` already ran on a file in this folder, that page stays on its own
+  review and the folder review covers every other page. Two reviews over one
+  folder is legal and is where a reply lands on the wrong card; the helper log
+  says so when it happens.
 
 **The assets trap.** `lahe review page.html` roots its server at the page's OWN
 folder. An asset beside the page loads. An asset ABOVE it does not:
