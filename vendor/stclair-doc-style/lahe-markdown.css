@@ -82,11 +82,20 @@
 
    A GFM task list already carries its own marker, so it drops the dot and the
    inset the dot hangs in. The selector has to name the class-free list the way
-   the base does, or the base's ::before wins on specificity. */
+   the base does, or the base's ::before wins on specificity.
 
-main ul:not([class]) li:has(> input[type="checkbox"]) { padding-left: 0 }
-main ul:not([class]) li:has(> input[type="checkbox"])::before { content: none }
-main li > input[type="checkbox"] {
+   Two shapes, because marked renders a task list two ways. A tight list puts
+   the checkbox straight in the item; a loose one (blank lines between items)
+   puts it inside a paragraph. Measured on 2026-09-16: only naming the tight
+   shape left a loose task item wearing a dot and a checkbox at once, which is
+   the exact thing this opt-out exists to prevent. */
+
+main ul:not([class]) li:has(> input[type="checkbox"]),
+main ul:not([class]) li:has(> p > input[type="checkbox"]) { padding-left: 0 }
+main ul:not([class]) li:has(> input[type="checkbox"])::before,
+main ul:not([class]) li:has(> p > input[type="checkbox"])::before { content: none }
+main li > input[type="checkbox"],
+main li > p > input[type="checkbox"] {
   accent-color: var(--sage);
   margin-right: var(--s2);
 }
