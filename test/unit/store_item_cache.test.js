@@ -28,7 +28,9 @@ function spyBacking(seed) {
   const values = Object.assign(Object.create(null), seed || {});
   const reads = [];
   const writes = [];
-  const state = { full: false };
+  // onSet runs AFTER the value has landed, which is how a test stands another
+  // tab in the middle of this one's write.
+  const state = { full: false, onSet: null, refuseKey: null };
   return {
     reads: reads,
     writes: writes,
@@ -39,13 +41,14 @@ function spyBacking(seed) {
       return Object.prototype.hasOwnProperty.call(values, key) ? values[key] : null;
     },
     setItem: (key, value) => {
-      if (state.full) {
+      if (state.full || (state.refuseKey && key.indexOf(state.refuseKey) === 0)) {
         const err = new Error("The quota has been exceeded.");
         err.name = "QuotaExceededError";
         throw err;
       }
       writes.push(key);
       values[key] = String(value);
+      if (state.onSet) state.onSet(key);
     },
     removeItem: (key) => {
       delete values[key];
@@ -185,6 +188,80 @@ test("a second tab's write to the items is visible to the first", () => {
 
   second.remove(REVIEW, item.id);
   assert.equal(first.read(REVIEW).length, 0, "including a removal");
+});
+
+test("a tab that reads in the middle of another tab's write does not hold on to the old list", () => {
+  // THE RACE. A write is two `setItem` calls, the list and the stamp, and
+  // another tab can read between them. With the stamp written first, that tab
+  // reads the NEW stamp and the OLD list, and caches the pair: its stamp check
+  // then agrees forever and it never sees the write at all. So the list lands
+  // first, and a reader that catches the halfway state holds a stamp that is
+  // already out of date, which invalidates on its next read.
+  const backing = spyBacking();
+  const writer = storeModule.createStore({ backing: backing });
+  const reader = storeModule.createStore({ backing: backing });
+  const item = itemOf({ note: "one" });
+
+  writer.write(REVIEW, item);
+  assert.equal(reader.readItem(REVIEW, item.id).note, "one", "the reader is warm");
+
+  // One read from the other tab, from inside the write, after the first of the
+  // two keys has landed.
+  let interleaved = 0;
+  backing.state.onSet = () => {
+    if (interleaved) return;
+    interleaved += 1;
+    reader.read(REVIEW);
+  };
+  writer.write(REVIEW, Object.assign({}, item, { note: "two" }));
+  backing.state.onSet = null;
+  assert.equal(interleaved, 1, "the read really did land in the middle of the write");
+
+  assert.equal(reader.readItem(REVIEW, item.id).note, "two", "and the reader sees the finished write");
+});
+
+test("a stamp that could not be written leaves no reader trusting the list before it", () => {
+  // The other half of the ordering: the list landed and the stamp did not, so
+  // nothing in storage says the list moved. The stamp is cleared instead, which
+  // every held copy disagrees with, so every reader goes back to the bytes.
+  const backing = spyBacking();
+  const writer = storeModule.createStore({ backing: backing });
+  const reader = storeModule.createStore({ backing: backing });
+  const item = itemOf({ note: "one" });
+
+  writer.write(REVIEW, item);
+  assert.equal(reader.readItem(REVIEW, item.id).note, "one");
+
+  backing.state.refuseKey = storeModule.GEN_PREFIX;
+  assert.throws(() => writer.write(REVIEW, Object.assign({}, item, { note: "two" })), /STORAGE_QUOTA|full/i);
+  backing.state.refuseKey = null;
+
+  assert.equal(reader.readItem(REVIEW, item.id).note, "two", "the list that did land is what both tabs read");
+  assert.equal(writer.readItem(REVIEW, item.id).note, "two");
+});
+
+test("a record repaired on the way out of storage is repaired on the way in too", () => {
+  // collapsePageCheckNote squashes the repeated page-check sentence that the
+  // pre-2026-09-10 reopen loop wrote into a note. It used to run on every read,
+  // which meant every read; it now runs on a cold parse, so the write path has
+  // to do it as well or a record arriving from the helper reads doubled on the
+  // card until the next reload.
+  const sentence = record.PAGE_CHECK_NOTES[0];
+  const doubled = sentence + " " + sentence;
+  const backing = spyBacking();
+  const store = storeModule.createStore({ backing: backing });
+
+  const fromHelper = itemOf({ note: doubled, state: record.STATE.READY });
+  store.mergeWithHelper(REVIEW, [fromHelper]);
+  assert.equal(store.readItem(REVIEW, fromHelper.id).note, sentence, "the warm read is repaired");
+
+  // And the repair is what was written down, so it holds without a reload and
+  // for every other tab too.
+  assert.equal(JSON.parse(backing.values[itemsKey(REVIEW)])[0].note, sentence);
+
+  // The ordinary write path as well, not only the merge.
+  store.write(REVIEW, Object.assign({}, fromHelper, { note: doubled }));
+  assert.equal(store.readItem(REVIEW, fromHelper.id).note, sentence);
 });
 
 test("a bucket written before any stamp existed is still read", () => {

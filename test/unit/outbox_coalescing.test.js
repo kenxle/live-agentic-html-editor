@@ -200,11 +200,30 @@ test("the same event_id still replaces, so a re-queue after a failed post cannot
   const event = eventOf(protocol.EVENT.ITEM_READY, item);
 
   store.queueEvent(REVIEW, event);
-  store.queueEvent(REVIEW, Object.assign({}, event, { payload: { record: typed(item, "again") } }));
+  const again = eventOf(protocol.EVENT.ITEM_READY, typed(item, "again"), { event_id: event.event_id });
+  store.queueEvent(REVIEW, again);
 
   const queue = store.pendingEvents(REVIEW);
   assert.equal(queue.length, 1);
   assert.equal(queue[0].event_id, event.event_id);
+  assert.equal(queue[0].record.note, "again", "and it is the REPLACEMENT that is queued, not the first one");
+});
+
+test("what a caller does to the record it queued does not change the queued event", () => {
+  // sync.js builds the event around the record the surface is holding, and the
+  // surface goes on editing that object. The queue is written to storage, so it
+  // was immune to that before it was also held in memory.
+  const store = storeModule.createStore({ backing: memoryBacking() });
+  const item = itemOf({ note: "one" });
+  const event = eventOf(protocol.EVENT.ITEM_CREATED, item);
+
+  store.queueEvent(REVIEW, event);
+  event.record.note = "scribbled on after queueing";
+  event.rev = 99;
+
+  const queue = store.pendingEvents(REVIEW);
+  assert.equal(queue[0].record.note, "one");
+  assert.equal(queue[0].rev, item.rev);
 });
 
 test("acknowledge still drops only the ids the helper named", () => {

@@ -92,6 +92,11 @@
   // The one event type the outbox collapses. Spelled in protocol.js, read here,
   // never restated: a second spelling of a wire name is how the two drift.
   var CONTENT_EVENT = protocol.EVENT.ITEM_CONTENT;
+  // How many times a cold read will try to see a list and its stamp hold still
+  // together before it gives up and caches nothing. Three, because the only way
+  // to lose three in a row is another tab writing on every one of them, and at
+  // that point not holding a copy is the right answer anyway.
+  var READ_ATTEMPTS = 3;
   var RECLAIM_DEADLINE_MS = 1500;
   var SESSION_SECRET_PREFIX = "lahe.session.v1:";
 
@@ -262,6 +267,14 @@
      * The cached list for a storage key, re-parsed only when someone has written
      * since this store last looked.
      *
+     * THE STAMP IS READ TWICE, once before the parse and once after, and the
+     * pair is only held when the two agree. A write is two `setItem` calls and
+     * another tab can read between them, so without the second read this store
+     * could hold "this list, under that stamp" for a moment that never existed.
+     * With the list written first (see writeList) that pair is merely one read
+     * out of date rather than wrong, so this is the braces to that belt; it also
+     * saves the next read from parsing again.
+     *
      * @param {string} key the storage key holding the list
      * @param {function(Array): Array} [prepare] run once, on a cold parse only
      * @returns {Array} the cached list itself. Callers do not mutate it.
@@ -270,38 +283,71 @@
       var stamp = backing.getItem(genKeyFor(key));
       var held = listCache[key];
       if (held && held.stamp === stamp) return held.value;
-      var parsed = readJson(key, []);
-      var value = Array.isArray(parsed) ? parsed : [];
-      if (prepare) value = prepare(value);
-      listCache[key] = { stamp: stamp, value: value };
+      var value = [];
+      for (var tries = 0; tries < READ_ATTEMPTS; tries += 1) {
+        var parsed = readJson(key, []);
+        value = Array.isArray(parsed) ? parsed : [];
+        if (prepare) value = prepare(value);
+        var after = backing.getItem(genKeyFor(key));
+        if (after === stamp) {
+          listCache[key] = { stamp: stamp, value: value };
+          return value;
+        }
+        stamp = after;
+      }
+      // Somebody wrote during every attempt. Hand back the last parse and hold
+      // nothing, so the next read starts again rather than trusting a pair that
+      // was never seen to hold still.
+      delete listCache[key];
       return value;
     }
 
     /**
      * Writes a list and stamps it, synchronously, in that order.
      *
-     * THE STAMP MOVES FIRST. If the list write then fails on a full storage, the
-     * stamp in storage no longer matches any cached copy, so every reader,
-     * including this one, goes back to the bytes. A stamp written after a failed
-     * write would be a cache that agrees with a stamp and disagrees with the
-     * disk, which is the one outcome worth ruling out.
+     * THE LIST MOVES FIRST, and this is the whole of the cross-tab rule. Browser
+     * storage is shared by every tab on the origin and a reader can land between
+     * the two writes. Stamping first would hand that reader the NEW stamp beside
+     * the OLD list, and it would hold that pair until the next write on this key:
+     * its stamp check would agree forever and it would never see this write at
+     * all. Writing the list first means the worst a reader can catch is the new
+     * list under the old stamp, which invalidates on its next read.
      */
     function writeList(key, value) {
       cacheTicks += 1;
       var stamp = cacheSalt + ":" + cacheTicks;
       delete listCache[key];
-      writeRaw(genKeyFor(key), stamp);
       writeJson(key, value);
+      try {
+        writeRaw(genKeyFor(key), stamp);
+      } catch (err) {
+        // The list landed and the stamp did not, so nothing in storage says the
+        // list moved and every other tab is holding a copy under the old stamp.
+        // Clearing the stamp says it louder than leaving the old one: no held
+        // copy matches an absent stamp, so every reader goes back to the bytes.
+        try {
+          backing.removeItem(genKeyFor(key));
+        } catch (ignored) {
+          void ignored;
+        }
+        throw err;
+      }
       listCache[key] = { stamp: stamp, value: value };
       return value;
     }
 
-    // Everything comes out of storage through here, which is why the repair
-    // below lives here. Records written before the reopen loop was fixed
-    // (2026-09-10) carry the page check's sentence many times over in one note,
-    // once per cycle. Collapsing it on the way out means the reviewer's card
-    // reads right on the next reload, with nobody editing storage by hand, and
-    // the next write of that item persists the collapse.
+    // THE REPAIR. Records written before the reopen loop was fixed (2026-09-10)
+    // carry the page check's sentence many times over in one note, once per
+    // cycle. Collapsing it means the reviewer's card reads right, with nobody
+    // editing storage by hand.
+    //
+    // It runs on BOTH SIDES, and it has to. A cold parse is the only read that
+    // reaches the bytes, so a repair done only there would be undone the moment
+    // the held copy took over: a record arriving from the helper still carrying
+    // the doubled sentence would read doubled on the card until the next reload.
+    // Running it on the write as well makes the held copy say what a fresh parse
+    // would, and writes the collapse down so it sticks.
+    //
     // A copy of one record, one level deep. Every caller that changes a record
     // in this library replaces a top-level field (replay.js and tab_done.js
     // write item[REGION], overlay.js writes item[STATE]) or builds a new object
@@ -325,7 +371,12 @@
     }
 
     function writeAll(reviewId, items) {
-      writeList(keyFor(reviewId), items.map(detach));
+      writeList(
+        keyFor(reviewId),
+        items.map(function (item) {
+          return detach(record.collapsePageCheckNote(item));
+        })
+      );
       return items;
     }
 
@@ -543,20 +594,33 @@
       if (!event || typeof event.event_id !== "string" || !event.event_id) {
         throw new TypeError("store.queueEvent: an event needs an event_id; idempotence is by event_id");
       }
+      var queued = detachEvent(event);
       var queue = readList(outboxKey(reviewId)).slice();
       for (var i = 0; i < queue.length; i += 1) {
-        if (queue[i].event_id === event.event_id) {
-          queue[i] = event;
+        if (queue[i].event_id === queued.event_id) {
+          queue[i] = queued;
           return writeList(outboxKey(reviewId), queue);
         }
       }
-      if (supersedes(event)) {
-        queue = queue.filter(function (queued) {
-          return !supersedes(queued) || !sameContentSlot(queued, event);
+      if (supersedes(queued)) {
+        queue = queue.filter(function (held) {
+          return !supersedes(held) || !sameContentSlot(held, queued);
         });
       }
-      queue.push(event);
+      queue.push(queued);
       return writeList(outboxKey(reviewId), queue);
+    }
+
+    // The event as the queue will hold it, detached from the caller. sync.js
+    // builds the event around the record the surface is HOLDING, and the surface
+    // goes on editing that object with the next keystroke. Serializing on every
+    // write used to make the queue immune to that; now that it is also held in
+    // memory, the copy has to be taken here. Two levels, because the record is
+    // the nested thing that keeps changing.
+    function detachEvent(event) {
+      var copy = Object.assign({}, event);
+      if (copy.record && typeof copy.record === "object") copy.record = Object.assign({}, copy.record);
+      return copy;
     }
 
     // Which events collapse onto each other, spelled once.
