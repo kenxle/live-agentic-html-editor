@@ -79,6 +79,20 @@ In the order I would do them.
 
 Items 1 and 2 change the event model and deserve a short brief before a builder touches them. Items 3 to 5 do not.
 
+## Progress
+
+- **2026-09-16, branch `worktree-agent-adfd555be06ed2870`: fix 3 landed, the layer's retention issues 3 to 6.** What it covers:
+  - `replay.js`: the element memory (`lastElement`) is released when the record leaves the review, and when the node it names is out of the document. A handled record keeps its entry while its node is live, because the Done card's click-to-find (`locate`) is the only thing that knows where a handled item's passage is.
+  - `replay.js`: a resolved conflict's card node is removed from the card and from `conflictNodes` instead of being emptied and hidden. The next collision on the same record builds a fresh one.
+  - `overlay.js`: the pill's viewport clamp (`resize` and `orientationchange` on the window) is removed on unmount, so a rail rebuilt by `ensureRoot` ends with two listeners rather than two more.
+  - `index.js`: the status line's history is capped at the newest 200 entries.
+  - `tab_done.js`: `pageLife.announced` and `pageLife.neglected` drop the ids of records that are no longer in the review.
+  - `comments.js`: the node an item was created on is released when the item is deleted.
+  - `editing.js`: the block-to-record list already dropped a record on retire; it now also drops rows whose block the page has replaced.
+  - `overlay.js` `toastKeys` was left alone on purpose: it is a rule, not a bug. See the note under issue 6 below.
+
+  Issue 6's `toastKeys` reading is corrected: the set does not block a later reply on the same item. The key is `reply:<id>:<replyStamp>`, so a new reply is a new key; the neglect re-show adds its own `:waiting` suffix, and the waiting COUNT passes no key at all so the rail cannot refuse a legitimately new one. "Shown once per key, for the life of the rail" is what rules 2 and 5 of the toast contract ask for (the X means read, and once per page life), so deleting a key on dismissal would put a dismissed reply back on screen. It grows by one short string per distinct thing the rail has said, which is bounded by the replies of one session.
+
 ## What this does not settle
 
 Whether any of Ken's long-open LAHE tabs is individually large. The Chrome extension was not connected to this session, so per-tab heap could not be read from outside. Chrome's own Task Manager (Window menu, Task Manager) lists memory per tab and would answer it in one look.
