@@ -535,6 +535,30 @@ test("servedVia is injected only while this session's static server is actually 
   assert.equal(await status.servedVia(dir, "s_served", [page]), "on_disk", "a stopped server is back on the on-disk line");
 });
 
+test("a folder review reads injected while its server is up, and says nothing once it is down", async (t) => {
+  // `lahe review <folder>` records the FOLDER as the review's target, and its
+  // server is rooted there. Every page in it carries the rail through the
+  // response and none of them has a line on disk, so "on_disk" would be a lie:
+  // this answer is either injected or nothing at all.
+  const dir = tempState();
+  const site = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-status-folder-"));
+  fs.writeFileSync(path.join(site, "index.html"), "<html></html>");
+
+  assert.equal(await status.servedVia(dir, "s_folder", [site]), null, "no server yet: nothing to report");
+
+  const server = await staticServersModule.start({ dir, sessionId: "s_folder", root: site });
+  t.after(async () => { await staticServersModule.stopAll(dir, "s_folder"); });
+  assert.equal(await status.servedVia(dir, "s_folder", [site]), "injected");
+  assert.equal(
+    await status.servedVia(dir, "s_other_session", [site]),
+    null,
+    "a static server is a per-session lease, so another session's folder is not ours"
+  );
+
+  await staticServersModule.stopOne(dir, "s_folder", server.meta);
+  assert.equal(await status.servedVia(dir, "s_folder", [site]), null);
+});
+
 test("the printed status names the mechanism for a static review with a live server", async (t) => {
   const dir = tempState();
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-status-served-"));
