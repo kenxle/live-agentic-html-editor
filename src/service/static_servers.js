@@ -269,31 +269,48 @@ function send(res, status, body, type) {
 // holds reviews in memory, so disk is the only thing they share.
 
 /**
- * Does this recorded target mean "the whole of the folder this server serves"?
+ * The folder a review of `target` is served out of: the folder itself for a
+ * folder review, the page's own folder for a single page. Null when the target
+ * is not on disk any more.
  *
- * Exactly one shape does: a folder review, whose target IS the served root. Two
- * near misses that must not count, both found in review:
- *
- *  - ANY TARGET UNDER THE ROOT. `lahe review site/` then
- *    `lahe review site/sub/` are two documents that happen to be nested, and a
- *    newer inner review would otherwise take over every page of the outer one.
- *  - A SINGLE PAGE'S TARGET. A one-page review roots its server at the page's
- *    own folder, which is very often a home or Desktop directory full of
- *    unrelated HTML. Those pages are not what the reviewer asked for, and
- *    serving them a live review id and token hands it to any script on them.
- *
- * The stat is what separates a folder review from a page review, and it only
- * runs for a target that already equals one of this server's roots, so it is at
- * most one syscall per candidate review.
+ * This is the same choice `lahe review` makes when it starts the server (see
+ * servedKind in src/cli/commands/review.js), which is the point: it is how a
+ * review recorded on disk is matched back to the server that serves it.
  */
-function isServedFolder(target, roots) {
-  if (typeof target !== "string" || !target) return false;
-  if (roots.indexOf(target) === -1) return false;
+function servedFrom(target) {
+  if (typeof target !== "string" || !target) return null;
   try {
-    return fs.statSync(target).isDirectory();
+    if (fs.statSync(target).isDirectory()) return target;
   } catch (err) {
-    return false;
+    return null;
   }
+  return path.dirname(target);
+}
+
+/**
+ * Is this review's own served folder the folder this server is rooted at?
+ *
+ * THE RAIL FOLLOWS THE REVIEWER. Ken, 2026-09-16: "if you can navigate to a
+ * page from where you currently are, and you currently have the lahe editor, it
+ * should follow you across anything you click on." A single-page review serves
+ * that page's whole folder, so every page in it is somewhere the reviewer can
+ * get to by clicking a link or typing a name, and arriving there without a rail
+ * is arriving somewhere they cannot say anything. So a one-page review answers
+ * for its siblings too, exactly as a folder review answers for its pages.
+ *
+ * The reviewer who does not want that says so with `--only`, which is checked
+ * by the caller: a folder nobody chose (Downloads, a Desktop) is a real case,
+ * and it gets a flag rather than a narrower default.
+ *
+ * WHAT IS STILL EXCLUDED is a review whose own server root is somewhere else.
+ * `lahe review site/` and `lahe review site/sub/` are two documents that happen
+ * to be nested, each with its own server rooted at its own folder, and neither
+ * reaches up into the other. Without that, the newer and narrower review takes
+ * over every page of the outer one.
+ */
+function backsServer(target, roots) {
+  var from = servedFrom(target);
+  return !!from && roots.indexOf(from) !== -1;
 }
 
 /** Newer wins; the id breaks a tie, so two reviews minted in one millisecond
@@ -312,12 +329,13 @@ function newer(candidate, best) {
  *  1. THE RECORDED TARGET. A review that named this exact file (the same
  *     target paths reviews.recordPaths writes to meta.json). Newest wins on the
  *     rare path collision, matching add.js's reviewMatchingPath.
- *  2. THE FOLDER REVIEW. `lahe review <folder>` records the folder itself, and
- *     everything our own server hands out of that folder gets the rail: pages
- *     the reviewer reaches by a link, and pages written after the review was
- *     opened. A folder of wireframes is the case it exists for. See
- *     docs/ongoing/STATIC_SITE_FOLDER.md, and isServedFolder above for the two
- *     shapes that deliberately do NOT count.
+ *  2. THE REVIEW THIS SERVER IS SERVING FOR. Everything our own server hands
+ *     out of a reviewed folder gets the rail: pages the reviewer reaches by a
+ *     link, pages written after the review was opened, and the siblings of a
+ *     single reviewed page. The rail follows the reviewer wherever they can
+ *     navigate to. See backsServer above for what that means exactly, and
+ *     docs/ongoing/STATIC_SITE_FOLDER.md for why. A review opened with `--only`
+ *     opts out and answers for its recorded pages alone.
  *
  * NOTHING IS WRITTEN. No enrollment, no meta.json update, no log line for the
  * ordinary case. The server stays a reader of the review store; the item's own
@@ -379,8 +397,12 @@ function findReviewForRequest(dir, options) {
       if (newer(candidate, recorded)) recorded = candidate;
       return;
     }
-    var isFolderReview = targets.some(function (target) { return isServedFolder(target, roots); });
-    if (isFolderReview && newer(candidate, backing)) backing = candidate;
+    // `--only` (meta.only_recorded_pages) is the reviewer saying this review is
+    // about the page they named and nothing else around it. An isolated review
+    // is never borrowed for a page it did not record.
+    if (meta.only_recorded_pages === true) return;
+    var servesThisFolder = targets.some(function (target) { return backsServer(target, roots); });
+    if (servesThisFolder && newer(candidate, backing)) backing = candidate;
   });
   var best = recorded || backing;
   if (!best) return null;
