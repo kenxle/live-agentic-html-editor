@@ -82,3 +82,13 @@ Items 1 and 2 change the event model and deserve a short brief before a builder 
 ## What this does not settle
 
 Whether any of Ken's long-open LAHE tabs is individually large. The Chrome extension was not connected to this session, so per-tab heap could not be read from outside. Chrome's own Task Manager (Window menu, Task Manager) lists memory per tab and would answer it in one look.
+
+## Progress
+
+**2026-09-16, branch `worktree-agent-aa9147257d5b588f7`: fix 1 landed, plus finding 2.** The design note is `docs/ongoing/OUTBOX_COALESCING.md`. What it does:
+
+- **The outbox holds one entry per item per revision, not one per keystroke.** A queued `item.content` for an item is dropped when the next one for that item at the same revision arrives, and the new one goes to the back of the queue. `item.created`, `item.ready`, `item.deleted` and `item.reopened` are never coalesced. Revision is part of the match because the helper composes a thread continuation against `prev.rev + 1`; keystrokes never move the revision, so this costs the saving nothing.
+- **The poll tick stops parsing the outbox, and the keystroke stops parsing the items.** Both lists are held in memory in `store.js` beside a small stamp written into storage on every write. A reader compares the stamp it is holding with the stamp on disk, so a write from another tab invalidates the copy here with no window listener and no storage event.
+- **A full browser storage no longer throws out of the keystroke handler.** `failures.js` gained `isStorageQuota` and `tolerateStorageQuota`; `editing.js` and `comments.js` use them on the typing path, and `index.js` routes the failure to the rail's failure list. The rail's own `saveChips` tolerates it too, since it writes into the same full storage.
+
+The helper, the log format and the projection are untouched. Fix 2 of the list above, the helper re-reading the whole log on every fold, is still open and is the other half of the 84 MB parse.
