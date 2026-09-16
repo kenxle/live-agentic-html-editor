@@ -54,6 +54,32 @@ Every item.content event carries the full record, including after_history. So on
 
 The helper regenerates review.json by reading the whole log for that review and projecting it, on every fold and on every change an agent can act on (`regenerate` in `src/service/projection.js`). For the 84 MB review that is an 84 MB parse per flush. The helper's steady RSS is modest because that memory is freed afterward, but each parse is a spike, which is exactly what the sibling session saw: transient spikes, not sustained growth.
 
+## CPU and battery, measured 2026-09-16 afternoon
+
+Ken's battery drained in about two hours off the charger and the machine ran hot. Measured the same afternoon:
+
+| Where the CPU went | Accumulated |
+| --- | --- |
+| Chrome, iTerm2, Superwhisper, and the rest | 10.4 cpu-hours |
+| WindowServer (drawing the screen) | 3.9 cpu-hours |
+| Claude Code sessions | 0.7 cpu-hours |
+| All Node processes | 0.5 cpu-hours |
+| LAHE helper, up 19.5 hours | 28 minutes |
+| One LAHE static server, up for hours | about 1 second |
+
+At the moment of measurement the hot processes were a Playwright gate run: four headless Chrome workers and four Node test workers. The full browser suite ran at least six times that day across builders and reviewers, with up to seven agents in parallel, each with its own checkout and npm install. That is the burn, not the tool's runtime.
+
+A controlled A/B of one review page in headless Chromium, 90 seconds each, CPU read from Chrome's own process info:
+
+| Page | Renderer CPU | Browser process CPU |
+| --- | --- | --- |
+| With the rail and the one-second poll | 0.2% of one core | 0.1% |
+| Same HTML from disk, no rail | 0.0% | 0.0% |
+
+So an open LAHE tab costs about a fifth of a percent of one core while visible, and hidden tabs poll ten times less often. Twenty open tabs is a few percent of one core. The helper's poll route caches on the log's sequence number and only re-projects when something new landed, so an idle tab is a cheap read on both ends.
+
+Policy change from this: builders run the unit suite only; the orchestrator runs the browser suite once per checkpoint, plugged in; fewer parallel agents on battery.
+
 ## What the code audit found in the layer
 
 Ranked by impact. File and line references are into `src/layer/`.
