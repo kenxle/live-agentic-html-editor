@@ -268,17 +268,61 @@ function send(res, status, body, type) {
 // straight off disk: this server is a separate process from the helper that
 // holds reviews in memory, so disk is the only thing they share.
 
+/** Is `candidate` the directory `base`, or something inside it? */
+function isUnder(candidate, base) {
+  if (typeof candidate !== "string" || !candidate) return false;
+  if (typeof base !== "string" || !base) return false;
+  return candidate === base || candidate.indexOf(base + path.sep) === 0;
+}
+
+/** Newer wins; the id breaks a tie, so two reviews minted in one millisecond
+ * still pick the same way on every request. */
+function newer(candidate, best) {
+  if (!best) return true;
+  if (candidate.at !== best.at) return candidate.at > best.at;
+  return candidate.review > best.review;
+}
+
 /**
- * The review that recorded `filePath` (or one of `filePaths`) as a target, or
- * null. Newest review wins on the rare path collision, matching
- * add.js's reviewMatchingPath.
+ * The review a page this server is about to serve belongs to, or null.
+ *
+ * TWO WAYS TO LAND ON ONE, in order.
+ *
+ *  1. THE RECORDED TARGET. A review that named this exact file (the same
+ *     target paths reviews.recordPaths writes to meta.json). Newest wins on the
+ *     rare path collision, matching add.js's reviewMatchingPath.
+ *  2. THE REVIEW THIS SERVER BACKS. Anything our own static server serves gets
+ *     the rail, so a page no review ever recorded rides the newest review of
+ *     this agent session whose own target sits in the folder this server is
+ *     rooted at. A folder of wireframes is the case: one review for the folder,
+ *     and every page in it, including pages written after the review was
+ *     opened, comes up reviewable. See docs/ongoing/STATIC_SITE_FOLDER.md.
+ *
+ * NOTHING IS WRITTEN. No enrollment, no meta.json update, no log line for the
+ * ordinary case. The server stays a reader of the review store; the item's own
+ * event carries the page path, which is all the rail and review.json need to
+ * group by page.
+ *
+ * Another agent session's review never answers here, even when it is newer and
+ * in the same folder: sessions do not see each other's work, and a shared folder
+ * is exactly where that would leak. Mounted folders are not searched either,
+ * because a document reached by a link off a rendered Markdown page is served
+ * read-only on purpose.
+ *
+ * Read straight off disk: this server is a separate process from the helper that
+ * holds reviews in memory, so disk is the only thing they share.
  *
  * @param {string} dir the state directory
- * @param {string[]} filePaths candidate absolute paths for the same request
- *   (the resolved path and, when it differs, its realpath)
+ * @param {{filePaths: string[], sessionId: string, roots: string[]}} options
+ *   `filePaths` are candidate absolute paths for the same request (the resolved
+ *   path and, when it differs, its realpath). `roots` are this server's own
+ *   root directories.
  * @returns {{review: string, token: string}|null}
  */
-function findReviewForTarget(dir, filePaths) {
+function findReviewForRequest(dir, options) {
+  var opts = options || {};
+  var filePaths = opts.filePaths || [];
+  var roots = opts.roots || [];
   var root;
   try {
     root = stateDir.reviewsRoot(dir);
@@ -292,7 +336,8 @@ function findReviewForTarget(dir, filePaths) {
   } catch (err) {
     return null;
   }
-  var best = null;
+  var recorded = null;
+  var backing = null;
   entries.forEach(function (entry) {
     if (!entry.isDirectory() || !protocol.isSafeId(entry.name)) return;
     var meta = readJson(stateDir.metaPath(dir, entry.name));
@@ -301,11 +346,22 @@ function findReviewForTarget(dir, filePaths) {
     if (typeof meta.target_path === "string" && meta.target_path && targets.indexOf(meta.target_path) === -1) {
       targets.push(meta.target_path);
     }
-    var matches = filePaths.some(function (candidate) { return targets.indexOf(candidate) !== -1; });
-    if (!matches) return;
-    var at = typeof meta.created_at === "string" ? meta.created_at : "";
-    if (!best || at > best.at) best = { review: entry.name, token: meta.token, at: at };
+    var candidate = {
+      review: entry.name,
+      token: meta.token,
+      at: typeof meta.created_at === "string" ? meta.created_at : ""
+    };
+    if (filePaths.some(function (file) { return targets.indexOf(file) !== -1; })) {
+      if (newer(candidate, recorded)) recorded = candidate;
+      return;
+    }
+    if (meta.agent_session_id !== opts.sessionId) return;
+    var backsThisServer = targets.some(function (target) {
+      return roots.some(function (base) { return isUnder(target, base); });
+    });
+    if (backsThisServer && newer(candidate, backing)) backing = candidate;
   });
+  var best = recorded || backing;
   return best ? { review: best.review, token: best.token } : null;
 }
 
@@ -499,6 +555,22 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
     res.end(body);
   }
 
+  // Said once per server, not once per request. A page served plain means the
+  // reviewer has no rail and no way to say anything, and the only place that
+  // fact can be seen from is the log; a line per request would bury it.
+  var saidNoReview = false;
+  function noReviewBacksThisServer() {
+    if (saidNoReview) return;
+    saidNoReview = true;
+    try {
+      logModule.createEventLog({ dir: dir }).helperLog(
+        "static server " + id + ": no review backs " + root + ", so its pages are served plain, with no rail"
+      );
+    } catch (err) {
+      // Diagnostic only; a page that cannot log must still be served.
+    }
+  }
+
   var startedAt = new Date().toISOString();
   var server = http.createServer(function (req, res) {
     var pathname;
@@ -567,7 +639,15 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
         var logicalCandidate = path.resolve(logicalRoot, path.relative(servingRoot, candidate));
         if (filePaths.indexOf(logicalCandidate) === -1) filePaths.push(logicalCandidate);
       }
-      var match = findReviewForTarget(dir, filePaths);
+      var match = findReviewForRequest(dir, {
+        filePaths: filePaths,
+        sessionId: sessionId,
+        // The server's OWN root only. A mounted folder holds documents a
+        // rendered Markdown page links to, and those are served read-only by
+        // design, so nothing there is put on a review.
+        roots: servingRoot === root ? [root, logicalRoot] : []
+      });
+      if (!match) noReviewBacksThisServer();
       if (match) {
         var html;
         try { html = fs.readFileSync(candidate, "utf8"); } catch (err) { html = null; }
