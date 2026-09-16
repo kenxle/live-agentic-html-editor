@@ -2,14 +2,14 @@
 
 Ken asked on 2026-09-16, after Claude Code killed several background monitors for low memory and a sibling session blamed Chrome. His point: a leak in the injected layer would show up as Chrome, not as a LAHE process. This is what was measured and what was found. Numbers come from `ps`, a Playwright soak test, and a Python pass over the event logs on disk.
 
-## Where this stands (updated 2026-09-16 19:00)
+## Where this stands (updated 2026-09-16 19:55)
 
 This is the one progress page for all of the memory, CPU, and token work. The merge record for the first batch is in `docs/ongoing/CHECKPOINT_20260916.md` and is not updated any more.
 
 | Work | State |
 | --- | --- |
 | 1. One message per pause instead of one per keystroke | Merged, live |
-| 2. Helper stops re-reading logs (startup rebuilds nothing; rebuilds read only what is new) | Building. Brief: `docs/features/20260916.03_helper_lazy_projection/01_spec_lazy_projection.md` |
+| 2. Helper stops re-reading logs (startup rebuilds nothing; rebuilds read only what is new) | Merged, live. Brief: `docs/features/20260916.03_helper_lazy_projection/01_spec_lazy_projection.md` |
 | 3. The page lets go of old memory | Merged, live |
 | 4. Compact or archive the 654 MB of old logs | Not started. Easier once 1 has run a while |
 | 5. Close stale agent sessions and their little servers | Not started. Cheap |
@@ -17,7 +17,7 @@ This is the one progress page for all of the memory, CPU, and token work. The me
 | 7. Trim the agent playbook (AGENTS.md, 14,000 tokens per session start) | Not started. Needs a go |
 | 8. The instructions tell agents to read the summary file once, not every wake | Not started. One line in the frozen contract text; needs a go |
 | 9. The rail follows the reviewer through a folder of pages | Merged, live (not a performance item, but it shipped in the same batch) |
-| 10. A page load or status call on a big review still reads its whole log once | Folded into 2 at Ken's request; building |
+| 10. A page load or status call on a big review still reads its whole log once | Merged with 2, live |
 
 ## Short answer
 
