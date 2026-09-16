@@ -263,15 +263,35 @@ var HANDLERS = {
     if (typeof deps.projection.tickReview === "function") {
       deps.projection.tickReview(deps, request.review);
     }
-    var events = deps.log.read(request.review);
-    var projected = deps.projection.project(request.review, events);
-    // How many items the reviewer is still writing. Drafts are NOT in the
-    // projection (R7: they never reach an agent) and that stays true; this is a
-    // count and nothing else, so `lahe status` can say "3 drafts, the reviewer
-    // is still writing" instead of leaving a stuck draft invisible to everyone.
-    var draftCount = deps.projection.itemsFrom(events).filter(function (item) {
-      return item.state === "draft";
-    }).length;
+    // OFF THE PROJECTOR'S KEPT FOLD, not off a second read of the whole log.
+    // This route used to read events.jsonl from the top and fold it twice, once
+    // for the summary and once to count drafts, on every page load, every
+    // reconnect and every `lahe status`. On an 84 MB log that is the cost the
+    // projector had just stopped paying, paid again by the reviewer.
+    //
+    // The count is of items the reviewer is still writing. Drafts are NOT in
+    // the projection (R7: they never reach an agent) and that stays true; the
+    // fold holds them and the summary withholds them, so the count comes off
+    // the fold rather than off another pass.
+    var current =
+      typeof deps.projection.currentProjection === "function"
+        ? deps.projection.currentProjection(deps, request.review)
+        : null;
+    var projected;
+    var draftCount;
+    if (current) {
+      projected = current.projection;
+      draftCount = current.draft_count;
+    } else {
+      // No projector to ask (a caller that handed in a partial projection
+      // module). The from-the-top read is still the right answer, just the
+      // expensive one.
+      var events = deps.log.read(request.review);
+      projected = deps.projection.project(request.review, events);
+      draftCount = deps.projection.itemsFrom(events).filter(function (item) {
+        return item.state === "draft";
+      }).length;
+    }
     return {
       status: 200,
       // `page_last_seen_at` is the liveness fact `lahe status` reports: when the
@@ -568,7 +588,16 @@ function unansweredWork(request, deps) {
 
   var projected;
   try {
-    projected = deps.projection.project(request.review, deps.log.read(request.review));
+    // The same kept fold `review.read` answers from. This runs on the reply
+    // poll, several times a second per open page, so a full read here was the
+    // other half of the same bill.
+    var current =
+      typeof deps.projection.currentProjection === "function"
+        ? deps.projection.currentProjection(deps, request.review)
+        : null;
+    projected = current
+      ? current.projection
+      : deps.projection.project(request.review, deps.log.read(request.review));
   } catch (err) {
     return out;
   }
