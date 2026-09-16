@@ -4,21 +4,37 @@
   not copied from the personal repo: system-tokens.css and document.css beside
   it are the copies, and they are never edited here.
 
-  Why this file exists. document.css styles CLASSED components: ul.dot,
-  table.boxed, .panel, section.sheet. marked emits bare elements with no
-  classes, so nothing in a rendered Markdown document would pick those styles
-  up. This file maps the bare elements onto the same components, so a rendered
-  .md looks like a St. Clair AI document without an agent having to add a
-  single class.
+  Why this file is short. document.css now styles BARE elements: a class-free
+  ul gets the sage dot, a class-free ol gets the drawn numeral, and the
+  headings, tables, blockquotes and images all have a house look with no class
+  needed. marked emits exactly those bare elements, so a rendered .md already
+  looks like a St. Clair AI document. Restating any of it here is the drift the
+  style rebuild ended, so this file only carries what the base cannot know
+  about:
 
-  It also carries the @font-face rules. They are the one place in this file
-  allowed to name a font file or a literal value; everything else uses a token
-  from system-tokens.css.
+  - the three @font-face rules, pointing at the vendored woff2 files
+  - color-scheme: light, so the browser's own controls stay on a light ground
+  - ligatures off in code, because an arrow drawn as one glyph is wrong in a
+    document about code
+  - the Mermaid block: a diagram is emitted as pre.mermaid, so it has to be
+    told not to look like a code block
+  - LAHE's own furniture: .frontmatter, .lahe-readonly-note, .lahe-local-link
+  - the GFM task-list opt-out: a checkbox item already carries its own marker,
+    so it drops the base's dot and its inset
+  - the tighter paragraph gap inside a list item, which the base has no
+    list-scoped rule for
+  - the top margin on a list nested inside a list item
 
-  Light only, by decision. The guide is a light system, so the renderer's old
-  dark palette is gone and no media query in this bundle asks the browser which
-  scheme it prefers. color-scheme is pinned to light below, which is what keeps
-  the browser's own scrollbars and form controls on a light ground.
+  The page column is not here, and must not be. main is a body child, so the
+  base's one column rule gives it the 1080px column and the gutter, and the
+  hero and the sections sit inside that. No width, no font size, no heading
+  margin in this file.
+
+  Two look changes are decisions, not fallout. A table is now the base's naked
+  ruled table, its default, rather than the boxed cobalt-header table this
+  layer used to draw. A blockquote is now the base's quiet hairline quote
+  rather than a sage tint. Both are the guide's own defaults, which is the
+  point of taking the base whole.
 
   House rules this file obeys: no em dashes, no pills, no gradients, no
   shadows, no all caps, no single-side coloured borders.
@@ -56,135 +72,36 @@
   src: url("./.lahe-fonts/jetbrains-mono-variable.woff2") format("woff2");
 }
 
+/* Light only, by decision. The guide is a light system, so nothing in this
+   bundle asks the browser which scheme it prefers. */
 :root { color-scheme: light }
 
-/* ---------- the page column ----------
-   main is a plain block. The renderer wraps the document in .wrap.hero and
-   section.sheet, and both of those carry the 1080px column and the horizontal
-   inset themselves, from document.css. Nothing sets a column here: Ken's note
-   from the style review was that it had once been set in five places and they
-   drifted apart.
-
-   Prose takes the reading measure inside that column, the way .read does for a
-   hand-written page. Tables, code and diagrams stay full width. */
-
-section.sheet p, section.sheet ul, section.sheet ol,
-.hero p, .hero ul, .hero ol { max-width: var(--read) }
-
-/* ---------- headings ----------
-   document.css sets the faces, sizes and sentence-case rule. It zeroes the
-   margins, because a component decides its own spacing. h1 and h2 now sit in
-   components that own their spacing (.hero and .sheet-head), so only the lower
-   headings need rhythm. Scoped to main rather than to section.sheet so a
-   heading in the lede gets the same room as one in a section. */
-
-main h3 { margin: var(--s6) 0 var(--s3) }
-main h4 { margin: var(--s5) 0 var(--s2) }
-main h5, main h6 { margin: var(--s5) 0 var(--s3) }
-main h5, main h6 {
-  font-family: var(--font-display);
-  font-weight: var(--w-display);
-  font-size: 16px;
-  line-height: 1.2;
-  letter-spacing: -.012em;
-}
-
 /* ---------- lists ----------
-   The renderer puts class="dot" on every unordered list, so document.css's
-   ul.dot rules draw the sage bullet and there is nothing to restate here. Only
-   the bottom margin is ours: ul.dot zeroes it, on the assumption that a
-   component sets the gap, and a Markdown document has no components.
+   The base draws the dot and the numeral. These three rules are the gaps it
+   leaves, because it has no rule scoped inside a list item.
 
-   ol becomes the guide's numbered list, numerals left in ink: the guide says to
-   pick dots or coloured numerals, not both, and the dots are already spent. */
+   A GFM task list already carries its own marker, so it drops the dot and the
+   inset the dot hangs in. The selector has to name the class-free list the way
+   the base does, or the base's ::before wins on specificity. */
 
-main ul.dot { margin-bottom: var(--s4) }
-
-/* A GFM task list already carries its own marker, so it does not get a dot. */
-main ul.dot li:has(> input[type="checkbox"]) { padding-left: 0 }
-main ul.dot li:has(> input[type="checkbox"])::before { content: none }
+main ul:not([class]) li:has(> input[type="checkbox"]) { padding-left: 0 }
+main ul:not([class]) li:has(> input[type="checkbox"])::before { content: none }
 main li > input[type="checkbox"] {
   accent-color: var(--sage);
   margin-right: var(--s2);
 }
 
-main ol {
-  margin: 0 0 var(--s4);
-  padding-left: 1.4em;
-}
-main ol li {
-  margin-bottom: var(--s3);
-  font-size: 16px;
-  line-height: 1.5;
-}
-
+/* A list item holding more than one paragraph: the base's paragraph gap is the
+   gap between blocks of prose, which is too much inside a bullet. */
 main li > p { margin-bottom: var(--s2) }
 main li > p:last-child { margin-bottom: 0 }
 main li ul, main li ol { margin: var(--s3) 0 0 }
-/* The class raises the specificity of ul.dot's own rules, so a nested list
-   needs a selector that carries it too, or it keeps the outer bottom margin. */
-main li ul.dot { margin-block: var(--s3) 0 }
-main li:last-child { margin-bottom: 0 }
-
-/* ---------- blockquote as the tinted panel ----------
-   The guide's aside is a tint, never a coloured line down one side. Sage is
-   the quiet default of the three colourways. */
-
-main blockquote {
-  margin: 0 0 var(--s4);
-  padding: var(--s5);
-  border-radius: var(--r);
-  background: var(--sage-tint);
-}
-main blockquote > :last-child { margin-bottom: 0 }
-
-/* ---------- tables, the boxed look ----------
-   Full borders and a cobalt-tint header row, no zebra. document.css reaches
-   these elements through bare selectors and a :last-child rule, so every
-   override below is scoped under main to win on specificity. */
-
-/* Every table is wrapped in .scrollx by the renderer. document.css gives that
-   wrapper the horizontal scroll; the bottom margin is ours, because the table
-   inside carries none and prose after one was crowding it. */
-main .scrollx {
-  margin-bottom: var(--s5);
-  overflow-x: auto;
-}
-
-main table {
-  width: 100%;
-  margin: 0 0 var(--s4);
-  border: var(--line);
-  border-collapse: collapse;
-  font-size: 16px;
-}
-main thead th {
-  background: var(--cobalt-tint);
-  border-bottom: var(--line);
-  padding: var(--s3) var(--s4);
-  color: var(--ink);
-  font-size: 14px;
-  text-align: left;
-}
-main td {
-  padding: var(--s3) var(--s4);
-  border-bottom: var(--line);
-  vertical-align: top;
-}
-main th, main td { border-right: var(--line) }
-main th:last-child, main td:last-child {
-  border-right: 0;
-  padding-right: var(--s4);
-}
-main tbody tr:last-child td { border-bottom: 0 }
 
 /* ---------- code ----------
-   document.css already puts JetBrains Mono on a cobalt tint at 15px. The one
-   thing added here is turning the face's ligatures off: an arrow drawn as a
-   single glyph is the wrong thing in a document about code. */
+   document.css already puts JetBrains Mono on a tint. The one thing added here
+   is turning the face's ligatures off. */
 
 main code, main pre { font-variant-ligatures: none }
-main pre { margin: 0 0 var(--s4) }
 
 /* ---------- Mermaid ----------
    A diagram is emitted as pre.mermaid, so it would otherwise inherit the code
@@ -202,39 +119,18 @@ main .mermaid svg {
   height: auto;
 }
 
-/* ---------- the rest of what marked emits ---------- */
-
-main img {
-  max-width: 100%;
-  height: auto;
-  border-radius: var(--r);
-}
-main hr {
-  height: 0;
-  margin: var(--s6) 0;
-  border: 0;
-  border-block-start: var(--divider);
-}
-
 /* ---------- LAHE's own furniture ----------
    These three class names are load-bearing: the renderer writes them, the
-   layer and the tests look for them. Restyled onto tokens, not renamed. */
+   layer and the tests look for them. Styled on tokens, not renamed.
 
-/* The read-only note and the frontmatter sit above the hero, outside any
-   section, so nothing else gives them a column. They take the hero's, which is
-   what lines their left edge up with the title underneath. */
+   The read-only note and the frontmatter sit above the hero, outside any
+   section. They take their column from main, like everything else on the page,
+   so all they need here is the room above them. */
+
 main > .lahe-readonly-note,
-main > .frontmatter {
-  max-width: var(--maxw);
-  margin-inline: auto;
-  margin-block: var(--s6) 0;
-  padding-inline: var(--s5);
-}
+main > .frontmatter { margin-block: var(--s6) 0 }
 
-main .frontmatter {
-  color: var(--ink-faint);
-  font-size: 15px;
-}
+main .frontmatter { color: var(--on-surface-faint) }
 main .frontmatter summary {
   cursor: pointer;
   font-family: var(--font-display);
@@ -243,20 +139,20 @@ main .frontmatter summary {
 main .frontmatter pre { margin: var(--s3) 0 0 }
 
 main .lahe-readonly-note {
-  padding-block: var(--s3);
+  /* The box's own inner padding, not a page column: without it the sentence
+     would sit flush against the border. */
+  padding: var(--s3) var(--s4);
   border: var(--line);
   border-radius: var(--r);
-  color: var(--ink-faint);
-  font-size: 15px;
+  color: var(--on-surface-faint);
 }
 main .lahe-readonly-note code {
   background: none;
   padding: 0;
-  font-size: inherit;
 }
 
 main .lahe-local-link {
-  color: var(--ink-faint);
+  color: var(--on-surface-faint);
   text-decoration: underline dotted;
   text-underline-offset: 3px;
   cursor: help;
