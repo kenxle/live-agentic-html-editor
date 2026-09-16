@@ -9,10 +9,15 @@ already carries its own styles is never touched.
 
 | File | Where it came from |
 | --- | --- |
-| `system-tokens.css` | `~/Documents/workspace/personal/lib/templates/system-tokens.css`, copied whole on 2026-09-16 |
-| `document.css` | `~/Documents/workspace/personal/lib/templates/document.css`, copied whole on 2026-09-16 |
+| `system-tokens.css` | `~/Documents/workspace/personal/lib/templates/system-tokens.css`, copied whole on 2026-09-16 (post-rebuild version) |
+| `document.css` | `~/Documents/workspace/personal/lib/templates/document.css`, copied whole on 2026-09-16 (post-rebuild version) |
 | `lahe-markdown.css` | written in this repo, not a copy |
 | `fonts/*.woff2` | Google Fonts, latin subset, fetched 2026-09-16 |
+
+Both copies above are the post-rebuild version: PR #4 in the personal repo, landed
+2026-09-16. That rebuild put one column rule on the direct children of `body`
+(and `.band`), made every value in both files a token, and dropped `.wrap` from
+the vocabulary. A copy taken before that PR used `.wrap` for the column instead.
 | `LICENSE` | SIL Open Font License 1.1, with all three font copyright lines |
 
 The spec for the style is `personal/docs/document-style-guide.md`. The two
