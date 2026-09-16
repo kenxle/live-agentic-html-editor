@@ -37,6 +37,11 @@ var stateDir = require("./state_dir.js");
 var EVENT_ID = protocol.IDEMPOTENCE_KEY;
 var SEQ = protocol.EVENT_FIELD.SEQ;
 
+// Read the tail in chunks rather than the file whole: an events log grows for
+// the life of a review, it reaches tens of megabytes, and a reader that has
+// already seen the first ten thousand lines only ever wants the last few.
+var READ_CHUNK_BYTES = 64 * 1024;
+
 // helper.log is one line per call, and it is the file AC8 ("outside cannot get
 // in") is judged from. Any attacker-controlled value that reaches it (a review
 // id, a request path, an origin header) could otherwise carry a newline and
@@ -125,27 +130,90 @@ function createEventLog(options) {
           EVENT_ID
       );
     }
-    var state = { seq: 0, seen: Object.create(null), path: logPath };
+    // `scannedBytes` and `scannedSeq` are the tail cursor: bytes [0, scannedBytes)
+    // are whole lines this reader has already parsed, and scannedSeq is the
+    // highest seq among them. They start here, filled in by the one full read
+    // that has to happen anyway to learn the review's seq and its event ids.
+    var state = { seq: 0, seen: Object.create(null), path: logPath, scannedBytes: 0, scannedSeq: 0 };
     if (fs.existsSync(logPath)) {
-      fs.readFileSync(logPath, "utf8")
-        .split("\n")
-        .forEach(function (line) {
-          if (!line) return;
-          var parsed = protocol.parseEventLine(line);
-          if (!parsed.ok) {
-            // A line the helper itself cannot read is history it must not
-            // silently renumber over. It is reported and the file is left alone.
-            helperLog("review " + reviewId + " has an unreadable log line: " + parsed.reason);
-            return;
-          }
-          state.seen[parsed.event[EVENT_ID]] = true;
-          if (typeof parsed.event[SEQ] === "number" && parsed.event[SEQ] > state.seq) {
-            state.seq = parsed.event[SEQ];
-          }
-        });
+      var text = fs.readFileSync(logPath, "utf8");
+      var split = protocol.splitCompleteLines(text);
+      // Measured in BYTES, because the cursor is a byte offset and a multi-byte
+      // character would otherwise shift it.
+      state.scannedBytes = Buffer.byteLength(text, "utf8") - Buffer.byteLength(split.remainder, "utf8");
+      split.lines.forEach(function (line) {
+        if (!line) return;
+        var parsed = protocol.parseEventLine(line);
+        if (!parsed.ok) {
+          // A line the helper itself cannot read is history it must not
+          // silently renumber over. It is reported and the file is left alone.
+          helperLog("review " + reviewId + " has an unreadable log line: " + parsed.reason);
+          return;
+        }
+        state.seen[parsed.event[EVENT_ID]] = true;
+        if (typeof parsed.event[SEQ] === "number" && parsed.event[SEQ] > state.seq) {
+          state.seq = parsed.event[SEQ];
+        }
+      });
+      state.scannedSeq = state.seq;
     }
     loaded[reviewId] = state;
     return state;
+  }
+
+  /**
+   * The whole lines appended since this reader last looked, and nothing before
+   * them.
+   *
+   * @returns {object[]|null} the parsed events, or null when the file shrank
+   *   (truncated or replaced rather than appended to), which means the cursor
+   *   is meaningless and the caller has to read the file whole.
+   */
+  function readTailInto(state) {
+    var stat;
+    try {
+      stat = fs.statSync(state.path);
+    } catch (err) {
+      if (err.code === "ENOENT") return [];
+      throw err;
+    }
+    if (stat.size < state.scannedBytes) return null;
+    if (stat.size === state.scannedBytes) return [];
+
+    var fd = fs.openSync(state.path, "r");
+    var chunks = [];
+    var read = state.scannedBytes;
+    try {
+      for (;;) {
+        var buffer = Buffer.alloc(READ_CHUNK_BYTES);
+        var got = fs.readSync(fd, buffer, 0, READ_CHUNK_BYTES, read);
+        if (got <= 0) break;
+        chunks.push(buffer.slice(0, got));
+        read += got;
+      }
+    } finally {
+      fs.closeSync(fd);
+    }
+
+    // Concatenated before decoding, so a chunk boundary landing inside a
+    // multi-byte character does not produce two broken halves.
+    var split = protocol.splitCompleteLines(Buffer.concat(chunks).toString("utf8"));
+    var out = [];
+    split.lines.forEach(function (line) {
+      if (!line) return;
+      var parsed = protocol.parseEventLine(line);
+      // Skipped rather than reported, which is exactly what read() does with an
+      // unreadable line. load() is where that gets said out loud, once.
+      if (!parsed.ok) return;
+      out.push(parsed.event);
+      if (typeof parsed.event[SEQ] === "number" && parsed.event[SEQ] > state.scannedSeq) {
+        state.scannedSeq = parsed.event[SEQ];
+      }
+    });
+    // The remainder is a torn final line, held in front of the cursor until it
+    // is finished, so it folds once and whole on a later pass.
+    state.scannedBytes = read - Buffer.byteLength(split.remainder, "utf8");
+    return out;
   }
 
   /**
@@ -217,9 +285,29 @@ function createEventLog(options) {
     return out;
   }
 
-  /** Events after a cursor. The cursor is a seq, never a timestamp. */
+  /**
+   * Events after a cursor. The cursor is a seq, never a timestamp.
+   *
+   * A caller already level with this reader (the projector, which asks for
+   * everything after the seq it last folded) gets the tail off disk and nothing
+   * else, which is what keeps a rebuild off an 84 MB log. A caller behind it
+   * (the library's reply poll, which carries its own older cursor) gets the
+   * honest answer, which means reading the file.
+   */
   function since(reviewId, cursor) {
     var from = typeof cursor === "number" ? cursor : 0;
+    var state = load(reviewId);
+    if (from >= state.scannedSeq) {
+      var tail = readTailInto(state);
+      if (tail) {
+        return tail.filter(function (event) {
+          return typeof event[SEQ] === "number" && event[SEQ] > from;
+        });
+      }
+      // The file shrank, so the cursor names bytes that are not there any more.
+      state.scannedBytes = 0;
+      state.scannedSeq = 0;
+    }
     return read(reviewId).filter(function (event) {
       return typeof event[SEQ] === "number" && event[SEQ] > from;
     });
