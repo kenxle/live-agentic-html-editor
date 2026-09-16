@@ -97,14 +97,23 @@ needs an update, not that `src/` needs a new top-level folder.
 
 ## Running the gate
 
-**A builder runs `npm run gate:builder`.** Three gates exist and they are not
+**A builder runs `npm run gate:unit`.** Four gates exist and they are not
 interchangeable:
 
 | Command | lint | `check:layer` | unit | browsers |
 | --- | --- | --- | --- | --- |
+| `npm run gate:unit` | yes | **no** | yes | **none** |
 | `npm run gate:builder` | yes | **no** | yes | Chromium |
 | `npm run gate` | yes | yes | yes | Chromium |
 | `npm run gate:all` | yes | yes | yes | Chromium, Firefox, WebKit |
+
+Builders and reviewers run `gate:unit`. The browser suite runs ONCE per
+checkpoint, by the orchestrator, on the integrated diff. On 2026-09-16 the full
+Chromium suite ran at least six times in one afternoon across parallel builders
+and fix rounds, which drained Ken's battery in two hours and bought no coverage
+the checkpoint run would not have. A builder whose change is browser-only
+behaviour (the rail, replay, protection) may run one named spec file with
+`npx playwright test test/browser/<file>.spec.js`, never the whole suite.
 
 `check:layer` fails when the committed bundle `dist/lahe-layer.js` is stale.
 **Builders never commit `dist/`**: it is generated, and four parallel branches
@@ -122,6 +131,30 @@ Browsers install once: `npx playwright install chromium`, plus
 `npx playwright install firefox webkit` for the lanes. A bare `playwright test`
 is Chromium only, so the inner loop stays one browser wide; `--project=webkit`
 runs a single lane by name.
+
+## Running the loop (lessons from 2026-09-16)
+
+Reviews, worktrees, docs for decisions, and tests first all stay. What was
+slow that day was how the loop ran around them, so:
+
+- **Review the integrated diff at the checkpoint, not each builder branch.**
+  Merge green builder branches into an integration branch, then run one review
+  set on that diff. Per-branch reviews found the same defects three times over
+  at three times the cost.
+- **One fix round, verified by the tests the reviewer asked for.** The reviewer
+  names the test; the builder writes it red then green; the orchestrator checks
+  it exists and passes. A second review only when a fix is itself risky.
+- **Reviewer count follows the process.** A whetstone-size change gets one
+  reviewer. Feature-forge gets the set its phases define. Security joins when
+  the diff touches auth, serving, paths, or tokens.
+- **Write the builder's spec from the file, not from memory.** Open the code
+  and quote how it behaves before describing it. Three specs that day carried
+  a wrong detail each, and each cost a round of the builder arguing back.
+- **A builder that hits a limit checks in instead of documenting around it.**
+  "This cannot be done" in a report is a claim the reviewer will test; a
+  one-line question mid-build is cheaper than the fix round.
+- **A stalled small task gets a status check, not a longer wait.** A builder
+  that has made no commits after a reasonable stretch is asked where it is.
 
 ## Platform and browser target
 
