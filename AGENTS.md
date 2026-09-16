@@ -13,15 +13,6 @@ answers appear on the page while they keep reviewing. This allows a person to
 stay in flow and not switch windows, while received threaded comments from an
 agent that don't all get lost in the chat window stream.
 
-When the LAHE skill is first invoked, the agent reports the exact model name its
-host exposes, or says the name is unavailable instead of guessing. It also
-recommends a fast, lower-cost model for routine document editing. In the current
-OpenAI family that means Luna for straightforward edits and Terra when more
-judgment is needed; Sol is reserved for difficult architecture, implementation,
-or reasoning work. Other providers should recommend the analogous lightweight
-model. The report happens once per LAHE session, not on every monitor wakeup,
-and does not switch models without the human's request.
-
 ## The normal path, and the four ways agents break it
 
 Read this section even if you read nothing else. Everything below it is detail.
