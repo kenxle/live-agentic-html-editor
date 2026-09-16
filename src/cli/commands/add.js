@@ -153,6 +153,10 @@ var USAGE = [
   "  --review <id>        re-attach this page to a review that already exists, by id. Use it when a",
   "                       rebuild stripped the script line and the page did not match by path.",
   "  --session <id>       enroll or reuse only reviews owned by this open agent session.",
+  "  --only               keep this review to the page it was given. Our static server serves the",
+  "                       page's whole folder, and by default the rail follows the reviewer onto",
+  "                       every page in it. Use this when that folder holds files they did not ask",
+  "                       to review: a Downloads folder, a Desktop. It cannot be undone on a review.",
   "  --remove             take the script line back out of the page and change nothing else.",
   "                       The review's history stays where it is; see `Removing it` in the README.",
   "  --origin <origin>    an origin to register for this review. Repeatable. A static file needs",
@@ -175,6 +179,10 @@ function parseArgs(argv) {
     target: null,
     isNew: false,
     remove: false,
+    // `--only`: this review answers for the pages it recorded and nothing else
+    // in their folder. Off by default, because the default is the rail
+    // following the reviewer wherever they can navigate to.
+    only: false,
     origins: [],
     source: null,
     review: null,
@@ -223,6 +231,8 @@ function parseArgs(argv) {
         options.underReview = true;
       } else if (name === "--new") {
         options.isNew = true;
+      } else if (name === "--only") {
+        options.only = true;
       } else if (name === "--remove") {
         options.remove = true;
       } else if (name === "--origin") {
@@ -1177,7 +1187,8 @@ async function run(argv) {
       origins: origins,
       target_path: pathWrites.target_path,
       source_path: pathWrites.source_path,
-      agent_session_id: agentSessionId
+      agent_session_id: agentSessionId,
+      only_recorded_pages: options.only
     };
     if (reuseId) spec.id = reuseId;
     review = reviews.create(spec);
@@ -1212,8 +1223,16 @@ async function run(argv) {
     !!heldMeta &&
     heldMeta.target_path === pathWrites.target_path &&
     (!pathWrites.source_path || heldMeta.source_path === pathWrites.source_path);
+  // `--only` on a review the helper already holds still has to reach it: the
+  // reviewer has just looked at what else is in that folder and asked for it to
+  // stop being served. Nothing to write is only true when it is already set.
+  var isolationAlreadySet = !!heldMeta && (!options.only || heldMeta.only_recorded_pages === true);
   var nothingToWrite =
-    heldByHelper && !options.source && pathsAlreadyRecorded && helperHolds(ready, reuseId, heldToken, origins);
+    heldByHelper &&
+    !options.source &&
+    pathsAlreadyRecorded &&
+    isolationAlreadySet &&
+    helperHolds(ready, reuseId, heldToken, origins);
 
   if (nothingToWrite) {
     review = { id: reuseId, token: heldToken };
@@ -1230,7 +1249,11 @@ async function run(argv) {
       target_path: pathWrites.target_path,
       source_path: pathWrites.source_path,
       source_hint: options.source || null,
-      page_path: kind === "static" ? path.basename(target) : String(options.target)
+      page_path: kind === "static" ? path.basename(target) : String(options.target),
+      // Only ever sent as true. The route refuses the other direction on
+      // purpose (src/shared/protocol.js), so there is nothing to send for a run
+      // without the flag.
+      only_recorded_pages: options.only ? true : undefined
     });
     if (!handedToHelper) {
       // The helper is up and would not take the writes. Only now is a restart
@@ -1378,6 +1401,11 @@ async function run(argv) {
       })
   );
   say("  origin    " + originNote);
+  // Read back rather than echoed from the flag: a review isolated on an earlier
+  // run is still isolated on this one, and the reviewer is owed the fact, not
+  // this run's arguments.
+  var isolatedNow = options.only || !!(readMetaOnDisk(dir, review.id) || {}).only_recorded_pages;
+  if (isolatedNow) say("  scope     only this page; other pages in its folder are served without the rail (--only)");
   if (options.source) say("  source    " + options.source);
   say();
 

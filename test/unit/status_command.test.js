@@ -587,6 +587,38 @@ test("the printed status names the mechanism for a static review with a live ser
   assert.match(stopped.stdout, /the on-disk script line only/);
 });
 
+test("the printed status says when a review is limited to the page it was given", async (t) => {
+  // The default is the other way round: our server serves the page's whole
+  // folder and the rail follows the reviewer onto any page in it. An agent that
+  // assumes that of an isolated review would be wrong about where a comment can
+  // come from, so the narrowing is said out loud and the wide case stays quiet.
+  const dir = tempState();
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-status-only-"));
+  const page = path.join(work, "statement.html");
+  fs.writeFileSync(page, "<html></html>");
+
+  const log = logModule.createEventLog({ dir });
+  const reviews = reviewsModule.createReviews({ dir, log });
+  reviews.create({
+    id: "r_only",
+    origins: ["null"],
+    target_path: page,
+    agent_session_id: "s_only",
+    only_recorded_pages: true
+  });
+  reviews.create({ id: "r_wide", origins: ["null"], target_path: page, agent_session_id: "s_only" });
+
+  await staticServersModule.start({ dir, sessionId: "s_only", root: work });
+  t.after(async () => { await staticServersModule.stopAll(dir, "s_only"); });
+
+  const run = await runStatus(["--review", "r_only"], dir);
+  assert.equal(run.code, protocol.CLI_EXIT.OK, run.stderr);
+  assert.match(run.stdout, /scope: only this page/);
+
+  const wide = await runStatus(["--review", "r_wide"], dir);
+  assert.equal(wide.stdout.indexOf("scope: only this page"), -1, "and says nothing for the ordinary case");
+});
+
 // ---------------------------------------------------------------------------
 // An ended review is not a quiet one
 // ---------------------------------------------------------------------------
