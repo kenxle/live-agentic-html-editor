@@ -1,4 +1,6 @@
-# LAHE: memory fixes and folder reviews, ready to merge
+# LAHE: the 2026-09-16 merge record
+
+This page is the record of what merged on 2026-09-16 and why. The one page to follow for progress on all of the performance and token work is `docs/ongoing/MEMORY_AUDIT_20260916.md` (LAHE: performance and token work). Nothing here is updated any more.
 
 Three changes are built and tested. Ken said merge on 2026-09-16, and they are on main. The full test run passed on all three together: 1,091 small tests and the full browser suite.
 
@@ -40,35 +42,6 @@ All of these are fixed. In plain words:
 - The builder wrote the first plain description of how the browser stores comments before sending them. It should live with the other "how this works" docs, not just as a note on this change.
 - The rules for what the page remembers about each comment, and when it forgets, are only in the code and in the audit page. They deserve a doc of their own.
 
-## Token cost, measured 2026-09-16
-
-How much text the tool hands an agent to read, per action. One token is roughly four characters.
-
-| What an agent reads | Tokens |
-| --- | --- |
-| One check for new work (the drain), when nothing is waiting | 3,867 |
-| Of which: the agent instructions, repeated word for word every time | 3,817 |
-| The summary file for a ten-comment review | 9,584 |
-| The agent playbook (AGENTS.md), read once per session | 14,239 |
-| The lahe skill, read once per session | 5,741 |
-
-About the summary file: of its 8,822 tokens for that ten-comment review, 3,612 are the instructions (one copy, which is where they belong) and 4,930 are the ten comments themselves, about 480 tokens each. Each comment carries your words, the passage you quoted, a slice of the surrounding text so the agent can find the spot, the agent's reply, and the thread. How often it is read: an agent needs the whole file once, when it opens a review cold. On each wake the drain is enough, and the drain with one comment waiting is now 612 tokens. An agent that re-reads the whole file on every wake is following the instructions too literally; the instructions should say so, and that is a one-line change in the frozen contract text.
-
-So every comment you leave costs the agent about 3,800 tokens of instructions it already has, before it reads your comment. One agent checked about thirty times today. That is the change being built now, on its own page: the drain stops repeating the instructions and points at the summary file instead, where they already live.
-
-What today's helper agents spent, from their own reports:
-
-| Who | Tokens |
-| --- | --- |
-| Three builders, first attempt each | 611,000 |
-| The same builders, fixing what the checkers found (five rounds) | 1,536,000 |
-| Six checker passes | 633,000 |
-| The memory audit reader | 141,000 |
-| Total | 3,093,000 |
-
-All of those ran on Opus, not Fable. Fixing rounds cost more than first attempts, which is the next thing to shrink: better briefs that point at the docs, and builders that ask instead of working around a limit.
-
-Not measured: this Fable session itself, which took a full turn for every comment, wake, and report. That is the case for running the review loop on a smaller model.
 
 ## Merged
 

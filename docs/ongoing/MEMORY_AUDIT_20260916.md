@@ -1,18 +1,22 @@
-# Is LAHE leaking memory?
+# LAHE: performance and token work, one page to follow
 
 Ken asked on 2026-09-16, after Claude Code killed several background monitors for low memory and a sibling session blamed Chrome. His point: a leak in the injected layer would show up as Chrome, not as a LAHE process. This is what was measured and what was found. Numbers come from `ps`, a Playwright soak test, and a Python pass over the event logs on disk.
 
-## Where this stands (updated 2026-09-16 18:50)
+## Where this stands (updated 2026-09-16 19:00)
 
-| Fix | State |
+This is the one progress page for all of the memory, CPU, and token work. The merge record for the first batch is in `docs/ongoing/CHECKPOINT_20260916.md` and is not updated any more.
+
+| Work | State |
 | --- | --- |
-| 1. One message per pause instead of one per keystroke | Merged to main |
-| 2. Helper stops re-reading a review's whole log (and stops re-reading every log on restart) | Not started. On the board as LAHE-helper-boot-storm. Needs a short brief first, then a go. |
-| 3. The page lets go of old memory | Merged to main |
-| 4. Compact or archive the 654 MB of old logs | Not started. Gets easier once 1 has been running a while, since the logs stop growing so fast. |
-| 5. Close stale agent sessions and their little servers | Not started. Cheap; a session-by-session cleanup. |
-
-Also merged today, found along the way: the drain no longer repeats the agent instructions on every wake (3,800 tokens saved per comment).
+| 1. One message per pause instead of one per keystroke | Merged, live |
+| 2. Helper stops re-reading logs (startup rebuilds nothing; rebuilds read only what is new) | Building. Brief: `docs/features/20260916.03_helper_lazy_projection/01_spec_lazy_projection.md` |
+| 3. The page lets go of old memory | Merged, live |
+| 4. Compact or archive the 654 MB of old logs | Not started. Easier once 1 has run a while |
+| 5. Close stale agent sessions and their little servers | Not started. Cheap |
+| 6. The drain stops repeating the agent instructions (3,800 tokens per wake) | Merged, live. Spec: `docs/features/20260916.02_contract_once/01_spec_contract_once.md` |
+| 7. Trim the agent playbook (AGENTS.md, 14,000 tokens per session start) | Not started. Needs a go |
+| 8. The instructions tell agents to read the summary file once, not every wake | Not started. One line in the frozen contract text; needs a go |
+| 9. The rail follows the reviewer through a folder of pages | Merged, live (not a performance item, but it shipped in the same batch) |
 
 ## Short answer
 
@@ -100,6 +104,36 @@ Two things follow:
 
 - Do not restart the helper casually, and never force-kill it while it is busy: a kill mid-pass just restarts the pass. Today's sequence of restart, kill, restart made the outage longer.
 - This is fix 2 above, made urgent. The helper should project a review the first time something asks for it, not every review at boot, and a review's projection should not require re-reading its whole log. Log compaction (fix 4) shrinks the pass but does not remove it.
+
+## Token cost, measured 2026-09-16
+
+How much text the tool hands an agent to read, per action. One token is roughly four characters.
+
+| What an agent reads | Tokens |
+| --- | --- |
+| One check for new work (the drain), when nothing is waiting | 3,867 |
+| Of which: the agent instructions, repeated word for word every time | 3,817 |
+| The summary file for a ten-comment review | 9,584 |
+| The agent playbook (AGENTS.md), read once per session | 14,239 |
+| The lahe skill, read once per session | 5,741 |
+
+About the summary file: of its 8,822 tokens for that ten-comment review, 3,612 are the instructions (one copy, which is where they belong) and 4,930 are the ten comments themselves, about 480 tokens each. Each comment carries your words, the passage you quoted, a slice of the surrounding text so the agent can find the spot, the agent's reply, and the thread. How often it is read: an agent needs the whole file once, when it opens a review cold. On each wake the drain is enough, and the drain with one comment waiting is now 612 tokens. An agent that re-reads the whole file on every wake is following the instructions too literally; the instructions should say so, and that is a one-line change in the frozen contract text.
+
+So every comment you leave costs the agent about 3,800 tokens of instructions it already has, before it reads your comment. One agent checked about thirty times today. That is the change being built now, on its own page: the drain stops repeating the instructions and points at the summary file instead, where they already live.
+
+What today's helper agents spent, from their own reports:
+
+| Who | Tokens |
+| --- | --- |
+| Three builders, first attempt each | 611,000 |
+| The same builders, fixing what the checkers found (five rounds) | 1,536,000 |
+| Six checker passes | 633,000 |
+| The memory audit reader | 141,000 |
+| Total | 3,093,000 |
+
+All of those ran on Opus, not Fable. Fixing rounds cost more than first attempts, which is the next thing to shrink: better briefs that point at the docs, and builders that ask instead of working around a limit.
+
+Not measured: this Fable session itself, which took a full turn for every comment, wake, and report. That is the case for running the review loop on a smaller model.
 
 ## What the code audit found in the layer
 
