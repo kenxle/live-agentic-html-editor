@@ -15,7 +15,6 @@ agent that don't all get lost in the chat window stream.
 
 ## The normal path, and the four ways agents break it
 
-Read this section even if you read nothing else. Everything below it is detail.
 These four rules are the ones agents have actually broken in live sessions, and
 each one cost a reviewer their work.
 
