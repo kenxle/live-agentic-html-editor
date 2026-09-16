@@ -9,7 +9,9 @@ every step is a command you can run yourself.
 Your human reviews a locally running HTML page in their browser: they select
 passages and comment, and they edit text directly on the page. Every finished
 comment and edit becomes a durable record in a review folder on disk. Your
-answers appear on the page while they keep reviewing.
+answers appear on the page while they keep reviewing. This allows a person to
+stay in flow and not switch windows, while received threaded comments from an
+agent that don't all get lost in the chat window stream.
 
 When the LAHE skill is first invoked, the agent reports the exact model name its
 host exposes, or says the name is unavailable instead of guessing. It also
