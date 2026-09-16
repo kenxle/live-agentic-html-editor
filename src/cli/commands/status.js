@@ -248,25 +248,52 @@ function healLine(liveness, nowMs) {
  * @param {string} agentSessionId the review's owning session (static servers
  *   are leased per session, src/service/static_servers.js)
  * @param {string[]} targetPaths the review's recorded target paths
+ * A folder review (`lahe review <folder>`) records the folder itself, and its
+ * server is rooted there. That reads "injected" the same way a page does, which
+ * matters because every page in the folder carries the rail through the
+ * response and none of them has a line on disk to fall back on.
+ *
  * @returns {Promise<"injected"|"on_disk"|null>} null when nothing here applies
  *   (a dev-server review, or a review with no recorded target at all)
  */
 async function servedVia(dir, agentSessionId, targetPaths) {
-  var staticTargets = (targetPaths || []).filter(function (target) {
-    return typeof target === "string" && target && healModule.isStaticPage(target);
+  var named = (targetPaths || []).filter(function (target) {
+    return typeof target === "string" && !!target;
   });
-  if (!staticTargets.length) return null;
+  var pageTargets = named.filter(function (target) { return healModule.isStaticPage(target); });
+  // A FOLDER REVIEW RECORDS THE FOLDER, which carries no page extension. It is
+  // served the same way, with the server rooted AT it rather than at a parent,
+  // so it is worth matching. It is NOT enough on its own to call a review
+  // "on_disk" though: the app-in-dev row records a project directory too, and
+  // that row has no on-disk line of ours to be stale. So a directory only ever
+  // turns this answer into "injected", by a live server of ours rooted there.
+  var folderTargets = named.filter(function (target) {
+    if (healModule.isStaticPage(target)) return false;
+    try {
+      return fs.statSync(target).isDirectory();
+    } catch (error) {
+      return false;
+    }
+  });
+  // What "not served" means depends on which shape this is. A page review has
+  // its own on-disk line to fall back on. A folder review has nothing: its
+  // pages only ever carried a line in the response, so a dead server means no
+  // rail at all, and saying nothing hid that from the one person who could fix
+  // it by reopening the session.
+  var fallback = pageTargets.length ? "on_disk" : "unserved";
+  if (!pageTargets.length && !folderTargets.length) return null;
 
   var servers;
   try {
     servers = staticServersModule.list(dir, agentSessionId);
   } catch (error) {
-    return "on_disk";
+    return fallback;
   }
-  if (!servers.length) return "on_disk";
+  if (!servers.length) return fallback;
 
-  for (var i = 0; i < staticTargets.length; i += 1) {
-    var targetDir = path.dirname(staticTargets[i]);
+  var roots = pageTargets.map(function (target) { return path.dirname(target); }).concat(folderTargets);
+  for (var i = 0; i < roots.length; i += 1) {
+    var targetDir = roots[i];
     var real = targetDir;
     try {
       real = fs.realpathSync(targetDir);
@@ -281,7 +308,7 @@ async function servedVia(dir, agentSessionId, targetPaths) {
       if (await staticServersModule.isExactServer(server)) return "injected";
     }
   }
-  return "on_disk";
+  return fallback;
 }
 
 /** The human line for `servedVia`'s answer, or null when nothing applies. */
@@ -291,6 +318,9 @@ function servedViaLine(servedViaValue) {
   }
   if (servedViaValue === "on_disk") {
     return "served: the on-disk script line only (file:// review, or no static server is running); a rebuild between one poll and the next can drop the rail until something polls again";
+  }
+  if (servedViaValue === "unserved") {
+    return "served: nothing right now. This is a folder review, whose pages carry no script line on disk, and no static server of this session is rooted at that folder. Reopen the session to start it again: lahe session reopen <id>";
   }
   return null;
 }

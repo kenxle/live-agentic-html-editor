@@ -156,6 +156,99 @@ test("a missing file and a review with no path both report null, and the route s
   assert.equal(pathless.target_mtime, null);
 });
 
+// ---------------------------------------------------------------------------
+// A FOLDER REVIEW RELOADS ITS PAGES LIKE ANY OTHER.
+//
+// `lahe review <folder>` records the FOLDER as the review's target, and a
+// folder's own modification time is no use as a reload trigger: it moves when a
+// stray file appears and stands still when a page's text changes. The page the
+// browser is asking about is a real file under that folder, and the poll
+// already carries its pathname, so that file is what gets stat'ed.
+
+/** A folder review with two pages, and a poll helper bound to it. */
+function folderFixture() {
+  const dir = tempDir();
+  const site = path.join(dir, "site");
+  fs.mkdirSync(site, { recursive: true });
+  fs.writeFileSync(path.join(site, "index.html"), "<h1>home</h1>");
+  fs.writeFileSync(path.join(site, "plan.html"), "<h1>the plan</h1>");
+  const log = logModule.createEventLog({ dir: dir });
+  const clock = { at: 10000 };
+  const reviews = reviewsModule.createReviews({ dir: dir, log: log, now: () => clock.at });
+  reviews.create({ id: "folder-1", origins: ["null"], target_path: site });
+  const deps = { log: log, reviews: reviews };
+  return {
+    dir,
+    site,
+    clock,
+    reviews,
+    poll: (pagePath) => pollBody(deps, "folder-1", pagePath).target_mtime
+  };
+}
+
+test("a folder review reports the mtime of the page that is asking, not the folder's", () => {
+  const f = folderFixture();
+  const plan = path.join(f.site, "plan.html");
+
+  assert.equal(
+    f.poll("/plan.html"),
+    fs.statSync(plan).mtime.toISOString(),
+    "the page's own file answers, where the folder used to answer null"
+  );
+  assert.equal(f.poll("/index.html"), fs.statSync(path.join(f.site, "index.html")).mtime.toISOString());
+
+  // An edit to one page moves only that page's trigger. Both pages poll inside
+  // the same cache window, which is the case that made this worth a test: one
+  // cache slot per review, keyed by the review alone, handed page two page
+  // one's answer.
+  const later = new Date(Date.now() + 5000);
+  const planBefore = f.poll("/plan.html");
+  const indexBefore = f.poll("/index.html");
+  fs.writeFileSync(plan, "<h1>the plan, rewritten</h1>");
+  fs.utimesSync(plan, later, later);
+  f.clock.at += 1000;
+
+  assert.notEqual(f.poll("/plan.html"), planBefore, "the edited page reloads");
+  assert.equal(f.poll("/index.html"), indexBefore, "the page nobody touched does not");
+});
+
+test("a folder review answers for the index at the folder's own URL, and for nothing outside it", () => {
+  const f = folderFixture();
+  assert.equal(
+    f.poll("/"),
+    fs.statSync(path.join(f.site, "index.html")).mtime.toISOString(),
+    "the bare root is the index, which is the URL `lahe review <folder>` prints"
+  );
+  f.clock.at += 1000;
+
+  const outside = path.join(f.dir, "outside.html");
+  fs.writeFileSync(outside, "<h1>not part of the review</h1>");
+  assert.equal(f.poll("/../outside.html"), null, "a path climbing out of the folder is not a page of this review");
+  f.clock.at += 1000;
+  assert.equal(f.poll("/missing.html"), null, "and neither is a page that is not there");
+  f.clock.at += 1000;
+  assert.equal(f.poll(null), null, "a client that sends no page identity gets nothing, rather than the folder");
+});
+
+test("a folder review never writes a script line into one of its pages", () => {
+  // The single-page review heals: when a rebuild strips the line out of the
+  // reviewed file, the helper puts it back. A folder page has no line on disk to
+  // begin with; its line lives in the response. Writing one here would put a
+  // review id and a live token into the reviewer's own working tree, for a page
+  // they never asked to enroll.
+  const f = folderFixture();
+  const plan = path.join(f.site, "plan.html");
+
+  f.poll("/plan.html");
+  f.clock.at += 2000;
+  f.poll("/plan.html");
+  f.clock.at += 2000;
+  f.poll("/plan.html");
+
+  assert.equal(fs.readFileSync(plan, "utf8").indexOf("data-lahe-review"), -1);
+  assert.equal(fs.readdirSync(f.site).sort().join(","), "index.html,plan.html", "and no bundle was copied beside it");
+});
+
 test("the route table documents target_mtime, so nobody has to read the handler to find it", () => {
   const route = protocol.route("replies.poll");
   assert.match(route.response, /target_mtime/);

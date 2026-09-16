@@ -387,6 +387,56 @@ the page and how the script line gets into it.
 
 Variations that are not separate architectures:
 
+- **A folder of HTML pages.** `lahe review path/to/folder` is the first shape
+  with the server rooted at the folder instead of at one page's own directory.
+  It mints one review for the folder and opens `index.html`, or the first page
+  in name order when there is no index. Nothing else changes: nothing is written
+  into your folder, the script line rides the response, and edits go to whatever
+  page file the item names.
+
+  What makes it work is a rule rather than a mechanism: **everything our own
+  static server serves out of a reviewed folder gets the rail.** A page no
+  review ever recorded is served on the newest review whose target IS that
+  folder, so the pages the reviewer reaches by a link carry the rail, and so do
+  pages written after the review was opened. No page is enrolled, nothing is
+  written to the review store, and the server stays a reader of it. A dev server
+  somebody else runs is a different thing and keeps its own row above; ours has
+  no such excuse.
+
+  The rule is scoped to the review that asked for a folder, and that scope is
+  the security boundary. A single-page review roots its server at the page's own
+  directory, which is very often a home or Desktop folder full of unrelated
+  HTML. Those pages are served, but plain: only the page the reviewer named
+  carries the review id and token. Nesting is scoped the same way. `lahe review
+  site/` and `lahe review site/sub/` are two documents that happen to sit one
+  inside the other, and each one's rule stops at its own folder, so the newer
+  inner review never takes over the outer one's pages.
+
+  **A page recorded on its own keeps its own review**, and the folder review
+  covers the rest. That happens when someone ran `lahe review page.html` on a
+  file in the folder before or after opening the folder itself. It is legal and
+  deliberate, and the helper log says so the first time each such page is
+  served, because otherwise it is discovered by wondering why a reply landed on
+  the wrong card.
+
+  The folder needs at least one `.html` file of its own, and it is the folder's
+  own pages that count, not a recursive walk. A directory with no pages in it is
+  still the app-in-dev row, which is what pointing at a project checkout means.
+
+  **Pages reload themselves, the same as a single-page review.** The review's
+  recorded target is the folder, and a folder's modification time is no use as a
+  trigger: it moves when a stray file appears and stands still when a page's own
+  text is rewritten. So the poll's page path is what the helper stats, resolved
+  under the folder with the same containment check the server applies to a
+  request. An edit to one page reloads that page and no other. Nothing is ever
+  written into those pages, healing included: their script line only ever lived
+  in the response, and writing one to disk would put a live token in a file
+  nobody asked to enroll.
+
+  One thing this does not do: it does not render Markdown in the folder. That is
+  wanted and is its own piece of work, because a rendered page lives in LAHE's
+  state directory rather than in the source folder.
+
 - **Several pages, one review.** Run `lahe review` again with the same
   `--session <id>`. Each page shows only its own items; `review.json` and
   `lahe status` show them all.
