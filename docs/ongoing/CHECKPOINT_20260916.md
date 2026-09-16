@@ -40,6 +40,34 @@ All of these are fixed. In plain words:
 - The builder wrote the first plain description of how the browser stores comments before sending them. It should live with the other "how this works" docs, not just as a note on this change.
 - The rules for what the page remembers about each comment, and when it forgets, are only in the code and in the audit page. They deserve a doc of their own.
 
+## Token cost, measured 2026-09-16
+
+How much text the tool hands an agent to read, per action. One token is roughly four characters.
+
+| What an agent reads | Tokens |
+| --- | --- |
+| One check for new work (the drain), when nothing is waiting | 3,867 |
+| Of which: the agent instructions, repeated word for word every time | 3,817 |
+| The summary file for a ten-comment review | 9,584 |
+| The agent playbook (AGENTS.md), read once per session | 14,239 |
+| The lahe skill, read once per session | 5,741 |
+
+So every comment you leave costs the agent about 3,800 tokens of instructions it already has, before it reads your comment. One agent checked about thirty times today. That is the change being built now, on its own page: the drain stops repeating the instructions and points at the summary file instead, where they already live.
+
+What today's helper agents spent, from their own reports:
+
+| Who | Tokens |
+| --- | --- |
+| Three builders, first attempt each | 611,000 |
+| The same builders, fixing what the checkers found (five rounds) | 1,536,000 |
+| Six checker passes | 633,000 |
+| The memory audit reader | 141,000 |
+| Total | 3,093,000 |
+
+All of those ran on Opus, not Fable. Fixing rounds cost more than first attempts, which is the next thing to shrink: better briefs that point at the docs, and builders that ask instead of working around a limit.
+
+Not measured: this Fable session itself, which took a full turn for every comment, wake, and report. That is the case for running the review loop on a smaller model.
+
 ## Merged
 
 2026-09-16: merged to main after the final test run, helper restarted.
