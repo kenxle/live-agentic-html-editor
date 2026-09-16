@@ -13,10 +13,7 @@ answers appear on the page while they keep reviewing. This allows a person to
 stay in flow and not switch windows, while received threaded comments from an
 agent that don't all get lost in the chat window stream.
 
-## The normal path, and the four ways agents break it
-
-These four rules are the ones agents have actually broken in live sessions, and
-each one cost a reviewer their work.
+## The normal path
 
 ```mermaid
 flowchart TD
@@ -27,37 +24,13 @@ flowchart TD
     E --> C
 ```
 
-**1. Serve it. Every time.** `lahe review <target>` is the command for every
-case. That includes an HTML file you generated thirty seconds ago in a scratch
-directory: three logo options on a page, a chart to look at, a draft email. If
-it is worth their eyes, it is worth serving. Never hand someone a page you
-opened from disk just because you made it a moment ago and a server felt like
-ceremony. Serving is one command and it is the difference between a review that
-works and one that half works.
+1. **Serve the page.** Run `lahe review <target>` on whatever they are going to look at, including a page you generated a moment ago. It starts a local server and prints one `open` URL.
+2. **Hand over that one URL**, exactly as printed.
+3. **Wait to be woken.** When a comment or edit lands, run the drain command the review printed. It lists what is unanswered.
+4. **Make the change in the source, rebuild, and check the built page shows it.**
+5. **Reply with `lahe reply`.** `handled` means the change is on their screen now. Then drain again until it prints nothing.
 
-**2. Hand back exactly one link: the `open` line, verbatim.** Not a file path,
-not the bare server root, not two options for them to choose from. If you
-already opened the file from disk before you started the review, say so and tell
-them to close that tab. A reviewer with two tabs open on one document is a
-reviewer whose comments are about to split in half.
-
-**3. Rebuild before you reply, and verify.** `handled` means the reviewer's page
-now shows the change. Edit the source, rebuild, check the change is really in
-the built HTML, and only then run `lahe reply`. Never tell them to reload;
-the page does that itself.
-
-**4. `file://` works, and it is the fallback, not the normal path.** It is there
-for when a server genuinely cannot run. What is different about it is worth
-knowing: on the served path the script line is put into the page as it is served,
-so no rebuild of yours can strip it, and nothing at all is written into your
-human's folder. On `file://` the line lives in the file on disk, along with a
-copy of the library beside it, so a rebuild that overwrites the file takes the
-rail with it, and the repair only lands when a page with a live layer is polling.
-If your rebuild is an ad hoc script rather than a project build, re-run
-`lahe review path/to/file.html --session <agent-session-id>` right after the
-script writes, before you tell them to look. Both files stay in that folder until
-someone takes them out, so `lahe add <page> --remove` is worth running when a
-`file://` review is finished.
+The rest of this file is the detail behind each step. The ways agents have broken this loop are compiled in the last section, "Gotchas".
 
 ## Which kind of review is this? Find your row before you run anything
 
@@ -962,3 +935,39 @@ do that only when your human asks: `Removing it` in the README has the detail.
   the source for a simple build or the entrypoint for a multi-source build. Use
   the captured page text to locate the actual fragment, then edit source so the
   next build does not erase the fix.
+
+## Gotchas: the ways agents have broken the loop
+
+Each of these cost a reviewer their work in a live session. They are compiled here so the steps above stay about what to do.
+
+**1. Serve it. Every time.** `lahe review <target>` is the command for every
+case. That includes an HTML file you generated thirty seconds ago in a scratch
+directory: three logo options on a page, a chart to look at, a draft email. If
+it is worth their eyes, it is worth serving. Never hand someone a page you
+opened from disk just because you made it a moment ago and a server felt like
+ceremony. Serving is one command and it is the difference between a review that
+works and one that half works.
+
+**2. Hand back exactly one link: the `open` line, verbatim.** Not a file path,
+not the bare server root, not two options for them to choose from. If you
+already opened the file from disk before you started the review, say so and tell
+them to close that tab. A reviewer with two tabs open on one document is a
+reviewer whose comments are about to split in half.
+
+**3. Rebuild before you reply, and verify.** `handled` means the reviewer's page
+now shows the change. Edit the source, rebuild, check the change is really in
+the built HTML, and only then run `lahe reply`. Never tell them to reload;
+the page does that itself.
+
+**4. `file://` works, and it is the fallback, not the normal path.** It is there
+for when a server genuinely cannot run. What is different about it is worth
+knowing: on the served path the script line is put into the page as it is served,
+so no rebuild of yours can strip it, and nothing at all is written into your
+human's folder. On `file://` the line lives in the file on disk, along with a
+copy of the library beside it, so a rebuild that overwrites the file takes the
+rail with it, and the repair only lands when a page with a live layer is polling.
+If your rebuild is an ad hoc script rather than a project build, re-run
+`lahe review path/to/file.html --session <agent-session-id>` right after the
+script writes, before you tell them to look. Both files stay in that folder until
+someone takes them out, so `lahe add <page> --remove` is worth running when a
+`file://` review is finished.
