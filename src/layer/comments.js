@@ -65,7 +65,8 @@
       root.LAHE.gestures,
       root.LAHE.anchor,
       root.LAHE.highlight,
-      root.LAHE.listeners
+      root.LAHE.listeners,
+      root.LAHE.failures
     );
   } else {
     module.exports = factory(
@@ -77,7 +78,8 @@
       require("../shared/gestures.js"),
       require("./anchor.js"),
       require("./highlight.js"),
-      require("./listeners.js")
+      require("./listeners.js"),
+      require("../shared/failures.js")
     );
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function (
@@ -89,7 +91,8 @@
   gestures,
   anchor,
   highlightModule,
-  listeners
+  listeners,
+  failuresModule
 ) {
   "use strict";
 
@@ -923,6 +926,11 @@
       opts.highlights ||
       (isRealDocument ? highlightModule.shared : doc ? highlightModule.createHighlights({ document: doc }) : null);
     var defaultPage = opts.page || null;
+    // Where a failure this surface cannot act on goes. Boot hands it the rail's
+    // failure list (src/layer/index.js); a caller that builds a surface by hand
+    // gets a no-op, so the write paths below never have to ask whether it is
+    // there.
+    var onFailure = typeof opts.onFailure === "function" ? opts.onFailure : null;
 
     // id -> handle
     var open = Object.create(null);
@@ -992,15 +1000,50 @@
     // so the bridge lives in index.js rather than here.
     var createdOn = Object.create(null);
 
+    // EACH LISTENER IS GUARDED ON ITS OWN. index.js's listener is the one that
+    // posts the record, into the same browser storage everything else here
+    // writes to, and a quota failure swallowed around the whole loop would skip
+    // every listener registered after it (the Active tab's, among others). One
+    // listener that cannot write is not the rest of the rail going quiet.
     function emit(item, event) {
       var el = createdOn[item && item[record.FIELD.ID]] || null;
-      for (var i = 0; i < listenersState.length; i += 1) listenersState[i](item, event || "changed", el);
+      for (var i = 0; i < listenersState.length; i += 1) {
+        (function (listener) {
+          durably(function () {
+            listener(item, event || "changed", el);
+          });
+        })(listenersState[i]);
+      }
+    }
+
+    /**
+     * A durable write on the typing path.
+     *
+     * Storage is full is the ONE failure that does not come back out of here.
+     * The reviewer keeps typing, the words stay in the box and in the record
+     * this surface is holding, and the rail says what could not be saved. See
+     * failures.js tolerateStorageQuota, and docs/ongoing/OUTBOX_COALESCING.md
+     * for why a full storage is reachable at all.
+     *
+     * @returns {null|Object} the failure, when there was one
+     */
+    function durably(run) {
+      return failuresModule.tolerateStorageQuota(run, onFailure);
     }
 
     // The one write path. Synchronous to storage before anything else happens.
     function persist(item, event) {
-      store.write(requireReview(), item);
-      emit(item, event);
+      var refused = durably(function () {
+        store.write(requireReview(), item);
+      });
+      // NOTHING IS EMITTED FOR A RECORD THE DISK DOES NOT HAVE. index.js posts
+      // from inside this listener chain, and posting a record that was not saved
+      // is how the helper comes to acknowledge a wording the browser will not
+      // have on the next load: sync stamps the item acknowledged at that
+      // revision and merge.js's SAME_REV_ACKED rule then lets the stale record
+      // win. The rail also stays in step with what is actually stored. The next
+      // keystroke that lands carries the newest wording anyway.
+      if (!refused) emit(item, event);
       return item;
     }
 
@@ -1660,14 +1703,22 @@
           next[record.FIELD.STATE] =
             String(text) === committedNote ? record.STATE.READY : record.STATE.DRAFT;
         }
-        store.write(requireReview(), next);
+        // THE KEYSTROKE PATH. A full browser storage used to throw from here,
+        // straight out of the textarea's input handler, and the box stopped
+        // taking keystrokes with nothing on screen to say why.
+        var refused = durably(function () {
+          store.write(requireReview(), next);
+        });
         writeInput(next[record.FIELD.NOTE]);
         // The box fits itself to the words on every keystroke, whether the
         // keystroke came from a keyboard or from a caller driving this handle.
         paintSendable();
         grow();
         paintState(next);
-        emit(next, "typed");
+        // Same rule as persist: a keystroke the disk refused posts nothing, so
+        // the helper never acknowledges a wording this browser will not have on
+        // the next load. The box keeps the words either way.
+        if (!refused) emit(next, "typed");
         return next;
       }
 

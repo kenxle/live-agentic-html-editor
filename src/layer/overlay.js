@@ -2789,7 +2789,14 @@
 
     function saveChips() {
       if (!store || !reviewId || typeof store.writeChips !== "function") return;
-      store.writeChips(reviewId, { chips: chips, dismissed: Object.keys(dismissed) });
+      // A chip that survives a remount is the nice half. The chip ON SCREEN is
+      // the half that matters, and one of the codes this list carries is
+      // STORAGE_QUOTA: the write below is into the very storage that is full, so
+      // without this the rail throws while trying to say so and the reviewer
+      // sees nothing at all.
+      failuresModule.tolerateStorageQuota(function () {
+        store.writeChips(reviewId, { chips: chips, dismissed: Object.keys(dismissed) });
+      });
     }
 
     // -------------------------------------------------------------------------

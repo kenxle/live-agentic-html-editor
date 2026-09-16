@@ -108,3 +108,20 @@ Items 1 and 2 change the event model and deserve a short brief before a builder 
 ## What this does not settle
 
 Whether any of Ken's long-open LAHE tabs is individually large. The Chrome extension was not connected to this session, so per-tab heap could not be read from outside. Chrome's own Task Manager (Window menu, Task Manager) lists memory per tab and would answer it in one look.
+
+## Progress
+
+**2026-09-16, branch `worktree-agent-aa9147257d5b588f7`: fix 1 landed, plus finding 2.** The design note is `docs/ongoing/OUTBOX_COALESCING.md`. What it does:
+
+- **The outbox holds one entry per item per revision, not one per keystroke.** A queued `item.content` for an item is dropped when the next one for that item at the same revision arrives, and the new one goes to the back of the queue. `item.created`, `item.ready`, `item.deleted` and `item.reopened` are never coalesced. Revision is part of the match because the helper composes a thread continuation against `prev.rev + 1`; keystrokes never move the revision, so this costs the saving nothing.
+- **The poll tick stops parsing the outbox, and the keystroke stops parsing the items.** Both lists are held in memory in `store.js` beside a small stamp written into storage on every write. A reader compares the stamp it is holding with the stamp on disk, so a write from another tab invalidates the copy here with no window listener and no storage event.
+- **A full browser storage no longer throws out of the keystroke handler.** `failures.js` gained `isStorageQuota` and `tolerateStorageQuota`; `editing.js` and `comments.js` use them on the typing path, and `index.js` routes the failure to the rail's failure list. The rail's own `saveChips` tolerates it too, since it writes into the same full storage.
+
+The helper, the log format and the projection are untouched. Fix 2 of the list above, the helper re-reading the whole log on every fold, is still open and is the other half of the 84 MB parse.
+
+**Second pass, after two reviews of the branch.** Four things the reviewers found, all fixed on the same branch:
+
+- **The cross-tab write order was backwards.** Stamping before writing the list let another tab read the new stamp beside the old list and hold that pair forever. The list is written first now, and a cold read takes the stamp twice so the pair it holds is one the storage actually had.
+- **The outbox could run ahead of the disk.** A keystroke whose record write was refused still posted. The helper would acknowledge a wording the browser had not saved, and `merge.js`'s SAME_REV_ACKED rule would then let the stale record win on the next load. A refused write now posts nothing.
+- **The page-check repair stopped running on warm reads.** It runs on the write path too now, so a record arriving from the helper with the doubled sentence is repaired without waiting for a reload.
+- **Three smaller ones:** the acknowledgement writes inside `flush` are guarded (a full storage there was an unhandled rejection), `comments.js` guards each listener separately so one that cannot write does not silence the rest, and a queued event is detached from the record the surface is still editing.

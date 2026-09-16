@@ -400,6 +400,60 @@
     return describe(code).persistent;
   }
 
+  // -------------------------------------------------------------------------
+  // The one failure a keystroke has to survive
+  // -------------------------------------------------------------------------
+  //
+  // src/layer/store.js writes synchronously on every keystroke and throws when
+  // browser storage is full, with the failure stamped onto the error. Before
+  // the 2026-09-16 memory audit that throw came straight back out of the input
+  // handler, so a full storage stopped the block or the comment box taking
+  // keystrokes at all and said nothing the reviewer could see.
+
+  /**
+   * Is this error the store saying there is no room?
+   *
+   * @param {*} err anything a write threw
+   * @returns {boolean}
+   */
+  function isStorageQuota(err) {
+    return !!(err && err.failure && err.failure.code === "STORAGE_QUOTA");
+  }
+
+  /**
+   * Run a durable write that must not take the keystroke down with it.
+   *
+   * A quota failure is reported and swallowed; the reviewer keeps typing and
+   * the rail says what could not be saved. EVERY OTHER ERROR IS RETHROWN, because
+   * a silently dropped bug in the write path is the failure this tool exists to
+   * remove.
+   *
+   * The report is itself guarded, and only against the same failure: the rail
+   * remembers its chips in the SAME browser storage that just refused the write
+   * being reported, so saying "storage is full" can fail the way the write did.
+   * A report that fails for any other reason is a bug and stays loud.
+   *
+   * @param {function()} run the write
+   * @param {function(Object)} [report] where a quota failure is surfaced
+   * @returns {null|Object} the failure, or null when the write went through
+   */
+  function tolerateStorageQuota(run, report) {
+    try {
+      run();
+      return null;
+    } catch (err) {
+      if (!isStorageQuota(err)) throw err;
+      if (typeof report === "function") {
+        try {
+          report(err.failure);
+        } catch (reportErr) {
+          if (!isStorageQuota(reportErr)) throw reportErr;
+        }
+      }
+      return err.failure;
+    }
+  }
+
   var api = {
     SEVERITY: SEVERITY,
     SURFACE: SURFACE,
@@ -415,7 +469,9 @@
     isCopyable: isCopyable,
     describe: describe,
     failure: failure,
-    isPersistent: isPersistent
+    isPersistent: isPersistent,
+    isStorageQuota: isStorageQuota,
+    tolerateStorageQuota: tolerateStorageQuota
   };
 
   if (browser) {

@@ -135,6 +135,7 @@
       // walk is the one an edit's context.heading uses too, so the two record
       // kinds cannot disagree about which heading a block sits under.
       root.LAHE.comments,
+      root.LAHE.failures,
       // replay.js loads AFTER this file (it depends on everything), so it is
       // resolved when a pass is scheduled rather than when this module loads.
       function () {
@@ -157,6 +158,7 @@
       require("./listeners.js"),
       require("./protect.js"),
       require("./comments.js"),
+      require("../shared/failures.js"),
       function () {
         return require("./replay.js");
       }
@@ -177,6 +179,7 @@
   listeners,
   protect,
   commentsModule,
+  failuresModule,
   replayRef
 ) {
   "use strict";
@@ -489,6 +492,10 @@
       opts.highlights ||
       (isRealDocument ? highlightModule.shared : doc ? highlightModule.createHighlights({ document: doc }) : null);
     var defaultPage = opts.page || null;
+    // Where a failure this surface cannot act on goes. Boot hands it the rail's
+    // failure list (src/layer/index.js); a caller that builds a surface by hand
+    // gets nothing, and persist below works either way.
+    var onFailure = typeof opts.onFailure === "function" ? opts.onFailure : null;
 
     // The one open session, or null. Edit state is per region and there is one
     // of it: a second Cmd-Shift-E commits the first.
@@ -553,12 +560,45 @@
       return null;
     }
 
+    /**
+     * A durable write on the typing path.
+     *
+     * Storage is full is the ONE failure that does not come back out of here.
+     * captureTyping runs on every keystroke, so before this the reviewer's block
+     * stopped taking keystrokes the moment the outbox filled browser storage,
+     * with nothing on screen to say why (the 2026-09-16 memory audit, finding
+     * 1). The reviewer keeps typing, the words stay in the block and in the
+     * record, and the rail says what could not be saved. Every other error is
+     * still loud. See failures.js tolerateStorageQuota.
+     *
+     * @returns {null|Object} the failure, when there was one
+     */
+    function durably(run) {
+      return failuresModule.tolerateStorageQuota(run, onFailure);
+    }
+
     // The one write path. Storage first, synchronously, then everyone else.
     function persist(item, event, immediate) {
-      store.write(requireReview(), item);
-      emit(item, event);
-      if (sync && typeof sync.recordItem === "function") {
-        sync.recordItem(item, immediate ? { immediate: immediate } : undefined);
+      var refused = durably(function () {
+        store.write(requireReview(), item);
+      });
+      durably(function () {
+        emit(item, event);
+      });
+      // THE POST ONLY EVER FOLLOWS A WRITE THAT LANDED.
+      //
+      // Posting a record the disk does not have is worse than not posting at
+      // all. The helper takes it, acknowledges it, and sync stamps that item
+      // acknowledged at that revision; on the next load merge.js's
+      // SAME_REV_ACKED rule lets the store win at equal revision, so the STALE
+      // record still on disk beats the newer one the reviewer typed. Nothing is
+      // lost by waiting: the next keystroke that does land carries the newest
+      // wording, and the surface has been holding it all along.
+      if (!refused && sync && typeof sync.recordItem === "function") {
+        // The queue is a write into the same storage, so it is guarded too.
+        durably(function () {
+          sync.recordItem(item, immediate ? { immediate: immediate } : undefined);
+        });
       }
       return item;
     }
