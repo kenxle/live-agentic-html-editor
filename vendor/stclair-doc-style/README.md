@@ -9,7 +9,7 @@ already carries its own styles is never touched.
 
 | File | Where it came from |
 | --- | --- |
-| `system-tokens.css` | `~/Documents/workspace/personal/lib/templates/system-tokens.css`, copied whole on 2026-09-16 from `main` at `83088576` |
+| `system-tokens.css` | `~/Documents/workspace/personal/lib/templates/system-tokens.css`, copied whole on 2026-09-16 from `main` at `83088576`; unchanged through `4da9515d`, the commit `document.css` was taken at |
 | `document.css` | `~/Documents/workspace/personal/lib/templates/document.css`, copied whole on 2026-09-16 from `main` at `4da9515d` |
 | `lahe-markdown.css` | written in this repo, not a copy |
 | `fonts/*.woff2` | Google Fonts, latin subset, fetched 2026-09-16 |
