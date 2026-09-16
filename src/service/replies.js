@@ -176,9 +176,19 @@ function rejectEventId(reviewId, file, lineNumber, line) {
  * The reply folder for one state directory.
  *
  * @param {{dir: string, log: object, items?: function}} options
- *   `items` is how the folder learns what an item looks like right now. It
- *   defaults to reading the log through the projection, and is injectable so a
- *   test can fold against records it built by hand.
+ *   `items` is how the folder learns what an item looks like right now, and it
+ *   is asked once per reply line that names an item.
+ *
+ *   THE PROJECTOR PASSES ITS KEPT FOLD. The default below folds the whole log
+ *   again for every line, which on a review with a large log is the same bill
+ *   the lazy projection exists to stop paying. It stays as the answer for a
+ *   folder built on its own (a test, or a caller with no projector), and for
+ *   the first touch of a review, where the projector has no fold yet and reads
+ *   the log whole exactly once before handing it over.
+ *
+ *   Whatever is passed has to be CURRENT, not current as of the last tick: this
+ *   line's verdict depends on the revision the item is at right now, and the
+ *   line before it may have moved it.
  */
 function createReplyFolder(options) {
   var opts = options || {};

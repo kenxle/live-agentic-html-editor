@@ -390,7 +390,21 @@ function createProjector(options) {
   var dir = opts.dir;
   var log = opts.log;
   var intervalMs = typeof opts.intervalMs === "number" ? opts.intervalMs : protocol.REPLY_POLL.INTERVAL_MS;
-  var folder = opts.folder || replies.createReplyFolder({ dir: dir, log: log });
+  // The folder asks what an item looks like right now once per reply line it
+  // accepts, and its own default answer is to fold the whole log again for each
+  // one. It gets the kept fold instead, caught up first so the answer is exactly
+  // as current as a fresh read would have been: the line before this one may
+  // have appended a reply.folded event, and a stale fold would judge this line
+  // against the wrong revision.
+  var folder =
+    opts.folder ||
+    replies.createReplyFolder({
+      dir: dir,
+      log: log,
+      items: function (reviewId) {
+        return itemsOf(catchUp(reviewId).fold);
+      }
+    });
 
   // review id -> {fold, seq}. `fold` is the kept fold state and `seq` is the
   // log's high-water mark at the last write, which is the "has anything moved"
@@ -434,17 +448,16 @@ function createProjector(options) {
     return watched[reviewId].seq;
   }
 
-  function tickReview(reviewId) {
-    var summary = folder.fold(reviewId);
-    if (summary.accepted.length || summary.rejected.length || summary.refused.length) counters.folds += 1;
-    var seq = log.currentSeq(reviewId);
+  /**
+   * Fold everything that has landed since this review's fold last looked.
+   *
+   * The first pass reads the log whole, the way regenerate does, because
+   * log.since only ever hands back events carrying a seq and a legacy or
+   * hand-written line without one is still history. Afterwards the cursor is
+   * the fold's own high-water mark and only the tail is read.
+   */
+  function catchUp(reviewId) {
     var entry = entryFor(reviewId);
-    if (entry.seq === seq) return { wrote: false, seq: seq };
-
-    // The first pass reads the log whole, the way regenerate does, because
-    // log.since only ever hands back events carrying a seq and a legacy or
-    // hand-written line without one is still history. Afterwards the cursor is
-    // the fold's own high-water mark and only the tail is read.
     var events = entry.started ? log.since(reviewId, entry.fold.seq) : log.read(reviewId);
     entry.started = true;
     foldEvents(entry.fold, events, {
@@ -452,10 +465,49 @@ function createProjector(options) {
         reportDropped(reviewId, event, reason);
       }
     });
+    return entry;
+  }
+
+  function tickReview(reviewId) {
+    var entry = entryFor(reviewId);
+    // Before the reply fold, so a reply is judged against the item as it stands
+    // right now rather than as it stood at the last tick. A reviewer who
+    // reworded in between is the whole reason the revision rule exists.
+    catchUp(reviewId);
+    var summary = folder.fold(reviewId);
+    if (summary.accepted.length || summary.rejected.length || summary.refused.length) counters.folds += 1;
+    // And again after it, because folding a reply appends reply.folded events
+    // that the summary has to carry.
+    catchUp(reviewId);
+    var seq = log.currentSeq(reviewId);
+    if (entry.seq === seq) return { wrote: false, seq: seq };
+
     reviewWriter.writeReviewJson(projectFold(reviewId, entry.fold), { dir: dir, review: reviewId });
     entry.seq = seq;
     counters.writes += 1;
     return { wrote: true, seq: seq, summary: summary };
+  }
+
+  /**
+   * This review's summary and draft count, off the kept fold.
+   *
+   * The `review.read` route used to answer with its own full read of the log
+   * and its own fold, twice: once for the summary and once to count drafts.
+   * That made every page load and every `lahe status` on a big review pay the
+   * cost the projector had just stopped paying. The fold is brought up to date
+   * here rather than assumed current, so this is correct whether or not the
+   * caller ticked first.
+   *
+   * @returns {{projection: object, draft_count: number}}
+   */
+  function currentProjection(reviewId) {
+    var entry = catchUp(reviewId);
+    return {
+      projection: projectFold(reviewId, entry.fold),
+      draft_count: itemsOf(entry.fold).filter(function (item) {
+        return item[F.STATE] === record.STATE.DRAFT;
+      }).length
+    };
   }
 
   function tick() {
@@ -483,6 +535,7 @@ function createProjector(options) {
     watch: watch,
     tick: tick,
     tickReview: tickReview,
+    currentProjection: currentProjection,
     start: start,
     stop: stop,
     counters: counters,
@@ -506,12 +559,21 @@ function createProjector(options) {
 // the same door: `lahe reply` writes the line, and `lahe status` reads that
 // review through review.read, which calls startWatching for it and then ticks
 // it. That is the only thing the old directory walk was carrying.
-var sharedProjector = null;
+// ONE PROJECTOR PER STATE DIRECTORY, not one per process. A helper serves one
+// directory, so in the product these are the same thing; they stopped being the
+// same thing the moment the routes started taking their ANSWER from the
+// projector instead of only nudging it. A single cached projector hands the
+// second directory the first one's folds, which is an empty review where there
+// should be items. The key is the directory because that is what a projector is
+// about.
+var projectors = Object.create(null);
 
 function attach(deps) {
-  if (!deps || !deps.log) return null;
-  if (!sharedProjector) sharedProjector = createProjector({ dir: deps.log.dir, log: deps.log });
-  return sharedProjector;
+  if (!deps || !deps.log || !deps.log.dir) return null;
+  if (!projectors[deps.log.dir]) {
+    projectors[deps.log.dir] = createProjector({ dir: deps.log.dir, log: deps.log });
+  }
+  return projectors[deps.log.dir];
 }
 
 function startWatching(deps, reviewIds) {
@@ -525,6 +587,19 @@ function tickReview(deps, reviewId) {
   var projector = attach(deps);
   if (!projector) return null;
   return projector.tickReview(reviewId);
+}
+
+/**
+ * The route's door to the kept fold: this review's summary and draft count
+ * without reading the log from the top.
+ *
+ * Null when there is no projector to ask, which is the signal for the caller to
+ * fall back to the from-the-top read rather than to answer with nothing.
+ */
+function currentProjection(deps, reviewId) {
+  var projector = attach(deps);
+  if (!projector) return null;
+  return projector.currentProjection(reviewId);
 }
 
 module.exports = {
@@ -542,5 +617,6 @@ module.exports = {
   createProjector: createProjector,
   attach: attach,
   startWatching: startWatching,
-  tickReview: tickReview
+  tickReview: tickReview,
+  currentProjection: currentProjection
 };
