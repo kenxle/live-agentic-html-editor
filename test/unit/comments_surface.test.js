@@ -213,6 +213,21 @@ test("closing keeps the draft; only the reviewer's own delete removes it", () =>
   assert.equal(store.readItem("rev_1", box.id), null);
 });
 
+// The node an item was MADE on is remembered so replay can start bound to it.
+// That memory is the item's: when the reviewer deletes the item, holding its
+// node keeps a whole detached document tree alive behind it (the 2026-09-16
+// memory audit, retention issue 3).
+test("deleting an item lets go of the node it was made on", () => {
+  const { comments } = surface();
+  const element = { nodeType: 1, tagName: "FIGURE", getAttribute: () => null, textContent: "" };
+  const box = comments.openBox({ quote: "a chart with no words in it", element: element });
+  box.type("what is this axis?");
+  assert.deepEqual(comments.createdOnIds(), [box.id], "the creation node is remembered while the item lives");
+
+  comments.remove(box.id);
+  assert.deepEqual(comments.createdOnIds(), [], "and released with it");
+});
+
 test("outstanding is newest first, and a handled item is not outstanding", () => {
   const { store, comments } = surface();
   const first = comments.openBox({ quote: "one" });
