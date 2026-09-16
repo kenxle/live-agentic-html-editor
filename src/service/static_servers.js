@@ -49,7 +49,8 @@ var MIME = {
   ".png": "image/png",
   ".svg": "image/svg+xml",
   ".txt": "text/plain; charset=utf-8",
-  ".webp": "image/webp"
+  ".webp": "image/webp",
+  ".woff2": "font/woff2"
 };
 
 function delay(ms) {
@@ -480,6 +481,24 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
     fs.createReadStream(heal.BUNDLE).on("error", function () { res.destroy(); }).pipe(res);
   }
 
+  // The document stylesheet is three vendored files joined into one, so there
+  // is no single file on disk to stream. It is built once and cached by
+  // markdown.js, so this is a string lookup rather than three reads per hit.
+  function sendDocStyle(req, res) {
+    var css;
+    try { css = markdown.styleSheet(); }
+    catch (err) { return send(res, 404, "the document stylesheet is not in this clone\n"); }
+    var body = Buffer.from(css, "utf8");
+    res.writeHead(200, {
+      "cache-control": "no-store",
+      "content-length": body.length,
+      "content-type": MIME[".css"],
+      "x-content-type-options": "nosniff"
+    });
+    if (req.method === "HEAD") return res.end();
+    res.end(body);
+  }
+
   var startedAt = new Date().toISOString();
   var server = http.createServer(function (req, res) {
     var pathname;
@@ -520,9 +539,20 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
       if (real !== servingRoot && real.indexOf(servingRoot + path.sep) !== 0) return send(res, 403, "forbidden\n");
       if (!stat.isFile()) return send(res, 404, "not found\n");
     } catch (err) {
-      // A rendered document may pull the Mermaid runtime beside itself, and the
-      // source directory has no copy of it. The packaged one is the same bytes.
-      if (path.basename(candidate) === markdown.MERMAID_ASSET) candidate = markdown.MERMAID_SOURCE;
+      // Three files a page may ask for beside itself that the served directory
+      // has no copy of. All three are packaged, and the packaged ones are the
+      // same bytes, so the basename is enough to resolve them from anywhere.
+      var missingName = path.basename(candidate);
+      // A rendered document may pull the Mermaid runtime beside itself.
+      if (missingName === markdown.MERMAID_ASSET) candidate = markdown.MERMAID_SOURCE;
+      // A page an agent wrote for review links the document stylesheet. It is
+      // three vendored files concatenated, so it is built rather than read.
+      else if (missingName === markdown.DOC_STYLE_ASSET) return sendDocStyle(req, res);
+      // The faces that stylesheet names.
+      else if (path.basename(path.dirname(candidate)) === markdown.FONT_ASSET_DIR &&
+               markdown.FONT_ASSETS.indexOf(missingName) !== -1) {
+        candidate = path.join(markdown.FONT_SOURCE_DIR, missingName);
+      }
       else return send(res, 404, "not found\n");
       try { stat = fs.statSync(candidate); } catch (missing) { return send(res, 404, "not found\n"); }
     }

@@ -1,0 +1,116 @@
+/*
+  System tokens, Ken St. Clair
+  SOURCE OF TRUTH for every surface: web, documents, presentations.
+
+  Each surface imports this file and adds only its own rules. Do not redefine a
+  token below in a surface stylesheet. If a surface needs a value this file does
+  not have, add it here so the other surfaces can see it.
+
+  Token names are stable. Renaming one breaks every surface that imports it, and
+  at least one surface vendors a copy rather than importing across repos (the
+  Columbia deck system). If you rename or add a token, say so in the commit and
+  tell the deck maintainer.
+
+  What belongs here, and what does not:
+    Here      any colour, type or spacing role more than one surface uses.
+    Not here  values only one surface can use. Slide-only type scales, slide
+              margins, page-print margins and the like stay in that surface's
+              own file under surface-specific names. If such a value turns out
+              to be a shared role, move it here rather than copying it.
+
+  Agreed with the deck surface on 2026-09-11: the vendored copy is taken whole
+  including this header, nobody edits it locally, and any new shared role comes
+  back here as a request rather than being defined in the copy.
+
+  Consumers:
+    lib/templates/document.css                      documents, briefs, one-pagers
+    projects/agent_storefront/site/index.html        the web surface (inline today)
+    columbia .../templates/deck-system/themes/       presentations (vendored copy)
+*/
+
+:root{
+  /* ---------- colour ---------- */
+
+  /* Structural neutrals. Every surface uses these. */
+  --white:#ffffff;
+  --paper:#f7f7f5;
+  --ink:#1f1e1a;
+  --ink-soft:#55534b;
+  --ink-faint:#6b6860;
+  --rule:#dcdad6;
+  --rule-ondark:#4a4842;
+
+  /* Accents. One jab of colour per element, never a gradient. */
+  --purple:#46188c;
+  --purple-hover:#35126b;
+  /* Derived to match the other two tints rather than picked by eye: hue held,
+     lightness 95%. Ink reads 14.30:1 on it, against 14.39 on cobalt-tint and
+     14.46 on sage-tint, so the three are interchangeable for contrast. */
+  --purple-tint:#f1ebfa;
+  --link:#6d28d9;
+  --cobalt:#0760c7;
+  --cobalt-hover:#054a99;
+  --cobalt-tint:#e6effc;
+  /*
+    Two sages, and they are one colour with two legibility variants rather than
+    two colours. #8fb5a0 is the brand sage: it is what STYLE_GUIDE.md lists and
+    what the logo's middle segment uses, on white and on ink. It is unreadable
+    as a mark on white, at 2.26:1, so marks on white use a darkened version.
+
+                      on ink      on white
+      --sage-fill     7.38:1      2.26:1
+      --sage          3.57:1      4.67:1
+
+    Each fails where the other passes, so pick by ground, not by taste.
+  */
+  --sage-fill:#8fb5a0;   /* brand sage: fills, illustrations, the logo segment, anything on ink */
+  --sage:#637a63;        /* darkened: bullet dots and marks on white */
+  --sage-tint:#e7f1ed;
+
+  /* Deprecated alias, kept because the deck surface vendors this file and a
+     rename would break it. Was #84c1ae, now resolves to the brand sage, which
+     clears the floor on ink at 7.38:1 and matches the logo. Use --sage-fill. */
+  --sage-lift:var(--sage-fill);
+
+  /* ---------- text on an ink ground ---------- */
+  /* Body text on dark is full white, 16.68:1. This is a house decision, not a
+     contrast one: a softened grey for body copy on a dark band was rejected.
+     The two values below are for secondary and meta text only.
+     Large-format surfaces such as slides may use soft for secondary copy where
+     full white at size glares. */
+  --ink-soft-ondark:#d9d7d1;   /* 11.59:1, secondary copy at large sizes */
+  --ink-faint-ondark:#b3b0a8;  /* 7.70:1, meta, section numbers, captions */
+
+  /* ---------- type ---------- */
+
+  --font-display:"Schibsted Grotesk","Hanken Grotesk",system-ui,sans-serif;
+  --font-body:"Hanken Grotesk",system-ui,sans-serif;
+  /* Code, in documents and on slides. Ken chose JetBrains Mono 2026-09-11.
+     The fallbacks are the platform faces, so a surface that has not bundled or
+     loaded the webfont still gets a real monospace rather than Courier. */
+  --font-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+
+  /* Weights. The wordmark stays at 600 wherever it appears. */
+  --w-body:400;
+  --w-medium:500;
+  --w-display:600;
+  --w-bold:700;
+
+  /* ---------- spacing, 4px-rooted ---------- */
+
+  --s1:4px; --s2:8px; --s3:12px; --s4:18px;
+  --s5:28px; --s6:44px; --s7:72px; --s8:104px;
+
+  /* ---------- lines and radius ---------- */
+
+  --r:4px;
+  --r-lg:6px;
+  --line:1px solid var(--rule);
+  --line-ink:1px solid var(--ink);
+  --divider:2px solid var(--ink);
+
+  /* ---------- layout ---------- */
+
+  --maxw:1080px;
+  --read:68ch;
+}

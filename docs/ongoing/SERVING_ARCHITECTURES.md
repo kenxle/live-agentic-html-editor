@@ -122,7 +122,8 @@ Markdown to HTML itself and serves that generated page. The rendering:
 
 - handles CommonMark and GFM
 - draws mermaid diagrams as local SVG
-- applies a neutral reading layout
+- sets the page in the St. Clair AI document style, vendored under
+  `vendor/stclair-doc-style/` and inlined so a saved page stays self-contained
 
 The generated HTML lives in LAHE's own state directory, owned by the agent
 session, never beside your source.
