@@ -121,22 +121,55 @@ test("one agent session can own static reviews in different project roots", asyn
 
 const PAGE_WITHOUT_LINE = "<!doctype html>\n<html>\n<body>\n<h1>hello</h1>\n</body>\n</html>\n";
 
-/** A review recording `root/page.html` as its target, and a server rooted there. */
+/**
+ * A review and a server rooted at `root`.
+ *
+ * By default the review records `root/page.html`, the single-page shape. With
+ * `folderReview: true` it records the FOLDER instead, which is what
+ * `lahe review <folder>` writes, and is the only shape that puts its line on
+ * pages it never recorded.
+ *
+ * The session is on the fixture because the server must be started with the
+ * same one: a review of another agent session never answers for this server's
+ * pages, recorded or not.
+ */
 function injectFixture(options) {
   const opts = options || {};
   const root = tempDir("lahe-static-inject-root-");
   const state = path.join(tempDir("lahe-static-inject-state-"), "state");
   const page = path.join(root, opts.filename || "page.html");
   fs.writeFileSync(page, opts.html === undefined ? PAGE_WITHOUT_LINE : opts.html);
+  const sessionId = opts.sessionId || "s_inject";
   const log = logModule.createEventLog({ dir: state });
   const reviews = reviewsModule.createReviews({ dir: state, log: log });
   const review = reviews.create({
     id: opts.reviewId || "r_inject",
     origins: ["null"],
-    target_path: page,
-    agent_session_id: opts.sessionId
+    target_path: opts.folderReview ? root : page,
+    agent_session_id: sessionId
   });
-  return { root: root, state: state, page: page, review: review, reviews: reviews };
+  return {
+    root: root,
+    state: state,
+    page: page,
+    review: review,
+    reviews: reviews,
+    sessionId: sessionId
+  };
+}
+
+/** The helper log, or "" when nothing has written one. */
+function helperLog(state) {
+  try {
+    return fs.readFileSync(path.join(state, "helper.log"), "utf8");
+  } catch (err) {
+    return "";
+  }
+}
+
+/** How many helper.log lines mention `phrase`. */
+function logLines(state, phrase) {
+  return helperLog(state).split("\n").filter((line) => line.indexOf(phrase) !== -1);
 }
 
 /** Another review on the same state directory, with a chosen creation time. */
@@ -159,8 +192,8 @@ function addReview(f, spec) {
 
 test("a target file whose on-disk tag was stripped is served carrying the tag", async (t) => {
   const f = injectFixture();
-  const server = await staticServers.start({ dir: f.state, sessionId: "s_inject_missing", root: f.root });
-  t.after(async () => { await staticServers.stopAll(f.state, "s_inject_missing"); });
+  const server = await staticServers.start({ dir: f.state, sessionId: f.sessionId, root: f.root });
+  t.after(async () => { await staticServers.stopAll(f.state, f.sessionId); });
 
   const res = await request(server.meta, "/page.html");
   assert.equal(res.status, 200);
@@ -190,8 +223,8 @@ test("a file that already carries this review's tag is served with exactly one, 
   fs.writeFileSync(f.page, scriptLine.placeScriptLine(PAGE_WITHOUT_LINE, tag).html);
   const onDiskBefore = fs.readFileSync(f.page, "utf8");
 
-  const server = await staticServers.start({ dir: f.state, sessionId: "s_inject_present", root: f.root });
-  t.after(async () => { await staticServers.stopAll(f.state, "s_inject_present"); });
+  const server = await staticServers.start({ dir: f.state, sessionId: f.sessionId, root: f.root });
+  t.after(async () => { await staticServers.stopAll(f.state, f.sessionId); });
 
   const res = await request(server.meta, "/page.html");
   assert.equal(res.status, 200);
@@ -206,8 +239,8 @@ test("a file that already carries this review's tag is served with exactly one, 
 
 test("a served page with no tab icon of its own gets the fallback, and one that has an icon keeps it", async (t) => {
   const f = injectFixture();
-  const server = await staticServers.start({ dir: f.state, sessionId: "s_icon", root: f.root });
-  t.after(async () => { await staticServers.stopAll(f.state, "s_icon"); });
+  const server = await staticServers.start({ dir: f.state, sessionId: f.sessionId, root: f.root });
+  t.after(async () => { await staticServers.stopAll(f.state, f.sessionId); });
 
   const plain = await request(server.meta, "/page.html");
   assert.ok(plain.body.includes(tabIcon.LINK), "the blank-tab default is what a reviewer cannot find among six tabs");
@@ -231,15 +264,15 @@ test("a served page with no tab icon of its own gets the fallback, and one that 
 
 test("injection still matches after restartAll, which re-derives root from meta rather than the original call", async (t) => {
   const f = injectFixture();
-  const first = await staticServers.start({ dir: f.state, sessionId: "s_inject_restart", root: f.root });
-  await staticServers.stopAll(f.state, "s_inject_restart");
+  const first = await staticServers.start({ dir: f.state, sessionId: f.sessionId, root: f.root });
+  await staticServers.stopAll(f.state, f.sessionId);
   assert.equal(await staticServers.isExactServer(first.meta), false, "stopped before the restart");
 
-  const restarted = await staticServers.restartAll(f.state, "s_inject_restart");
-  t.after(async () => { await staticServers.stopAll(f.state, "s_inject_restart"); });
+  const restarted = await staticServers.restartAll(f.state, f.sessionId);
+  t.after(async () => { await staticServers.stopAll(f.state, f.sessionId); });
   assert.equal(restarted, 1);
 
-  const servers = staticServers.list(f.state, "s_inject_restart").filter((m) => !m.stopped_at);
+  const servers = staticServers.list(f.state, f.sessionId).filter((m) => !m.stopped_at);
   assert.equal(servers.length, 1);
   const res = await request(servers[0], "/page.html");
   assert.equal(res.status, 200);
@@ -257,8 +290,8 @@ test("injection still matches after restartAll, which re-derives root from meta 
 // the request for the page answers for the library too.
 test("the static server publishes the built library at its own reserved route", async (t) => {
   const f = injectFixture();
-  const server = await staticServers.start({ dir: f.state, sessionId: "s_inject_library", root: f.root });
-  t.after(async () => { await staticServers.stopAll(f.state, "s_inject_library"); });
+  const server = await staticServers.start({ dir: f.state, sessionId: f.sessionId, root: f.root });
+  t.after(async () => { await staticServers.stopAll(f.state, f.sessionId); });
 
   const res = await request(server.meta, staticServers.LIBRARY_PATH);
   assert.equal(res.status, 200);
@@ -277,8 +310,8 @@ test("the static server publishes the built library at its own reserved route", 
 
 test("the injected tag loads the library from this server and keeps the helper as the fallback", async (t) => {
   const f = injectFixture();
-  const server = await staticServers.start({ dir: f.state, sessionId: "s_inject_src", root: f.root });
-  t.after(async () => { await staticServers.stopAll(f.state, "s_inject_src"); });
+  const server = await staticServers.start({ dir: f.state, sessionId: f.sessionId, root: f.root });
+  t.after(async () => { await staticServers.stopAll(f.state, f.sessionId); });
 
   const res = await request(server.meta, "/page.html");
   const src = /<script src="([^"]+)"/.exec(res.body);
@@ -303,7 +336,7 @@ test("the injected tag loads the library from this server and keeps the helper a
 });
 
 // ---------------------------------------------------------------------------
-// ANYTHING THIS SERVER SERVES GETS THE RAIL.
+// A FOLDER REVIEW PUTS THE RAIL ON EVERY PAGE OF ITS FOLDER.
 //
 // This used to be the opposite: a page no review had recorded as a target was
 // served plain, so a reviewer walking a folder of wireframes found the rail on
@@ -312,23 +345,29 @@ test("the injected tag loads the library from this server and keeps the helper a
 // them. Ken's rule (docs/ongoing/STATIC_SITE_FOLDER.md): this is our server,
 // made for document review, so everything coming through it is reviewable.
 //
-// A page no review recorded rides the newest review this server backs. Nothing
-// is written anywhere to make that happen: no enrollment, no meta.json update,
-// no log line. The item's own event carries the page path, which is all the rail
-// and review.json need to group by page.
+// THE RULE IS SCOPED TO THE REVIEW THAT ASKED FOR A FOLDER. A single-page
+// review roots its server at the page's own folder, which is very often a
+// home or Desktop directory holding unrelated HTML. Handing those pages a live
+// review token was never the ask: `lahe review <folder>` is where the reviewer
+// said "this whole folder", so a review whose recorded target IS this server's
+// root is the only one that answers for pages it never recorded.
+//
+// Nothing is written to make it happen: no enrollment, no meta.json update, no
+// log line for the ordinary case. The item's own event carries the page path,
+// which is all the rail and review.json need to group by page.
 
-test("a page no review recorded is served on the newest review this server backs", async (t) => {
-  const f = injectFixture({ sessionId: "s_inject_other" });
+test("a folder review puts its line on a page nobody recorded, and writes nothing to do it", async (t) => {
+  const f = injectFixture({ folderReview: true });
   const otherHtml = "<!doctype html>\n<html>\n<body>\n<p>nobody enrolled this one</p>\n</body>\n</html>\n";
   fs.writeFileSync(path.join(f.root, "other.html"), otherHtml);
   const metaBefore = fs.readFileSync(stateDirModule.metaPath(f.state, f.review.id), "utf8");
 
-  const server = await staticServers.start({ dir: f.state, sessionId: "s_inject_other", root: f.root });
-  t.after(async () => { await staticServers.stopAll(f.state, "s_inject_other"); });
+  const server = await staticServers.start({ dir: f.state, sessionId: f.sessionId, root: f.root });
+  t.after(async () => { await staticServers.stopAll(f.state, f.sessionId); });
 
   const res = await request(server.meta, "/other.html");
   assert.equal(res.status, 200);
-  assert.equal(scriptLine.reviewAlreadyInFile(res.body), f.review.id, "it carries this server's review");
+  assert.equal(scriptLine.reviewAlreadyInFile(res.body), f.review.id, "it carries this folder's review");
   assert.ok(res.body.indexOf(f.review.token) !== -1, "with that review's own token");
   assert.match(res.body, /nobody enrolled this one/, "and the page's own content is untouched");
   assert.equal(
@@ -343,8 +382,46 @@ test("a page no review recorded is served on the newest review this server backs
   );
 });
 
-test("the newest review wins, and another session's or another folder's never does", async (t) => {
-  const f = injectFixture({ sessionId: "s_newest", reviewId: "r_oldest" });
+// THE SECURITY CASE THIS SCOPING EXISTS FOR.
+//
+// `lahe review ~/Desktop/x.html` roots a server at the Desktop. If a single-page
+// review answered for pages it never recorded, every other HTML file in that
+// folder would be served carrying a live review id and token, readable by any
+// script on the page. The reviewer asked for one page.
+test("a single-page review keeps to its own page and leaves the rest of the folder alone", async (t) => {
+  const f = injectFixture();
+  fs.writeFileSync(path.join(f.root, "taxes.html"), PAGE_WITHOUT_LINE);
+
+  const server = await staticServers.start({ dir: f.state, sessionId: f.sessionId, root: f.root });
+  t.after(async () => { await staticServers.stopAll(f.state, f.sessionId); });
+
+  const neighbour = await request(server.meta, "/taxes.html");
+  assert.equal(neighbour.status, 200);
+  assert.equal(neighbour.body.indexOf("data-lahe-review"), -1, "no review id on a page nobody asked to review");
+  assert.equal(neighbour.body.indexOf(f.review.token), -1, "and no token either");
+
+  const recorded = await request(server.meta, "/page.html");
+  assert.equal(scriptLine.reviewAlreadyInFile(recorded.body), f.review.id, "the page that WAS reviewed still gets it");
+});
+
+test("a review of another agent session never answers, not even for a page it recorded", async (t) => {
+  const f = injectFixture({ sessionId: "s_mine" });
+
+  const server = await staticServers.start({ dir: f.state, sessionId: "s_theirs", root: f.root });
+  t.after(async () => { await staticServers.stopAll(f.state, "s_theirs"); });
+
+  const res = await request(server.meta, "/page.html");
+  assert.equal(res.status, 200);
+  assert.equal(
+    res.body.indexOf("data-lahe-review"),
+    -1,
+    "one session's server does not hand out another session's review, recorded target or not"
+  );
+  assert.equal(res.body.indexOf(f.review.token), -1, "and above all not its token");
+});
+
+test("the newest folder review wins; another session's, a nested one, and another folder's never do", async (t) => {
+  const f = injectFixture({ sessionId: "s_newest", reviewId: "r_oldest", folderReview: true });
   addReview(f, {
     id: "r_oldest",
     sessionId: "s_newest",
@@ -366,6 +443,19 @@ test("the newest review wins, and another session's or another folder's never do
     targetPath: f.root,
     createdAt: "2026-09-17T00:00:00.000Z"
   });
+  // A NESTED review, newer than everything. `lahe review site/` then
+  // `lahe review site/sub/` are two separate documents that happen to be one
+  // inside the other. The inner one owns its own folder and nothing above it,
+  // or the newer, narrower review quietly takes over every page of the parent.
+  const nested = path.join(f.root, "sub");
+  fs.mkdirSync(nested, { recursive: true });
+  fs.writeFileSync(path.join(nested, "deep.html"), PAGE_WITHOUT_LINE);
+  addReview(f, {
+    id: "r_nested",
+    sessionId: "s_newest",
+    targetPath: nested,
+    createdAt: "2026-09-19T00:00:00.000Z"
+  });
   // And a review of this same session whose pages live somewhere else entirely.
   const elsewhere = tempDir("lahe-static-elsewhere-");
   addReview(f, {
@@ -384,13 +474,50 @@ test("the newest review wins, and another session's or another folder's never do
   assert.equal(
     scriptLine.reviewAlreadyInFile(res.body),
     "r_newest",
-    "the newest review of this session rooted in this folder"
+    "the newest review of this session whose target IS this folder"
   );
 
-  // The recorded target still wins for the page a review actually named, so
-  // nothing about the existing match changes.
-  const recorded = await request(server.meta, "/page.html");
-  assert.equal(scriptLine.reviewAlreadyInFile(recorded.body), "r_oldest");
+  // The page inside the nested folder belongs to the parent's server, which is
+  // the one answering here, so it rides the parent's review. The nested review
+  // has its own server and its own root; it does not reach up.
+  const deep = await request(server.meta, "/sub/deep.html");
+  assert.equal(scriptLine.reviewAlreadyInFile(deep.body), "r_newest");
+});
+
+test("a page recorded on its own keeps its own review while the folder review takes the rest", async (t) => {
+  const f = injectFixture({ sessionId: "s_mixed", reviewId: "r_folder", folderReview: true });
+  addReview(f, {
+    id: "r_folder",
+    sessionId: "s_mixed",
+    targetPath: f.root,
+    createdAt: "2026-09-16T00:00:00.000Z"
+  });
+  addReview(f, {
+    id: "r_just_this_page",
+    sessionId: "s_mixed",
+    targetPath: f.page,
+    createdAt: "2026-09-01T00:00:00.000Z"
+  });
+  fs.writeFileSync(path.join(f.root, "rest.html"), PAGE_WITHOUT_LINE);
+
+  const server = await staticServers.start({ dir: f.state, sessionId: "s_mixed", root: f.root });
+  t.after(async () => { await staticServers.stopAll(f.state, "s_mixed"); });
+
+  const own = await request(server.meta, "/page.html");
+  assert.equal(
+    scriptLine.reviewAlreadyInFile(own.body),
+    "r_just_this_page",
+    "the page's own review wins over the folder's, even though the folder's is newer"
+  );
+  const rest = await request(server.meta, "/rest.html");
+  assert.equal(scriptLine.reviewAlreadyInFile(rest.body), "r_folder");
+
+  // Said in the log, because two reviews over one folder is the kind of thing
+  // an agent discovers by wondering why a reply landed on the wrong card.
+  await request(server.meta, "/page.html");
+  const said = logLines(f.state, "keeps its own review");
+  assert.equal(said.length, 1, "said once for that page, not once per request:\n" + helperLog(f.state));
+  assert.ok(said[0].indexOf("r_just_this_page") !== -1, "naming the review that won: " + said[0]);
 });
 
 test("a server no review backs serves its pages plain, and says so once", async (t) => {
@@ -407,7 +534,37 @@ test("a server no review backs serves its pages plain, and says so once", async 
   assert.match(first.body, /<h1>hello<\/h1>/, "and the page is still served");
   await request(server.meta, "/page.html");
 
-  const helperLog = fs.readFileSync(path.join(state, "helper.log"), "utf8");
-  const lines = helperLog.split("\n").filter((line) => line.indexOf("no review backs") !== -1);
-  assert.equal(lines.length, 1, "said once, not once per request:\n" + helperLog);
+  const lines = logLines(state, "no review backs");
+  assert.equal(lines.length, 1, "said once, not once per request:\n" + helperLog(state));
+});
+
+// THE LATCH BELONGS TO THE ROOT, NOT TO EVERY REQUEST.
+//
+// A mounted folder holds documents a rendered Markdown page links to, and those
+// are served read-only with no review on purpose. Counting one of them as "no
+// review backs this server" both says something untrue and burns the once-only
+// latch, so the real unbacked case, a page at the root with nothing behind it,
+// would never be logged at all.
+test("a page under a mount is not mistaken for an unbacked server", async (t) => {
+  const f = injectFixture({ folderReview: true });
+  const linked = tempDir("lahe-static-mount-");
+  fs.writeFileSync(path.join(linked, "linked.html"), PAGE_WITHOUT_LINE);
+
+  const server = await staticServers.start({ dir: f.state, sessionId: f.sessionId, root: f.root });
+  t.after(async () => { await staticServers.stopAll(f.state, f.sessionId); });
+  const prefix = "/.lahe-source/abc123/";
+  await staticServers.registerMount(f.state, f.sessionId, server.meta, prefix, linked);
+
+  const mounted = await request(server.meta, prefix + "linked.html");
+  assert.equal(mounted.status, 200);
+  assert.equal(
+    mounted.body.indexOf("data-lahe-review"),
+    -1,
+    "a linked document stays read-only: no review, no token"
+  );
+  assert.deepEqual(
+    logLines(f.state, "no review backs"),
+    [],
+    "and it is not reported as an unbacked server, which would also spend the once-only latch"
+  );
 });
