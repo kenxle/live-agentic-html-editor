@@ -5,7 +5,7 @@ Board row: `LAHE-static-site-folder` in `docs/BULLETIN.md`. Written 2026-09-16 a
 ## What happens today
 
 - A review remembers the exact file paths it was pointed at (`target_paths` in the review's meta.json). The session's static server puts the rail into a response only when the requested file is one of those paths. Any other file under the same folder is served plain.
-- `lahe review <folder>` does not mean "review these pages". A folder target falls into the app-in-dev row: it registers an origin and prints a script line for you to paste into a layout. Wireframes have no layout, so that row does nothing for them.
+- `lahe review <folder>` does not mean "review these pages". A folder target falls into the app-in-dev row, which is built for a running app: it registers the app's origin and prints one script line for you to paste into the app's shared template (a Rails or Next layout), the one file every page is rendered through, so one paste reaches every page. A set of wireframes is separate HTML files with no shared template. There is no single place to paste the line, so that row leaves you pasting it into every file by hand, or doing nothing.
 - One review can already span pages. Items carry the page they were made on, the rail shows each page only its own items, and `review.json` lists them all. So the multi-page half of the problem is solved; only the "which pages get the rail" half is missing.
 
 ## Why per-page enrolment is the wrong answer
