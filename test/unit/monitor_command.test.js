@@ -10,6 +10,10 @@ const monitor = require("../../src/cli/commands/monitor.js");
 const protocol = require("../../src/shared/protocol.js");
 const agentSessions = require("../../src/service/agent_sessions.js");
 const stateDir = require("../../src/service/state_dir.js");
+const record = require("../../src/shared/record.js");
+const logModule = require("../../src/service/log.js");
+const reviewsModule = require("../../src/service/reviews.js");
+const reviewFormat = require("../../src/shared/review_format.js");
 
 function tempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "lahe-monitor-"));
@@ -74,6 +78,53 @@ test("idle polls stay local until work appears, then monitor prints once and exi
   // The drain command the monitor runs is the same one it prints.
   calls.forEach((args) => {
     assert.deepEqual(args, ["--session", "s_owner", "--json", "--quiet"]);
+  });
+});
+
+test("the work the monitor prints carries no contract block", async () => {
+  // The monitor has no output of its own: it prints what the drain printed.
+  // So this runs the REAL status command, not a stub, because a stub would
+  // only prove the monitor forwards a string.
+  const dir = tempDir();
+  const sessions = agentSessions.createStore({ dir: dir });
+  sessions.create({ id: "s_monitor" });
+  const log = logModule.createEventLog({ dir: dir });
+  const reviews = reviewsModule.createReviews({ dir: dir, log: log });
+  reviews.create({ id: "r_monitor", agent_session_id: "s_monitor" });
+  const item = record.newItem({
+    kind: record.KIND.COMMENT,
+    state: record.STATE.READY,
+    note: "fix the footer",
+    page_origin: "http://127.0.0.1:8000",
+    page_path: "/report.html",
+    page_seq: 1
+  });
+  log.append("r_monitor", [
+    protocol.newEvent({
+      event: protocol.EVENT.ITEM_READY,
+      event_id: "ev_monitor_item",
+      review: "r_monitor",
+      item: item[record.FIELD.ID],
+      rev: item[record.FIELD.REV],
+      page_path: item[record.FIELD.PAGE_PATH],
+      page_seq: item[record.FIELD.PAGE_SEQ],
+      payload: { draft: false, record: item }
+    })
+  ]);
+
+  const stdout = [];
+  const code = await monitor.run(["--session", "s_monitor", "--state-dir", dir], {
+    stdout: (text) => stdout.push(text),
+    stderr: () => {},
+    wait: async () => {}
+  });
+
+  assert.equal(code, protocol.CLI_EXIT.OK);
+  const printed = stdout.join("");
+  assert.match(printed, /fix the footer/, "the work still gets through");
+  assert.match(printed, /"contract_in":"review\.json"/, "with the pointer in its place");
+  reviewFormat.CONTRACT.forEach((clause) => {
+    assert.equal(printed.includes(clause), false, "a contract clause reached the monitor: " + clause);
   });
 });
 
