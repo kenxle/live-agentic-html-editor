@@ -185,6 +185,10 @@ Nothing in your application is edited. `add` prints the one line with a reminder
 comment. That comment is not a guard: wrap the script in your framework's actual
 development-only conditional before pasting it into the layout.
 
+Do not fork these instructions by agent: Claude, Codex, and Gemini use the same
+CLI and file protocol after discovery, and the repository copy under `skills/` is
+the one source of truth for the skill.
+
 ## Without installing
 
 `npm link` is a convenience, and on some machines it needs a writable npm prefix

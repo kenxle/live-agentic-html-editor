@@ -122,13 +122,7 @@ For the dev-server row, delete the line you pasted. Nobody else will.
 
 ## Step 1: install (once per machine)
 
-Install is its own page: `docs/INSTALL.md`. Read it once when setting up a
-machine, not on every session. The short version: Node 18 or newer, `git clone`,
-`npm run install-cli`, then `lahe --help`. There is no dependency install. The
-same command installs the lahe skill for Claude Code, Codex, and Gemini; the
-repository copy under `skills/` is the source of truth, and the installed copies
-are refreshed by rerunning it. Do not fork these instructions by agent: every
-host uses the same CLI and file protocol after discovery.
+Install is its own page: `docs/INSTALL.md`. Read it when setting up a machine.
 
 ## Step 2: start a review on the page your human wants to look at
 
