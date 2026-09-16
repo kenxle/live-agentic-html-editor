@@ -207,6 +207,13 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
   dark as the current system look and document that the brand style is light.
   Mermaid diagrams keep working. The rail's own chrome is not part of this.
 
+- [ ] @anyone 2026-09-16 LAHE-wireframe-skill-guidance -- **The wireframing skill
+  needs firmer guidance on how it lays out a set of pages.** Ken (2026-09-16, on
+  the static-site decision page): "the wireframes have been kind of all over the
+  place every time they get generated. It seems like we need to give a bit more
+  guidance." Separate from how LAHE serves the folder (LAHE-static-site-folder);
+  wanted regardless. The skill lives in `~/.claude/skills/magic-mirror`.
+
 - [ ] @anyone 2026-09-16 LAHE-static-site-folder -- **A folder of linked HTML pages
   has no row of its own, so the rail does not follow the reviewer between pages.**
   Seen 2026-09-16 on a set of wireframe pages: `lahe review <dir>` takes the
@@ -219,9 +226,9 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
   incorrect... fragile." Wanted: a static-site row where `lahe review <dir>` of a
   folder of HTML serves the folder and injects the rail into every HTML page under
   it as one review that spans pages, with the session-owned static server doing
-  the matching by root rather than by enrolled path. Decide how the reviewer's
-  per-page item view and `review.json` group pages that were never individually
-  enrolled.
+  the matching by root rather than by enrolled path. Decision page:
+  `docs/ongoing/STATIC_SITE_FOLDER.md`. Ken set the rule 2026-09-16: anything our
+  own static server serves gets the rail; page-specific threads stand.
 
 - [ ] @ken 2026-09-11 LAHE-organic-discovery -- **Someone found LAHE on their own,
   days after launch.** A student in Ken's Columbia class searched, found the tool,

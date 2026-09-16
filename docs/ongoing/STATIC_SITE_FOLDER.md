@@ -1,12 +1,12 @@
 # The rail should follow the reviewer through a folder of pages
 
-Board row: `LAHE-static-site-folder` in `docs/BULLETIN.md`. Written 2026-09-16 after an agent reviewing a set of wireframe pages found the rail only on the page it had enrolled, and worked around it by enrolling every page one at a time. Ken called that fragile. This is the decision page: what is happening, two ways to fix it, and a recommendation. Nothing here is built.
+Board row: `LAHE-static-site-folder` in `docs/BULLETIN.md`. Written 2026-09-16 after an agent reviewing a set of wireframe pages found the rail only on the page it had enrolled, and worked around it by enrolling every page one at a time. Ken read the first draft of this page and left notes; this is the rewrite with his decisions folded in. Nothing is built.
 
 ## What happens today
 
-- A review remembers the exact file paths it was pointed at (`target_paths` in the review's meta.json). The session's static server puts the rail into a response only when the requested file is one of those paths. Any other file under the same folder is served plain.
+- A review remembers the exact file paths it was pointed at. The session's static server puts the rail into a response only when the requested file is one of those paths. Any other file under the same folder is served plain.
 - `lahe review <folder>` does not mean "review these pages". A folder target falls into the app-in-dev row, which is built for a running app: it registers the app's origin and prints one script line for you to paste into the app's shared template (a Rails or Next layout), the one file every page is rendered through, so one paste reaches every page. A set of wireframes is separate HTML files with no shared template. There is no single place to paste the line, so that row leaves you pasting it into every file by hand, or doing nothing.
-- One review can already span pages. Items carry the page they were made on, the rail shows each page only its own items, and `review.json` lists them all. So the multi-page half of the problem is solved; only the "which pages get the rail" half is missing.
+- One review can already span pages. Items carry the page they were made on, the rail shows each page only its own items, and `review.json` lists them all.
 
 ## Why per-page enrollment is the wrong answer
 
@@ -14,38 +14,40 @@ Board row: `LAHE-static-site-folder` in `docs/BULLETIN.md`. Written 2026-09-16 a
 - A page added to the folder after enrollment is missed.
 - It is a loop the agent has to remember to run. Today's run enrolled 82 pages as 82 separate reviews, and a similar run on Sep 9 made 139. Each one is a folder on disk with its own log, and 166 of the 384 reviews on this machine never received a comment.
 
-## Option A: a folder is a target
+## The rule, decided
 
-`lahe review <folder>` where the folder holds HTML files creates one review whose target is the folder. The static server, when it matches a request, treats a recorded folder as "every `.html` file under it", and puts the rail in. Pages join the review as the reviewer visits them, through the `page.visited` event that already exists.
+**Anything our own static server serves gets the rail.** Ken's words while reading: this is our server, made for document review, so everything coming through it should be editable. A dev server someone else runs is different and keeps its row. Our server has no such excuse.
 
-- Changes: the target-path match in `static_servers.js` learns to match by root as well as by exact path; `lahe review` and `lahe add` stop routing a folder of HTML to the dev-server row; the review meta records a folder target; `AGENTS.md`, the skill table and `docs/CLI.md` get a new row.
-- What stays the same: the review store, the item record, the rail, the layer, the helper's routes.
-- Risk to think through: a folder that also holds pages the reviewer should not be commenting on (a vendored library's demo page, an old export). The match is "under the root", so those get a rail too. Acceptable for wireframes and generated sites; say so in the docs, and keep `--source` for build output the way it works now.
-- Risk: a folder of Markdown, or a mix. Out of scope. A folder counts as a static site only when it holds at least one `.html` and the reviewer did not pass `--origin`.
+This replaces the "which pages get the rail" question in the first draft. Options A and B both tried to answer it by enrolling pages, one by folder and one on first visit. Neither is needed.
 
-## Option B: auto-enroll on first visit
+## What changes
 
-Keep per-page reviews, but when the static server serves an HTML file under a session's root that no review has recorded, it enrolls the page into the newest review on that server before responding.
+- **The static server injects into every HTML file it serves**, not only files recorded as review targets. Everything else the server does stays the same. It stays read-only against the review store.
+- **Which review an item lands in.** The script line the server injects names a review id and token. For a page no review recorded, the server uses the newest review on that server (a server is one per folder per agent session, so "newest on this server" is "the review this folder was opened for"). No enrollment, no write. The item's own event carries the page path, and that is all the rail and `review.json` need to group by page.
+- **`lahe review <folder>` for a folder of HTML** starts the static server on that folder, creates one review for it, and prints the folder's index (or the first page) as the open link. It stops falling into the dev-server row when the folder holds HTML and no `--origin` was passed.
+- **Docs:** a new row in the serving table in `AGENTS.md`, the lahe skill, and `docs/CLI.md`. The contract text does not change; it is about replies, not serving.
 
-- Changes: the static server gains a write path into review meta. Today it is read-only against the store, on purpose: it is a separate process and disk is the only thing it shares with the helper.
-- Risk: two processes writing meta.json; a race between the helper recording paths and the server enrolling. It also keeps the one-review-per-page shape that produced 384 reviews.
+## What stands from earlier decisions
 
-## Option C: change the wireframing skill instead
+- **Comment threads stay page specific.** Ken: "those decisions stand." A page shows its own items. A "see all pages" view in the rail, so a reviewer walking a folder does not think their comments vanished, is a possible follow-on and not part of this.
+- **`--source` for build output** keeps working exactly as it does now.
 
-Ken's suggestion while reading: the wireframes come from the magic-mirror skill, so the skill could generate them with a shared piece every page includes, and the existing app-in-dev row would then work with one paste.
+## Why the first draft's Option B was risky, in plain words
 
-- Changes: the skill's page template, not LAHE.
-- What it solves: wireframes this skill produces, going forward.
-- What it does not solve: any other folder of pages (an exported site, a generated report with subpages, someone else's wireframes), and every wireframe set already on disk. Plain HTML has no include mechanism, so "a shared piece" means either a tiny script every page loads that pulls the line in, or a build step, and both are more machinery than pointing LAHE at the folder.
-- Fits alongside A: a skill that emits a clean folder of pages is exactly what Option A serves well. It does not replace A.
+Today one program, the helper, writes a review's files, and the static server only reads them. Option B would have had both writing the same file. If they write at the same moment one overwrites the other, so a page the server just added could vanish when the helper saved a second later. Avoiding that means a lock, or routing the write through the helper, which is more machinery. The rule above needs no write at all, so the risk does not arise.
 
-## Recommendation
+## Follow-ons Ken wants recorded
 
-Option A, and Option C is welcome on top of it for wireframes specifically. A is the smaller change, it keeps the static server read-only, and it collapses a wireframe set into one review the way a reviewer already thinks about it. It also needs no new discipline from the agent: point at the folder, hand over the link, done.
+- **A folder of Markdown, or a mix of Markdown and HTML.** A future agent will try it. Wanted, not out of scope; a separate piece of work once this lands, because Markdown pages are rendered into LAHE's own artifact folder rather than served from the source folder.
+- **The wireframing skill needs firmer guidance** on how it lays out a set of pages, regardless of how LAHE serves the folder. Ken: "the wireframes have been kind of all over the place every time they get generated." Its own board row, `LAHE-wireframe-skill-guidance`.
+- **A see-all view** of every page's items in the rail (above).
 
 ## Before building
 
-- Confirm with Ken that "every HTML page under the folder gets the rail" is the rule he wants, including the vendored-demo-page case.
-- Decide what the rail's page list looks like for pages that were visited but never commented on. Today `review.json` groups items by page; a visited page with no items may not appear at all, and the reviewer may want to see which pages they have walked.
-- Write the tests first: a folder of three linked pages, enroll the folder once, load each page through the server, the rail is present on all three; comment on page two, the item carries page two's path; a page added to the folder after enrollment also gets the rail.
-- This touches the serving table, so the skill and `AGENTS.md` change together, and the contract text does not (it is about replies, not serving).
+- Write the tests first: a folder of three linked pages, `lahe review <folder>` once, load each page through the server, the rail is present on all three; comment on page two, the item carries page two's path and lands in the folder's review; a page added to the folder after the review was opened also gets the rail; a page that already carries a LAHE script line for a different review is left alone (the existing rule).
+- The serving table changes, so `AGENTS.md`, the skill, and `docs/CLI.md` change in the same commit.
+- Two independent review passes on the diff before merge, and Ken sees the result on a page.
+
+## Progress
+
+- 2026-09-16: first draft with three options. Ken reviewed it and set the rule: everything our server serves gets the rail. Rewritten around that. Waiting on his go to build.
