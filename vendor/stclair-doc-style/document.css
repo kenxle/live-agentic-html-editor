@@ -121,6 +121,10 @@ hr{border:0;border-top:var(--line);margin:var(--section-gap-narrow) 0}
    any class below can override it without a fight. */
 
 :where(section.sheet,.fold-body,.checkin,.hero) :where(p,ul,ol,blockquote){max-width:var(--read)}
+/* A paragraph that is only an image is a figure, not prose: a chart or a
+   screenshot wants the column, not the reading measure. Markdown always wraps
+   an image in a paragraph, which is why this is decided here. */
+p:has(> img:only-child){max-width:none}
 :is(table,.facts,.cols,pre) :is(p,ul,ol,blockquote){max-width:none}
 
 /* ---------- layout helpers ---------- */

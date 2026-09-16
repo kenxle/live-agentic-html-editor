@@ -10,7 +10,7 @@ already carries its own styles is never touched.
 | File | Where it came from |
 | --- | --- |
 | `system-tokens.css` | `~/Documents/workspace/personal/lib/templates/system-tokens.css`, copied whole on 2026-09-16 from `main` at `83088576` |
-| `document.css` | `~/Documents/workspace/personal/lib/templates/document.css`, copied whole on 2026-09-16 from `main` at `83088576` |
+| `document.css` | `~/Documents/workspace/personal/lib/templates/document.css`, copied whole on 2026-09-16 from `main` at `4da9515d` |
 | `lahe-markdown.css` | written in this repo, not a copy |
 | `fonts/*.woff2` | Google Fonts, latin subset, fetched 2026-09-16 |
 | `LICENSE` | SIL Open Font License 1.1, with all three font copyright lines |
