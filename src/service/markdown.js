@@ -255,11 +255,11 @@ function render(source, options) {
     "</div>"
   ];
   page.sections.forEach(function (section, index) {
-    // .first pulls the hanging rule up under the title, so it is only correct
-    // when there is no lede sitting between the two.
-    var first = index === 0 && !lede ? " first" : "";
+    // Every section carries its own top space now, whether or not a lede
+    // sits between it and the hero, so the renderer never tucks the first
+    // one underneath.
     blocks.push(
-      "<section class=\"sheet" + first + "\">",
+      "<section class=\"sheet\">",
       "<div class=\"sheet-head\"><h2>" + parser.parseInline(section.heading.tokens) +
         "</h2><span class=\"n\">Section " + (index + 1) + "</span></div>",
       parseChunk(parser, section.body, lexed.links),
