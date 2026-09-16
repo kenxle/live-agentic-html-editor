@@ -28,6 +28,50 @@ test("a fenced Mermaid flowchart renders as a diagram in generated Markdown HTML
     await expect(page.locator(".mermaid svg")).toBeVisible();
     await expect(page.locator(".mermaid")).toContainText("Setup");
     await expect(page.locator("pre code")).toHaveCount(0);
+
+    // Mermaid picks its own lavender unless it is handed a palette, and the
+    // stylesheet cannot reach inside the SVG it draws. #ECECFF is that stock
+    // fill; #e6effc is cobalt-tint, which is what the theme asks for.
+    const fills = await page.evaluate(() => Array.from(
+      document.querySelectorAll(".mermaid svg rect, .mermaid svg polygon"),
+      (node) => getComputedStyle(node).fill
+    ));
+    expect(fills.length).toBeGreaterThan(0);
+    expect(fills).not.toContain("rgb(236, 236, 255)");
+    expect(fills).toContain("rgb(230, 239, 252)");
+  } finally {
+    await server.close();
+  }
+});
+
+// The point of the structure pass: a rendered document is built out of the
+// document style's own components, so document.css's chrome applies without
+// this repo restating any of it. The hanging rule over a section head is the
+// visible half of that, and it comes from a stylesheet we never edit.
+test("a rendered section carries document.css's hanging rule", async ({ page }) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-markdown-sheet-"));
+  const state = path.join(root, "state");
+  const source = path.join(root, "REPORT.md");
+  fs.writeFileSync(source, [
+    "# Replay branches",
+    "",
+    "A lede paragraph.",
+    "",
+    "## The clean path",
+    "",
+    "Text."
+  ].join("\n"));
+  const artifact = markdown.writeArtifact(state, "s_sheet", source);
+  const server = await startStaticServer({ root: path.dirname(artifact.target), label: "markdown-sheet" });
+
+  try {
+    await page.goto(server.origin + "/" + path.basename(artifact.target));
+    await expect(page.locator("div.wrap.hero h1")).toHaveText("Replay branches");
+    await expect(page.locator("section.sheet")).toHaveCount(1);
+    await expect(page.locator("section.sheet .sheet-head .n")).toHaveText("Section 1");
+    // --divider is 2px solid ink, and it is the only border on the head.
+    await expect(page.locator("section.sheet .sheet-head"))
+      .toHaveCSS("border-top", "2px solid rgb(31, 30, 26)");
   } finally {
     await server.close();
   }

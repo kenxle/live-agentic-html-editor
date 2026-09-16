@@ -22,6 +22,34 @@ var MARKDOWN_EXTENSIONS = [".md", ".markdown"];
 var MERMAID_ASSET = ".lahe-mermaid-11.16.1.js";
 var MERMAID_SOURCE = path.join(__dirname, "..", "..", "vendor", "mermaid", "mermaid.tiny.js");
 
+// Mermaid draws in its own lavender unless it is handed a palette, and its
+// theme variables are read by JavaScript before any stylesheet exists, so they
+// cannot be var(--token). These literals are the tokens, copied by hand:
+// #e6effc cobalt-tint, #0760c7 cobalt, #1f1e1a ink, #e7f1ed sage-tint,
+// #637a63 sage, #f1ebfa purple-tint, #46188c purple, #55534b ink-soft,
+// #f7f7f5 paper, #dcdad6 rule. Change one here only when the token moves in
+// vendor/stclair-doc-style/system-tokens.css.
+var MERMAID_THEME = {
+  theme: "base",
+  themeVariables: {
+    fontFamily: "Hanken Grotesk, system-ui, sans-serif",
+    primaryColor: "#e6effc", primaryBorderColor: "#0760c7", primaryTextColor: "#1f1e1a",
+    secondaryColor: "#e7f1ed", secondaryBorderColor: "#637a63", secondaryTextColor: "#1f1e1a",
+    tertiaryColor: "#f1ebfa", tertiaryBorderColor: "#46188c", tertiaryTextColor: "#1f1e1a",
+    lineColor: "#55534b", textColor: "#1f1e1a",
+    noteBkgColor: "#e7f1ed", noteBorderColor: "#637a63", noteTextColor: "#1f1e1a",
+    clusterBkg: "#f7f7f5", clusterBorder: "#dcdad6",
+    edgeLabelBackground: "#ffffff",
+    actorBkg: "#e6effc", actorBorder: "#0760c7", actorTextColor: "#1f1e1a",
+    signalColor: "#55534b", signalTextColor: "#1f1e1a",
+    labelBoxBkgColor: "#e6effc", labelBoxBorderColor: "#0760c7",
+    loopTextColor: "#1f1e1a", activationBkgColor: "#f1ebfa", activationBorderColor: "#46188c"
+  }
+};
+
+var MERMAID_INIT = "mermaid.initialize(" +
+  JSON.stringify(Object.assign({ startOnLoad: true, securityLevel: "strict" }, MERMAID_THEME)) + ");";
+
 // The St. Clair AI document style, vendored under vendor/stclair-doc-style. It
 // is the default look for every document LAHE renders, and for HTML pages an
 // agent writes for review. See that folder's README for what was copied, from
@@ -127,6 +155,44 @@ function artifactPath(dir, sessionId, source) {
   return path.join(stateDir.reviewArtifactsRoot(dir, sessionId), base + "-" + hash + ".html");
 }
 
+// The page shape build_styled_doc.py in the personal repo builds, and the shape
+// the St. Clair AI document style is drawn for: a hero holding the title and
+// whatever runs before the first H2, then one numbered section per H2. The
+// split reads marked's tokens rather than the rendered HTML, so a "## " inside
+// a fenced code block is a code token and cannot open a section.
+//
+// Anything before the first H1 goes into the lede as well, the way the Python
+// does it. It is rare, and the alternative is content that silently vanishes.
+function splitSections(tokens) {
+  var heading = null;
+  var lede = [];
+  var sections = [];
+  var current = null;
+  tokens.forEach(function (token) {
+    if (token.type === "heading" && token.depth === 1 && heading === null && current === null) {
+      heading = token;
+      return;
+    }
+    if (token.type === "heading" && token.depth === 2) {
+      current = { heading: token, body: [] };
+      sections.push(current);
+      return;
+    }
+    (current ? current.body : lede).push(token);
+  });
+  return { heading: heading, lede: lede, sections: sections };
+}
+
+// marked resolves reference-style links while lexing, but the parser still
+// reads tokens.links, and a fresh array built by the split carries none.
+// Handing the lexer's table back keeps a [text][ref] link working in a section.
+function parseChunk(parser, tokens, referenceLinks) {
+  if (!tokens.length) return "";
+  var chunk = tokens.slice();
+  chunk.links = referenceLinks;
+  return parser.parse(chunk);
+}
+
 function sourceNote(sourcePath) {
   return "<p class=\"lahe-readonly-note\">Read-only rendered view of <code>" + escapeHtml(sourcePath) +
     "</code>. This document is not under review.</p>";
@@ -166,12 +232,49 @@ function render(source, options) {
       var className = language ? " class=\"language-" + escapeHtml(language) + "\"" : "";
       return "<pre><code" + className + ">" + escapeHtml(token.text) + "</code></pre>\n";
     };
-  var body = rewriteRelativeUrls(marked.parse(parts.body, { gfm: true, breaks: false, renderer: renderer }), prefix);
+  // document.css styles ul.dot and .scrollx, not a bare <ul> or <table>. The
+  // class goes on at the token level so nothing has to post-process the HTML
+  // hunting for tags, and the vendored stylesheet stays an untouched copy.
+  var defaultList = renderer.list;
+  renderer.list = function (token) {
+    var html = defaultList.call(this, token);
+    return token.ordered ? html : html.replace(/^<ul>/, "<ul class=\"dot\">");
+  };
+  var defaultTable = renderer.table;
+  renderer.table = function (token) {
+    return "<div class=\"scrollx\">" + defaultTable.call(this, token) + "</div>\n";
+  };
+
+  var lexed = marked.lexer(parts.body, { gfm: true, breaks: false });
+  var page = splitSections(lexed);
+  // One parser for the whole document. Constructing it is what sets
+  // renderer.parser, which renderer.link and the headings below both read.
+  var parser = new markedPackage.Parser({ gfm: true, breaks: false, renderer: renderer });
+  var title = titleFrom(resolved, parts.body);
+  var lede = parseChunk(parser, page.lede, lexed.links);
+  var blocks = [
+    "<div class=\"wrap hero\">",
+    "<h1>" + (page.heading ? parser.parseInline(page.heading.tokens) : escapeHtml(title)) + "</h1>",
+    lede,
+    "</div>"
+  ];
+  page.sections.forEach(function (section, index) {
+    // .first pulls the hanging rule up under the title, so it is only correct
+    // when there is no lede sitting between the two.
+    var first = index === 0 && !lede ? " first" : "";
+    blocks.push(
+      "<section class=\"sheet" + first + "\">",
+      "<div class=\"sheet-head\"><h2>" + parser.parseInline(section.heading.tokens) +
+        "</h2><span class=\"n\">Section " + (index + 1) + "</span></div>",
+      parseChunk(parser, section.body, lexed.links),
+      "</section>"
+    );
+  });
+  var body = rewriteRelativeUrls(blocks.join("\n"), prefix);
   var metadata = parts.frontmatter === null
     ? ""
     : "<details class=\"frontmatter\"><summary>Document metadata</summary><pre data-block=\"Frontmatter\"><code>" +
       escapeHtml(parts.frontmatter) + "</code></pre></details>";
-  var title = titleFrom(resolved, parts.body);
   return [
     "<!doctype html>",
     "<html lang=\"en\"><head><meta charset=\"utf-8\">",
@@ -185,7 +288,7 @@ function render(source, options) {
     metadata,
     body,
     "</main>",
-    containsMermaid ? "<script src=\"./" + MERMAID_ASSET + "\"></script><script>mermaid.initialize({startOnLoad:true,securityLevel:\"strict\"});</script>" : "",
+    containsMermaid ? "<script src=\"./" + MERMAID_ASSET + "\"></script><script>" + MERMAID_INIT + "</script>" : "",
     "</body></html>"
   ].join("\n");
 }
@@ -225,6 +328,7 @@ module.exports = {
   MARKDOWN_EXTENSIONS: MARKDOWN_EXTENSIONS,
   MERMAID_ASSET: MERMAID_ASSET,
   MERMAID_SOURCE: MERMAID_SOURCE,
+  MERMAID_THEME: MERMAID_THEME,
   DOC_STYLE_ASSET: DOC_STYLE_ASSET,
   DOC_STYLE_SOURCES: DOC_STYLE_SOURCES,
   FONT_ASSET_DIR: FONT_ASSET_DIR,

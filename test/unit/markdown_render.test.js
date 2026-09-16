@@ -37,7 +37,7 @@ test("Markdown rendering preserves block structure, applies reading styles, and 
   ].join("\n"));
 
   const html = markdown.render(source);
-  assert.match(html, /<ul>\s*<li>Prior bullet<\/li>\s*<\/ul>\s*<p>The main agent acts/);
+  assert.match(html, /<ul class="dot">\s*<li>Prior bullet<\/li>\s*<\/ul>\s*<p>The main agent acts/);
   assert.doesNotMatch(html, /<li>Prior bullet[\s\S]*The main agent acts[\s\S]*<\/li>/);
   assert.match(html, /<summary>Document metadata<\/summary>/);
   assert.match(html, /src="\/\.lahe-source\/[a-f0-9]+\/assets\/diagram\.png"/);
@@ -48,7 +48,7 @@ test("Markdown rendering preserves block structure, applies reading styles, and 
   // the one accent the guide allows.
   assert.match(html, /--ink:#1f1e1a/, "generated Markdown carries the St. Clair AI tokens");
   assert.match(html, /--purple:#46188c/, "generated Markdown carries the St. Clair AI tokens");
-  assert.match(html, /max-width: ?calc\(var\(--read\)/, "the reading column comes from the --read token");
+  assert.match(html, /max-width: ?var\(--read\)/, "the reading measure comes from the --read token");
   assert.match(html, /color-scheme: ?light/, "the document style is light only");
   // Light only was a decision, not an oversight. The old renderer shipped a
   // dark palette; nothing in the bundle may ask the browser for a scheme.
@@ -57,8 +57,91 @@ test("Markdown rendering preserves block structure, applies reading styles, and 
   assert.match(html, /\.lahe-fonts\/schibsted-grotesk-variable\.woff2/);
   assert.match(html, /<pre class="mermaid">flowchart TD\n  A --&gt; B<\/pre>/);
   assert.match(html, /\.lahe-mermaid-11\.16\.1\.js/);
-  assert.match(html, /mermaid\.initialize\(\{startOnLoad:true,securityLevel:"strict"\}\)/);
+  assert.match(html, /mermaid\.initialize\(\{[^)]*"securityLevel":"strict"/);
+  assert.match(html, /"theme":"base"/, "diagrams draw in the document palette, not Mermaid's own");
   assert.match(html, /<pre><code class="language-js">const untouched = true;<\/code><\/pre>/);
+});
+
+// The page shape. It is the same shape build_styled_doc.py builds in the
+// personal repo, and the reason a rendered .md and one of Ken's reference
+// documents look like the same thing rather than the same typeface.
+function renderSource(prefix, lines) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const source = path.join(root, "DOC.md");
+  fs.writeFileSync(source, lines.join("\n"));
+  return markdown.render(source);
+}
+
+test("a document becomes a hero and one numbered section per H2", () => {
+  const html = renderSource("lahe-markdown-shape-", [
+    "# Replay branches",
+    "",
+    "What happens when an edit cannot be replayed.",
+    "",
+    "## The clean path",
+    "",
+    "Text.",
+    "",
+    "## The drifted path",
+    "",
+    "| case | result |",
+    "| --- | --- |",
+    "| moved | re-anchor |",
+    "",
+    "- a bullet",
+    "",
+    "1. a step",
+    "",
+    "## The lost path",
+    "",
+    "```sh",
+    "## this is a shell comment, not a heading",
+    "```"
+  ]);
+
+  const hero = html.match(/<div class="wrap hero">([\s\S]*?)<\/div>/);
+  assert.notEqual(hero, null, "the hero wrapper is emitted");
+  assert.match(hero[1], /<h1>Replay branches<\/h1>/, "the first H1 is the hero title");
+  assert.match(hero[1], /<p>What happens when an edit cannot be replayed\.<\/p>/,
+    "everything up to the first H2 is the lede, and it sits in the hero");
+
+  assert.equal(html.match(/<section class="sheet[^"]*">/g).length, 3,
+    "three H2s open three sections, and the fenced '## ' line opens none");
+  assert.doesNotMatch(html, /class="sheet first"/, "there is a lede, so the first section keeps its top padding");
+  for (const n of [1, 2, 3]) {
+    assert.match(html, new RegExp('<span class="n">Section ' + n + "</span>"),
+      "sections are numbered from 1 in document order");
+  }
+  assert.match(html, /<div class="sheet-head"><h2>The clean path<\/h2>/, "the H2 is the section's head");
+  assert.match(html, /<pre><code class="language-sh">## this is a shell comment/,
+    "the fenced line stays code");
+
+  assert.match(html, /<div class="scrollx"><table>/, "a table is wrapped for horizontal scroll");
+  assert.match(html, /<ul class="dot">/, "an unordered list takes the guide's dot bullet");
+  assert.doesNotMatch(html, /<ol class="dot">/, "an ordered list does not");
+  assert.match(html, /<ol>\s*<li>a step<\/li>/, "an ordered list is left alone");
+});
+
+test("a section that follows the title with nothing in between hangs its rule under it", () => {
+  const html = renderSource("lahe-markdown-first-", ["# Straight in", "", "## First thing", "", "Text."]);
+  assert.match(html, /<section class="sheet first">/,
+    "no lede means the first section drops its top padding");
+});
+
+test("a heading keeps its inline markup, and a document with no H1 still gets a hero", () => {
+  const withMarkup = renderSource("lahe-markdown-inline-", [
+    "# Title",
+    "",
+    "## The `render` function and [the doc](https://example.com)"
+  ]);
+  assert.match(withMarkup, /<h2>The <code>render<\/code> function and <a href="https:\/\/example\.com">the doc<\/a><\/h2>/,
+    "a code span or a link in an H2 survives into the sheet head");
+
+  const noTitle = renderSource("lahe-markdown-notitle-", ["Just a paragraph.", "", "## A section", "", "Text."]);
+  assert.match(noTitle, /<div class="wrap hero">\s*<h1>DOC\.md<\/h1>/,
+    "with no H1 the hero falls back to the title the renderer already computes");
+  assert.match(noTitle, /<div class="wrap hero">[\s\S]*<p>Just a paragraph\.<\/p>/,
+    "content before the H1 goes into the lede rather than vanishing");
 });
 
 test("the document style is one bundle, and a written artifact carries its own faces", () => {
@@ -71,7 +154,7 @@ test("the document style is one bundle, and a written artifact carries its own f
   assert.doesNotMatch(css, /@import/, "no @import survives in the middle of the bundle");
   assert.match(css, /--read:68ch/, "the tokens file leads");
   assert.match(css, /ul\.dot/, "document.css follows it");
-  assert.match(css, /body > main/, "LAHE's own layer comes last");
+  assert.match(css, /\.lahe-readonly-note/, "LAHE's own layer comes last");
 
   // A rendered artifact inlines the CSS, so the only thing it still reaches for
   // is the type. writeArtifact copies the faces beside it, which is what lets
