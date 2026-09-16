@@ -561,6 +561,11 @@
     var opts = options || {};
     var rail = opts.overlay || overlayModule.shared;
     var store = opts.store || null;
+    // The whole review, every page of it. `store` above is scoped to the page
+    // the reviewer is on, which is right for everything this tab DRAWS and
+    // wrong for the one question that is about the review rather than the page:
+    // is this record still here at all? See forgetGoneItems.
+    var allStore = opts.allStore || null;
     var reviewId = opts.reviewId || null;
     var comments = opts.comments || null;
     var sync = opts.sync || null;
@@ -1740,15 +1745,23 @@
      * it?"). What they had no answer for is an item that GOES: the reviewer
      * deletes it, undoes it, or answers a collision with "take the page's". The
      * key then sits there for the life of the page with no record behind it
-     * (the 2026-09-16 memory audit). Every refresh is already reading the item
-     * list, so this costs the walk and nothing else.
+     * (the 2026-09-16 memory audit).
      *
-     * A HANDLED item is not gone: it is in Done, it is reopenable (R38), and it
-     * must still count as announced.
+     * GONE IS ASKED OF THE REVIEW, NOT OF THIS PAGE. A review spans pages and
+     * this tab is handed a page-scoped store, so page A's records read as absent
+     * the moment the reviewer clicks through to page B. Forgetting them there
+     * would re-announce the whole backlog on every round trip, which is exactly
+     * the pile rule 5 (once per page life) exists to prevent. With no unscoped
+     * store to ask, nothing is forgotten: keeping a stale key is a bounded cost
+     * and re-toasting a read reply is not.
+     *
+     * A HANDLED item is not gone either: it is in Done, it is reopenable (R38),
+     * and it must still count as announced.
      */
     function forgetGoneItems() {
+      if (!allStore || typeof allStore.read !== "function") return false;
       var live = Object.create(null);
-      itemsNow().forEach(function (item) {
+      allStore.read(reviewId).forEach(function (item) {
         live[item[record.FIELD.ID]] = true;
       });
       Object.keys(life.announced).forEach(function (id) {
@@ -1757,6 +1770,7 @@
       Object.keys(life.neglected).forEach(function (id) {
         if (!live[id]) delete life.neglected[id];
       });
+      return true;
     }
 
     /** This reply was shown, ignored, and ran out of time. Start the clock. */
