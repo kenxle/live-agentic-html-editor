@@ -1,4 +1,4 @@
-# Checkpoint 2026-09-16: three changes ready to merge
+# LAHE: memory fixes and folder reviews, ready to merge
 
 Three changes are built, tested, and waiting on your say-so. They are sitting on a side branch called `integration-20260916`. Nothing has gone into main. The full test run passed on all three together: 1,086 small tests and 376 browser tests. This page is the ask: say merge, or say what to change.
 
