@@ -15,10 +15,10 @@
   allowed to name a font file or a literal value; everything else uses a token
   from system-tokens.css.
 
-  Light only, by decision. The guide is a light system, so there is no
-  prefers-color-scheme block anywhere in the bundle and color-scheme is pinned
-  to light below, which is what keeps the browser's own scrollbars and form
-  controls on a light ground.
+  Light only, by decision. The guide is a light system, so the renderer's old
+  dark palette is gone and no media query in this bundle asks the browser which
+  scheme it prefers. color-scheme is pinned to light below, which is what keeps
+  the browser's own scrollbars and form controls on a light ground.
 
   House rules this file obeys: no em dashes, no pills, no gradients, no
   shadows, no all caps, no single-side coloured borders.

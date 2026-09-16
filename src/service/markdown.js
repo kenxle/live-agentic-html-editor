@@ -22,6 +22,53 @@ var MARKDOWN_EXTENSIONS = [".md", ".markdown"];
 var MERMAID_ASSET = ".lahe-mermaid-11.16.1.js";
 var MERMAID_SOURCE = path.join(__dirname, "..", "..", "vendor", "mermaid", "mermaid.tiny.js");
 
+// The St. Clair AI document style, vendored under vendor/stclair-doc-style. It
+// is the default look for every document LAHE renders, and for HTML pages an
+// agent writes for review. See that folder's README for what was copied, from
+// where, and the three decisions behind it.
+//
+// Two ways to reach one copy. A rendered Markdown artifact inlines the whole
+// bundle, so a page saved to disk stays self-contained. A page an agent wrote
+// links DOC_STYLE_ASSET, and static_servers.js resolves that basename to this
+// same bundle from any served directory, the way it already does for the
+// Mermaid script.
+var DOC_STYLE_ASSET = ".lahe-doc-style.css";
+var DOC_STYLE_DIR = path.join(__dirname, "..", "..", "vendor", "stclair-doc-style");
+// Order matters: tokens first, then the components that read them, then LAHE's
+// layer, which maps marked's bare elements onto those components.
+var DOC_STYLE_SOURCES = ["system-tokens.css", "document.css", "lahe-markdown.css"].map(function (name) {
+  return path.join(DOC_STYLE_DIR, name);
+});
+
+var FONT_ASSET_DIR = ".lahe-fonts";
+var FONT_SOURCE_DIR = path.join(DOC_STYLE_DIR, "fonts");
+var FONT_ASSETS = [
+  "hanken-grotesk-variable.woff2",
+  "jetbrains-mono-variable.woff2",
+  "schibsted-grotesk-variable.woff2"
+];
+
+var styleCache = null;
+
+// document.css opens with an @import of system-tokens.css, which is correct
+// when the two are served as separate files and wrong once they are one string:
+// an @import has to come before every other rule, and the tokens are already
+// above it here. Dropping the line is the only edit made to a vendored file,
+// and it happens at read time so the copy on disk stays byte-identical to the
+// personal repo's.
+function stripTokenImport(css) {
+  return String(css).replace(/^\s*@import\s+url\(\s*["']system-tokens\.css["']\s*\)\s*;\s*$/m, "");
+}
+
+function styleSheet() {
+  if (styleCache === null) {
+    styleCache = DOC_STYLE_SOURCES.map(function (file) {
+      return stripTokenImport(fs.readFileSync(file, "utf8"));
+    }).join("\n");
+  }
+  return styleCache;
+}
+
 function isMarkdown(file) {
   return MARKDOWN_EXTENSIONS.indexOf(path.extname(file).toLowerCase()) !== -1;
 }
@@ -132,13 +179,7 @@ function render(source, options) {
     "<title>" + escapeHtml(title) + "</title>",
     tabIcon.LINK,
     "<style>",
-    ":root{color-scheme:light dark}body{font:16px/1.65 system-ui,sans-serif;max-width:52rem;margin:3rem auto;padding:0 1.25rem;color:#202124}",
-    "@media(prefers-color-scheme:dark){body{color:#e8eaed}}img{max-width:100%;height:auto}pre{overflow:auto;padding:1rem;background:rgba(127,127,127,.1);border-radius:.5rem}",
-    "code,pre{font-variant-ligatures:none}code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}blockquote{margin-left:0;padding-left:1rem;border-left:3px solid #9aa0a6}li+li{margin-top:.35rem}",
-    ".mermaid{overflow:visible;padding:1rem 0;background:transparent;text-align:center}.mermaid svg{max-width:100%;height:auto}",
-    ".frontmatter{margin-bottom:2rem;color:#5f6368}.frontmatter summary{cursor:pointer}",
-    ".lahe-local-link{color:#1a73e8;text-decoration:underline dotted;cursor:help}",
-    ".lahe-readonly-note{margin:0 0 2rem;padding:.5rem .75rem;border-left:3px solid #9aa0a6;color:#5f6368;font-size:.9rem}",
+    styleSheet(),
     "</style></head><body><main data-container=\"Markdown document\">",
     opts.readOnlyNote ? sourceNote(resolved) : "",
     metadata,
@@ -147,6 +188,14 @@ function render(source, options) {
     containsMermaid ? "<script src=\"./" + MERMAID_ASSET + "\"></script><script>mermaid.initialize({startOnLoad:true,securityLevel:\"strict\"});</script>" : "",
     "</body></html>"
   ].join("\n");
+}
+
+function copyFonts(dir) {
+  var target = path.join(dir, FONT_ASSET_DIR);
+  fs.mkdirSync(target, { recursive: true });
+  FONT_ASSETS.forEach(function (name) {
+    fs.copyFileSync(path.join(FONT_SOURCE_DIR, name), path.join(target, name));
+  });
 }
 
 function writeArtifact(dir, sessionId, source) {
@@ -158,6 +207,10 @@ function writeArtifact(dir, sessionId, source) {
   if (html.indexOf("./" + MERMAID_ASSET) !== -1) {
     fs.copyFileSync(MERMAID_SOURCE, path.join(path.dirname(target), MERMAID_ASSET));
   }
+  // The stylesheet is inlined, so the only thing the artifact still reaches for
+  // is the type. Copying the faces beside it is what lets the file be opened
+  // from disk, or moved somewhere with no helper running, and still look right.
+  copyFonts(path.dirname(target));
   stateDir.writeAtomic(target, html);
   return {
     target: target,
@@ -172,7 +225,14 @@ module.exports = {
   MARKDOWN_EXTENSIONS: MARKDOWN_EXTENSIONS,
   MERMAID_ASSET: MERMAID_ASSET,
   MERMAID_SOURCE: MERMAID_SOURCE,
+  DOC_STYLE_ASSET: DOC_STYLE_ASSET,
+  DOC_STYLE_SOURCES: DOC_STYLE_SOURCES,
+  FONT_ASSET_DIR: FONT_ASSET_DIR,
+  FONT_SOURCE_DIR: FONT_SOURCE_DIR,
+  FONT_ASSETS: FONT_ASSETS,
   MOUNT_CAP: links.MOUNT_CAP,
+  styleSheet: styleSheet,
+  copyFonts: copyFonts,
   isMarkdown: isMarkdown,
   splitFrontmatter: splitFrontmatter,
   assetPrefix: assetPrefix,
