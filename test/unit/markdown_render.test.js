@@ -37,7 +37,7 @@ test("Markdown rendering preserves block structure, applies reading styles, and 
   ].join("\n"));
 
   const html = markdown.render(source);
-  assert.match(html, /<ul class="dot">\s*<li>Prior bullet<\/li>\s*<\/ul>\s*<p>The main agent acts/);
+  assert.match(html, /<ul>\s*<li>Prior bullet<\/li>\s*<\/ul>\s*<p>The main agent acts/);
   assert.doesNotMatch(html, /<li>Prior bullet[\s\S]*The main agent acts[\s\S]*<\/li>/);
   assert.match(html, /<summary>Document metadata<\/summary>/);
   assert.match(html, /src="\/\.lahe-source\/[a-f0-9]+\/assets\/diagram\.png"/);
@@ -99,7 +99,7 @@ test("a document becomes a hero and one numbered section per H2", () => {
     "```"
   ]);
 
-  const hero = html.match(/<div class="wrap hero">([\s\S]*?)<\/div>/);
+  const hero = html.match(/<div class="hero">([\s\S]*?)<\/div>/);
   assert.notEqual(hero, null, "the hero wrapper is emitted");
   assert.match(hero[1], /<h1>Replay branches<\/h1>/, "the first H1 is the hero title");
   assert.match(hero[1], /<p>What happens when an edit cannot be replayed\.<\/p>/,
@@ -117,9 +117,12 @@ test("a document becomes a hero and one numbered section per H2", () => {
     "the fenced line stays code");
 
   assert.match(html, /<div class="scrollx"><table>/, "a table is wrapped for horizontal scroll");
-  assert.match(html, /<ul class="dot">/, "an unordered list takes the guide's dot bullet");
-  assert.doesNotMatch(html, /<ol class="dot">/, "an ordered list does not");
-  assert.match(html, /<ol>\s*<li>a step<\/li>/, "an ordered list is left alone");
+  // The renderer stopped writing class="dot": document.css draws the dot on a
+  // class-free ul, so a class here would opt the list OUT of the house look.
+  assert.match(html, /<ul>\s*<li>a bullet<\/li>/, "an unordered list is left bare");
+  assert.match(html, /<ol>\s*<li>a step<\/li>/, "an ordered list is left bare");
+  assert.doesNotMatch(html, /class="dot"/, "no list carries the old dot class");
+  assert.doesNotMatch(html, /class="wrap/, "the hero no longer carries the old wrap class");
 });
 
 test("a section that follows the title with nothing in between hangs its rule under it", () => {
@@ -138,9 +141,9 @@ test("a heading keeps its inline markup, and a document with no H1 still gets a 
     "a code span or a link in an H2 survives into the sheet head");
 
   const noTitle = renderSource("lahe-markdown-notitle-", ["Just a paragraph.", "", "## A section", "", "Text."]);
-  assert.match(noTitle, /<div class="wrap hero">\s*<h1>DOC\.md<\/h1>/,
+  assert.match(noTitle, /<div class="hero">\s*<h1>DOC\.md<\/h1>/,
     "with no H1 the hero falls back to the title the renderer already computes");
-  assert.match(noTitle, /<div class="wrap hero">[\s\S]*<p>Just a paragraph\.<\/p>/,
+  assert.match(noTitle, /<div class="hero">[\s\S]*<p>Just a paragraph\.<\/p>/,
     "content before the H1 goes into the lede rather than vanishing");
 });
 
@@ -153,8 +156,17 @@ test("the document style is one bundle, and a written artifact carries its own f
   // the tokens are already above it. The join drops that line.
   assert.doesNotMatch(css, /@import/, "no @import survives in the middle of the bundle");
   assert.match(css, /--read:68ch/, "the tokens file leads");
-  assert.match(css, /ul\.dot/, "document.css follows it");
+  assert.match(css, /ul:where\(:not\(\[class\]\), \.dot\)/, "document.css follows it");
   assert.match(css, /\.lahe-readonly-note/, "LAHE's own layer comes last");
+
+  // The column is declared once, by the base, as a rule about the page. The
+  // layer used to declare a second one on body > main at 68 characters, and
+  // the two drifted apart, which is what this refresh ended. The font size
+  // went the same way: the rebuilt scale has no 16px step to restate.
+  assert.equal(css.match(/max-width:\s*var\(--maxw\)/g).length, 1,
+    "exactly one rule sets the page column, and it is the base's");
+  assert.doesNotMatch(css, /font-size:\s*16px/, "no rule in the bundle hard-codes a body size");
+  assert.doesNotMatch(css, /body\s*>\s*main/, "nothing sets a second column on main");
 
   // A rendered artifact inlines the CSS, so the only thing it still reaches for
   // is the type. writeArtifact copies the faces beside it, which is what lets

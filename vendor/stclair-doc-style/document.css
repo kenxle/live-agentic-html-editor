@@ -1,21 +1,45 @@
 /*
   Document style system, Ken St. Clair
   Spec: docs/document-style-guide.md (read that first; this file is the "how", not the "why")
-  Skeleton that demonstrates every component: lib/templates/document-skeleton.html
+  Skeleton that demonstrates every component: lib/templates/document-every-component.html
 
   Standalone. No brand assets in the base system below, drop this file into any
   HTML document and it works with no dependency on St. Clair AI branding.
   An optional, clearly separate brand section for the masthead lives at the
   bottom of this file. Only include that section's markup in a document that
   is an actual St. Clair AI deliverable.
+
+  Two rules govern everything below.
+
+  1. The column is declared once, as a rule about the page (see the next
+     block). No component sets its own max-width or inline padding, so a new
+     component cannot be off the grid: it never knows where the grid is.
+  2. Every colour, font, weight, size and spacing value is a var() from
+     system-tokens.css. A pixel value appears only on a border, an outline, a
+     stroke width, inside a media query, or with a same-line marker naming the
+     geometry it comes from. That is what makes a second style a new token file
+     rather than a rewrite of this file.
 */
 
 @import url("system-tokens.css");
 
 /*
-  Tokens live in system-tokens.css, shared with the web and presentation
-  surfaces. Add surface-specific values below, never redefine a shared token.
+  Tokens live in system-tokens.css, shared with the presentation surface. Add
+  surface-specific rules below, never redefine a shared token.
 */
+
+/* ---------- the column ----------
+   Every direct child of the body sits in the column. A full-bleed band opts
+   out (it runs edge to edge) and its inner element opts back in through the
+   same rule. Three element types render nothing and are skipped, and
+   [data-lahe] is the review layer's own chrome: it lives in the body too, and
+   the page must not lay it out. */
+
+:is(body, .band) > :not(.band, script, style, template, [data-lahe]){
+  max-width:var(--maxw);
+  margin-inline:auto;
+  padding-inline:var(--gutter);
+}
 
 /* ---------- base ---------- */
 
@@ -23,103 +47,143 @@
 
 body{
   margin:0;
-  background:var(--white);
-  color:var(--ink);
-  font-family:"Hanken Grotesk",system-ui,sans-serif;
-  font-size:17px;
+  background:var(--surface);
+  color:var(--on-surface);
+  font-family:var(--font-body);
+  font-size:var(--text-body);
   line-height:1.65;
   -webkit-font-smoothing:antialiased;
 }
 
-h1,h2,h3,h4{
-  font-family:"Schibsted Grotesk","Hanken Grotesk",sans-serif;
-  font-weight:600;
+/* ---------- headings ----------
+   A heading carries its own room, sized to its level, so it is correct
+   wherever it lands: inside a section, inside rendered Markdown with no
+   wrapper at all, or written by an agent who does not know the hero markup.
+   The six head wrappers already provide that room, so they zero it, and the
+   first child of any padded container drops its top margin so the container's
+   padding is the only gap. */
+
+h1,h2,h3,h4,h5,h6{
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
   line-height:1.12;
   letter-spacing:-.012em;
-  margin:0;
   /* Sentence case only. Never set a heading in all caps. */
 }
-h1{font-size:clamp(34px,4.6vw,52px)}
-h2{font-size:clamp(25px,3vw,34px)}
-h3{font-size:clamp(19px,2vw,23px)}
-h4{font-size:18px}
+h1{font-size:var(--text-h1);margin:var(--section-gap) 0 var(--block-gap)}
+h2{font-size:var(--text-h2);margin:var(--section-gap) 0 var(--block-gap)}
+h3{font-size:var(--text-h3);margin:var(--section-gap-narrow) 0 var(--s3)}
+h4{font-size:var(--text-h4);margin:var(--s5) 0 var(--s2)}
+h5{font-size:var(--text-body);margin:var(--s5) 0 var(--s2)}
+h6{font-size:var(--text-small);margin:var(--s5) 0 var(--s2);color:var(--on-surface-soft)}
 
-p{margin:0 0 var(--s4)}
+:is(.hero,.sheet-head,.fold-head,.checkin-head,.cols,.icon-row) :is(h1,h2,h3,h4,h5,h6){margin:0}
+:is(.fold-body,.panel,.insight,.callout,.band,td) > :first-child{margin-top:0}
+
+/* ---------- text ---------- */
+
+p{margin:0 0 var(--block-gap)}
 p:last-child{margin-bottom:0}
 
-a{color:var(--link);text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px}
-:focus-visible{outline:2px solid var(--link);outline-offset:3px;border-radius:var(--r)}
+/* A long unbroken run (a raw URL) wraps rather than widening the page. */
+p,li,td,dd{overflow-wrap:anywhere}
 
-/* ---------- layout ---------- */
+a{color:var(--link);text-decoration:underline}
+a{
+  text-decoration-thickness:1px;   /* px: a hairline underline, not a second rule on the page */
+  text-underline-offset:3px;       /* px: clears the descenders at body size */
+}
+:focus-visible{outline:2px solid var(--focus);outline-offset:3px;border-radius:var(--r)}
 
-.wrap{max-width:var(--maxw);margin:0 auto;padding:0 var(--s5)}
+/* ---------- plain elements ----------
+   Rendered Markdown carries no classes, so every element Markdown can produce
+   has a house look with no class needed. The classes further down are
+   optional upgrades, not the only way to get the style. */
+
+img{max-width:100%;height:auto}
+figure{margin:var(--block-gap) 0}
+figcaption{margin-top:var(--s2);font-size:var(--text-meta);line-height:1.5;color:var(--on-surface-faint)}
+blockquote{
+  margin:var(--block-gap) 0;
+  padding-left:var(--s4);
+  border-left:3px solid var(--border);
+  color:var(--on-surface-soft);
+}
+hr{border:0;border-top:var(--line);margin:var(--section-gap-narrow) 0}
+
+/* Stacked blocks carry their own room, so the markup needs no inline margins. */
+:is(.panel,.callout,.insight,.icon-line){margin-bottom:var(--block-gap)}
+:is(.panel,.callout,.insight,.icon-line):last-child{margin-bottom:0}
+
+/* ---------- the reading measure ----------
+   Prose gets the measure by default and the full-width blocks opt out. The
+   container half of the selector is :where(), so its specificity is zero and
+   any class below can override it without a fight. */
+
+:where(section.sheet,.fold-body,.checkin,.hero) :where(p,ul,ol,blockquote){max-width:var(--read)}
+/* A paragraph that is only an image is a figure, not prose: a chart or a
+   screenshot wants the column, not the reading measure. Markdown always wraps
+   an image in a paragraph, which is why this is decided here. */
+p:has(> img:only-child){max-width:none}
+:is(table,.facts,.cols,pre) :is(p,ul,ol,blockquote){max-width:none}
+
+/* ---------- layout helpers ---------- */
+
 .read{max-width:var(--read)}
-.soft{color:var(--ink-soft)}
-.lede{font-size:20px;line-height:1.55;color:var(--ink-soft)}
-.small{font-size:15px;line-height:1.5}
+/* .small and .soft are for captions, footnotes, the footer, and a meta line: never
+   for running prose. Body text is one size and one colour, or the page reads as
+   two systems. */
+.soft{color:var(--on-surface-soft)}
+.lede{font-size:var(--text-lede);line-height:1.55;color:var(--on-surface-soft);max-width:none}
+.small{font-size:var(--text-small);line-height:1.5}
 
 /* ---------- masthead (unbranded) ----------
    Even an unbranded document can carry a plain meta line: doc type + date,
    no mark, no wordmark. See the brand section at the bottom for the branded
    version. */
-.masthead{padding-block:var(--s6) 0}
-.masthead .meta{margin-top:var(--s2);font-size:14px;color:var(--ink-faint)}
+.masthead{padding-block:var(--section-gap-narrow) 0}
+.masthead .meta{margin-top:var(--s2);font-size:var(--text-meta);color:var(--on-surface-faint)}
 
 /* ---------- hero ---------- */
 
-.hero{padding-block:var(--s6) var(--s7)}
-.hero h1{max-width:17ch;margin-bottom:var(--s4)}
+.hero{padding-block:var(--section-gap-narrow) var(--section-gap)}
+.hero h1{max-width:17ch;margin-bottom:var(--block-gap)}
 .hero .lede{max-width:58ch}
 
 /* ---------- the chrome: numbered sections under a hanging rule ----------
-   Bug fixes preserved from the reference implementation:
-   1. padding-block, never the padding shorthand, on any block inside .wrap
-      the shorthand zeroes the horizontal inset the wrapper applies.
-   2. the "first section has no top padding" rule is an explicit .first class,
-      never :first-of-type, which misfires on any section that starts a new
-      wrapper (e.g. the first section after a full-bleed band). */
+   A section carries its vertical rhythm and nothing else. The column comes
+   from the page rule at the top of this file, so a section is correct
+   wherever it lands in the body and cannot be double-padded by a wrapper.
 
-/*
-  A section is self-contained: it carries its own max-width and horizontal inset
-  rather than depending on a .wrap parent. This is deliberate. When the inset
-  lived only on a wrapper, a section inserted outside that wrapper lost its
-  padding silently, and the wrappers open and close around full-bleed bands, so
-  that was easy to do and invisible in the markup. A section is now correct
-  wherever it lands in the body.
+   One bug fix preserved from the reference implementation: the "first section
+   has no top padding" rule is an explicit .first class, never :first-of-type,
+   which misfires on any section that follows a full-bleed band. */
 
-  Do not nest a .sheet inside a .wrap. Both set the inset, so the section would
-  be indented twice.
-*/
-section.sheet{
-  max-width:var(--maxw);
-  margin-inline:auto;
-  padding-inline:var(--s5);
-  padding-block:var(--s7);
-}
+section.sheet{padding-block:var(--section-gap)}
 section.sheet.first{padding-block-start:0}
 
 .sheet-head{
   display:flex;
-  gap:var(--s4);
+  gap:var(--block-gap);
   align-items:baseline;         /* section number aligns to the heading's baseline, never the row's bottom */
   justify-content:space-between;
   flex-wrap:wrap;
   border-top:var(--divider);    /* the hanging rule, always full column width, never a short stub */
   padding-top:var(--s3);
-  margin-bottom:var(--s6);
+  margin-bottom:var(--section-gap-narrow);
 }
 .sheet-head .n{
-  font-family:"Schibsted Grotesk",sans-serif;
-  font-weight:600;
-  font-size:15px;
-  color:var(--ink-faint);
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-small);
+  color:var(--on-surface-faint);
 }
 
 /* ---------- facts (a definition-list grid for key figures) ---------- */
 
-.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--s6)}
-.facts dt{font-family:"Schibsted Grotesk",sans-serif;font-weight:600;font-size:23px;letter-spacing:-.012em;margin-bottom:var(--s2)}
-.facts dd{margin:0;font-size:16px;line-height:1.5;color:var(--ink-soft)}
+.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--section-gap-narrow)}
+.facts dt{font-family:var(--font-display);font-weight:var(--w-display);font-size:var(--text-figure);letter-spacing:-.012em;margin-bottom:var(--s2)}
+.facts dd{margin:0;font-size:var(--text-body);line-height:1.5;color:var(--on-surface-soft)}
 
 /*
   Facts grid with icons. Use when the three items are genuinely three points
@@ -139,7 +203,7 @@ section.sheet.first{padding-block-start:0}
   the thing that makes the row look heavier.
 */
 .facts--line dt{display:flex; align-items:center; gap:var(--s3)}
-.facts--line dt .icon,.facts--line dt svg{width:.88em; height:.88em; color:var(--cobalt); flex:none}
+.facts--line dt .icon,.facts--line dt svg{width:.88em; height:.88em; color:var(--accent); flex:none}
 
 /*
   Second option: a filled circle on the term's line. Louder, and it puts colour
@@ -147,52 +211,55 @@ section.sheet.first{padding-block-start:0}
   other accent; prefer the line version otherwise.
 */
 .facts--icons dt{display:flex; align-items:center; gap:var(--s3)}
-.facts--icons .icon-circle{width:32px; height:32px}
-.facts--icons .icon-circle .icon,.facts--icons .icon-circle svg{width:16px; height:16px}
+.facts--icons .icon-circle{width:32px; height:32px}   /* px: the contrast floor for white on sage is a 32px circle */
+.facts--icons .icon-circle .icon,.facts--icons .icon-circle svg{width:16px; height:16px}   /* px: the glyph inside a 32px circle */
 
 /* ---------- code ---------- */
 /*
-  Inline code and code blocks. The tint is cobalt, which STYLE_GUIDE.md already
+  Inline code and code blocks. The tint is cobalt, which the guide already
   assigns to code blocks and table headers; ink on it reads 14.39:1.
 
-  The face is JetBrains Mono with a platform fallback stack, so a document that
-  has not loaded the webfont still gets a real monospace. Load it in the head
-  alongside the other two faces, or omit it and accept the fallback; nothing
-  breaks either way.
+  The face is whatever --font-mono names, and that token ends in a platform
+  fallback stack, so a document that has not loaded the webfont still gets a
+  real monospace. Load the face in the head alongside the other two, or omit it
+  and accept the fallback; nothing breaks either way.
 
-  Code sits at 15px against 17px body. A monospace at the same nominal size
-  reads larger than the surrounding prose because its characters are wider.
+  Code sits at --text-small against --text-body. A monospace at the same
+  nominal size reads larger than the surrounding prose because its characters
+  are wider.
 */
 code{
   font-family:var(--font-mono);
-  font-size:15px;
+  font-size:var(--text-small);
   background:var(--cobalt-tint);
   padding:.1em .35em;
-  border-radius:3px;
+  border-radius:3px;        /* px: a corner this small reads as a chip; var(--r) rounds an inline run too far */
 }
 pre{
   font-family:var(--font-mono);
-  font-size:15px;
+  font-size:var(--text-small);
   line-height:1.55;
   background:var(--cobalt-tint);
   padding:var(--s4) var(--s5);
   border-radius:var(--r);
   overflow-x:auto;          /* a long line scrolls rather than breaking the page */
-  margin:0 0 var(--s4);
+  margin:0 0 var(--block-gap);
 }
 pre code{background:none; padding:0; font-size:inherit}
 
 /* ---------- tables ----------
-   Two styles. See docs/document-style-guide.md for when to use each. */
+   Two styles. See docs/document-style-guide.md for when to use each.
+   A table carries space under it, so the paragraph after one is not cramped
+   against the last row. */
 
-table{width:100%;border-collapse:collapse;font-size:16px}
+table{width:100%;border-collapse:collapse;font-size:var(--text-body);margin:0 0 var(--s5)}  /* s5 not block-gap: the prose after a table crowded it at the smaller step */
 
 /* 1. Naked ruled table, the default. No outer border, no header tint. */
 thead th{
-  font-family:"Schibsted Grotesk",sans-serif;
-  font-weight:600;
-  font-size:14px;
-  color:var(--ink-faint);
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-meta);
+  color:var(--on-surface-faint);
   text-align:left;
   padding:0 var(--s4) var(--s3) 0;
   border-bottom:var(--divider);
@@ -216,22 +283,59 @@ table.boxed td:last-child,table.boxed th:last-child{padding-right:var(--s4)}
 
 /* ---------- two-column prose ---------- */
 
-.cols{display:grid;grid-template-columns:1fr 1fr;gap:var(--s6)}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:var(--section-gap-narrow)}
 .cols h4{margin-bottom:var(--s3)}
 
-/* ---------- lists ---------- */
+/* ---------- lists ----------
+   A list with no class gets the house look, because rendered Markdown has no
+   classes. A list that carries any class has opted out, which is how .tasks,
+   .cal-events and .email-list keep their own shape. Every list, including
+   one inside the insight panel, draws its marker at left:0 and starts its
+   text at the same inset, so stacked lists line up to the pixel. */
 
-/* Dot-bullet list. Pick one accent color per list, don't mix cobalt and sage dots. */
-ul.dot{list-style:none;padding:0;margin:0}
-ul.dot li{position:relative;padding-left:1.6em;margin-bottom:var(--s3);font-size:16px;line-height:1.5}
-ul.dot li::before{content:"";position:absolute;left:0;top:.6em;width:7px;height:7px;border-radius:50%;background:var(--sage)}
-ul.dot.cobalt li::before{background:var(--cobalt)}
+/* Dot-bullet list. Pick one accent colour per list, don't mix cobalt and sage dots. */
+ul:where(:not([class]), .dot){list-style:none;padding:0;margin:0 0 var(--block-gap)}
+ul:where(:not([class]), .dot) li{position:relative;padding-left:2.1em;   /* same inset as a numbered list, so text starts on one line when the two stack */margin-bottom:var(--s3);font-size:var(--text-body);line-height:1.5}
+ul:where(:not([class]), .dot) li::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:.6em;
+  width:7px;      /* px: the dot's drawn size, fixed so it does not swell with the line */
+  height:7px;     /* px: the dot's drawn size */
+  border-radius:50%;
+  background:var(--sage);
+}
+ul.dot--cobalt li::before{background:var(--accent)}
 
-/* Numbered steps, optionally two columns for short lines. */
-ol.steps{margin:0;padding-left:1.4em}
-ol.steps.two-col{columns:2;column-gap:var(--s6)}
-ol.steps li{margin-bottom:var(--s3);font-size:16px;line-height:1.5;break-inside:avoid;padding-left:.2em}
-ol.steps b{font-family:"Schibsted Grotesk",sans-serif;font-weight:600}
+/* Numbered steps, optionally two columns for short lines. The numeral is
+   drawn by a counter at a fixed inset rather than left to the browser's own
+   marker, so every numbered list has the same gap between numeral and text
+   as the accent version below. Ken asked for the two to match. */
+ol:where(:not([class]), .steps){list-style:none;counter-reset:step;margin:0 0 var(--block-gap);padding-left:0}
+ol:where(:not([class]), .steps) li{counter-increment:step;position:relative;padding-left:2.1em;margin-bottom:var(--s3);font-size:var(--text-body);line-height:1.5;break-inside:avoid}
+ol:where(:not([class]), .steps) li::before{
+  content:counter(step) ".";
+  position:absolute; left:0; top:0;
+  color:var(--on-surface);
+}
+ol.steps b{font-family:var(--font-display);font-weight:var(--w-display)}
+/* A list that starts at a number other than one keeps the browser's own
+   numerals, since a CSS counter cannot read the start attribute everywhere
+   yet. The text inset stays the same, so it still lines up with its
+   neighbours; only the numeral is drawn by the browser. */
+ol:where(:not([class]), .steps)[start]{list-style:decimal;padding-left:2.1em}
+ol:where(:not([class]), .steps)[start] li{padding-left:0}
+ol:where(:not([class]), .steps)[start] li::before{content:none}
+/* Where the browser can read the start attribute into the counter (Chromium
+   can), the list keeps its drawn numeral on the shared line instead. */
+@supports (counter-reset: step calc(attr(start type(<integer>), 1) - 1)){
+  ol:where(:not([class]), .steps)[start]{list-style:none;padding-left:0;counter-reset:step calc(attr(start type(<integer>), 1) - 1)}
+  ol:where(:not([class]), .steps)[start] li{padding-left:2.1em}
+  ol:where(:not([class]), .steps)[start] li::before{content:counter(step) "."}
+}
+
+ol.steps--two-col{columns:2;column-gap:var(--section-gap-narrow)}
 
 /* ---------- panel: a tint holding a short aside (one to three sentences) ---------- */
 
@@ -243,10 +347,9 @@ ol.steps b{font-family:"Schibsted Grotesk",sans-serif;font-weight:600}
     purple  for the one thing on the page worth pausing on
   One tint per page. Two tinted panels in different colours read as decoration.
 */
-.panel{background:var(--sage-tint);padding:var(--s5);border-radius:var(--r)}
+.panel{background:var(--sage-tint);padding:var(--gutter);border-radius:var(--r)}
 .panel--cobalt{background:var(--cobalt-tint)}
 .panel--purple{background:var(--purple-tint)}
-.panel.cobalt{background:var(--cobalt-tint)}
 .panel p:last-child{margin-bottom:0}
 
 /* ---------- insight panel: a tinted panel with a generated label row ---------- */
@@ -263,8 +366,8 @@ ol.steps b{font-family:"Schibsted Grotesk",sans-serif;font-weight:600}
     .insight--caveat    purple tint, label "Caveat", for the limit or the
                         objection attached to what was just said
 
-  Contrast, measured. The label is 14px at display weight, under the WCAG
-  large-text threshold, so it has to clear 4.5:1 on its own tint:
+  Contrast, measured. The label is --text-meta at display weight, under the
+  WCAG large-text threshold, so it has to clear 4.5:1 on its own tint:
     cobalt label on cobalt-tint    5.17:1
     purple label on purple-tint   10.17:1
     sage label on sage-tint        4.05:1   fails, so there is no sage variant
@@ -273,12 +376,13 @@ ol.steps b{font-family:"Schibsted Grotesk",sans-serif;font-weight:600}
   Never give this panel a single-side coloured border. The tint is the device.
 */
 .insight{
-  margin:var(--s5) 0;
-  padding:var(--s5);
+  position:relative;          /* the icon below is placed against this box */
+  margin:var(--gutter) 0;
+  padding:var(--gutter);
   border-radius:var(--r);
   max-width:var(--read);
   background:var(--cobalt-tint);
-  font-size:16px;
+  font-size:var(--text-body);
   line-height:1.6;
 }
 .insight--caveat{background:var(--purple-tint)}
@@ -287,21 +391,45 @@ ol.steps b{font-family:"Schibsted Grotesk",sans-serif;font-weight:600}
   display:block;
   font-family:var(--font-display);
   font-weight:var(--w-display);
-  font-size:14px;
+  font-size:var(--text-meta);
   margin-bottom:var(--s2);
-  padding-left:22px;
-  min-height:18px;
-  background-repeat:no-repeat;
-  background-position:left center;
-  background-size:16px 16px;
+  padding-left:22px;    /* px: the 16px icon plus its gap, so the label clears it */
+  min-height:18px;      /* px: the icon's box, so a one-line label never clips it */
   content:"Key insight";
-  color:var(--cobalt);
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230760c7' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18h6'/%3E%3Cpath d='M10 22h4'/%3E%3Cpath d='M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14'/%3E%3C/svg%3E");
+  color:var(--accent);
 }
 .insight--caveat::before{
   content:"Caveat";
   color:var(--purple);
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2346188c' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z'/%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E");
+}
+
+/*
+  The icon is a mask, not a background image. A data-URI background has the
+  stroke colour written into it as a hex, which puts a colour outside the token
+  file and means a restyle cannot reach it. A mask paints the pseudo-element's
+  own background-color through the glyph, so the colour is the token and the
+  SVG carries only the shape. It sits on ::after rather than ::before because a
+  mask clips everything the element paints, and ::before is the label text.
+*/
+.insight::after{
+  content:"";
+  position:absolute;
+  left:var(--gutter);
+  top:calc(var(--gutter) + 3.2px);   /* px: half the label's 22.4px line box less half the 16px icon, which is where background-position:center put it */
+  width:16px;                        /* px: the icon's drawn size */
+  height:16px;                       /* px: the icon's drawn size */
+  background-color:var(--accent);
+  -webkit-mask-repeat:no-repeat;
+  mask-repeat:no-repeat;
+  -webkit-mask-size:contain;
+  mask-size:contain;
+  -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18h6'/%3E%3Cpath d='M10 22h4'/%3E%3Cpath d='M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14'/%3E%3C/svg%3E");
+  mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18h6'/%3E%3Cpath d='M10 22h4'/%3E%3Cpath d='M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14'/%3E%3C/svg%3E");
+}
+.insight--caveat::after{
+  background-color:var(--purple);
+  -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z'/%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E");
+  mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z'/%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E");
 }
 /*
   Override the label text with data-label when "Key insight" or "Caveat" is
@@ -310,11 +438,14 @@ ol.steps b{font-family:"Schibsted Grotesk",sans-serif;font-weight:600}
 */
 .insight[data-label]::before{content:attr(data-label)}
 
-/* A plain list inside the panel, since ul.dot and ol.steps are not used here. */
-.insight ul,.insight ol{margin:0 0 var(--s4);padding-left:1.4em}
+/* Lists inside the panel use the same inset and drawn markers as every other
+   list, so text lines up across the page; only the marker takes the panel's
+   colour. */
 .insight li{margin:0 0 var(--s2)}
-.insight li::marker{color:var(--cobalt)}
-.insight--caveat li::marker{color:var(--purple)}
+.insight ol li::before{color:var(--accent)}
+.insight--caveat ol li::before{color:var(--purple)}
+.insight ul li::before{background:var(--accent)}
+.insight--caveat ul li::before{background:var(--purple)}
 .insight > :first-child{margin-top:0}
 .insight > :last-child{margin-bottom:0}
 
@@ -324,13 +455,13 @@ ol.steps b{font-family:"Schibsted Grotesk",sans-serif;font-weight:600}
   Four fills. White text on each, with measured contrast:
     ink 16.68:1, purple 11.87:1, cobalt 5.99:1, sage 4.67:1.
   Sage is the tightest and passes only because callout text is short. Do not
-  put a long paragraph on sage, and never drop callout text below 16px.
+  put a long paragraph on sage, and never drop callout text below body size.
   One callout per page. It is the loudest small element available.
 */
-.callout{background:var(--ink);color:#fff;padding:var(--s4) var(--s5);border-radius:var(--r)}
-.callout.cobalt{background:var(--cobalt)}
-.callout.purple{background:var(--purple)}
-.callout.sage{background:var(--sage)}
+.callout{background:var(--structure);color:var(--white);padding:var(--s4) var(--gutter);border-radius:var(--r)}
+.callout--cobalt{background:var(--cobalt)}
+.callout--purple{background:var(--purple)}
+.callout--sage{background:var(--sage)}
 .callout p{color:inherit;margin:0}
 
 /* ---------- icons ---------- */
@@ -352,7 +483,7 @@ ol.steps b{font-family:"Schibsted Grotesk",sans-serif;font-weight:600}
 
 /* Inline icon leading a line of text. */
 .icon-line{display:flex; gap:var(--s3); align-items:flex-start}
-.icon-line .icon,.icon-line svg{margin-top:.15em; color:var(--ink)}
+.icon-line .icon,.icon-line svg{margin-top:.15em; color:var(--on-surface)}
 
 /*
   Icon in a filled circle. The second way to get colour onto a page, and the
@@ -362,42 +493,233 @@ ol.steps b{font-family:"Schibsted Grotesk",sans-serif;font-weight:600}
   Sage is the tightest. Do not put white on a sage circle smaller than 32px.
 */
 .icon-circle{
-  width:44px; height:44px; border-radius:50%;
+  width:44px;      /* px: the circle's drawn size, also the tap-target floor */
+  height:44px;     /* px: the circle's drawn size */
+  border-radius:50%;
   display:grid; place-items:center; flex:none;
-  background:var(--ink); color:#fff;
+  background:var(--structure); color:var(--white);
 }
-.icon-circle .icon,.icon-circle svg{width:20px; height:20px; vertical-align:0}
+.icon-circle .icon,.icon-circle svg{width:20px; height:20px; vertical-align:0}   /* px: the glyph inside a 44px circle */
 .icon-circle--cobalt{background:var(--cobalt)}
 .icon-circle--purple{background:var(--purple)}
 .icon-circle--sage{background:var(--sage)}
 
 /* A row of icon-circle plus text, for a short list of capabilities or steps. */
-.icon-row{display:flex; gap:var(--s4); align-items:flex-start; margin-bottom:var(--s5)}
+.icon-row{display:flex; gap:var(--s4); align-items:flex-start; margin-bottom:var(--gutter)}
 .icon-row h4{margin-bottom:var(--s2)}
-.icon-row p{margin:0; color:var(--ink-soft)}
+.icon-row p{margin:0; color:var(--on-surface-soft)}
 
 /* ---------- numbered list, optional coloured numerals ---------- */
 /*
-  Plain ol.steps leaves the numerals in ink. Add .steps--accent to colour them,
-  which matches the sage dots on ul.dot. Use one or the other in a document,
-  not both, or the page starts to look decorated.
+  Plain steps leave the numerals in ink. Add .steps--accent to colour them,
+  which matches the sage dots on a dot list. Use one or the other in a
+  document, not both, or the page starts to look decorated.
 */
-ol.steps--accent{list-style:none; counter-reset:step; padding-left:0}
-ol.steps--accent li{counter-increment:step; position:relative; padding-left:2.1em}
 ol.steps--accent li::before{
-  content:counter(step) ".";
-  position:absolute; left:0; top:0;
   font-family:var(--font-display); font-weight:var(--w-display);
   color:var(--sage);
 }
 
+/* ---------- folded section ----------
+   A native <details>, closed by default. The summary row is the section's
+   head, styled the same as a numbered section's: the hanging rule, an h2 at
+   full heading size, the section number on the right. A chevron sits on the
+   left of the heading, where a disclosure control conventionally lives, and
+   turns to point down when the section is open. No text label: "Show" and
+   "Hide" beside the heading made the row messy.
+
+   It owns only its top spacing, not the bottom, so a closed section takes no
+   more room than its head. The bottom gap lives on .fold-body, which a closed
+   <details> does not render at all. */
+
+details.fold{padding-block-start:var(--section-gap)}
+details.fold.first{padding-block-start:0}
+
+details.fold summary.fold-head{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:var(--s4);
+  flex-wrap:wrap;
+  min-height:44px;              /* px: the tap-target floor, since the whole row is the control */
+  border-top:var(--divider);
+  padding-top:var(--s3);
+  cursor:pointer;
+  list-style:none;
+}
+details.fold summary.fold-head::-webkit-details-marker{display:none}
+details.fold summary.fold-head::marker{content:""}
+details.fold summary.fold-head h2{flex:1 1 auto}
+details.fold summary.fold-head .n{
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-small);
+  color:var(--on-surface-faint);
+  flex:none;
+}
+details.fold summary.fold-head .fold-arrow{
+  flex:none;
+  align-self:center;
+  width:10px;     /* px: the chevron is drawn from two borders, so its size is geometry */
+  height:10px;    /* px: the chevron's drawn size */
+  margin-right:var(--s1);
+  border-right:2px solid var(--on-surface-faint);
+  border-bottom:2px solid var(--on-surface-faint);
+  transform:rotate(-45deg);      /* closed: points right */
+  transition:transform .15s ease;
+}
+details.fold[open] summary.fold-head .fold-arrow{transform:rotate(45deg)}   /* open: points down */
+details.fold .fold-body{padding-top:var(--section-gap-narrow);padding-bottom:var(--section-gap)}
+
+/* ---------- check-in block ----------
+   A timestamped, unnumbered section. On the day page the newest one renders
+   open and older ones fold below it using the folded section above. */
+
+.checkin{padding-block:var(--section-gap-narrow)}
+.checkin .checkin-head{
+  border-top:var(--divider);
+  padding-top:var(--s3);
+  margin-bottom:var(--gutter);
+}
+.checkin .checkin-head .time{
+  display:block;
+  font-size:var(--text-meta);
+  line-height:1.5;
+  color:var(--on-surface-faint);
+  margin-top:var(--s2);
+}
+
+/* ---------- calendar grids ----------
+   Week view: seven columns, today first. Month view: weeks as rows, held
+   inside .scrollx so a narrow screen scrolls the grid rather than the page.
+   No drop shadow anywhere in this block; today is marked with a heavier rule
+   and a filled day-number label. */
+
+.cal-week{
+  display:grid;
+  grid-template-columns:repeat(7,1fr);
+  gap:var(--s4);
+}
+.cal-day{
+  border-top:var(--line);
+  padding-top:var(--s3);
+}
+.cal-day--today{border-top:var(--divider)}
+
+.cal-day-head{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:var(--s2);
+  margin-bottom:var(--s3);
+}
+.cal-wd{
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-meta);
+  color:var(--on-surface-faint);
+}
+.cal-dn{
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-body);
+  color:var(--on-surface);
+}
+.cal-day--today .cal-dn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:22px;    /* px: the pill around a two-digit day number */
+  height:22px;       /* px: the pill's drawn height */
+  padding-inline:var(--s1);
+  border-radius:999px;
+  background:var(--structure);
+  color:var(--surface);
+}
+
+.cal-events{list-style:none;margin:0;padding:0}
+.cal-event{
+  display:flex;
+  flex-direction:column;
+  gap:1px;            /* px: the time and the title are one unit, a hair apart, not two lines */
+  margin-bottom:var(--s3);
+  font-size:var(--text-meta);
+  line-height:1.4;
+}
+.cal-event:last-child{margin-bottom:0}
+.cal-time{
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-micro);
+  color:var(--on-surface-faint);
+}
+.cal-event--allday .cal-time{color:var(--sage)}
+.cal-title{color:var(--on-surface)}
+.cal-account{font-size:var(--text-micro);color:var(--on-surface-faint)}
+
+.cal-open{
+  margin:0;
+  font-size:var(--text-meta);
+  color:var(--on-surface-faint);
+}
+
+.cal-month{min-width:560px}   /* px: seven readable columns; under this the grid scrolls instead of crushing */
+.cal-month-weekdays{
+  display:grid;
+  grid-template-columns:repeat(7,1fr);
+  gap:var(--s2);
+  margin-bottom:var(--s2);
+}
+.cal-month-weekdays span{
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-meta);
+  color:var(--on-surface-faint);
+}
+.cal-month-grid{
+  display:grid;
+  grid-template-columns:repeat(7,1fr);
+  gap:var(--s2);
+}
+.cal-month-cell{
+  min-height:84px;    /* px: a cell holds three event lines before it grows */
+  border-top:var(--line);
+  padding-top:var(--s2);
+}
+.cal-month-cell--today{border-top:var(--divider)}
+.cal-month-cell--outside{opacity:.4}
+.cal-month-cell .cal-dn{
+  display:block;
+  font-size:var(--text-meta);
+  margin-bottom:var(--s1);
+}
+.cal-month-cell--today .cal-dn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:20px;    /* px: the pill around a day number in the tighter month cell */
+  height:20px;       /* px: the pill's drawn height */
+  padding-inline:var(--s1);
+  border-radius:999px;
+  background:var(--structure);
+  color:var(--surface);
+}
+.cal-month-events{list-style:none;margin:0;padding:0}
+.cal-month-events li{
+  font-size:var(--text-micro);
+  line-height:1.4;
+  color:var(--on-surface-soft);
+  margin-bottom:2px;    /* px: event lines in a month cell sit almost touching, by design */
+  overflow-wrap:anywhere;
+}
+
 /* ---------- bands: full-bleed, one per document at most ---------- */
 
-.band{background:var(--ink);color:#fff;margin-top:var(--s7)}
-.band .wrap{padding-block:var(--s7)}
-.band h2{color:#fff;margin-bottom:var(--s4)}
-.band p,.band li{color:#fff}          /* full white on a dark band, never a soft grey, contrast holds this way */
-.band .sheet-head{border-top-color:#fff}
+.band{background:var(--structure);color:var(--white);margin-top:var(--section-gap)}
+.band > *{padding-block:var(--section-gap)}    /* the band's inner element carries the vertical room; the column comes from the page rule */
+.band h2{color:var(--white)}   /* no margin of its own: a band head is a .sheet-head like any other, and a bare h2 takes the base margins */
+.band p,.band li{color:var(--white)}          /* full white on a dark band, never a soft grey, contrast holds this way */
+.band .sheet-head{border-top-color:var(--white)}
 .band .sheet-head .n{color:var(--ink-faint-ondark)}
 
 /*
@@ -413,33 +735,53 @@ ol.steps--accent li::before{
   does. Pick the band colour for the document, then obey its row above.
 */
 .band--cobalt{background:var(--cobalt)}
-.band--cobalt .sheet-head .n{color:#fff; opacity:.72}   /* grey fails here, dim white instead */
+.band--cobalt .sheet-head .n{color:var(--white); opacity:.72}   /* grey fails here, dim white instead */
 .band--purple{background:var(--purple)}
 .band--purple .sheet-head .n{color:var(--ink-faint-ondark)}
-.band--cobalt .icon-circle,.band--purple .icon-circle,.band .icon-circle{background:#fff;color:var(--ink)}
+.band--cobalt .icon-circle,.band--purple .icon-circle,.band .icon-circle{background:var(--white);color:var(--on-surface)}
 
-/* ---------- footer ---------- */
+/* ---------- footer ----------
+   The page footer only. A <footer> inside a card or a component is that
+   component's business and keeps its own look. */
 
-footer{max-width:var(--maxw);margin-inline:auto;padding-inline:var(--s5);border-top:var(--line);margin-top:var(--s7);padding-block:var(--s5) var(--s7);font-size:14px;color:var(--ink-faint)}
-footer a{color:var(--ink)}
+body > footer{
+  border-top:var(--line);
+  margin-top:var(--section-gap);
+  padding-block:var(--gutter) var(--section-gap);
+  font-size:var(--text-meta);
+  color:var(--on-surface-faint);
+}
+body > footer a{color:var(--on-surface)}
 
 /* ---------- responsive ---------- */
 
 @media (max-width:820px){
-  .facts,.cols{grid-template-columns:1fr;gap:var(--s5)}
-  ol.steps.two-col{columns:1}
-  section.sheet{padding-block:var(--s6)}
+  .facts,.cols{grid-template-columns:1fr;gap:var(--gutter)}
+  ol.steps--two-col{columns:1}
+  section.sheet{padding-block:var(--section-gap-narrow)}
+
+  .cal-week{display:block}
+  .cal-day{padding-top:var(--s3);padding-bottom:var(--s3)}
+  .cal-day-head{margin-bottom:var(--s2)}
 }
 
 @media (prefers-reduced-motion:reduce){
   *{transition:none!important;animation:none!important;scroll-behavior:auto!important}
+  details.fold summary.fold-head .fold-arrow{transition:none}
 }
 
 @media print{
   .band{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .callout{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .insight{-webkit-print-color-adjust:exact;print-color-adjust:exact;break-inside:avoid}
-  section.sheet{break-inside:avoid}
+  .insight{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  /*
+    Keep-together belongs on a section's head and on the small blocks, not on
+    the section. A section longer than a page with break-inside:avoid starts on
+    a fresh page and leaves the previous one mostly empty, which made most
+    exports worse to help a few.
+  */
+  .sheet-head{break-after:avoid}
+  table,.panel,.insight,.callout{break-inside:avoid}
 }
 
 
@@ -456,10 +798,6 @@ footer a{color:var(--ink)}
    Mark source: projects/agent_storefront/brand/logo/ (mark.svg or lockup.svg).
    ========================================================================= */
 
-:root{
-  --brand-purple:#46188c;
-}
-
 /*
   The logo is a FILE, never rebuilt. Inline lockup.svg on white or
   lockup_on_ink.svg on a dark ground, both from
@@ -475,7 +813,6 @@ footer a{color:var(--ink)}
   projects/agent_storefront/brand/BRAND_KIT.md.
 */
 .mark{display:flex; align-items:center}
-.mark svg{height:17.6px; width:auto; display:block}
 /*
   Lockup height is not chosen by eye. BRAND_KIT.md: the lockup's height is
   0.9288 em of the wordmark font size it replaces, which puts the letters at the
@@ -483,5 +820,4 @@ footer a{color:var(--ink)}
   0.9288 x 19 = 17.6px. If a surface uses a different wordmark size, recompute
   rather than guessing; too tall and the logo fights the document title.
 */
-.masthead .meta{margin-top:var(--s2)}
-
+.mark svg{height:17.6px; width:auto; display:block}   /* px: 0.9288 em of the 19px wordmark it replaces, see above */

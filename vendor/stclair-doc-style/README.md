@@ -9,8 +9,8 @@ already carries its own styles is never touched.
 
 | File | Where it came from |
 | --- | --- |
-| `system-tokens.css` | `~/Documents/workspace/personal/lib/templates/system-tokens.css`, copied whole on 2026-09-16 |
-| `document.css` | `~/Documents/workspace/personal/lib/templates/document.css`, copied whole on 2026-09-16 |
+| `system-tokens.css` | `~/Documents/workspace/personal/lib/templates/system-tokens.css`, copied whole on 2026-09-16 from `main` at `83088576`; unchanged through `4da9515d`, the commit `document.css` was taken at |
+| `document.css` | `~/Documents/workspace/personal/lib/templates/document.css`, copied whole on 2026-09-16 from `main` at `4da9515d` |
 | `lahe-markdown.css` | written in this repo, not a copy |
 | `fonts/*.woff2` | Google Fonts, latin subset, fetched 2026-09-16 |
 | `LICENSE` | SIL Open Font License 1.1, with all three font copyright lines |
@@ -21,21 +21,31 @@ here. If one of them needs to change, change it in the personal repo and copy
 the new version over, the same way the other vendor folders work. Nothing
 imports across repos, by rule.
 
-`lahe-markdown.css` is LAHE's own layer. `document.css` styles classed
-components (`ul.dot`, `table.boxed`, `.panel`) and marked emits bare elements
-with no classes, so this layer maps the bare elements onto the same components
-and carries the `@font-face` rules.
+`lahe-markdown.css` is LAHE's own layer, and it is thin on purpose. `document.css`
+styles bare elements now: a class-free `ul` gets the sage dot, a class-free `ol`
+gets the drawn numeral, and the table, blockquote, image and heading looks all
+come from the base with no class needed. So the layer no longer restates any of
+that. What it still carries is the part the base cannot know about: the
+`@font-face` rules pointing at the vendored woff2 files, `color-scheme: light`,
+ligatures off in code, the Mermaid block (a diagram is a `pre`, so it has to be
+told not to look like a code block), LAHE's own furniture (`.frontmatter`,
+`.lahe-readonly-note`, `.lahe-local-link`), the GFM task-list opt-out, the
+tighter paragraph gap inside a list item, and the top margin on a nested list.
+
+The layer sets no page column. `main` is a body child, so the base's one column
+rule puts it in the 1080px column with the gutter, and the hero and the sections
+inside it sit in that column. Two stylesheets each deciding the column is the
+drift the style rebuild ended.
 
 The renderer supplies the other half. `render()` in `src/service/markdown.js`
 reproduces the page shape that `personal/lib/scripts/build_styled_doc.py`
-builds: the first H1 becomes a `.wrap.hero` title, everything up to the first
-H2 is the lede inside it, and every H2 opens a numbered `section.sheet`. It
-also writes the `ul.dot` and `.scrollx` classes that `document.css` is waiting
-for. That is why this layer sets no page column of its own: the hero and the
-sections carry it. Mermaid gets the same palette through a theme object in
-that file, since its theme variables are read by JavaScript before any
-stylesheet exists and cannot be `var(--token)`; each hex there is a token from
-`system-tokens.css`, named in a comment beside it.
+builds: the first H1 becomes a `<div class="hero">` title, everything up to the
+first H2 is the lede inside it, and every H2 opens a numbered `section.sheet`.
+The one class it still writes for the stylesheet is `.scrollx` around a table,
+because the base does not wrap a bare table for horizontal scroll. Mermaid gets
+the palette through a theme object in that same file, since its theme variables
+are read by JavaScript before any stylesheet exists and cannot be `var(--token)`;
+each hex there is a token from `system-tokens.css`, named in a comment beside it.
 
 ## The fonts
 
