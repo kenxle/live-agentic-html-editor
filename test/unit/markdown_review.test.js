@@ -92,7 +92,7 @@ test("lahe review renders Markdown without touching it, serves assets, and reuse
   assert.equal(fs.readFileSync(source, "utf8"), original, "the Markdown source was not given a script tag");
   const page = await request(open);
   assert.equal(page.status, 200);
-  assert.match(page.body, /<ul>\s*<li>One<\/li>\s*<\/ul>\s*<p>A separate paragraph\.<\/p>/);
+  assert.match(page.body, /<ul class="dot">\s*<li>One<\/li>\s*<\/ul>\s*<p>A separate paragraph\.<\/p>/);
   const assetPath = page.body.match(/src="(\/\.lahe-source\/[a-f0-9]+\/assets\/pixel\.txt)"/)[1];
   const asset = await request(new URL(assetPath, open).href);
   assert.equal(asset.status, 200);
