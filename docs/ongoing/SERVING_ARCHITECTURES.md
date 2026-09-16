@@ -372,7 +372,7 @@ Four, and every review is one of them:
 
 | Shape | Page served by | Written into your folder | Where edits go |
 | --- | --- | --- | --- |
-| Static HTML doc | LAHE review server | nothing | the HTML file |
+| Static HTML doc | LAHE review server (rooted at the page's own folder, and the rail follows the reviewer onto every page in it unless `--only`) | nothing | the HTML file the item names |
 | Markdown doc | LAHE review server (LAHE renders first) | nothing | the `.md` source |
 | Built document | LAHE review server (you run the build) | nothing | the source fragments, then rebuild |
 | App in dev | your own dev server | one pasted line in a layout | the app's code |
@@ -394,30 +394,45 @@ Variations that are not separate architectures:
   into your folder, the script line rides the response, and edits go to whatever
   page file the item names.
 
-  What makes it work is a rule rather than a mechanism: **everything our own
-  static server serves out of a reviewed folder gets the rail.** A page no
-  review ever recorded is served on the newest review whose target IS that
-  folder, so the pages the reviewer reaches by a link carry the rail, and so do
-  pages written after the review was opened. No page is enrolled, nothing is
-  written to the review store, and the server stays a reader of it. A dev server
-  somebody else runs is a different thing and keeps its own row above; ours has
-  no such excuse.
+  What makes it work is a rule rather than a mechanism: **the rail follows the
+  reviewer.** Ken, setting it: "if you can navigate to a page from where you
+  currently are, and you currently have the lahe editor, it should follow you
+  across anything you click on." So every HTML page our own server hands out of
+  a reviewed folder gets the rail, whether or not any review recorded it: pages
+  reached by a link, pages written after the review was opened, and the siblings
+  of a single reviewed page. No page is enrolled, nothing is written to the
+  review store, and the server stays a reader of it. A dev server somebody else
+  runs is a different thing and keeps its own row above; ours has no such
+  excuse.
 
-  The rule is scoped to the review that asked for a folder, and that scope is
-  the security boundary. A single-page review roots its server at the page's own
-  directory, which is very often a home or Desktop folder full of unrelated
-  HTML. Those pages are served, but plain: only the page the reviewer named
-  carries the review id and token. Nesting is scoped the same way. `lahe review
-  site/` and `lahe review site/sub/` are two documents that happen to sit one
-  inside the other, and each one's rule stops at its own folder, so the newer
-  inner review never takes over the outer one's pages.
+  **`lahe review <page> --only` is the way out**, and it is the same sentence
+  from Ken: "if you want to isolate a single file because you know other things
+  around shouldn't be in there, that should be an option." The case is the
+  folder nobody chose. `lahe review ~/Downloads/statement.html` roots a server
+  at Downloads, and an isolated review is never borrowed for a page it did not
+  record, so the rest of that folder is served plain. It records
+  `only_recorded_pages` on the review, and it goes one way only: the helper
+  route that applies it accepts `true` and never `false`, because widening a
+  review back out is the one thing a script that read the token off the script
+  tag would ask for.
 
-  **A page recorded on its own keeps its own review**, and the folder review
+  Nesting is where the rule stops. A review answers for the folder its OWN
+  server is rooted at: the folder for a folder review, the page's own folder for
+  a single page. `lahe review site/` and `lahe review site/sub/` are two
+  documents that happen to sit one inside the other, each rooted at its own
+  folder, so the newer inner review never takes over the outer one's pages.
+
+  **A page recorded on its own keeps its own review**, and the wider review
   covers the rest. That happens when someone ran `lahe review page.html` on a
   file in the folder before or after opening the folder itself. It is legal and
   deliberate, and the helper log says so the first time each such page is
   served, because otherwise it is discovered by wondering why a reply landed on
   the wrong card.
+
+  **What is reachable is the served root, and `lahe review` prints it.** The
+  reviewer is handed one URL, but the root line is the honest answer to "what
+  else can be opened through this", and it is the line to read before deciding
+  whether this wants `--only`.
 
   The folder needs at least one `.html` file of its own, and it is the folder's
   own pages that count, not a recursive walk. A directory with no pages in it is
