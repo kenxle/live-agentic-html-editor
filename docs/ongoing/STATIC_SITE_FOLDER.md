@@ -23,7 +23,7 @@ Board row: `LAHE-static-site-folder` in `docs/BULLETIN.md`. Written 2026-09-16 a
 - Risk to think through: a folder that also holds pages the reviewer should not be commenting on (a vendored library's demo page, an old export). The match is "under the root", so those get a rail too. Acceptable for wireframes and generated sites; say so in the docs, and keep `--source` for build output the way it works now.
 - Risk: a folder of Markdown, or a mix. Out of scope. A folder counts as a static site only when it holds at least one `.html` and the reviewer did not pass `--origin`.
 
-## Option B: auto-enrol on first visit
+## Option B: auto-enroll on first visit
 
 Keep per-page reviews, but when the static server serves an HTML file under a session's root that no review has recorded, it enrolls the page into the newest review on that server before responding.
 
@@ -47,5 +47,5 @@ Option A, and Option C is welcome on top of it for wireframes specifically. A is
 
 - Confirm with Ken that "every HTML page under the folder gets the rail" is the rule he wants, including the vendored-demo-page case.
 - Decide what the rail's page list looks like for pages that were visited but never commented on. Today `review.json` groups items by page; a visited page with no items may not appear at all, and the reviewer may want to see which pages they have walked.
-- Write the tests first: a folder of three linked pages, enrol the folder once, load each page through the server, the rail is present on all three; comment on page two, the item carries page two's path; a page added to the folder after enrollment also gets the rail.
+- Write the tests first: a folder of three linked pages, enroll the folder once, load each page through the server, the rail is present on all three; comment on page two, the item carries page two's path; a page added to the folder after enrollment also gets the rail.
 - This touches the serving table, so the skill and `AGENTS.md` change together, and the contract text does not (it is about replies, not serving).
