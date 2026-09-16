@@ -107,7 +107,7 @@ test("a document becomes a hero and one numbered section per H2", () => {
 
   assert.equal(html.match(/<section class="sheet[^"]*">/g).length, 3,
     "three H2s open three sections, and the fenced '## ' line opens none");
-  assert.doesNotMatch(html, /class="sheet first"/, "there is a lede, so the first section keeps its top padding");
+  assert.doesNotMatch(html, /class="sheet first"/, "no section carries the old first class; every section supplies its own top space");
   for (const n of [1, 2, 3]) {
     assert.match(html, new RegExp('<span class="n">Section ' + n + "</span>"),
       "sections are numbered from 1 in document order");
@@ -125,10 +125,9 @@ test("a document becomes a hero and one numbered section per H2", () => {
   assert.doesNotMatch(html, /class="wrap/, "the hero no longer carries the old wrap class");
 });
 
-test("a section that follows the title with nothing in between hangs its rule under it", () => {
+test("a section that follows the title with nothing in between still supplies its own top space", () => {
   const html = renderSource("lahe-markdown-first-", ["# Straight in", "", "## First thing", "", "Text."]);
-  assert.match(html, /<section class="sheet first">/,
-    "no lede means the first section drops its top padding");
+  assert.doesNotMatch(html, /class="sheet first"/, "no section carries the old first class; every section supplies its own top space");
 });
 
 test("a heading keeps its inline markup, and a document with no H1 still gets a hero", () => {
