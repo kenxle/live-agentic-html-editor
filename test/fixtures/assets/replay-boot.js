@@ -388,6 +388,12 @@
           ? {
               hidden: conflict.hasAttribute("hidden"),
               title: conflict.firstChild.textContent,
+              // COMPUTED, because the collision's stylesheet travels inside
+              // whichever conflict node carried it into the rail's closed root.
+              // A test that only reads attribute names cannot tell a styled card
+              // from an unstyled one, and unstyled is what the reviewer would be
+              // looking at.
+              display: getComputedStyle(conflict).display,
               yours: conflict.querySelector('[data-lahe-conflict-side="yours"] [data-lahe-conflict-text]')
                 .textContent,
               theirs: conflict.querySelector('[data-lahe-conflict-side="theirs"] [data-lahe-conflict-text]')
@@ -395,6 +401,53 @@
             }
           : null
       };
+    },
+
+    /**
+     * Focus one of the collision's two buttons, the way a Tab key would.
+     *
+     * The rail has to be open and on the card's own pane first: a card in a
+     * hidden pane has no box, and focus() on a node that is not being drawn is
+     * not the reviewer standing on that button.
+     */
+    focusConflictButton: function (selector, choice) {
+      var item = byRegion[selector];
+      if (!item) return false;
+      var id = item[record.FIELD.ID];
+      if (typeof rail.collapse === "function") rail.collapse(false);
+      var tabs = Object.keys(LAHE.overlay.TAB).map(function (key) {
+        return LAHE.overlay.TAB[key];
+      });
+      for (var i = 0; i < tabs.length; i += 1) {
+        rail.selectTab(tabs[i]);
+        var body = rail.cardBody(id);
+        var button = body ? body.querySelector('[data-lahe-conflict-choice="' + choice + '"]') : null;
+        if (button) {
+          button.focus();
+          if (rail.holdsFocus(id)) return true;
+        }
+      }
+      return false;
+    },
+
+    /** The reviewer's focus leaves the card, without pressing anything. */
+    blurCard: function (selector) {
+      var item = byRegion[selector];
+      if (!item) return false;
+      var id = item[record.FIELD.ID];
+      var body = rail.cardBody(id);
+      var buttons = body ? body.querySelectorAll("[data-lahe-conflict-choice]") : [];
+      for (var i = 0; i < buttons.length; i += 1) {
+        if (typeof buttons[i].blur === "function") buttons[i].blur();
+      }
+      return rail.holdsFocus(id);
+    },
+
+    /** The rail rebuilt, which is what a page that throws the root away does. */
+    remountRail: function () {
+      rail.unmount();
+      rail.mount();
+      return rail.isMounted();
     }
   };
 })();

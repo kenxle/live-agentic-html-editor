@@ -1044,19 +1044,94 @@ test("an edit whose stamp points at different words is still refused", () => {
 // remount. What it must not outlive is the record it is about, or the document
 // the node came from.
 
+/**
+ * The review's own answer to "is this record still here", which is what the
+ * library wires in: a read straight through to the UNSCOPED store, never the
+ * page-scoped cache the pass runs over. See index.js's configure.
+ */
+function reviewHolding(ids) {
+  const held = {};
+  ids.forEach(function (id) {
+    held[id] = true;
+  });
+  return {
+    hasItem: function (id) {
+      return held[id] === true;
+    },
+    drop: function (id) {
+      delete held[id];
+    }
+  };
+}
+
 test("a record that leaves the review takes its element memory with it", () => {
   const item = fixtures.edit();
   const page = pageOf(["Before it.", item.before, "After it."]);
   const anchoredItem = anchored(item, page.blocks[1], page.root);
+  const review = reviewHolding([item.id]);
 
-  runOne(anchoredItem, page.root);
+  runOne(anchoredItem, page.root, { hasItem: review.hasItem });
   assert.ok(replay.boundIds().indexOf(item.id) !== -1, "the pass bound the record to its block");
 
   // The reviewer took it back: an undo, a delete, or "take the page's" on a
   // collision. The record is gone from the review, so there is nothing left for
   // the node to be the node OF.
-  replay.runPass(replay.REASON.MUTATION, { root: page.root, items: [], cards: fakeCards() });
+  review.drop(item.id);
+  replay.runPass(replay.REASON.MUTATION, {
+    root: page.root,
+    items: [],
+    cards: fakeCards(),
+    hasItem: review.hasItem
+  });
   assert.equal(replay.boundIds().indexOf(item.id), -1, "and the node is not held after it");
+});
+
+// The 2026-08-18 regression, guarded. comments.onChange hands replay the node an
+// item was created on the instant the box opens, and the pass's item list is a
+// CACHE that does not have that item yet. A pass that reads "not in my list" as
+// "gone from the review" deletes the binding, and for an element pick (a chart,
+// an image) the binding is the only anchor there is: the next settle marks it
+// lost while the reviewer is looking straight at it.
+test("a record bound before any pass has seen it keeps its binding", () => {
+  const item = fixtures.comment();
+  const page = pageOf(["Before it.", "A chart with no words in it.", "After it."]);
+
+  replay.bindElement(item.id, page.blocks[1]);
+  // The review holds it (it was written to the store before the event fired);
+  // this pass's list does not, because nothing has refreshed the cache yet.
+  replay.runPass(replay.REASON.MUTATION, {
+    root: page.root,
+    items: [],
+    cards: fakeCards(),
+    hasItem: reviewHolding([item.id]).hasItem
+  });
+
+  assert.ok(replay.boundIds().indexOf(item.id) !== -1, "the creation binding survives the pass");
+});
+
+// A tab panel, an accordion, a carousel: the page takes a section out of the
+// document and puts it back. A record the text matcher can re-find is no worse
+// off for losing its binding; an ELEMENT PICK has nothing to re-find with, so
+// dropping its binding loses the only place it has.
+test("an element pick keeps its binding while its node is out of the document", () => {
+  const item = fixtures.comment();
+  const page = pageOf(["Before it.", { text: "", attrs: { "data-kind": "chart" } }, "After it."]);
+  const ref = anchor.mint({ element: page.blocks[1], root: page.root });
+  assert.equal(ref.ok, true);
+  assert.equal(ref.probe_kind, anchor.PROBE.ELEMENT, "the fixture is an element pick, with no words to match");
+  const picked = Object.assign({}, item);
+  picked[record.FIELD.REGION] = { ref: ref, label: "a chart", lost: null };
+
+  replay.bindElement(picked.id, page.blocks[1]);
+  page.blocks[1].isConnected = false;
+  replay.runPass(replay.REASON.MUTATION, {
+    root: page.root,
+    items: [picked],
+    cards: fakeCards(),
+    hasItem: reviewHolding([picked.id]).hasItem
+  });
+
+  assert.ok(replay.boundIds().indexOf(picked.id) !== -1, "the only anchor it has is kept");
 });
 
 test("a node the page rebuilt is let go, so no dead document tree hangs off the map", () => {

@@ -205,6 +205,108 @@ test.describe("replay: the four branches", () => {
     expect(again.card.conflict, "a second collision draws a second card").not.toBeNull();
     expect(again.card.conflict.theirs).toBe(again.theirs);
     expect(again.card.conflict.hidden).toBe(false);
+    // And it is DRAWN, not just present: the stylesheet travelled inside the
+    // node that was removed, and a second card in no system at all is the same
+    // bug wearing a different hat.
+    expect(again.card.conflict.display, "the second card draws in the rail's system").toBe("flex");
+  });
+
+  // The rail remembers every node a caller attached and puts them all back
+  // whenever it rebuilds a card, so a conflict node taken out of the DOM alone
+  // comes back at the next remount: a resolved collision reappearing on the card
+  // the first time the page navigates.
+  test("a resolved collision does not come back when the rail rebuilds the card", async ({ page }) => {
+    const id = await page.evaluate(() => {
+      const item = window.__laheReplay.itemFor("#region-c");
+      window.__laheReplay.rewrite("#region-c", item.before + " The agent rewrote this.");
+      window.__laheReplay.pass("manual");
+      return window.__laheReplay.card("#region-c").id;
+    });
+    expect(await page.evaluate(() => window.__laheReplay.card("#region-c").conflict)).not.toBeNull();
+
+    const after = await page.evaluate(() => {
+      const item = window.__laheReplay.itemFor("#region-c");
+      window.__laheReplay.rewrite("#region-c", item.after);
+      window.__laheReplay.pass("manual");
+      const cleared = window.__laheReplay.card("#region-c").conflict;
+      const remounted = window.__laheReplay.remountRail();
+      return { cleared: cleared, remounted: remounted, rebuilt: window.__laheReplay.card("#region-c").conflict };
+    });
+    expect(after.cleared, "gone when it clears").toBeNull();
+    expect(after.remounted, "and the rail really did rebuild").toBe(true);
+    expect(after.rebuilt, "and it is not put back by the rebuild").toBeNull();
+    expect(id).toBeTruthy();
+  });
+
+  // Two collisions at once. Clearing one takes its node away, and the sheet that
+  // rode in on that node goes with it, so the one still standing has to keep its
+  // system.
+  test("clearing one collision leaves the one still standing drawn", async ({ page }) => {
+    const both = await page.evaluate(() => {
+      ["#region-b", "#region-c"].forEach(function (selector) {
+        const item = window.__laheReplay.itemFor(selector);
+        window.__laheReplay.rewrite(selector, item.before + " Neither version says this.");
+      });
+      window.__laheReplay.pass("manual");
+      return {
+        b: window.__laheReplay.card("#region-b").conflict,
+        c: window.__laheReplay.card("#region-c").conflict
+      };
+    });
+    expect(both.b, "the first collision is on its card").not.toBeNull();
+    expect(both.c, "and so is the second").not.toBeNull();
+    expect(both.b.display).toBe("flex");
+
+    // The FIRST of the two, deliberately: the sheet rides inside whichever node
+    // was built first, so clearing that one is the case where the other is left
+    // with nothing behind its attribute names.
+    const afterOneCleared = await page.evaluate(() => {
+      const item = window.__laheReplay.itemFor("#region-b");
+      window.__laheReplay.rewrite("#region-b", item.after);
+      window.__laheReplay.pass("manual");
+      return {
+        b: window.__laheReplay.card("#region-b").conflict,
+        c: window.__laheReplay.card("#region-c").conflict
+      };
+    });
+    expect(afterOneCleared.b, "the answered one is gone").toBeNull();
+    expect(afterOneCleared.c, "the unanswered one is still there").not.toBeNull();
+    expect(afterOneCleared.c.display, "and still drawn in the rail's system").toBe("flex");
+  });
+
+  // Taking a node out of a card that holds focus drops the reviewer's focus to
+  // the body. The warning is blanked and hidden right away either way; the node
+  // itself waits for the reviewer to leave, which the next pass notices.
+  test("a collision that clears while the reviewer is in the card waits for them to leave", async ({
+    page
+  }) => {
+    await page.evaluate(() => {
+      const item = window.__laheReplay.itemFor("#region-c");
+      window.__laheReplay.rewrite("#region-c", item.before + " The agent rewrote this.");
+      window.__laheReplay.pass("manual");
+    });
+    expect(
+      await page.evaluate(() => window.__laheReplay.focusConflictButton("#region-c", "keep_mine")),
+      "the reviewer has tabbed onto Keep mine"
+    ).toBe(true);
+
+    const held = await page.evaluate(() => {
+      const item = window.__laheReplay.itemFor("#region-c");
+      window.__laheReplay.rewrite("#region-c", item.after);
+      window.__laheReplay.pass("manual");
+      return window.__laheReplay.card("#region-c").conflict;
+    });
+    expect(held, "the node is still on the card, because the reviewer is in it").not.toBeNull();
+    expect(held.hidden, "but hidden").toBe(true);
+    expect(held.yours, "and emptied, so no stale warning is readable").toBe("");
+    expect(held.theirs).toBe("");
+
+    const gone = await page.evaluate(() => {
+      window.__laheReplay.blurCard("#region-c");
+      window.__laheReplay.pass("manual");
+      return window.__laheReplay.card("#region-c").conflict;
+    });
+    expect(gone, "and it goes on the next pass after focus leaves").toBeNull();
   });
 
   test("a format-only record compares on structure, and a delete is idempotent by absence", async ({
