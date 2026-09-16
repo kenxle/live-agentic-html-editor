@@ -535,6 +535,36 @@ test("servedVia is injected only while this session's static server is actually 
   assert.equal(await status.servedVia(dir, "s_served", [page]), "on_disk", "a stopped server is back on the on-disk line");
 });
 
+test("a folder review reads injected while its server is up, and unserved once it is down", async (t) => {
+  // `lahe review <folder>` records the FOLDER as the review's target, and its
+  // server is rooted there. Every page in it carries the rail through the
+  // response and none of them has a line on disk, so "on_disk" would be a lie.
+  // "unserved" is the truth when the server is gone: those pages have no rail
+  // at all, and nothing on disk to fall back on.
+  const dir = tempState();
+  const site = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-status-folder-"));
+  fs.writeFileSync(path.join(site, "index.html"), "<html></html>");
+
+  assert.equal(await status.servedVia(dir, "s_folder", [site]), "unserved", "no server yet: no rail anywhere");
+
+  const server = await staticServersModule.start({ dir, sessionId: "s_folder", root: site });
+  t.after(async () => { await staticServersModule.stopAll(dir, "s_folder"); });
+  assert.equal(await status.servedVia(dir, "s_folder", [site]), "injected");
+  assert.equal(
+    await status.servedVia(dir, "s_other_session", [site]),
+    "unserved",
+    "a static server is a per-session lease, so another session's folder is not ours"
+  );
+
+  await staticServersModule.stopOne(dir, "s_folder", server.meta);
+  assert.equal(await status.servedVia(dir, "s_folder", [site]), "unserved");
+});
+
+test("servedViaLine tells a reviewer with a dead folder server what they are looking at", () => {
+  assert.match(status.servedViaLine("unserved"), /no static server/);
+  assert.match(status.servedViaLine("unserved"), /reopen/);
+});
+
 test("the printed status names the mechanism for a static review with a live server", async (t) => {
   const dir = tempState();
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-status-served-"));
@@ -555,6 +585,38 @@ test("the printed status names the mechanism for a static review with a live ser
   await staticServersModule.stopOne(dir, "s_served", server.meta);
   const stopped = await runStatus([], dir);
   assert.match(stopped.stdout, /the on-disk script line only/);
+});
+
+test("the printed status says when a review is limited to the page it was given", async (t) => {
+  // The default is the other way round: our server serves the page's whole
+  // folder and the rail follows the reviewer onto any page in it. An agent that
+  // assumes that of an isolated review would be wrong about where a comment can
+  // come from, so the narrowing is said out loud and the wide case stays quiet.
+  const dir = tempState();
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-status-only-"));
+  const page = path.join(work, "statement.html");
+  fs.writeFileSync(page, "<html></html>");
+
+  const log = logModule.createEventLog({ dir });
+  const reviews = reviewsModule.createReviews({ dir, log });
+  reviews.create({
+    id: "r_only",
+    origins: ["null"],
+    target_path: page,
+    agent_session_id: "s_only",
+    only_recorded_pages: true
+  });
+  reviews.create({ id: "r_wide", origins: ["null"], target_path: page, agent_session_id: "s_only" });
+
+  await staticServersModule.start({ dir, sessionId: "s_only", root: work });
+  t.after(async () => { await staticServersModule.stopAll(dir, "s_only"); });
+
+  const run = await runStatus(["--review", "r_only"], dir);
+  assert.equal(run.code, protocol.CLI_EXIT.OK, run.stderr);
+  assert.match(run.stdout, /scope: only this page/);
+
+  const wide = await runStatus(["--review", "r_wide"], dir);
+  assert.equal(wide.stdout.indexOf("scope: only this page"), -1, "and says nothing for the ordinary case");
 });
 
 // ---------------------------------------------------------------------------

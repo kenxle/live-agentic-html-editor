@@ -554,6 +554,11 @@ review's feedback, never the machine or another review. The token persists acros
 because rotating it would orphan a page mid-review and violate the never-lose-work posture. A token
 written into a static file can be committed and shared, so the add step says so out loud when the file
 is in a repository, and the snippet it writes for a dev server belongs in a development-only guard.
+Serving widens this residual by one step (2026-09-16): any review served by the session's static server
+has its token served on every HTML file under that server's root, not only on the pages the review
+recorded, so any script on any of those pages can read it. The root is the reviewed folder, or the
+reviewed page's own folder. `lahe review --only` narrows a review back to its recorded pages, and the
+command prints the root so the reviewer can see what is reachable before deciding.
 The final boundary is the user account: a process already running as the reviewer can touch the store
 directly, and no local helper can defend against that.
 

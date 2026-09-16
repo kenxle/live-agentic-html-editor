@@ -147,6 +147,10 @@ function setup(options) {
   if (opts.tab) rail.selectTab(opts.tab);
   const done = tabDone.createDoneTab({
     store: store,
+    // The same pair the library hands it: the page's records to draw, and the
+    // whole review to ask "is this record still here at all". They are the same
+    // object here because this store is not page-scoped.
+    allStore: store,
     reviewId: REVIEW,
     overlay: rail,
     document: null,
@@ -161,6 +165,7 @@ function remount(parts) {
   parts.done.unmount();
   const done = tabDone.createDoneTab({
     store: parts.store,
+    allStore: parts.store,
     reviewId: REVIEW,
     overlay: parts.rail,
     document: null
@@ -174,7 +179,13 @@ function reboot(store) {
   tabDone.forgetPageLife();
   const rail = overlay.createRail({ store: store, reviewId: REVIEW });
   rail.collapse(true);
-  const done = tabDone.createDoneTab({ store: store, reviewId: REVIEW, overlay: rail, document: null });
+  const done = tabDone.createDoneTab({
+    store: store,
+    allStore: store,
+    reviewId: REVIEW,
+    overlay: rail,
+    document: null
+  });
   done.mount();
   return { rail, done };
 }
@@ -317,6 +328,63 @@ test("timing out is not dismissing: nobody decided anything, so it stays unread"
 
   assert.deepEqual(parts.done.unseenIds(), ["c_ignored"], "still waiting to be read");
   assert.deepEqual(parts.done.neglectedIds(), ["c_ignored"], "and now on the neglect clock");
+});
+
+// The page's memory is per ITEM, and the item can go: the reviewer deletes it,
+// undoes it, or answers a collision with "take the page's". Two small maps keyed
+// by id then grow for the life of the page with nothing behind the keys (the
+// 2026-09-16 memory audit, retention issue 6).
+test("a record that leaves the review is forgotten: what was announced, and what was neglected", () => {
+  const parts = setup();
+  const [item] = pending(parts, ["c_removed"]);
+  parts.done.refresh();
+  parts.done.applyReplies([foldEvent(item, flagged())]);
+  parts.rail.dismissToast(parts.rail.toastInfo().toasts[0].id, "timeout");
+
+  assert.deepEqual(parts.done.announcedIds(), ["c_removed"], "the page said it once");
+  assert.deepEqual(parts.done.neglectedIds(), ["c_removed"], "and nobody read it");
+
+  parts.store.remove(REVIEW, "c_removed");
+  parts.done.refresh();
+
+  assert.deepEqual(parts.done.announcedIds(), [], "the record is gone and so is the memory of it");
+  assert.deepEqual(parts.done.neglectedIds(), []);
+});
+
+// "Gone" is a question about the REVIEW, not about this page. A review spans
+// pages, and every surface below the rail is handed a page-scoped store, so the
+// records made on page A read as absent the moment the reviewer clicks through
+// to page B. Forgetting them there would re-announce the whole backlog on every
+// round trip.
+test("a record on another page of the review is not gone, so nothing is re-announced", () => {
+  const parts = setup();
+  const [item] = pending(parts, ["c_pageA"]);
+  parts.done.refresh();
+  parts.done.applyReplies([foldEvent(item, flagged())]);
+  parts.rail.dismissToast(parts.rail.toastInfo().toasts[0].id, "timeout");
+  assert.deepEqual(parts.done.announcedIds(), ["c_pageA"]);
+  assert.deepEqual(parts.done.neglectedIds(), ["c_pageA"]);
+
+  // The navigation: a new Done tab on page B, handed a store scoped to page B,
+  // which holds none of page A's records. The review still holds all of them,
+  // and that is the store the question is asked of.
+  parts.done.unmount();
+  const pageB = Object.create(parts.store);
+  pageB.read = function () {
+    return [];
+  };
+  const done = tabDone.createDoneTab({
+    store: pageB,
+    allStore: parts.store,
+    reviewId: REVIEW,
+    overlay: parts.rail,
+    document: null
+  });
+  done.mount();
+  done.refresh();
+
+  assert.deepEqual(done.announcedIds(), ["c_pageA"], "the page said it once and still knows");
+  assert.deepEqual(done.neglectedIds(), ["c_pageA"], "and still knows nobody read it");
 });
 
 // --- rule 3: a count is for neglect only --------------------------------------

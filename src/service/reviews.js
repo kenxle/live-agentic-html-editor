@@ -47,6 +47,7 @@
 
 var crypto = require("node:crypto");
 var fs = require("node:fs");
+var path = require("node:path");
 
 var protocol = require("../shared/protocol.js");
 var elapsed = require("../shared/elapsed.js");
@@ -251,6 +252,7 @@ function createReviews(options) {
           target_paths: Array.isArray(parsed.target_paths) ? parsed.target_paths.slice() : [],
           source_path: typeof parsed.source_path === "string" ? parsed.source_path : null,
           agent_session_id: typeof parsed.agent_session_id === "string" ? parsed.agent_session_id : "legacy",
+          only_recorded_pages: parsed.only_recorded_pages === true,
           created_at: parsed.created_at || new Date().toISOString()
         };
       } else {
@@ -397,6 +399,7 @@ function createReviews(options) {
       target_paths: Array.isArray(parsed.target_paths) ? parsed.target_paths.slice() : [],
       source_path: typeof parsed.source_path === "string" ? parsed.source_path : null,
       agent_session_id: typeof parsed.agent_session_id === "string" ? parsed.agent_session_id : "legacy",
+      only_recorded_pages: parsed.only_recorded_pages === true,
       created_at: parsed.created_at || new Date().toISOString()
     };
     log.helperLog("review " + reviewId + " learned from disk without a restart");
@@ -465,6 +468,8 @@ function createReviews(options) {
         registerOrigin(id, origin);
       });
       recordPaths(id, spec);
+      // Narrowing only, never widening: see isolate().
+      if (spec.only_recorded_pages === true) isolate(id);
       return existing;
     }
 
@@ -478,6 +483,11 @@ function createReviews(options) {
       target_paths: typeof spec.target_path === "string" && spec.target_path ? [spec.target_path] : [],
       source_path: typeof spec.source_path === "string" ? spec.source_path : null,
       agent_session_id: typeof spec.agent_session_id === "string" ? spec.agent_session_id : "legacy",
+      // `lahe review <page> --only`: this review is about the page it was given
+      // and nothing else in that page's folder. The static server reads it off
+      // meta.json and refuses to borrow this review for a page it never
+      // recorded (src/service/static_servers.js).
+      only_recorded_pages: spec.only_recorded_pages === true,
       created_at: new Date().toISOString()
     };
     reviews[id] = review;
@@ -557,6 +567,29 @@ function createReviews(options) {
    * @param {string} reviewId
    * @param {{target_path?: string|null, source_path?: string|null}} paths
    */
+  /**
+   * Narrow a review to the pages it actually recorded (`lahe review --only`).
+   *
+   * ONE DIRECTION ONLY, and that is the whole design. Narrowing is the reviewer
+   * noticing what else is in the folder they pointed at. Widening is the one
+   * move a script that read the token off the script tag would want to make,
+   * and review.write is reachable with exactly that token (see D11's residuals
+   * and the route's own note), so there is no way back out through this. A
+   * review that should be wide again is a new review.
+   *
+   * @param {string} reviewId
+   * @returns {boolean} whether the review is isolated now
+   */
+  function isolate(reviewId) {
+    var review = get(reviewId);
+    if (!review) return false;
+    if (review.only_recorded_pages === true) return true;
+    review.only_recorded_pages = true;
+    persist(review);
+    log.helperLog("review " + reviewId + " is limited to the pages it recorded (--only)");
+    return true;
+  }
+
   function recordPaths(reviewId, paths) {
     var review = get(reviewId);
     if (!review) return null;
@@ -655,6 +688,47 @@ function createReviews(options) {
     return "http://" + protocol.DEFAULT_HOST + ":" + port;
   }
 
+  /**
+   * The page file a folder review's browser pathname names, or null.
+   *
+   * A FOLDER REVIEW RECORDS THE FOLDER (`lahe review <folder>`), and a folder's
+   * modification time is useless as a reload trigger: it moves when a stray
+   * file appears beside the pages and stands still when a page's own text is
+   * rewritten, which is the change the reviewer is waiting to see. The page
+   * asking is a real file under that folder and the poll already carries its
+   * pathname, so that file is what gets stat'ed.
+   *
+   * Null for anything that is not a folder target, and for any pathname that
+   * does not land strictly inside it: the containment check is the same shape
+   * the static server applies to a request, and for the same reason.
+   *
+   * @param {string} target a recorded target path
+   * @param {string|null} pagePath the requesting browser's location.pathname
+   * @returns {string|null}
+   */
+  function pageUnderFolder(target, pagePath) {
+    if (typeof pagePath !== "string" || !pagePath) return null;
+    try {
+      if (!fs.statSync(target).isDirectory()) return null;
+    } catch (error) {
+      return null;
+    }
+    var decoded;
+    try {
+      decoded = decodeURIComponent(pagePath);
+    } catch (error) {
+      // A malformed escape is not a page identity.
+      return null;
+    }
+    var relative = decoded.replace(/\\/g, "/").replace(/^\/+/, "");
+    // The folder's own URL is its index, which is what `lahe review <folder>`
+    // prints as the open link.
+    if (!relative || relative.charAt(relative.length - 1) === "/") relative += "index.html";
+    var resolved = path.resolve(target, relative);
+    if (resolved.indexOf(target + path.sep) !== 0) return null;
+    return resolved;
+  }
+
   /** The one retained filesystem target represented by a browser pathname. */
   function targetForPage(paths, pagePath) {
     if (paths.length === 1) return paths[0];
@@ -702,7 +776,11 @@ function createReviews(options) {
     if (!review) return null;
     var paths = targetPathsOf(review);
     if (paths.length === 0) return null;
-    var key = paths.join("\n");
+    // THE PAGE IS PART OF THE CACHE KEY. A folder review resolves each poll to a
+    // different file, and there is one cache slot per review: without the page
+    // in the key, two pages of one folder polling inside the same window read
+    // each other's answer, and page two reloads for page one's edit.
+    var key = paths.join("\n") + "\n#page:" + (typeof pagePath === "string" ? pagePath : "");
     var cached = mtimeCache[reviewId];
     var now = clock();
     var selected = targetForPage(paths, pagePath);
@@ -714,15 +792,27 @@ function createReviews(options) {
     var byPath = Object.create(null);
     var newest = null;
     paths.forEach(function (target) {
-      var at = healer.consider({
-        path: target,
-        review: review.id,
-        token: review.token,
-        helperOrigin: helperOrigin(),
-        servedBy: function () {
-          return servedByStaticServer(review, target);
-        }
-      });
+      var at;
+      var folderPage = pageUnderFolder(target, pagePath);
+      if (folderPage) {
+        // STAT ONLY, NEVER HEAL. A folder review's pages have no script line on
+        // disk to repair: it goes into the response, put there by the server
+        // that serves the folder. Writing one here would put a review id and a
+        // live token into the reviewer's own working tree, in a file they never
+        // asked to enroll. Passing no review or token is what keeps heal.js to
+        // the stat (see its consider()).
+        at = healer.consider({ path: folderPage });
+      } else {
+        at = healer.consider({
+          path: target,
+          review: review.id,
+          token: review.token,
+          helperOrigin: helperOrigin(),
+          servedBy: function () {
+            return servedByStaticServer(review, target);
+          }
+        });
+      }
       byPath[target] = at;
       if (at && (!newest || at > newest)) newest = at;
     });
@@ -1198,6 +1288,7 @@ function createReviews(options) {
     list: list,
     registerOrigin: registerOrigin,
     recordPaths: recordPaths,
+    isolate: isolate,
     touch: touch,
     lastSeenAt: lastSeenAt,
     targetMtime: targetMtime,

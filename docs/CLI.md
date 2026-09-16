@@ -14,6 +14,8 @@ once, and after that a plain sentence works:
 | Command | What it does |
 | --- | --- |
 | `lahe review path/to/page.html` | Start a review and isolated agent session: starts or reuses its static server and the shared helper, then prints one URL plus the wake, monitor, drain, and close commands. It writes NOTHING into the page's folder: the server puts the script line into each response instead |
+| `lahe review path/to/folder` | A folder of HTML pages that is itself the document: serves the whole folder, mints ONE review for it, and opens `index.html` (else the first page in name order). The folder needs at least one `.html` file of its own; one with none is still the dev-server row |
+| `lahe review ... --only` | Keep this review to the page it was given. The default is the opposite: our server serves the page's whole folder and the rail follows the reviewer onto every HTML page in it, including pages added later, so a link or a typed filename never lands them somewhere they cannot comment. Use `--only` when that folder holds files nobody asked to review, a Downloads folder or a Desktop. It cannot be undone on a review afterwards. `lahe review` prints the served `root`, which is the line that tells you whether you want this |
 | `lahe review another.html --session <id>` | Add a later document to the same agent workstream without receiving another agent's comments |
 | `lahe add path/to/project --origin http://localhost:3000` | Dev-server variant: edits nothing, prints a commented snippet that you must wrap in your framework's development-only conditional |
 | `lahe add ... --new` | Mint a fresh review even though the page already carries one |

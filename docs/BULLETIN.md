@@ -214,7 +214,7 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
   guidance." Separate from how LAHE serves the folder (LAHE-static-site-folder);
   wanted regardless. The skill lives in `~/.claude/skills/magic-mirror`.
 
-- [ ] @anyone 2026-09-16 LAHE-static-site-folder -- **A folder of linked HTML pages
+- [x] @anyone 2026-09-16 LAHE-static-site-folder (done 2026-09-16: the rail follows the reviewer onto any page the session's static server serves; `--only` isolates one page; see docs/ongoing/STATIC_SITE_FOLDER.md) -- **A folder of linked HTML pages
   has no row of its own, so the rail does not follow the reviewer between pages.**
   Seen 2026-09-16 on a set of wireframe pages: `lahe review <dir>` takes the
   dev-server row (registers an origin, prints a script line to paste into a
