@@ -8,11 +8,8 @@ every step is a command you can run yourself.
 
 Your human reviews a locally running HTML page in their browser: they select
 passages and comment, and they edit text directly on the page. Every finished
-comment and edit becomes a durable record in a review folder on disk. You read
-one JSON file (`review.json`), make each requested change in the source, and
-answer by appending one JSON line to a reply file. Your answers appear on the
-page while they keep reviewing. There is no send button and no chat relay: the
-files are the whole interface.
+comment and edit becomes a durable record in a review folder on disk. Your
+answers appear on the page while they keep reviewing.
 
 When the LAHE skill is first invoked, the agent reports the exact model name its
 host exposes, or says the name is unavailable instead of guessing. It also
