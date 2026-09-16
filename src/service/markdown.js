@@ -232,14 +232,10 @@ function render(source, options) {
       var className = language ? " class=\"language-" + escapeHtml(language) + "\"" : "";
       return "<pre><code" + className + ">" + escapeHtml(token.text) + "</code></pre>\n";
     };
-  // document.css styles ul.dot and .scrollx, not a bare <ul> or <table>. The
-  // class goes on at the token level so nothing has to post-process the HTML
-  // hunting for tags, and the vendored stylesheet stays an untouched copy.
-  var defaultList = renderer.list;
-  renderer.list = function (token) {
-    var html = defaultList.call(this, token);
-    return token.ordered ? html : html.replace(/^<ul>/, "<ul class=\"dot\">");
-  };
+  // document.css styles a bare <ul> and a bare <ol> on its own, so marked's
+  // lists need no class from here. A bare <table> is the one thing it does not
+  // wrap for horizontal scroll, so .scrollx is still written, at the token
+  // level, so nothing has to post-process the HTML hunting for tags.
   var defaultTable = renderer.table;
   renderer.table = function (token) {
     return "<div class=\"scrollx\">" + defaultTable.call(this, token) + "</div>\n";
@@ -253,7 +249,7 @@ function render(source, options) {
   var title = titleFrom(resolved, parts.body);
   var lede = parseChunk(parser, page.lede, lexed.links);
   var blocks = [
-    "<div class=\"wrap hero\">",
+    "<div class=\"hero\">",
     "<h1>" + (page.heading ? parser.parseInline(page.heading.tokens) : escapeHtml(title)) + "</h1>",
     lede,
     "</div>"

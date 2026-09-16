@@ -66,7 +66,7 @@ test("a rendered section carries document.css's hanging rule", async ({ page }) 
 
   try {
     await page.goto(server.origin + "/" + path.basename(artifact.target));
-    await expect(page.locator("div.wrap.hero h1")).toHaveText("Replay branches");
+    await expect(page.locator("div.hero h1")).toHaveText("Replay branches");
     await expect(page.locator("section.sheet")).toHaveCount(1);
     await expect(page.locator("section.sheet .sheet-head .n")).toHaveText("Section 1");
     // --divider is 2px solid ink, and it is the only border on the head.
