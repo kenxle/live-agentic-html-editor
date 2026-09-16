@@ -17,6 +17,7 @@ This is the one progress page for all of the memory, CPU, and token work. The me
 | 7. Trim the agent playbook (AGENTS.md, 14,000 tokens per session start) | Not started. Needs a go |
 | 8. The instructions tell agents to read the summary file once, not every wake | Not started. One line in the frozen contract text; needs a go |
 | 9. The rail follows the reviewer through a folder of pages | Merged, live (not a performance item, but it shipped in the same batch) |
+| 10. A page load or status call on a big review still reads its whole log once | Not started. Same fix as 2, at the read route; follow-on once 2 lands |
 
 ## Short answer
 
