@@ -426,6 +426,71 @@ test("a reply appended to a review with no page polling is folded and lands in r
 });
 
 // ---------------------------------------------------------------------------
+// The same proof, through the real path
+// ---------------------------------------------------------------------------
+//
+// Everything above folds arrays that were already parsed, so it proves the FOLD
+// resumes and says nothing about the CURSOR. The cursor is where the sharp
+// edges are: bytes arrive in whatever sizes the filesystem hands over, a chunk
+// boundary lands in the middle of a line as a matter of course, and a torn line
+// has to be held rather than half-parsed. So this one writes a real fixture into
+// a real state directory in byte chunks that cut wherever they land, ticks the
+// projector after each write, and compares the bytes of review.json with what
+// regenerate writes from the top for the same partial file.
+
+function stripGeneratedAt(text) {
+  return text.replace(/"generated_at": "[^"]*"/, '"generated_at": "pinned"');
+}
+
+/** What a from-the-top rebuild writes for the same bytes, in its own directory. */
+function regeneratedBytes(sourcePath, reviewId) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-regen-"));
+  stateDir.ensureReviewDir(dir, reviewId);
+  fs.copyFileSync(sourcePath, stateDir.eventsPath(dir, reviewId));
+  const log = logModule.createEventLog({ dir: dir });
+  projection.regenerate({ dir: dir, log: log, review: reviewId });
+  return stripGeneratedAt(fs.readFileSync(stateDir.reviewJsonPath(dir, reviewId), "utf8"));
+}
+
+["r28b63eabad87.events.jsonl", "r0fce850a67da.events.jsonl", "ra34b8e0e4d5a.events.jsonl"].forEach((file) => {
+  test("written in byte chunks that cut mid-line, " + file + " still lands on the full rebuild's bytes", () => {
+    const raw = fs.readFileSync(path.join(FIXTURE_DIR, file));
+    const reviewId = reviewIdOf(file);
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-chunks-"));
+    stateDir.ensureReviewDir(dir, reviewId);
+    const eventsPath = stateDir.eventsPath(dir, reviewId);
+    fs.writeFileSync(eventsPath, "", { mode: 0o600 });
+
+    const log = logModule.createEventLog({ dir: dir });
+    const projector = projection.createProjector({ dir: dir, log: log });
+    projector.watch(reviewId);
+
+    const next = rng(11);
+    // Big enough to get through a multi-megabyte fixture in a dozen or so
+    // writes, small enough that most of them land inside a line.
+    const biggestChunk = Math.max(1, Math.ceil(raw.length / 8));
+    let at = 0;
+    let torn = 0;
+    while (at < raw.length) {
+      const size = 1 + Math.floor(next() * biggestChunk);
+      const chunk = raw.slice(at, at + size);
+      fs.appendFileSync(eventsPath, chunk);
+      at += chunk.length;
+      if (at < raw.length && raw[at - 1] !== 0x0a) torn += 1;
+
+      projector.tickReview(reviewId);
+      assert.equal(
+        stripGeneratedAt(fs.readFileSync(stateDir.reviewJsonPath(dir, reviewId), "utf8")),
+        regeneratedBytes(eventsPath, reviewId),
+        file + ": after " + at + " of " + raw.length + " bytes"
+      );
+    }
+    assert.equal(torn > 0, true, "at least one write really did stop in the middle of a line");
+    projector.stop();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // The fixtures are real in shape
 // ---------------------------------------------------------------------------
 //
