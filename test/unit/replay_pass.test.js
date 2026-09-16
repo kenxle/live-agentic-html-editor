@@ -1035,3 +1035,42 @@ test("an edit whose stamp points at different words is still refused", () => {
   assert.equal(page.blocks[1].textContent, "Words nobody in this record has ever seen.");
   assert.ok(anchoredItem.region.lost, "the record says so, and the agent is told");
 });
+
+// ---------------------------------------------------------------------------
+// What a pass lets go of (the 2026-09-16 memory audit, retention issue 3)
+// ---------------------------------------------------------------------------
+//
+// The element memory is a module-level map, so it outlives every pass and every
+// remount. What it must not outlive is the record it is about, or the document
+// the node came from.
+
+test("a record that leaves the review takes its element memory with it", () => {
+  const item = fixtures.edit();
+  const page = pageOf(["Before it.", item.before, "After it."]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+
+  runOne(anchoredItem, page.root);
+  assert.ok(replay.boundIds().indexOf(item.id) !== -1, "the pass bound the record to its block");
+
+  // The reviewer took it back: an undo, a delete, or "take the page's" on a
+  // collision. The record is gone from the review, so there is nothing left for
+  // the node to be the node OF.
+  replay.runPass(replay.REASON.MUTATION, { root: page.root, items: [], cards: fakeCards() });
+  assert.equal(replay.boundIds().indexOf(item.id), -1, "and the node is not held after it");
+});
+
+test("a node the page rebuilt is let go, so no dead document tree hangs off the map", () => {
+  const item = fixtures.edit();
+  const page = pageOf(["Before it.", item.before, "After it."]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+
+  runOne(anchoredItem, page.root);
+  assert.ok(replay.boundIds().indexOf(item.id) !== -1);
+
+  // What a repaint does to the node it replaces. Every read of the memory
+  // already refuses a detached node, so letting it go frees the tree and
+  // answers nothing differently.
+  page.blocks[1].isConnected = false;
+  replay.runPass(replay.REASON.MUTATION, { root: page.root, items: [anchoredItem], cards: fakeCards() });
+  assert.equal(replay.boundIds().indexOf(item.id), -1, "the detached node is not kept");
+});

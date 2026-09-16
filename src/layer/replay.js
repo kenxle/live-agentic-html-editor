@@ -521,10 +521,50 @@
     }
 
     lastSummary = summary;
+    releaseRetired(ctx);
     // Finding 9: run any pass a colliding repaint owed but that the observer
     // could only remember while replay's own write epoch was open.
     scheduleOwedPass();
     return summary;
+  }
+
+  /**
+   * What this pass no longer has any use for.
+   *
+   * The element memory below is module-level, so it outlives every pass and
+   * every remount. Two things end an entry, and neither of them used to
+   * (the 2026-09-16 memory audit):
+   *
+   *   THE RECORD IS GONE from the review. The reviewer undid it, deleted it, or
+   *   answered a collision with "take the page's". There is nothing left for the
+   *   node to be the node OF, and the collision's card node goes with it.
+   *
+   *   THE NODE IS OUT OF THE DOCUMENT, which is what a repaint does to every
+   *   node it replaces. A detached node holds its parents, so one kept entry
+   *   keeps a whole dead document tree. Every read of the memory already refuses
+   *   a detached node (see locate, applyRecord's still-bound rule), so letting
+   *   it go frees the tree and answers nothing differently. The live node is put
+   *   back by the next pass that binds the record.
+   *
+   * A HANDLED RECORD KEEPS ITS ENTRY while its node is live. It is still in the
+   * review, and `locate` is the Done card's click-to-find: a handled item has no
+   * highlight left to scroll to (R37), so its binding is the only thing that
+   * knows where its passage is.
+   */
+  function releaseRetired(ctx) {
+    var live = Object.create(null);
+    itemsIn(ctx).forEach(function (item) {
+      live[item[record.FIELD.ID]] = true;
+    });
+    Object.keys(lastElement).forEach(function (id) {
+      var element = lastElement[id];
+      if (!live[id] || !element || element.isConnected === false) delete lastElement[id];
+    });
+    Object.keys(conflictNodes).forEach(function (id) {
+      if (live[id]) return;
+      delete conflicts[id];
+      dropConflictNode(id);
+    });
   }
 
   var lastSummary = null;
@@ -1374,9 +1414,17 @@
     clearConflict(ctx, id);
   }
 
-  // A conflict that resolved: the node stays where it is (removing it from a
-  // card the reviewer may be in is the churn this file refuses), and it is
-  // emptied and hidden.
+  // A conflict that resolved: the node comes off the card and out of the map.
+  //
+  // It used to be emptied and hidden and then kept, which reads as the churn
+  // rule (a card the reviewer is in must not be rebuilt underneath them) and is
+  // not: nothing is rebuilt here, a warning nobody is being shown any more is
+  // taken away. What the keeping cost was one detached-but-attached node per
+  // item that ever collided, held for the life of the page in the map and in the
+  // card (the 2026-09-16 memory audit). The next collision on the same record
+  // builds a fresh node, which is what makes the removal safe: see
+  // conflictNodeFor, and the stylesheet that rides in with it, which notices it
+  // left the document and comes back with the new node.
   function clearConflict(ctx, id) {
     // A DISPLACED conflict is not cleared by an ordinary pass. It was raised
     // from something the page tried to say and protection took back off, so the
@@ -1387,14 +1435,25 @@
     if (conflicts[id] && conflicts[id].displaced) return;
     if (conflicts[id]) delete conflicts[id];
     callCard(ctx, "clearCardBadge", id, "REPLAY_NEITHER_MATCHES");
+    dropConflictNode(id);
+  }
+
+  /**
+   * Take one collision's node off the card and out of the map.
+   *
+   * Hidden first, so a browser that is mid-anything with it stops drawing it
+   * before it moves, and then removed. Both words are cheap and the order is the
+   * one the toast stack uses.
+   */
+  function dropConflictNode(id) {
     var node = conflictNodes[id];
-    if (!node) return;
-    if (node.firstChild) node.firstChild.textContent = "";
-    var yours = textIn(node, "yours");
-    var theirs = textIn(node, "theirs");
-    if (yours) yours.textContent = "";
-    if (theirs) theirs.textContent = "";
-    node.setAttribute("hidden", "hidden");
+    if (!node) return false;
+    delete conflictNodes[id];
+    if (typeof node.setAttribute === "function") node.setAttribute("hidden", "hidden");
+    if (node.parentNode && typeof node.parentNode.removeChild === "function") {
+      node.parentNode.removeChild(node);
+    }
+    return true;
   }
 
   /** What the reviewer's card is showing as a collision right now. */
@@ -2294,6 +2353,12 @@
     // events; see the createdOn note in comments.js.
     bindElement: function (id, element) {
       if (id && element && element.nodeType === 1) lastElement[id] = element;
+    },
+    // Which records this file is holding a node for. Read-only, and for the
+    // retention tests: the map is module-level, so "it let go of that one" is
+    // otherwise unobservable from outside.
+    boundIds: function () {
+      return Object.keys(lastElement);
     },
     locate: locate,
     schedule: schedule,

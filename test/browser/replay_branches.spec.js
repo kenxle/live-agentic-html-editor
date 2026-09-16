@@ -164,6 +164,49 @@ test.describe("replay: the four branches", () => {
     expect(card.conflict.hidden).toBe(false);
   });
 
+  // The 2026-09-16 memory audit, retention issue 4: the conflict card used to be
+  // emptied and hidden and then kept, in the map and in the card, for the life
+  // of the page. A hidden node is invisible and is still a node; every item that
+  // ever collided left one behind.
+  test("a collision that resolves takes its card off the page, and a later one builds a new one", async ({
+    page
+  }) => {
+    const landed = await page.evaluate(() => {
+      const item = window.__laheReplay.itemFor("#region-c");
+      const theirs = window.__laheReplay.rewrite("#region-c", item.before + " The agent rewrote this.");
+      window.__laheReplay.pass("manual");
+      return { theirs: theirs, card: window.__laheReplay.card("#region-c") };
+    });
+    expect(landed.card.conflict, "the collision is on the card").not.toBeNull();
+    expect(landed.card.conflict.theirs).toBe(landed.theirs);
+
+    // The collision answers itself: the page says what the record says, so the
+    // next pass reads it as already applied and clears the warning.
+    const cleared = await page.evaluate(() => {
+      const item = window.__laheReplay.itemFor("#region-c");
+      window.__laheReplay.rewrite("#region-c", item.after);
+      window.__laheReplay.pass("manual");
+      return {
+        card: window.__laheReplay.card("#region-c"),
+        flagged: window.LAHE.replay.conflictIds()
+      };
+    });
+    expect(cleared.flagged).not.toContain(landed.card.id);
+    expect(cleared.card.conflict, "and the node goes with it, rather than sitting there hidden").toBeNull();
+
+    // And the card can say it again. The node is rebuilt on the next collision,
+    // which is what makes removing it safe.
+    const again = await page.evaluate(() => {
+      const item = window.__laheReplay.itemFor("#region-c");
+      const theirs = window.__laheReplay.rewrite("#region-c", item.before + " The agent rewrote this twice.");
+      window.__laheReplay.pass("manual");
+      return { theirs: theirs, card: window.__laheReplay.card("#region-c") };
+    });
+    expect(again.card.conflict, "a second collision draws a second card").not.toBeNull();
+    expect(again.card.conflict.theirs).toBe(again.theirs);
+    expect(again.card.conflict.hidden).toBe(false);
+  });
+
   test("a format-only record compares on structure, and a delete is idempotent by absence", async ({
     page
   }) => {
