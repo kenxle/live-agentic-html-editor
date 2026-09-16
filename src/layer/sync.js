@@ -1777,7 +1777,15 @@
         flushing = false;
         if (result.ok) {
           var accepted = (result.body && result.body.accepted) || [];
-          store.acknowledge(requireReview(), accepted);
+          // BOTH OF THESE ARE WRITES INTO BROWSER STORAGE, inside a promise
+          // chain with no catch of its own. A full storage throwing here is an
+          // unhandled rejection raised after `flushing` has already gone back to
+          // false, which leaves the reviewer with a client that looks idle and a
+          // console error nobody sees. Guarded, it is a chip on the rail and the
+          // events simply stay queued for the next flush.
+          failures.tolerateStorageQuota(function () {
+            store.acknowledge(requireReview(), accepted);
+          }, onFailure);
           // Finding 10: beside dropping the accepted events from the outbox,
           // stamp the item acknowledged when the helper named the event carrying
           // its current rev, so merge.js can let the store win at equal rev. The
@@ -1787,14 +1795,16 @@
             accepted.forEach(function (id) {
               acceptedIds[id] = true;
             });
-            events.forEach(function (ev) {
-              if (!acceptedIds[ev.event_id]) return;
-              var itemId = ev[protocol.EVENT_FIELD.ITEM];
-              var rev = ev[protocol.EVENT_FIELD.REV];
-              if (itemId && typeof rev === "number") {
-                store.markAcknowledged(requireReview(), itemId, rev);
-              }
-            });
+            failures.tolerateStorageQuota(function () {
+              events.forEach(function (ev) {
+                if (!acceptedIds[ev.event_id]) return;
+                var itemId = ev[protocol.EVENT_FIELD.ITEM];
+                var rev = ev[protocol.EVENT_FIELD.REV];
+                if (itemId && typeof rev === "number") {
+                  store.markAcknowledged(requireReview(), itemId, rev);
+                }
+              });
+            }, onFailure);
           }
           deliveredOnce = true;
           counters.acknowledged += accepted.length;

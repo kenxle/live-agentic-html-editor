@@ -25,12 +25,15 @@ const PAGE = { origin: "http://127.0.0.1:4000", path: "/plan", title: "Plan", se
 // works, which is what a real quota does: the bytes already stored are fine.
 function fullBacking() {
   const values = Object.create(null);
-  const state = { full: false };
+  // `refuseKey` is the sharper instrument: storage with room for one bucket and
+  // not the other, which is how the outbox gets to run ahead of the records.
+  const state = { full: false, refuseKey: null };
   return {
+    values: values,
     state: state,
     getItem: (key) => (Object.prototype.hasOwnProperty.call(values, key) ? values[key] : null),
     setItem: (key, value) => {
-      if (state.full) {
+      if (state.full || (state.refuseKey && key.indexOf(state.refuseKey) === 0)) {
         const err = new Error("The quota has been exceeded.");
         err.name = "QuotaExceededError";
         throw err;
@@ -226,6 +229,226 @@ test("a comment write that fails for any other reason is still loud", () => {
     throw new Error("the store is broken");
   };
   assert.throws(() => box.type("two"), /the store is broken/);
+});
+
+// ---------------------------------------------------------------------------
+// The outbox must never run ahead of the disk
+// ---------------------------------------------------------------------------
+//
+// The post and the durable write are two writes into the same full storage, and
+// swallowing the first while letting the second through is worse than throwing.
+// The helper takes the newer record, acknowledges it, and the browser stamps
+// that item acknowledged at that revision. On the next load merge.js's
+// SAME_REV_ACKED rule lets the store win at equal revision, so the STALE record
+// still on disk beats the newer one the reviewer typed. So a keystroke whose
+// record write was refused posts nothing; the next one that lands carries the
+// newest wording anyway.
+
+test("a comment keystroke whose write was refused does not post", (t) => {
+  // Wired the way src/layer/index.js wires it: the comment surface emits, and
+  // the listener is what hands the record to sync.
+  const backing = fullBacking();
+  const store = storeModule.createStore({ backing: backing });
+  const syncModule = require("../../src/layer/sync.js");
+  const sync = syncModule.createSync({
+    review: "review-ahead",
+    token: "t",
+    helperOrigin: "http://127.0.0.1:7817",
+    store: store,
+    document: null,
+    window: null,
+    fetch: null
+  });
+  t.after(() => sync.stop());
+  const comments = commentsModule.createComments({
+    store: store,
+    reviewId: "review-ahead",
+    document: null,
+    page: PAGE,
+    onFailure: () => {}
+  });
+  comments.onChange((item) => sync.recordItem(item));
+
+  const box = comments.openBox({ quote: "q" });
+  box.type("the last thing that fitted");
+  const queued = store.pendingEvents("review-ahead").length;
+  assert.ok(queued > 0, "an ordinary keystroke does post");
+
+  // Room for the outbox and none for the records. This is the state that makes
+  // the bug reachable: swallow the record write, let the post through, and the
+  // helper acknowledges a wording the disk does not have.
+  backing.state.refuseKey = storeModule.KEY_PREFIX;
+  box.type("no room for this");
+  backing.state.refuseKey = null;
+
+  const after = store.pendingEvents("review-ahead");
+  assert.equal(after.length, queued, "nothing was queued for the keystroke that was not saved");
+  after.forEach((event) => {
+    assert.notEqual(
+      event.record.note,
+      "no room for this",
+      "no event carries a wording the disk does not have"
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The edit surface, on the same rule
+// ---------------------------------------------------------------------------
+
+function fakeElement(text) {
+  const attrs = Object.create(null);
+  return {
+    nodeType: 1,
+    tagName: "P",
+    textContent: text,
+    innerHTML: text,
+    isConnected: true,
+    parentElement: null,
+    parentNode: null,
+    childNodes: [],
+    firstChild: null,
+    classList: { add() {}, remove() {}, contains: () => false },
+    style: {},
+    closest: () => null,
+    matches: () => false,
+    hasAttribute: (name) => Object.prototype.hasOwnProperty.call(attrs, name),
+    getAttribute: (name) => (Object.prototype.hasOwnProperty.call(attrs, name) ? attrs[name] : null),
+    setAttribute: (name, value) => {
+      attrs[name] = String(value);
+    },
+    removeAttribute: (name) => {
+      delete attrs[name];
+    },
+    addEventListener() {},
+    removeEventListener() {},
+    getBoundingClientRect: () => ({ top: 0, left: 0, width: 100, height: 20, bottom: 20, right: 100 }),
+    querySelectorAll: () => [],
+    contains: () => false,
+    focus() {}
+  };
+}
+
+// Enough document for the edit surface to mint a record and commit one. The
+// caret, the repaint and the real keystroke are browser tests; what is here is
+// the write path, which needs no page.
+function editHarness() {
+  const backing = fullBacking();
+  const store = storeModule.createStore({ backing: backing });
+  const posted = [];
+  const raised = [];
+  const doc = {
+    body: fakeElement(""),
+    documentElement: null,
+    createElement: () => fakeElement(""),
+    createRange: null,
+    querySelectorAll: () => [],
+    addEventListener() {},
+    removeEventListener() {},
+    getElementById: () => null
+  };
+  const editingModule = require("../../src/layer/editing.js");
+  const surface = editingModule.createEditing({
+    document: doc,
+    window: null,
+    reviewId: "review-edit-quota",
+    store: store,
+    sync: { recordItem: (item, options) => posted.push({ item: item, options: options }) },
+    onFailure: (failure) => raised.push(failure),
+    highlights: { ensureStylesheet() {}, surface: () => ({ root: null }), addSurfaceStyle() {} },
+    page: PAGE
+  });
+  return { backing, store, surface, posted, raised };
+}
+
+test("committing an edit when storage is full raises the failure and posts nothing", () => {
+  const { backing, store, surface, posted, raised } = editHarness();
+  const block = fakeElement("Warm up for ten minutes.");
+
+  assert.equal(surface.editBlock(block).open, true);
+  assert.equal(raised.length, 0);
+  const openedPosts = posted.length;
+  assert.ok(openedPosts > 0, "opening a block writes and posts a draft");
+
+  backing.state.full = true;
+  block.innerHTML = "Warm up for fifteen minutes.";
+  block.textContent = "Warm up for fifteen minutes.";
+
+  // DOES NOT THROW. Before this, a full storage came back out of the commit and
+  // in the real surface out of the input handler.
+  const committed = surface.commit({ reason: "commit" });
+  assert.equal(committed.after, "Warm up for fifteen minutes.", "the record the surface is holding is complete");
+  assert.ok(raised.length >= 1, "and the rail is told");
+  assert.equal(raised[0].code, "STORAGE_QUOTA");
+  assert.equal(posted.length, openedPosts, "nothing was posted for a record that did not land on disk");
+  assert.equal(
+    store.readItem("review-edit-quota", committed.id).after,
+    null,
+    "storage still says what it said before there was no room"
+  );
+});
+
+test("an edit surface write that fails for any other reason is still loud", () => {
+  const { store, surface } = editHarness();
+  const block = fakeElement("Warm up for ten minutes.");
+  surface.editBlock(block);
+  store.write = () => {
+    throw new Error("the store is broken");
+  };
+  block.innerHTML = "Warm up for fifteen minutes.";
+  block.textContent = "Warm up for fifteen minutes.";
+  assert.throws(() => surface.commit({ reason: "commit" }), /the store is broken/);
+});
+
+// ---------------------------------------------------------------------------
+// The flush's own writes
+// ---------------------------------------------------------------------------
+
+test("a helper answer that cannot be written down is a chip, not an unhandled rejection", async (t) => {
+  // flush drops the accepted events and stamps the item acknowledged, both
+  // writes into browser storage, both inside a promise chain with no catch. A
+  // throw there is an unhandled rejection after flushing has already been set
+  // back to false, which leaves the client wedged.
+  const backing = fullBacking();
+  const store = storeModule.createStore({ backing: backing });
+  const raised = [];
+  const syncModule = require("../../src/layer/sync.js");
+  const sync = syncModule.createSync({
+    review: "review-flush",
+    token: "t",
+    helperOrigin: "http://127.0.0.1:7817",
+    store: store,
+    document: null,
+    window: null,
+    onFailure: (failure) => raised.push(failure),
+    fetch: () => {
+      const accepted = store.pendingEvents("review-flush").map((event) => event.event_id);
+      backing.state.full = true;
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ accepted: accepted, seq: 1 })
+      });
+    }
+  });
+  t.after(() => sync.stop());
+
+  const item = record.newItem({
+    kind: record.KIND.COMMENT,
+    state: record.STATE.READY,
+    note: "a note",
+    page_origin: PAGE.origin,
+    page_path: PAGE.path
+  });
+  sync.recordItem(item, { immediate: "ready" });
+
+  const result = await sync.flush();
+  assert.ok(result, "the flush settled rather than rejecting");
+  assert.deepEqual(
+    raised.map((failure) => failure.code),
+    ["STORAGE_QUOTA"],
+    "and what went wrong is on the rail"
+  );
 });
 
 // ---------------------------------------------------------------------------

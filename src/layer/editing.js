@@ -579,15 +579,23 @@
 
     // The one write path. Storage first, synchronously, then everyone else.
     function persist(item, event, immediate) {
-      durably(function () {
+      var refused = durably(function () {
         store.write(requireReview(), item);
       });
       durably(function () {
         emit(item, event);
       });
-      if (sync && typeof sync.recordItem === "function") {
-        // The post queues into the same browser storage the write above may
-        // have just been refused by, so it is guarded the same way.
+      // THE POST ONLY EVER FOLLOWS A WRITE THAT LANDED.
+      //
+      // Posting a record the disk does not have is worse than not posting at
+      // all. The helper takes it, acknowledges it, and sync stamps that item
+      // acknowledged at that revision; on the next load merge.js's
+      // SAME_REV_ACKED rule lets the store win at equal revision, so the STALE
+      // record still on disk beats the newer one the reviewer typed. Nothing is
+      // lost by waiting: the next keystroke that does land carries the newest
+      // wording, and the surface has been holding it all along.
+      if (!refused && sync && typeof sync.recordItem === "function") {
+        // The queue is a write into the same storage, so it is guarded too.
         durably(function () {
           sync.recordItem(item, immediate ? { immediate: immediate } : undefined);
         });

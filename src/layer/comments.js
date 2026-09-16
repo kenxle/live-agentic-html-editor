@@ -1000,9 +1000,20 @@
     // so the bridge lives in index.js rather than here.
     var createdOn = Object.create(null);
 
+    // EACH LISTENER IS GUARDED ON ITS OWN. index.js's listener is the one that
+    // posts the record, into the same browser storage everything else here
+    // writes to, and a quota failure swallowed around the whole loop would skip
+    // every listener registered after it (the Active tab's, among others). One
+    // listener that cannot write is not the rest of the rail going quiet.
     function emit(item, event) {
       var el = createdOn[item && item[record.FIELD.ID]] || null;
-      for (var i = 0; i < listenersState.length; i += 1) listenersState[i](item, event || "changed", el);
+      for (var i = 0; i < listenersState.length; i += 1) {
+        (function (listener) {
+          durably(function () {
+            listener(item, event || "changed", el);
+          });
+        })(listenersState[i]);
+      }
     }
 
     /**
@@ -1022,15 +1033,17 @@
 
     // The one write path. Synchronous to storage before anything else happens.
     function persist(item, event) {
-      durably(function () {
+      var refused = durably(function () {
         store.write(requireReview(), item);
       });
-      // Emitted even when the write was refused: index.js posts through this,
-      // and the post is into the same full storage, so it is guarded the same
-      // way rather than left to throw from inside a listener.
-      durably(function () {
-        emit(item, event);
-      });
+      // NOTHING IS EMITTED FOR A RECORD THE DISK DOES NOT HAVE. index.js posts
+      // from inside this listener chain, and posting a record that was not saved
+      // is how the helper comes to acknowledge a wording the browser will not
+      // have on the next load: sync stamps the item acknowledged at that
+      // revision and merge.js's SAME_REV_ACKED rule then lets the stale record
+      // win. The rail also stays in step with what is actually stored. The next
+      // keystroke that lands carries the newest wording anyway.
+      if (!refused) emit(item, event);
       return item;
     }
 
@@ -1693,7 +1706,7 @@
         // THE KEYSTROKE PATH. A full browser storage used to throw from here,
         // straight out of the textarea's input handler, and the box stopped
         // taking keystrokes with nothing on screen to say why.
-        durably(function () {
+        var refused = durably(function () {
           store.write(requireReview(), next);
         });
         writeInput(next[record.FIELD.NOTE]);
@@ -1702,11 +1715,10 @@
         paintSendable();
         grow();
         paintState(next);
-        // index.js posts the record from inside this listener, into the same
-        // browser storage that may have just refused the write above.
-        durably(function () {
-          emit(next, "typed");
-        });
+        // Same rule as persist: a keystroke the disk refused posts nothing, so
+        // the helper never acknowledges a wording this browser will not have on
+        // the next load. The box keeps the words either way.
+        if (!refused) emit(next, "typed");
         return next;
       }
 
