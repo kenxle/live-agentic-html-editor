@@ -149,40 +149,13 @@ For the dev-server row, delete the line you pasted. Nobody else will.
 
 ## Step 1: install (once per machine)
 
-Requires Node 18+ (`node --version`). There is no install step: the tool has no
-runtime dependencies, and the two Markdown packages it uses are vendored under
-`vendor/`. The documented `install-cli` wrapper is for macOS and Linux POSIX
-shells; on Windows, run `node bin/lahe.js` from the clone directly, or use WSL.
-
-```sh
-git clone https://github.com/kenxle/live-agentic-html-editor
-cd live-agentic-html-editor
-npm run install-cli
-lahe --help || echo "not on PATH"
-```
-
-`install-cli` writes `~/.local/bin/lahe`, a two-line wrapper naming the absolute
-path of the Node that ran it and of this clone, so it keeps working whatever is
-on PATH. Use it rather than `npm link`: under nvm, `npm link` puts the command in
-that Node version's own bin directory, which is on PATH only while that version
-is selected, so the install looks like it worked and then `lahe` is not found.
-The verification line above is worth running; if `~/.local/bin` is not on PATH,
-`install-cli` prints the `export` line to add.
-
-The same command installs this repository's canonical `skills/lahe/SKILL.md`
-to `~/.agents/skills/lahe/SKILL.md` for Codex and Gemini CLI, and to
-`~/.claude/skills/lahe/SKILL.md` for Claude Code. Codex and Gemini both discover
-the shared location, so do not create redundant `.codex` or `.gemini` copies.
-Never edit either installed projection as the source of truth. Update the
-repository skill, then rerun `npm run install-cli` or `npm run install-skills`
-to refresh them.
-
-Keep discovery and the first safe commands in the canonical skill. Keep the
-complete operating contract here. Do not fork these instructions by agent:
-Claude, Codex, and Gemini use the same CLI and file protocol after discovery.
-
-`npm link` is an alternative, and `node bin/lahe.js ...` from the clone always
-works with nothing installed at all.
+Install is its own page: `docs/INSTALL.md`. Read it once when setting up a
+machine, not on every session. The short version: Node 18 or newer, `git clone`,
+`npm run install-cli`, then `lahe --help`. There is no dependency install. The
+same command installs the lahe skill for Claude Code, Codex, and Gemini; the
+repository copy under `skills/` is the source of truth, and the installed copies
+are refreshed by rerunning it. Do not fork these instructions by agent: every
+host uses the same CLI and file protocol after discovery.
 
 ## Step 2: start a review on the page your human wants to look at
 
