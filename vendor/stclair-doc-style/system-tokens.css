@@ -1,10 +1,16 @@
 /*
   System tokens, Ken St. Clair
-  SOURCE OF TRUTH for every surface: web, documents, presentations.
+  SOURCE OF TRUTH for documents: this file is what document.css and day-page.css
+  read, and a paid style is a replacement for this file rather than a rewrite of
+  the surface files.
 
-  Each surface imports this file and adds only its own rules. Do not redefine a
-  token below in a surface stylesheet. If a surface needs a value this file does
-  not have, add it here so the other surfaces can see it.
+  Scope. This is the document system. The web surface keeps its own values (its
+  column is narrower and its spacing scale is its own) and shares only the
+  palette and the fonts with this file. The presentation surface vendors a copy.
+  Neither one is a consumer that constrains a change here.
+
+  Do not redefine a token below in a surface stylesheet. If a surface needs a
+  value this file does not have, add it here so the other surfaces can see it.
 
   Token names are stable. Renaming one breaks every surface that imports it, and
   at least one surface vendors a copy rather than importing across repos (the
@@ -22,10 +28,10 @@
   including this header, nobody edits it locally, and any new shared role comes
   back here as a request rather than being defined in the copy.
 
-  Consumers:
-    lib/templates/document.css                      documents, briefs, one-pagers
-    projects/agent_storefront/site/index.html        the web surface (inline today)
-    columbia .../templates/deck-system/themes/       presentations (vendored copy)
+  Two layers. The raw names (--ink, --s5, --cobalt) are the palette and the
+  scale. The semantic roles below them (--on-surface, --gutter, --text-body) are
+  what a surface file and an agent reach for, because a role survives a restyle
+  and a raw name does not.
 */
 
 :root{
@@ -113,4 +119,39 @@
 
   --maxw:1080px;
   --read:68ch;
+
+  /* ---------- semantic roles ----------
+     What a surface file writes. Each one points at a raw token above, so a new
+     style repoints these rather than editing document.css. */
+
+  /* Colour by job, not by name. */
+  --surface:var(--white);            /* the page ground */
+  --on-surface:var(--ink);           /* body text on it */
+  --on-surface-soft:var(--ink-soft); /* secondary copy */
+  --on-surface-faint:var(--ink-faint); /* meta, captions, section numbers */
+  --accent:var(--cobalt);            /* the one accent a document uses */
+  --structure:var(--ink);            /* heavy structural marks: dividers, filled pills */
+  --border:var(--rule);              /* hairline colour */
+  --focus:var(--link);               /* the focus ring */
+
+  /* Spacing by purpose. The numeric scale above still exists; these name the
+     three distances a document actually keeps repeating. */
+  --gutter:var(--s5);                /* the column's side inset */
+  --section-gap:var(--s7);           /* between sections */
+  --section-gap-narrow:var(--s6);    /* the same gap on a narrow screen */
+  --block-gap:var(--s4);             /* between stacked blocks inside a section */
+
+  /* Type scale. Taken from the M5 tearsheet's actual sizes, not invented.
+     There is no 16px: lists, tables and the facts explanations sit at body
+     size like everything else. */
+  --text-h1:clamp(34px,4.6vw,52px);
+  --text-h2:clamp(25px,3vw,34px);
+  --text-h3:clamp(19px,2vw,23px);
+  --text-h4:18px;
+  --text-figure:23px;                /* the number in a facts grid */
+  --text-lede:20px;
+  --text-body:17px;
+  --text-small:15px;                 /* .small, code, the section number */
+  --text-meta:14px;                  /* table heads, captions, meta lines */
+  --text-micro:12px;                 /* chips, labels, month-grid events */
 }

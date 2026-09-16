@@ -162,3 +162,47 @@ Not touched: `src/shared/manifest.js` (nothing new under `src/`),
   The browser lane gained the two checks only a browser can answer: that
   `document.css`'s hanging rule lands on a rendered section head, and that a
   Mermaid node is filled with cobalt-tint rather than the stock lavender.
+
+- 2026-09-16, later: the style system rebuild landed in the personal repo, and
+  this repo took it whole. Spec:
+  `docs/features/20260916.01_doc_style_refresh/01_spec_doc_style_refresh.md`.
+
+  The rebuilt `document.css` styles BARE elements, and declares the column once
+  as a rule about the page: every direct child of the body gets `--maxw` and
+  `--gutter`. So the two halves swapped jobs. `main` is a body child, so the
+  base now gives the page its 1080px column and its 28px inset, and the hero
+  and the sections sit inside it rather than each carrying a column of their
+  own. A class-free `ul` gets the sage dot, a class-free `ol` gets the drawn
+  numeral, and the headings, tables, blockquotes and images all have a house
+  look with no class needed.
+
+  `lahe-markdown.css` dropped everything the base now does: the column, every
+  font size, the heading margins, the list look, the table look, the blockquote
+  look, the image radius, the `hr`. What is left is the faces, `color-scheme`,
+  ligatures off in code, the Mermaid block, LAHE's own furniture, the task-list
+  opt-out, the paragraph gap inside a list item, and the nested-list margin.
+
+  Two look changes are decisions, not fallout: a table is the base's naked
+  ruled table rather than the boxed cobalt-header one, and a blockquote is the
+  base's hairline quote rather than a sage tint. Both are the guide's defaults.
+
+  The renderer stopped writing classes: `class="dot"` now opts a list OUT of
+  the house look, and `.wrap` was a column the hero no longer needs, so the
+  hero is `<div class="hero">`. `.scrollx` stays, because the base does not
+  wrap a bare table for horizontal scroll.
+
+  Measured in Chromium at 1280px, on a document served through `lahe review`:
+  `main` 1080 wide with a 28px inset, the hero and all three sections 1024 wide
+  inside it, the hanging rule 2px solid ink on every section head, a section
+  paragraph at 647px (the 68-character measure), the bullet marker a 7px sage
+  dot, no dot on a task item, the image clamped to the measure, and no page
+  overflow. A document with no H1 and one with no H2 measure the same.
+
+  One bug found by measuring: marked renders a loose task list (blank lines
+  between items) with the checkbox inside a paragraph, so an opt-out that only
+  names `li > input` leaves that item wearing a dot and a checkbox at once. The
+  selector names both shapes now, and a browser test pins it.
+
+  Open question for Ken: a Markdown image is always wrapped in a paragraph, and
+  the base gives prose the reading measure, so an image renders at 647px rather
+  than the full 1024px column. That is the base's behaviour, not this repo's.

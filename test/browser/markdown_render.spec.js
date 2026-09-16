@@ -66,12 +66,76 @@ test("a rendered section carries document.css's hanging rule", async ({ page }) 
 
   try {
     await page.goto(server.origin + "/" + path.basename(artifact.target));
-    await expect(page.locator("div.wrap.hero h1")).toHaveText("Replay branches");
+    await expect(page.locator("div.hero h1")).toHaveText("Replay branches");
     await expect(page.locator("section.sheet")).toHaveCount(1);
     await expect(page.locator("section.sheet .sheet-head .n")).toHaveText("Section 1");
     // --divider is 2px solid ink, and it is the only border on the head.
     await expect(page.locator("section.sheet .sheet-head"))
       .toHaveCSS("border-top", "2px solid rgb(31, 30, 26)");
+  } finally {
+    await server.close();
+  }
+});
+
+// The page column and the list looks now come from document.css, which styles
+// bare elements. Two things only a browser can answer: that a class-free list
+// gets the sage dot, and that a task list does not, in both shapes marked
+// emits. A loose task item (blank lines between items) puts the checkbox
+// inside a paragraph, and the first pass at this missed it, so the item wore a
+// dot and a checkbox at once.
+test("a bare list takes the dot, a task list takes the checkbox, and the page sits in one column", async ({ page }) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-markdown-lists-"));
+  const state = path.join(root, "state");
+  const source = path.join(root, "LISTS.md");
+  fs.writeFileSync(source, [
+    "# Lists",
+    "",
+    "A lede.",
+    "",
+    "## Items",
+    "",
+    "- a bare bullet",
+    "",
+    "- [ ] a tight task",
+    "- [x] a tight done task",
+    "",
+    "Prose between the two lists.",
+    "",
+    "- [ ] a loose task",
+    "",
+    "- [x] a loose done task"
+  ].join("\n"));
+  const artifact = markdown.writeArtifact(state, "s_lists", source);
+  const server = await startStaticServer({ root: path.dirname(artifact.target), label: "markdown-lists" });
+
+  try {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto(server.origin + "/" + path.basename(artifact.target));
+
+    const measured = await page.evaluate(() => {
+      const bullet = document.querySelector("main ul:not([class]) li");
+      const tasks = Array.from(document.querySelectorAll("main li"))
+        .filter((li) => li.querySelector("input[type=checkbox]"))
+        .map((li) => getComputedStyle(li, "::before").content);
+      return {
+        bulletMarker: getComputedStyle(bullet, "::before").width,
+        bulletFill: getComputedStyle(bullet, "::before").backgroundColor,
+        taskMarkers: tasks,
+        mainWidth: Math.round(document.querySelector("main").getBoundingClientRect().width),
+        mainPad: getComputedStyle(document.querySelector("main")).paddingLeft,
+        overflow: document.documentElement.scrollWidth
+      };
+    });
+
+    expect(measured.bulletMarker).toBe("7px");
+    expect(measured.bulletFill).toBe("rgb(99, 122, 99)");
+    expect(measured.taskMarkers.length).toBe(4);
+    expect(measured.taskMarkers.every((value) => value === "none")).toBe(true);
+    // --maxw is 1080 and --gutter is 28, declared once, by the page rule in
+    // document.css. A second column anywhere would show up here.
+    expect(measured.mainWidth).toBe(1080);
+    expect(measured.mainPad).toBe("28px");
+    expect(measured.overflow).toBe(1280);
   } finally {
     await server.close();
   }
