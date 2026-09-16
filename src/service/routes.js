@@ -204,6 +204,17 @@ var HANDLERS = {
       recordedPaths = true;
     }
 
+    // `--only`, applied in the narrowing direction and no other. A caller may
+    // limit a review to the pages it recorded; nothing here can widen one back
+    // out. This route is reachable with the per-review token, which any script
+    // on an allowed page can read off the script tag, so "make this review
+    // answer for more pages" is precisely the request it must not grant. Same
+    // reasoning as the narrower origin rule above.
+    var isolated = false;
+    if (body.only_recorded_pages === true && typeof deps.reviews.isolate === "function") {
+      isolated = deps.reviews.isolate(request.review);
+    }
+
     // The source hint rides a page.visited event, the one event in the closed
     // vocabulary that carries page facts, so the projector puts it on that
     // page's group header. The event is minted HERE: the helper owns the log.
@@ -228,6 +239,7 @@ var HANDLERS = {
         origins: applied,
         recorded_source: recordedSource,
         recorded_paths: recordedPaths,
+        only_recorded_pages: isolated,
         seq: deps.log.currentSeq(request.review)
       }
     };

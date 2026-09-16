@@ -230,6 +230,16 @@ async function run(argv) {
             : "  (the page's own folder, which is everything this server can serve)") +
           "\n"
       );
+      if (opts.only) {
+        process.stdout.write(
+          "  scope     only this page. Other pages under that root are served without the rail\n"
+        );
+      } else if (served === "file") {
+        process.stdout.write(
+          "  scope     the rail follows links onto any page under that root.\n" +
+          "            Rerun with --only to keep this review to the one page.\n"
+        );
+      }
     }
     if (rendered) {
       process.stdout.write(

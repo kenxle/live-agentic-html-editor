@@ -221,9 +221,13 @@
         "Its origins are DELIBERATELY NARROWER than what `add` may write to disk: only \"null\" and loopback " +
         "http/https pass (isRegisterableOrigin), capped at ORIGIN_LIMIT per review. A body-supplied origin is the " +
         "one way a script on an allowed page could widen the allowlist with a token it read off the script tag, " +
-        "which would leave the token as the only factor guarding the review",
-      request: "{review, origins: [origin...], target_path?, source_path?, source_hint?, page_path?}",
-      response: "{origins, recorded_source, recorded_paths, seq}"
+        "which would leave the token as the only factor guarding the review. " +
+        "only_recorded_pages is accepted as true and never as false, for the same reason: narrowing a review to " +
+        "the pages it recorded is the reviewer's `--only`, and widening one back out is what a leaked token would ask for",
+      request:
+        "{review, origins: [origin...], target_path?, source_path?, source_hint?, page_path?, " +
+        "only_recorded_pages?: true}",
+      response: "{origins, recorded_source, recorded_paths, only_recorded_pages, seq}"
     },
     {
       name: "review.read",

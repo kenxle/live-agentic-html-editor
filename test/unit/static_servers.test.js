@@ -146,7 +146,8 @@ function injectFixture(options) {
     id: opts.reviewId || "r_inject",
     origins: ["null"],
     target_path: opts.folderReview ? root : page,
-    agent_session_id: sessionId
+    agent_session_id: sessionId,
+    only_recorded_pages: !!opts.only
   });
   return {
     root: root,
@@ -382,26 +383,61 @@ test("a folder review puts its line on a page nobody recorded, and writes nothin
   );
 });
 
-// THE SECURITY CASE THIS SCOPING EXISTS FOR.
+// THE RAIL FOLLOWS THE REVIEWER, and that includes a single-page review.
 //
-// `lahe review ~/Desktop/x.html` roots a server at the Desktop. If a single-page
-// review answered for pages it never recorded, every other HTML file in that
-// folder would be served carrying a live review id and token, readable by any
-// script on the page. The reviewer asked for one page.
-test("a single-page review keeps to its own page and leaves the rest of the folder alone", async (t) => {
+// Ken, 2026-09-16: "if you can navigate to a page from where you currently are,
+// and you currently have the lahe editor, it should follow you across anything
+// you click on." A one-page review still serves that page's whole folder, so a
+// link to a sibling, or a sibling's name typed into the address bar, is
+// somewhere the reviewer can get to, and arriving there without a rail is
+// arriving somewhere they cannot say anything.
+//
+// The isolation case is real too, and it is the next test: an opt-in flag, not
+// the default, because the default is the one that matches what a reviewer
+// expects a review to do.
+test("a single-page review's folder follows the reviewer: a sibling carries the rail too", async (t) => {
   const f = injectFixture();
-  fs.writeFileSync(path.join(f.root, "taxes.html"), PAGE_WITHOUT_LINE);
+  fs.writeFileSync(path.join(f.root, "sibling.html"), PAGE_WITHOUT_LINE);
 
   const server = await staticServers.start({ dir: f.state, sessionId: f.sessionId, root: f.root });
   t.after(async () => { await staticServers.stopAll(f.state, f.sessionId); });
 
-  const neighbour = await request(server.meta, "/taxes.html");
+  const neighbour = await request(server.meta, "/sibling.html");
   assert.equal(neighbour.status, 200);
-  assert.equal(neighbour.body.indexOf("data-lahe-review"), -1, "no review id on a page nobody asked to review");
-  assert.equal(neighbour.body.indexOf(f.review.token), -1, "and no token either");
+  assert.equal(
+    scriptLine.reviewAlreadyInFile(neighbour.body),
+    f.review.id,
+    "a page reachable from the reviewed one carries the same review"
+  );
 
   const recorded = await request(server.meta, "/page.html");
-  assert.equal(scriptLine.reviewAlreadyInFile(recorded.body), f.review.id, "the page that WAS reviewed still gets it");
+  assert.equal(scriptLine.reviewAlreadyInFile(recorded.body), f.review.id, "and the page that was named still does");
+});
+
+// THE OPT-OUT, for the folder you did not choose.
+//
+// `lahe review ~/Downloads/statement.html` roots a server at Downloads, which
+// is full of files the reviewer never meant to open to anything. `--only`
+// records the review as isolated, and an isolated review is never used as the
+// answer for a page it did not record, so those files are served plain.
+test("an isolated review is never borrowed for a page it did not record", async (t) => {
+  const f = injectFixture({ only: true });
+  fs.writeFileSync(path.join(f.root, "statement.html"), PAGE_WITHOUT_LINE);
+
+  const server = await staticServers.start({ dir: f.state, sessionId: f.sessionId, root: f.root });
+  t.after(async () => { await staticServers.stopAll(f.state, f.sessionId); });
+
+  const neighbour = await request(server.meta, "/statement.html");
+  assert.equal(neighbour.status, 200);
+  assert.equal(neighbour.body.indexOf("data-lahe-review"), -1, "no review id on a file the reviewer never named");
+  assert.equal(neighbour.body.indexOf(f.review.token), -1, "and above all no token");
+
+  const recorded = await request(server.meta, "/page.html");
+  assert.equal(
+    scriptLine.reviewAlreadyInFile(recorded.body),
+    f.review.id,
+    "the page the review was opened on is unaffected: --only narrows the fallback, not the review"
+  );
 });
 
 test("a review of another agent session never answers, not even for a page it recorded", async (t) => {
@@ -420,7 +456,7 @@ test("a review of another agent session never answers, not even for a page it re
   assert.equal(res.body.indexOf(f.review.token), -1, "and above all not its token");
 });
 
-test("the newest folder review wins; another session's, a nested one, and another folder's never do", async (t) => {
+test("the newest review rooted here wins; another session's, a nested one, and another folder's never do", async (t) => {
   const f = injectFixture({ sessionId: "s_newest", reviewId: "r_oldest", folderReview: true });
   addReview(f, {
     id: "r_oldest",
@@ -443,18 +479,25 @@ test("the newest folder review wins; another session's, a nested one, and anothe
     targetPath: f.root,
     createdAt: "2026-09-17T00:00:00.000Z"
   });
-  // A NESTED review, newer than everything. `lahe review site/` then
-  // `lahe review site/sub/` are two separate documents that happen to be one
-  // inside the other. The inner one owns its own folder and nothing above it,
-  // or the newer, narrower review quietly takes over every page of the parent.
+  // TWO NESTED reviews, both newer than everything else. `lahe review site/`
+  // then `lahe review site/sub/`, and separately a page inside that subfolder.
+  // Each of those owns its own folder, which is where its own server is rooted;
+  // neither reaches up, or the newer and narrower review quietly takes over
+  // every page of the parent.
   const nested = path.join(f.root, "sub");
   fs.mkdirSync(nested, { recursive: true });
   fs.writeFileSync(path.join(nested, "deep.html"), PAGE_WITHOUT_LINE);
   addReview(f, {
-    id: "r_nested",
+    id: "r_nested_folder",
     sessionId: "s_newest",
     targetPath: nested,
     createdAt: "2026-09-19T00:00:00.000Z"
+  });
+  addReview(f, {
+    id: "r_nested_page",
+    sessionId: "s_newest",
+    targetPath: path.join(nested, "deep.html"),
+    createdAt: "2026-09-20T00:00:00.000Z"
   });
   // And a review of this same session whose pages live somewhere else entirely.
   const elsewhere = tempDir("lahe-static-elsewhere-");
@@ -474,14 +517,15 @@ test("the newest folder review wins; another session's, a nested one, and anothe
   assert.equal(
     scriptLine.reviewAlreadyInFile(res.body),
     "r_newest",
-    "the newest review of this session whose target IS this folder"
+    "the newest review of this session whose own server root IS this folder"
   );
 
-  // The page inside the nested folder belongs to the parent's server, which is
-  // the one answering here, so it rides the parent's review. The nested review
-  // has its own server and its own root; it does not reach up.
+  // `/sub/deep.html` IS a recorded target of r_nested_page, so that review
+  // answers for it: a recorded page always keeps its own review. What must not
+  // happen is either nested review answering for the parent's pages, which the
+  // line above is the assertion for.
   const deep = await request(server.meta, "/sub/deep.html");
-  assert.equal(scriptLine.reviewAlreadyInFile(deep.body), "r_newest");
+  assert.equal(scriptLine.reviewAlreadyInFile(deep.body), "r_nested_page");
 });
 
 test("a page recorded on its own keeps its own review while the folder review takes the rest", async (t) => {

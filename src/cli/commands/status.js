@@ -416,6 +416,15 @@ function targetPathsOfReview(dir, reviewId) {
   }
 }
 
+/** Was this review opened with `--only`? Read off meta.json, like its paths. */
+function isolatedReview(dir, reviewId) {
+  try {
+    return JSON.parse(fs.readFileSync(stateDirModule.metaPath(dir, reviewId), "utf8")).only_recorded_pages === true;
+  } catch (err) {
+    return false;
+  }
+}
+
 async function readThroughHelper(fetchImpl, origin, reviewId, credentials) {
   var target = origin + protocol.route("review.read").path + "?review=" + encodeURIComponent(reviewId);
   var headers = {};
@@ -659,7 +668,8 @@ async function run(argv, options) {
       last_heal_at: lastHeal,
       last_item_at: lastItemAt(items),
       drafts: draftCount,
-      served_via: await servedVia(dir, ownerSessionId, targetPathsOfReview(dir, id))
+      served_via: await servedVia(dir, ownerSessionId, targetPathsOfReview(dir, id)),
+      only_recorded_pages: isolatedReview(dir, id)
     };
 
     if (args.json) {
@@ -722,6 +732,12 @@ async function run(argv, options) {
     if (healed) lines.push("            " + healed);
     var served = servedViaLine(liveness.served_via);
     if (served) lines.push("  " + served);
+    // `--only`. Worth its own line, because the default is the opposite and an
+    // agent that assumes the reviewer can wander onto any page in the folder
+    // will be wrong about where a comment can come from.
+    if (liveness.only_recorded_pages) {
+      lines.push("  scope: only this page. Other pages in its folder are served without the rail (--only)");
+    }
     if (open.length === 0) {
       // "Nothing is waiting" is false for an ended review: the reviewer is done,
       // and being done is itself the thing waiting on the agent. Printing the

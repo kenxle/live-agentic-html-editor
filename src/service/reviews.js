@@ -252,6 +252,7 @@ function createReviews(options) {
           target_paths: Array.isArray(parsed.target_paths) ? parsed.target_paths.slice() : [],
           source_path: typeof parsed.source_path === "string" ? parsed.source_path : null,
           agent_session_id: typeof parsed.agent_session_id === "string" ? parsed.agent_session_id : "legacy",
+          only_recorded_pages: parsed.only_recorded_pages === true,
           created_at: parsed.created_at || new Date().toISOString()
         };
       } else {
@@ -398,6 +399,7 @@ function createReviews(options) {
       target_paths: Array.isArray(parsed.target_paths) ? parsed.target_paths.slice() : [],
       source_path: typeof parsed.source_path === "string" ? parsed.source_path : null,
       agent_session_id: typeof parsed.agent_session_id === "string" ? parsed.agent_session_id : "legacy",
+      only_recorded_pages: parsed.only_recorded_pages === true,
       created_at: parsed.created_at || new Date().toISOString()
     };
     log.helperLog("review " + reviewId + " learned from disk without a restart");
@@ -466,6 +468,8 @@ function createReviews(options) {
         registerOrigin(id, origin);
       });
       recordPaths(id, spec);
+      // Narrowing only, never widening: see isolate().
+      if (spec.only_recorded_pages === true) isolate(id);
       return existing;
     }
 
@@ -479,6 +483,11 @@ function createReviews(options) {
       target_paths: typeof spec.target_path === "string" && spec.target_path ? [spec.target_path] : [],
       source_path: typeof spec.source_path === "string" ? spec.source_path : null,
       agent_session_id: typeof spec.agent_session_id === "string" ? spec.agent_session_id : "legacy",
+      // `lahe review <page> --only`: this review is about the page it was given
+      // and nothing else in that page's folder. The static server reads it off
+      // meta.json and refuses to borrow this review for a page it never
+      // recorded (src/service/static_servers.js).
+      only_recorded_pages: spec.only_recorded_pages === true,
       created_at: new Date().toISOString()
     };
     reviews[id] = review;
@@ -558,6 +567,29 @@ function createReviews(options) {
    * @param {string} reviewId
    * @param {{target_path?: string|null, source_path?: string|null}} paths
    */
+  /**
+   * Narrow a review to the pages it actually recorded (`lahe review --only`).
+   *
+   * ONE DIRECTION ONLY, and that is the whole design. Narrowing is the reviewer
+   * noticing what else is in the folder they pointed at. Widening is the one
+   * move a script that read the token off the script tag would want to make,
+   * and review.write is reachable with exactly that token (see D11's residuals
+   * and the route's own note), so there is no way back out through this. A
+   * review that should be wide again is a new review.
+   *
+   * @param {string} reviewId
+   * @returns {boolean} whether the review is isolated now
+   */
+  function isolate(reviewId) {
+    var review = get(reviewId);
+    if (!review) return false;
+    if (review.only_recorded_pages === true) return true;
+    review.only_recorded_pages = true;
+    persist(review);
+    log.helperLog("review " + reviewId + " is limited to the pages it recorded (--only)");
+    return true;
+  }
+
   function recordPaths(reviewId, paths) {
     var review = get(reviewId);
     if (!review) return null;
@@ -1256,6 +1288,7 @@ function createReviews(options) {
     list: list,
     registerOrigin: registerOrigin,
     recordPaths: recordPaths,
+    isolate: isolate,
     touch: touch,
     lastSeenAt: lastSeenAt,
     targetMtime: targetMtime,
