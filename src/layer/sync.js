@@ -1468,7 +1468,7 @@
     }
 
     function recomputeStatus() {
-      var pending = store ? store.pendingEvents(requireReview()).length : 0;
+      var pending = pendingCount();
       // Anything the helper refused, could not take, or never answered means
       // the reviewer's typing is living in this browser and nowhere else.
       if (lastFailure || cspRefused) return setStatus(overlay.STATUS.KEPT_LOCALLY);
@@ -1893,8 +1893,14 @@
       return result.status ? "HTTP " + result.status : null;
     }
 
+    // How many events are waiting. Asked on every poll tick, from here and from
+    // recomputeStatus, so it asks the store for its COUNT rather than for the
+    // queue: the old spelling parsed the whole outbox out of browser storage
+    // once a second per caller (the 2026-09-16 memory audit, finding 1).
     function pendingCount() {
-      return store ? store.pendingEvents(requireReview()).length : 0;
+      if (!store) return 0;
+      if (typeof store.pendingCount === "function") return store.pendingCount(requireReview());
+      return store.pendingEvents(requireReview()).length;
     }
 
     function scheduleFlush(delayMs) {

@@ -44,20 +44,31 @@
   var browser = typeof window !== "undefined" && !!window.document;
   if (browser) {
     root.LAHE = root.LAHE || {};
-    root.LAHE.store = factory(root.LAHE.record, root.LAHE.merge, root.LAHE.failures, root.LAHE.elapsed);
+    root.LAHE.store = factory(
+      root.LAHE.record,
+      root.LAHE.merge,
+      root.LAHE.failures,
+      root.LAHE.elapsed,
+      root.LAHE.protocol
+    );
   } else {
     module.exports = factory(
       require("../shared/record.js"),
       require("../shared/merge.js"),
       require("../shared/failures.js"),
-      require("../shared/elapsed.js")
+      require("../shared/elapsed.js"),
+      require("../shared/protocol.js")
     );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (record, merge, failures, elapsed) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (record, merge, failures, elapsed, protocol) {
   "use strict";
 
   var KEY_PREFIX = "lahe.items.v1:";
   var OUTBOX_PREFIX = "lahe.outbox.v1:";
+  // The STAMP beside a cached list. See "Reading a list without parsing it"
+  // below: the value is opaque and is only ever compared for equality, so a tab
+  // can tell whether the copy it is holding is still the copy in storage.
+  var GEN_PREFIX = "lahe.gen.v1:";
   var CHIPS_PREFIX = "lahe.chips.v1:";
   var ACKED_PREFIX = "lahe.acked.v1:";
   var HOLDER_PREFIX = "lahe.holder.v1:";
@@ -78,6 +89,9 @@
   // That is exactly the line the helper session needs: a navigated reload proves
   // it is the holder with the secret it kept, and a second tab has neither.
   var WINDOW_ID_KEY = "lahe.window.id.v1";
+  // The one event type the outbox collapses. Spelled in protocol.js, read here,
+  // never restated: a second spelling of a wire name is how the two drift.
+  var CONTENT_EVENT = protocol.EVENT.ITEM_CONTENT;
   var RECLAIM_DEADLINE_MS = 1500;
   var SESSION_SECRET_PREFIX = "lahe.session.v1:";
 
@@ -189,14 +203,96 @@
     // Every durable write in this file goes through here, so there is one place
     // a full disk is reported from and one place that is synchronous.
     function writeJson(key, value) {
+      writeRaw(key, JSON.stringify(value));
+      return value;
+    }
+
+    // The bytes half of writeJson, split out for the one value that is stored as
+    // itself rather than as JSON: the cache stamp below, which is only ever
+    // compared with what getItem hands back.
+    function writeRaw(key, text) {
       try {
-        backing.setItem(key, JSON.stringify(value));
+        backing.setItem(key, text);
       } catch (err) {
         var f = failures.failure("STORAGE_QUOTA", err && err.message);
         var loud = new Error("store: " + f.message + " (key " + key + ")");
         loud.failure = f;
         throw loud;
       }
+      return text;
+    }
+
+    // -----------------------------------------------------------------------
+    // Reading a list without parsing it
+    // -----------------------------------------------------------------------
+    //
+    // The two big buckets, the items and the outbox, were parsed out of storage
+    // on every read. The outbox is read on every poll tick, once a second while
+    // the tab is visible; the items are read and rewritten on every keystroke.
+    // The 2026-09-16 memory audit named both.
+    //
+    // So each of those two buckets is held in memory here. The hazard is that
+    // BROWSER STORAGE IS SHARED BY EVERY TAB ON THE ORIGIN, so a copy in one tab
+    // goes stale the moment another tab writes. Two things could answer that:
+    //
+    //   the `storage` event   correct in a browser, and nothing at all in Node
+    //                         or in a test, where the backing is a plain object.
+    //                         It also means a window listener inside a module
+    //                         that has never touched `window`, and a listener
+    //                         with no unmount is finding 5 of the same audit.
+    //   a stamp in storage    one extra tiny key beside each list, rewritten on
+    //                         every write. A reader compares the stamp it cached
+    //                         with the stamp in storage: equal means no writer
+    //                         has been here since, in this tab or any other.
+    //
+    // The stamp is what this uses. It costs one `getItem` of a short string per
+    // read, which is the cheap half; what it removes is the `JSON.parse` of the
+    // whole list, which is the expensive half and the one the audit measured.
+    // It needs no events, so it is equally correct in a second tab, in Node, and
+    // between two store instances over one backing.
+    var cacheSalt = record.randomId("gen");
+    var cacheTicks = 0;
+    var listCache = Object.create(null);
+
+    function genKeyFor(key) {
+      return GEN_PREFIX + key;
+    }
+
+    /**
+     * The cached list for a storage key, re-parsed only when someone has written
+     * since this store last looked.
+     *
+     * @param {string} key the storage key holding the list
+     * @param {function(Array): Array} [prepare] run once, on a cold parse only
+     * @returns {Array} the cached list itself. Callers do not mutate it.
+     */
+    function readList(key, prepare) {
+      var stamp = backing.getItem(genKeyFor(key));
+      var held = listCache[key];
+      if (held && held.stamp === stamp) return held.value;
+      var parsed = readJson(key, []);
+      var value = Array.isArray(parsed) ? parsed : [];
+      if (prepare) value = prepare(value);
+      listCache[key] = { stamp: stamp, value: value };
+      return value;
+    }
+
+    /**
+     * Writes a list and stamps it, synchronously, in that order.
+     *
+     * THE STAMP MOVES FIRST. If the list write then fails on a full storage, the
+     * stamp in storage no longer matches any cached copy, so every reader,
+     * including this one, goes back to the bytes. A stamp written after a failed
+     * write would be a cache that agrees with a stamp and disagrees with the
+     * disk, which is the one outcome worth ruling out.
+     */
+    function writeList(key, value) {
+      cacheTicks += 1;
+      var stamp = cacheSalt + ":" + cacheTicks;
+      delete listCache[key];
+      writeRaw(genKeyFor(key), stamp);
+      writeJson(key, value);
+      listCache[key] = { stamp: stamp, value: value };
       return value;
     }
 
@@ -389,27 +485,72 @@
     }
 
     function pendingEvents(reviewId) {
-      var parsed = readJson(outboxKey(reviewId), []);
-      return Array.isArray(parsed) ? parsed : [];
+      return readList(outboxKey(reviewId)).slice();
     }
 
-    // Appends one event. Same event_id twice replaces rather than duplicates,
-    // so a re-queue after a failed post cannot double-count.
+    // How many events are waiting. The poll loop asks this once a second while
+    // the tab is visible, and it used to parse the whole outbox to answer.
+    function pendingCount(reviewId) {
+      return readList(outboxKey(reviewId)).length;
+    }
+
+    /**
+     * Queues one event.
+     *
+     * TWO REPLACEMENT RULES, and everything else is appended.
+     *
+     *  1. Same event_id replaces, in place. That is a re-queue of an event whose
+     *     post failed; nothing about when it happened has changed.
+     *  2. Same item, same revision, both item.content: the older one is dropped
+     *     and the new one goes to the BACK. This is the keystroke rule. Every
+     *     keystroke used to be its own line carrying the whole record, which is
+     *     the 84 MB log and the 1,515 copies of one item the 2026-09-16 audit
+     *     counted.
+     *
+     * Only item.content. item.created, item.ready, item.deleted and
+     * item.reopened are lifecycle facts, each the only line in the log that says
+     * a thing happened, so each one goes.
+     *
+     * REVISION IS PART OF THE MATCH. The helper composes a continuation against
+     * prev.rev + 1 (src/service/projection.js, itemsFrom), so an event that
+     * carried a revision must not be dropped by an event at a later one.
+     * Keystrokes never move the revision (comments.js type(), editing.js
+     * captureTyping), so this costs the saving nothing.
+     *
+     * THE REPLACEMENT GOES TO THE BACK, never into the old entry's slot. The
+     * projection takes the LAST event for an item in log order, so a fresh
+     * content event left sitting in front of an older item.ready would be folded
+     * as the older one. Queue order is recency order.
+     *
+     * See docs/ongoing/OUTBOX_COALESCING.md.
+     */
     function queueEvent(reviewId, event) {
       if (!event || typeof event.event_id !== "string" || !event.event_id) {
         throw new TypeError("store.queueEvent: an event needs an event_id; idempotence is by event_id");
       }
-      var queue = pendingEvents(reviewId);
+      var queue = readList(outboxKey(reviewId)).slice();
       for (var i = 0; i < queue.length; i += 1) {
         if (queue[i].event_id === event.event_id) {
           queue[i] = event;
-          writeJson(outboxKey(reviewId), queue);
-          return queue;
+          return writeList(outboxKey(reviewId), queue);
         }
       }
+      if (supersedes(event)) {
+        queue = queue.filter(function (queued) {
+          return !supersedes(queued) || !sameContentSlot(queued, event);
+        });
+      }
       queue.push(event);
-      writeJson(outboxKey(reviewId), queue);
-      return queue;
+      return writeList(outboxKey(reviewId), queue);
+    }
+
+    // Which events collapse onto each other, spelled once.
+    function supersedes(event) {
+      return !!event && event.event === CONTENT_EVENT;
+    }
+
+    function sameContentSlot(queued, event) {
+      return queued.item === event.item && queued.rev === event.rev;
     }
 
     // Drops the events the helper said it accepted. Anything it did not name
@@ -419,11 +560,10 @@
       (eventIds || []).forEach(function (id) {
         accepted[id] = true;
       });
-      var queue = pendingEvents(reviewId).filter(function (event) {
+      var queue = readList(outboxKey(reviewId)).filter(function (event) {
         return !accepted[event.event_id];
       });
-      writeJson(outboxKey(reviewId), queue);
-      return queue;
+      return writeList(outboxKey(reviewId), queue);
     }
 
     // -------------------------------------------------------------------------
@@ -865,6 +1005,7 @@
       reviews: reviews,
       mergeWithHelper: mergeWithHelper,
       pendingEvents: pendingEvents,
+      pendingCount: pendingCount,
       queueEvent: queueEvent,
       acknowledge: acknowledge,
       readChips: readChips,
@@ -891,6 +1032,7 @@
   return {
     KEY_PREFIX: KEY_PREFIX,
     OUTBOX_PREFIX: OUTBOX_PREFIX,
+    GEN_PREFIX: GEN_PREFIX,
     CHIPS_PREFIX: CHIPS_PREFIX,
     HOLDER_PREFIX: HOLDER_PREFIX,
     LOCK_PREFIX: LOCK_PREFIX,
