@@ -1,6 +1,6 @@
 # LAHE: memory fixes and folder reviews, ready to merge
 
-Three changes are built, tested, and waiting on your say-so. They are sitting on a side branch called `integration-20260916`. Nothing has gone into main. The full test run passed on all three together: 1,086 small tests and 376 browser tests. This page is the ask: say merge, or say what to change.
+Three changes are built and tested. Ken said merge on 2026-09-16, and they are on main. The full test run passed on all three together: 1,091 small tests and the full browser suite.
 
 ## The three changes, in one line each
 
@@ -16,7 +16,7 @@ Each change was built by one agent, then read by two other agents whose only job
 
 ## Decisions I made that you should know about
 
-- **The rail follows links everywhere, and you can opt out.** You said the rail should follow you into anything you can click on. It now does, whether you pointed LAHE at a folder or at a single file. If you want the rail on one file only (say the file sits in Downloads next to a lot of unrelated pages), add `--only` to the command. The builder is finishing this last part now.
+- **The rail follows links everywhere, and you can opt out.** You said the rail should follow you into anything you can click on. It now does, whether you pointed LAHE at a folder or at a single file. If you want the rail on one file only (say the file sits in Downloads next to a lot of unrelated pages), add `--only` to the command. One thing to know: `--only` cannot be switched back off for that review, on purpose, because the same switch is reachable from a page's own scripts and "show me more pages" is what a hostile page would ask for. To go wide again, start a new review.
 - **Nothing is written to your files up front.** The rail is added to each page as it is served to the browser. No file on disk is touched, and a page you never open costs nothing.
 - **Typing does not make a new version of a comment; Cmd-Enter does.** Keystrokes are merged into one message per pause. Pressing Cmd-Enter, or rewording a comment the agent already answered, counts as a new version, and versions are kept separate so the conversation on the card stays in order.
 - **The page keeps remembering where a finished comment was.** The Done tab can scroll you back to the passage a finished comment was about. That memory is kept on purpose. It is dropped only when the comment is deleted, or the page redraws and that passage is gone.
@@ -39,6 +39,10 @@ All of these are fixed. In plain words:
 
 - The builder wrote the first plain description of how the browser stores comments before sending them. It should live with the other "how this works" docs, not just as a note on this change.
 - The rules for what the page remembers about each comment, and when it forgets, are only in the code and in the audit page. They deserve a doc of their own.
+
+## Merged
+
+2026-09-16: merged to main after the final test run, helper restarted.
 
 ## Not in this checkpoint
 
