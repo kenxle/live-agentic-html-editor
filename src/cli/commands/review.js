@@ -16,7 +16,7 @@ var USAGE = [
   "usage: lahe review <file-or-directory> [--session <id>] [--new-session] [add options]",
   "",
   "Starts a new agent session for a new target, or infers the existing target's session.",
-  "Markdown is rendered with a neutral reading style and local Mermaid diagrams.",
+  "Markdown is rendered in the St. Clair AI document style with local Mermaid diagrams.",
   "Use the printed session id for later documents and the status monitor.",
   "--new-session deliberately starts a separate session and review."
 ].join("\n");

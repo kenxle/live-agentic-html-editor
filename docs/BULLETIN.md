@@ -153,8 +153,21 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
   replacement should start within that window; `--restart` should stop and start
   in one process so the gap is milliseconds.
 
-- [ ] @anyone 2026-09-11 LAHE-default-doc-style -- **The St. Clair AI documentation
+- [x] @anyone 2026-09-11 LAHE-default-doc-style -- **The St. Clair AI documentation
   style becomes the default look for new documents LAHE puts in front of Ken.**
+
+  **Done 2026-09-16** (spec and progress: `docs/ongoing/DOC_STYLE_BUILD.md`). The
+  three open questions were decided this way:
+
+  1. The fonts are vendored under `vendor/stclair-doc-style/fonts/`, so nothing is
+     fetched at runtime and the system stacks stay as fallbacks.
+  2. Light only. The renderer's `prefers-color-scheme` dark palette is gone and
+     `color-scheme: light` is declared in its place.
+  3. One vendored copy reached two ways: inlined into rendered Markdown so a page
+     saved to disk stays self-contained, and served at `.lahe-doc-style.css` for
+     pages an agent writes, using the basename fallback `static_servers.js`
+     already had for the Mermaid script.
+
   After the fingerprinting build (docs/ongoing/FINGERPRINTING_BUILD.md) lands.
   Ken: "Lately I've been getting a lot of brand new documents generated just to
   throw things in front of me to look at and comment on, and I love it. I want

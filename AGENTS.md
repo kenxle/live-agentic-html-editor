@@ -215,6 +215,15 @@ Do not add an icon to a page you did not write. The fallback reaches every
 served page; it does not reach the `file://` fallback or the dev-server row,
 because on those two nothing of LAHE's sits between the page and the browser.
 
+**A page you write for review links one stylesheet and no more.** Put
+`<link rel="stylesheet" href="./.lahe-doc-style.css">` in the head and write no
+other base styling. The helper answers that name from any directory it is
+serving, and the file sets the page in the house document style: type, colour,
+headings, tables, lists and code. Add CSS of your own only for what the page
+genuinely needs on top, such as a chart or a grid of options. A page that
+already has its own styles is left alone; this is a rule for a page you are
+about to write, not one you found.
+
 **Cmd-Shift-1 opens and closes the review panel.** Left hand only, and unbound in
 every major browser, so a reviewer can put the panel away to read the page and
 bring it back without reaching for the mouse. The choice is remembered per review,
@@ -244,7 +253,7 @@ lahe review path/to/SKILL.md
 ```
 
 `review` renders CommonMark/GFM deterministically, keeps list and paragraph
-boundaries intact, applies a neutral reading layout, serves relative images and
+boundaries intact, sets the page in the same document style, serves relative images and
 links from the source folder, and renders fenced `mermaid` flowcharts as local
 SVG diagrams. It never writes the Markdown source. The generated HTML, local
 Mermaid runtime, server, review, and helper all belong to the printed agent
