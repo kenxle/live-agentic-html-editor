@@ -30,9 +30,18 @@ Keep per-page reviews, but when the static server serves an HTML file under a se
 - Changes: the static server gains a write path into review meta. Today it is read-only against the store, on purpose: it is a separate process and disk is the only thing it shares with the helper.
 - Risk: two processes writing meta.json; a race between the helper recording paths and the server enrolling. It also keeps the one-review-per-page shape that produced 384 reviews.
 
+## Option C: change the wireframing skill instead
+
+Ken's suggestion while reading: the wireframes come from the magic-mirror skill, so the skill could generate them with a shared piece every page includes, and the existing app-in-dev row would then work with one paste.
+
+- Changes: the skill's page template, not LAHE.
+- What it solves: wireframes this skill produces, going forward.
+- What it does not solve: any other folder of pages (an exported site, a generated report with subpages, someone else's wireframes), and every wireframe set already on disk. Plain HTML has no include mechanism, so "a shared piece" means either a tiny script every page loads that pulls the line in, or a build step, and both are more machinery than pointing LAHE at the folder.
+- Fits alongside A: a skill that emits a clean folder of pages is exactly what Option A serves well. It does not replace A.
+
 ## Recommendation
 
-Option A. It is the smaller change, it keeps the static server read-only, and it collapses a wireframe set into one review the way a reviewer already thinks about it. It also needs no new discipline from the agent: point at the folder, hand over the link, done.
+Option A, and Option C is welcome on top of it for wireframes specifically. A is the smaller change, it keeps the static server read-only, and it collapses a wireframe set into one review the way a reviewer already thinks about it. It also needs no new discipline from the agent: point at the folder, hand over the link, done.
 
 ## Before building
 
