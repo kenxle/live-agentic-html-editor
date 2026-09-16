@@ -17,9 +17,37 @@ var USAGE = [
   "",
   "Starts a new agent session for a new target, or infers the existing target's session.",
   "Markdown is rendered in the St. Clair AI document style with local Mermaid diagrams.",
+  "A folder of HTML pages is served whole: one review, and every page in it carries",
+  "the rail, including pages written after the review was opened.",
   "Use the printed session id for later documents and the status monitor.",
   "--new-session deliberately starts a separate session and review."
 ].join("\n");
+
+/**
+ * Does `lahe review` serve this target itself, and as what?
+ *
+ * "file" is one HTML page (or the page LAHE rendered a Markdown file into), and
+ * the server is rooted at the page's own folder. "folder" is a set of pages
+ * that is itself the document: the server is rooted at the folder, one review
+ * covers all of it, and every page it serves carries the rail.
+ *
+ * Null means somebody else serves these pages: `--origin` was passed, the run is
+ * a `--remove`, the target is a project checkout with no pages of its own, or
+ * there is nothing there at all. Those are the app-in-dev row, unchanged.
+ *
+ * @param {string} target an absolute path
+ * @param {{remove: boolean, origins: string[]}} options as `add.parseArgs` returns them
+ * @returns {"file"|"folder"|null}
+ */
+function servedKind(target, options) {
+  var opts = options || {};
+  if (opts.remove || (opts.origins || []).length > 0) return null;
+  if (!fs.existsSync(target)) return null;
+  var kind = add.classify(target);
+  if (kind === "static") return "file";
+  if (kind === "static-folder") return "folder";
+  return null;
+}
 
 function metaFiles(dir) {
   var root = stateDir.reviewsRoot(dir);
@@ -107,6 +135,8 @@ async function run(argv) {
   if (!opts.session) list.push("--session", sessionId);
   var staticServer = null;
   var rendered = null;
+  var served = null;
+  var openPage = null;
   var target = originalTarget;
   try {
     if (markdownTarget) {
@@ -117,8 +147,22 @@ async function run(argv) {
       list.push("--source", originalTarget);
       target = rendered.target;
     }
-    if (!opts.remove && opts.origins.length === 0 && fs.existsSync(target) && add.classify(target) === "static") {
-      staticServer = await staticServers.start({ dir: dir, sessionId: sessionId, root: path.dirname(target) });
+    served = servedKind(target, opts);
+    if (served) {
+      // A single page's server is rooted at the page's own folder; a folder of
+      // pages is its own root, so links between the pages resolve and a page
+      // added later is served the moment it exists.
+      staticServer = await staticServers.start({
+        dir: dir,
+        sessionId: sessionId,
+        root: served === "folder" ? target : path.dirname(target)
+      });
+      if (served === "folder") {
+        openPage = add.folderEntryPage(target);
+        if (!openPage) throw new Error("there are no pages in " + target + " to open");
+      } else {
+        openPage = path.basename(target);
+      }
       if (rendered) {
         await staticServers.registerMount(
           dir,
@@ -170,8 +214,16 @@ async function run(argv) {
         "\n  server    http://" + staticServer.meta.host + ":" + staticServer.meta.port +
           (staticServer.started ? "  (started for this agent session)" : "  (reused for this agent session)") +
           "\n  open      http://" + staticServer.meta.host + ":" + staticServer.meta.port +
-          "/" + encodeURIComponent(path.basename(target)) + "\n"
+          "/" + encodeURIComponent(openPage) + "\n"
       );
+      if (served === "folder") {
+        // Not "folder": `add` already prints that label for the review's own
+        // directory on disk, and two different folders under one label is how a
+        // reader (or a script) picks the wrong path.
+        process.stdout.write(
+          "  pages     " + target + "  (every page in it is this one review; links between them keep the rail)\n"
+        );
+      }
     }
     if (rendered) {
       process.stdout.write(
@@ -195,4 +247,4 @@ async function run(argv) {
   return code;
 }
 
-module.exports = { USAGE: USAGE, inferSession: inferSession, run: run };
+module.exports = { USAGE: USAGE, inferSession: inferSession, servedKind: servedKind, run: run };

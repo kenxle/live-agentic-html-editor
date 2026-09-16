@@ -146,6 +146,8 @@ var USAGE = [
   "                       (a directory, a layout template) is treated as a dev server and the",
   "                       line is printed with a reminder comment. Before pasting it, wrap the",
   "                       line in your framework's actual development-only conditional.",
+  "                       For a folder of HTML pages that is the document itself, use",
+  "                       `lahe review <folder>`: it serves the folder and writes nothing.",
   "",
   "  --new                mint a second review even though the file already carries one.",
   "  --review <id>        re-attach this page to a review that already exists, by id. Use it when a",
@@ -766,9 +768,64 @@ function sameBytes(a, b) {
   }
 }
 
+/**
+ * The `.html` and `.htm` files directly in a directory, in name order.
+ *
+ * The folder's OWN pages, not a recursive walk. The served root and the open
+ * link have to agree, and `lahe review <folder>` roots its server at the folder
+ * itself: a lone page three directories down would be served at a URL nobody
+ * would guess, and a project checkout that happens to hold a built HTML file
+ * somewhere would stop being the app-in-dev row it has always been.
+ *
+ * @param {string} dirPath
+ * @returns {string[]} file names, byte order, so two runs pick the same page
+ */
+function folderPages(dirPath) {
+  var entries;
+  try {
+    entries = fs.readdirSync(dirPath, { withFileTypes: true });
+  } catch (err) {
+    return [];
+  }
+  return entries
+    .filter(function (entry) {
+      return entry.isFile() && STATIC_EXTENSIONS.indexOf(path.extname(entry.name).toLowerCase()) !== -1;
+    })
+    .map(function (entry) { return entry.name; })
+    .sort();
+}
+
+/**
+ * The page `lahe review <folder>` prints as the open link: `index.html` when the
+ * folder has one, then `index.htm`, else the first page in name order. Null when
+ * the folder holds no pages at all.
+ *
+ * @param {string} dirPath
+ * @returns {string|null}
+ */
+function folderEntryPage(dirPath) {
+  var pages = folderPages(dirPath);
+  if (pages.length === 0) return null;
+  if (pages.indexOf("index.html") !== -1) return "index.html";
+  if (pages.indexOf("index.htm") !== -1) return "index.htm";
+  return pages[0];
+}
+
+/**
+ * What kind of thing is this target?
+ *
+ * `static-folder` is a folder of pages we serve ourselves: a set of wireframes,
+ * a small generated site. It is NOT the app-in-dev row, which is somebody
+ * else's running server and a line you paste into their layout. A folder of
+ * separate HTML files has no shared layout to paste into, so that row left an
+ * agent pasting the line into every file by hand, or enrolling the pages one at
+ * a time. See docs/ongoing/STATIC_SITE_FOLDER.md.
+ *
+ * A directory with no pages of its own is still `dev-server`, unchanged.
+ */
 function classify(targetPath) {
   var stat = fs.statSync(targetPath);
-  if (stat.isDirectory()) return "dev-server";
+  if (stat.isDirectory()) return folderPages(targetPath).length > 0 ? "static-folder" : "dev-server";
   var ext = path.extname(targetPath).toLowerCase();
   return STATIC_EXTENSIONS.indexOf(ext) === -1 ? "dev-server" : "static";
 }
@@ -801,7 +858,21 @@ async function run(argv) {
   // directory. The review's history is the reviewer's work, and a flag that
   // edits a page is not the thing that should delete it; the README says how.
   if (options.remove) {
-    if (classify(target) !== "static") {
+    var removeKind = classify(target);
+    if (removeKind === "static-folder") {
+      process.stdout.write(
+        [
+          "lahe add --remove: " + target,
+          "",
+          "  There is nothing to take out. A folder reviewed this way is served by a server of ours,",
+          "  which puts the script line into each response and never into a file. Close the agent",
+          "  session instead and the server goes with it: lahe session close <id>.",
+          ""
+        ].join("\n")
+      );
+      return EXIT.OK;
+    }
+    if (removeKind !== "static") {
       process.stdout.write(
         [
           "lahe add --remove: " + target,
@@ -882,6 +953,11 @@ async function run(argv) {
   }
 
   var kind = classify(target);
+  // A FOLDER IS ONLY OURS WHEN `review` SAYS SO. `--under-review` means a static
+  // server of ours is already answering for these pages, and `lahe review` sets
+  // it in the same block where it starts that server. A bare `lahe add <folder>`
+  // is what it always was: somebody else's project, and a snippet to paste.
+  if (kind === "static-folder" && !options.underReview) kind = "dev-server";
   var host = protocol.DEFAULT_HOST;
   var port = options.port === undefined ? protocol.DEFAULT_PORT : options.port;
   var helperOrigin = "http://" + host + ":" + port;
@@ -1259,7 +1335,7 @@ async function run(argv) {
   //
   // The two cases with no server to inject for them keep both halves exactly as
   // they were: a plain `lahe add`, and any file:// review.
-  var servedInjection = kind === "static" && options.underReview;
+  var servedInjection = (kind === "static" || kind === "static-folder") && options.underReview;
   // The copy beside the page is written BEFORE the line that names it, so a
   // page loaded the instant after `add` prints has both halves.
   var librarySrc = libraryUrl(helperOrigin);
@@ -1306,8 +1382,14 @@ async function run(argv) {
   say();
 
   if (servedInjection) {
-    say("  Nothing was written into " + path.basename(target) + ". The script line goes into the response,");
-    say("  put there by the server this review already owns, so no review id and no token land in your folder.");
+    if (kind === "static-folder") {
+      say("  Nothing was written into " + path.basename(target) + "/. Every page this folder's server hands out");
+      say("  carries the script line in the response, including pages written after this review was opened,");
+      say("  so no review id and no token land in your folder and no page has to be enrolled by hand.");
+    } else {
+      say("  Nothing was written into " + path.basename(target) + ". The script line goes into the response,");
+      say("  put there by the server this review already owns, so no review id and no token land in your folder.");
+    }
     say("  That same server publishes the library at " + staticServersModule.LIBRARY_PATH + ", so no copy of it");
     say("  sits beside the page either, and the page still opens with the helper down.");
     if (carried) {
@@ -1435,5 +1517,7 @@ module.exports = {
   removeScriptLine: removeScriptLine,
   reviewAlreadyInFile: reviewAlreadyInFile,
   classify: classify,
+  folderPages: folderPages,
+  folderEntryPage: folderEntryPage,
   run: run
 };

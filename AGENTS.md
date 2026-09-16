@@ -89,6 +89,7 @@ edits generated HTML that the next build throws away.
 | --- | --- | --- | --- |
 | A Markdown file, on its own | `lahe review path/to/file.md` | the `.md` itself | rerun the same `lahe review` command, then check the rendered page shows it. Markdown has nowhere to put an attribute, so `region.stamp_carriable` is false on these items: skip the stamp and use `region.where` and `region.ordinal` |
 | HTML that IS the source: a hand-written one-pager, a mockup | `lahe review path/to/page.html` | that HTML file | the change is in the file and on their screen |
+| A FOLDER of HTML pages that is the document: a set of wireframes, a small generated site | `lahe review path/to/folder` | the page file the item names | the change is in that file and on their screen |
 | HTML that is BUILD OUTPUT | `lahe review path/to/page.html --source path/to/generator` | the generator, never the page | rerun the build, grep the built HTML for the change, then reply |
 | A document built from several sources: many `.md`, templates, citations | run the project's real build first, then `lahe review path/to/build/report.html --source path/to/build-entrypoint` | the source fragment the item points at | the canonical build, rerun and verified |
 | Your own app running in dev | `lahe review path/to/project --origin http://localhost:3000` | your app's code | the change is live in the running app |
@@ -98,6 +99,18 @@ edits generated HTML that the next build throws away.
 **More than one file is not a separate row.** One review spans pages: run
 `lahe review` again with the same `--session <id>`. Each page shows the reviewer
 only its own items, while `review.json` and `lahe status` show them all.
+
+**A folder is one command, not one per page.** Point `lahe review` at the folder
+and every page in it carries the rail: the ones you wrote, the ones they reach by
+a link, and the ones you add later. Do not enroll pages one at a time. The rule
+is that anything our own static server serves gets the rail, so there is nothing
+to enroll. Two things to know:
+
+- The folder needs at least one `.html` file of its own. A folder with no pages
+  in it is still the app-in-dev row, which is what pointing at a project checkout
+  means.
+- The open link is `index.html` when the folder has one, else the first page in
+  name order. Give them that URL and let them walk from there.
 
 **The assets trap.** `lahe review page.html` roots its server at the page's OWN
 folder. An asset beside the page loads. An asset ABOVE it does not:

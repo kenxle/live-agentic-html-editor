@@ -387,6 +387,34 @@ the page and how the script line gets into it.
 
 Variations that are not separate architectures:
 
+- **A folder of HTML pages.** `lahe review path/to/folder` is the first shape
+  with the server rooted at the folder instead of at one page's own directory.
+  It mints one review for the folder and opens `index.html`, or the first page
+  in name order when there is no index. Nothing else changes: nothing is written
+  into your folder, the script line rides the response, and edits go to whatever
+  page file the item names.
+
+  What makes it work is a rule rather than a mechanism: **anything our own
+  static server serves gets the rail.** A page no review ever recorded is served
+  on the newest review this server backs, so the pages the reviewer reaches by a
+  link carry the rail, and so do pages written after the review was opened. No
+  page is enrolled, nothing is written to the review store, and the server stays
+  a reader of it. A dev server somebody else runs is a different thing and keeps
+  its own row above; ours has no such excuse.
+
+  The folder needs at least one `.html` file of its own, and it is the folder's
+  own pages that count, not a recursive walk. A directory with no pages in it is
+  still the app-in-dev row, which is what pointing at a project checkout means.
+
+  Two things this does not do. It does not render Markdown in the folder; that
+  is wanted and is its own piece of work, because a rendered page lives in
+  LAHE's state directory rather than in the source folder. And it does not
+  reload the reviewer's page when you edit a file: the review's recorded target
+  is a directory, and a directory's modification time moves on every stray file
+  while standing still when a page's own text changes, so there is nothing
+  honest to reload from. Tell the reviewer to reload, or review one page at a
+  time when the loop matters more than the walk.
+
 - **Several pages, one review.** Run `lahe review` again with the same
   `--session <id>`. Each page shows only its own items; `review.json` and
   `lahe status` show them all.
