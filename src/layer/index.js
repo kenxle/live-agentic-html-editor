@@ -88,6 +88,25 @@
   // script tag, so there is nothing here to hide behind a flag.
   var GLOBAL = "__lahe";
 
+  // How much of the status line's history a page keeps. Two hundred entries is
+  // far more than a session's worth of honest transitions and a hard stop on a
+  // helper that flaps all afternoon.
+  var STATUS_LOG_MAX = 200;
+
+  /**
+   * Append to a list that must not outgrow its cap, oldest out first.
+   *
+   * @param {Array} list  mutated in place
+   * @param {*} value
+   * @param {number} max
+   * @returns {Array} the same list
+   */
+  function pushCapped(list, value, max) {
+    list.push(value);
+    if (list.length > max) list.splice(0, list.length - max);
+    return list;
+  }
+
   // How long after the reviewer last touched anything a LAHE reload waits.
   //
   // Ken clicked a toast, the rail opened on the card, and two seconds later a
@@ -502,6 +521,11 @@
       return made;
     }
 
+    // Every status the line has shown, newest last and capped at
+    // STATUS_LOG_MAX. One entry per TRANSITION, so an ordinary session adds a
+    // handful and a flapping helper adds one per flap for as long as the page is
+    // open. Nothing reads more than the tail of it (the 2026-09-16 memory
+    // audit).
     var statusLog = [];
     // revertChecks counts the check having RUN on this load, which is what a
     // test waits on: "the check ran and reopened nothing" is a real result and
@@ -563,7 +587,7 @@
       helperOrigin: config.helper || undefined,
       store: store,
       onStatus: function (state) {
-        statusLog.push(state);
+        pushCapped(statusLog, state, STATUS_LOG_MAX);
         rail.setStatusLine(state);
       },
       // Whether an agent is actually listening, from the helper's own files
@@ -1916,6 +1940,8 @@
   api = {
     VERSION: VERSION,
     GLOBAL: GLOBAL,
+    STATUS_LOG_MAX: STATUS_LOG_MAX,
+    pushCapped: pushCapped,
     // Why this page has no rail on it, or null when it has one. The ONLY value
     // it takes today is SKIPPED_FRAMED, and it is static: nothing sets it back.
     skipped: skipped,

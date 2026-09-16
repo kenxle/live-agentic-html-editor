@@ -939,6 +939,7 @@
 
     function refresh() {
       if (!mounted) return api;
+      forgetGoneItems();
       // The unseen count is RECORD truth, not DOM truth. A headless rail (no
       // document, which is the shape the unit tests run in) draws nothing and
       // still has to know how many replies are waiting to be read.
@@ -1730,6 +1731,33 @@
     // -------------------------------------------------------------------------
     // Neglect
     // -------------------------------------------------------------------------
+
+    /**
+     * Forget the records that are no longer in the review.
+     *
+     * The page's memory is two maps keyed by item id, and they are the right
+     * shape for what they answer ("have I already said this?", "did anyone read
+     * it?"). What they had no answer for is an item that GOES: the reviewer
+     * deletes it, undoes it, or answers a collision with "take the page's". The
+     * key then sits there for the life of the page with no record behind it
+     * (the 2026-09-16 memory audit). Every refresh is already reading the item
+     * list, so this costs the walk and nothing else.
+     *
+     * A HANDLED item is not gone: it is in Done, it is reopenable (R38), and it
+     * must still count as announced.
+     */
+    function forgetGoneItems() {
+      var live = Object.create(null);
+      itemsNow().forEach(function (item) {
+        live[item[record.FIELD.ID]] = true;
+      });
+      Object.keys(life.announced).forEach(function (id) {
+        if (!live[id]) delete life.announced[id];
+      });
+      Object.keys(life.neglected).forEach(function (id) {
+        if (!live[id]) delete life.neglected[id];
+      });
+    }
 
     /** This reply was shown, ignored, and ran out of time. Start the clock. */
     function noteNeglected(id) {

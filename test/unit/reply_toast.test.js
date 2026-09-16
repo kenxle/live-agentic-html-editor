@@ -319,6 +319,27 @@ test("timing out is not dismissing: nobody decided anything, so it stays unread"
   assert.deepEqual(parts.done.neglectedIds(), ["c_ignored"], "and now on the neglect clock");
 });
 
+// The page's memory is per ITEM, and the item can go: the reviewer deletes it,
+// undoes it, or answers a collision with "take the page's". Two small maps keyed
+// by id then grow for the life of the page with nothing behind the keys (the
+// 2026-09-16 memory audit, retention issue 6).
+test("a record that leaves the review is forgotten: what was announced, and what was neglected", () => {
+  const parts = setup();
+  const [item] = pending(parts, ["c_removed"]);
+  parts.done.refresh();
+  parts.done.applyReplies([foldEvent(item, flagged())]);
+  parts.rail.dismissToast(parts.rail.toastInfo().toasts[0].id, "timeout");
+
+  assert.deepEqual(parts.done.announcedIds(), ["c_removed"], "the page said it once");
+  assert.deepEqual(parts.done.neglectedIds(), ["c_removed"], "and nobody read it");
+
+  parts.store.remove(REVIEW, "c_removed");
+  parts.done.refresh();
+
+  assert.deepEqual(parts.done.announcedIds(), [], "the record is gone and so is the memory of it");
+  assert.deepEqual(parts.done.neglectedIds(), []);
+});
+
 // --- rule 3: a count is for neglect only --------------------------------------
 
 test("a neglected answer comes back as itself, with its words, and does not time out", () => {
