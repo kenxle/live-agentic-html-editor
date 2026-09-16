@@ -203,6 +203,70 @@ test("--json line one carries the contract and the field classes, before any pag
   assert.deepEqual(emptyFirst.contract, reviewFormat.CONTRACT);
 });
 
+/** One review owned by one agent session, with one item waiting on the agent. */
+function seedOwnedReview(dir, sessionId, reviewId, note) {
+  const sessions = agentSessionsModule.createStore({ dir });
+  sessions.create({ id: sessionId });
+  const log = logModule.createEventLog({ dir });
+  const reviews = reviewsModule.createReviews({ dir, log });
+  reviews.create({ id: reviewId, agent_session_id: sessionId });
+  const item = anItem(note, record.STATE.READY);
+  log.append(reviewId, [itemEvent(reviewId, item, protocol.EVENT.ITEM_READY)]);
+  return item;
+}
+
+test("the quiet drain points at the contract rather than reprinting it", async () => {
+  // The drain runs every time an agent is woken. The contract is about 3,800
+  // tokens the agent already has: it ships in every review.json, which is the
+  // one file an agent is guaranteed to read. Repeating it on each wake cost
+  // over a hundred thousand tokens in a single session.
+  const dir = tempState();
+  seedOwnedReview(dir, "s_drain", "r_drain", "fix the footer");
+
+  const run = await runStatus(["--session", "s_drain", "--json", "--quiet"], dir);
+  assert.equal(run.code, protocol.CLI_EXIT.OK, run.stderr);
+  const lines = run.stdout.trim().split("\n");
+  const first = JSON.parse(lines[0]);
+  assert.equal(first.contract, undefined, "the contract block is gone from the drain");
+  assert.equal(first.contract_in, status.CONTRACT_POINTER.contract_in, "line one is the pointer");
+
+  reviewFormat.CONTRACT.forEach((clause) => {
+    assert.equal(run.stdout.includes(clause), false, "a contract clause reached the drain: " + clause);
+  });
+
+  // The work itself is unchanged, and so is the fencing that says which of its
+  // fields are page text rather than the reviewer's own words.
+  assert.equal(JSON.parse(lines[1]).note, "fix the footer");
+  assert.deepEqual(first.field_classes, reviewFormat.PROJECTED_FIELD_CLASS);
+  assert.deepEqual(first.intent_fields, reviewFormat.INTENT_FIELDS);
+});
+
+test("the drain's pointer names review.json and the contract field", async () => {
+  // A pointer an agent cannot follow is worse than no pointer, so it says the
+  // file and the field by name, and it stays one line of JSON because the
+  // drain is read by a machine.
+  const dir = tempState();
+  seedOwnedReview(dir, "s_pointer", "r_pointer", "tighten the headline");
+
+  const run = await runStatus(["--session", "s_pointer", "--json", "--quiet"], dir);
+  const first = JSON.parse(run.stdout.trim().split("\n")[0]);
+  assert.equal(first.contract_in, "review.json");
+  assert.equal(first.contract_field, "contract");
+  assert.deepEqual(status.CONTRACT_POINTER, { contract_in: "review.json", contract_field: "contract" });
+});
+
+test("--json without --quiet still leads with the contract, for an agent starting cold", async () => {
+  // An agent that runs status once before it has opened any review file has
+  // nowhere else to read the contract, so the non-quiet modes keep it whole.
+  const dir = tempState();
+  seed(dir, "rev1", [anItem("fix the footer", record.STATE.READY)]);
+
+  const run = await runStatus(["--json"], dir);
+  const first = JSON.parse(run.stdout.trim().split("\n")[0]);
+  assert.deepEqual(first.contract, reviewFormat.CONTRACT);
+  assert.equal(first.contract_in, undefined, "the whole text is there, so no pointer is needed");
+});
+
 test("the human list labels page-derived text and never prints it as the reviewer's words", async () => {
   const dir = tempState();
   const quoted = record.newItem({

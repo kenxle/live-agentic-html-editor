@@ -47,7 +47,10 @@ nothing. Work stays listed until a reply lands, so a missed wake costs nothing:
 the next drain shows the item again. When the reviews are not in the default
 state directory, every command the tool prints carries `--state-dir <path>`
 already: copy them as printed, because the same command without it reads the
-default directory and reports no work.
+default directory and reports no work. The drain's first line is a pointer to
+the `contract` field in the review's `review.json` rather than the contract
+itself, so an agent that is woken thirty times does not read it thirty times;
+`lahe status --json` without `--quiet` still prints the whole thing.
 
 The **wake channel** is per host, because hosts differ in what they can do
 without spending model tokens:
