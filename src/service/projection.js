@@ -435,36 +435,79 @@ function createProjector(options) {
   /** The kept fold for a review, minted the first time it is asked for. */
   function entryFor(reviewId) {
     if (!Object.prototype.hasOwnProperty.call(watched, reviewId)) {
-      watched[reviewId] = { fold: createFold(), seq: -1, started: false };
+      watched[reviewId] = { fold: createFold(), wroteAt: -1, started: false, epoch: -1 };
     }
     return watched[reviewId];
   }
 
-  /** Start watching a review, and write its file once so it exists at all. */
+  /**
+   * Start watching a review, and write its file once so it exists at all.
+   *
+   * `wroteAt` of -1 is "this review has never been written", which is not the
+   * same as "this review is not being watched": answering a read mints the
+   * entry without writing anything. Watching one in that state still has to
+   * write the file, or the file an agent opens never appears.
+   */
   function watch(reviewId) {
-    if (Object.prototype.hasOwnProperty.call(watched, reviewId)) return watched[reviewId].seq;
-    entryFor(reviewId);
+    var entry = entryFor(reviewId);
+    if (entry.wroteAt !== -1) return entry.wroteAt;
     tickReview(reviewId);
-    return watched[reviewId].seq;
+    return entry.wroteAt;
+  }
+
+  /**
+   * Is this run of events something the kept fold can be continued with?
+   *
+   * Only a strictly increasing run of seqs is. Anything else means the log is
+   * not what the fold thinks it is: a second writer on the same directory hands
+   * out a seq the fold has already passed, and a hand-written or legacy line
+   * carries no seq at all. Both used to be skipped, silently, which is a
+   * comment quietly missing from what an agent reads. They are treated as a
+   * reason to start over instead, and starting over is the from-the-top fold,
+   * which is the reference answer by definition.
+   */
+  function continues(fold, events) {
+    var at = fold.seq;
+    for (var i = 0; i < events.length; i += 1) {
+      var seq = events[i][protocol.EVENT_FIELD.SEQ];
+      if (typeof seq !== "number" || seq <= at) return false;
+      at = seq;
+    }
+    return true;
   }
 
   /**
    * Fold everything that has landed since this review's fold last looked.
    *
-   * The first pass reads the log whole, the way regenerate does, because
-   * log.since only ever hands back events carrying a seq and a legacy or
-   * hand-written line without one is still history. Afterwards the cursor is
-   * the fold's own high-water mark and only the tail is read.
+   * The first pass reads the log whole, the way regenerate does, and so does
+   * any pass where the tail cannot be trusted to continue the fold: the log was
+   * rewritten under the helper (log.epoch moved), or the events it handed back
+   * are not a strictly increasing run. Otherwise the cursor is the fold's own
+   * high-water mark and only the tail is read.
    */
   function catchUp(reviewId) {
     var entry = entryFor(reviewId);
-    var events = entry.started ? log.since(reviewId, entry.fold.seq) : log.read(reviewId);
-    entry.started = true;
-    foldEvents(entry.fold, events, {
-      onDropped: function (event, reason) {
-        reportDropped(reviewId, event, reason);
+    var dropped = function (event, reason) {
+      reportDropped(reviewId, event, reason);
+    };
+
+    if (entry.started && log.epoch(reviewId) === entry.epoch) {
+      var events = log.since(reviewId, entry.fold.seq);
+      if (log.epoch(reviewId) === entry.epoch && continues(entry.fold, events)) {
+        foldEvents(entry.fold, events, { onDropped: dropped });
+        return entry;
       }
-    });
+    }
+
+    // Start over. The fold is REPLACED rather than added to: folding the whole
+    // log on top of a fold that already holds half of it would double the
+    // order list and keep items a rewrite removed.
+    entry.fold = createFold();
+    entry.wroteAt = -1;
+    var all = log.read(reviewId);
+    entry.epoch = log.epoch(reviewId);
+    entry.started = true;
+    foldEvents(entry.fold, all, { onDropped: dropped });
     return entry;
   }
 
@@ -479,11 +522,18 @@ function createProjector(options) {
     // And again after it, because folding a reply appends reply.folded events
     // that the summary has to carry.
     catchUp(reviewId);
+
+    // THE GATE IS THE FOLD'S OWN SEQ, not the log's high-water mark.
+    // log.currentSeq only moves on appends THIS process made, so an event
+    // written by anything else was folded into memory and then never reached
+    // disk: review.json sat there stale while the helper knew better. The fold
+    // has seen whatever is on the file, so it is the honest answer to "has
+    // anything changed".
     var seq = log.currentSeq(reviewId);
-    if (entry.seq === seq) return { wrote: false, seq: seq };
+    if (entry.wroteAt === entry.fold.seq) return { wrote: false, seq: seq };
 
     reviewWriter.writeReviewJson(projectFold(reviewId, entry.fold), { dir: dir, review: reviewId });
-    entry.seq = seq;
+    entry.wroteAt = entry.fold.seq;
     counters.writes += 1;
     return { wrote: true, seq: seq, summary: summary };
   }
