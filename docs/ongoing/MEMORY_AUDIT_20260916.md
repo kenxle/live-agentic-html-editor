@@ -2,6 +2,18 @@
 
 Ken asked on 2026-09-16, after Claude Code killed several background monitors for low memory and a sibling session blamed Chrome. His point: a leak in the injected layer would show up as Chrome, not as a LAHE process. This is what was measured and what was found. Numbers come from `ps`, a Playwright soak test, and a Python pass over the event logs on disk.
 
+## Where this stands (updated 2026-09-16 18:50)
+
+| Fix | State |
+| --- | --- |
+| 1. One message per pause instead of one per keystroke | Merged to main |
+| 2. Helper stops re-reading a review's whole log (and stops re-reading every log on restart) | Not started. On the board as LAHE-helper-boot-storm. Needs a short brief first, then a go. |
+| 3. The page lets go of old memory | Merged to main |
+| 4. Compact or archive the 654 MB of old logs | Not started. Gets easier once 1 has been running a while, since the logs stop growing so fast. |
+| 5. Close stale agent sessions and their little servers | Not started. Cheap; a session-by-session cleanup. |
+
+Also merged today, found along the way: the drain no longer repeats the agent instructions on every wake (3,800 tokens saved per comment).
+
 ## Short answer
 
 - The idle page does not leak. A review page left open with the poll loop running held a flat heap, a flat DOM node count, and a flat listener count for four minutes with garbage collection forced before every sample.
