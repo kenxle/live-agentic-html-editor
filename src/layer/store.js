@@ -302,16 +302,31 @@
     // once per cycle. Collapsing it on the way out means the reviewer's card
     // reads right on the next reload, with nobody editing storage by hand, and
     // the next write of that item persists the collapse.
-    function readAll(reviewId) {
-      var parsed = readJson(keyFor(reviewId), []);
-      if (!Array.isArray(parsed)) return [];
-      return parsed.map(function (item) {
+    // A copy of one record, one level deep. Every caller that changes a record
+    // in this library replaces a top-level field (replay.js and tab_done.js
+    // write item[REGION], overlay.js writes item[STATE]) or builds a new object
+    // with Object.assign, so one level is the whole of what has to be detached.
+    //
+    // It is what keeps the held list below private. Handing a caller the object
+    // this store is holding would mean a change nobody wrote reaching the next
+    // reader, and a write that never happened surviving to the next write.
+    function detach(item) {
+      return Object.assign({}, item);
+    }
+
+    function collapseAll(items) {
+      return items.map(function (item) {
         return record.collapsePageCheckNote(item);
       });
     }
 
+    function readAll(reviewId) {
+      return readList(keyFor(reviewId), collapseAll).map(detach);
+    }
+
     function writeAll(reviewId, items) {
-      return writeJson(keyFor(reviewId), items);
+      writeList(keyFor(reviewId), items.map(detach));
+      return items;
     }
 
     // @returns {Array<Object>} every item for this review, in creation order
