@@ -207,6 +207,22 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
   dark as the current system look and document that the brand style is light.
   Mermaid diagrams keep working. The rail's own chrome is not part of this.
 
+- [ ] @anyone 2026-09-16 LAHE-static-site-folder -- **A folder of linked HTML pages
+  has no row of its own, so the rail does not follow the reviewer between pages.**
+  Seen 2026-09-16 on a set of wireframe pages: `lahe review <dir>` takes the
+  dev-server row (registers an origin, prints a script line to paste into a
+  layout), which is wrong for plain files with no layout. The agent's fallback was
+  to run `lahe review <page> --session <id>` once per page, which works but is
+  fragile: a page nobody enrolled has no rail, a page added later is missed, and
+  the static server only injects into paths recorded in a review's meta.json
+  (`injectForMatch` in `src/service/static_servers.js`). Ken: "seems suboptimal or
+  incorrect... fragile." Wanted: a static-site row where `lahe review <dir>` of a
+  folder of HTML serves the folder and injects the rail into every HTML page under
+  it as one review that spans pages, with the session-owned static server doing
+  the matching by root rather than by enrolled path. Decide how the reviewer's
+  per-page item view and `review.json` group pages that were never individually
+  enrolled.
+
 - [ ] @ken 2026-09-11 LAHE-organic-discovery -- **Someone found LAHE on their own,
   days after launch.** A student in Ken's Columbia class searched, found the tool,
   and brought it up in class. Nobody pointed them to it. Ken: "i just launched it,
