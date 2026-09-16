@@ -52,6 +52,8 @@ How much text the tool hands an agent to read, per action. One token is roughly 
 | The agent playbook (AGENTS.md), read once per session | 14,239 |
 | The lahe skill, read once per session | 5,741 |
 
+About the summary file: of its 8,822 tokens for that ten-comment review, 3,612 are the instructions (one copy, which is where they belong) and 4,930 are the ten comments themselves, about 480 tokens each. Each comment carries your words, the passage you quoted, a slice of the surrounding text so the agent can find the spot, the agent's reply, and the thread. How often it is read: an agent needs the whole file once, when it opens a review cold. On each wake the drain is enough, and the drain with one comment waiting is now 612 tokens. An agent that re-reads the whole file on every wake is following the instructions too literally; the instructions should say so, and that is a one-line change in the frozen contract text.
+
 So every comment you leave costs the agent about 3,800 tokens of instructions it already has, before it reads your comment. One agent checked about thirty times today. That is the change being built now, on its own page: the drain stops repeating the instructions and points at the summary file instead, where they already live.
 
 What today's helper agents spent, from their own reports:
