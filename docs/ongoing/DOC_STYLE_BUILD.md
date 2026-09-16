@@ -115,3 +115,50 @@ Not touched: `src/shared/manifest.js` (nothing new under `src/`),
   once the files are concatenated, since an `@import` has to come before every
   other rule. `markdown.js` drops that line as it reads, so the vendored copies
   stay byte-identical to the personal repo's. `npm run gate:builder` is green.
+- 2026-09-16: Ken reviewed that first pass and said it was not close enough to
+  his reference document. The gap was not type or colour, both of which had
+  landed. It was structure. His reference pages are built by
+  `personal/lib/scripts/build_styled_doc.py`, which turns a document into a
+  hero and a run of numbered sections; ours was still one long column of bare
+  tags with a stylesheet over it.
+
+  `render()` now does what that script does, in JavaScript:
+
+  - the first H1 becomes the title inside `div.wrap.hero`, and everything up to
+    the first H2 is the lede inside it
+  - every H2 opens a `section.sheet` with a `.sheet-head` carrying the heading
+    and a `Section N` label, numbered from 1
+  - the first section gets the extra `first` class only when there is no lede,
+    which is what pulls the hanging rule up under the title
+  - every table is wrapped in `div.scrollx`, and every unordered list gets
+    `class="dot"`
+
+  The split is done on marked's token array, not with regexes over the rendered
+  HTML the way the Python does it. That is the one deliberate departure, and it
+  is what makes a `## ` line inside a fenced code block safe by construction: it
+  is a code token, so it cannot open a section. The list and table classes go on
+  through `renderer.list` and `renderer.table` for the same reason.
+
+  `lahe-markdown.css` gave the page column back. It used to set a reading
+  column on `body > main`, which now fights the hero and the sections, both of
+  which carry the 1080px column and the inset themselves from `document.css`.
+  What is left in our layer is the gaps: the reading measure on prose inside a
+  section, rhythm for h3 and h4, a bottom margin on `.scrollx`, and the hero's
+  inset for the read-only note and the frontmatter, which sit above the hero
+  with no component around them. The dot-bullet rules are gone, since
+  `document.css` draws them now.
+
+  Mermaid was still drawing in its stock lavender next to a cobalt and sage
+  page. Its theme variables are read by JavaScript before any stylesheet
+  exists, so they cannot be `var(--token)`. `MERMAID_THEME` in `markdown.js`
+  carries the hexes with a comment naming the token each one came from, and
+  `securityLevel: "strict"` is unchanged.
+
+  Tests: the unit suite gained the page shape (hero, section count, numbering,
+  the fenced `## `, `.scrollx`, `ul.dot`, the `first` class, inline markup in a
+  heading, a document with no H1). Three older assertions moved with the code:
+  two that looked for a bare `<ul>` now look for `ul.dot`, and the one that
+  proved LAHE's layer sorts last used `body > main`, which this change removes.
+  The browser lane gained the two checks only a browser can answer: that
+  `document.css`'s hanging rule lands on a rendered section head, and that a
+  Mermaid node is filled with cobalt-tint rather than the stock lavender.

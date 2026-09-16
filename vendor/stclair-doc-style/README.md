@@ -26,6 +26,17 @@ components (`ul.dot`, `table.boxed`, `.panel`) and marked emits bare elements
 with no classes, so this layer maps the bare elements onto the same components
 and carries the `@font-face` rules.
 
+The renderer supplies the other half. `render()` in `src/service/markdown.js`
+reproduces the page shape that `personal/lib/scripts/build_styled_doc.py`
+builds: the first H1 becomes a `.wrap.hero` title, everything up to the first
+H2 is the lede inside it, and every H2 opens a numbered `section.sheet`. It
+also writes the `ul.dot` and `.scrollx` classes that `document.css` is waiting
+for. That is why this layer sets no page column of its own: the hero and the
+sections carry it. Mermaid gets the same palette through a theme object in
+that file, since its theme variables are read by JavaScript before any
+stylesheet exists and cannot be `var(--token)`; each hex there is a token from
+`system-tokens.css`, named in a comment beside it.
+
 ## The fonts
 
 Three variable woff2 files, latin subset, all under the SIL Open Font License.
