@@ -420,7 +420,20 @@
       return wrapper;
     }
 
-    var comments = opts.comments || ns.comments.createComments({ store: scopedStore, reviewId: reviewId, page: page });
+    // A failure the comment surface cannot act on, most of all a browser storage
+    // that is full while the reviewer is typing, goes to the rail's own failure
+    // list. Without somewhere to put it the write path would have to throw, out
+    // of the textarea's input handler, which is what it used to do.
+    var comments =
+      opts.comments ||
+      ns.comments.createComments({
+        store: scopedStore,
+        reviewId: reviewId,
+        page: page,
+        onFailure: function (failure) {
+          rail.failures.add(failure);
+        }
+      });
     comments.bind({ page: page });
 
     // -------------------------------------------------------------------------
@@ -708,7 +721,12 @@
       store: scopedStore,
       reviewId: reviewId,
       page: page,
-      sync: sync
+      sync: sync,
+      // Same reason as the comment surface above: a full browser storage during
+      // typing is said on the rail rather than thrown at the input handler.
+      onFailure: function (failure) {
+        rail.failures.add(failure);
+      }
     });
     editing.bind({ page: page });
 
