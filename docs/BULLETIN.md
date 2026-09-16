@@ -207,6 +207,16 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
   dark as the current system look and document that the brand style is light.
   Mermaid diagrams keep working. The rail's own chrome is not part of this.
 
+- [ ] @anyone 2026-09-16 LAHE-helper-boot-storm -- **Every helper restart re-reads
+  every review log (654 MB today) and rewrites every review.json before it can
+  answer, blocking every open page for minutes.** Seen 2026-09-16 17:28 after two
+  restarts in a row; pages said "helper not available"; a force-kill mid-pass only
+  restarted the pass. Cause: `tick()` in `src/service/projection.js` discovers all
+  reviews and regenerates each on the first tick. Fix: project lazily on first
+  request per review, keep the folded projection in memory and apply new events to
+  it, and compact or archive closed reviews' logs. This is fix 2 in
+  docs/ongoing/MEMORY_AUDIT_20260916.md. Architecture-level: brief first.
+
 - [ ] @anyone 2026-09-16 LAHE-wireframe-skill-guidance -- **The wireframing skill
   needs firmer guidance on how it lays out a set of pages.** Ken (2026-09-16, on
   the static-site decision page): "the wireframes have been kind of all over the

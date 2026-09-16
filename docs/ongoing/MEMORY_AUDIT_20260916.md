@@ -80,6 +80,15 @@ So an open LAHE tab costs about a fifth of a percent of one core while visible, 
 
 Policy change from this: builders run the unit suite only; the orchestrator runs the browser suite once per checkpoint, plugged in; fewer parallel agents on battery.
 
+## Found later the same day: every helper restart re-reads every log
+
+At 17:28 the helper was restarted twice within a few minutes (once by me after the merge, once by another session after its own merge). Each time, every open review page said "helper not available" for several minutes, and the helper sat at over 100 percent CPU answering nothing. A third session noticed the cause and it is right: on boot, the projector's first tick (`tick()` in `src/service/projection.js`) discovers every review on disk, reads each one's whole log, projects it, and rewrites its review.json. Today that is 400 reviews and about 654 MB of log, parsed in one synchronous pass with the event loop blocked. Once the pass finishes the helper is fine: the one that came up at 17:30 answered a health check in under a millisecond and sat at 0 percent CPU after rewriting 400 review.json files.
+
+Two things follow:
+
+- Do not restart the helper casually, and never force-kill it while it is busy: a kill mid-pass just restarts the pass. Today's sequence of restart, kill, restart made the outage longer.
+- This is fix 2 above, made urgent. The helper should project a review the first time something asks for it, not every review at boot, and a review's projection should not require re-reading its whole log. Log compaction (fix 4) shrinks the pass but does not remove it.
+
 ## What the code audit found in the layer
 
 Ranked by impact. File and line references are into `src/layer/`.
