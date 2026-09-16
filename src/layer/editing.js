@@ -1716,9 +1716,20 @@
       itemForElement.push({ el: el, id: id });
     }
 
+    // Drops this record's row, and any row whose block is out of the document.
+    //
+    // The retire paths (undo, commit, retire) already call this, so a record
+    // that leaves the review leaves the list with it. What the list used to keep
+    // was the OTHER shape: a block a repaint replaced, still named by a record
+    // that is still outstanding. Nothing can match a detached node again
+    // (itemFor is asked about a block on the page), and holding one holds its
+    // whole old document tree, so it goes on the next pass through here
+    // (the 2026-09-16 memory audit). `!== false` because a fake block in a unit
+    // test has no isConnected at all, and absent is not detached.
     function forget(id) {
       itemForElement = itemForElement.filter(function (row) {
-        return row.id !== id;
+        if (row.id === id) return false;
+        return !!row.el && row.el.isConnected !== false;
       });
     }
 

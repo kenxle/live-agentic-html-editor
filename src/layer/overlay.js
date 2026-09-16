@@ -1356,6 +1356,13 @@
 
     // The DOM, all of it, or all nulls when there is no document (Node).
     var dom = null;
+    // The viewport clamp's two window listeners, held so unmount can take them
+    // off again. They are the rail's, they are bound on mount, and a rail is
+    // rebuilt every time the page throws the overlay root away (index.js's
+    // ensureRoot): two more per rebuild, for the life of the page, was a real
+    // accumulation on a page that rebuilds all session (the 2026-09-16 memory
+    // audit). See mount, where it is bound, and unmount, where it goes.
+    var viewportClamp = null;
     // Cards whose pane changed while they held focus. Re-parenting a focused
     // element blurs it, so the move waits for focus to leave.
     var pendingPlacement = Object.create(null);
@@ -1783,14 +1790,18 @@
       // reviewer's choice, not a new one made on their behalf.
       var pillView = doc && doc.defaultView;
       if (pillView && typeof pillView.addEventListener === "function") {
-        pillView.addEventListener("resize", function () {
-          if (pillSpot) applyPillSpot();
-        });
-        if (typeof pillView.addEventListener === "function") {
-          pillView.addEventListener("orientationchange", function () {
+        // One handler for both events, held on the closure so unmount removes
+        // exactly what this mount bound. Binding happens once per mount:
+        // mount() returns early when the rail is already up, and unmount is the
+        // only other way out, so there is no path that binds twice.
+        viewportClamp = {
+          view: pillView,
+          handler: function () {
             if (pillSpot) applyPillSpot();
-          });
-        }
+          }
+        };
+        pillView.addEventListener("resize", viewportClamp.handler);
+        pillView.addEventListener("orientationchange", viewportClamp.handler);
       }
 
       // A held pane move lands the moment focus leaves the card.
@@ -1909,6 +1920,9 @@
       });
       // A node mid-fade belongs to a root that is going away with it.
       toastLeaving = [];
+      // The viewport clamp is about a pill that is about to stop existing, and
+      // mount binds it again for the pill that replaces it.
+      releaseViewportClamp();
       if (dom && dom.host && dom.host.parentNode) dom.host.parentNode.removeChild(dom.host);
       Object.keys(cards).forEach(function (id) {
         cards[id].node = null;
@@ -1921,6 +1935,18 @@
       // again from renderAgent, so nothing is lost by dropping it here, and a
       // page that navigates away leaves no interval of ours running.
       armAgentAgeTick();
+    }
+
+    /** Take the viewport clamp off the window it was bound to. */
+    function releaseViewportClamp() {
+      if (!viewportClamp) return false;
+      var view = viewportClamp.view;
+      if (view && typeof view.removeEventListener === "function") {
+        view.removeEventListener("resize", viewportClamp.handler);
+        view.removeEventListener("orientationchange", viewportClamp.handler);
+      }
+      viewportClamp = null;
+      return true;
     }
 
     function isMounted() {

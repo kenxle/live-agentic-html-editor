@@ -490,6 +490,9 @@
     function createDoneTab() {
       var made = ns.tabDone.createDoneTab({
         store: scopedStore,
+        // The whole review, for the one question that is not about this page:
+        // whether a record it already announced is still in the review at all.
+        allStore: store,
         reviewId: reviewId,
         comments: comments,
         overlay: rail,
@@ -515,7 +518,14 @@
       return made;
     }
 
+    // Every status the line has shown, newest last, for the browser harness to
+    // assert on. One entry per TRANSITION, and the status line deliberately
+    // holds its reading while work is queued and in flight, so an ordinary
+    // session adds a handful and only a helper going away and coming back adds
+    // more. Capped so an afternoon of that does not grow it without end, the
+    // same way sync.js caps repliesSeen (the 2026-09-16 memory audit).
     var statusLog = [];
+    var STATUS_KEPT = 200;
     // revertChecks counts the check having RUN on this load, which is what a
     // test waits on: "the check ran and reopened nothing" is a real result and
     // an arbitrary sleep is the only other way to observe it.
@@ -576,7 +586,7 @@
       helperOrigin: config.helper || undefined,
       store: store,
       onStatus: function (state) {
-        statusLog.push(state);
+        statusLog = statusLog.concat([state]).slice(-STATUS_KEPT);
         rail.setStatusLine(state);
       },
       // Whether an agent is actually listening, from the helper's own files
@@ -1143,6 +1153,14 @@
       // "closed" is not a change to the record: the state it would post was
       // already posted by the keystroke or by ready.
       if (event === "closed") return;
+      // The cache first, and before the binding below. A record the cache has
+      // not picked up yet is a record the next pass cannot see, and a pass that
+      // cannot see a record used to drop what it holds for it. Replay asks the
+      // store rather than the cache now (its `hasItem`), so this is no longer
+      // load-bearing; it stays because a rail, a replay pass and an exporter
+      // reading a list that is one item behind the store is its own small class
+      // of bug.
+      refreshItems();
       // Creation is a binding: hand replay the node the item was made on, so
       // the still-bound rule covers element picks the text matcher can never
       // re-find (comments loads before replay, so the bridge is here).
@@ -1188,6 +1206,15 @@
       // For one thing only: the conflict card's "take the page's" button, which
       // retires a record and writes nothing. See replay's `context`.
       editing: editing,
+      // Is this record still in the review at all? Replay asks before it lets
+      // go of anything it holds per record, and the answer comes from the
+      // UNSCOPED store rather than from `items` above. `items` is a page-scoped
+      // cache that a change updates afterwards, so it answers "no" for a record
+      // made a moment ago and for every record made on another page of the same
+      // review, and neither of those is gone. See replay's releaseRetired.
+      hasItem: function (id) {
+        return !!store.readItem(reviewId, id);
+      },
       // How a record replay changed gets written down. `items` above is a
       // CACHE, and merge() replaces it from the store on every remount, so a
       // change replay only made in memory dies at the next morph. That is what

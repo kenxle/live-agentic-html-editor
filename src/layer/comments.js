@@ -2691,6 +2691,12 @@
       // and the page the deleted item belonged to, and the rail reads the id
       // off it either way.
       if (removed) emit(doomed || { id: id }, "removed");
+      // AFTER the emit, which reads it: the listener is told which node the item
+      // was made on, and this is the last time anyone can be. The node is the
+      // item's, and an item nobody can reach again must not go on holding one: a
+      // creation node the page has since rebuilt keeps its whole old document
+      // tree alive behind it (the 2026-09-16 memory audit).
+      delete createdOn[id];
       return removed;
     }
 
@@ -3141,6 +3147,12 @@
       setReview: setReview,
       setPage: setPage,
       onChange: onChange,
+      // Which items this surface is still holding a creation node for.
+      // Read-only, and for the retention tests: the map is private and "it let
+      // go of that one" is otherwise unobservable from outside.
+      createdOnIds: function () {
+        return Object.keys(createdOn);
+      },
       openBox: openBox,
       openNote: openNote,
       reopen: reopen,

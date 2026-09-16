@@ -521,10 +521,97 @@
     }
 
     lastSummary = summary;
+    releaseRetired(ctx);
     // Finding 9: run any pass a colliding repaint owed but that the observer
     // could only remember while replay's own write epoch was open.
     scheduleOwedPass();
     return summary;
+  }
+
+  /**
+   * What this pass no longer has any use for.
+   *
+   * The element memory below is module-level, so it outlives every pass and
+   * every remount. Two things end an entry, and neither of them used to
+   * (the 2026-09-16 memory audit):
+   *
+   *   THE RECORD IS GONE from the review. The reviewer undid it, deleted it, or
+   *   answered a collision with "take the page's". There is nothing left for the
+   *   node to be the node OF, and the collision's card node goes with it.
+   *
+   *   THE NODE IS OUT OF THE DOCUMENT, which is what a repaint does to every
+   *   node it replaces. A detached node holds its parents, so one kept entry
+   *   keeps a whole dead document tree.
+   *
+   * GONE IS ASKED OF THE REVIEW, NEVER OF THIS PASS'S LIST. `ctx.items` is a
+   * page-scoped cache that a change updates after the fact, so a record made a
+   * moment ago (comments.onChange binds the creation node before anything
+   * refreshes) and a record made on another page of the review both read as
+   * absent there. Deleting on that answer is the 2026-08-18 regression:
+   * an element pick has no words for the matcher to re-find, its binding is the
+   * only anchor it has, and the next settle calls it lost while the reviewer is
+   * looking at it. So the question goes to `ctx.hasItem`, which index.js answers
+   * from the UNSCOPED store, and with no such hook nothing is dropped for being
+   * gone.
+   *
+   * THE DETACHED-NODE SWEEP IS NARROW for the same reason. A tab panel, an
+   * accordion or a carousel takes a section out of the document and puts it
+   * back, so "detached" is not "dead". An entry goes only when the record could
+   * be found again from its own words (see refindableByText); for anything else
+   * the binding is kept, because losing it loses the only place the record has.
+   *
+   * A HANDLED RECORD KEEPS ITS ENTRY while its node is live. It is still in the
+   * review, and `locate` is the Done card's click-to-find: a handled item has no
+   * highlight left to scroll to (R37), so its binding is the only thing that
+   * knows where its passage is.
+   */
+  function releaseRetired(ctx) {
+    var known = typeof ctx.hasItem === "function" ? ctx.hasItem : null;
+    var onThisPage = Object.create(null);
+    itemsIn(ctx).forEach(function (item) {
+      onThisPage[item[record.FIELD.ID]] = item;
+    });
+    Object.keys(lastElement).forEach(function (id) {
+      if (known && known(id) !== true) {
+        delete lastElement[id];
+        return;
+      }
+      var element = lastElement[id];
+      if (!element) {
+        delete lastElement[id];
+        return;
+      }
+      if (element.isConnected === false && refindableByText(onThisPage[id])) delete lastElement[id];
+    });
+    if (!known) return;
+    // The probable place is the same shape: one element per record, for the
+    // reviewer's eyes only. It goes when the record does.
+    Object.keys(probable).forEach(function (id) {
+      if (known(id) !== true) delete probable[id];
+    });
+    Object.keys(conflictNodes).forEach(function (id) {
+      if (known(id) === true) return;
+      delete conflicts[id];
+      dropConflictNode(ctx, id);
+    });
+  }
+
+  /**
+   * Could this record be found again from its own words alone?
+   *
+   * True only for a record this pass can SEE (one on this page's list), whose
+   * reference carries text to match on, and whose region is not already stamped
+   * lost. Anything else is answered false, which is the conservative answer
+   * everywhere it is asked: keep the binding.
+   */
+  function refindableByText(item) {
+    if (!item) return false;
+    var region = item[record.FIELD.REGION];
+    if (!region || region.lost) return false;
+    var ref = region.ref;
+    if (!ref || typeof ref.probe !== "string" || !ref.probe) return false;
+    var elementProbe = anchorEngine && anchorEngine.PROBE ? anchorEngine.PROBE.ELEMENT : "element";
+    return ref.probe_kind !== elementProbe;
   }
 
   var lastSummary = null;
@@ -1156,13 +1243,19 @@
       sides.appendChild(sideNode(doc, "theirs", THEIRS_LABEL));
       node.appendChild(sides);
       node.appendChild(decideNode(ctx, doc, id));
-      // The stylesheet rides in with the node, into the rail's own closed root,
-      // the way 3A's Done tab puts its own in. Without it these are attribute
-      // names with nothing behind them and the card that matters most in the
-      // product draws in no system at all.
-      ensureConflictStyle(doc, node);
       conflictNodes[id] = node;
     }
+    // The stylesheet rides in with a node, into the rail's own closed root, the
+    // way 3A's Done tab puts its own in. Without it these are attribute names
+    // with nothing behind them and the card that matters most in the product
+    // draws in no system at all.
+    //
+    // Asked on EVERY call, not only when a node is built: the sheet lives inside
+    // whichever node carried it in, and that node leaves the document when its
+    // own collision clears. A second collision standing at that moment would
+    // otherwise be left drawing in nothing at all. ensureConflictStyle is a
+    // no-op while the sheet is connected, so the repeat costs one property read.
+    ensureConflictStyle(doc, node);
     node.firstChild.textContent = CONFLICT_TITLE;
     writeSide(doc, node, "yours", yours, theirs);
     writeSide(doc, node, "theirs", theirs, yours);
@@ -1374,9 +1467,17 @@
     clearConflict(ctx, id);
   }
 
-  // A conflict that resolved: the node stays where it is (removing it from a
-  // card the reviewer may be in is the churn this file refuses), and it is
-  // emptied and hidden.
+  // A conflict that resolved: the node comes off the card and out of the map.
+  //
+  // It used to be emptied and hidden and then kept, which reads as the churn
+  // rule (a card the reviewer is in must not be rebuilt underneath them) and is
+  // not: nothing is rebuilt here, a warning nobody is being shown any more is
+  // taken away. What the keeping cost was one detached-but-attached node per
+  // item that ever collided, held for the life of the page in the map and in the
+  // card (the 2026-09-16 memory audit). The next collision on the same record
+  // builds a fresh node, which is what makes the removal safe: see
+  // conflictNodeFor, and the stylesheet that rides in with it, which notices it
+  // left the document and comes back with the new node.
   function clearConflict(ctx, id) {
     // A DISPLACED conflict is not cleared by an ordinary pass. It was raised
     // from something the page tried to say and protection took back off, so the
@@ -1387,14 +1488,50 @@
     if (conflicts[id] && conflicts[id].displaced) return;
     if (conflicts[id]) delete conflicts[id];
     callCard(ctx, "clearCardBadge", id, "REPLAY_NEITHER_MATCHES");
+    dropConflictNode(ctx, id);
+  }
+
+  /**
+   * Take one collision's node off the card and out of the map.
+   *
+   * Emptied and hidden FIRST, and unconditionally: the words in it are a
+   * warning that no longer stands, and they must not be readable a moment
+   * longer whether or not the node itself can go yet.
+   *
+   * NOT WHILE THE REVIEWER IS IN THIS CARD. Taking a node out of a card that
+   * holds focus drops the focus to the body, which is the same re-parenting
+   * rule attachCardNode keeps. The blank hidden node is harmless meanwhile, and
+   * every later pass over an already-applied record calls through here again,
+   * so it goes the moment focus leaves.
+   *
+   * detachCardNode, not removeChild: the rail REMEMBERS the nodes a caller
+   * attached and puts them all back whenever it rebuilds the card (see
+   * overlay's render), so a node taken out of the DOM alone reappears at the
+   * next remount. removeChild is the fallback for a caller with no rail, which
+   * is the shape the unit tests run in.
+   */
+  function dropConflictNode(ctx, id) {
     var node = conflictNodes[id];
-    if (!node) return;
+    if (!node) return false;
+    blankConflictNode(node);
+    if (typeof node.setAttribute === "function") node.setAttribute("hidden", "hidden");
+    if (callCard(ctx, "holdsFocus", id) === true) return false;
+    delete conflictNodes[id];
+    if (!callCard(ctx, "detachCardNode", id, node)) {
+      if (node.parentNode && typeof node.parentNode.removeChild === "function") {
+        node.parentNode.removeChild(node);
+      }
+    }
+    return true;
+  }
+
+  /** The title and both sides, emptied. */
+  function blankConflictNode(node) {
     if (node.firstChild) node.firstChild.textContent = "";
     var yours = textIn(node, "yours");
     var theirs = textIn(node, "theirs");
     if (yours) yours.textContent = "";
     if (theirs) theirs.textContent = "";
-    node.setAttribute("hidden", "hidden");
   }
 
   /** What the reviewer's card is showing as a collision right now. */
@@ -2294,6 +2431,12 @@
     // events; see the createdOn note in comments.js.
     bindElement: function (id, element) {
       if (id && element && element.nodeType === 1) lastElement[id] = element;
+    },
+    // Which records this file is holding a node for. Read-only, and for the
+    // retention tests: the map is module-level, so "it let go of that one" is
+    // otherwise unobservable from outside.
+    boundIds: function () {
+      return Object.keys(lastElement);
     },
     locate: locate,
     schedule: schedule,
