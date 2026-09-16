@@ -58,31 +58,29 @@
 
 :root { color-scheme: light }
 
-/* ---------- the reading column ----------
-   Declared here and nowhere else. Ken's note from the style review: the column
-   was once set in five places and they drifted apart. The max-width adds the
-   horizontal inset back on top of --read, because box-sizing is border-box, so
-   the text itself measures the full 68ch rather than 68ch minus the padding. */
+/* ---------- the page column ----------
+   main is a plain block. The renderer wraps the document in .wrap.hero and
+   section.sheet, and both of those carry the 1080px column and the horizontal
+   inset themselves, from document.css. Nothing sets a column here: Ken's note
+   from the style review was that it had once been set in five places and they
+   drifted apart.
 
-body > main {
-  max-width: calc(var(--read) + var(--s5) * 2);
-  margin-block: var(--s7);
-  margin-inline: auto;
-  padding-inline: var(--s5);
-}
+   Prose takes the reading measure inside that column, the way .read does for a
+   hand-written page. Tables, code and diagrams stay full width. */
 
-main > :first-child { margin-top: 0 }
-main > :last-child { margin-bottom: 0 }
+section.sheet p, section.sheet ul, section.sheet ol,
+.hero p, .hero ul, .hero ol { max-width: var(--read) }
 
 /* ---------- headings ----------
    document.css sets the faces, sizes and sentence-case rule. It zeroes the
-   margins, because a component decides its own spacing. A Markdown document
-   has no components, so the rhythm is set here. */
+   margins, because a component decides its own spacing. h1 and h2 now sit in
+   components that own their spacing (.hero and .sheet-head), so only the lower
+   headings need rhythm. Scoped to main rather than to section.sheet so a
+   heading in the lede gets the same room as one in a section. */
 
-main h1 { margin: 0 0 var(--s5) }
-main h2 { margin: var(--s7) 0 var(--s4) }
 main h3 { margin: var(--s6) 0 var(--s3) }
-main h4, main h5, main h6 { margin: var(--s5) 0 var(--s3) }
+main h4 { margin: var(--s5) 0 var(--s2) }
+main h5, main h6 { margin: var(--s5) 0 var(--s3) }
 main h5, main h6 {
   font-family: var(--font-display);
   font-weight: var(--w-display);
@@ -92,36 +90,19 @@ main h5, main h6 {
 }
 
 /* ---------- lists ----------
-   ul becomes the guide's dot-bullet list, sage. ol becomes the guide's
-   numbered list, numerals left in ink: the guide says to pick dots or coloured
-   numerals, not both, and the dots are already spent here. */
+   The renderer puts class="dot" on every unordered list, so document.css's
+   ul.dot rules draw the sage bullet and there is nothing to restate here. Only
+   the bottom margin is ours: ul.dot zeroes it, on the assumption that a
+   component sets the gap, and a Markdown document has no components.
 
-main ul {
-  list-style: none;
-  margin: 0 0 var(--s4);
-  padding-left: 0;
-}
-main ul li {
-  position: relative;
-  margin-bottom: var(--s3);
-  padding-left: 1.6em;
-  font-size: 16px;
-  line-height: 1.5;
-}
-main ul li::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: .62em;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--sage);
-}
+   ol becomes the guide's numbered list, numerals left in ink: the guide says to
+   pick dots or coloured numerals, not both, and the dots are already spent. */
+
+main ul.dot { margin-bottom: var(--s4) }
 
 /* A GFM task list already carries its own marker, so it does not get a dot. */
-main ul li:has(> input[type="checkbox"]) { padding-left: 0 }
-main ul li:has(> input[type="checkbox"])::before { content: none }
+main ul.dot li:has(> input[type="checkbox"]) { padding-left: 0 }
+main ul.dot li:has(> input[type="checkbox"])::before { content: none }
 main li > input[type="checkbox"] {
   accent-color: var(--sage);
   margin-right: var(--s2);
@@ -140,6 +121,9 @@ main ol li {
 main li > p { margin-bottom: var(--s2) }
 main li > p:last-child { margin-bottom: 0 }
 main li ul, main li ol { margin: var(--s3) 0 0 }
+/* The class raises the specificity of ul.dot's own rules, so a nested list
+   needs a selector that carries it too, or it keeps the outer bottom margin. */
+main li ul.dot { margin-block: var(--s3) 0 }
 main li:last-child { margin-bottom: 0 }
 
 /* ---------- blockquote as the tinted panel ----------
@@ -158,6 +142,14 @@ main blockquote > :last-child { margin-bottom: 0 }
    Full borders and a cobalt-tint header row, no zebra. document.css reaches
    these elements through bare selectors and a :last-child rule, so every
    override below is scoped under main to win on specificity. */
+
+/* Every table is wrapped in .scrollx by the renderer. document.css gives that
+   wrapper the horizontal scroll; the bottom margin is ours, because the table
+   inside carries none and prose after one was crowding it. */
+main .scrollx {
+  margin-bottom: var(--s5);
+  overflow-x: auto;
+}
 
 main table {
   width: 100%;
@@ -228,8 +220,18 @@ main hr {
    These three class names are load-bearing: the renderer writes them, the
    layer and the tests look for them. Restyled onto tokens, not renamed. */
 
+/* The read-only note and the frontmatter sit above the hero, outside any
+   section, so nothing else gives them a column. They take the hero's, which is
+   what lines their left edge up with the title underneath. */
+main > .lahe-readonly-note,
+main > .frontmatter {
+  max-width: var(--maxw);
+  margin-inline: auto;
+  margin-block: var(--s6) 0;
+  padding-inline: var(--s5);
+}
+
 main .frontmatter {
-  margin: 0 0 var(--s6);
   color: var(--ink-faint);
   font-size: 15px;
 }
@@ -241,8 +243,7 @@ main .frontmatter summary {
 main .frontmatter pre { margin: var(--s3) 0 0 }
 
 main .lahe-readonly-note {
-  margin: 0 0 var(--s6);
-  padding: var(--s3) var(--s4);
+  padding-block: var(--s3);
   border: var(--line);
   border-radius: var(--r);
   color: var(--ink-faint);
@@ -259,8 +260,4 @@ main .lahe-local-link {
   text-decoration: underline dotted;
   text-underline-offset: 3px;
   cursor: help;
-}
-
-@media (max-width: 720px) {
-  body > main { margin-block: var(--s6) }
 }
