@@ -100,11 +100,12 @@ edits generated HTML that the next build throws away.
 `lahe review` again with the same `--session <id>`. Each page shows the reviewer
 only its own items, while `review.json` and `lahe status` show them all.
 
-**A folder is one command, not one per page.** Point `lahe review` at the folder
+**A folder is one command, not one per page.** Point `lahe review` at the FOLDER
 and every page in it carries the rail: the ones you wrote, the ones they reach by
-a link, and the ones you add later. Do not enroll pages one at a time. The rule
-is that anything our own static server serves gets the rail, so there is nothing
-to enroll. Two things to know:
+a link, and the ones you add later. Do not enroll pages one at a time. Pointing
+it at one page instead is not the same thing and never was: that serves the
+page's own folder, but only the page you named carries the review, and the rest
+are served plain. Things to know:
 
 - The folder needs at least one `.html` file of its own. A folder with no pages
   in it is still the app-in-dev row, which is what pointing at a project checkout
