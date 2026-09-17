@@ -55,15 +55,10 @@ itself, so an agent that is woken thirty times does not read it thirty times;
 The **wake channel** is per host, because hosts differ in what they can do
 without spending model tokens:
 
-- **Claude Code** arms one Monitor, with `persistent: true` in the tool call, on
-  `tail -n 0 -f <state-dir>/agent-sessions/<id>/wake.log`. Without that parameter
-  the Monitor times out at its default 300 seconds, and a timing-out monitor is a
-  scheduled model wakeup in disguise. The wake feed is one
-  append-only file per agent session, created empty when the session is, so the
-  tail can be armed before any work exists. It gets a line when a ready item
-  lands, when the reviewer reopens an item, when the session is taken over, and
-  when it closes. Nothing to relaunch,
-  and no model turns at all while it is quiet.
+- **Claude Code** runs `lahe monitor --session <id>` with Bash in the background.
+  It exits when work lands (`0`), the session closes (`5`), or another agent takes
+  over (`6`). On `0` the agent drains to empty and launches the same command again
+  in the background.
 - **Codex** runs `lahe monitor --session <id>` as a foreground pending exec call
   and keeps waiting on it. It must not detach the process, announce that
   monitoring started, and end the turn: detached task completion alone does not

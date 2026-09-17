@@ -169,9 +169,9 @@ function withinMs(iso, nowMs, windowMs) {
  * handoff. One spelling, because two spellings of the wake command is how an
  * agent ends up tailing a path that does not exist.
  *
- * The wake line is FIRST because it is the one that costs nothing while it
- * waits. The monitor line is the fallback for a host with no persistent file
- * watcher of its own.
+ * The wake line names the feed the monitor watches. Every host waits with the
+ * monitor line: Claude Code in a background Bash call, Codex as a pending exec,
+ * Antigravity as a background terminal task.
  *
  * THE COMMANDS CARRY --state-dir WHEN THIS SESSION IS NOT IN THE DEFAULT
  * DIRECTORY. They are printed to be copied, and a copied command resolves the
@@ -187,9 +187,9 @@ function commandBlock(input) {
   var flagDir = stateDir.flagFor(spec.dir);
   return (
     "  wake      tail -n 0 -f " + wake + "\n" +
-    "            Claude Code: arm this once as a Monitor with persistent true, never the default\n" +
-    "            timeout. Each new line means run drain.\n" +
+    "            one line per wake. Wait on it with the monitor below, not a tail of your own.\n" +
     "  monitor   " + protocol.monitorCommand(spec.session, flagDir) + "\n" +
+    "            Claude Code: run with Bash in the background and launch it again after each drain.\n" +
     "            Codex: run as a foreground pending exec and keep waiting on it. Antigravity: a\n" +
     "            background terminal task, never the native schedule timer. It prints work and exits.\n" +
     "  drain     " + protocol.drainCommand(spec.session, flagDir) + "\n" +
