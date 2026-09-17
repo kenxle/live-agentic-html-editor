@@ -34,29 +34,27 @@ exact no-op token burn the wake channel exists to prevent.
 ```mermaid
 flowchart TD
     Host{"which host is this?"}
-    Host -->|"Claude Code"| CC["Monitor tool armed on<br/>tail -n 0 -f wake.log<br/>with persistent: true"]
+    Host -->|"Claude Code"| CC["lahe monitor --session id,<br/>run with Bash in the background"]
     Host -->|"Codex"| Cx["lahe monitor --session id,<br/>run as a foreground pending exec,<br/>keep waiting on it"]
     Host -->|"Antigravity"| AG["lahe monitor --session id,<br/>run as a background terminal task"]
     Host -->|"any other host"| Oth["lahe monitor --session id,<br/>run in the foreground"]
 
-    CC --> Silent["stays silent while there is no work,<br/>no model turns spent"]
-    Silent -->|"a line lands in wake.log"| Drain1["run the drain command"]
-
+    CC --> LocalPoll
     Cx --> LocalPoll["the monitor polls locally in one<br/>small Node process, no model tokens spent"]
     AG --> LocalPoll
     Oth --> LocalPoll
     LocalPoll -->|"work is found"| Exit0["exits with code 0, prints the work"]
-    Exit0 --> Drain1
+    Exit0 --> Drain1["run the drain command,<br/>then launch the monitor again"]
 
     LocalPoll -.->|"session closed"| Exit5["exits with code 5"]
     LocalPoll -.->|"another agent took over"| Exit6["exits with code 6"]
     Exit5 --> Stop["STOP. do not relaunch"]
     Exit6 --> Stop
 
-    Danger["Claude Code Monitor armed WITHOUT persistent: true"] --> Timeout["hits its default 300 second timeout,<br/>even though nothing happened"]
+    Danger["a watch with a timeout,<br/>or a scheduled model wakeup"] --> Timeout["fires even though nothing happened"]
     Timeout --> Relaunch["model wakes up, finds nothing,<br/>re-arms, reports the no-op"]
-    Relaunch -->|"repeats every few minutes"| NoOp["the no-op token burn:<br/>a scheduled model wakeup wearing a disguise"]
-    NoOp -.->|"avoided by using"| CC
+    Relaunch -->|"repeats every few minutes"| NoOp["the no-op token burn"]
+    NoOp -.->|"avoided by using"| LocalPoll
 ```
 
 ## Whether one diagram could hold all of this
@@ -76,10 +74,11 @@ the loop above, and the wake channel below carrying all four required pieces.
 
 - The main loop never has the agent stop and report that a wake arrived; the
   interrupt is a reason to keep working through drain, not a stopping point.
-- On Claude Code, `persistent: true` is the one setting that keeps the
-  Monitor tool from defaulting to a 300 second timeout. Without it, the
-  Monitor times out on its own and looks exactly like new work landing, which
-  is the no-op token burn shown in the lower diagram.
+- Every host now waits with the same `lahe monitor` process; only how it is
+  run differs. On Claude Code it runs with Bash in the background and is
+  launched again after each drain. A watch that times out on its own looks
+  exactly like new work landing, which is the no-op token burn shown in the
+  lower diagram.
 - Exit codes 5 and 6 both mean stop, but for different reasons: 5 is the
   reviewer ending the session on purpose, 6 is another agent explicitly
   taking it over. Either way, relaunching the monitor is wrong.

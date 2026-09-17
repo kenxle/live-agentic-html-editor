@@ -149,7 +149,7 @@ slow that day was how the loop ran around them, so:
   the diff touches auth, serving, paths, or tokens.
 - **A builder's brief points at the docs; it does not restate the code.**
   `docs/ongoing/` (how a subsystem works now), `docs/diagrams/` (the shape of
-  the system), `docs/CONTRACTS.md`, `docs/CLI.md`, and `AGENTS.md` are what a
+  the system), `docs/CONTRACTS.md`, `docs/CLI.md`, and `skills/lahe/SKILL.md` are what a
   builder reads first, and the brief names which ones. Paraphrasing the code
   in a brief is how three specs on 2026-09-16 each carried a wrong detail.
   When the brief would have to describe code that no doc covers, that is the
@@ -211,14 +211,22 @@ The feature folder (brief, architecture, plan) is HISTORY: what we set out
 to build and why. It is not rewritten as the tool evolves. The living
 truth for how the tool works now is:
 
-- **`AGENTS.md`**: the cold-start playbook any agent follows.
+- **`skills/lahe/SKILL.md`**: every instruction for running a review.
+  Hosts load it automatically.
 - **The `contract` field in review.json** (authored in
   `src/shared/review_format.js`): the only instructions an agent is
   GUARANTEED to see, embedded into every review at setup time.
+- **`AGENTS.md`**: about the tool, not the task. How each agent host
+  connects, a pointer to install, and pointers to the docs.
 
-These two travel together. A workflow change that lands in AGENTS.md must
-also be folded into the contract text (and its restated copy in
-test/unit/review_format.test.js and docs/CONTRACTS.md, plus a dist
-rebuild, since the contract ships in the bundle). An agent instruction
-that exists only in AGENTS.md is invisible to an agent that only ever
-reads review.json.
+The skill and the contract travel together. A workflow change that lands
+in the skill must also be folded into the contract text, and into every
+copy of it:
+
+- the skill itself, `skills/lahe/SKILL.md` (then `npm run install-skills`)
+- the restated copy in `test/unit/review_format.test.js`
+- the restated copy in `docs/CONTRACTS.md`
+- a dist rebuild, since the contract ships in the bundle
+
+An agent instruction that exists only in the skill is invisible to an
+agent that only ever reads review.json.

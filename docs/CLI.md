@@ -1,8 +1,8 @@
 # Every invocation
 
-**Things a person says to their agent.** The agent-readable playbook is
-[`AGENTS.md`](../AGENTS.md); an agent that has never seen this tool needs the URL
-once, and after that a plain sentence works:
+**Things a person says to their agent.** An agent that has never seen this tool
+needs the [`AGENTS.md`](../AGENTS.md) URL once, which leads it to install and the
+lahe skill; after that a plain sentence works:
 
 > Set up a live review of `path/to/page.html`: follow
 > https://raw.githubusercontent.com/kenxle/live-agentic-html-editor/main/AGENTS.md
