@@ -12,7 +12,7 @@ Keep the pointer, or bring back a short checklist in the playbook?
 
 They still tell Claude Code agents to use a timer option that Claude Code removed on Sep 14. The new playbook gives the right instruction and says that one line in the review file is out of date. The instructions in the review file are locked on purpose and change only with care.
 
-Fix that locked text now, as its own small change? (Recommended: yes. Until then, every Claude Code agent that reads only the review file tries the broken thing.)
+Ken folded this into the playbook swap: the locked text gets fixed in the same change, along with telling agents to read the review file once rather than on every wake. No answer needed here.
 
 ## 3. The keyboard shortcuts
 
