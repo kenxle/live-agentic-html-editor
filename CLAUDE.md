@@ -152,6 +152,15 @@ slow that day was how the loop ran around them, so:
   the system), `docs/CONTRACTS.md`, `docs/CLI.md`, and `AGENTS.md` are what a
   builder reads first, and the brief names which ones. Paraphrasing the code
   in a brief is how three specs on 2026-09-16 each carried a wrong detail.
+- **A visual change ships with a screenshot, every time.** Ken (2026-09-16),
+  after a builder's progress page showed the rail it had actually built: "I
+  love that you added screencaps... it lets me see things and comment on them
+  without having to go try and create the situation, and it makes a good
+  record." Any change to the rail, a card, a banner, or anything else drawn on
+  screen gets a real screenshot from the built page (light and dark when the
+  change touches both) on the change's own progress page, not a description of
+  what it should look like. Take it after the browser test that proves the
+  change, so the picture and the passing test are the same run.
   When the brief would have to describe code that no doc covers, that is the
   gap: write the doc, or have the builder's design note become it.
 - **A builder that hits a limit checks in instead of documenting around it.**
