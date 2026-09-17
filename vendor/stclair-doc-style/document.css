@@ -295,8 +295,8 @@ table.boxed td:last-child,table.boxed th:last-child{padding-right:var(--s4)}
 
 /* Dot-bullet list. Pick one accent colour per list, don't mix cobalt and sage dots. */
 ul:where(:not([class]), .dot){list-style:none;padding:0;margin:0 0 var(--block-gap)}
-ul:where(:not([class]), .dot) li{position:relative;padding-left:2.1em;   /* same inset as a numbered list, so text starts on one line when the two stack */margin-bottom:var(--s3);font-size:var(--text-body);line-height:1.5}
-ul:where(:not([class]), .dot) li::before{
+ul:where(:not([class]), .dot) > li{position:relative;padding-left:2.1em;   /* same inset as a numbered list, so text starts on one line when the two stack */margin-bottom:var(--s3);font-size:var(--text-body);line-height:1.5}
+ul:where(:not([class]), .dot) > li::before{
   content:"";
   position:absolute;
   left:0;
@@ -313,8 +313,8 @@ ul.dot--cobalt li::before{background:var(--accent)}
    marker, so every numbered list has the same gap between numeral and text
    as the accent version below. Ken asked for the two to match. */
 ol:where(:not([class]), .steps){list-style:none;counter-reset:step;margin:0 0 var(--block-gap);padding-left:0}
-ol:where(:not([class]), .steps) li{counter-increment:step;position:relative;padding-left:2.1em;margin-bottom:var(--s3);font-size:var(--text-body);line-height:1.5;break-inside:avoid}
-ol:where(:not([class]), .steps) li::before{
+ol:where(:not([class]), .steps) > li{counter-increment:step;position:relative;padding-left:2.1em;margin-bottom:var(--s3);font-size:var(--text-body);line-height:1.5;break-inside:avoid}
+ol:where(:not([class]), .steps) > li::before{
   content:counter(step) ".";
   position:absolute; left:0; top:0;
   color:var(--on-surface);
@@ -325,14 +325,14 @@ ol.steps b{font-family:var(--font-display);font-weight:var(--w-display)}
    yet. The text inset stays the same, so it still lines up with its
    neighbours; only the numeral is drawn by the browser. */
 ol:where(:not([class]), .steps)[start]{list-style:decimal;padding-left:2.1em}
-ol:where(:not([class]), .steps)[start] li{padding-left:0}
-ol:where(:not([class]), .steps)[start] li::before{content:none}
+ol:where(:not([class]), .steps)[start] > li{padding-left:0}
+ol:where(:not([class]), .steps)[start] > li::before{content:none}
 /* Where the browser can read the start attribute into the counter (Chromium
    can), the list keeps its drawn numeral on the shared line instead. */
 @supports (counter-reset: step calc(attr(start type(<integer>), 1) - 1)){
   ol:where(:not([class]), .steps)[start]{list-style:none;padding-left:0;counter-reset:step calc(attr(start type(<integer>), 1) - 1)}
-  ol:where(:not([class]), .steps)[start] li{padding-left:2.1em}
-  ol:where(:not([class]), .steps)[start] li::before{content:counter(step) "."}
+  ol:where(:not([class]), .steps)[start] > li{padding-left:2.1em}
+  ol:where(:not([class]), .steps)[start] > li::before{content:counter(step) "."}
 }
 
 ol.steps--two-col{columns:2;column-gap:var(--section-gap-narrow)}
@@ -442,10 +442,10 @@ ol.steps--two-col{columns:2;column-gap:var(--section-gap-narrow)}
    list, so text lines up across the page; only the marker takes the panel's
    colour. */
 .insight li{margin:0 0 var(--s2)}
-.insight ol li::before{color:var(--accent)}
-.insight--caveat ol li::before{color:var(--purple)}
-.insight ul li::before{background:var(--accent)}
-.insight--caveat ul li::before{background:var(--purple)}
+.insight ol > li::before{color:var(--accent)}
+.insight--caveat ol > li::before{color:var(--purple)}
+.insight ul > li::before{background:var(--accent)}
+.insight--caveat ul > li::before{background:var(--purple)}
 .insight > :first-child{margin-top:0}
 .insight > :last-child{margin-bottom:0}
 
@@ -515,7 +515,7 @@ ol.steps--two-col{columns:2;column-gap:var(--section-gap-narrow)}
   which matches the sage dots on a dot list. Use one or the other in a
   document, not both, or the page starts to look decorated.
 */
-ol.steps--accent li::before{
+ol.steps--accent > li::before{
   font-family:var(--font-display); font-weight:var(--w-display);
   color:var(--sage);
 }
