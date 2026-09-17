@@ -19,7 +19,7 @@ beside the passage while they keep reviewing.
 Serve a review whenever a person is about to look at something:
 
 - a document, report, spec, plan, or draft email
-- a mockup, a set of logo options, a chart, a one-pager
+- a mockup, a set of logo options, a tear sheet, a chart, a one-pager
 - a Markdown file
 - your own app running in dev
 
