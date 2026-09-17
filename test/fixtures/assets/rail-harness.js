@@ -320,6 +320,25 @@
       return rail.setAgentLiveness(liveness);
     },
 
+    // The overdue wait, through the rail's own self-report (computed style,
+    // for the same reason as statusLine).
+    waitBanner: function () {
+      return rail.waitBannerInfo();
+    },
+    cardWait: function (id) {
+      return rail.cardWaitInfo(id);
+    },
+    // Test setup, not behavior: show the rail this card as if the reviewer had
+    // submitted it `ms` ago, so a test does not wait ten real minutes.
+    backdateCard: function (id, ms) {
+      var item = JSON.parse(JSON.stringify(store.readItem(reviewId, id)));
+      var at = new Date(Date.now() - ms).toISOString();
+      item.created_at = at;
+      item.updated_at = at;
+      rail.upsertCard(item);
+      return item;
+    },
+
     // --- sync ----------------------------------------------------------------
 
     sync: function () {

@@ -101,8 +101,10 @@ test.describe("the rail says whether anything has come back", () => {
         "monitor_at",
         "oldest_unanswered_at",
         "state",
+        "takeover_command",
         "unanswered"
       ]);
+      expect(overTheWire.takeover_command, "a review with no agent session names no command").toBe(null);
 
       await pollPage(page, () => window.__laheRail.status() === "stored", undefined, {
         message: "the line to read stored"
@@ -323,6 +325,167 @@ test.describe("the rail says whether anything has come back", () => {
       // One row, not two: the whole footer holds a single status line, which is
       // also a single announcement for a screen reader.
       expect(await page.evaluate(() => window.__laheRail.statusRows()), "one line").toBe(1);
+    } finally {
+      await helper.stop();
+    }
+  });
+
+  test("a card nobody picked up turns amber, and the top of the rail offers a handoff", async ({ page }) => {
+    // Ken, 2026-09-16: the footer's "nobody has picked this up, 10m" was right
+    // and too easy to miss. A late card changes color and says how long, and a
+    // banner at the TOP of the rail says to check the agent or hand the doc to
+    // a new one. Asserted on computed style and position, not on attributes.
+    const helper = await startService({
+      entry: SERVICE_ENTRY,
+      args: EPHEMERAL_PORT,
+      reviews: [REVIEW],
+      allowedOrigins: [pages.origin]
+    });
+
+    try {
+      await page.setViewportSize({ width: 1100, height: 720 });
+      await page.goto(railUrl(pages, helper.url, helper.tokenFor(REVIEW)));
+      await page.evaluate(() => window.__laheRail.startSync());
+      await pollPage(page, () => window.__laheRail.status() === "stored", undefined, {
+        message: "the line to read stored"
+      });
+
+      // Two submitted comments: one the reviewer sent twelve minutes ago, one
+      // just now.
+      const late = await page.evaluate(() => window.__laheRail.openCard());
+      await page.keyboard.type("The chart legend overlaps the axis", { delay: 5 });
+      await page.evaluate((id) => window.__laheRail.markReady(id), late.id);
+      const fresh = await page.evaluate(() => window.__laheRail.openCard());
+      await page.keyboard.type("Tighten this paragraph", { delay: 5 });
+      await page.evaluate((id) => window.__laheRail.markReady(id), fresh.id);
+      // Both reach the helper first, so its own answer is in before the test
+      // sets the ones it needs, and cannot land on top of them afterwards.
+      await pollPage(
+        page,
+        () => {
+          const liveness = window.__laheRail.sync().agentLiveness;
+          return !!liveness && liveness.unanswered === 2;
+        },
+        undefined,
+        { message: "the helper to report both waiting items" }
+      );
+      await page.evaluate(() => window.__laheRail.stopSync());
+      await page.evaluate((id) => window.__laheRail.backdateCard(id, 12 * 60 * 1000), late.id);
+
+      const calm = await page.evaluate((id) => window.__laheRail.cardWait(id), fresh.id);
+      const calmBanner = await page.evaluate(() => window.__laheRail.waitBanner());
+      expect(calmBanner.visible, "nothing is late yet").toBe(false);
+
+      // An agent is listening and nothing has come back for twelve minutes.
+      const banner = await page.evaluate(
+        (at) =>
+          window.__laheRail.setAgentLiveness({
+            state: "waiting",
+            unanswered: 2,
+            oldest_unanswered_at: at,
+            last_reply_at: null,
+            listening: true,
+            takeover_command: "lahe session takeover s_amber01"
+          }) && window.__laheRail.waitBanner(),
+        agoIso(12 * 60 * 1000)
+      );
+      const lateCard = await page.evaluate((id) => window.__laheRail.cardWait(id), late.id);
+      const freshCard = await page.evaluate((id) => window.__laheRail.cardWait(id), fresh.id);
+      expect(lateCard.late).toBe(true);
+      expect(lateCard.waitVisible, "the card says how long").toBe(true);
+      expect(lateCard.waitText).toBe("waiting 12m");
+      expect(lateCard.background, "the late card is a different color").not.toBe(freshCard.background);
+      expect(freshCard.late, "a comment sent a moment ago is not late").toBe(false);
+      expect(freshCard.background).toBe(calm.background);
+
+      expect(banner.visible).toBe(true);
+      expect(banner.text).toBe("Nothing has come back on your comments in 12m.");
+      expect(banner.check).toContain("Check your agent's window");
+      expect(banner.buttonText).toBe("Copy a message for a new agent");
+      expect(banner.aboveTabs, "the banner sits at the top, above the tabs and every card").toBe(true);
+      expect(banner.topInRail, "right under the head, not down in the footer").toBeLessThan(120);
+      ["monitor", "heartbeat", "wake", "token"].forEach((jargon) => {
+        expect((banner.text + " " + banner.check).toLowerCase()).not.toContain(jargon);
+      });
+
+      // The picture, when one is asked for.
+      if (process.env.LAHE_SCREENSHOT_DIR) {
+        const box = banner.railBox;
+        await page.screenshot({
+          path: path.join(process.env.LAHE_SCREENSHOT_DIR, "rail_amber_card_and_banner.png"),
+          clip: { x: box.x, y: box.y, width: box.width, height: Math.min(box.height, 720) }
+        });
+      }
+
+      // The button, pressed the way a person presses it. The clipboard is
+      // caught rather than read back, so the test does not hang on a
+      // permission prompt.
+      await page.evaluate(() => {
+        window.__copied = null;
+        Object.defineProperty(navigator, "clipboard", {
+          configurable: true,
+          value: {
+            writeText: (text) => {
+              window.__copied = text;
+              return Promise.resolve();
+            }
+          }
+        });
+      });
+      const b = banner.button;
+      await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+      await pollPage(page, () => typeof window.__copied === "string", undefined, {
+        message: "the handoff message to reach the clipboard"
+      });
+      const copied = await page.evaluate(() => window.__copied);
+      expect(copied).toContain("lahe session takeover s_amber01");
+      expect(copied).not.toContain(helper.tokenFor(REVIEW));
+      const afterCopy = await page.evaluate(() => window.__laheRail.waitBanner());
+      expect(afterCopy.note).toContain("Copied");
+
+      // An agent that is working: the same wait, explained, and nothing amber.
+      const working = await page.evaluate(
+        (at) =>
+          window.__laheRail.setAgentLiveness({
+            state: "working",
+            unanswered: 2,
+            oldest_unanswered_at: at.old,
+            activity_at: at.ran,
+            listening: true
+          }) && window.__laheRail.waitBanner(),
+        { old: agoIso(12 * 60 * 1000), ran: agoIso(20000) }
+      );
+      expect(working.visible).toBe(false);
+      expect((await page.evaluate((id) => window.__laheRail.cardWait(id), late.id)).late).toBe(false);
+
+      // Nobody listening at all: the words change to match.
+      const nobody = await page.evaluate(
+        (at) =>
+          window.__laheRail.setAgentLiveness({
+            state: "no_agent",
+            unanswered: 2,
+            oldest_unanswered_at: at,
+            last_reply_at: null,
+            listening: false
+          }) && window.__laheRail.waitBanner(),
+        agoIso(12 * 60 * 1000)
+      );
+      expect(nobody.visible).toBe(true);
+      expect(nobody.text).toBe("Nobody has picked up your comments in 12m.");
+
+      // Everything answered: the banner goes on its own.
+      const settled = await page.evaluate(
+        () =>
+          window.__laheRail.setAgentLiveness({
+            state: "none",
+            unanswered: 0,
+            oldest_unanswered_at: null,
+            last_reply_at: null,
+            listening: true
+          }) && window.__laheRail.waitBanner()
+      );
+      expect(settled.visible).toBe(false);
+      expect((await page.evaluate((id) => window.__laheRail.cardWait(id), late.id)).late).toBe(false);
     } finally {
       await helper.stop();
     }

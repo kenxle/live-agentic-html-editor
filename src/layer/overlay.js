@@ -542,6 +542,10 @@
     ".card__wait{display:none;font-size:10px;font-weight:600;color:var(--warn);white-space:nowrap;",
     "font-variant-numeric:tabular-nums}",
     ".card[" + CARD_LATE_ATTR + "='true'] .card__wait{display:inline}",
+    // The wait takes the timestamp's place rather than sitting beside it: at
+    // rail width both together pushed the state chip off the card. The exact
+    // time is still one hover away on the wait itself.
+    ".card[" + CARD_LATE_ATTR + "='true'] .card__time{display:none}",
     ".card:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-wash)}",
     ".card__top{display:flex;align-items:center;gap:8px}",
     ".card__kind{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;",
@@ -3309,6 +3313,9 @@
       if (wait.overdue) card.node.setAttribute(CARD_LATE_ATTR, "true");
       else card.node.removeAttribute(CARD_LATE_ATTR);
       card.parts.wait.textContent = wait.text;
+      var sentAt = card.parts.time.getAttribute("title");
+      if (wait.overdue && sentAt) card.parts.wait.setAttribute("title", sentAt);
+      else card.parts.wait.removeAttribute("title");
     }
 
     /** What the banner says, and whether it is up. Works with no document. */
@@ -3399,6 +3406,13 @@
         buttonText: dom.lateBtn.textContent || "",
         note: dom.lateNote.textContent || "",
         background: computed ? computed.backgroundColor : null,
+        messageVisible: dom.lateMessage.getAttribute("data-shown") === "true",
+        // Where the button is, so a test can press it like a person would.
+        button: (function () {
+          var b = dom.lateBtn.getBoundingClientRect();
+          return { x: b.left, y: b.top, width: b.width, height: b.height };
+        })(),
+        railBox: { x: railBox.left, y: railBox.top, width: railBox.width, height: railBox.height },
         topInRail: box.top - railBox.top,
         aboveTabs: !!tabsBox && box.bottom <= tabsBox.top + 0.5
       };
