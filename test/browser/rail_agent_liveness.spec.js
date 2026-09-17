@@ -234,12 +234,16 @@ test.describe("the rail says whether anything has come back", () => {
         "listening",
         "monitor_at",
         "oldest_unanswered_at",
+        "oldest_unanswered_item",
+        "session_id",
         "session_name",
         "state",
-        "takeover_command",
+        "state_dir_flag_needed",
         "unanswered"
       ]);
-      expect(overTheWire.takeover_command, "a review with no agent session names no command").toBe(null);
+      expect(overTheWire.session_id, "a review with no agent session names no session").toBe(null);
+      // The page is never sent a filesystem path.
+      expect(JSON.stringify(overTheWire)).not.toContain(helper.stateDir);
 
       await pollPage(page, () => window.__laheRail.status() === "stored", undefined, {
         message: "the line to read stored"
@@ -520,7 +524,8 @@ test.describe("the rail says whether anything has come back", () => {
             oldest_unanswered_at: at,
             last_reply_at: null,
             listening: true,
-            takeover_command: "lahe session takeover s_amber01"
+            session_id: "s_amber01",
+            oldest_unanswered_item: "itm_amber01"
           }) && window.__laheRail.waitBanner(),
         agoIso(12 * 60 * 1000)
       );
@@ -660,7 +665,8 @@ test.describe("the rail says whether anything has come back", () => {
           oldest_unanswered_at: at,
           last_reply_at: null,
           listening: true,
-          takeover_command: "lahe session takeover s_named01",
+          session_id: "s_named01",
+          oldest_unanswered_item: "itm_named01",
           session_name: "<b>lahe</b> updates 9/16"
         });
       const calmPill = await page.evaluate(() => window.__laheRail.pillWait());
@@ -755,7 +761,8 @@ test.describe("the rail says whether anything has come back", () => {
             oldest_unanswered_at: at,
             last_reply_at: null,
             listening: true,
-            takeover_command: "lahe session takeover s_9a3835ce54bc9e66",
+            session_id: "s_9a3835ce54bc9e66",
+            oldest_unanswered_item: "itm_boot01",
             session_name: "lahe updates 9/16"
           }),
         agoIso(12 * 60 * 1000)

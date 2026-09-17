@@ -1295,6 +1295,13 @@
     // Where the handoff message is copied to. A seam for the same reason the
     // clock is one: a test holds the write without a real clipboard.
     var clipboardOverride = opts.clipboard || null;
+    // Where the notices already raised are remembered for this tab, so a reload,
+    // a remount or the next page of a folder review does not raise them again.
+    // A seam so a test can hand two rails the same storage.
+    var sessionStorageOverride = opts.sessionStorage || null;
+    // Was the banner up at the last repaint? A notice is raised only when this
+    // goes from false to true.
+    var overdueShown = false;
     // What the banner last said about the copy, so a repaint keeps it.
     var handoffNote = "";
     var handoffFailed = false;
@@ -3260,7 +3267,7 @@
         else if (listening === false) parts.push(AGENT_DETAIL.agent_absent);
         else parts.push(AGENT_DETAIL.agent_unknown);
         var agentName = sessionName();
-        if (agentName) parts.push(AGENT_DETAIL.agent_named.replace("{name}", agentName));
+        if (agentName) parts.push(fillName(AGENT_DETAIL.agent_named, agentName));
 
         var repliedMs = sinceMs(AGENT_FIELD.LAST_REPLY_AT);
         parts.push(
@@ -3303,8 +3310,18 @@
     // (ready, no reply) and ITS OWN wait passes agentOverdue under the review's
     // current state. A reply lands on the item, so the card goes back at once.
 
+    /**
+     * A name, filled in literally. A function replacer, because a string one
+     * reads $& and $' in the name as patterns and mangles it.
+     */
+    function fillName(template, name) {
+      return String(template).replace("{name}", function () {
+        return name;
+      });
+    }
+
     /** Is this card late, and how long has it waited? Works with no document. */
-    function cardWaitFor(card) {
+    function cardWaitFor(card, agentState) {
       var item = card && card.item;
       var none = { overdue: false, waitedMs: null, text: "" };
       if (!item || status !== STATUS.STORED || !record.isUnansweredReady(item)) return none;
@@ -3312,7 +3329,8 @@
       var then = typeof at === "string" ? Date.parse(at) : NaN;
       if (Number.isNaN(then)) return none;
       var waitedMs = Math.max(0, now() - then);
-      if (!agentOverdue(getAgentState(), waitedMs)) return { overdue: false, waitedMs: waitedMs, text: "" };
+      var state = agentState === undefined ? getAgentState() : agentState;
+      if (!agentOverdue(state, waitedMs)) return { overdue: false, waitedMs: waitedMs, text: "" };
       return { overdue: true, waitedMs: waitedMs, text: fillAge(AGENT_PROMINENT.CARD, waitedMs) };
     }
 
@@ -3320,9 +3338,9 @@
       return cardWaitFor(cards[id]);
     }
 
-    function paintCardWait(card) {
+    function paintCardWait(card, agentState) {
       if (!dom || !card || !card.node || !card.parts) return;
-      var wait = cardWaitFor(card);
+      var wait = cardWaitFor(card, agentState);
       if (wait.overdue) card.node.setAttribute(CARD_LATE_ATTR, "true");
       else card.node.removeAttribute(CARD_LATE_ATTR);
       card.parts.wait.textContent = wait.text;
@@ -3334,9 +3352,13 @@
     /** What the banner says, and whether it is up. Works with no document. */
     function waitBanner(line) {
       var current = line || statusLine();
-      var takeover = agentLiveness ? agentLiveness[AGENT_FIELD.TAKEOVER] : null;
+      var sessionId = agentLiveness ? agentLiveness[AGENT_FIELD.SESSION_ID] : null;
       var name = sessionName();
-      var message = protocol.AGENT_LIVENESS.handoffMessage(typeof takeover === "string" ? takeover : null, name);
+      var message = protocol.AGENT_LIVENESS.handoffMessage(
+        typeof sessionId === "string" ? sessionId : null,
+        name,
+        !!(agentLiveness && agentLiveness[AGENT_FIELD.STATE_DIR_FLAG] === true)
+      );
       var shown = !!current.loud;
       var state = shown ? current.agentState : null;
       var template =
@@ -3345,7 +3367,8 @@
         shown: shown,
         state: state,
         text: shown ? fillAge(template, current.agedMs || 0) : "",
-        check: name ? AGENT_PROMINENT.CHECK_NAMED.replace("{name}", name) : AGENT_PROMINENT.CHECK,
+        check: name ? fillName(AGENT_PROMINENT.CHECK_NAMED, name) : AGENT_PROMINENT.CHECK,
+        agedMs: current.agedMs || 0,
         name: name,
         button: AGENT_PROMINENT.HANDOFF_BUTTON,
         message: message
@@ -3363,36 +3386,47 @@
      * showing the wait, with the banner's sentence as its hover text. Works with
      * no document.
      */
-    function pillWait(line) {
-      var banner = waitBanner(line);
-      if (!banner.shown) return { late: false, text: "", title: PILL_TITLE };
-      var current = line || statusLine();
+    function pillWait(banner) {
+      var b = banner || waitBanner();
+      if (!b.shown) return { late: false, text: "", title: PILL_TITLE };
       return {
         late: true,
-        text: ageLabel(current.agedMs || 0),
-        title: banner.text + " " + banner.check + " " + PILL_TITLE
+        text: ageLabel(b.agedMs),
+        title: b.text + " " + b.check + " " + PILL_TITLE
       };
     }
 
     /**
-     * ONE NOTICE PER CROSSING. The key is the review and the oldest waiting item,
-     * so the clock and the helper repeating themselves never raise it twice, a
-     * dismissed one stays dismissed for that wait, and a later wait on another
-     * item raises its own. The toast system refuses a key it has already seen.
+     * ONE NOTICE PER CROSSING.
+     *
+     * Raised only when the banner goes from not shown to shown, so answering
+     * the oldest late item while another is still late raises nothing: the
+     * banner never left. The key is the review, the oldest waiting item the
+     * helper names, and that item's wait-start, so a follow-up that puts the
+     * same item back into waiting is a new wait with a new notice. Keys already
+     * raised are kept in sessionStorage, so a reload, a remount or the next page
+     * of a folder review does not raise the same one again. Without storage the
+     * toast system's own memory still stops repeats within this page.
      */
-    function raiseOverdueToast(line) {
-      var banner = waitBanner(line);
-      if (!banner.shown) return null;
-      // Not while presenting: the key would be spent on a notice nobody can
-      // see. The next repaint after the talk raises it.
+    function raiseOverdueToast(banner) {
+      // Not while presenting, and the crossing is not counted either: the
+      // notice would be spent on nobody. The first repaint after the talk
+      // raises it.
       if (presenting) return null;
-      var oldest = oldestWaitingCardId();
-      var about = oldest || (agentLiveness ? agentLiveness[AGENT_FIELD.OLDEST_UNANSWERED_AT] : null) || "";
+      var was = overdueShown;
+      overdueShown = banner.shown;
+      if (!banner.shown || was) return null;
+      var itemId = agentLiveness ? agentLiveness[AGENT_FIELD.OLDEST_ITEM] : null;
+      var waitStart = agentLiveness ? agentLiveness[AGENT_FIELD.OLDEST_UNANSWERED_AT] : null;
+      if (typeof itemId !== "string" || !itemId || typeof waitStart !== "string" || !waitStart) return null;
+      var key = "overdue:" + String(reviewId || "") + ":" + itemId + ":" + waitStart;
+      if (overdueSeen(key)) return null;
+      rememberOverdue(key);
       var check = banner.name
-        ? AGENT_PROMINENT.TOAST_CHECK_NAMED.replace("{name}", banner.name)
+        ? fillName(AGENT_PROMINENT.TOAST_CHECK_NAMED, banner.name)
         : AGENT_PROMINENT.TOAST_CHECK;
       return showToast({
-        key: "overdue:" + String(reviewId || "") + ":" + String(about),
+        key: key,
         label: AGENT_PROMINENT.TOAST_LABEL,
         text: banner.text + " " + check + " " + AGENT_PROMINENT.TOAST_OPEN,
         onOpen: function () {
@@ -3401,20 +3435,44 @@
       });
     }
 
-    /** The waiting card the reviewer submitted longest ago, or null. */
-    function oldestWaitingCardId() {
-      var best = null;
-      var bestAt = null;
-      Object.keys(cards).forEach(function (id) {
-        var item = cards[id].item;
-        if (!item || !record.isUnansweredReady(item)) return;
-        var at = item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || "";
-        if (best === null || at < bestAt) {
-          best = id;
-          bestAt = at;
-        }
-      });
-      return best;
+    var OVERDUE_SEEN_PREFIX = "lahe:overdue-notices:";
+    var OVERDUE_SEEN_MAX = 50;
+
+    function overdueStorage() {
+      if (sessionStorageOverride) return sessionStorageOverride;
+      try {
+        var view = doc && doc.defaultView;
+        return view && view.sessionStorage ? view.sessionStorage : null;
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function overdueSeenList() {
+      try {
+        var storage = overdueStorage();
+        if (!storage) return [];
+        var parsed = JSON.parse(storage.getItem(OVERDUE_SEEN_PREFIX + String(reviewId || "")) || "[]");
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (err) {
+        return [];
+      }
+    }
+
+    function overdueSeen(key) {
+      return overdueSeenList().indexOf(key) !== -1;
+    }
+
+    function rememberOverdue(key) {
+      try {
+        var storage = overdueStorage();
+        if (!storage) return false;
+        var list = overdueSeenList().concat([key]).slice(-OVERDUE_SEEN_MAX);
+        storage.setItem(OVERDUE_SEEN_PREFIX + String(reviewId || ""), JSON.stringify(list));
+        return true;
+      } catch (err) {
+        return false;
+      }
     }
 
     /** Self-report for the closed root: what the pill renders. */
@@ -3436,9 +3494,8 @@
       };
     }
 
-    function renderWaitBanner(line) {
+    function renderWaitBanner(banner) {
       if (!dom || !dom.late) return;
-      var banner = waitBanner(line);
       dom.late.setAttribute("data-shown", banner.shown ? "true" : "");
       dom.lateTitle.textContent = banner.text;
       // textContent, never innerHTML: the agent's name is display text.
@@ -3887,11 +3944,15 @@
     }
 
     function renderStatus() {
+      // ONE READING PER REPAINT. The line, the banner, the pill, the notice and
+      // every late card below read these two, rather than each working the
+      // status out again.
+      var line = statusLine();
+      var banner = waitBanner(line);
       // Before the document check: the notice is state the toast list holds,
       // and it must be raised whether or not a rail is drawn yet.
-      raiseOverdueToast(statusLine());
+      raiseOverdueToast(banner);
       if (!dom) return;
-      var line = statusLine();
       dom.statusRow.setAttribute("data-status", status || "");
       dom.statusRow.setAttribute("data-agent", line.agentState || "");
       dom.statusRow.setAttribute("data-loud", line.loud ? "true" : "");
@@ -3899,14 +3960,15 @@
       dom.statusRow.title = line.title;
       // The banner and the late cards run off the same clock and the same
       // liveness answer as this line, so they are repainted with it.
-      renderWaitBanner(line);
-      var pill = pillWait(line);
+      renderWaitBanner(banner);
+      var pill = pillWait(banner);
       dom.pill.setAttribute("data-lahe-late", pill.late ? "true" : "");
       dom.pillWait.textContent = pill.text;
       dom.pill.title = pill.title;
       dom.pill.setAttribute("aria-label", pill.title);
+      var agentState = getAgentState();
       Object.keys(cards).forEach(function (id) {
-        paintCardWait(cards[id]);
+        paintCardWait(cards[id], agentState);
       });
       // ONLY IN THE STATE IT DESCRIBES. The limit is about there being no helper
       // to see across two storage buckets, so it is on screen exactly while the
