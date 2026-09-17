@@ -201,11 +201,15 @@
   var AGENT_TEXT = protocol.AGENT_LIVENESS.TEXT;
   var AGENT_CONNECTION = protocol.AGENT_LIVENESS.CONNECTION;
   var AGENT_DETAIL = protocol.AGENT_LIVENESS.DETAIL;
-  // Under AGENT_QUIET_MS the line says nothing about a wait; past
-  // AGENT_STALE_MS it is loud about one. Both live in protocol.js beside the
+  // Under AGENT_QUIET_MS the line says nothing about a wait; past the overdue
+  // rule below it is loud about one. Both live in protocol.js beside the
   // states, for the same reason the words do.
   var AGENT_QUIET_MS = protocol.AGENT_LIVENESS.QUIET_MS;
-  var AGENT_STALE_MS = protocol.AGENT_LIVENESS.STALE_MS;
+  // THE ONE RULE for an overdue wait, and the words that go with it. The footer
+  // going loud, a late card turning amber and the banner at the top of the rail
+  // all read agentOverdue, so the three cannot disagree about when to speak up.
+  var agentOverdue = protocol.AGENT_LIVENESS.overdue;
+  var AGENT_PROMINENT = protocol.AGENT_LIVENESS.PROMINENT;
 
   var STATE_LABEL = {
     draft: "Draft",
@@ -369,6 +373,9 @@
   // spelling: tab_done.js takes its own constants from these.
   var CARD_UNSEEN_ATTR = "data-lahe-unseen";
   var CARD_ASKING_ATTR = "data-lahe-asking";
+  // A ready card nobody has picked up, past the overdue rule. Set by the rail
+  // alone, off the item and the helper's liveness answer.
+  var CARD_LATE_ATTR = "data-lahe-late";
 
   // How much of what a card is about fits on its folded line. Long enough to
   // recognize the passage, short enough that every folded card is one row at
@@ -392,6 +399,10 @@
     // stays the strongest thing on the card, so these sit a few points off
     // --paper rather than announcing themselves.
     "--draft-wash:#fdf8ef;--draft-line:#ecdcbe;--ready-wash:#f1f8f4;--ready-line:#cee2d6;",
+    // LATE is the one wash meant to be noticed: a card nobody has picked up. It
+    // is the draft amber turned up, so it reads as "this needs you" in the same
+    // family, and strong enough to find in a long list at a glance.
+    "--late-wash:#fcebcf;--late-line:#e2ae5c;",
     "--radius:14px;--radius-sm:10px}",
     // THE PAGE PICKS THE SCHEME, NOT THE OS. highlight.js samples the reviewed
     // page's own background and stamps data-lahe-scheme on this rail's host, so
@@ -414,6 +425,7 @@
     // carried into dark reads as a lit panel; these are the dark paper with the
     // hue mixed into it.
     "--draft-wash:#26221b;--draft-line:#3b3327;--ready-wash:#1a2420;--ready-line:#2a3d34;",
+    "--late-wash:#3a2c17;--late-line:#9a6f2c;",
     "--shadow:0 1px 2px rgba(0,0,0,.4),0 16px 40px rgba(0,0,0,.45)}",
     "*{box-sizing:border-box;margin:0;padding:0;font:inherit;color:inherit}",
     "button{background:none;border:0;cursor:pointer;font:inherit;color:inherit}",
@@ -523,6 +535,13 @@
     // wears an outlined green chip on paper, ready wears the wash.
     ".card[data-state='draft']{background:var(--draft-wash);border-color:var(--draft-line)}",
     ".card[data-state='ready']{background:var(--ready-wash);border-color:var(--ready-line)}",
+    // A READY CARD NOBODY HAS PICKED UP, past the overdue rule. After the state
+    // rules so it wins over the ready green, and it goes the moment a reply
+    // lands, because the reply takes the item out of waiting.
+    ".card[" + CARD_LATE_ATTR + "='true']{background:var(--late-wash);border-color:var(--late-line)}",
+    ".card__wait{display:none;font-size:10px;font-weight:600;color:var(--warn);white-space:nowrap;",
+    "font-variant-numeric:tabular-nums}",
+    ".card[" + CARD_LATE_ATTR + "='true'] .card__wait{display:inline}",
     ".card:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-wash)}",
     ".card__top{display:flex;align-items:center;gap:8px}",
     ".card__kind{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;",
@@ -647,6 +666,26 @@
     "font-family:ui-monospace,SFMono-Regular,Menlo,monospace;",
     "display:flex;flex-direction:column;gap:2px;min-width:0}",
     ".agent__file{overflow-wrap:anywhere;word-break:break-word;line-height:1.35}",
+
+    // --- the overdue banner ---------------------------------------------------
+    //
+    // At the top of the rail, under the head, where it is read before any card.
+    // Shown exactly while the footer line is loud, and gone when it is not.
+    ".late{display:none;flex-direction:column;gap:7px;margin:10px 10px 0;padding:11px 12px;",
+    "border-radius:var(--radius-sm);background:var(--late-wash);border:1px solid var(--late-line)}",
+    ".late[data-shown='true']{display:flex}",
+    ".late__title{font-size:12.5px;font-weight:700;color:var(--ink);line-height:1.4}",
+    ".late__check{font-size:12px;color:var(--ink-soft);line-height:1.45}",
+    ".late__btn{align-self:flex-start;font-size:12px;font-weight:600;padding:6px 12px;border-radius:8px;",
+    "background:var(--accent);border:1px solid var(--accent);color:#fff;cursor:pointer}",
+    ":host([data-lahe-scheme='dark']) .late__btn{color:#12151a}",
+    ".late__btn:hover{filter:brightness(1.06)}",
+    ".late__note{font-size:11.5px;color:var(--ink-soft);line-height:1.4}",
+    ".late__note:empty{display:none}",
+    ".late__message{display:none;font-size:11px;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere;",
+    "font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--paper);",
+    "border:1px solid var(--line);border-radius:7px;padding:7px 8px;user-select:text;-webkit-user-select:text}",
+    ".late__message[data-shown='true']{display:block}",
 
     // --- footer -------------------------------------------------------------
     ".foot{border-top:1px solid var(--line-soft);background:var(--paper);",
@@ -1242,6 +1281,12 @@
     // no timers at all.
     var now = typeof opts.now === "function" ? opts.now : function () { return Date.now(); };
     var timers = opts.timers || timersFrom(doc);
+    // Where the handoff message is copied to. A seam for the same reason the
+    // clock is one: a test holds the write without a real clipboard.
+    var clipboardOverride = opts.clipboard || null;
+    // What the banner last said about the copy, so a repaint keeps it.
+    var handoffNote = "";
+    var handoffFailed = false;
 
     var cards = Object.create(null);
     var cardSequence = 0;
@@ -1509,6 +1554,28 @@
       });
       head.appendChild(collapseBtn);
       rail.appendChild(head);
+
+      // THE OVERDUE BANNER, at the top where it is read first. Built once and
+      // shown or hidden by renderWaitBanner, like every other piece of chrome.
+      var late = el("div", "late");
+      late.setAttribute("role", "alert");
+      late.setAttribute("data-lahe-late-banner", "true");
+      var lateTitle = el("div", "late__title", "");
+      var lateCheck = el("div", "late__check", AGENT_PROMINENT.CHECK);
+      var lateBtn = el("button", "late__btn", AGENT_PROMINENT.HANDOFF_BUTTON);
+      lateBtn.setAttribute("type", "button");
+      lateBtn.addEventListener("click", function () {
+        copyHandoff();
+      });
+      var lateNote = el("div", "late__note", "");
+      lateNote.setAttribute("aria-live", "polite");
+      var lateMessage = el("div", "late__message", "");
+      late.appendChild(lateTitle);
+      late.appendChild(lateCheck);
+      late.appendChild(lateBtn);
+      late.appendChild(lateNote);
+      late.appendChild(lateMessage);
+      rail.appendChild(late);
 
       var tabs = el("div", "tabs");
       tabs.setAttribute("role", "tablist");
@@ -1825,6 +1892,12 @@
         foot: foot,
         statusRow: statusRow,
         statusText: statusText,
+        late: late,
+        lateTitle: lateTitle,
+        lateCheck: lateCheck,
+        lateBtn: lateBtn,
+        lateNote: lateNote,
+        lateMessage: lateMessage,
         statusDot: statusDot,
         limit: limit,
         hints: hints,
@@ -2332,6 +2405,9 @@
       var kind = el("span", "card__kind");
       top.appendChild(kind);
       top.appendChild(el("span", "spacer"));
+      // How long a late card has waited. Hidden unless the card is late.
+      var wait = el("span", "card__wait", "");
+      top.appendChild(wait);
       var time = el("time", "card__time");
       top.appendChild(time);
       var state = el("span", "card__state");
@@ -2374,6 +2450,7 @@
         line: line,
         lineText: lineText,
         kind: kind,
+        wait: wait,
         time: time,
         state: state,
         quote: quote,
@@ -2476,6 +2553,7 @@
       // On the card itself too, so anything a tab owner attached can be shown or
       // withdrawn by the card's own state without a second file being told.
       card.node.setAttribute("data-state", card.state);
+      paintCardWait(card);
       var quote = (item[record.FIELD.CONTEXT] && item[record.FIELD.CONTEXT].quote) || "";
       p.quote.textContent = quote;
       p.quote.style.display = quote ? "" : "none";
@@ -3131,9 +3209,7 @@
           // back for ten minutes is not, and neither is nobody having picked it
           // up: a file tail can be armed all afternoon over an agent that
           // stopped reading, so no amount of listening buys quiet here.
-          loud:
-            state !== AGENT_STATE.WORKING &&
-            (waitedMs >= AGENT_STALE_MS || state === AGENT_STATE.NO_AGENT),
+          loud: agentOverdue(state, waitedMs),
           speaking: true,
           waitedMs: waitedMs
         };
@@ -3195,6 +3271,153 @@
 
     function fillAge(template, ms) {
       return String(template).replace("{age}", ageLabel(ms));
+    }
+
+    // -------------------------------------------------------------------------
+    // Making an overdue wait prominent
+    // -------------------------------------------------------------------------
+    //
+    // Ken, 2026-09-16: "active boxes should change color if they haven't been
+    // picked up after a certain amount of time. something with more prominence
+    // should tell you to go check your agent or assign a new one to this doc."
+    //
+    // Two surfaces, and neither has a rule of its own. The banner shows exactly
+    // while the footer line is loud. A card is late when it is itself waiting
+    // (ready, no reply) and ITS OWN wait passes agentOverdue under the review's
+    // current state. A reply lands on the item, so the card goes back at once.
+
+    /** Is this card late, and how long has it waited? Works with no document. */
+    function cardWaitFor(card) {
+      var item = card && card.item;
+      var none = { overdue: false, waitedMs: null, text: "" };
+      if (!item || status !== STATUS.STORED || !record.isUnansweredReady(item)) return none;
+      var at = item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || null;
+      var then = typeof at === "string" ? Date.parse(at) : NaN;
+      if (Number.isNaN(then)) return none;
+      var waitedMs = Math.max(0, now() - then);
+      if (!agentOverdue(getAgentState(), waitedMs)) return { overdue: false, waitedMs: waitedMs, text: "" };
+      return { overdue: true, waitedMs: waitedMs, text: fillAge(AGENT_PROMINENT.CARD, waitedMs) };
+    }
+
+    function cardWait(id) {
+      return cardWaitFor(cards[id]);
+    }
+
+    function paintCardWait(card) {
+      if (!dom || !card || !card.node || !card.parts) return;
+      var wait = cardWaitFor(card);
+      if (wait.overdue) card.node.setAttribute(CARD_LATE_ATTR, "true");
+      else card.node.removeAttribute(CARD_LATE_ATTR);
+      card.parts.wait.textContent = wait.text;
+    }
+
+    /** What the banner says, and whether it is up. Works with no document. */
+    function waitBanner(line) {
+      var current = line || statusLine();
+      var takeover = agentLiveness ? agentLiveness[AGENT_FIELD.TAKEOVER] : null;
+      var message = protocol.AGENT_LIVENESS.handoffMessage(typeof takeover === "string" ? takeover : null);
+      var shown = !!current.loud;
+      var state = shown ? current.agentState : null;
+      var template =
+        state && AGENT_PROMINENT.BANNER[state] ? AGENT_PROMINENT.BANNER[state] : AGENT_PROMINENT.BANNER.waiting;
+      return {
+        shown: shown,
+        state: state,
+        text: shown ? fillAge(template, current.agedMs || 0) : "",
+        check: AGENT_PROMINENT.CHECK,
+        button: AGENT_PROMINENT.HANDOFF_BUTTON,
+        message: message
+      };
+    }
+
+    function renderWaitBanner(line) {
+      if (!dom || !dom.late) return;
+      var banner = waitBanner(line);
+      dom.late.setAttribute("data-shown", banner.shown ? "true" : "");
+      dom.lateTitle.textContent = banner.text;
+      if (!banner.shown) {
+        handoffNote = "";
+        handoffFailed = false;
+      }
+      dom.lateNote.textContent = handoffNote;
+      dom.lateMessage.textContent = banner.message;
+      dom.lateMessage.setAttribute("data-shown", handoffFailed ? "true" : "");
+    }
+
+    function clipboardTarget() {
+      if (clipboardOverride) return clipboardOverride;
+      var view = doc && doc.defaultView;
+      if (view && view.navigator && view.navigator.clipboard) return view.navigator.clipboard;
+      return null;
+    }
+
+    /**
+     * Copy the handoff message. No false success: a clipboard that refused
+     * says so on the banner and shows the message to copy by hand.
+     *
+     * @returns {Promise<{ok: boolean, text: string, error?: string}>}
+     */
+    function copyHandoff() {
+      var text = waitBanner().message;
+      var target = clipboardTarget();
+      var write =
+        target && typeof target.writeText === "function"
+          ? Promise.resolve().then(function () {
+              return target.writeText(text);
+            })
+          : Promise.reject(new Error("this browser gave the page no clipboard to write to"));
+      return write.then(
+        function () {
+          handoffNote = AGENT_PROMINENT.COPIED;
+          handoffFailed = false;
+          renderStatus();
+          return { ok: true, text: text };
+        },
+        function (error) {
+          handoffNote = AGENT_PROMINENT.COPY_FAILED;
+          handoffFailed = true;
+          renderStatus();
+          return { ok: false, text: text, error: String((error && error.message) || error) };
+        }
+      );
+    }
+
+    /** Self-report for the closed root: what the banner renders, and where. */
+    function waitBannerInfo() {
+      if (!dom || !dom.late) return { present: false };
+      var view = dom.late.ownerDocument ? dom.late.ownerDocument.defaultView : null;
+      var computed = view ? view.getComputedStyle(dom.late) : null;
+      var railBox = dom.rail.getBoundingClientRect();
+      var box = dom.late.getBoundingClientRect();
+      var tabsNode = dom.rail.querySelector(".tabs");
+      var tabsBox = tabsNode ? tabsNode.getBoundingClientRect() : null;
+      return {
+        present: true,
+        visible: !!computed && computed.display !== "none",
+        text: dom.lateTitle.textContent || "",
+        check: dom.lateCheck.textContent || "",
+        buttonText: dom.lateBtn.textContent || "",
+        note: dom.lateNote.textContent || "",
+        background: computed ? computed.backgroundColor : null,
+        topInRail: box.top - railBox.top,
+        aboveTabs: !!tabsBox && box.bottom <= tabsBox.top + 0.5
+      };
+    }
+
+    /** Self-report for the closed root: whether a card is drawn late. */
+    function cardWaitInfo(id) {
+      var card = cards[id];
+      if (!dom || !card || !card.node) return { present: false };
+      var view = card.node.ownerDocument ? card.node.ownerDocument.defaultView : null;
+      var computed = view ? view.getComputedStyle(card.node) : null;
+      var waitComputed = view ? view.getComputedStyle(card.parts.wait) : null;
+      return {
+        present: true,
+        late: card.node.getAttribute(CARD_LATE_ATTR) === "true",
+        background: computed ? computed.backgroundColor : null,
+        waitText: card.parts.wait.textContent || "",
+        waitVisible: !!waitComputed && waitComputed.display !== "none"
+      };
     }
 
     /**
@@ -3552,6 +3775,12 @@
       dom.statusRow.setAttribute("data-loud", line.loud ? "true" : "");
       dom.statusText.textContent = line.text;
       dom.statusRow.title = line.title;
+      // The banner and the late cards run off the same clock and the same
+      // liveness answer as this line, so they are repainted with it.
+      renderWaitBanner(line);
+      Object.keys(cards).forEach(function (id) {
+        paintCardWait(cards[id]);
+      });
       // ONLY IN THE STATE IT DESCRIBES. The limit is about there being no helper
       // to see across two storage buckets, so it is on screen exactly while the
       // rail is saying nothing reached a helper. Under "Stored" it was a
@@ -5229,6 +5458,15 @@
       agentLine: agentLine,
       statusLine: statusLine,
       statusLineInfo: statusLineInfo,
+      // The overdue wait, made prominent: the banner, the late cards, and the
+      // one button that copies a handoff message for a new agent.
+      waitBanner: function () {
+        return waitBanner();
+      },
+      waitBannerInfo: waitBannerInfo,
+      cardWait: cardWait,
+      cardWaitInfo: cardWaitInfo,
+      copyHandoff: copyHandoff,
       statusRowCount: statusRowCount,
       LIMIT_SEPARATE_STORAGE_NO_HELPER: LIMIT_SEPARATE_STORAGE_NO_HELPER,
       SHEET_ATTR: SHEET_ATTR,
