@@ -32,9 +32,9 @@ missing piece is a process on the agent's side that nothing checks.
 ## What to do instead
 
 Arm the wake channel in the same turn that runs `lahe review`, before handing over
-the URL. Not after the reviewer asks, not once the first comment lands. On Claude
-Code that is the Monitor tool on the printed `wake` command with `persistent` true;
-other hosts run `lahe monitor` per `AGENTS.md`.
+the URL. Not after the reviewer asks, not once the first comment lands. Every host
+runs the printed `lahe monitor` command, the way the lahe skill says for that host;
+on Claude Code that is Bash in the background.
 
 Then drain once immediately. A reviewer who commented while the agent was still
 opening tabs has work waiting before the watcher exists, and the wake feed only
