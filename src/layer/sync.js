@@ -2039,7 +2039,8 @@
         value[f.MONITOR_AT],
         value[f.ACTIVITY_AT],
         value[f.UNANSWERED],
-        value[f.OLDEST_UNANSWERED_AT]
+        value[f.OLDEST_UNANSWERED_AT],
+        value[f.TAKEOVER]
       ].join("|");
     }
 

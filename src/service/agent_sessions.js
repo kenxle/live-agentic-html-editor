@@ -152,6 +152,10 @@ function livenessFrom(input) {
   out[protocol.AGENT_LIVENESS.FIELD.LISTENING] = listening;
   out[protocol.AGENT_LIVENESS.FIELD.MONITOR_AT] = monitorAt;
   out[protocol.AGENT_LIVENESS.FIELD.ACTIVITY_AT] = activityAt;
+  // Passed in by the store, which knows the state directory. The pure half has
+  // no directory to put in the command, so it claims none.
+  out[protocol.AGENT_LIVENESS.FIELD.TAKEOVER] =
+    typeof spec.takeoverCommand === "string" && spec.takeoverCommand ? spec.takeoverCommand : null;
   return out;
 }
 
@@ -463,7 +467,8 @@ function createStore(options) {
       unanswered: w.unanswered,
       oldestUnansweredAt: w.oldestUnansweredAt,
       lastReplyAt: w.lastReplyAt,
-      nowMs: w.nowMs
+      nowMs: w.nowMs,
+      takeoverCommand: id === LEGACY_ID ? null : protocol.takeoverCommand(id, stateDir.flagFor(dir))
     });
   }
 

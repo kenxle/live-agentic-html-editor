@@ -1040,6 +1040,16 @@
     return "lahe monitor --session " + String(sessionId) + stateDirFlag(stateDirPath);
   }
 
+  /**
+   * The one spelling of the takeover command. Same state-directory rule.
+   *
+   * The CLI's own usage names it, and the rail's handoff message carries it to
+   * a new agent, fully formed, so the reviewer pastes something that runs.
+   */
+  function takeoverCommand(sessionId, stateDirPath) {
+    return "lahe session takeover " + String(sessionId) + stateDirFlag(stateDirPath);
+  }
+
   // ---------------------------------------------------------------------------
   // Monitor liveness: what the rail is allowed to claim about an agent
   // ---------------------------------------------------------------------------
@@ -1126,7 +1136,12 @@
       // produces a claim in either direction; the line falls back to the wait.
       LISTENING: "listening",
       MONITOR_AT: "monitor_at",
-      ACTIVITY_AT: "activity_at"
+      ACTIVITY_AT: "activity_at",
+      // The takeover command for the session that owns this review, with the
+      // state directory already in it, or null for a review with no session.
+      // The helper builds it because only the helper knows the directory. It is
+      // what the rail's handoff message hands a new agent; it holds no token.
+      TAKEOVER: "takeover_command"
     },
     // THE WORDS, SPELLED ONCE, HERE. They used to be hand-copied into the layer,
     // which is two spellings of one wire value: rename a state and the rail
@@ -1182,6 +1197,25 @@
       stored: "Your comments and edits are stored in this browser and in the helper's log on disk.",
       save: "You can get your own copy any time: use Copy review or Export review to file in the menu."
     },
+    // THE LOUD HALF, made prominent (Ken, 2026-09-16: "active boxes should
+    // change color if they haven't been picked up after a certain amount of
+    // time. something with more prominence should tell you to go check your
+    // agent or assign a new one to this doc.").
+    //
+    // Shown only while the wait is overdue (see `overdue` below): a banner at
+    // the top of the rail and a word on each late card. Same rule as the TEXT
+    // above: a reviewer's words, no plumbing. `{age}` is filled in the same way.
+    PROMINENT: {
+      BANNER: {
+        no_agent: "Nobody has picked up your comments in {age}.",
+        waiting: "Nothing has come back on your comments in {age}."
+      },
+      CHECK: "Check your agent's window first. It may have stopped, or it may be waiting on you.",
+      HANDOFF_BUTTON: "Copy a message for a new agent",
+      COPIED: "Copied. Paste it into a new agent and it will pick up your comments.",
+      COPY_FAILED: "Could not copy. Select the message below and copy it yourself.",
+      CARD: "waiting {age}"
+    },
     // WHEN THE LINE STARTS SPEAKING, counted from the moment the reviewer
     // submitted, not from anything about a process.
     //
@@ -1212,6 +1246,64 @@
     // holding the feed open and no heartbeat.
     RECENT_COMMAND_MS: 600000
   };
+
+  /**
+   * THE ONE RULE for "this wait is overdue". The footer line goes loud on it,
+   * a waiting card turns amber on it, and the banner at the top of the rail
+   * shows on it. Three places, one rule, so they can never disagree.
+   *
+   *  - Nothing is listening: overdue once the line starts speaking (QUIET_MS).
+   *    There is nobody to wait for.
+   *  - Something may be listening, nothing came back: overdue after STALE_MS.
+   *  - The agent is working: never. The queue behind it is explained.
+   *
+   * A state with no words (NONE, or anything unrecognised off the wire) is
+   * never overdue, for the same reason it never speaks.
+   *
+   * @param {string|null} state an AGENT_LIVENESS.STATE value
+   * @param {number|null} waitedMs how long the wait has run
+   * @returns {boolean}
+   */
+  function livenessOverdue(state, waitedMs) {
+    if (typeof state !== "string" || !Object.prototype.hasOwnProperty.call(AGENT_LIVENESS.TEXT, state)) return false;
+    if (typeof waitedMs !== "number" || !isFinite(waitedMs) || waitedMs < AGENT_LIVENESS.QUIET_MS) return false;
+    if (state === AGENT_LIVENESS.STATE.WORKING) return false;
+    return state === AGENT_LIVENESS.STATE.NO_AGENT || waitedMs >= AGENT_LIVENESS.STALE_MS;
+  }
+  AGENT_LIVENESS.overdue = livenessOverdue;
+
+  /**
+   * The message the reviewer pastes into a fresh agent to hand this doc over.
+   *
+   * It is written to the NEW AGENT, so unlike the rail's own words it names the
+   * command. Pasting it is the human's explicit request, which is the one thing
+   * `lahe session takeover` requires. It carries the command and nothing else
+   * off the wire: no token, no review secret.
+   *
+   * @param {string|null} command AGENT_LIVENESS.FIELD.TAKEOVER, or null for a
+   *   review with no agent session, which gets pointed at the list instead
+   * @returns {string} plain text
+   */
+  function handoffMessage(command) {
+    var run = typeof command === "string" && command
+      ? ["Run this command:", "", "    " + command, ""]
+      : [
+          "Run `lahe session list` to find the session for this document, then take it over with:",
+          "",
+          "    lahe session takeover <session-id>",
+          ""
+        ];
+    return [
+      "Please take over my live LAHE review. The agent that was working on it stopped answering my comments, and I am asking you to continue it.",
+      ""
+    ]
+      .concat(run)
+      .concat([
+        "It prints the commands to catch up. Then work every comment that is waiting and reply to each one, and keep watching for new ones."
+      ])
+      .join("\n");
+  }
+  AGENT_LIVENESS.handoffMessage = handoffMessage;
 
   return {
     API_VERSION: API_VERSION,
@@ -1285,6 +1377,7 @@
     stateDirFlag: stateDirFlag,
     drainCommand: drainCommand,
     monitorCommand: monitorCommand,
+    takeoverCommand: takeoverCommand,
 
     MONITOR: MONITOR,
     AGENT_LIVENESS: AGENT_LIVENESS
