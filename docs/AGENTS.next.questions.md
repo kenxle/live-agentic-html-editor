@@ -8,6 +8,8 @@ Most of the cut came from not repeating the agent instructions that already ship
 
 Keep the pointer, or bring back a short checklist in the playbook?
 
+**Ken decided (2026-09-16):** the rules for handling comments and writing replies are instructions, so they belong in the playbook and the skill, not in the drain. The drain carries as little as possible because it is repeated on every wake: the comments and what is needed to find their spot, nothing more. So the playbook gets a short checklist of the item and reply rules back, and the drain's own extra lines get trimmed in a follow-on.
+
 ## 2. The instructions inside every review file still say the old, broken thing for Claude Code
 
 They still tell Claude Code agents to use a timer option that Claude Code removed on Sep 14. The new playbook gives the right instruction and says that one line in the review file is out of date. The instructions in the review file are locked on purpose and change only with care.
