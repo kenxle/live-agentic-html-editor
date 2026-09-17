@@ -6,7 +6,7 @@ A whetstone-size change to the rail. Progress is at the bottom.
 
 ## What you will see
 
-- **A comment card that has waited too long changes color.** Today every waiting card in the Active tab looks the same whether it was sent five seconds ago or an hour ago. After the wait passes the limit below, that card turns amber, and it says how long it has waited.
+- **A comment card that has waited too long changes color.** Today every waiting card in the Active tab looks the same whether it was sent five seconds ago or an hour ago, and that color is green, signifying success. After the wait passes the limit below, that card turns amber, and it says how long it has waited.
 - **A banner at the top of the rail**, not the small line at the bottom, once anything has waited past the limit. It says, in plain words, that nobody has picked up your comments, for how long, and gives two things to do:
   - **Check your agent.** The words say to look at the agent's window, because that is usually the fix.
   - **Hand this doc to a new agent.** A button copies a short message you paste into a fresh agent. The message tells that agent to take over this LAHE session and work the comments that are waiting. It uses the takeover command the tool already has.
