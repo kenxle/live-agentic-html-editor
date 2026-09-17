@@ -466,6 +466,7 @@ test("replies.poll answers with how long it has been, not with a claim", () => {
     "listening",
     "monitor_at",
     "oldest_unanswered_at",
+    "session_name",
     "state",
     "takeover_command",
     "unanswered"

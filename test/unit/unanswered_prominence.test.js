@@ -347,3 +347,130 @@ test("the helper's liveness answer carries the takeover command for its session"
   const bare = agentSessions.livenessFrom({ session: { handoff_rev: 0 }, unanswered: 0, nowMs: NOW });
   assert.equal(bare[LIVENESS.FIELD.TAKEOVER], null);
 });
+
+// ---------------------------------------------------------------------------
+// Which agent: the session's name
+// ---------------------------------------------------------------------------
+
+test("the banner names the agent to check when the session has a name, and says it plainly when not", () => {
+  const rail = railAt(NOW);
+  const base = {
+    state: STATE.NO_AGENT,
+    unanswered: 1,
+    listening: false,
+    oldest_unanswered_at: agoIso(5 * 60000),
+    takeover_command: "lahe session takeover s_named"
+  };
+  rail.setAgentLiveness(base);
+  assert.equal(rail.waitBanner().check, LIVENESS.PROMINENT.CHECK);
+
+  rail.setAgentLiveness(Object.assign({}, base, { session_name: "lahe updates 9/16" }));
+  const banner = rail.waitBanner();
+  assert.equal(banner.check, LIVENESS.PROMINENT.CHECK_NAMED.replace("{name}", "lahe updates 9/16"));
+  assert.match(banner.check, /^Check the agent named lahe updates 9\/16/);
+  assert.match(rail.statusLine().title, /lahe updates 9\/16/, "the footer hover names it too");
+  assert.match(banner.message, /lahe updates 9\/16/, "and so does the handoff message");
+  rail.unmount();
+});
+
+test("the handoff message names the session being taken over, quoted", () => {
+  const message = LIVENESS.handoffMessage("lahe session takeover s_1", 'lahe "updates"');
+  assert.ok(message.includes('"lahe \\"updates\\""'), message);
+  assert.equal(LIVENESS.handoffMessage("lahe session takeover s_1", null).includes("named"), false);
+});
+
+// ---------------------------------------------------------------------------
+// The rail closed to its pill
+// ---------------------------------------------------------------------------
+
+test("the collapsed pill goes late on the same rule, shows the wait, and carries the banner's sentence", () => {
+  const rail = railAt(NOW);
+  const item = readyItem(12 * 60000);
+  rail.upsertCard(item);
+  rail.setAgentLiveness({
+    state: STATE.WAITING,
+    unanswered: 1,
+    listening: true,
+    oldest_unanswered_at: item[record.FIELD.UPDATED_AT],
+    session_name: "lahe updates 9/16"
+  });
+  const pill = rail.pillWait();
+  assert.equal(pill.late, rail.statusLine().loud);
+  assert.equal(pill.late, true);
+  assert.equal(pill.text, "12m");
+  assert.ok(pill.title.includes(rail.waitBanner().text));
+  assert.ok(pill.title.includes("lahe updates 9/16"));
+
+  // A working agent: same wait, and the pill is its ordinary self.
+  rail.setAgentLiveness({
+    state: STATE.WORKING,
+    unanswered: 1,
+    listening: true,
+    oldest_unanswered_at: item[record.FIELD.UPDATED_AT],
+    activity_at: agoIso(10000)
+  });
+  assert.equal(rail.pillWait().late, false);
+  assert.equal(rail.pillWait().text, "");
+
+  // A reply lands and nothing is waiting: back to normal.
+  rail.setAgentLiveness({ state: STATE.NONE, unanswered: 0, listening: true, oldest_unanswered_at: null });
+  assert.equal(rail.pillWait().late, false);
+  rail.unmount();
+});
+
+// ---------------------------------------------------------------------------
+// One toast per crossing
+// ---------------------------------------------------------------------------
+
+function overdueToasts(rail) {
+  return rail.toastInfo().toasts.filter((t) => String(t.key).indexOf("overdue:") === 0);
+}
+
+test("crossing the rule raises one toast, keyed to the review and the oldest waiting item", () => {
+  const rail = overlay.createRail({ document: null, now: () => NOW, reviewId: "r_toast" });
+  rail.mount();
+  rail.setStatusLine(overlay.STATUS.STORED);
+  const first = readyItem(12 * 60000);
+  rail.upsertCard(first);
+  const overdue = {
+    state: STATE.WAITING,
+    unanswered: 1,
+    listening: true,
+    oldest_unanswered_at: first[record.FIELD.UPDATED_AT],
+    session_name: "lahe updates 9/16"
+  };
+  // Not yet over the line: nothing.
+  rail.setAgentLiveness(Object.assign({}, overdue, { oldest_unanswered_at: agoIso(60000) }));
+  assert.equal(overdueToasts(rail).length, 0);
+
+  rail.setAgentLiveness(overdue);
+  let raised = overdueToasts(rail);
+  assert.equal(raised.length, 1);
+  assert.equal(raised[0].key, "overdue:r_toast:" + first[record.FIELD.ID]);
+  assert.ok(raised[0].text.includes(rail.waitBanner().text));
+  assert.ok(raised[0].text.includes("lahe updates 9/16"), "it names the agent");
+
+  // The same wait, repainted by the clock and by the helper repeating itself.
+  rail.setAgentLiveness(Object.assign({}, overdue));
+  rail.setStatusLine(overlay.STATUS.STORED);
+  assert.equal(overdueToasts(rail).length, 1, "no second toast for the same wait");
+
+  // Dismissed: it does not come back for that same wait.
+  rail.dismissToast(raised[0].id);
+  rail.setAgentLiveness(Object.assign({}, overdue));
+  assert.equal(overdueToasts(rail).length, 0);
+
+  // The reply lands. Then a new comment waits too long: a new wait, a new toast.
+  const answered = Object.assign({}, first, { state: record.STATE.HANDLED });
+  answered[record.FIELD.REPLY] = { status: record.REPLY_STATUS.HANDLED, agent: "claude", at: agoIso(1000), files: [] };
+  rail.upsertCard(answered);
+  rail.setAgentLiveness({ state: STATE.NONE, unanswered: 0, listening: true, oldest_unanswered_at: null });
+  assert.equal(overdueToasts(rail).length, 0, "a reply raises nothing");
+  const second = readyItem(11 * 60000);
+  rail.upsertCard(second);
+  rail.setAgentLiveness(Object.assign({}, overdue, { oldest_unanswered_at: second[record.FIELD.UPDATED_AT] }));
+  raised = overdueToasts(rail);
+  assert.equal(raised.length, 1);
+  assert.equal(raised[0].key, "overdue:r_toast:" + second[record.FIELD.ID]);
+  rail.unmount();
+});
