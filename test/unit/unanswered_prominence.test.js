@@ -246,25 +246,24 @@ test("the reviewer's words carry no tool jargon", () => {
 // ---------------------------------------------------------------------------
 
 test("the handoff message names the session and the takeover command, in plain text", () => {
-  const command = protocol.takeoverCommand("s_7f3a", null);
-  assert.equal(command, "lahe session takeover s_7f3a");
-  const message = LIVENESS.handoffMessage(command);
+  const message = LIVENESS.handoffMessage("s_7f3a", null, false);
   assert.equal(typeof message, "string");
-  assert.ok(message.includes("s_7f3a"), "the new agent is told which session");
-  assert.ok(message.includes("lahe session takeover s_7f3a"), "and the command that takes it over");
+  assert.ok(message.includes("lahe session takeover s_7f3a"), "the command that takes it over");
+  assert.equal(message.includes("--state-dir"), false, "no flag when the default folder is right");
   assert.equal(/<[a-z]/i.test(message), false, "plain text, no markup");
   assert.equal(/—/.test(message), false, "no em dashes");
   // Pasting it is the human's explicit request, which is what takeover needs.
   assert.match(message.toLowerCase(), /take over/);
 });
 
-test("the handoff message carries a custom state directory when there is one", () => {
-  const command = protocol.takeoverCommand("s_7f3a", "/tmp/lahe state");
-  assert.equal(command, "lahe session takeover s_7f3a --state-dir '/tmp/lahe state'");
-  assert.ok(LIVENESS.handoffMessage(command).includes(command));
+test("with the state outside the default folder, the message says so without naming a path", () => {
+  const message = LIVENESS.handoffMessage("s_7f3a", null, true);
+  assert.ok(message.includes("lahe session takeover s_7f3a"));
+  assert.ok(message.includes("--state-dir"), "the new agent is told the flag is needed");
+  assert.equal(/\/[A-Za-z]/.test(message.replace(/lahe session list|--state-dir/g, "")), false, "and no path");
 });
 
-test("the handoff message holds no token or review secret", () => {
+test("the page receives no token, secret or filesystem path, and neither does the message", () => {
   const rail = railAt(NOW);
   const secret = "tok_do_not_leak_0123456789";
   rail.setAgentLiveness({
@@ -272,22 +271,25 @@ test("the handoff message holds no token or review secret", () => {
     unanswered: 1,
     listening: false,
     oldest_unanswered_at: agoIso(5 * 60000),
-    takeover_command: protocol.takeoverCommand("s_7f3a", null),
+    session_id: "s_7f3a",
+    state_dir_flag_needed: true,
     // Anything else on the wire object never reaches the message.
     token: secret,
-    session_secret: secret
+    session_secret: secret,
+    state_dir: "/Users/someone/private/lahe-state"
   });
   const message = rail.waitBanner().message;
   assert.ok(message.includes("lahe session takeover s_7f3a"));
   assert.equal(message.includes(secret), false);
   assert.equal(/token|secret/i.test(message), false);
+  assert.equal(message.includes("/Users/"), false, "no path reaches the message");
   rail.unmount();
 });
 
 test("a review with no agent session still gets a message that works", () => {
   // Reviews from before sessions existed have no id to name. The new agent is
   // pointed at the list instead of handed a command with a hole in it.
-  const message = LIVENESS.handoffMessage(null);
+  const message = LIVENESS.handoffMessage(null, null, false);
   assert.ok(message.includes("lahe session list"));
   assert.ok(message.includes("lahe session takeover"));
   assert.equal(message.includes("null"), false);
@@ -308,7 +310,7 @@ test("the copy button writes the handoff message to the clipboard", async () => 
     unanswered: 1,
     listening: false,
     oldest_unanswered_at: agoIso(5 * 60000),
-    takeover_command: "lahe session takeover s_7f3a"
+    session_id: "s_7f3a"
   });
   const result = await rail.copyHandoff();
   assert.equal(result.ok, true);
@@ -327,10 +329,10 @@ test("the copy button writes the handoff message to the clipboard", async () => 
 });
 
 // ---------------------------------------------------------------------------
-// The helper sends the command, with the state directory already in it
+// The helper sends the session id and whether a flag is needed, never a path
 // ---------------------------------------------------------------------------
 
-test("the helper's liveness answer carries the takeover command for its session", () => {
+test("the helper's liveness answer names the session and whether --state-dir is needed, and holds no path", () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-prominence-"));
   const store = agentSessions.createStore({
     dir: dir,
@@ -339,13 +341,18 @@ test("the helper's liveness answer carries the takeover command for its session"
     })
   });
   store.create({ id: "s_hand" });
-  const out = store.liveness("s_hand", { unanswered: 1, oldestUnansweredAt: agoIso(60000) });
-  assert.equal(out[LIVENESS.FIELD.TAKEOVER], protocol.takeoverCommand("s_hand", stateDir.flagFor(dir)));
-  assert.ok(out[LIVENESS.FIELD.TAKEOVER].startsWith("lahe session takeover s_hand"));
+  const out = store.liveness("s_hand", { unanswered: 1, oldestUnansweredAt: agoIso(60000), oldestUnansweredItem: "itm_a" });
+  assert.equal(out[LIVENESS.FIELD.SESSION_ID], "s_hand");
+  assert.equal(out[LIVENESS.FIELD.STATE_DIR_FLAG], stateDir.flagFor(dir) !== null);
+  assert.equal(out[LIVENESS.FIELD.OLDEST_ITEM], "itm_a");
+  assert.equal(Object.prototype.hasOwnProperty.call(out, "takeover_command"), false);
+  assert.equal(JSON.stringify(out).includes(dir), false, "the state directory's path never reaches the page");
 
-  // The pure half, with no store behind it, claims no command.
+  // The pure half, with no store behind it, claims no session.
   const bare = agentSessions.livenessFrom({ session: { handoff_rev: 0 }, unanswered: 0, nowMs: NOW });
-  assert.equal(bare[LIVENESS.FIELD.TAKEOVER], null);
+  assert.equal(bare[LIVENESS.FIELD.SESSION_ID], null);
+  assert.equal(bare[LIVENESS.FIELD.STATE_DIR_FLAG], false);
+  assert.equal(bare[LIVENESS.FIELD.OLDEST_ITEM], null);
 });
 
 // ---------------------------------------------------------------------------
@@ -359,14 +366,14 @@ test("the banner names the agent to check when the session has a name, and says 
     unanswered: 1,
     listening: false,
     oldest_unanswered_at: agoIso(5 * 60000),
-    takeover_command: "lahe session takeover s_named"
+    session_id: "s_named"
   };
   rail.setAgentLiveness(base);
   assert.equal(rail.waitBanner().check, LIVENESS.PROMINENT.CHECK);
 
   rail.setAgentLiveness(Object.assign({}, base, { session_name: "lahe updates 9/16" }));
   const banner = rail.waitBanner();
-  assert.equal(banner.check, LIVENESS.PROMINENT.CHECK_NAMED.replace("{name}", "lahe updates 9/16"));
+  assert.equal(banner.check, LIVENESS.PROMINENT.CHECK_NAMED.replace("{name}", () => "lahe updates 9/16"));
   assert.match(banner.check, /^Check the agent named lahe updates 9\/16/);
   assert.match(rail.statusLine().title, /lahe updates 9\/16/, "the footer hover names it too");
   assert.match(banner.message, /lahe updates 9\/16/, "and so does the handoff message");
@@ -374,9 +381,32 @@ test("the banner names the agent to check when the session has a name, and says 
 });
 
 test("the handoff message names the session being taken over, quoted", () => {
-  const message = LIVENESS.handoffMessage("lahe session takeover s_1", 'lahe "updates"');
+  const message = LIVENESS.handoffMessage("s_1", 'lahe "updates"', false);
   assert.ok(message.includes('"lahe \\"updates\\""'), message);
-  assert.equal(LIVENESS.handoffMessage("lahe session takeover s_1", null).includes("named"), false);
+  assert.equal(LIVENESS.handoffMessage("s_1", null, false).includes("named"), false);
+});
+
+test("a name with $& and friends is filled in literally everywhere it is drawn", () => {
+  const name = "fix $& bug $` and $'";
+  const rail = overlay.createRail({ document: null, now: () => NOW, reviewId: "r_dollar", sessionStorage: memoryStorage() });
+  rail.mount();
+  rail.setStatusLine(overlay.STATUS.STORED);
+  rail.setAgentLiveness({
+    state: STATE.NO_AGENT,
+    unanswered: 1,
+    listening: false,
+    oldest_unanswered_at: agoIso(5 * 60000),
+    oldest_unanswered_item: "itm_dollar",
+    session_id: "s_dollar",
+    session_name: name
+  });
+  const banner = rail.waitBanner();
+  assert.ok(banner.check.includes("Check the agent named " + name + " first"), banner.check);
+  assert.ok(rail.statusLine().title.includes("named " + name + "."), "footer hover");
+  assert.ok(rail.pillWait().title.includes(name), "pill hover");
+  assert.ok(banner.message.includes(JSON.stringify(name)), "handoff message");
+  assert.ok(overdueToasts(rail)[0].text.includes("named " + name + "."), "the notice");
+  rail.unmount();
 });
 
 // ---------------------------------------------------------------------------
@@ -426,51 +456,127 @@ function overdueToasts(rail) {
   return rail.toastInfo().toasts.filter((t) => String(t.key).indexOf("overdue:") === 0);
 }
 
-test("crossing the rule raises one toast, keyed to the review and the oldest waiting item", () => {
-  const rail = overlay.createRail({ document: null, now: () => NOW, reviewId: "r_toast" });
+/** A sessionStorage stand-in that two rails can share, the way a reload does. */
+function memoryStorage() {
+  const values = Object.create(null);
+  return {
+    getItem: (key) => (key in values ? values[key] : null),
+    setItem: (key, value) => {
+      values[key] = String(value);
+    },
+    removeItem: (key) => {
+      delete values[key];
+    }
+  };
+}
+
+function lateLiveness(itemId, waitStart, extra) {
+  return Object.assign(
+    {
+      state: STATE.WAITING,
+      unanswered: 1,
+      listening: true,
+      oldest_unanswered_at: waitStart,
+      oldest_unanswered_item: itemId,
+      session_id: "s_toast",
+      session_name: "lahe updates 9/16"
+    },
+    extra || {}
+  );
+}
+
+function toastRail(storage) {
+  const rail = overlay.createRail({ document: null, now: () => NOW, reviewId: "r_toast", sessionStorage: storage });
   rail.mount();
   rail.setStatusLine(overlay.STATUS.STORED);
-  const first = readyItem(12 * 60000);
-  rail.upsertCard(first);
-  const overdue = {
-    state: STATE.WAITING,
-    unanswered: 1,
-    listening: true,
-    oldest_unanswered_at: first[record.FIELD.UPDATED_AT],
-    session_name: "lahe updates 9/16"
-  };
+  return rail;
+}
+
+test("crossing the rule raises one toast, keyed to the review, the oldest waiting item and its wait-start", () => {
+  const rail = toastRail(memoryStorage());
+  const start = agoIso(12 * 60000);
   // Not yet over the line: nothing.
-  rail.setAgentLiveness(Object.assign({}, overdue, { oldest_unanswered_at: agoIso(60000) }));
+  rail.setAgentLiveness(lateLiveness("itm_first", agoIso(60000)));
   assert.equal(overdueToasts(rail).length, 0);
 
-  rail.setAgentLiveness(overdue);
+  rail.setAgentLiveness(lateLiveness("itm_first", start));
   let raised = overdueToasts(rail);
   assert.equal(raised.length, 1);
-  assert.equal(raised[0].key, "overdue:r_toast:" + first[record.FIELD.ID]);
+  assert.equal(raised[0].key, "overdue:r_toast:itm_first:" + start);
   assert.ok(raised[0].text.includes(rail.waitBanner().text));
   assert.ok(raised[0].text.includes("lahe updates 9/16"), "it names the agent");
 
   // The same wait, repainted by the clock and by the helper repeating itself.
-  rail.setAgentLiveness(Object.assign({}, overdue));
+  rail.setAgentLiveness(lateLiveness("itm_first", start));
   rail.setStatusLine(overlay.STATUS.STORED);
   assert.equal(overdueToasts(rail).length, 1, "no second toast for the same wait");
 
   // Dismissed: it does not come back for that same wait.
   rail.dismissToast(raised[0].id);
-  rail.setAgentLiveness(Object.assign({}, overdue));
+  rail.setAgentLiveness(lateLiveness("itm_first", start));
   assert.equal(overdueToasts(rail).length, 0);
+  rail.unmount();
+});
 
-  // The reply lands. Then a new comment waits too long: a new wait, a new toast.
-  const answered = Object.assign({}, first, { state: record.STATE.HANDLED });
-  answered[record.FIELD.REPLY] = { status: record.REPLY_STATUS.HANDLED, agent: "claude", at: agoIso(1000), files: [] };
-  rail.upsertCard(answered);
+test("a reload does not raise the same notice again", () => {
+  const storage = memoryStorage();
+  const start = agoIso(12 * 60000);
+  const before = toastRail(storage);
+  before.setAgentLiveness(lateLiveness("itm_first", start));
+  assert.equal(overdueToasts(before).length, 1);
+  before.unmount();
+
+  // A new rail on the same tab's storage: a reload, a remount, or the next page
+  // of a folder review.
+  const after = toastRail(storage);
+  after.setAgentLiveness(lateLiveness("itm_first", start));
+  assert.equal(overdueToasts(after).length, 0);
+  after.unmount();
+});
+
+test("the rail still raises its notice when the browser gives it no storage", () => {
+  const throwing = {
+    getItem: () => { throw new Error("denied"); },
+    setItem: () => { throw new Error("denied"); },
+    removeItem: () => { throw new Error("denied"); }
+  };
+  const rail = toastRail(throwing);
+  rail.setAgentLiveness(lateLiveness("itm_first", agoIso(12 * 60000)));
+  assert.equal(overdueToasts(rail).length, 1);
+  rail.unmount();
+});
+
+test("a follow-up that puts the same item back into waiting gets a new notice", () => {
+  const rail = toastRail(memoryStorage());
+  rail.setAgentLiveness(lateLiveness("itm_first", agoIso(40 * 60000)));
+  assert.equal(overdueToasts(rail).length, 1);
+  rail.dismissToast(overdueToasts(rail)[0].id);
+
+  // The agent answers with a question; nothing is waiting.
   rail.setAgentLiveness({ state: STATE.NONE, unanswered: 0, listening: true, oldest_unanswered_at: null });
-  assert.equal(overdueToasts(rail).length, 0, "a reply raises nothing");
-  const second = readyItem(11 * 60000);
-  rail.upsertCard(second);
-  rail.setAgentLiveness(Object.assign({}, overdue, { oldest_unanswered_at: second[record.FIELD.UPDATED_AT] }));
-  raised = overdueToasts(rail);
+  // The reviewer answers back: the same item waits again, from a new start.
+  rail.setAgentLiveness(lateLiveness("itm_first", agoIso(11 * 60000)));
+  const raised = overdueToasts(rail);
   assert.equal(raised.length, 1);
-  assert.equal(raised[0].key, "overdue:r_toast:" + second[record.FIELD.ID]);
+  assert.equal(raised[0].key, "overdue:r_toast:itm_first:" + agoIso(11 * 60000));
+  rail.unmount();
+});
+
+test("answering the oldest late item while another is still late raises nothing more", () => {
+  const rail = toastRail(memoryStorage());
+  rail.setAgentLiveness(lateLiveness("itm_oldest", agoIso(30 * 60000), { unanswered: 2 }));
+  assert.equal(overdueToasts(rail).length, 1);
+  // The banner never leaves: the next oldest is late too.
+  rail.setAgentLiveness(lateLiveness("itm_next", agoIso(20 * 60000), { unanswered: 1 }));
+  assert.equal(overdueToasts(rail).length, 1, "still the one notice");
+  assert.equal(rail.waitBanner().shown, true);
+  rail.unmount();
+});
+
+test("with no waiting item named by the helper, no notice is keyed on a timestamp alone", () => {
+  const rail = toastRail(memoryStorage());
+  rail.setAgentLiveness(lateLiveness(null, agoIso(12 * 60000)));
+  assert.equal(rail.waitBanner().shown, true);
+  assert.equal(overdueToasts(rail).length, 0);
   rail.unmount();
 });

@@ -60,6 +60,12 @@ test("a name is plain text: trimmed, control characters stripped, capped at 80 c
   // Capped by character, not by UTF-16 unit, so an emoji is never cut in half.
   const emoji = "\u{1F600}".repeat(100);
   assert.equal(Array.from(agentSessions.cleanName(emoji)).length, 80);
+  // Direction overrides, zero-width characters and line/paragraph separators
+  // are invisible and can make a name read as something else. They go too.
+  assert.equal(agentSessions.cleanName("a\u202Eb\u2066c\u2069d"), "abcd");
+  assert.equal(agentSessions.cleanName("x\u200By\u200Fz\uFEFF"), "xyz");
+  assert.equal(agentSessions.cleanName("one\u2028two\u2029three"), "onetwothree");
+  assert.equal(agentSessions.cleanName("\u202A\u202B\u202C\u202D\u202E\u2067\u2068"), null);
   // Markup is not stripped: it is display text, and the rail draws it as text.
   assert.equal(agentSessions.cleanName("<b>bold</b>"), "<b>bold</b>");
 });
@@ -173,7 +179,7 @@ test("`lahe session list` prints the name after the id, quoted, and --json carri
 // The page
 // ---------------------------------------------------------------------------
 
-test("the name reaches the page in the liveness answer, next to the takeover command", () => {
+test("the name reaches the page in the liveness answer, next to the session id", () => {
   const dir = tempState();
   const log = logModule.createEventLog({ dir });
   const reviews = reviewsModule.createReviews({ dir, log });
@@ -204,7 +210,8 @@ test("the name reaches the page in the liveness answer, next to the takeover com
   const liveness = routes.handlerFor("replies.poll")({ review: "r_page", query: { since: 0 } }, deps).body.agent_liveness;
   assert.equal(FIELD.NAME, "session_name");
   assert.equal(liveness.session_name, "lahe updates 9/16");
-  assert.ok(liveness.takeover_command.startsWith("lahe session takeover s_page"));
+  assert.equal(liveness.session_id, "s_page");
+  assert.equal(Object.prototype.hasOwnProperty.call(liveness, "takeover_command"), false);
 
   // No name, no field value; and the pure half reads the name off the session.
   store.setName("s_page", "");
@@ -212,4 +219,14 @@ test("the name reaches the page in the liveness answer, next to the takeover com
   assert.equal(unnamed.session_name, null);
   const pure = agentSessions.livenessFrom({ session: { handoff_rev: 0, name: " x " }, unanswered: 0 });
   assert.equal(pure.session_name, "x");
+});
+
+test("`lahe review --name` names a session this call created or was handed, and nobody else's", () => {
+  assert.deepEqual(reviewCommand.nameAction({ name: "mine", created: true, explicit: false }), { apply: true, note: null });
+  assert.deepEqual(reviewCommand.nameAction({ name: "mine", created: false, explicit: true }), { apply: true, note: null });
+  assert.deepEqual(reviewCommand.nameAction({ name: undefined, created: false, explicit: false }), { apply: false, note: null });
+  const inferred = reviewCommand.nameAction({ name: "mine", created: false, explicit: false, session: "s_other" });
+  assert.equal(inferred.apply, false, "a session found by the target's path may belong to another agent");
+  assert.match(inferred.note, /lahe session name s_other/);
+  assert.equal(inferred.note.split("\n").filter(Boolean).length, 1, "one line");
 });

@@ -466,11 +466,15 @@ test("replies.poll answers with how long it has been, not with a claim", () => {
     "listening",
     "monitor_at",
     "oldest_unanswered_at",
+    "oldest_unanswered_item",
+    "session_id",
     "session_name",
     "state",
-    "takeover_command",
+    "state_dir_flag_needed",
     "unanswered"
   ]);
+  assert.equal(liveness.oldest_unanswered_item, item[record.FIELD.ID], "the notice is keyed on this item");
+  assert.equal(liveness.session_id, "s_wire");
 
   // The agent answers. The line now reports the answer rather than the wait, and
   // the timestamp is the folded reply's own, not something the page guessed.
