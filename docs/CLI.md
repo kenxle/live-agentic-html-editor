@@ -28,7 +28,9 @@ once, and after that a plain sentence works:
 | `lahe session list [--json]` | Read-only: every agent session on this machine, open ones first, with its handoff revision, reviews owned, unanswered items, whether anything is listening to it, and when the agent last replied. This is how you find a session id |
 | `lahe session close <id>` | Close an agent workstream, stop its static servers, and keep all review history. The final close also stops the shared helper |
 | `lahe session reopen <id>` | Reopen the workstream and restart its helper and static servers |
-| `lahe session takeover <id>` | Explicitly hand an existing workstream to a new agent, fence its older monitors, and print catch-up commands |
+| `lahe session takeover <id>` | Explicitly hand an existing workstream to a new agent, fence its older monitors, and print catch-up commands. Add `--name "<name>"` to record the new agent's name at the same time |
+| `lahe session name <id> "<name>"` | The human's name for this session, as the host shows it (Claude Code after `/rename`). The reviewer's rail uses it to say which agent to check, and `session list` prints it after the id. Trimmed, control characters removed, 80 characters at most; `""` clears it |
+| `lahe review ... --name "<name>"` | Start or add to a session and record its name in one step |
 | `lahe serve [--port N]` | Run the helper by hand (`add` starts it for you, so this is rarely needed) |
 | `lahe serve --restart` | Replace the helper that is already running, even when a reviewer has a page open on it. Every other command leaves such a helper alone and tells you to run this when they are done |
 

@@ -958,13 +958,19 @@ server-side from the review to its owning agent session. Fields: `state`, `unans
 `oldest_unanswered_at`, `last_reply_at`, `listening`, `monitor_at`, `activity_at`,
 `takeover_command`. The last is `protocol.takeoverCommand(session, flagDir)`, built by the helper
 because only the helper knows whether `--state-dir` is needed, or null for a review with no agent
-session. It carries no token.
+session. It carries no token. `session_name` is the owning session's optional name (`session.json`
+`name`, set with `--name` or `lahe session name`), or null. It is display text: the rail sets it with
+`textContent` everywhere it appears.
 
 **Overdue is one rule**, `protocol.AGENT_LIVENESS.overdue(state, waitedMs)`: `no_agent` past
 `QUIET_MS`, `waiting` past `STALE_MS`, `working` and `none` never. The footer line goes loud on it.
 The banner at the top of the rail shows exactly while the footer is loud, and its one button copies
 `AGENT_LIVENESS.handoffMessage(takeover_command)` for a new agent. A ready card with no reply turns
-amber when its own wait passes the same rule. The words are `AGENT_LIVENESS.PROMINENT`.
+amber when its own wait passes the same rule. With the rail collapsed, the pill goes amber on the
+same rule, shows the wait, and carries the banner's sentence as its hover text. The first time a wait
+goes late the rail raises one toast keyed `overdue:<review>:<oldest waiting item id>`; the toast
+system refuses a key it has seen, so the same wait never repeats it. The words are
+`AGENT_LIVENESS.PROMINENT`.
 
 | State | When |
 | --- | --- |

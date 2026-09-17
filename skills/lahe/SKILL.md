@@ -32,6 +32,14 @@ Run the public entrypoint on the target the user named:
 lahe review <target>
 ```
 
+**Name your session if your host tells you its name.** The human may run many
+agents at once, and when nothing comes back on their comments, the rail tells
+them which agent to go check. If your host tells you the human's name for this
+session (Claude Code does after `/rename`), add `--name "<name>"` to
+`lahe review`, or to `lahe session takeover <id>` when you take one over. If the
+name changes later, run `lahe session name <id> "<new name>"`. If your host never
+tells you a name, leave it out.
+
 **Run it for everything, including a page you just made.** If someone asks for
 three logo options on a page, a chart to look at, or a draft to read, that is a
 review. Serve it. Never hand over a page you opened from disk because you

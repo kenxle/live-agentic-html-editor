@@ -55,6 +55,14 @@ Section 4 says what `<target>` is for your case. The command starts a local
 server and prints one `open` URL, the agent session id, the review folder, and
 the drain, wake, and close commands for this session.
 
+**Name your session if your host tells you its name.** The human may run many
+agents at once, and when nothing comes back on their comments, the rail tells
+them which agent to go check. If your host tells you the human's name for this
+session (Claude Code does after `/rename`), add `--name "<name>"` to
+`lahe review`, or to `lahe session takeover <id>` when you take one over. If the
+name changes later, run `lahe session name <id> "<new name>"`. If your host never
+tells you a name, leave it out.
+
 ### Step 2. Hand over that one URL
 
 Give them the `open` line exactly as printed. One link. Not a file path, not the
