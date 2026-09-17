@@ -22,15 +22,18 @@ var eventLog = require("../../service/log.js");
 var BIN = path.join(__dirname, "..", "..", "..", "bin", "lahe.js");
 // Every action `lahe session` accepts. parse() validates against this list, so
 // a test can read the real actions instead of restating them.
-var ACTIONS = ["list", "close", "reopen", "takeover"];
+var ACTIONS = ["list", "close", "reopen", "takeover", "name"];
 var USAGE = [
-  "usage: lahe session <list|close|reopen|takeover> [session-id] [--port <n>] [--state-dir <path>] [--json]",
+  "usage: lahe session <list|close|reopen|takeover|name> [session-id] [--port <n>] [--state-dir <path>] [--json]",
   "",
   "  list      every agent session on this machine, open ones first. Read-only: it takes no id",
   "            and changes nothing. This is how you FIND a session id.",
   "  close     end a session, keep its review history",
   "  reopen    reopen a closed session you already own",
-  "  takeover  explicitly continue another agent's session, only when the human asks for it",
+  "  takeover  explicitly continue another agent's session, only when the human asks for it.",
+  "            --name \"<name>\" records the human's name for your session at the same time",
+  "  name      lahe session name <id> \"<name>\": the human's name for this session, shown on",
+  "            the reviewer's rail so they know which agent to check. \"\" clears it",
   "",
   "  --json    with list: one JSON object per session, then one summary line"
 ].join("\n");
@@ -54,9 +57,19 @@ function parse(argv) {
   // `list` is the only action that takes no id: it is the command an agent runs
   // BECAUSE it has no id yet. Its options therefore start one slot earlier.
   var listing = action === "list";
+  // `name` takes the name itself as its second positional, and an empty one is
+  // a real answer (it clears the name), so it is read before the options.
+  var naming = action === "name";
   var out = { action: action, id: listing ? null : list[1] || null, port: null, stateDir: null, json: false };
-  for (var i = listing ? 1 : 2; i < list.length; i += 1) {
+  var start = listing ? 1 : 2;
+  if (naming) {
+    if (list.length < 3 || /^--/.test(String(list[2]))) return { error: "name takes a session id and a name: lahe session name <id> \"<name>\"" };
+    out.name = String(list[2]);
+    start = 3;
+  }
+  for (var i = start; i < list.length; i += 1) {
     if (list[i] === "--json") out.json = true;
+    else if (list[i] === "--name" && list[i + 1] !== undefined && action === "takeover") out.name = String(list[(i += 1)]);
     else if (list[i] === "--port" && list[i + 1] !== undefined) out.port = Number(list[(i += 1)]);
     else if (list[i] === "--state-dir" && list[i + 1] !== undefined) out.stateDir = list[(i += 1)];
     else return { error: "unknown or incomplete option " + JSON.stringify(list[i]) };
@@ -244,6 +257,7 @@ function collect(input) {
     var monitorAt = liveness[protocol.AGENT_LIVENESS.FIELD.MONITOR_AT];
     return {
       id: session.id,
+      name: sessions.cleanName(session.name),
       open: !session.closed_at,
       closed_at: session.closed_at || null,
       handoff_rev: sessions.handoffRev(session),
@@ -297,6 +311,8 @@ function watcherText(row, nowMs) {
 function listLine(row, nowMs) {
   return (
     row.id +
+    // Quoted with JSON's rules, so a name with spaces or quotes stays one field.
+    (row.name ? "  " + JSON.stringify(row.name) : "") +
     "  " +
     (row.open ? "open" : "closed " + row.closed_at) +
     "  handoff " + row.handoff_rev +
@@ -369,7 +385,13 @@ async function run(argv, options) {
   catch (err) { errOut("lahe session: " + err.message + "\n"); return 1; }
   var store = sessions.createStore({ dir: dir });
   try {
-    if (args.action === "close") {
+    if (args.action === "name") {
+      var renamed = store.setName(args.id, args.name);
+      out(
+        "agent session " + args.id +
+          (renamed.name ? " is named " + JSON.stringify(renamed.name) : " has no name now") + "\n"
+      );
+    } else if (args.action === "close") {
       var staticStopped = await staticServers.stopAll(dir, args.id);
       store.close(args.id);
       var stopped = false;
@@ -381,7 +403,9 @@ async function run(argv, options) {
       );
     } else {
       var handedOff = args.action === "takeover";
-      var session = handedOff ? store.takeover(args.id) : store.reopen(args.id);
+      var session = handedOff
+        ? store.takeover(args.id, args.name !== undefined ? { name: args.name } : undefined)
+        : store.reopen(args.id);
       var prior = readReady(dir);
       var port = args.port || (prior && prior.port) || protocol.DEFAULT_PORT;
       var helperRun = await startHelper(dir, port);

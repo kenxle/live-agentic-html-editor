@@ -666,6 +666,7 @@ function livenessNone(work) {
   out[protocol.AGENT_LIVENESS.FIELD.MONITOR_AT] = null;
   out[protocol.AGENT_LIVENESS.FIELD.ACTIVITY_AT] = null;
   out[protocol.AGENT_LIVENESS.FIELD.TAKEOVER] = null;
+  out[protocol.AGENT_LIVENESS.FIELD.NAME] = null;
   return out;
 }
 

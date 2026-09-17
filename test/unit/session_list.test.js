@@ -207,7 +207,7 @@ test("list takes no id and no --port, and --json is refused on the write actions
   assert.equal(sessionCommand.parse(["list", "--json"]).json, true);
   assert.match(sessionCommand.parse(["list", "--port", "9999"]).error, /no --port/);
   assert.match(sessionCommand.parse(["takeover", "s_x", "--json"]).error, /--json is only for/);
-  assert.match(sessionCommand.parse(["bogus", "s_x"]).error, /expected list, close, reopen, or takeover/);
+  assert.match(sessionCommand.parse(["bogus", "s_x"]).error, /expected list, close, reopen, takeover, or name/);
 });
 
 test("a takeover handoff shows up in the list's handoff column", async () => {

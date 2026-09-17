@@ -13,15 +13,39 @@ var markdown = require("../../service/markdown.js");
 var add = require("./add.js");
 
 var USAGE = [
-  "usage: lahe review <file-or-directory> [--session <id>] [--new-session] [add options]",
+  "usage: lahe review <file-or-directory> [--session <id>] [--new-session] [--name <name>] [add options]",
   "",
   "Starts a new agent session for a new target, or infers the existing target's session.",
   "Markdown is rendered in the St. Clair AI document style with local Mermaid diagrams.",
   "A folder of HTML pages is served whole: one review, and every page in it carries",
   "the rail, including pages written after the review was opened.",
   "Use the printed session id for later documents and the status monitor.",
-  "--new-session deliberately starts a separate session and review."
+  "--new-session deliberately starts a separate session and review.",
+  "--name records the human's name for this agent session (what your host calls it,",
+  "for example after /rename), so the reviewer's rail can say which agent to check."
 ].join("\n");
+
+/**
+ * Take `--name <value>` off the argument list, before add.parseArgs sees it.
+ *
+ * @param {string[]} list
+ * @returns {{list: string[], name?: string, error?: string}}
+ */
+function takeName(list) {
+  var rest = [];
+  var name;
+  for (var i = 0; i < list.length; i += 1) {
+    if (list[i] !== "--name") {
+      rest.push(list[i]);
+      continue;
+    }
+    if (list[i + 1] === undefined) return { list: list, error: "--name needs a value" };
+    name = String(list[(i += 1)]);
+  }
+  var out = { list: rest };
+  if (name !== undefined) out.name = name;
+  return out;
+}
 
 /**
  * Does `lahe review` serve this target itself, and as what?
@@ -89,6 +113,12 @@ async function run(argv) {
     if (arg === "--new-session") { newSession = true; return false; }
     return true;
   });
+  var named = takeName(list);
+  if (named.error) {
+    process.stderr.write("lahe review: " + named.error + "\n");
+    return protocol.CLI_EXIT.BAD_USAGE;
+  }
+  list = named.list;
   var parsed = add.parseArgs(list);
   if (!parsed.ok) {
     process.stderr.write("lahe review: " + parsed.message + "\n");
@@ -123,6 +153,9 @@ async function run(argv) {
       sessionId = store.create().id;
       createdSession = true;
     }
+    // A name on a new or an existing session: the host may have renamed it
+    // since the last document was added.
+    if (named.name !== undefined) store.setName(sessionId, named.name);
     // The block printed below names the wake feed's path, so the file has to be
     // there before an agent copies that line. A session created before the feed
     // existed gets one here too.
@@ -263,4 +296,4 @@ async function run(argv) {
   return code;
 }
 
-module.exports = { USAGE: USAGE, inferSession: inferSession, servedKind: servedKind, run: run };
+module.exports = { USAGE: USAGE, inferSession: inferSession, servedKind: servedKind, takeName: takeName, run: run };

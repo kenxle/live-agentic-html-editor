@@ -25,6 +25,38 @@ function defaultWatchers() {
 var SCHEMA = 1;
 var LEGACY_ID = "legacy";
 
+// THE HUMAN'S NAME FOR A SESSION. Ken runs many agents at once, and an id like
+// s_9a3835ce54bc9e66 does not say which window to go check. A host that tells
+// its agent the name (Claude Code does, after /rename) passes it on, and the
+// rail's banner says which agent to check. It is display text only: nothing
+// routes on it, and every surface draws it as text, never as markup.
+var NAME_MAX = 80;
+
+/**
+ * A name as it is stored: trimmed, control characters removed, at most
+ * NAME_MAX characters (counted by character, so an emoji is never cut in half).
+ *
+ * @param {*} value
+ * @returns {string|null} null for anything that is not a non-blank string
+ */
+function cleanName(value) {
+  if (typeof value !== "string") return null;
+  // eslint-disable-next-line no-control-regex
+  var stripped = value.replace(/[\u0000-\u001f\u007f-\u009f]/g, "").trim();
+  if (!stripped) return null;
+  var chars = Array.from(stripped);
+  if (chars.length > NAME_MAX) stripped = chars.slice(0, NAME_MAX).join("").trim();
+  return stripped || null;
+}
+
+/** Put a cleaned name on a session record, or take the field off for none. */
+function applyName(session, value) {
+  var name = cleanName(value);
+  if (name) session.name = name;
+  else delete session.name;
+  return session;
+}
+
 function mintId() {
   return "s_" + crypto.randomBytes(8).toString("hex");
 }
@@ -156,6 +188,8 @@ function livenessFrom(input) {
   // no directory to put in the command, so it claims none.
   out[protocol.AGENT_LIVENESS.FIELD.TAKEOVER] =
     typeof spec.takeoverCommand === "string" && spec.takeoverCommand ? spec.takeoverCommand : null;
+  // Which agent, in the human's words, so the rail can say which window to check.
+  out[protocol.AGENT_LIVENESS.FIELD.NAME] = cleanName(spec.session && spec.session.name);
   return out;
 }
 
@@ -255,7 +289,19 @@ function createStore(options) {
     // before the feed existed gets one.
     feed.ensure(id);
     if (existing) return existing;
-    return write({ schema: SCHEMA, id: id, created_at: now(), closed_at: null, handoff_rev: 0 });
+    return write(applyName({ schema: SCHEMA, id: id, created_at: now(), closed_at: null, handoff_rev: 0 }, spec.name));
+  }
+
+  /**
+   * Name a session, rename it, or clear the name with an empty one.
+   *
+   * @param {string} id
+   * @param {string|null} name
+   */
+  function setName(id, name) {
+    var session = read(id);
+    if (!session || session.synthetic) throw new Error("unknown agent session " + JSON.stringify(id));
+    return write(applyName(session, name));
   }
 
   function list() {
@@ -301,9 +347,13 @@ function createStore(options) {
     return session;
   }
 
-  function takeover(id) {
+  function takeover(id, options) {
+    var o = options || {};
     var session = read(id);
     if (!session || session.synthetic) throw new Error("unknown agent session " + JSON.stringify(id));
+    // The agent taking over may be a different window with a different name. No
+    // name given keeps the one the session had.
+    if (o.name !== undefined) applyName(session, o.name);
     session.closed_at = null;
     session.handoff_rev = handoffRev(session) + 1;
     session.taken_over_at = now();
@@ -480,6 +530,7 @@ function createStore(options) {
     close: close,
     reopen: reopen,
     takeover: takeover,
+    setName: setName,
     handoffRev: handoffRev,
     openSessions: openSessions,
     wake: feed,
@@ -497,6 +548,8 @@ function createStore(options) {
 module.exports = {
   SCHEMA: SCHEMA,
   LEGACY_ID: LEGACY_ID,
+  NAME_MAX: NAME_MAX,
+  cleanName: cleanName,
   mintId: mintId,
   handoffRev: handoffRev,
   pidAlive: pidAlive,
