@@ -42,7 +42,141 @@ const {
   SERVICE_ENTRY: serviceEntry
 } = require("../helpers");
 
+const { startAppServer } = require("../fixtures/app/server");
+
 const REPO_ROOT = path.join(__dirname, "..", "..");
+const APP_REVIEW = "rail-late-review";
+const SHOT_DIR = process.env.LAHE_SCREENSHOT_DIR || null;
+
+// --- the real booted layer, for what a reviewer actually sees ----------------
+//
+// The rail harness (test/fixtures/rail.html) hosts a comment box inside a card
+// with no Active tab behind it, so a ready card there draws a composer the real
+// rail never shows. Anything about how the cards LOOK is read off the real
+// layer on the app fixture instead.
+
+async function bootApp(page) {
+  const app = await startAppServer();
+  const helper = await startService({
+    entry: SERVICE_ENTRY,
+    args: EPHEMERAL_PORT,
+    reviews: [APP_REVIEW],
+    allowedOrigins: [app.origin]
+  });
+  app.useLayer({ review: APP_REVIEW, token: helper.tokenFor(APP_REVIEW), helper: helper.url });
+  await page.setViewportSize({ width: 1180, height: 1320 });
+  await page.goto(app.urlFor("/?morph=off"));
+  await pollPage(page, () => !!(window.__lahe && window.__lahe.booted), undefined, {
+    message: "the layer to boot from its script tag"
+  });
+  await pollPage(page, () => window.__lahe.status() === "stored", undefined, {
+    message: "the rail to read stored"
+  });
+  return { app, helper };
+}
+
+async function selectAndOpen(page, selector) {
+  await page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }, selector);
+  await page.keyboard.press("ControlOrMeta+Shift+KeyC");
+  await pollPage(page, () => !!window.__lahe.focusedBoxQuote(), undefined, {
+    message: "the comment box to open on the passage"
+  });
+}
+
+/** A real comment, sent with Cmd-Enter. Returns its item. */
+async function sendComment(page, selector, text) {
+  const before = await page.evaluate(() => window.__lahe.items().map((i) => i.id));
+  await selectAndOpen(page, selector);
+  await page.keyboard.type(text);
+  await page.keyboard.press("ControlOrMeta+Enter");
+  const find = (known) =>
+    window.__lahe.items().filter((i) => i.state === "ready" && known.indexOf(i.id) === -1)[0] || null;
+  await pollPage(page, find, before, { message: "the comment to be ready" });
+  return page.evaluate(find, before);
+}
+
+/** A real draft: typed, never sent. */
+async function leaveDraft(page, selector, text) {
+  await selectAndOpen(page, selector);
+  await page.keyboard.type(text);
+  const find = () => window.__lahe.items().filter((i) => i.state === "draft")[0] || null;
+  await pollPage(page, find, undefined, { message: "the draft to reach the rail" });
+  return page.evaluate(find);
+}
+
+/** Fold an agent reply the way the helper's poll loop delivers one. */
+function foldHandled(page, item) {
+  return page.evaluate((it) => {
+    window.__lahe.handle.doneTab().applyReplies([
+      {
+        event: "reply.folded",
+        item: it.id,
+        rev: it.rev,
+        accepted: true,
+        state: "handled",
+        ts: new Date().toISOString(),
+        reply: { status: "handled", agent: "claude", text: "Done.", files: ["index.html"] }
+      }
+    ]);
+  }, item);
+}
+
+/** Computed card colors, plus the rail's own tokens to compare them with. */
+function readCards(page, ids) {
+  return page.evaluate((want) => {
+    const rail = window.__lahe.rail;
+    const root = rail.tabBody("active").getRootNode();
+    const railNode = root.querySelector(".rail");
+    const tokens = window.getComputedStyle(railNode);
+    // Resolve a token to the rgb() string the browser computes for it.
+    const probe = document.createElement("span");
+    railNode.appendChild(probe);
+    const resolve = (name) => {
+      probe.style.color = "var(" + name + ")";
+      return window.getComputedStyle(probe).color;
+    };
+    const out = {
+      scheme: root.host.getAttribute("data-lahe-scheme"),
+      paper: resolve("--paper"),
+      accent: resolve("--accent"),
+      warn: resolve("--warn"),
+      tokenPaper: tokens.getPropertyValue("--paper").trim()
+    };
+    probe.remove();
+    Object.keys(want).forEach((label) => {
+      const node = rail.cardNode(want[label]);
+      const cs = node ? window.getComputedStyle(node) : null;
+      out[label] = cs
+        ? {
+            background: cs.backgroundColor,
+            border: cs.borderTopColor,
+            shadow: cs.boxShadow,
+            late: node.getAttribute("data-lahe-late") === "true"
+          }
+        : null;
+    });
+    return out;
+  }, ids);
+}
+
+function rgb(value) {
+  const m = String(value).match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (!m) throw new Error("not an rgb color: " + value);
+  return { r: Number(m[1]), g: Number(m[2]), b: Number(m[3]) };
+}
+
+function distance(a, b) {
+  const x = rgb(a);
+  const y = rgb(b);
+  return Math.abs(x.r - y.r) + Math.abs(x.g - y.g) + Math.abs(x.b - y.b);
+}
 const SERVICE_ENTRY = serviceEntry;
 const REVIEW = "review-1";
 const EPHEMERAL_PORT = ["--port", "0"];
@@ -408,15 +542,6 @@ test.describe("the rail says whether anything has come back", () => {
         expect((banner.text + " " + banner.check).toLowerCase()).not.toContain(jargon);
       });
 
-      // The picture, when one is asked for.
-      if (process.env.LAHE_SCREENSHOT_DIR) {
-        const box = banner.railBox;
-        await page.screenshot({
-          path: path.join(process.env.LAHE_SCREENSHOT_DIR, "rail_amber_card_and_banner.png"),
-          clip: { x: box.x, y: box.y, width: box.width, height: Math.min(box.height, 720) }
-        });
-      }
-
       // The button, pressed the way a person presses it. The clipboard is
       // caught rather than read back, so the test does not hang on a
       // permission prompt.
@@ -490,4 +615,128 @@ test.describe("the rail says whether anything has come back", () => {
       await helper.stop();
     }
   });
+
+  test("four card states read apart on the real rail, light and dark: ready is not green, late is not a draft", async ({
+    page
+  }) => {
+    // Ken, 2026-09-16: a waiting card "is green, signifying success". Green is
+    // for handled only. A ready card inside its time is the plain card with the
+    // accent border; a late one is marked by a strong amber border and its
+    // wait, so it cannot be mistaken for a draft's quiet warm wash.
+    const { app, helper } = await bootApp(page);
+    try {
+      const fresh = await sendComment(page, "h1", "Say which week this is.");
+      const late = await sendComment(page, "p.lede", "Pick one number and use it twice.");
+      const handled = await sendComment(page, "section.focus p:nth-of-type(1)", "Name both clients up front.");
+      await foldHandled(page, handled);
+      const draft = await leaveDraft(page, "section.focus p:nth-of-type(2)", "Half written, not sent yet.");
+
+      // The helper's own answer is in; from here the test sets the one it needs.
+      await page.evaluate(() => window.__lahe.handle.sync.stop());
+      await page.evaluate(
+        (a) => {
+          const item = JSON.parse(JSON.stringify(window.__lahe.itemById(a.id)));
+          item.created_at = a.at;
+          item.updated_at = a.at;
+          window.__lahe.rail.upsertCard(item);
+        },
+        { id: late.id, at: agoIso(12 * 60 * 1000) }
+      );
+      await page.evaluate(
+        (at) =>
+          window.__lahe.rail.setAgentLiveness({
+            state: "waiting",
+            unanswered: 2,
+            oldest_unanswered_at: at,
+            last_reply_at: null,
+            listening: true,
+            takeover_command: "lahe session takeover s_9a3835ce54bc9e66"
+          }),
+        agoIso(12 * 60 * 1000)
+      );
+      const ids = { fresh: fresh.id, late: late.id, handled: handled.id, draft: draft.id };
+
+      const check = async (label) => {
+        const c = await readCards(page, ids);
+        expect(c.fresh.late, label + ": a card sent a moment ago is not late").toBe(false);
+        expect(c.late.late, label + ": the twelve-minute card is late").toBe(true);
+
+        expect(c.fresh.background, label + ": ready is the plain card surface").toBe(c.paper);
+        expect(c.fresh.border, label + ": with the accent border").toBe(c.accent);
+        const ready = rgb(c.fresh.background);
+        const done = rgb(c.handled.background);
+        expect(done.g - ready.g, label + ": handled is the green one").not.toBe(0);
+        expect(done.g - done.r, label + ": handled is green").toBeGreaterThanOrEqual(3);
+        expect(c.handled.background, label + ": and ready is not").not.toBe(c.fresh.background);
+
+        expect(c.late.border, label + ": late wears the amber border").toBe(c.warn);
+        expect(c.late.background, label + ": late is not the draft's wash").not.toBe(c.draft.background);
+        expect(c.late.border, label + ": nor the draft's border").not.toBe(c.draft.border);
+        expect(
+          distance(c.late.border, c.paper) - distance(c.draft.border, c.paper),
+          label + ": the late border is much stronger than the draft's"
+        ).toBeGreaterThan(90);
+        expect(distance(c.draft.background, c.paper), label + ": the draft wash stays quiet").toBeLessThanOrEqual(45);
+        return c;
+      };
+
+      const light = await check("light");
+      expect(light.scheme).toBe("light");
+      if (SHOT_DIR) await shootSet(page, "light");
+
+      await page.evaluate(() => {
+        document.documentElement.style.background = "#12151a";
+        document.body.style.background = "#12151a";
+        window.__lahe.rail.refreshScheme();
+      });
+      const dark = await check("dark");
+      expect(dark.scheme).toBe("dark");
+      if (SHOT_DIR) await shootSet(page, "dark");
+    } finally {
+      await helper.stop().catch(() => {});
+      await app.close();
+    }
+  });
 });
+
+/**
+ * The picture set, for Ken: the Active tab (banner, ready, late and draft
+ * cards), the Done tab (the handled card), and the collapsed pill, joined side
+ * by side into one image per scheme.
+ */
+async function shootSet(page, scheme) {
+  const rail = railBoxInPage;
+  const shots = [];
+  const railBox = await page.evaluate(rail);
+  const clip = { x: railBox.x, y: railBox.y, width: railBox.width, height: Math.min(railBox.height, 1320) };
+  await page.evaluate(() => window.__lahe.rail.selectTab("active"));
+  shots.push({ label: "Active", data: (await page.screenshot({ clip })).toString("base64") });
+  await page.evaluate(() => window.__lahe.rail.selectTab("done"));
+  shots.push({ label: "Done", data: (await page.screenshot({ clip })).toString("base64") });
+  await page.evaluate(() => window.__lahe.rail.selectTab("active"));
+
+  const composite = await page.context().newPage();
+  const bg = scheme === "dark" ? "#12151a" : "#eef0f4";
+  const ink = scheme === "dark" ? "#e9ebf0" : "#15171c";
+  await composite.setViewportSize({ width: 60 + shots.length * (clip.width + 30), height: clip.height + 70 });
+  await composite.setContent(
+    '<body style="margin:0;padding:20px;background:' + bg + ";color:" + ink +
+      ';font:13px system-ui;display:flex;gap:30px">' +
+      shots
+        .map(
+          (s) =>
+            '<figure style="margin:0"><figcaption style="margin-bottom:8px">' + s.label +
+            '</figcaption><img src="data:image/png;base64,' + s.data + '"></figure>'
+        )
+        .join("") +
+      "</body>"
+  );
+  await composite.screenshot({ path: path.join(SHOT_DIR, "rail_states_" + scheme + ".png"), fullPage: true });
+  await composite.close();
+}
+
+function railBoxInPage() {
+  const root = window.__lahe.rail.tabBody("active").getRootNode();
+  const box = root.querySelector(".rail").getBoundingClientRect();
+  return { x: box.left, y: box.top, width: box.width, height: box.height };
+}

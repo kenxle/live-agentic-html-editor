@@ -393,16 +393,13 @@
     "--accent-wash:rgba(60,86,165,.09);--warn:#8d5715;--warn-wash:rgba(180,120,30,.12);",
     "--good:#2c6f52;--shadow:0 1px 2px rgba(18,20,26,.06),0 14px 34px rgba(18,20,26,.13);",
     // THE CARD'S STATE IS A COLOR AS WELL AS A WORD. A draft the reviewer has
-    // not submitted wears the rail's needs-you amber, a submitted one wears its
-    // green, and the whole list can be read without reading a single chip. They
+    // not submitted wears a quiet warm wash, and a card an agent has HANDLED
+    // wears green, because green means done. A card that is sent and waiting is
+    // not done, so it is not green (Ken, 2026-09-16: a waiting card "is green,
+    // signifying success"): it is the plain card with the accent border. They
     // are washes over the card's paper, not fills: the reviewer's own sentence
-    // stays the strongest thing on the card, so these sit a few points off
-    // --paper rather than announcing themselves.
-    "--draft-wash:#fdf8ef;--draft-line:#ecdcbe;--ready-wash:#f1f8f4;--ready-line:#cee2d6;",
-    // LATE is the one wash meant to be noticed: a card nobody has picked up. It
-    // is the draft amber turned up, so it reads as "this needs you" in the same
-    // family, and strong enough to find in a long list at a glance.
-    "--late-wash:#fcebcf;--late-line:#e2ae5c;",
+    // stays the strongest thing on the card.
+    "--draft-wash:#fdf8ef;--draft-line:#ecdcbe;--handled-wash:#f1f8f4;--handled-line:#cee2d6;",
     "--radius:14px;--radius-sm:10px}",
     // THE PAGE PICKS THE SCHEME, NOT THE OS. highlight.js samples the reviewed
     // page's own background and stamps data-lahe-scheme on this rail's host, so
@@ -424,8 +421,7 @@
     // same relationship to the card's paper, not the same numbers. A light tint
     // carried into dark reads as a lit panel; these are the dark paper with the
     // hue mixed into it.
-    "--draft-wash:#26221b;--draft-line:#3b3327;--ready-wash:#1a2420;--ready-line:#2a3d34;",
-    "--late-wash:#3a2c17;--late-line:#9a6f2c;",
+    "--draft-wash:#26221b;--draft-line:#3b3327;--handled-wash:#1a2420;--handled-line:#2a3d34;",
     "--shadow:0 1px 2px rgba(0,0,0,.4),0 16px 40px rgba(0,0,0,.45)}",
     "*{box-sizing:border-box;margin:0;padding:0;font:inherit;color:inherit}",
     "button{background:none;border:0;cursor:pointer;font:inherit;color:inherit}",
@@ -528,17 +524,20 @@
     ".card{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius-sm);",
     "padding:11px 12px 12px;display:flex;flex-direction:column;gap:8px;",
     "box-shadow:0 1px 1px rgba(18,20,26,.03)}",
-    // The state, in color. Draft is the amber the rail already uses for "this
-    // one needs you", which is exactly what an unsubmitted comment is; ready is
-    // green. A HANDLED card keeps the plain paper it has always had, so the two
-    // greens never sit next to each other meaning different things: handled
-    // wears an outlined green chip on paper, ready wears the wash.
+    // The state, in color. Draft is a quiet warm wash: unsent, and only the
+    // reviewer can see it. Ready is the plain card with the accent border: sent,
+    // and not done yet. Handled is the one green card, because green means done.
     ".card[data-state='draft']{background:var(--draft-wash);border-color:var(--draft-line)}",
-    ".card[data-state='ready']{background:var(--ready-wash);border-color:var(--ready-line)}",
-    // A READY CARD NOBODY HAS PICKED UP, past the overdue rule. After the state
-    // rules so it wins over the ready green, and it goes the moment a reply
-    // lands, because the reply takes the item out of waiting.
-    ".card[" + CARD_LATE_ATTR + "='true']{background:var(--late-wash);border-color:var(--late-line)}",
+    ".card[data-state='ready']{background:var(--paper);border-color:var(--accent)}",
+    ".card[data-state='handled']{background:var(--handled-wash);border-color:var(--handled-line)}",
+    // A READY CARD NOBODY HAS PICKED UP, past the overdue rule. The signal is a
+    // strong amber border (drawn two pixels wide with a ring, so nothing moves)
+    // and the "waiting 12m" label, on the plain card. It is deliberately NOT a
+    // wash: a warm wash is what a draft wears, and the two must not blur. After
+    // the state rules so it wins over the ready accent, and it goes the moment a
+    // reply lands, because the reply takes the item out of waiting.
+    ".card[" + CARD_LATE_ATTR + "='true']{background:var(--paper);border-color:var(--warn);",
+    "box-shadow:0 0 0 1px var(--warn)}",
     ".card__wait{display:none;font-size:10px;font-weight:600;color:var(--warn);white-space:nowrap;",
     "font-variant-numeric:tabular-nums}",
     ".card[" + CARD_LATE_ATTR + "='true'] .card__wait{display:inline}",
@@ -676,7 +675,8 @@
     // At the top of the rail, under the head, where it is read before any card.
     // Shown exactly while the footer line is loud, and gone when it is not.
     ".late{display:none;flex-direction:column;gap:7px;margin:10px 10px 0;padding:11px 12px;",
-    "border-radius:var(--radius-sm);background:var(--late-wash);border:1px solid var(--late-line)}",
+    "border-radius:var(--radius-sm);background:var(--warn-wash);border:1px solid var(--warn);",
+    "box-shadow:inset 3px 0 0 var(--warn)}",
     ".late[data-shown='true']{display:flex}",
     ".late__title{font-size:12.5px;font-weight:700;color:var(--ink);line-height:1.4}",
     ".late__check{font-size:12px;color:var(--ink-soft);line-height:1.45}",

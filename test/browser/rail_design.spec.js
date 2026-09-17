@@ -202,10 +202,15 @@ test.describe("the rail as a shipping surface", () => {
   // the color comes back as a WASH, quiet enough that the reviewer's own
   // sentence is still the strongest thing on the card.
   //
+  // Then Ken, 2026-09-16: a sent, waiting card "is green, signifying success".
+  // Green is for handled only. A ready card is the plain card with the accent
+  // border, so these assertions say ready is NOT green. The four states side by
+  // side, and the late card, are in test/browser/rail_agent_liveness.spec.js.
+  //
   // Asserted on COMPUTED background, in both schemes, because "the attribute is
   // on the node" was true the whole time the rail had no color coding at all.
 
-  test("a draft card is washed warm and a ready card green, in both schemes, and the wash changes in place", async ({
+  test("a draft card is washed warm and a ready card is not green, in both schemes, and the color changes in place", async ({
     page
   }) => {
     const { app, helper, token } = await startBoth();
@@ -257,8 +262,7 @@ test.describe("the rail as a shipping surface", () => {
       const lightReady = rgb(light.ready);
       expect(light.draft, "draft and ready do not wear the same background").not.toBe(light.ready);
       expect(lightDraft.r - lightDraft.b, "the draft wash is warm: amber, the rail's own needs-you color").toBeGreaterThanOrEqual(8);
-      expect(lightReady.g - lightReady.r, "the ready wash is green").toBeGreaterThanOrEqual(4);
-      expect(lightReady.g - lightReady.b, "green, not blue").toBeGreaterThanOrEqual(2);
+      expect(lightReady.g - lightReady.b, "a ready card is not green: green means handled").toBeLessThan(2);
       // Quiet: a wash over the card's paper, not a fill. The reviewer's sentence
       // is still the strongest thing on the card.
       const paper = (() => {
@@ -318,7 +322,7 @@ test.describe("the rail as a shipping surface", () => {
       expect(darkDraft.r + darkDraft.g + darkDraft.b, "the dark draft wash is dark").toBeLessThan(330);
       expect(darkReady.r + darkReady.g + darkReady.b, "the dark ready wash is dark").toBeLessThan(330);
       expect(darkDraft.r - darkDraft.b, "still warm in dark").toBeGreaterThanOrEqual(4);
-      expect(darkReady.g - darkReady.r, "still green in dark").toBeGreaterThanOrEqual(3);
+      expect(darkReady.g - darkReady.b, "not green in dark either").toBeLessThan(2);
     } finally {
       await helper.stop().catch(() => {});
       await app.close();
