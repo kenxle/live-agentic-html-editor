@@ -13,6 +13,15 @@ A whetstone-size change to the rail. Progress is at the bottom.
 - The small line at the bottom stays as it is.
 - When a reply lands, the card goes back to its normal color and the banner goes away on its own.
 
+## Session names
+
+Ken runs many agents at once, and a LAHE session id like `s_9a3835ce54bc9e66` does not tell him which window to go check. Claude Code tells the agent the human's name for its session when he uses `/rename`. So:
+
+- A LAHE session can carry a name. The agent sets it when it starts a review, and updates it if the session is renamed.
+- `lahe session list` shows the name beside the id.
+- The banner says "Check the agent named lahe updates 9/16" instead of just "check your agent", and the handoff message names it too.
+- With no name, everything reads as it does today. Hosts that never tell the agent a name just show no name.
+
 ## The limits, decided
 
 The rail already has two limits and this change uses them rather than inventing new ones:
@@ -34,3 +43,4 @@ The rail's drawing code and its styles (`src/layer/overlay.js`, `src/layer/tab_a
 ## Progress
 
 - 2026-09-16 20:02: spec written, builder dispatched.
+- 2026-09-16 20:14: first pass came back with tests green. Sent back for Ken's edit (waiting cards should not be green), an amber that does not blur with drafts, a comment box drawn without styles in the screenshot, and session names in the banner. Ken approved the spec.
