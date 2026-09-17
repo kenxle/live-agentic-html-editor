@@ -10,6 +10,7 @@ A whetstone-size change to the rail. Progress is at the bottom.
 - **A banner at the top of the rail**, not the small line at the bottom, once anything has waited past the limit. It says, in plain words, that nobody has picked up your comments, for how long, and gives two things to do:
   - **Check your agent.** The words say to look at the agent's window, because that is usually the fix.
   - **Hand this doc to a new agent.** A button copies a short message you paste into a fresh agent. The message tells that agent to take over this LAHE session and work the comments that are waiting. It uses the takeover command the tool already has.
+- **When the rail is closed to its small pill**, the pill itself turns amber and shows how long things have waited. Hovering it gives the same sentence as the banner, including the agent's name. Clicking it opens the rail, where the banner is.
 - The small line at the bottom stays as it is.
 - When a reply lands, the card goes back to its normal color and the banner goes away on its own.
 
