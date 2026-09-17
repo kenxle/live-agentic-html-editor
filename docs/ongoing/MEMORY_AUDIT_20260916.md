@@ -18,6 +18,9 @@ This is the one progress page for all of the memory, CPU, and token work. The me
 | 8. The instructions tell agents to read the summary file once, not every wake | 🔨 In progress. Folded into 7: it changes the instructions inside the review file, and ships with the playbook swap |
 | 9. The rail follows the reviewer through a folder of pages | ✅ Done. (not a performance item, but it shipped in the same batch) |
 | 10. A page load or status call on a big review still reads its whole log once | ✅ Done. |
+| 11. Trim the drain to only the comments and what locates them (drop the pointer line and the field-class table) | ⬜ Not started. Ken, 2026-09-16: it repeats on every wake, so it carries nothing else |
+| 12. The drain can never print the contract by accident (no flag decides it any more) | ✅ Done. `--quiet` used to silently gate it; now status.js always returns the pointer, with or without `--quiet` |
+| 13. An orchestrator that watches LAHE keeps a small pool of subagents warm instead of spawning fresh ones for medium-size work | 🔨 Proposal below, not built. Needs your read |
 
 ✅ done and live · 🔨 in progress · ⬜ not started
 
@@ -184,6 +187,20 @@ Items 1 and 2 change the event model and deserve a short brief before a builder 
   - Pruning every detached node would have permanently lost an element-bound record whose node a tab panel or accordion takes out and puts back.
 
   Issue 6's `toastKeys` reading is corrected: the set does not block a later reply on the same item. The key is `reply:<id>:<replyStamp>`, so a new reply is a new key; the neglect re-show adds its own `:waiting` suffix, and the waiting COUNT passes no key at all so the rail cannot refuse a legitimately new one. "Shown once per key, for the life of the rail" is what rules 2 and 5 of the toast contract ask for (the X means read, and once per page life), so deleting a key on dismissal would put a dismissed reply back on screen. It grows by one short string per distinct thing the rail has said, which is bounded by the replies of one session.
+
+## Item 13: should an orchestrator keep a few subagents warm?
+
+Your idea, 2026-09-17, after reading the full token breakdown: running this session on Fable to babysit LAHE and send the real work to subagents "wasn't the worst thing in the world, once we got rid of the extra tokens." You asked about going further: keep a few subagents open and rotate work through them, instead of spawning a brand new one for every small thing, so nobody pays a fresh startup cost each time.
+
+**What already happens, tonight.** Every multi-round fix in this session (the outbox coalescing, the retention cleanup, the folder review, the amber cards, the playbook rewrite) went back to the SAME subagent for its fix round, by name, instead of spawning a new one. That subagent still has the whole conversation so far, so it does not re-read the brief or re-learn the repo. This is most of what you are asking for, and it is already the practice.
+
+**What is not happening, and should not.** A single card reply, a one-line doc edit, a commit and push: none of those went to a subagent at all tonight. They were done directly. That is the right call. A subagent's fixed cost (reading CLAUDE.md, the brief, the relevant source) is worth paying only when the work itself is bigger than that cost. Pooling does not help here, because the fix for tiny work is "do not dispatch it," not "dispatch it more cheaply."
+
+**Where pooling would actually help: the middle size.** Work too big to do inline, too small to justify spinning up a builder with a full brief and a fresh worktree: a handful of related small fixes that show up over an evening, none alone worth a whetstone-size dispatch. For that band, keeping two or three general-purpose subagents around and sending each new small task to whichever one is free, by name, would save the repeated setup cost.
+
+**The real cost this does not remove.** A subagent you keep resuming carries its whole history forward every time, so round ten is not the same price as round one: it is round one's cost plus nine rounds of accumulated context. Prompt caching softens this but does not erase it. So "keep it open forever" is not free either; at some point a subagent's own history becomes the expense. A pool needs a retirement rule, not just a reuse rule: after some size, or after a big merge changes what "the repo" looks like, let that subagent finish its current task and start the next one fresh rather than resuming it again.
+
+**Recommendation, if you want this built:** a short rule for the orchestrator (a section in `CLAUDE.md` next to tonight's other loop rules): keep at most two or three general-purpose subagents alive at once; send the next medium task to whichever one is idle, by name; spin up a new one only when all are busy with something that cannot be interrupted; retire a subagent (let it finish, do not resume it again) once its own conversation gets large or the repo has moved on since it last synced. Not built. Say go and I will write it in.
 
 ## What this does not settle
 
