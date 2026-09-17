@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+8d8439866494
+ * version 0.2.0+bfe8e5cc2d6e
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+8d8439866494";
+  g.LAHE.version = "0.2.0+bfe8e5cc2d6e";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -6159,6 +6159,16 @@
     return "lahe monitor --session " + String(sessionId) + stateDirFlag(stateDirPath);
   }
 
+  /**
+   * The one spelling of the takeover command. Same state-directory rule.
+   *
+   * The CLI's own usage names it, and the rail's handoff message carries it to
+   * a new agent, fully formed, so the reviewer pastes something that runs.
+   */
+  function takeoverCommand(sessionId, stateDirPath) {
+    return "lahe session takeover " + String(sessionId) + stateDirFlag(stateDirPath);
+  }
+
   // ---------------------------------------------------------------------------
   // Monitor liveness: what the rail is allowed to claim about an agent
   // ---------------------------------------------------------------------------
@@ -6245,7 +6255,20 @@
       // produces a claim in either direction; the line falls back to the wait.
       LISTENING: "listening",
       MONITOR_AT: "monitor_at",
-      ACTIVITY_AT: "activity_at"
+      ACTIVITY_AT: "activity_at",
+      // The session that owns this review, or null for a review with no
+      // session. The rail's handoff message names it in the takeover command.
+      SESSION_ID: "session_id",
+      // true when the session's state is outside the default folder, so a copied
+      // command needs --state-dir. A boolean on purpose: the page is never sent
+      // a filesystem path.
+      STATE_DIR_FLAG: "state_dir_flag_needed",
+      // The id of the oldest waiting item. With oldest_unanswered_at (its
+      // wait-start) it keys the one notice the rail raises for a late wait.
+      OLDEST_ITEM: "oldest_unanswered_item",
+      // The human's name for the owning session (set with --name or `lahe
+      // session name`), or null. Display text: the rail draws it as text only.
+      NAME: "session_name"
     },
     // THE WORDS, SPELLED ONCE, HERE. They used to be hand-copied into the layer,
     // which is two spellings of one wire value: rename a state and the rail
@@ -6295,11 +6318,39 @@
       agent_connected: "An agent has this review open.",
       agent_absent: "No agent has this review open.",
       agent_unknown: "Whether an agent has this review open cannot be checked on this computer.",
+      agent_named: "The agent on this review is named {name}.",
       replied: "The agent last replied {reply} ago.",
       never_replied: "The agent has not replied on this review yet.",
       waiting: "Your oldest unanswered item has been waiting {age}.",
       stored: "Your comments and edits are stored in this browser and in the helper's log on disk.",
       save: "You can get your own copy any time: use Copy review or Export review to file in the menu."
+    },
+    // THE LOUD HALF, made prominent (Ken, 2026-09-16: "active boxes should
+    // change color if they haven't been picked up after a certain amount of
+    // time. something with more prominence should tell you to go check your
+    // agent or assign a new one to this doc.").
+    //
+    // Shown only while the wait is overdue (see `overdue` below): a banner at
+    // the top of the rail and a word on each late card. Same rule as the TEXT
+    // above: a reviewer's words, no plumbing. `{age}` is filled in the same way.
+    PROMINENT: {
+      BANNER: {
+        no_agent: "Nobody has picked up your comments in {age}.",
+        waiting: "Nothing has come back on your comments in {age}."
+      },
+      CHECK: "Check your agent's window first. It may have stopped, or it may be waiting on you.",
+      // When the session has a name, say which agent. Ken runs many at once.
+      CHECK_NAMED: "Check the agent named {name} first. It may have stopped, or it may be waiting on you.",
+      HANDOFF_BUTTON: "Copy a message for a new agent",
+      COPIED: "Copied. Paste it into a new agent and it will pick up your comments.",
+      COPY_FAILED: "Could not copy. Select the message below and copy it yourself.",
+      CARD: "waiting {age}",
+      // The one pop-up notice raised when a wait first goes late. A notice has
+      // no buttons of its own, so it points at the rail, where the banner is.
+      TOAST_LABEL: "Comments waiting",
+      TOAST_CHECK: "Check your agent's window.",
+      TOAST_CHECK_NAMED: "Check the agent named {name}.",
+      TOAST_OPEN: "Open the rail to hand this doc to a new agent."
     },
     // WHEN THE LINE STARTS SPEAKING, counted from the moment the reviewer
     // submitted, not from anything about a process.
@@ -6331,6 +6382,74 @@
     // holding the feed open and no heartbeat.
     RECENT_COMMAND_MS: 600000
   };
+
+  /**
+   * THE ONE RULE for "this wait is overdue". The footer line goes loud on it,
+   * a waiting card turns amber on it, and the banner at the top of the rail
+   * shows on it. Three places, one rule, so they can never disagree.
+   *
+   *  - Nothing is listening: overdue once the line starts speaking (QUIET_MS).
+   *    There is nobody to wait for.
+   *  - Something may be listening, nothing came back: overdue after STALE_MS.
+   *  - The agent is working: never. The queue behind it is explained.
+   *
+   * A state with no words (NONE, or anything unrecognised off the wire) is
+   * never overdue, for the same reason it never speaks.
+   *
+   * @param {string|null} state an AGENT_LIVENESS.STATE value
+   * @param {number|null} waitedMs how long the wait has run
+   * @returns {boolean}
+   */
+  function livenessOverdue(state, waitedMs) {
+    if (typeof state !== "string" || !Object.prototype.hasOwnProperty.call(AGENT_LIVENESS.TEXT, state)) return false;
+    if (typeof waitedMs !== "number" || !isFinite(waitedMs) || waitedMs < AGENT_LIVENESS.QUIET_MS) return false;
+    if (state === AGENT_LIVENESS.STATE.WORKING) return false;
+    return state === AGENT_LIVENESS.STATE.NO_AGENT || waitedMs >= AGENT_LIVENESS.STALE_MS;
+  }
+  AGENT_LIVENESS.overdue = livenessOverdue;
+
+  /**
+   * The message the reviewer pastes into a fresh agent to hand this doc over.
+   *
+   * It is written to the NEW AGENT, so unlike the rail's own words it names the
+   * command. Pasting it is the human's explicit request, which is the one thing
+   * `lahe session takeover` requires. It carries the command and nothing else
+   * off the wire: no token, no review secret.
+   *
+   * @param {string|null} sessionId AGENT_LIVENESS.FIELD.SESSION_ID, or null for
+   *   a review with no agent session, which gets pointed at the list instead
+   * @param {string|null} [name] AGENT_LIVENESS.FIELD.NAME, quoted when present
+   * @param {boolean} [stateDirFlagNeeded] AGENT_LIVENESS.FIELD.STATE_DIR_FLAG
+   * @returns {string} plain text
+   */
+  function handoffMessage(sessionId, name, stateDirFlagNeeded) {
+    var hasId = typeof sessionId === "string" && isSafeId(sessionId);
+    var elsewhere = stateDirFlagNeeded === true
+      ? [
+          "This review keeps its files outside LAHE's default folder, so add --state-dir with the folder the earlier agent's lahe commands used. If you cannot find it, ask me.",
+          ""
+        ]
+      : [];
+    var run = hasId
+      ? ["Run this command:", "", "    " + takeoverCommand(sessionId, null), ""].concat(elsewhere)
+      : [
+          "Run `lahe session list` to find the session for this document, then take it over with:",
+          "",
+          "    lahe session takeover <session-id>",
+          ""
+        ].concat(elsewhere);
+    var named = typeof name === "string" && name ? ", the session named " + JSON.stringify(name) : "";
+    return [
+      "Please take over my live LAHE review" + named + ". The agent that was working on it stopped answering my comments, and I am asking you to continue it.",
+      ""
+    ]
+      .concat(run)
+      .concat([
+        "It prints the commands to catch up. Then work every comment that is waiting and reply to each one, and keep watching for new ones."
+      ])
+      .join("\n");
+  }
+  AGENT_LIVENESS.handoffMessage = handoffMessage;
 
   return {
     API_VERSION: API_VERSION,
@@ -6404,6 +6523,7 @@
     stateDirFlag: stateDirFlag,
     drainCommand: drainCommand,
     monitorCommand: monitorCommand,
+    takeoverCommand: takeoverCommand,
 
     MONITOR: MONITOR,
     AGENT_LIVENESS: AGENT_LIVENESS
@@ -12991,11 +13111,15 @@
   var AGENT_TEXT = protocol.AGENT_LIVENESS.TEXT;
   var AGENT_CONNECTION = protocol.AGENT_LIVENESS.CONNECTION;
   var AGENT_DETAIL = protocol.AGENT_LIVENESS.DETAIL;
-  // Under AGENT_QUIET_MS the line says nothing about a wait; past
-  // AGENT_STALE_MS it is loud about one. Both live in protocol.js beside the
+  // Under AGENT_QUIET_MS the line says nothing about a wait; past the overdue
+  // rule below it is loud about one. Both live in protocol.js beside the
   // states, for the same reason the words do.
   var AGENT_QUIET_MS = protocol.AGENT_LIVENESS.QUIET_MS;
-  var AGENT_STALE_MS = protocol.AGENT_LIVENESS.STALE_MS;
+  // THE ONE RULE for an overdue wait, and the words that go with it. The footer
+  // going loud, a late card turning amber and the banner at the top of the rail
+  // all read agentOverdue, so the three cannot disagree about when to speak up.
+  var agentOverdue = protocol.AGENT_LIVENESS.overdue;
+  var AGENT_PROMINENT = protocol.AGENT_LIVENESS.PROMINENT;
 
   var STATE_LABEL = {
     draft: "Draft",
@@ -13159,6 +13283,9 @@
   // spelling: tab_done.js takes its own constants from these.
   var CARD_UNSEEN_ATTR = "data-lahe-unseen";
   var CARD_ASKING_ATTR = "data-lahe-asking";
+  // A ready card nobody has picked up, past the overdue rule. Set by the rail
+  // alone, off the item and the helper's liveness answer.
+  var CARD_LATE_ATTR = "data-lahe-late";
 
   // How much of what a card is about fits on its folded line. Long enough to
   // recognize the passage, short enough that every folded card is one row at
@@ -13176,12 +13303,13 @@
     "--accent-wash:rgba(60,86,165,.09);--warn:#8d5715;--warn-wash:rgba(180,120,30,.12);",
     "--good:#2c6f52;--shadow:0 1px 2px rgba(18,20,26,.06),0 14px 34px rgba(18,20,26,.13);",
     // THE CARD'S STATE IS A COLOR AS WELL AS A WORD. A draft the reviewer has
-    // not submitted wears the rail's needs-you amber, a submitted one wears its
-    // green, and the whole list can be read without reading a single chip. They
+    // not submitted wears a quiet warm wash, and a card an agent has HANDLED
+    // wears green, because green means done. A card that is sent and waiting is
+    // not done, so it is not green (Ken, 2026-09-16: a waiting card "is green,
+    // signifying success"): it is the plain card with the accent border. They
     // are washes over the card's paper, not fills: the reviewer's own sentence
-    // stays the strongest thing on the card, so these sit a few points off
-    // --paper rather than announcing themselves.
-    "--draft-wash:#fdf8ef;--draft-line:#ecdcbe;--ready-wash:#f1f8f4;--ready-line:#cee2d6;",
+    // stays the strongest thing on the card.
+    "--draft-wash:#fdf8ef;--draft-line:#ecdcbe;--handled-wash:#f1f8f4;--handled-line:#cee2d6;",
     "--radius:14px;--radius-sm:10px}",
     // THE PAGE PICKS THE SCHEME, NOT THE OS. highlight.js samples the reviewed
     // page's own background and stamps data-lahe-scheme on this rail's host, so
@@ -13203,7 +13331,7 @@
     // same relationship to the card's paper, not the same numbers. A light tint
     // carried into dark reads as a lit panel; these are the dark paper with the
     // hue mixed into it.
-    "--draft-wash:#26221b;--draft-line:#3b3327;--ready-wash:#1a2420;--ready-line:#2a3d34;",
+    "--draft-wash:#26221b;--draft-line:#3b3327;--handled-wash:#1a2420;--handled-line:#2a3d34;",
     "--shadow:0 1px 2px rgba(0,0,0,.4),0 16px 40px rgba(0,0,0,.45)}",
     "*{box-sizing:border-box;margin:0;padding:0;font:inherit;color:inherit}",
     "button{background:none;border:0;cursor:pointer;font:inherit;color:inherit}",
@@ -13306,13 +13434,27 @@
     ".card{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius-sm);",
     "padding:11px 12px 12px;display:flex;flex-direction:column;gap:8px;",
     "box-shadow:0 1px 1px rgba(18,20,26,.03)}",
-    // The state, in color. Draft is the amber the rail already uses for "this
-    // one needs you", which is exactly what an unsubmitted comment is; ready is
-    // green. A HANDLED card keeps the plain paper it has always had, so the two
-    // greens never sit next to each other meaning different things: handled
-    // wears an outlined green chip on paper, ready wears the wash.
+    // The state, in color. Draft is a quiet warm wash: unsent, and only the
+    // reviewer can see it. Ready is the plain card with the accent border: sent,
+    // and not done yet. Handled is the one green card, because green means done.
     ".card[data-state='draft']{background:var(--draft-wash);border-color:var(--draft-line)}",
-    ".card[data-state='ready']{background:var(--ready-wash);border-color:var(--ready-line)}",
+    ".card[data-state='ready']{background:var(--paper);border-color:var(--accent)}",
+    ".card[data-state='handled']{background:var(--handled-wash);border-color:var(--handled-line)}",
+    // A READY CARD NOBODY HAS PICKED UP, past the overdue rule. The signal is a
+    // strong amber border (drawn two pixels wide with a ring, so nothing moves)
+    // and the "waiting 12m" label, on the plain card. It is deliberately NOT a
+    // wash: a warm wash is what a draft wears, and the two must not blur. After
+    // the state rules so it wins over the ready accent, and it goes the moment a
+    // reply lands, because the reply takes the item out of waiting.
+    ".card[" + CARD_LATE_ATTR + "='true']{background:var(--paper);border-color:var(--warn);",
+    "box-shadow:0 0 0 1px var(--warn)}",
+    ".card__wait{display:none;font-size:10px;font-weight:600;color:var(--warn);white-space:nowrap;",
+    "font-variant-numeric:tabular-nums}",
+    ".card[" + CARD_LATE_ATTR + "='true'] .card__wait{display:inline}",
+    // The wait takes the timestamp's place rather than sitting beside it: at
+    // rail width both together pushed the state chip off the card. The exact
+    // time is still one hover away on the wait itself.
+    ".card[" + CARD_LATE_ATTR + "='true'] .card__time{display:none}",
     ".card:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-wash)}",
     ".card__top{display:flex;align-items:center;gap:8px}",
     ".card__kind{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;",
@@ -13437,6 +13579,27 @@
     "font-family:ui-monospace,SFMono-Regular,Menlo,monospace;",
     "display:flex;flex-direction:column;gap:2px;min-width:0}",
     ".agent__file{overflow-wrap:anywhere;word-break:break-word;line-height:1.35}",
+
+    // --- the overdue banner ---------------------------------------------------
+    //
+    // At the top of the rail, under the head, where it is read before any card.
+    // Shown exactly while the footer line is loud, and gone when it is not.
+    ".late{display:none;flex-direction:column;gap:7px;margin:10px 10px 0;padding:11px 12px;",
+    "border-radius:var(--radius-sm);background:var(--warn-wash);border:1px solid var(--warn);",
+    "box-shadow:inset 3px 0 0 var(--warn)}",
+    ".late[data-shown='true']{display:flex}",
+    ".late__title{font-size:12.5px;font-weight:700;color:var(--ink);line-height:1.4}",
+    ".late__check{font-size:12px;color:var(--ink-soft);line-height:1.45}",
+    ".late__btn{align-self:flex-start;font-size:12px;font-weight:600;padding:6px 12px;border-radius:8px;",
+    "background:var(--accent);border:1px solid var(--accent);color:#fff;cursor:pointer}",
+    ":host([data-lahe-scheme='dark']) .late__btn{color:#12151a}",
+    ".late__btn:hover{filter:brightness(1.06)}",
+    ".late__note{font-size:11.5px;color:var(--ink-soft);line-height:1.4}",
+    ".late__note:empty{display:none}",
+    ".late__message{display:none;font-size:11px;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere;",
+    "font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--paper);",
+    "border:1px solid var(--line);border-radius:7px;padding:7px 8px;user-select:text;-webkit-user-select:text}",
+    ".late__message[data-shown='true']{display:block}",
 
     // --- footer -------------------------------------------------------------
     ".foot{border-top:1px solid var(--line-soft);background:var(--paper);",
@@ -13574,6 +13737,13 @@
     ".pill__dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}",
     ".pill__count{font-variant-numeric:tabular-nums;color:var(--ink-faint);font-weight:500}",
     ".pill__count[hidden]{display:none}",
+    // THE PILL, LATE. The rail can be closed for most of a session, and the
+    // banner is inside it. So the pill wears the late card's signal: the amber
+    // border and ring, an amber dot, and the wait. No motion and no sound.
+    ".pill__wait{display:none;font-variant-numeric:tabular-nums;font-weight:650;color:var(--warn)}",
+    ".pill[data-lahe-late='true']{border-color:var(--warn);box-shadow:var(--shadow),0 0 0 1px var(--warn)}",
+    ".pill[data-lahe-late='true'] .pill__dot{background:var(--warn)}",
+    ".pill[data-lahe-late='true'] .pill__wait{display:inline}",
     // THE JEWEL: the same number the Done tab badge carries, on the one surface
     // that is still on screen once the rail is put away. A reviewer works with
     // the rail collapsed, and a question or a refusal was badging a tab strip
@@ -14032,6 +14202,19 @@
     // no timers at all.
     var now = typeof opts.now === "function" ? opts.now : function () { return Date.now(); };
     var timers = opts.timers || timersFrom(doc);
+    // Where the handoff message is copied to. A seam for the same reason the
+    // clock is one: a test holds the write without a real clipboard.
+    var clipboardOverride = opts.clipboard || null;
+    // Where the notices already raised are remembered for this tab, so a reload,
+    // a remount or the next page of a folder review does not raise them again.
+    // A seam so a test can hand two rails the same storage.
+    var sessionStorageOverride = opts.sessionStorage || null;
+    // Was the banner up at the last repaint? A notice is raised only when this
+    // goes from false to true.
+    var overdueShown = false;
+    // What the banner last said about the copy, so a repaint keeps it.
+    var handoffNote = "";
+    var handoffFailed = false;
 
     var cards = Object.create(null);
     var cardSequence = 0;
@@ -14300,6 +14483,28 @@
       head.appendChild(collapseBtn);
       rail.appendChild(head);
 
+      // THE OVERDUE BANNER, at the top where it is read first. Built once and
+      // shown or hidden by renderWaitBanner, like every other piece of chrome.
+      var late = el("div", "late");
+      late.setAttribute("role", "alert");
+      late.setAttribute("data-lahe-late-banner", "true");
+      var lateTitle = el("div", "late__title", "");
+      var lateCheck = el("div", "late__check", AGENT_PROMINENT.CHECK);
+      var lateBtn = el("button", "late__btn", AGENT_PROMINENT.HANDOFF_BUTTON);
+      lateBtn.setAttribute("type", "button");
+      lateBtn.addEventListener("click", function () {
+        copyHandoff();
+      });
+      var lateNote = el("div", "late__note", "");
+      lateNote.setAttribute("aria-live", "polite");
+      var lateMessage = el("div", "late__message", "");
+      late.appendChild(lateTitle);
+      late.appendChild(lateCheck);
+      late.appendChild(lateBtn);
+      late.appendChild(lateNote);
+      late.appendChild(lateMessage);
+      rail.appendChild(late);
+
       var tabs = el("div", "tabs");
       tabs.setAttribute("role", "tablist");
       var tabButtons = Object.create(null);
@@ -14464,6 +14669,9 @@
       pill.appendChild(el("span", null, "Review"));
       var pillCount = el("span", "pill__count", "0");
       pill.appendChild(pillCount);
+      // How long the oldest comment has waited, shown only while that is late.
+      var pillWaitNode = el("span", "pill__wait", "");
+      pill.appendChild(pillWaitNode);
       var pillJewel = el("span", "pill__jewel");
       pillJewel.hidden = true;
       pill.appendChild(pillJewel);
@@ -14615,6 +14823,12 @@
         foot: foot,
         statusRow: statusRow,
         statusText: statusText,
+        late: late,
+        lateTitle: lateTitle,
+        lateCheck: lateCheck,
+        lateBtn: lateBtn,
+        lateNote: lateNote,
+        lateMessage: lateMessage,
         statusDot: statusDot,
         limit: limit,
         hints: hints,
@@ -14636,6 +14850,7 @@
         collapseBtn: collapseBtn,
         pill: pill,
         pillCount: pillCount,
+        pillWait: pillWaitNode,
         pillJewel: pillJewel,
         toastHost: toastHost,
         toastMore: toastMore
@@ -15122,6 +15337,9 @@
       var kind = el("span", "card__kind");
       top.appendChild(kind);
       top.appendChild(el("span", "spacer"));
+      // How long a late card has waited. Hidden unless the card is late.
+      var wait = el("span", "card__wait", "");
+      top.appendChild(wait);
       var time = el("time", "card__time");
       top.appendChild(time);
       var state = el("span", "card__state");
@@ -15164,6 +15382,7 @@
         line: line,
         lineText: lineText,
         kind: kind,
+        wait: wait,
         time: time,
         state: state,
         quote: quote,
@@ -15266,6 +15485,7 @@
       // On the card itself too, so anything a tab owner attached can be shown or
       // withdrawn by the card's own state without a second file being told.
       card.node.setAttribute("data-state", card.state);
+      paintCardWait(card);
       var quote = (item[record.FIELD.CONTEXT] && item[record.FIELD.CONTEXT].quote) || "";
       p.quote.textContent = quote;
       p.quote.style.display = quote ? "" : "none";
@@ -15921,9 +16141,7 @@
           // back for ten minutes is not, and neither is nobody having picked it
           // up: a file tail can be armed all afternoon over an agent that
           // stopped reading, so no amount of listening buys quiet here.
-          loud:
-            state !== AGENT_STATE.WORKING &&
-            (waitedMs >= AGENT_STALE_MS || state === AGENT_STATE.NO_AGENT),
+          loud: agentOverdue(state, waitedMs),
           speaking: true,
           waitedMs: waitedMs
         };
@@ -15958,6 +16176,8 @@
         if (listening === true) parts.push(AGENT_DETAIL.agent_connected);
         else if (listening === false) parts.push(AGENT_DETAIL.agent_absent);
         else parts.push(AGENT_DETAIL.agent_unknown);
+        var agentName = sessionName();
+        if (agentName) parts.push(fillName(AGENT_DETAIL.agent_named, agentName));
 
         var repliedMs = sinceMs(AGENT_FIELD.LAST_REPLY_AT);
         parts.push(
@@ -15985,6 +16205,305 @@
 
     function fillAge(template, ms) {
       return String(template).replace("{age}", ageLabel(ms));
+    }
+
+    // -------------------------------------------------------------------------
+    // Making an overdue wait prominent
+    // -------------------------------------------------------------------------
+    //
+    // Ken, 2026-09-16: "active boxes should change color if they haven't been
+    // picked up after a certain amount of time. something with more prominence
+    // should tell you to go check your agent or assign a new one to this doc."
+    //
+    // Two surfaces, and neither has a rule of its own. The banner shows exactly
+    // while the footer line is loud. A card is late when it is itself waiting
+    // (ready, no reply) and ITS OWN wait passes agentOverdue under the review's
+    // current state. A reply lands on the item, so the card goes back at once.
+
+    /**
+     * A name, filled in literally. A function replacer, because a string one
+     * reads $& and $' in the name as patterns and mangles it.
+     */
+    function fillName(template, name) {
+      return String(template).replace("{name}", function () {
+        return name;
+      });
+    }
+
+    /** Is this card late, and how long has it waited? Works with no document. */
+    function cardWaitFor(card, agentState) {
+      var item = card && card.item;
+      var none = { overdue: false, waitedMs: null, text: "" };
+      if (!item || status !== STATUS.STORED || !record.isUnansweredReady(item)) return none;
+      var at = item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || null;
+      var then = typeof at === "string" ? Date.parse(at) : NaN;
+      if (Number.isNaN(then)) return none;
+      var waitedMs = Math.max(0, now() - then);
+      var state = agentState === undefined ? getAgentState() : agentState;
+      if (!agentOverdue(state, waitedMs)) return { overdue: false, waitedMs: waitedMs, text: "" };
+      return { overdue: true, waitedMs: waitedMs, text: fillAge(AGENT_PROMINENT.CARD, waitedMs) };
+    }
+
+    function cardWait(id) {
+      return cardWaitFor(cards[id]);
+    }
+
+    function paintCardWait(card, agentState) {
+      if (!dom || !card || !card.node || !card.parts) return;
+      var wait = cardWaitFor(card, agentState);
+      if (wait.overdue) card.node.setAttribute(CARD_LATE_ATTR, "true");
+      else card.node.removeAttribute(CARD_LATE_ATTR);
+      card.parts.wait.textContent = wait.text;
+      var sentAt = card.parts.time.getAttribute("title");
+      if (wait.overdue && sentAt) card.parts.wait.setAttribute("title", sentAt);
+      else card.parts.wait.removeAttribute("title");
+    }
+
+    /** What the banner says, and whether it is up. Works with no document. */
+    function waitBanner(line) {
+      var current = line || statusLine();
+      var sessionId = agentLiveness ? agentLiveness[AGENT_FIELD.SESSION_ID] : null;
+      var name = sessionName();
+      var message = protocol.AGENT_LIVENESS.handoffMessage(
+        typeof sessionId === "string" ? sessionId : null,
+        name,
+        !!(agentLiveness && agentLiveness[AGENT_FIELD.STATE_DIR_FLAG] === true)
+      );
+      var shown = !!current.loud;
+      var state = shown ? current.agentState : null;
+      var template =
+        state && AGENT_PROMINENT.BANNER[state] ? AGENT_PROMINENT.BANNER[state] : AGENT_PROMINENT.BANNER.waiting;
+      return {
+        shown: shown,
+        state: state,
+        text: shown ? fillAge(template, current.agedMs || 0) : "",
+        check: name ? fillName(AGENT_PROMINENT.CHECK_NAMED, name) : AGENT_PROMINENT.CHECK,
+        agedMs: current.agedMs || 0,
+        name: name,
+        button: AGENT_PROMINENT.HANDOFF_BUTTON,
+        message: message
+      };
+    }
+
+    /** The human's name for the owning session, off the wire, or null. */
+    function sessionName() {
+      var value = agentLiveness ? agentLiveness[AGENT_FIELD.NAME] : null;
+      return typeof value === "string" && value.trim() ? value.trim() : null;
+    }
+
+    /**
+     * The collapsed pill, on the same rule. Late exactly while the banner is up,
+     * showing the wait, with the banner's sentence as its hover text. Works with
+     * no document.
+     */
+    function pillWait(banner) {
+      var b = banner || waitBanner();
+      if (!b.shown) return { late: false, text: "", title: PILL_TITLE };
+      return {
+        late: true,
+        text: ageLabel(b.agedMs),
+        title: b.text + " " + b.check + " " + PILL_TITLE
+      };
+    }
+
+    /**
+     * ONE NOTICE PER CROSSING.
+     *
+     * Raised only when the banner goes from not shown to shown, so answering
+     * the oldest late item while another is still late raises nothing: the
+     * banner never left. The key is the review, the oldest waiting item the
+     * helper names, and that item's wait-start, so a follow-up that puts the
+     * same item back into waiting is a new wait with a new notice. Keys already
+     * raised are kept in sessionStorage, so a reload, a remount or the next page
+     * of a folder review does not raise the same one again. Without storage the
+     * toast system's own memory still stops repeats within this page.
+     */
+    function raiseOverdueToast(banner) {
+      // Not while presenting, and the crossing is not counted either: the
+      // notice would be spent on nobody. The first repaint after the talk
+      // raises it.
+      if (presenting) return null;
+      var was = overdueShown;
+      overdueShown = banner.shown;
+      if (!banner.shown || was) return null;
+      var itemId = agentLiveness ? agentLiveness[AGENT_FIELD.OLDEST_ITEM] : null;
+      var waitStart = agentLiveness ? agentLiveness[AGENT_FIELD.OLDEST_UNANSWERED_AT] : null;
+      if (typeof itemId !== "string" || !itemId || typeof waitStart !== "string" || !waitStart) return null;
+      var key = "overdue:" + String(reviewId || "") + ":" + itemId + ":" + waitStart;
+      if (overdueSeen(key)) return null;
+      rememberOverdue(key);
+      var check = banner.name
+        ? fillName(AGENT_PROMINENT.TOAST_CHECK_NAMED, banner.name)
+        : AGENT_PROMINENT.TOAST_CHECK;
+      return showToast({
+        key: key,
+        label: AGENT_PROMINENT.TOAST_LABEL,
+        text: banner.text + " " + check + " " + AGENT_PROMINENT.TOAST_OPEN,
+        onOpen: function () {
+          collapse(false);
+        }
+      });
+    }
+
+    var OVERDUE_SEEN_PREFIX = "lahe:overdue-notices:";
+    var OVERDUE_SEEN_MAX = 50;
+
+    function overdueStorage() {
+      if (sessionStorageOverride) return sessionStorageOverride;
+      try {
+        var view = doc && doc.defaultView;
+        return view && view.sessionStorage ? view.sessionStorage : null;
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function overdueSeenList() {
+      try {
+        var storage = overdueStorage();
+        if (!storage) return [];
+        var parsed = JSON.parse(storage.getItem(OVERDUE_SEEN_PREFIX + String(reviewId || "")) || "[]");
+        return Array.isArray(parsed) ? parsed : [];
+      } catch (err) {
+        return [];
+      }
+    }
+
+    function overdueSeen(key) {
+      return overdueSeenList().indexOf(key) !== -1;
+    }
+
+    function rememberOverdue(key) {
+      try {
+        var storage = overdueStorage();
+        if (!storage) return false;
+        var list = overdueSeenList().concat([key]).slice(-OVERDUE_SEEN_MAX);
+        storage.setItem(OVERDUE_SEEN_PREFIX + String(reviewId || ""), JSON.stringify(list));
+        return true;
+      } catch (err) {
+        return false;
+      }
+    }
+
+    /** Self-report for the closed root: what the pill renders. */
+    function pillWaitInfo() {
+      if (!dom || !dom.pill) return { present: false };
+      var view = dom.pill.ownerDocument ? dom.pill.ownerDocument.defaultView : null;
+      var computed = view ? view.getComputedStyle(dom.pill) : null;
+      var waitComputed = view ? view.getComputedStyle(dom.pillWait) : null;
+      var box = dom.pill.getBoundingClientRect();
+      return {
+        present: true,
+        visible: !!computed && computed.display !== "none",
+        late: dom.pill.getAttribute("data-lahe-late") === "true",
+        waitText: dom.pillWait.textContent || "",
+        waitVisible: !!waitComputed && waitComputed.display !== "none",
+        border: computed ? computed.borderTopColor : null,
+        title: dom.pill.title || "",
+        box: { x: box.left, y: box.top, width: box.width, height: box.height }
+      };
+    }
+
+    function renderWaitBanner(banner) {
+      if (!dom || !dom.late) return;
+      dom.late.setAttribute("data-shown", banner.shown ? "true" : "");
+      dom.lateTitle.textContent = banner.text;
+      // textContent, never innerHTML: the agent's name is display text.
+      dom.lateCheck.textContent = banner.check;
+      if (!banner.shown) {
+        handoffNote = "";
+        handoffFailed = false;
+      }
+      dom.lateNote.textContent = handoffNote;
+      dom.lateMessage.textContent = banner.message;
+      dom.lateMessage.setAttribute("data-shown", handoffFailed ? "true" : "");
+    }
+
+    function clipboardTarget() {
+      if (clipboardOverride) return clipboardOverride;
+      var view = doc && doc.defaultView;
+      if (view && view.navigator && view.navigator.clipboard) return view.navigator.clipboard;
+      return null;
+    }
+
+    /**
+     * Copy the handoff message. No false success: a clipboard that refused
+     * says so on the banner and shows the message to copy by hand.
+     *
+     * @returns {Promise<{ok: boolean, text: string, error?: string}>}
+     */
+    function copyHandoff() {
+      var text = waitBanner().message;
+      var target = clipboardTarget();
+      var write =
+        target && typeof target.writeText === "function"
+          ? Promise.resolve().then(function () {
+              return target.writeText(text);
+            })
+          : Promise.reject(new Error("this browser gave the page no clipboard to write to"));
+      return write.then(
+        function () {
+          handoffNote = AGENT_PROMINENT.COPIED;
+          handoffFailed = false;
+          renderStatus();
+          return { ok: true, text: text };
+        },
+        function (error) {
+          handoffNote = AGENT_PROMINENT.COPY_FAILED;
+          handoffFailed = true;
+          renderStatus();
+          return { ok: false, text: text, error: String((error && error.message) || error) };
+        }
+      );
+    }
+
+    /** Self-report for the closed root: what the banner renders, and where. */
+    function waitBannerInfo() {
+      if (!dom || !dom.late) return { present: false };
+      var view = dom.late.ownerDocument ? dom.late.ownerDocument.defaultView : null;
+      var computed = view ? view.getComputedStyle(dom.late) : null;
+      var railBox = dom.rail.getBoundingClientRect();
+      var box = dom.late.getBoundingClientRect();
+      var tabsNode = dom.rail.querySelector(".tabs");
+      var tabsBox = tabsNode ? tabsNode.getBoundingClientRect() : null;
+      return {
+        present: true,
+        visible: !!computed && computed.display !== "none",
+        text: dom.lateTitle.textContent || "",
+        check: dom.lateCheck.textContent || "",
+        // Elements inside the check line. A name is text, so this stays 0 even
+        // for a name written as markup.
+        checkElements: dom.lateCheck.children.length,
+        buttonText: dom.lateBtn.textContent || "",
+        note: dom.lateNote.textContent || "",
+        background: computed ? computed.backgroundColor : null,
+        messageVisible: dom.lateMessage.getAttribute("data-shown") === "true",
+        // Where the button is, so a test can press it like a person would.
+        button: (function () {
+          var b = dom.lateBtn.getBoundingClientRect();
+          return { x: b.left, y: b.top, width: b.width, height: b.height };
+        })(),
+        railBox: { x: railBox.left, y: railBox.top, width: railBox.width, height: railBox.height },
+        topInRail: box.top - railBox.top,
+        aboveTabs: !!tabsBox && box.bottom <= tabsBox.top + 0.5
+      };
+    }
+
+    /** Self-report for the closed root: whether a card is drawn late. */
+    function cardWaitInfo(id) {
+      var card = cards[id];
+      if (!dom || !card || !card.node) return { present: false };
+      var view = card.node.ownerDocument ? card.node.ownerDocument.defaultView : null;
+      var computed = view ? view.getComputedStyle(card.node) : null;
+      var waitComputed = view ? view.getComputedStyle(card.parts.wait) : null;
+      return {
+        present: true,
+        late: card.node.getAttribute(CARD_LATE_ATTR) === "true",
+        background: computed ? computed.backgroundColor : null,
+        border: computed ? computed.borderTopColor : null,
+        waitText: card.parts.wait.textContent || "",
+        waitVisible: !!waitComputed && waitComputed.display !== "none"
+      };
     }
 
     /**
@@ -16335,13 +16854,32 @@
     }
 
     function renderStatus() {
-      if (!dom) return;
+      // ONE READING PER REPAINT. The line, the banner, the pill, the notice and
+      // every late card below read these two, rather than each working the
+      // status out again.
       var line = statusLine();
+      var banner = waitBanner(line);
+      // Before the document check: the notice is state the toast list holds,
+      // and it must be raised whether or not a rail is drawn yet.
+      raiseOverdueToast(banner);
+      if (!dom) return;
       dom.statusRow.setAttribute("data-status", status || "");
       dom.statusRow.setAttribute("data-agent", line.agentState || "");
       dom.statusRow.setAttribute("data-loud", line.loud ? "true" : "");
       dom.statusText.textContent = line.text;
       dom.statusRow.title = line.title;
+      // The banner and the late cards run off the same clock and the same
+      // liveness answer as this line, so they are repainted with it.
+      renderWaitBanner(banner);
+      var pill = pillWait(banner);
+      dom.pill.setAttribute("data-lahe-late", pill.late ? "true" : "");
+      dom.pillWait.textContent = pill.text;
+      dom.pill.title = pill.title;
+      dom.pill.setAttribute("aria-label", pill.title);
+      var agentState = getAgentState();
+      Object.keys(cards).forEach(function (id) {
+        paintCardWait(cards[id], agentState);
+      });
       // ONLY IN THE STATE IT DESCRIBES. The limit is about there being no helper
       // to see across two storage buckets, so it is on screen exactly while the
       // rail is saying nothing reached a helper. Under "Stored" it was a
@@ -18019,6 +18557,19 @@
       agentLine: agentLine,
       statusLine: statusLine,
       statusLineInfo: statusLineInfo,
+      // The overdue wait, made prominent: the banner, the late cards, and the
+      // one button that copies a handoff message for a new agent.
+      waitBanner: function () {
+        return waitBanner();
+      },
+      waitBannerInfo: waitBannerInfo,
+      cardWait: cardWait,
+      cardWaitInfo: cardWaitInfo,
+      pillWait: function () {
+        return pillWait();
+      },
+      pillWaitInfo: pillWaitInfo,
+      copyHandoff: copyHandoff,
       statusRowCount: statusRowCount,
       LIMIT_SEPARATE_STORAGE_NO_HELPER: LIMIT_SEPARATE_STORAGE_NO_HELPER,
       SHEET_ATTR: SHEET_ATTR,
@@ -24806,7 +25357,11 @@
         value[f.MONITOR_AT],
         value[f.ACTIVITY_AT],
         value[f.UNANSWERED],
-        value[f.OLDEST_UNANSWERED_AT]
+        value[f.OLDEST_UNANSWERED_AT],
+        value[f.OLDEST_ITEM],
+        value[f.SESSION_ID],
+        value[f.STATE_DIR_FLAG],
+        value[f.NAME]
       ].join("|");
     }
 
@@ -34182,7 +34737,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+8d8439866494";
+  var VERSION = "0.2.0+bfe8e5cc2d6e";
 
   var protocol = ns.protocol;
   var record = ns.record;

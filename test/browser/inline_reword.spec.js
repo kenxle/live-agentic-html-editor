@@ -188,8 +188,10 @@ test.describe("the note is the input: rewording without a button", () => {
 
       const ready = await cardPaint(page, first.id);
       expect(ready.state, "it starts ready").toBe("ready");
+      // A sent card within its time is plain, not green: green means handled
+      // (Ken, 2026-09-16, docs/features/20260916.04_unanswered_prominence).
       const readyRgb = rgb(ready.background);
-      expect(readyRgb.g - readyRgb.r, "and wears the green wash").toBeGreaterThanOrEqual(4);
+      expect(readyRgb.g - readyRgb.r, "and is not green").toBeLessThan(4);
       await stampCard(page, first.id);
 
       await editNote(page, first.id);
@@ -217,7 +219,7 @@ test.describe("the note is the input: rewording without a button", () => {
     }
   });
 
-  test("Cmd-Enter in the note readies it again: one rewording, one revision, green again", async ({ page }) => {
+  test("Cmd-Enter in the note readies it again: one rewording, one revision, plain again", async ({ page }) => {
     const { app, helper, token } = await startBoth();
     try {
       await bootedPage(page, app, helper, token);
@@ -242,9 +244,10 @@ test.describe("the note is the input: rewording without a button", () => {
 
       const committed = await cardPaint(page, first.id);
       expect(committed.probe, "still the same card node").toBe("1");
-      const greenAgain = rgb(committed.background);
-      expect(greenAgain.g - greenAgain.r, "the ready wash is back").toBeGreaterThanOrEqual(4);
-      expect(greenAgain.g - greenAgain.b, "green, not blue").toBeGreaterThanOrEqual(2);
+      const readyAgain = rgb(committed.background);
+      const draftWarmth = readyAgain.r - readyAgain.b;
+      expect(draftWarmth, "the draft's warm wash is gone again").toBeLessThan(8);
+      expect(readyAgain.g - readyAgain.r, "and ready is plain, not green").toBeLessThan(4);
 
       // Typing on and committing again is a SECOND rewording, and moves it once
       // more: the bump is per commit, not per session-that-ever-existed.
