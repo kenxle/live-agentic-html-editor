@@ -31,6 +31,24 @@ var USAGE = [
  * @param {string[]} list
  * @returns {{list: string[], name?: string, error?: string}}
  */
+/**
+ * Whether `lahe review --name` may name this session.
+ *
+ * @param {{name?: string, created: boolean, explicit: boolean, session?: string}} input
+ * @returns {{apply: boolean, note: string|null}}
+ */
+function nameAction(input) {
+  var spec = input || {};
+  if (spec.name === undefined) return { apply: false, note: null };
+  if (spec.created || spec.explicit) return { apply: true, note: null };
+  return {
+    apply: false,
+    note:
+      "lahe review: --name was not applied, because this document already belongs to session " +
+      spec.session + "; to rename it, run: lahe session name " + spec.session + " " + JSON.stringify(spec.name)
+  };
+}
+
 function takeName(list) {
   var rest = [];
   var name;
@@ -153,9 +171,12 @@ async function run(argv) {
       sessionId = store.create().id;
       createdSession = true;
     }
-    // A name on a new or an existing session: the host may have renamed it
-    // since the last document was added.
-    if (named.name !== undefined) store.setName(sessionId, named.name);
+    // Only a session this call made, or one the agent named with --session. A
+    // session found from the target's path may be another agent's, and its
+    // name is not this agent's to change.
+    var naming = nameAction({ name: named.name, created: createdSession, explicit: !!opts.session, session: sessionId });
+    if (naming.apply) store.setName(sessionId, named.name);
+    else if (naming.note) process.stderr.write(naming.note + "\n");
     // The block printed below names the wake feed's path, so the file has to be
     // there before an agent copies that line. A session created before the feed
     // existed gets one here too.
@@ -296,4 +317,4 @@ async function run(argv) {
   return code;
 }
 
-module.exports = { USAGE: USAGE, inferSession: inferSession, servedKind: servedKind, takeName: takeName, run: run };
+module.exports = { USAGE: USAGE, inferSession: inferSession, servedKind: servedKind, takeName: takeName, nameAction: nameAction, run: run };

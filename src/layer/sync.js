@@ -2040,7 +2040,9 @@
         value[f.ACTIVITY_AT],
         value[f.UNANSWERED],
         value[f.OLDEST_UNANSWERED_AT],
-        value[f.TAKEOVER],
+        value[f.OLDEST_ITEM],
+        value[f.SESSION_ID],
+        value[f.STATE_DIR_FLAG],
         value[f.NAME]
       ].join("|");
     }

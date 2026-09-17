@@ -42,7 +42,13 @@ var NAME_MAX = 80;
 function cleanName(value) {
   if (typeof value !== "string") return null;
   // eslint-disable-next-line no-control-regex
-  var stripped = value.replace(/[\u0000-\u001f\u007f-\u009f]/g, "").trim();
+  // Control characters, and the invisible ones that can make a name read as
+  // something it is not: zero-width characters (U+200B to U+200F, U+FEFF),
+  // line and paragraph separators (U+2028, U+2029), and direction overrides
+  // (U+202A to U+202E, U+2066 to U+2069).
+  var stripped = value
+    .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]/g, "")
+    .trim();
   if (!stripped) return null;
   var chars = Array.from(stripped);
   if (chars.length > NAME_MAX) stripped = chars.slice(0, NAME_MAX).join("").trim();
@@ -186,8 +192,13 @@ function livenessFrom(input) {
   out[protocol.AGENT_LIVENESS.FIELD.ACTIVITY_AT] = activityAt;
   // Passed in by the store, which knows the state directory. The pure half has
   // no directory to put in the command, so it claims none.
-  out[protocol.AGENT_LIVENESS.FIELD.TAKEOVER] =
-    typeof spec.takeoverCommand === "string" && spec.takeoverCommand ? spec.takeoverCommand : null;
+  out[protocol.AGENT_LIVENESS.FIELD.OLDEST_ITEM] =
+    typeof spec.oldestUnansweredItem === "string" && spec.oldestUnansweredItem ? spec.oldestUnansweredItem : null;
+  // Passed in by the store, which knows the session and the state directory.
+  // Never the directory itself: the page is not sent a filesystem path.
+  out[protocol.AGENT_LIVENESS.FIELD.SESSION_ID] =
+    typeof spec.sessionId === "string" && spec.sessionId ? spec.sessionId : null;
+  out[protocol.AGENT_LIVENESS.FIELD.STATE_DIR_FLAG] = spec.stateDirFlagNeeded === true;
   // Which agent, in the human's words, so the rail can say which window to check.
   out[protocol.AGENT_LIVENESS.FIELD.NAME] = cleanName(spec.session && spec.session.name);
   return out;
@@ -516,9 +527,11 @@ function createStore(options) {
       listening: w.listening === undefined ? watchingFeed(id) : w.listening,
       unanswered: w.unanswered,
       oldestUnansweredAt: w.oldestUnansweredAt,
+      oldestUnansweredItem: w.oldestUnansweredItem,
       lastReplyAt: w.lastReplyAt,
       nowMs: w.nowMs,
-      takeoverCommand: id === LEGACY_ID ? null : protocol.takeoverCommand(id, stateDir.flagFor(dir))
+      sessionId: id === LEGACY_ID ? null : id,
+      stateDirFlagNeeded: id !== LEGACY_ID && stateDir.flagFor(dir) !== null
     });
   }
 

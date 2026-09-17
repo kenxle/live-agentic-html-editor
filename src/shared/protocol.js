@@ -1137,11 +1137,16 @@
       LISTENING: "listening",
       MONITOR_AT: "monitor_at",
       ACTIVITY_AT: "activity_at",
-      // The takeover command for the session that owns this review, with the
-      // state directory already in it, or null for a review with no session.
-      // The helper builds it because only the helper knows the directory. It is
-      // what the rail's handoff message hands a new agent; it holds no token.
-      TAKEOVER: "takeover_command",
+      // The session that owns this review, or null for a review with no
+      // session. The rail's handoff message names it in the takeover command.
+      SESSION_ID: "session_id",
+      // true when the session's state is outside the default folder, so a copied
+      // command needs --state-dir. A boolean on purpose: the page is never sent
+      // a filesystem path.
+      STATE_DIR_FLAG: "state_dir_flag_needed",
+      // The id of the oldest waiting item. With oldest_unanswered_at (its
+      // wait-start) it keys the one notice the rail raises for a late wait.
+      OLDEST_ITEM: "oldest_unanswered_item",
       // The human's name for the owning session (set with --name or `lahe
       // session name`), or null. Display text: the rail draws it as text only.
       NAME: "session_name"
@@ -1292,20 +1297,28 @@
    * `lahe session takeover` requires. It carries the command and nothing else
    * off the wire: no token, no review secret.
    *
-   * @param {string|null} command AGENT_LIVENESS.FIELD.TAKEOVER, or null for a
-   *   review with no agent session, which gets pointed at the list instead
+   * @param {string|null} sessionId AGENT_LIVENESS.FIELD.SESSION_ID, or null for
+   *   a review with no agent session, which gets pointed at the list instead
    * @param {string|null} [name] AGENT_LIVENESS.FIELD.NAME, quoted when present
+   * @param {boolean} [stateDirFlagNeeded] AGENT_LIVENESS.FIELD.STATE_DIR_FLAG
    * @returns {string} plain text
    */
-  function handoffMessage(command, name) {
-    var run = typeof command === "string" && command
-      ? ["Run this command:", "", "    " + command, ""]
+  function handoffMessage(sessionId, name, stateDirFlagNeeded) {
+    var hasId = typeof sessionId === "string" && isSafeId(sessionId);
+    var elsewhere = stateDirFlagNeeded === true
+      ? [
+          "This review keeps its files outside LAHE's default folder, so add --state-dir with the folder the earlier agent's lahe commands used. If you cannot find it, ask me.",
+          ""
+        ]
+      : [];
+    var run = hasId
+      ? ["Run this command:", "", "    " + takeoverCommand(sessionId, null), ""].concat(elsewhere)
       : [
           "Run `lahe session list` to find the session for this document, then take it over with:",
           "",
           "    lahe session takeover <session-id>",
           ""
-        ];
+        ].concat(elsewhere);
     var named = typeof name === "string" && name ? ", the session named " + JSON.stringify(name) : "";
     return [
       "Please take over my live LAHE review" + named + ". The agent that was working on it stopped answering my comments, and I am asking you to continue it.",
