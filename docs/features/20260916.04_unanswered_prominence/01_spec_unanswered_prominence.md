@@ -24,6 +24,23 @@ Ken runs many agents at once, and a LAHE session id like `s_9a3835ce54bc9e66` do
 - The banner says "Check the agent named lahe updates 9/16" instead of just "check your agent", and the handoff message names it too.
 - With no name, everything reads as it does today. Hosts that never tell the agent a name just show no name.
 
+## What it looks like
+
+Built and passing its tests; not merged yet. Left to right: the Active tab with the banner naming the agent, then a draft, a sent card still within its time, and a late card; the Done tab with a handled card; and the page with the rail closed, showing the one pop-up notice and the late pill.
+
+![The rail in light mode](rail_states_light.png)
+
+![The rail in dark mode](rail_states_dark.png)
+
+What changed from the first pass, because of your comments:
+
+- A sent card that is still within its time is now plain, with a blue outline. Green only means handled.
+- A late card has no tint at all, just a strong amber outline and "waiting 12m", so it cannot be mistaken for a draft.
+- The banner, the pop-up, and the closed pill all name the agent when the session has a name.
+- The garbled comment box in the first screenshot was the test page, not the real rail. These pictures come from the real rail on a real page.
+
+One thing the pictures show that this change did not cause: in dark mode, the "Add another message" boxes are light grey with unreadable text. That is an existing styling bug; it is a separate small fix.
+
 ## The limits, decided
 
 The rail already has two limits and this change uses them rather than inventing new ones:
