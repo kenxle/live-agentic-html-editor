@@ -181,17 +181,19 @@ test("--json prints one line per unanswered item, then a summary line", async ()
   assert.equal(lines[2].reviews, 1);
 });
 
-test("--json line one carries the contract and the field classes, before any page text", async () => {
+test("--json line one carries the pointer and the field classes, before any page text", async () => {
   // The flaw this covers: --json spread the raw item with no fencing, so text
   // copied off the reviewed page reached a consuming agent's stdin unlabeled.
-  // review.json sends the classification with the data; so does this now.
+  // review.json sends the classification with the data; so does this now. The
+  // contract text itself is never one of those fields: it lives in review.json
+  // alone, and line one only ever points there (see status.CONTRACT_POINTER).
   const dir = tempState();
   seed(dir, "rev1", [anItem("fix the footer", record.STATE.READY)]);
 
   const run = await runStatus(["--json"], dir);
   const first = JSON.parse(run.stdout.trim().split("\n")[0]);
-  assert.deepEqual(first.contract, reviewFormat.CONTRACT, "the same contract review.json carries");
-  assert.deepEqual(first.field_classes, reviewFormat.PROJECTED_FIELD_CLASS, "and the same field classes");
+  assert.equal(first.contract, undefined, "the contract text itself is not one of these fields");
+  assert.deepEqual(first.field_classes, reviewFormat.PROJECTED_FIELD_CLASS, "the same field classes");
   assert.deepEqual(first.intent_fields, reviewFormat.INTENT_FIELDS);
   assert.equal(first.field_classes.quote, record.CLASS_DATA, "page text is data");
   assert.equal(first.field_classes.note, record.CLASS_INSTRUCTION, "the reviewer's words are intent");
@@ -200,7 +202,7 @@ test("--json line one carries the contract and the field classes, before any pag
   // same way every time.
   const empty = await runStatus(["--json"], tempState());
   const emptyFirst = JSON.parse(empty.stdout.trim().split("\n")[0]);
-  assert.deepEqual(emptyFirst.contract, reviewFormat.CONTRACT);
+  assert.deepEqual(emptyFirst.field_classes, reviewFormat.PROJECTED_FIELD_CLASS);
 });
 
 /** One review owned by one agent session, with one item waiting on the agent. */
@@ -255,16 +257,40 @@ test("the drain's pointer names review.json and the contract field", async () =>
   assert.deepEqual(status.CONTRACT_POINTER, { contract_in: "review.json", contract_field: "contract" });
 });
 
-test("--json without --quiet still leads with the contract, for an agent starting cold", async () => {
-  // An agent that runs status once before it has opened any review file has
-  // nowhere else to read the contract, so the non-quiet modes keep it whole.
+test("--json without --quiet points at the contract too; there is no flag that reprints it", async () => {
+  // status used to fork on --quiet: pass it and get the pointer, forget it and
+  // pay 3,800 tokens for the whole contract. That is exactly the kind of bug an
+  // agent has to remember not to make. Ken, 2026-09-17: "we don't want to rely
+  // on agents remembering to use a flag. we want to put things in the right
+  // place and that's it." The right place is review.json, always, so status
+  // never carries the contract text, with or without --quiet.
   const dir = tempState();
   seed(dir, "rev1", [anItem("fix the footer", record.STATE.READY)]);
 
   const run = await runStatus(["--json"], dir);
   const first = JSON.parse(run.stdout.trim().split("\n")[0]);
-  assert.deepEqual(first.contract, reviewFormat.CONTRACT);
-  assert.equal(first.contract_in, undefined, "the whole text is there, so no pointer is needed");
+  assert.equal(first.contract, undefined, "no mode of status prints the contract");
+  assert.equal(first.contract_in, "review.json");
+  assert.equal(first.contract_field, "contract");
+
+  reviewFormat.CONTRACT.forEach((clause) => {
+    assert.equal(run.stdout.includes(clause), false, "a contract clause reached status: " + clause);
+  });
+});
+
+test("the empty-review line and the drain's first line are the same function, quiet or not", async () => {
+  // One function, no argument that changes what it returns. If a future edit
+  // reintroduces a fork here, this catches it: both call sites must agree.
+  const dir = tempState();
+  seedOwnedReview(dir, "s_same", "r_same", "one comment");
+
+  const quiet = await runStatus(["--session", "s_same", "--json", "--quiet"], dir);
+  const loud = await runStatus(["--session", "s_same", "--json"], dir);
+  assert.deepEqual(
+    JSON.parse(quiet.stdout.trim().split("\n")[0]),
+    JSON.parse(loud.stdout.trim().split("\n")[0]),
+    "line one does not depend on --quiet"
+  );
 });
 
 test("the human list labels page-derived text and never prints it as the reviewer's words", async () => {

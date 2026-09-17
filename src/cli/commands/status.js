@@ -352,23 +352,6 @@ function clip(text, limit) {
   return text.length <= limit ? text : text.slice(0, limit - 1) + "…";
 }
 
-/**
- * The first `--json` line: the same fencing review.json carries.
- *
- * `--json` feeds another agent's stdin, and the contract now points agents at
- * this command, so the trust classes have to travel with the output the way
- * review_format.projectReview sends them with review.json. Same field names,
- * same classes, one source: an agent that already learned the rule from
- * review.json reads it here unchanged.
- */
-function contractLine() {
-  return {
-    contract: reviewFormat.CONTRACT.slice(),
-    field_classes: Object.assign({}, reviewFormat.PROJECTED_FIELD_CLASS),
-    intent_fields: reviewFormat.INTENT_FIELDS.slice()
-  };
-}
-
 // WHERE THE CONTRACT ACTUALLY IS, named so an agent can go and read it. The
 // file is review.json, one per review, and the field in it is `contract`.
 var CONTRACT_POINTER = {
@@ -377,37 +360,30 @@ var CONTRACT_POINTER = {
 };
 
 /**
- * The first line of the drain: the pointer, not the contract.
+ * The first `--json` line, in every mode this command has.
  *
- * `--json --quiet` is the command an agent runs every time it is woken, and
- * the contract is about 3,800 tokens the agent already has. It ships in every
- * review.json, which is the one file an agent is guaranteed to read, so the
- * drain says where it is instead of sending it again.
+ * `lahe status` never prints the contract text. Not once, not for a cold
+ * start, not behind a flag. The contract lives in exactly one place,
+ * review.json, and that is the only file an agent is ever told to read it
+ * from (D6: the agent contract is one JSON file). A second place it could
+ * come from is a second thing to keep in sync, and a flag that decides which
+ * one you get is a thing an agent has to remember to pass. `--quiet` used to
+ * be that flag by accident: omit it and the drain silently cost 3,800 tokens
+ * more. Nothing here reads `quiet` any more, on purpose, so there is no way
+ * to call this command wrong.
  *
- * The field classes stay. They are the fencing for the item lines that follow
- * on this same run: they say which of those fields hold text copied off the
- * reviewed page, so a consuming agent cannot read page text as intent. Sending
- * the classification with the data is D12, and it costs a fraction of a line.
+ * The field classes still travel with every line. They are the fencing for
+ * the item lines that follow: which fields hold text copied off the reviewed
+ * page, so a consuming agent cannot read page text as intent (D12). Sending
+ * the classification with the data costs a fraction of a line, every time.
  */
-function contractPointerLine() {
+function firstJsonLine() {
   return {
     contract_in: CONTRACT_POINTER.contract_in,
     contract_field: CONTRACT_POINTER.contract_field,
     field_classes: Object.assign({}, reviewFormat.PROJECTED_FIELD_CLASS),
     intent_fields: reviewFormat.INTENT_FIELDS.slice()
   };
-}
-
-/**
- * Line one of `--json`, whichever mode this is.
- *
- * Quiet is the drain, run on every wake, and it gets the pointer. The other
- * modes are an agent or a person LOOKING, which happens once when an agent is
- * starting cold and may not have opened a review.json yet, so they keep the
- * whole contract.
- */
-function firstJsonLine(quiet) {
-  return quiet ? contractPointerLine() : contractLine();
 }
 
 // ---------------------------------------------------------------------------
@@ -615,11 +591,9 @@ async function run(argv, options) {
   if (ids.length === 0) {
     if (args.quiet) return EXIT.OK;
     if (args.json) {
-      // The fencing line goes out even with nothing to list, so a consumer can
-      // read line one the same way every time. A quiet run never reaches here,
-      // so this is the whole contract, but it asks the same question the drain
-      // does rather than spelling the choice a second way.
-      out(JSON.stringify(firstJsonLine(args.quiet)) + "\n");
+      // The pointer line goes out even with nothing to list, so a consumer can
+      // read line one the same way every time.
+      out(JSON.stringify(firstJsonLine()) + "\n");
       out(JSON.stringify({ reviews: 0, unanswered_ready: 0, state_dir: dir }) + "\n");
     } else {
       out("lahe status: no reviews in " + stateDirModule.reviewsRoot(dir) + ". Start one with `lahe review <page>`.\n");
@@ -911,9 +885,9 @@ async function run(argv, options) {
     // ended review is something, so it has to get past this.
     if (args.quiet && toPrint.length === 0 && endedToReport.length === 0) return EXIT.OK;
 
-    // Line one, before any page-derived text reaches the reader: the field
-    // classes always, and the contract itself only when this is not the drain.
-    out(JSON.stringify(firstJsonLine(args.quiet)) + "\n");
+    // Line one, before any page-derived text reaches the reader: the pointer
+    // and the field classes, every time, every mode.
+    out(JSON.stringify(firstJsonLine()) + "\n");
     toPrint.forEach(function (item) {
       out(JSON.stringify(item) + "\n");
     });
@@ -967,9 +941,7 @@ module.exports = {
   servedViaLine: servedViaLine,
   excerpt: excerpt,
   PAGE_TEXT_LABEL: PAGE_TEXT_LABEL,
-  contractLine: contractLine,
   CONTRACT_POINTER: CONTRACT_POINTER,
-  contractPointerLine: contractPointerLine,
   firstJsonLine: firstJsonLine,
   // `lahe session list` counts reviews and unanswered work per session. It asks
   // these two, rather than spelling the routing rule a second time: one answer
