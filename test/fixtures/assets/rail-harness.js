@@ -328,6 +328,9 @@
     cardWait: function (id) {
       return rail.cardWaitInfo(id);
     },
+    pillWait: function () {
+      return rail.pillWaitInfo();
+    },
     // Test setup, not behavior: show the rail this card as if the reviewer had
     // submitted it `ms` ago, so a test does not wait ten real minutes.
     backdateCard: function (id, ms) {

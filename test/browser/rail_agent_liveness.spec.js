@@ -234,6 +234,7 @@ test.describe("the rail says whether anything has come back", () => {
         "listening",
         "monitor_at",
         "oldest_unanswered_at",
+        "session_name",
         "state",
         "takeover_command",
         "unanswered"
@@ -528,7 +529,8 @@ test.describe("the rail says whether anything has come back", () => {
       expect(lateCard.late).toBe(true);
       expect(lateCard.waitVisible, "the card says how long").toBe(true);
       expect(lateCard.waitText).toBe("waiting 12m");
-      expect(lateCard.background, "the late card is a different color").not.toBe(freshCard.background);
+      // The signal is the amber border, not a wash: a wash is what a draft wears.
+      expect(lateCard.border, "the late card wears a different border").not.toBe(freshCard.border);
       expect(freshCard.late, "a comment sent a moment ago is not late").toBe(false);
       expect(freshCard.background).toBe(calm.background);
 
@@ -616,6 +618,106 @@ test.describe("the rail says whether anything has come back", () => {
     }
   });
 
+  test("with the rail closed, the pill goes late and one notice says which agent; the name is text, never markup", async ({
+    page
+  }) => {
+    // Ken: "and what happens if the rail is closed?" The banner is inside the
+    // rail. So the pill wears the late signal and the wait, and one notice
+    // appears once. And the session's name, which the agent sets, is drawn as
+    // text: a name written as markup shows its angle brackets.
+    const helper = await startService({
+      entry: SERVICE_ENTRY,
+      args: EPHEMERAL_PORT,
+      reviews: [REVIEW],
+      allowedOrigins: [pages.origin]
+    });
+    try {
+      await page.goto(railUrl(pages, helper.url, helper.tokenFor(REVIEW)));
+      await page.evaluate(() => window.__laheRail.startSync());
+      await pollPage(page, () => window.__laheRail.status() === "stored", undefined, {
+        message: "the line to read stored"
+      });
+      const card = await page.evaluate(() => window.__laheRail.openCard());
+      await page.keyboard.type("The chart legend overlaps the axis", { delay: 5 });
+      await page.evaluate((id) => window.__laheRail.markReady(id), card.id);
+      await pollPage(
+        page,
+        () => {
+          const liveness = window.__laheRail.sync().agentLiveness;
+          return !!liveness && liveness.unanswered === 1;
+        },
+        undefined,
+        { message: "the helper to report the waiting item" }
+      );
+      await page.evaluate(() => window.__laheRail.stopSync());
+      await page.evaluate((id) => window.__laheRail.backdateCard(id, 12 * 60 * 1000), card.id);
+      await page.evaluate(() => window.__laheRail.collapse(true));
+
+      const overdue = (at) =>
+        window.__laheRail.setAgentLiveness({
+          state: "waiting",
+          unanswered: 1,
+          oldest_unanswered_at: at,
+          last_reply_at: null,
+          listening: true,
+          takeover_command: "lahe session takeover s_named01",
+          session_name: "<b>lahe</b> updates 9/16"
+        });
+      const calmPill = await page.evaluate(() => window.__laheRail.pillWait());
+      expect(calmPill.visible, "the rail is closed, so the pill is what shows").toBe(true);
+      expect(calmPill.late).toBe(false);
+
+      await page.evaluate(overdue, agoIso(12 * 60 * 1000));
+      const pill = await page.evaluate(() => window.__laheRail.pillWait());
+      expect(pill.late).toBe(true);
+      expect(pill.waitVisible).toBe(true);
+      expect(pill.waitText).toBe("12m");
+      expect(pill.border, "the pill wears the late amber").not.toBe(calmPill.border);
+      expect(pill.title).toContain("Nothing has come back on your comments in 12m.");
+      expect(pill.title).toContain("Check the agent named <b>lahe</b> updates 9/16");
+
+      const notices = () =>
+        window.__laheRail.toastInfo().toasts.filter((t) => String(t.key).indexOf("overdue:") === 0);
+      let raised = await page.evaluate(notices);
+      expect(raised.length, "one notice, raised with the rail closed").toBe(1);
+      expect(raised[0].visible).toBe(true);
+      expect(raised[0].text).toContain("Check the agent named <b>lahe</b> updates 9/16.");
+      // The helper repeating itself, and the clock, raise nothing more.
+      await page.evaluate(overdue, agoIso(12 * 60 * 1000));
+      await page.evaluate(overdue, agoIso(13 * 60 * 1000));
+      raised = await page.evaluate(notices);
+      expect(raised.length, "still one").toBe(1);
+
+      // Open the rail: the banner names the agent, as text.
+      await page.evaluate(() => window.__laheRail.collapse(false));
+      const banner = await page.evaluate(() => window.__laheRail.waitBanner());
+      expect(banner.visible).toBe(true);
+      expect(banner.check).toContain("Check the agent named <b>lahe</b> updates 9/16");
+      expect(banner.checkElements, "the name's markup is not drawn as markup").toBe(0);
+      expect((await page.evaluate(() => window.__laheRail.statusLine())).title).toContain(
+        "named <b>lahe</b> updates 9/16"
+      );
+
+      // A reply lands and nothing is waiting: the pill is ordinary again.
+      await page.evaluate(() => window.__laheRail.collapse(true));
+      await page.evaluate(() =>
+        window.__laheRail.setAgentLiveness({
+          state: "none",
+          unanswered: 0,
+          oldest_unanswered_at: null,
+          last_reply_at: new Date().toISOString(),
+          listening: true
+        })
+      );
+      const settled = await page.evaluate(() => window.__laheRail.pillWait());
+      expect(settled.late).toBe(false);
+      expect(settled.waitVisible).toBe(false);
+      expect(settled.border).toBe(calmPill.border);
+    } finally {
+      await helper.stop();
+    }
+  });
+
   test("four card states read apart on the real rail, light and dark: ready is not green, late is not a draft", async ({
     page
   }) => {
@@ -642,6 +744,9 @@ test.describe("the rail says whether anything has come back", () => {
         },
         { id: late.id, at: agoIso(12 * 60 * 1000) }
       );
+      // The wait goes late while the rail is closed, so the pill and its one
+      // notice are what the reviewer sees first.
+      await page.evaluate(() => window.__lahe.rail.collapse(true));
       await page.evaluate(
         (at) =>
           window.__lahe.rail.setAgentLiveness({
@@ -650,10 +755,20 @@ test.describe("the rail says whether anything has come back", () => {
             oldest_unanswered_at: at,
             last_reply_at: null,
             listening: true,
-            takeover_command: "lahe session takeover s_9a3835ce54bc9e66"
+            takeover_command: "lahe session takeover s_9a3835ce54bc9e66",
+            session_name: "lahe updates 9/16"
           }),
         agoIso(12 * 60 * 1000)
       );
+      const closed = await page.evaluate(() => ({
+        pill: window.__lahe.rail.pillWaitInfo(),
+        notices: window.__lahe.rail.toastInfo().toasts.filter((t) => String(t.key).indexOf("overdue:") === 0)
+      }));
+      expect(closed.pill.late).toBe(true);
+      expect(closed.pill.waitText).toBe("12m");
+      expect(closed.notices.length).toBe(1);
+      expect(closed.notices[0].text).toContain("Check the agent named lahe updates 9/16.");
+      await page.evaluate(() => window.__lahe.rail.collapse(false));
       const ids = { fresh: fresh.id, late: late.id, handled: handled.id, draft: draft.id };
 
       const check = async (label) => {
@@ -705,23 +820,26 @@ test.describe("the rail says whether anything has come back", () => {
  * by side into one image per scheme.
  */
 async function shootSet(page, scheme) {
-  const rail = railBoxInPage;
   const shots = [];
-  const railBox = await page.evaluate(rail);
+  const railBox = await page.evaluate(railBoxInPage);
   const clip = { x: railBox.x, y: railBox.y, width: railBox.width, height: Math.min(railBox.height, 1320) };
   await page.evaluate(() => window.__lahe.rail.selectTab("active"));
   shots.push({ label: "Active", data: (await page.screenshot({ clip })).toString("base64") });
   await page.evaluate(() => window.__lahe.rail.selectTab("done"));
   shots.push({ label: "Done", data: (await page.screenshot({ clip })).toString("base64") });
   await page.evaluate(() => window.__lahe.rail.selectTab("active"));
+  // The rail closed: the one notice at the top, the late pill at the bottom.
+  await page.evaluate(() => window.__lahe.rail.collapse(true));
+  shots.push({ label: "Rail closed", data: await shootClosed(page) });
+  await page.evaluate(() => window.__lahe.rail.collapse(false));
 
   const composite = await page.context().newPage();
   const bg = scheme === "dark" ? "#12151a" : "#eef0f4";
   const ink = scheme === "dark" ? "#e9ebf0" : "#15171c";
-  await composite.setViewportSize({ width: 60 + shots.length * (clip.width + 30), height: clip.height + 70 });
+  await composite.setViewportSize({ width: 100 + clip.width * 2 + 600 + 60, height: Math.max(clip.height, 1320) + 70 });
   await composite.setContent(
     '<body style="margin:0;padding:20px;background:' + bg + ";color:" + ink +
-      ';font:13px system-ui;display:flex;gap:30px">' +
+      ';font:13px system-ui;display:flex;align-items:flex-start;gap:30px">' +
       shots
         .map(
           (s) =>
@@ -733,6 +851,13 @@ async function shootSet(page, scheme) {
   );
   await composite.screenshot({ path: path.join(SHOT_DIR, "rail_states_" + scheme + ".png"), fullPage: true });
   await composite.close();
+}
+
+/** The page's right-hand strip: the notice at the top, the pill at the bottom. */
+async function shootClosed(page) {
+  const view = page.viewportSize();
+  const strip = { x: view.width - 600, y: 0, width: 600, height: view.height };
+  return (await page.screenshot({ clip: strip, animations: "disabled" })).toString("base64");
 }
 
 function railBoxInPage() {

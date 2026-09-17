@@ -3441,6 +3441,8 @@
       var banner = waitBanner(line);
       dom.late.setAttribute("data-shown", banner.shown ? "true" : "");
       dom.lateTitle.textContent = banner.text;
+      // textContent, never innerHTML: the agent's name is display text.
+      dom.lateCheck.textContent = banner.check;
       if (!banner.shown) {
         handoffNote = "";
         handoffFailed = false;
@@ -3502,6 +3504,9 @@
         visible: !!computed && computed.display !== "none",
         text: dom.lateTitle.textContent || "",
         check: dom.lateCheck.textContent || "",
+        // Elements inside the check line. A name is text, so this stays 0 even
+        // for a name written as markup.
+        checkElements: dom.lateCheck.children.length,
         buttonText: dom.lateBtn.textContent || "",
         note: dom.lateNote.textContent || "",
         background: computed ? computed.backgroundColor : null,
@@ -3528,6 +3533,7 @@
         present: true,
         late: card.node.getAttribute(CARD_LATE_ATTR) === "true",
         background: computed ? computed.backgroundColor : null,
+        border: computed ? computed.borderTopColor : null,
         waitText: card.parts.wait.textContent || "",
         waitVisible: !!waitComputed && waitComputed.display !== "none"
       };
