@@ -35,3 +35,9 @@ For example, why a page embedded inside another page gets no comment rail. The w
 ## 7. Swapping it in
 
 When you approve, the new file replaces `AGENTS.md` at the repo root. The edits you made to the old file today are already in the new one (the writer started after them). Say go and I swap it, run the tests that check the docs, and push.
+
+## Decided: which file holds what (Ken, 2026-09-16)
+
+The old split assumed the skill was the less reliable place and AGENTS.md the more reliable one. Ken reversed it: hosts load the skill automatically, so the skill holds all of the instructions for doing a review. AGENTS.md becomes the file about the tool rather than the task: how different agent hosts connect to it, how to install it, and pointers to the documentation.
+
+So the rebuilt playbook's content moves into `skills/lahe/SKILL.md`, and `AGENTS.md` gets rewritten short around hosts, install, and doc pointers. The rule in `CLAUDE.md` that "AGENTS.md and the contract travel together" changes to the skill and the contract travelling together.
