@@ -827,6 +827,13 @@
     ".pill__dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}",
     ".pill__count{font-variant-numeric:tabular-nums;color:var(--ink-faint);font-weight:500}",
     ".pill__count[hidden]{display:none}",
+    // THE PILL, LATE. The rail can be closed for most of a session, and the
+    // banner is inside it. So the pill wears the late card's signal: the amber
+    // border and ring, an amber dot, and the wait. No motion and no sound.
+    ".pill__wait{display:none;font-variant-numeric:tabular-nums;font-weight:650;color:var(--warn)}",
+    ".pill[data-lahe-late='true']{border-color:var(--warn);box-shadow:var(--shadow),0 0 0 1px var(--warn)}",
+    ".pill[data-lahe-late='true'] .pill__dot{background:var(--warn)}",
+    ".pill[data-lahe-late='true'] .pill__wait{display:inline}",
     // THE JEWEL: the same number the Done tab badge carries, on the one surface
     // that is still on screen once the rail is put away. A reviewer works with
     // the rail collapsed, and a question or a refusal was badging a tab strip
@@ -1745,6 +1752,9 @@
       pill.appendChild(el("span", null, "Review"));
       var pillCount = el("span", "pill__count", "0");
       pill.appendChild(pillCount);
+      // How long the oldest comment has waited, shown only while that is late.
+      var pillWaitNode = el("span", "pill__wait", "");
+      pill.appendChild(pillWaitNode);
       var pillJewel = el("span", "pill__jewel");
       pillJewel.hidden = true;
       pill.appendChild(pillJewel);
@@ -1923,6 +1933,7 @@
         collapseBtn: collapseBtn,
         pill: pill,
         pillCount: pillCount,
+        pillWait: pillWaitNode,
         pillJewel: pillJewel,
         toastHost: toastHost,
         toastMore: toastMore
@@ -3248,6 +3259,8 @@
         if (listening === true) parts.push(AGENT_DETAIL.agent_connected);
         else if (listening === false) parts.push(AGENT_DETAIL.agent_absent);
         else parts.push(AGENT_DETAIL.agent_unknown);
+        var agentName = sessionName();
+        if (agentName) parts.push(AGENT_DETAIL.agent_named.replace("{name}", agentName));
 
         var repliedMs = sinceMs(AGENT_FIELD.LAST_REPLY_AT);
         parts.push(
@@ -3322,7 +3335,8 @@
     function waitBanner(line) {
       var current = line || statusLine();
       var takeover = agentLiveness ? agentLiveness[AGENT_FIELD.TAKEOVER] : null;
-      var message = protocol.AGENT_LIVENESS.handoffMessage(typeof takeover === "string" ? takeover : null);
+      var name = sessionName();
+      var message = protocol.AGENT_LIVENESS.handoffMessage(typeof takeover === "string" ? takeover : null, name);
       var shown = !!current.loud;
       var state = shown ? current.agentState : null;
       var template =
@@ -3331,9 +3345,94 @@
         shown: shown,
         state: state,
         text: shown ? fillAge(template, current.agedMs || 0) : "",
-        check: AGENT_PROMINENT.CHECK,
+        check: name ? AGENT_PROMINENT.CHECK_NAMED.replace("{name}", name) : AGENT_PROMINENT.CHECK,
+        name: name,
         button: AGENT_PROMINENT.HANDOFF_BUTTON,
         message: message
+      };
+    }
+
+    /** The human's name for the owning session, off the wire, or null. */
+    function sessionName() {
+      var value = agentLiveness ? agentLiveness[AGENT_FIELD.NAME] : null;
+      return typeof value === "string" && value.trim() ? value.trim() : null;
+    }
+
+    /**
+     * The collapsed pill, on the same rule. Late exactly while the banner is up,
+     * showing the wait, with the banner's sentence as its hover text. Works with
+     * no document.
+     */
+    function pillWait(line) {
+      var banner = waitBanner(line);
+      if (!banner.shown) return { late: false, text: "", title: PILL_TITLE };
+      var current = line || statusLine();
+      return {
+        late: true,
+        text: ageLabel(current.agedMs || 0),
+        title: banner.text + " " + banner.check + " " + PILL_TITLE
+      };
+    }
+
+    /**
+     * ONE NOTICE PER CROSSING. The key is the review and the oldest waiting item,
+     * so the clock and the helper repeating themselves never raise it twice, a
+     * dismissed one stays dismissed for that wait, and a later wait on another
+     * item raises its own. The toast system refuses a key it has already seen.
+     */
+    function raiseOverdueToast(line) {
+      var banner = waitBanner(line);
+      if (!banner.shown) return null;
+      // Not while presenting: the key would be spent on a notice nobody can
+      // see. The next repaint after the talk raises it.
+      if (presenting) return null;
+      var oldest = oldestWaitingCardId();
+      var about = oldest || (agentLiveness ? agentLiveness[AGENT_FIELD.OLDEST_UNANSWERED_AT] : null) || "";
+      var check = banner.name
+        ? AGENT_PROMINENT.TOAST_CHECK_NAMED.replace("{name}", banner.name)
+        : AGENT_PROMINENT.TOAST_CHECK;
+      return showToast({
+        key: "overdue:" + String(reviewId || "") + ":" + String(about),
+        label: AGENT_PROMINENT.TOAST_LABEL,
+        text: banner.text + " " + check + " " + AGENT_PROMINENT.TOAST_OPEN,
+        onOpen: function () {
+          collapse(false);
+        }
+      });
+    }
+
+    /** The waiting card the reviewer submitted longest ago, or null. */
+    function oldestWaitingCardId() {
+      var best = null;
+      var bestAt = null;
+      Object.keys(cards).forEach(function (id) {
+        var item = cards[id].item;
+        if (!item || !record.isUnansweredReady(item)) return;
+        var at = item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || "";
+        if (best === null || at < bestAt) {
+          best = id;
+          bestAt = at;
+        }
+      });
+      return best;
+    }
+
+    /** Self-report for the closed root: what the pill renders. */
+    function pillWaitInfo() {
+      if (!dom || !dom.pill) return { present: false };
+      var view = dom.pill.ownerDocument ? dom.pill.ownerDocument.defaultView : null;
+      var computed = view ? view.getComputedStyle(dom.pill) : null;
+      var waitComputed = view ? view.getComputedStyle(dom.pillWait) : null;
+      var box = dom.pill.getBoundingClientRect();
+      return {
+        present: true,
+        visible: !!computed && computed.display !== "none",
+        late: dom.pill.getAttribute("data-lahe-late") === "true",
+        waitText: dom.pillWait.textContent || "",
+        waitVisible: !!waitComputed && waitComputed.display !== "none",
+        border: computed ? computed.borderTopColor : null,
+        title: dom.pill.title || "",
+        box: { x: box.left, y: box.top, width: box.width, height: box.height }
       };
     }
 
@@ -3782,6 +3881,9 @@
     }
 
     function renderStatus() {
+      // Before the document check: the notice is state the toast list holds,
+      // and it must be raised whether or not a rail is drawn yet.
+      raiseOverdueToast(statusLine());
       if (!dom) return;
       var line = statusLine();
       dom.statusRow.setAttribute("data-status", status || "");
@@ -3792,6 +3894,11 @@
       // The banner and the late cards run off the same clock and the same
       // liveness answer as this line, so they are repainted with it.
       renderWaitBanner(line);
+      var pill = pillWait(line);
+      dom.pill.setAttribute("data-lahe-late", pill.late ? "true" : "");
+      dom.pillWait.textContent = pill.text;
+      dom.pill.title = pill.title;
+      dom.pill.setAttribute("aria-label", pill.title);
       Object.keys(cards).forEach(function (id) {
         paintCardWait(cards[id]);
       });
@@ -5480,6 +5587,10 @@
       waitBannerInfo: waitBannerInfo,
       cardWait: cardWait,
       cardWaitInfo: cardWaitInfo,
+      pillWait: function () {
+        return pillWait();
+      },
+      pillWaitInfo: pillWaitInfo,
       copyHandoff: copyHandoff,
       statusRowCount: statusRowCount,
       LIMIT_SEPARATE_STORAGE_NO_HELPER: LIMIT_SEPARATE_STORAGE_NO_HELPER,

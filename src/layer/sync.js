@@ -2040,7 +2040,8 @@
         value[f.ACTIVITY_AT],
         value[f.UNANSWERED],
         value[f.OLDEST_UNANSWERED_AT],
-        value[f.TAKEOVER]
+        value[f.TAKEOVER],
+        value[f.NAME]
       ].join("|");
     }
 

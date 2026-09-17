@@ -1141,7 +1141,10 @@
       // state directory already in it, or null for a review with no session.
       // The helper builds it because only the helper knows the directory. It is
       // what the rail's handoff message hands a new agent; it holds no token.
-      TAKEOVER: "takeover_command"
+      TAKEOVER: "takeover_command",
+      // The human's name for the owning session (set with --name or `lahe
+      // session name`), or null. Display text: the rail draws it as text only.
+      NAME: "session_name"
     },
     // THE WORDS, SPELLED ONCE, HERE. They used to be hand-copied into the layer,
     // which is two spellings of one wire value: rename a state and the rail
@@ -1191,6 +1194,7 @@
       agent_connected: "An agent has this review open.",
       agent_absent: "No agent has this review open.",
       agent_unknown: "Whether an agent has this review open cannot be checked on this computer.",
+      agent_named: "The agent on this review is named {name}.",
       replied: "The agent last replied {reply} ago.",
       never_replied: "The agent has not replied on this review yet.",
       waiting: "Your oldest unanswered item has been waiting {age}.",
@@ -1211,10 +1215,18 @@
         waiting: "Nothing has come back on your comments in {age}."
       },
       CHECK: "Check your agent's window first. It may have stopped, or it may be waiting on you.",
+      // When the session has a name, say which agent. Ken runs many at once.
+      CHECK_NAMED: "Check the agent named {name} first. It may have stopped, or it may be waiting on you.",
       HANDOFF_BUTTON: "Copy a message for a new agent",
       COPIED: "Copied. Paste it into a new agent and it will pick up your comments.",
       COPY_FAILED: "Could not copy. Select the message below and copy it yourself.",
-      CARD: "waiting {age}"
+      CARD: "waiting {age}",
+      // The one pop-up notice raised when a wait first goes late. A notice has
+      // no buttons of its own, so it points at the rail, where the banner is.
+      TOAST_LABEL: "Comments waiting",
+      TOAST_CHECK: "Check your agent's window.",
+      TOAST_CHECK_NAMED: "Check the agent named {name}.",
+      TOAST_OPEN: "Open the rail to hand this doc to a new agent."
     },
     // WHEN THE LINE STARTS SPEAKING, counted from the moment the reviewer
     // submitted, not from anything about a process.
@@ -1282,9 +1294,10 @@
    *
    * @param {string|null} command AGENT_LIVENESS.FIELD.TAKEOVER, or null for a
    *   review with no agent session, which gets pointed at the list instead
+   * @param {string|null} [name] AGENT_LIVENESS.FIELD.NAME, quoted when present
    * @returns {string} plain text
    */
-  function handoffMessage(command) {
+  function handoffMessage(command, name) {
     var run = typeof command === "string" && command
       ? ["Run this command:", "", "    " + command, ""]
       : [
@@ -1293,8 +1306,9 @@
           "    lahe session takeover <session-id>",
           ""
         ];
+    var named = typeof name === "string" && name ? ", the session named " + JSON.stringify(name) : "";
     return [
-      "Please take over my live LAHE review. The agent that was working on it stopped answering my comments, and I am asking you to continue it.",
+      "Please take over my live LAHE review" + named + ". The agent that was working on it stopped answering my comments, and I am asking you to continue it.",
       ""
     ]
       .concat(run)
