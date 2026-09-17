@@ -573,7 +573,7 @@ function workCacheFor(deps) {
  * updated_at is when it last became something an agent has to answer.
  */
 function unansweredWork(request, deps) {
-  var out = { unanswered: 0, oldest: null, lastReplyAt: null };
+  var out = { unanswered: 0, oldest: null, oldestItem: null, lastReplyAt: null };
   if (!deps.projection || typeof deps.projection.project !== "function") return out;
 
   var cache = workCacheFor(deps);
@@ -615,7 +615,10 @@ function unansweredWork(request, deps) {
       if (!record.isUnansweredReady(item)) return;
       out.unanswered += 1;
       var at = item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || null;
-      if (typeof at === "string" && at && (!out.oldest || at < out.oldest)) out.oldest = at;
+      if (typeof at === "string" && at && (!out.oldest || at < out.oldest)) {
+        out.oldest = at;
+        out.oldestItem = item[record.FIELD.ID] || null;
+      }
     });
   });
   if (seq !== null) cache[request.review] = { seq: seq, work: out };
@@ -643,6 +646,7 @@ function agentLiveness(request, deps, owner) {
   return deps.agentSessions.liveness(owner, {
     unanswered: work.unanswered,
     oldestUnansweredAt: work.oldest,
+    oldestUnansweredItem: work.oldestItem,
     lastReplyAt: work.lastReplyAt
   });
 }
@@ -665,6 +669,10 @@ function livenessNone(work) {
   out[protocol.AGENT_LIVENESS.FIELD.LISTENING] = null;
   out[protocol.AGENT_LIVENESS.FIELD.MONITOR_AT] = null;
   out[protocol.AGENT_LIVENESS.FIELD.ACTIVITY_AT] = null;
+  out[protocol.AGENT_LIVENESS.FIELD.OLDEST_ITEM] = work.oldestItem;
+  out[protocol.AGENT_LIVENESS.FIELD.SESSION_ID] = null;
+  out[protocol.AGENT_LIVENESS.FIELD.STATE_DIR_FLAG] = false;
+  out[protocol.AGENT_LIVENESS.FIELD.NAME] = null;
   return out;
 }
 

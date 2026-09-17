@@ -1040,6 +1040,16 @@
     return "lahe monitor --session " + String(sessionId) + stateDirFlag(stateDirPath);
   }
 
+  /**
+   * The one spelling of the takeover command. Same state-directory rule.
+   *
+   * The CLI's own usage names it, and the rail's handoff message carries it to
+   * a new agent, fully formed, so the reviewer pastes something that runs.
+   */
+  function takeoverCommand(sessionId, stateDirPath) {
+    return "lahe session takeover " + String(sessionId) + stateDirFlag(stateDirPath);
+  }
+
   // ---------------------------------------------------------------------------
   // Monitor liveness: what the rail is allowed to claim about an agent
   // ---------------------------------------------------------------------------
@@ -1126,7 +1136,20 @@
       // produces a claim in either direction; the line falls back to the wait.
       LISTENING: "listening",
       MONITOR_AT: "monitor_at",
-      ACTIVITY_AT: "activity_at"
+      ACTIVITY_AT: "activity_at",
+      // The session that owns this review, or null for a review with no
+      // session. The rail's handoff message names it in the takeover command.
+      SESSION_ID: "session_id",
+      // true when the session's state is outside the default folder, so a copied
+      // command needs --state-dir. A boolean on purpose: the page is never sent
+      // a filesystem path.
+      STATE_DIR_FLAG: "state_dir_flag_needed",
+      // The id of the oldest waiting item. With oldest_unanswered_at (its
+      // wait-start) it keys the one notice the rail raises for a late wait.
+      OLDEST_ITEM: "oldest_unanswered_item",
+      // The human's name for the owning session (set with --name or `lahe
+      // session name`), or null. Display text: the rail draws it as text only.
+      NAME: "session_name"
     },
     // THE WORDS, SPELLED ONCE, HERE. They used to be hand-copied into the layer,
     // which is two spellings of one wire value: rename a state and the rail
@@ -1176,11 +1199,39 @@
       agent_connected: "An agent has this review open.",
       agent_absent: "No agent has this review open.",
       agent_unknown: "Whether an agent has this review open cannot be checked on this computer.",
+      agent_named: "The agent on this review is named {name}.",
       replied: "The agent last replied {reply} ago.",
       never_replied: "The agent has not replied on this review yet.",
       waiting: "Your oldest unanswered item has been waiting {age}.",
       stored: "Your comments and edits are stored in this browser and in the helper's log on disk.",
       save: "You can get your own copy any time: use Copy review or Export review to file in the menu."
+    },
+    // THE LOUD HALF, made prominent (Ken, 2026-09-16: "active boxes should
+    // change color if they haven't been picked up after a certain amount of
+    // time. something with more prominence should tell you to go check your
+    // agent or assign a new one to this doc.").
+    //
+    // Shown only while the wait is overdue (see `overdue` below): a banner at
+    // the top of the rail and a word on each late card. Same rule as the TEXT
+    // above: a reviewer's words, no plumbing. `{age}` is filled in the same way.
+    PROMINENT: {
+      BANNER: {
+        no_agent: "Nobody has picked up your comments in {age}.",
+        waiting: "Nothing has come back on your comments in {age}."
+      },
+      CHECK: "Check your agent's window first. It may have stopped, or it may be waiting on you.",
+      // When the session has a name, say which agent. Ken runs many at once.
+      CHECK_NAMED: "Check the agent named {name} first. It may have stopped, or it may be waiting on you.",
+      HANDOFF_BUTTON: "Copy a message for a new agent",
+      COPIED: "Copied. Paste it into a new agent and it will pick up your comments.",
+      COPY_FAILED: "Could not copy. Select the message below and copy it yourself.",
+      CARD: "waiting {age}",
+      // The one pop-up notice raised when a wait first goes late. A notice has
+      // no buttons of its own, so it points at the rail, where the banner is.
+      TOAST_LABEL: "Comments waiting",
+      TOAST_CHECK: "Check your agent's window.",
+      TOAST_CHECK_NAMED: "Check the agent named {name}.",
+      TOAST_OPEN: "Open the rail to hand this doc to a new agent."
     },
     // WHEN THE LINE STARTS SPEAKING, counted from the moment the reviewer
     // submitted, not from anything about a process.
@@ -1212,6 +1263,74 @@
     // holding the feed open and no heartbeat.
     RECENT_COMMAND_MS: 600000
   };
+
+  /**
+   * THE ONE RULE for "this wait is overdue". The footer line goes loud on it,
+   * a waiting card turns amber on it, and the banner at the top of the rail
+   * shows on it. Three places, one rule, so they can never disagree.
+   *
+   *  - Nothing is listening: overdue once the line starts speaking (QUIET_MS).
+   *    There is nobody to wait for.
+   *  - Something may be listening, nothing came back: overdue after STALE_MS.
+   *  - The agent is working: never. The queue behind it is explained.
+   *
+   * A state with no words (NONE, or anything unrecognised off the wire) is
+   * never overdue, for the same reason it never speaks.
+   *
+   * @param {string|null} state an AGENT_LIVENESS.STATE value
+   * @param {number|null} waitedMs how long the wait has run
+   * @returns {boolean}
+   */
+  function livenessOverdue(state, waitedMs) {
+    if (typeof state !== "string" || !Object.prototype.hasOwnProperty.call(AGENT_LIVENESS.TEXT, state)) return false;
+    if (typeof waitedMs !== "number" || !isFinite(waitedMs) || waitedMs < AGENT_LIVENESS.QUIET_MS) return false;
+    if (state === AGENT_LIVENESS.STATE.WORKING) return false;
+    return state === AGENT_LIVENESS.STATE.NO_AGENT || waitedMs >= AGENT_LIVENESS.STALE_MS;
+  }
+  AGENT_LIVENESS.overdue = livenessOverdue;
+
+  /**
+   * The message the reviewer pastes into a fresh agent to hand this doc over.
+   *
+   * It is written to the NEW AGENT, so unlike the rail's own words it names the
+   * command. Pasting it is the human's explicit request, which is the one thing
+   * `lahe session takeover` requires. It carries the command and nothing else
+   * off the wire: no token, no review secret.
+   *
+   * @param {string|null} sessionId AGENT_LIVENESS.FIELD.SESSION_ID, or null for
+   *   a review with no agent session, which gets pointed at the list instead
+   * @param {string|null} [name] AGENT_LIVENESS.FIELD.NAME, quoted when present
+   * @param {boolean} [stateDirFlagNeeded] AGENT_LIVENESS.FIELD.STATE_DIR_FLAG
+   * @returns {string} plain text
+   */
+  function handoffMessage(sessionId, name, stateDirFlagNeeded) {
+    var hasId = typeof sessionId === "string" && isSafeId(sessionId);
+    var elsewhere = stateDirFlagNeeded === true
+      ? [
+          "This review keeps its files outside LAHE's default folder, so add --state-dir with the folder the earlier agent's lahe commands used. If you cannot find it, ask me.",
+          ""
+        ]
+      : [];
+    var run = hasId
+      ? ["Run this command:", "", "    " + takeoverCommand(sessionId, null), ""].concat(elsewhere)
+      : [
+          "Run `lahe session list` to find the session for this document, then take it over with:",
+          "",
+          "    lahe session takeover <session-id>",
+          ""
+        ].concat(elsewhere);
+    var named = typeof name === "string" && name ? ", the session named " + JSON.stringify(name) : "";
+    return [
+      "Please take over my live LAHE review" + named + ". The agent that was working on it stopped answering my comments, and I am asking you to continue it.",
+      ""
+    ]
+      .concat(run)
+      .concat([
+        "It prints the commands to catch up. Then work every comment that is waiting and reply to each one, and keep watching for new ones."
+      ])
+      .join("\n");
+  }
+  AGENT_LIVENESS.handoffMessage = handoffMessage;
 
   return {
     API_VERSION: API_VERSION,
@@ -1285,6 +1404,7 @@
     stateDirFlag: stateDirFlag,
     drainCommand: drainCommand,
     monitorCommand: monitorCommand,
+    takeoverCommand: takeoverCommand,
 
     MONITOR: MONITOR,
     AGENT_LIVENESS: AGENT_LIVENESS
