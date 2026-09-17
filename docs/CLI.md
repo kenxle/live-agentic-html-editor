@@ -58,7 +58,10 @@ without spending model tokens:
 - **Claude Code** runs `lahe monitor --session <id>` with Bash in the background.
   It exits when work lands (`0`), the session closes (`5`), or another agent takes
   over (`6`). On `0` the agent drains to empty and launches the same command again
-  in the background.
+  in the background. The harness can also kill a backgrounded watch outright
+  under memory pressure, outside those three codes. Relaunching after that is
+  fine once or twice; after three such kills in a row with nothing new landed
+  between them, the agent stops relaunching and tells the reviewer instead.
 - **Codex** runs `lahe monitor --session <id>` as a foreground pending exec call
   and keeps waiting on it. It must not detach the process, announce that
   monitoring started, and end the turn: detached task completion alone does not

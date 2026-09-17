@@ -128,6 +128,16 @@ tokens. It exits when work lands (code 0), the session closes (5), or another
 agent takes over (6). On 0, drain to empty and launch the same command again in
 the background. On 5 and 6, stop.
 
+**Stop re-arming after three no-op restarts in a row.** The harness can kill a
+backgrounded watch outright under memory pressure, which is not one of the
+three exit codes above and looks, from the agent's side, identical to nothing
+having happened. Relaunching once or twice after that is fine. If the watch
+gets killed three times in a row with no new item landing between any of the
+arms, stop relaunching it and tell the reviewer instead of continuing to
+re-arm: something is wrong with the host or the machine, and a fourth silent
+relaunch is a guess, not a fix. Say what you tried and that you are holding
+until they ask you to watch again.
+
 #### Codex
 
 Run the printed `lahe monitor` command as a foreground pending exec call and keep
@@ -523,7 +533,9 @@ Each of these is a rule that a live review paid for.
    because it is written atomically and a tail follows a deleted inode.
    `events.jsonl` has no session routing.
 10. **On Claude Code, wait with `lahe monitor` in a background Bash call.** A watch
-    with a timeout wakes the model every few minutes on nothing.
+    with a timeout wakes the model every few minutes on nothing. If the harness
+    kills it under memory pressure three times running with nothing new landing
+    between arms, stop relaunching it and tell the reviewer.
 11. **In Codex, keep the turn pending on the monitor's exec call, with no Codex
     Timer.** A detached terminal task does not guarantee a new Codex turn after the
     current one ends.
