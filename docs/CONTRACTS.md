@@ -955,22 +955,35 @@ are our plumbing. A unit test asserts none of those words appears in `TEXT`, `CO
 
 `replies.poll` answers with an `agent_liveness` object (`protocol.AGENT_LIVENESS`), resolved
 server-side from the review to its owning agent session. Fields: `state`, `unanswered`,
-`oldest_unanswered_at`, `last_reply_at`, `listening`, `monitor_at`, `activity_at`,
-`takeover_command`. The last is `protocol.takeoverCommand(session, flagDir)`, built by the helper
-because only the helper knows whether `--state-dir` is needed, or null for a review with no agent
-session. It carries no token. `session_name` is the owning session's optional name (`session.json`
-`name`, set with `--name` or `lahe session name`), or null. It is display text: the rail sets it with
-`textContent` everywhere it appears.
+`oldest_unanswered_at`, `oldest_unanswered_item`, `last_reply_at`, `listening`, `monitor_at`,
+`activity_at`, `session_id`, `session_name`, `state_dir_flag_needed`.
+
+- `oldest_unanswered_item` is the id of the waiting item `oldest_unanswered_at` belongs to (its
+  wait-start, `updated_at` first), or null.
+- `session_id` is the owning agent session, or null for a review with no session.
+- `state_dir_flag_needed` is true when that session's state is outside the default folder, so a
+  copied command needs `--state-dir`. It is a boolean on purpose: **the page is never sent a
+  filesystem path**, and nothing in this object carries a token.
+- `session_name` is the owning session's optional name (`session.json` `name`, set with `--name` or
+  `lahe session name`), or null. The helper strips control characters, zero-width characters,
+  U+2028/U+2029 and direction overrides. It is display text: the rail sets it with `textContent`, and
+  fills it into sentences with a function replacer so `$&` in a name stays literal.
 
 **Overdue is one rule**, `protocol.AGENT_LIVENESS.overdue(state, waitedMs)`: `no_agent` past
 `QUIET_MS`, `waiting` past `STALE_MS`, `working` and `none` never. The footer line goes loud on it.
 The banner at the top of the rail shows exactly while the footer is loud, and its one button copies
-`AGENT_LIVENESS.handoffMessage(takeover_command)` for a new agent. A ready card with no reply turns
-amber when its own wait passes the same rule. With the rail collapsed, the pill goes amber on the
-same rule, shows the wait, and carries the banner's sentence as its hover text. The first time a wait
-goes late the rail raises one toast keyed `overdue:<review>:<oldest waiting item id>`; the toast
-system refuses a key it has seen, so the same wait never repeats it. The words are
-`AGENT_LIVENESS.PROMINENT`.
+`AGENT_LIVENESS.handoffMessage(session_id, session_name, state_dir_flag_needed)` for a new agent: the
+takeover command for that id, and a sentence saying `--state-dir` is needed when it is. A ready card
+with no reply turns amber when its own wait passes the same rule. With the rail collapsed, the pill
+goes amber on the same rule, shows the wait, and carries the banner's sentence as its hover text.
+
+**One notice per crossing.** The rail raises one toast only when the banner goes from not shown to
+shown, keyed `overdue:<review>:<oldest_unanswered_item>:<oldest_unanswered_at>`. Keys already raised
+are kept in `sessionStorage` (every read and write guarded, and the rail works without it), so a
+reload, a remount or the next page of a folder review does not raise it again. A follow-up that puts
+the same item back into waiting has a new wait-start and a new key. Answering the oldest late item
+while another is late raises nothing, because the banner never left. With no item named, no toast.
+The words are `AGENT_LIVENESS.PROMINENT`.
 
 | State | When |
 | --- | --- |
