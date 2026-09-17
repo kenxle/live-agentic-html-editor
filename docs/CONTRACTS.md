@@ -955,7 +955,16 @@ are our plumbing. A unit test asserts none of those words appears in `TEXT`, `CO
 
 `replies.poll` answers with an `agent_liveness` object (`protocol.AGENT_LIVENESS`), resolved
 server-side from the review to its owning agent session. Fields: `state`, `unanswered`,
-`oldest_unanswered_at`, `last_reply_at`, `listening`, `monitor_at`, `activity_at`.
+`oldest_unanswered_at`, `last_reply_at`, `listening`, `monitor_at`, `activity_at`,
+`takeover_command`. The last is `protocol.takeoverCommand(session, flagDir)`, built by the helper
+because only the helper knows whether `--state-dir` is needed, or null for a review with no agent
+session. It carries no token.
+
+**Overdue is one rule**, `protocol.AGENT_LIVENESS.overdue(state, waitedMs)`: `no_agent` past
+`QUIET_MS`, `waiting` past `STALE_MS`, `working` and `none` never. The footer line goes loud on it.
+The banner at the top of the rail shows exactly while the footer is loud, and its one button copies
+`AGENT_LIVENESS.handoffMessage(takeover_command)` for a new agent. A ready card with no reply turns
+amber when its own wait passes the same rule. The words are `AGENT_LIVENESS.PROMINENT`.
 
 | State | When |
 | --- | --- |
