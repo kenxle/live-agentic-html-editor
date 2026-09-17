@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+bfe8e5cc2d6e
+ * version 0.2.0+da4ff2adf3a0
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+bfe8e5cc2d6e";
+  g.LAHE.version = "0.2.0+da4ff2adf3a0";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -13584,9 +13584,12 @@
     //
     // At the top of the rail, under the head, where it is read before any card.
     // Shown exactly while the footer line is loud, and gone when it is not.
+    // A full border on --warn carries the signal on all four sides, matching
+    // the late card's own ring (see CARD_LATE_ATTR below). No accent stripe on
+    // one side alone: that reads as a single-side colored border, which this
+    // rail's own style rules ban the same way the document style guide does.
     ".late{display:none;flex-direction:column;gap:7px;margin:10px 10px 0;padding:11px 12px;",
-    "border-radius:var(--radius-sm);background:var(--warn-wash);border:1px solid var(--warn);",
-    "box-shadow:inset 3px 0 0 var(--warn)}",
+    "border-radius:var(--radius-sm);background:var(--warn-wash);border:1px solid var(--warn)}",
     ".late[data-shown='true']{display:flex}",
     ".late__title{font-size:12.5px;font-weight:700;color:var(--ink);line-height:1.4}",
     ".late__check{font-size:12px;color:var(--ink-soft);line-height:1.45}",
@@ -34737,7 +34740,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+bfe8e5cc2d6e";
+  var VERSION = "0.2.0+da4ff2adf3a0";
 
   var protocol = ns.protocol;
   var record = ns.record;
