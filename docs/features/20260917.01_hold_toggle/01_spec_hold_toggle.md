@@ -164,6 +164,29 @@ name and live-region announcement, and the whole-outbox-suppression rule.
 Confirmed as correct and unchanged: no confirm dialog on force-flush, per
 this rail's existing no-`window.confirm` rule.
 
+## What it looks like
+
+Real booted layer, light and dark: the Active tab with Hold on (a draft, a held
+comment, and one that was already sent before Hold started, still plain
+ready), the Done tab, and the collapsed pill reading "1 held".
+
+![Hold on, light](hold_states_light.png)
+
+![Hold on, dark](hold_states_dark.png)
+
+## Code review
+
+One pass, per whetstone's process. Verdict: approve to merge once the
+screenshots above were committed (they were) and once `npm run gate:unit` and
+`npx playwright test test/browser/rail_hold.spec.js` were confirmed green by
+someone with shell access, which I then did myself: both pass (1,185 unit
+tests, 3/3 browser). The two things the builder flagged itself both checked
+out as low risk: the `reviewSessions` test plumbing never runs outside a test
+harness, and the in-flight-request-not-cancelled claim holds by construction
+(the hold check is a single synchronous read before any request is sent; JS
+has no path back to it mid-flight). One nice-to-have, not a blocker: a
+dedicated unit test for that in-flight case.
+
 ## Progress
 
 - 2026-09-17: spec written, reviewed by `magic-mirror`, findings integrated.
@@ -225,3 +248,4 @@ this rail's existing no-`window.confirm` rule.
   draft, the handled card in Done, and the collapsed pill reading "1 held".
   Saved under the builder's scratchpad (not committed; see the build
   report for the path).
+- 2026-09-18: code review complete, gate:unit and the named browser spec independently re-run and confirmed green, screenshots committed. Merging.
