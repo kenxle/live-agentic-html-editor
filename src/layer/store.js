@@ -74,6 +74,14 @@
   var HOLDER_PREFIX = "lahe.holder.v1:";
   var LOCK_PREFIX = "lahe.window.v1:";
   var UI_PREFIX = "lahe.ui.v1:";
+  // Whether this review is currently held (docs/features/20260917.01_hold_toggle):
+  // Cmd-Enter still commits an item to `ready`, durably, exactly as it always
+  // has (Hold gates DELIVERY, not the item lifecycle). sync.js's flush reads
+  // this before posting. Best effort, like the rail-preference buckets below:
+  // a denied or corrupt value costs the reviewer their Hold choice, never their
+  // work, and the safe failure direction is NOT held, so a browser that cannot
+  // remember the toggle never silently stops delivering.
+  var HELD_PREFIX = "lahe.held.v1:";
   // Private reviewer text. Versioned and review-scoped, but deliberately not a
   // record field: an unfinished follow-up must never enter review.json.
   var FOLLOWUP_PREFIX = "lahe.followups.v1:";
@@ -666,6 +674,46 @@
     }
 
     // -----------------------------------------------------------------------
+    // Hold: queue several comments, release them to the agent at once
+    // -----------------------------------------------------------------------
+    //
+    // A boolean per review, in its own bucket rather than folded into the rail
+    // preferences below: the UI-preferences bucket is written WHOLE on every
+    // change (every field, always), and Hold is flipped from a different part
+    // of the rail on its own schedule. Sharing that bucket would mean every
+    // Hold toggle has to know and restate collapsed/pill/width/present/cards,
+    // or risk one write silently resetting the others.
+
+    function heldKey(reviewId) {
+      keyFor(reviewId); // the same non-empty review-id guard every bucket uses
+      return HELD_PREFIX + reviewId;
+    }
+
+    function isHeld(reviewId) {
+      try {
+        return backing.getItem(heldKey(reviewId)) === "1";
+      } catch (err) {
+        return false;
+      }
+    }
+
+    function setHeld(reviewId, value) {
+      var next = !!value;
+      try {
+        if (next) backing.setItem(heldKey(reviewId), "1");
+        // Cleared rather than written "0": an absent key and a false read the
+        // same way, and it keeps a review that never touched Hold from growing
+        // a key for it.
+        else backing.removeItem(heldKey(reviewId));
+      } catch (err) {
+        // Best effort, like the rest of this file's rail-preference buckets:
+        // a denied storage costs the reviewer their Hold choice, never a word
+        // of their own work.
+      }
+      return next;
+    }
+
+    // -----------------------------------------------------------------------
     // Rail preferences
     // -----------------------------------------------------------------------
     //
@@ -1087,6 +1135,8 @@
       pendingCount: pendingCount,
       queueEvent: queueEvent,
       acknowledge: acknowledge,
+      isHeld: isHeld,
+      setHeld: setHeld,
       readChips: readChips,
       writeChips: writeChips,
       readUiPreferences: readUiPreferences,
@@ -1116,6 +1166,7 @@
     HOLDER_PREFIX: HOLDER_PREFIX,
     LOCK_PREFIX: LOCK_PREFIX,
     UI_PREFIX: UI_PREFIX,
+    HELD_PREFIX: HELD_PREFIX,
     FOLLOWUP_PREFIX: FOLLOWUP_PREFIX,
     SEEN_REPLIES_PREFIX: SEEN_REPLIES_PREFIX,
     keyFor: keyFor,
