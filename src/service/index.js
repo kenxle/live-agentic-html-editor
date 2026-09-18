@@ -182,12 +182,26 @@ async function serve(options) {
   // (see the session table note in reviews.js).
   reviews.loadSessions();
   var auth = authModule.createAuth({ log: log, reviews: reviews });
+  // Created here rather than down with the rest of `deps` (below) because the
+  // review-creation loop right after this needs it too: a review named on the
+  // command line can also name the agent session that owns it (opts.reviewSessions,
+  // the test harness's way of standing up a review whose wake feed is real,
+  // rather than "legacy" and therefore silent by construction).
+  var agentSessions = agentSessionsModule.createStore({ dir: dir });
 
   // Reviews named on the command line (or by the harness) exist before the
   // listener does, so a page that loads the instant the port answers already has
   // a review to post to.
   (opts.reviews || []).forEach(function (id) {
-    reviews.create({ id: id, origins: opts.origins || [] });
+    var sessionId = opts.reviewSessions && opts.reviewSessions[id];
+    if (sessionId) {
+      try {
+        agentSessions.create({ id: sessionId });
+      } catch (err) {
+        /* already exists: a second review naming the same session is fine */
+      }
+    }
+    reviews.create({ id: id, origins: opts.origins || [], agent_session_id: sessionId || undefined });
   });
   // Origins named without a review are registered on every review the helper
   // holds. This is what `add` does when it points a second dev-server origin at
@@ -207,7 +221,7 @@ async function serve(options) {
     // The session store, so a route can answer two questions server-side: which
     // agent session owns this review, and is that session's monitor alive. Both
     // used to be things the reviewer could only get by asking the agent.
-    agentSessions: agentSessionsModule.createStore({ dir: dir }),
+    agentSessions: agentSessions,
     library: loadLibrary(),
     version: VERSION,
     startedAt: startedAt
@@ -494,11 +508,26 @@ if (require.main === module) {
       .filter(Boolean);
   };
 
+  // Test-only: a JSON map of {reviewId: agentSessionId}, so a browser test can
+  // stand up a review whose wake feed is real (the ordinary LAHE_REVIEWS
+  // shortcut leaves every review owned by the synthetic "legacy" session,
+  // which has no feed and no owner, so a wake-line assertion against it would
+  // pass whether or not the code under test does anything at all).
+  var reviewSessions = null;
+  if (process.env.LAHE_REVIEW_SESSIONS) {
+    try {
+      reviewSessions = JSON.parse(process.env.LAHE_REVIEW_SESSIONS);
+    } catch (err) {
+      reviewSessions = null;
+    }
+  }
+
   serve({
     port: portArg === null || Number.isNaN(portArg) ? protocol.DEFAULT_PORT : portArg,
     stateDir: process.env.LAHE_STATE_DIR,
     reviews: splitList(process.env.LAHE_REVIEWS),
-    origins: splitList(process.env.LAHE_ALLOWED_ORIGINS)
+    origins: splitList(process.env.LAHE_ALLOWED_ORIGINS),
+    reviewSessions: reviewSessions
   })
     .then(function (helper) {
       // Test workers spawn the service with one IPC descriptor. That channel

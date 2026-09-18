@@ -1727,6 +1727,16 @@
       var fo = flushOptions || {};
       if (flushing) return Promise.resolve({ sent: 0, remaining: pendingCount(), busy: true });
       if (cspRefused) return Promise.resolve({ sent: 0, remaining: pendingCount(), refused: true });
+      // HOLD (docs/features/20260917.01_hold_toggle): a gate on this call, not
+      // a new state and not a new wire event. The event already sits queued in
+      // the outbox exactly as it would with the helper unreachable; this is the
+      // one place that decides whether to actually post it. `force` is how the
+      // two callers who must get past the gate ask for that: drainOutbox, so
+      // ending a review with items held still flushes them first (R6), and
+      // releasing Hold itself, which flushes immediately, in one pass (R3).
+      if (!fo.force && typeof store.isHeld === "function" && store.isHeld(requireReview())) {
+        return Promise.resolve({ sent: 0, remaining: pendingCount(), held: true });
+      }
       // ONCE THE DOCUMENT IS LEAVING, EVERY FLUSH IS AN UNLOAD FLUSH.
       //
       // The cap and the keepalive header belong to the MOMENT, not to the
@@ -1868,7 +1878,9 @@
       var settled = flushing && flushInFlight ? flushInFlight : Promise.resolve(null);
       return settled
         .then(function () {
-          return flush();
+          // force: true, because ending a review force-flushes anything still
+          // held (R6). Ending a review discards nothing, held or not.
+          return flush({ force: true });
         })
         .then(function (result) {
           var r = result || {};

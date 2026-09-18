@@ -167,10 +167,13 @@ function processStopped(pid) {
  *
  * @param {{stateDir?: string, entry?: string, args?: string[],
  *          env?: Record<string,string>, allowedOrigins?: string[],
- *          reviews?: string[], readyTimeoutMs?: number}} [options]
+ *          reviews?: string[], reviewSessions?: Record<string,string>,
+ *          readyTimeoutMs?: number}} [options]
  *   `reviews` names the review ids the helper should have open when it reports
  *   ready. Default one, so the common test says nothing about it and still gets
- *   a review with a token.
+ *   a review with a token. `reviewSessions` maps a subset of those ids to a real
+ *   agent session id, for a test that needs a genuine wake feed rather than the
+ *   synthetic "legacy" owner an unnamed review gets.
  * @returns {Promise<object>} a handle with port, url, reviews, tokenFor,
  *   stateDir, logs, and stop / kill9 / suspend / resume / waitForExit
  */
@@ -187,7 +190,11 @@ async function startService(options = {}) {
   const env = Object.assign({}, process.env, {
     LAHE_STATE_DIR: stateDir,
     LAHE_ALLOWED_ORIGINS: (options.allowedOrigins || []).join(","),
-    LAHE_REVIEWS: reviewIds.join(",")
+    LAHE_REVIEWS: reviewIds.join(","),
+    // {reviewId: agentSessionId}, test-only: a review named here gets a real
+    // agent session (and therefore a real wake feed) instead of the synthetic
+    // "legacy" owner LAHE_REVIEWS alone produces. See src/service/index.js.
+    LAHE_REVIEW_SESSIONS: options.reviewSessions ? JSON.stringify(options.reviewSessions) : ""
   }, options.env || {});
 
   const child = spawn(process.execPath, [entry].concat(options.args || []), {
