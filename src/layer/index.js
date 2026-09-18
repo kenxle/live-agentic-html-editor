@@ -722,6 +722,14 @@
     ns.exporter.configure(exporter);
     rail.onAction("copy", exporter.copyReview);
     rail.onAction("export", exporter.exportReview);
+    // Hold (docs/features/20260917.01_hold_toggle): releasing it flushes the
+    // queue immediately, in one pass, past the same gate sync.js's flush()
+    // checks store.isHeld against. force:true is what gets it past that gate;
+    // an ordinary flush() called the instant after setHeld(false) writes would
+    // still see the old value if the store write and this read ever raced.
+    rail.onAction("hold-release", function () {
+      return sync.flush({ force: true });
+    });
 
     // The editing surface. It is handed sync, because a record is posted by the
     // same act that writes it, and it is bound to the document the way the

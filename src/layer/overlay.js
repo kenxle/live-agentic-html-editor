@@ -215,8 +215,20 @@
     draft: "Draft",
     ready: "Ready",
     handled: "Handled",
-    not_handled: "Not handled"
+    not_handled: "Not handled",
+    // A rail-only display state (docs/features/20260917.01_hold_toggle): the
+    // item itself is still `ready` in the record (Hold gates delivery, not
+    // lifecycle); this is what the card shows while its ready event sits
+    // queued in the outbox with Hold on.
+    held: "Held"
   };
+  // The word the toggle and the toast both use. One spelling, so the button's
+  // accessible name and anything announcing it never drift apart.
+  var HOLD_LABEL = "Hold sending";
+  var HOLD_ZERO_TEXT = "Holding — nothing sends until you release";
+  function holdCountText(n) {
+    return "Holding, " + n + " queued";
+  }
   var KIND_LABEL = {
     comment: "Comment",
     edit: "Edit",
@@ -530,6 +542,14 @@
     ".card[data-state='draft']{background:var(--draft-wash);border-color:var(--draft-line)}",
     ".card[data-state='ready']{background:var(--paper);border-color:var(--accent)}",
     ".card[data-state='handled']{background:var(--handled-wash);border-color:var(--handled-line)}",
+    // HELD (docs/features/20260917.01_hold_toggle). Not a fifth meaning added to
+    // the three colors above: green stays "handled", the warm wash stays
+    // "draft", so held is neutral, built only from tokens this rail already
+    // has (--surface, --line). A dashed line is the whole signal; no accent
+    // stripe layered on top (Ken flagged exactly that pattern as a banned
+    // single-side colored border on the overdue banner, commit 51bfd2a: this
+    // rail's own border already carries the meaning, on all four sides).
+    ".card[data-state='held']{background:var(--surface);border-color:var(--line);border-style:dashed}",
     // A READY CARD NOBODY HAS PICKED UP, past the overdue rule. The signal is a
     // strong amber border (drawn two pixels wide with a ring, so nothing moves)
     // and the "waiting 12m" label, on the plain card. It is deliberately NOT a
@@ -741,6 +761,23 @@
     ".status[data-loud='true'] .status__dot{background:var(--warn)}",
     ".status__text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
 
+    // THE HOLD TOGGLE (docs/features/20260917.01_hold_toggle). Beside the
+    // status line, not a new zone: this is already the rail's place for "state
+    // of the conversation with the agent," and Hold is exactly that. A real
+    // switch, drawn with the rail's own neutral tokens: pressed reads as a
+    // filled pill on --sunken, the same surface the end-review panel's buttons
+    // use for their own pressed state, never a new hue.
+    ".holdrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}",
+    ".holdbtn{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;",
+    "color:var(--ink-soft);padding:3px 9px;border-radius:999px;border:1px solid var(--line);flex:none}",
+    ".holdbtn:hover{background:var(--surface);color:var(--ink)}",
+    ".holdbtn__dot{width:6px;height:6px;border-radius:50%;background:var(--ink-faint);flex:none}",
+    ".holdbtn[aria-pressed='true']{background:var(--sunken);color:var(--ink);border-color:var(--line)}",
+    ".holdbtn[aria-pressed='true'] .holdbtn__dot{background:var(--ink-soft)}",
+    ".holdcount{font-size:11px;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;",
+    "white-space:nowrap;flex:1;min-width:0}",
+    ".holdcount:empty{display:none}",
+
     ".limit{font-size:11.5px;color:var(--ink-faint);line-height:1.4}",
     ".limit:empty{display:none}",
 
@@ -837,6 +874,14 @@
     ".pill[data-lahe-late='true']{border-color:var(--warn);box-shadow:var(--shadow),0 0 0 1px var(--warn)}",
     ".pill[data-lahe-late='true'] .pill__dot{background:var(--warn)}",
     ".pill[data-lahe-late='true'] .pill__wait{display:inline}",
+    // THE PILL, HELD (docs/features/20260917.01_hold_toggle). Neutral, on the
+    // same tokens as the held card, and never at the same time as late above:
+    // renderStatus shows held whenever it applies, because held is the more
+    // actionable of the two ("you did this on purpose") and a card only ever
+    // reads as held while Hold suppresses it from the overdue clock entirely.
+    ".pill[data-lahe-held='true']{border-color:var(--line);box-shadow:var(--shadow),0 0 0 1px var(--line)}",
+    ".pill[data-lahe-held='true'] .pill__dot{background:var(--ink-faint)}",
+    ".pill[data-lahe-held='true'] .pill__wait{display:inline;color:var(--ink-soft)}",
     // THE JEWEL: the same number the Done tab badge carries, on the one surface
     // that is still on screen once the rail is put away. A reviewer works with
     // the rail collapsed, and a question or a refusal was badging a tab strip
@@ -1682,6 +1727,28 @@
       statusLineWrap.appendChild(statusRow);
       footMain.appendChild(statusLineWrap);
 
+      // HOLD (docs/features/20260917.01_hold_toggle). Beside the status line,
+      // the rail's existing place for "state of the conversation with the
+      // agent." A real switch: aria-pressed says whether it is on, and the
+      // count beside it is an aria-live region so a screen-reader reviewer is
+      // told the count changed without polling the button.
+      var holdRow = el("div", "holdrow");
+      var holdBtn = el("button", "holdbtn");
+      holdBtn.setAttribute("type", "button");
+      holdBtn.setAttribute("aria-pressed", "false");
+      holdBtn.setAttribute("aria-label", HOLD_LABEL);
+      holdBtn.title = HOLD_LABEL;
+      holdBtn.appendChild(el("span", "holdbtn__dot"));
+      holdBtn.appendChild(el("span", null, HOLD_LABEL));
+      holdBtn.addEventListener("click", function () {
+        toggleHeld();
+      });
+      holdRow.appendChild(holdBtn);
+      var holdCount = el("span", "holdcount", "");
+      holdCount.setAttribute("aria-live", "polite");
+      holdRow.appendChild(holdCount);
+      footMain.appendChild(holdRow);
+
       var limit = el("div", "limit");
       footMain.appendChild(limit);
 
@@ -1923,6 +1990,8 @@
         lateNote: lateNote,
         lateMessage: lateMessage,
         statusDot: statusDot,
+        holdBtn: holdBtn,
+        holdCount: holdCount,
         limit: limit,
         hints: hints,
         footMain: footMain,
@@ -2130,6 +2199,123 @@
     }
 
     // -------------------------------------------------------------------------
+    // Hold: queue several comments, release them to the agent at once
+    // -------------------------------------------------------------------------
+    //
+    // docs/features/20260917.01_hold_toggle. Hold gates DELIVERY, not the item
+    // lifecycle (docs/diagrams/item_lifecycle.md): an item is still `ready`,
+    // durably, the moment the reviewer commits it. Everything below is a
+    // RENDERING-layer question, the same kind record.displayState already
+    // answers for handled/not_handled: is this ready item's own event still
+    // sitting in this review's outbox because Hold is on? If so the card and
+    // the pill say so; nothing about the record itself changes.
+
+    function isHeldNow() {
+      if (!store || !reviewId || typeof store.isHeld !== "function") return false;
+      try {
+        return store.isHeld(reviewId) === true;
+      } catch (err) {
+        return false;
+      }
+    }
+
+    function heldQueuedCount() {
+      if (!store || !reviewId || typeof store.pendingCount !== "function") return 0;
+      try {
+        return store.pendingCount(reviewId);
+      } catch (err) {
+        return 0;
+      }
+    }
+
+    /**
+     * Is THIS item's own event still queued, undelivered, while Hold is on?
+     *
+     * Checked per item, not just "is Hold on": an item sent and acknowledged
+     * BEFORE Hold was turned on already reached the agent, so it stays a plain
+     * ready card. Only an item whose event is still sitting in the outbox is
+     * held back, which is the whole point of Requirement 9 (Hold suppresses
+     * the outbox, not a fourth lifecycle state).
+     */
+    function isItemHeld(id) {
+      if (!id || !isHeldNow()) return false;
+      if (!store || typeof store.pendingEvents !== "function") return false;
+      try {
+        var pending = store.pendingEvents(reviewId);
+        for (var i = 0; i < pending.length; i += 1) {
+          if (pending[i] && pending[i].item === id) return true;
+        }
+      } catch (err) {
+        /* best effort: an unreadable outbox reads as not held */
+      }
+      return false;
+    }
+
+    /** record.displayState, with the rail's one display-only addition. */
+    function cardDisplayState(item) {
+      var base = record.displayState(item);
+      if (base === record.STATE.READY && isItemHeld(item[record.FIELD.ID])) return "held";
+      return base;
+    }
+
+    /**
+     * Recompute one card's held-ness and repaint only if it changed.
+     *
+     * Called from renderStatus's per-card pass (the same pass that already
+     * repaints every card's late/wait state each tick), which is what makes a
+     * newly-ready item correct without a special case: upsertCard paints it
+     * BEFORE sync.js has queued its event, so the very first paint reads
+     * "ready"; the very next renderStatus (fired by sync's own recomputeStatus,
+     * synchronously after the event is queued) corrects it to "held" before
+     * the reviewer's eye has moved.
+     */
+    function paintCardHeld(card) {
+      if (!card) return;
+      var next = cardDisplayState(card.item);
+      if (next === card.state) return;
+      card.state = next;
+      paintCard(card);
+    }
+
+    function renderHold() {
+      if (!dom || !dom.holdBtn) return;
+      var held = isHeldNow();
+      dom.holdBtn.setAttribute("aria-pressed", held ? "true" : "false");
+      if (!held) {
+        dom.holdCount.textContent = "";
+        return;
+      }
+      var n = heldQueuedCount();
+      // A ZERO-COUNT LABEL THAT ONLY MAKES SENSE ONCE SOMETHING HAS BEEN TYPED
+      // reads as broken the moment Hold is turned on (R5, design review).
+      dom.holdCount.textContent = n === 0 ? HOLD_ZERO_TEXT : holdCountText(n);
+    }
+
+    /**
+     * Flip Hold. Releasing it runs the "hold-release" action, which is the
+     * seam index.js wires to sync.flush({force: true}): the flush is forced
+     * PAST the same gate this store write sets, exactly like the takeover and
+     * end-review actions already registered on this seam (onAction/runAction).
+     * Nothing here posts to the network directly; overlay.js has no sync.
+     */
+    function setHeldState(next) {
+      var want = !!next;
+      if (!store || !reviewId || typeof store.setHeld !== "function") return false;
+      try {
+        store.setHeld(reviewId, want);
+      } catch (err) {
+        return false;
+      }
+      renderStatus();
+      if (!want) runAction("hold-release");
+      return true;
+    }
+
+    function toggleHeld() {
+      return setHeldState(!isHeldNow());
+    }
+
+    // -------------------------------------------------------------------------
     // Cards
     // -------------------------------------------------------------------------
 
@@ -2156,7 +2342,7 @@
           bodyNode: null,
           parts: null,
           item: item,
-          state: record.displayState(item),
+          state: cardDisplayState(item),
           pane: paneForItem(item),
           badges: [],
           agentMessage: null,
@@ -2171,7 +2357,7 @@
         placeCard(cards[id]);
       } else {
         cards[id].item = item;
-        cards[id].state = record.displayState(item);
+        cards[id].state = cardDisplayState(item);
         cards[id].pane = paneForItem(item);
         placeCard(cards[id]);
       }
@@ -3328,6 +3514,13 @@
       var item = card && card.item;
       var none = { overdue: false, waitedMs: null, text: "" };
       if (!item || status !== STATUS.STORED || !record.isUnansweredReady(item)) return none;
+      // R4: a held item never turns amber. This clock is computed off the
+      // item's OWN local timestamp, not off anything the helper has said, so
+      // an item that has never reached the helper would otherwise start
+      // counting anyway. isItemHeld is the one thing standing between "the
+      // helper has never heard of this" and a client clock that does not know
+      // that.
+      if (isItemHeld(item[record.FIELD.ID])) return none;
       var at = item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || null;
       var then = typeof at === "string" ? Date.parse(at) : NaN;
       if (Number.isNaN(then)) return none;
@@ -3489,11 +3682,27 @@
         present: true,
         visible: !!computed && computed.display !== "none",
         late: dom.pill.getAttribute("data-lahe-late") === "true",
+        held: dom.pill.getAttribute("data-lahe-held") === "true",
         waitText: dom.pillWait.textContent || "",
         waitVisible: !!waitComputed && waitComputed.display !== "none",
         border: computed ? computed.borderTopColor : null,
         title: dom.pill.title || "",
         box: { x: box.left, y: box.top, width: box.width, height: box.height }
+      };
+    }
+
+    /** Self-report for the closed root: what the Hold toggle renders. */
+    function holdInfo() {
+      if (!dom || !dom.holdBtn) return { present: false };
+      var view = dom.holdBtn.ownerDocument ? dom.holdBtn.ownerDocument.defaultView : null;
+      var computed = view ? view.getComputedStyle(dom.holdBtn) : null;
+      return {
+        present: true,
+        visible: !!computed && computed.display !== "none",
+        pressed: dom.holdBtn.getAttribute("aria-pressed") === "true",
+        label: dom.holdBtn.getAttribute("aria-label") || "",
+        countText: dom.holdCount.textContent || "",
+        countLive: dom.holdCount.getAttribute("aria-live") || ""
       };
     }
 
@@ -3964,13 +4173,31 @@
       // The banner and the late cards run off the same clock and the same
       // liveness answer as this line, so they are repainted with it.
       renderWaitBanner(banner);
-      var pill = pillWait(banner);
-      dom.pill.setAttribute("data-lahe-late", pill.late ? "true" : "");
-      dom.pillWait.textContent = pill.text;
-      dom.pill.title = pill.title;
-      dom.pill.setAttribute("aria-label", pill.title);
+      renderHold();
+      // HELD, ON THE COLLAPSED PILL (R10), takes over the late pill's spot
+      // rather than sitting beside it: while Hold is on with anything queued,
+      // that is the more actionable fact ("you did this on purpose, release it
+      // when you're ready"), and a held item is by construction never the one
+      // making the late reading loud (cardWaitFor excludes it, R4).
+      var heldQueued = isHeldNow() ? heldQueuedCount() : 0;
+      if (heldQueued > 0) {
+        var heldTitle = heldQueued + " held. Nothing sends to the agent until you release Hold.";
+        dom.pill.setAttribute("data-lahe-held", "true");
+        dom.pill.removeAttribute("data-lahe-late");
+        dom.pillWait.textContent = heldQueued + " held";
+        dom.pill.title = heldTitle;
+        dom.pill.setAttribute("aria-label", heldTitle);
+      } else {
+        dom.pill.removeAttribute("data-lahe-held");
+        var pill = pillWait(banner);
+        dom.pill.setAttribute("data-lahe-late", pill.late ? "true" : "");
+        dom.pillWait.textContent = pill.text;
+        dom.pill.title = pill.title;
+        dom.pill.setAttribute("aria-label", pill.title);
+      }
       var agentState = getAgentState();
       Object.keys(cards).forEach(function (id) {
+        paintCardHeld(cards[id]);
         paintCardWait(cards[id], agentState);
       });
       // ONLY IN THE STATE IT DESCRIBES. The limit is about there being no helper
@@ -5663,6 +5890,15 @@
       },
       pillWaitInfo: pillWaitInfo,
       copyHandoff: copyHandoff,
+      // Hold: queue several comments, release them to the agent at once
+      // (docs/features/20260917.01_hold_toggle). isHeld/setHeld read and
+      // write through the store, exactly like isCollapsed/collapse above;
+      // setHeld(false) is what runs the "hold-release" action a host wires to
+      // sync.flush({force: true}).
+      isHeld: isHeldNow,
+      setHeld: setHeldState,
+      heldCount: heldQueuedCount,
+      holdInfo: holdInfo,
       statusRowCount: statusRowCount,
       LIMIT_SEPARATE_STORAGE_NO_HELPER: LIMIT_SEPARATE_STORAGE_NO_HELPER,
       SHEET_ATTR: SHEET_ATTR,

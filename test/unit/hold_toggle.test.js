@@ -26,6 +26,7 @@ const assert = require("node:assert/strict");
 const record = require("../../src/shared/record.js");
 const storeModule = require("../../src/layer/store.js");
 const syncModule = require("../../src/layer/sync.js");
+const overlay = require("../../src/layer/overlay.js");
 
 function memoryBacking(seed) {
   const values = Object.assign(Object.create(null), seed || {});
@@ -227,4 +228,131 @@ test("a flush the moment Hold goes on suppresses anything already sitting in the
   assert.equal(posted, 0, "held after the fact still suppresses what was already queued");
   assert.equal(result.held, true);
   assert.equal(store.pendingEvents("review-1").length, 1);
+});
+
+// ---------------------------------------------------------------------------
+// Task 3: overlay.js's display-only card state (headless: no jsdom in this
+// repo, so DOM attributes and rendered text are the browser spec's job;
+// this is the state computation underneath them).
+// ---------------------------------------------------------------------------
+
+const REVIEW = "review-hold";
+
+/** Simulate sync.js having queued this item's ready event, the way recordItem does. */
+function queueReadyEvent(store, item) {
+  store.queueEvent(REVIEW, {
+    event_id: "evt-" + item.id + "-" + item.rev,
+    event: "item.ready",
+    item: item.id,
+    rev: item.rev,
+    record: item
+  });
+}
+
+test("a ready item whose event is still queued while held reads as a distinct 'held' card state", () => {
+  const store = storeModule.createStore();
+  const rail = overlay.createRail({ document: null, store: store, reviewId: REVIEW });
+  const item = readyItem("batched while managing turns");
+
+  store.setHeld(REVIEW, true);
+  queueReadyEvent(store, item);
+  rail.upsertCard(item);
+
+  assert.equal(rail.getCard(item.id).state, "held");
+});
+
+test("an item already sent and acknowledged before Hold went on stays a plain ready card", () => {
+  const store = storeModule.createStore();
+  const rail = overlay.createRail({ document: null, store: store, reviewId: REVIEW });
+  const item = readyItem("sent before the reviewer turned Hold on");
+
+  // Nothing queued for this item (the ack already dropped its event from the
+  // outbox), so turning Hold on afterward must not relabel it.
+  store.setHeld(REVIEW, true);
+  rail.upsertCard(item);
+
+  assert.equal(rail.getCard(item.id).state, "ready", "already delivered, so plain ready, not held");
+});
+
+test("hold off: an item with something queued (e.g. a network retry) is not drawn 'held'", () => {
+  const store = storeModule.createStore();
+  const rail = overlay.createRail({ document: null, store: store, reviewId: REVIEW });
+  const item = readyItem("queued because the helper hiccuped, not because of Hold");
+
+  queueReadyEvent(store, item);
+  rail.upsertCard(item);
+
+  assert.equal(rail.getCard(item.id).state, "ready", "held is only ever a Hold reading, never a retry reading");
+});
+
+test("a draft stays a draft even when everything in the outbox is held", () => {
+  const store = storeModule.createStore();
+  const rail = overlay.createRail({ document: null, store: store, reviewId: REVIEW });
+  const draftItem = record.newItem({
+    kind: record.KIND.COMMENT,
+    state: record.STATE.DRAFT,
+    note: "still typing",
+    page_origin: "http://127.0.0.1:4000",
+    page_path: "/roster"
+  });
+
+  store.setHeld(REVIEW, true);
+  store.queueEvent(REVIEW, { event_id: "evt-draft", event: "item.content", item: draftItem.id, rev: draftItem.rev, record: draftItem });
+  rail.upsertCard(draftItem);
+
+  assert.equal(rail.getCard(draftItem.id).state, "draft", "held is a ready-only reading; a draft was never going to an agent anyway");
+});
+
+test("R4: a held item's own local clock never turns it late, however long it has sat", () => {
+  const store = storeModule.createStore();
+  const rail = overlay.createRail({ document: null, store: store, reviewId: REVIEW });
+  const longAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const item = Object.assign(readyItem("sat for an hour, held"), { updated_at: longAgo, created_at: longAgo });
+
+  store.setHeld(REVIEW, true);
+  queueReadyEvent(store, item);
+  rail.upsertCard(item);
+  // cardWaitFor only computes anything past STATUS.STORED (statusLine() short-
+  // circuits otherwise), so this has to be set for the guard under test to be
+  // reached at all rather than the assertion passing for an unrelated reason.
+  rail.setStatusLine(overlay.STATUS.STORED);
+  rail.setAgentLiveness({ state: "no_agent", oldest_unanswered_at: longAgo, unanswered: 1 });
+
+  const wait = rail.cardWait(item.id);
+  assert.equal(wait.overdue, false, "held is invisible to the overdue clock (R4), not merely usually-fine");
+  assert.equal(wait.text, "");
+
+  // Proves the assertion above is actually about Hold, not a fluke: the exact
+  // same item, at the exact same wait, WOULD be overdue once it is not held.
+  store.setHeld(REVIEW, false);
+  const unheld = rail.cardWait(item.id);
+  assert.equal(unheld.overdue, true, "same item, same wait, not held: this is what R4 is guarding against");
+});
+
+test("releasing hold flips a held card back to ready in the same call, before any network round trip", () => {
+  const store = storeModule.createStore();
+  const rail = overlay.createRail({ document: null, store: store, reviewId: REVIEW });
+  const item = readyItem("about to be released");
+
+  store.setHeld(REVIEW, true);
+  queueReadyEvent(store, item);
+  rail.upsertCard(item);
+  assert.equal(rail.getCard(item.id).state, "held");
+
+  rail.setHeld(false);
+  // renderStatus (called by setHeld) repaints every card against the fresh
+  // isHeld() reading; the event is still physically in the outbox (nothing
+  // here has a network), but Hold itself is off, so the card reads ready.
+  rail.upsertCard(item);
+  assert.equal(rail.getCard(item.id).state, "ready");
+});
+
+test("the toggle's queued count is the outbox's own pendingCount, read live", () => {
+  const store = storeModule.createStore();
+  const rail = overlay.createRail({ document: null, store: store, reviewId: REVIEW });
+  assert.equal(rail.heldCount(), 0);
+  rail.setHeld(true);
+  queueReadyEvent(store, readyItem("one"));
+  queueReadyEvent(store, readyItem("two"));
+  assert.equal(rail.heldCount(), 2);
 });
