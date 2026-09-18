@@ -177,6 +177,15 @@ prints, rebuild, verify the visible output, append your replies, then run it
 again. Repeat until it prints nothing. Work stays listed until your reply lands,
 so a wake you miss costs you nothing: the next drain shows the item again.
 
+**A reviewer can hold their comments back.** A toggle in the rail lets them
+leave several comments and choose when you see any of them, for when they are
+managing their own turn budget. While held, a committed comment is not on the
+drain list and fires no wake: it is durably `ready` in their browser, but
+invisible to you until they release Hold, which sends everything queued at
+once. There is nothing for you to do differently; it just means an
+otherwise-quiet review can have real work waiting behind a toggle you cannot
+see, and the drain command is the truth the moment it lands.
+
 **You are an orchestrator first.** While a review is open, your job is the
 loop: drain, dispatch, reply. Long or exploratory work (debugging, a refactor,
 anything past a few minutes) goes to a background subagent where your host has

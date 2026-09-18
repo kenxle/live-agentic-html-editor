@@ -720,6 +720,14 @@ Work stays listed until your reply lands. That is deliberate: it means a wake yo
 miss costs you nothing, because the next drain shows the item again. There is no
 ledger to carry and nothing to keep in sync.
 
+**A reviewer can hold their comments back**, a toggle in the rail for when
+they are managing their own turn budget. A held comment is durably `ready` in
+their browser, but it is not on the drain list and fires no wake until they
+release Hold, which sends everything queued at once. There is nothing for you
+to do differently; it just means an otherwise-quiet review can have real work
+waiting behind a toggle you cannot see, and the drain command is the truth the
+moment it lands.
+
 The drain does not carry the contract, because you would read the same few
 thousand tokens on every wake: its first line points at the `contract` field in
 the review's `review.json`, which is where the contract lives.

@@ -2219,10 +2219,32 @@
       }
     }
 
+    /**
+     * How many comments the toggle's count is about.
+     *
+     * DISTINCT READY ITEMS, not store.pendingCount's raw event count. One
+     * comment can sit in the outbox as more than one event (its creation, its
+     * keystrokes, its ready), and a draft queues events too (drafts flow to
+     * the helper for durability, R7 of the original brief) without ever being
+     * something an agent could act on. "Holding, 3 queued" means three
+     * comments, the way a reviewer reads it, not five wire events including a
+     * draft nobody is waiting on.
+     */
     function heldQueuedCount() {
-      if (!store || !reviewId || typeof store.pendingCount !== "function") return 0;
+      if (!store || !reviewId) return 0;
+      if (typeof store.pendingEvents !== "function" || typeof store.readItem !== "function") return 0;
       try {
-        return store.pendingCount(reviewId);
+        var pending = store.pendingEvents(reviewId);
+        var seen = Object.create(null);
+        var n = 0;
+        for (var i = 0; i < pending.length; i += 1) {
+          var itemId = pending[i] && pending[i].item;
+          if (!itemId || seen[itemId]) continue;
+          seen[itemId] = true;
+          var current = store.readItem(reviewId, itemId);
+          if (current && current[record.FIELD.STATE] === record.STATE.READY) n += 1;
+        }
+        return n;
       } catch (err) {
         return 0;
       }
@@ -2289,6 +2311,43 @@
       // A ZERO-COUNT LABEL THAT ONLY MAKES SENSE ONCE SOMETHING HAS BEEN TYPED
       // reads as broken the moment Hold is turned on (R5, design review).
       dom.holdCount.textContent = n === 0 ? HOLD_ZERO_TEXT : holdCountText(n);
+    }
+
+    /**
+     * The toggle's count and the collapsed pill's held reading, repainted
+     * together. Called from renderStatus (the ordinary poll-driven refresh)
+     * AND from upsertCard: sync.js's status line deliberately holds its
+     * current reading steady rather than repainting on every queued event
+     * (recomputeStatus, "HOLD the current reading rather than flickering"),
+     * so a rail that only repainted Hold's own chrome from renderStatus would
+     * leave the queued count reading stale for up to a poll interval after
+     * each comment. upsertCard runs synchronously with every item change,
+     * which is what makes this immediate instead.
+     */
+    function repaintHoldChrome() {
+      renderHold();
+      if (!dom || !dom.pill) return;
+      var heldQueued = isHeldNow() ? heldQueuedCount() : 0;
+      // HELD, ON THE COLLAPSED PILL (R10), takes over the late pill's spot
+      // rather than sitting beside it: while Hold is on with anything queued,
+      // that is the more actionable fact ("you did this on purpose, release
+      // it when you're ready"), and a held item is by construction never the
+      // one making the late reading loud (cardWaitFor excludes it, R4).
+      if (heldQueued > 0) {
+        var heldTitle = heldQueued + " held. Nothing sends to the agent until you release Hold.";
+        dom.pill.setAttribute("data-lahe-held", "true");
+        dom.pill.removeAttribute("data-lahe-late");
+        dom.pillWait.textContent = heldQueued + " held";
+        dom.pill.title = heldTitle;
+        dom.pill.setAttribute("aria-label", heldTitle);
+      } else {
+        dom.pill.removeAttribute("data-lahe-held");
+        var pill = pillWait();
+        dom.pill.setAttribute("data-lahe-late", pill.late ? "true" : "");
+        dom.pillWait.textContent = pill.text;
+        dom.pill.title = pill.title;
+        dom.pill.setAttribute("aria-label", pill.title);
+      }
     }
 
     /**
@@ -2363,6 +2422,9 @@
       }
       paintCard(cards[id]);
       renderTabs();
+      // See repaintHoldChrome: the queued count has to move the instant a new
+      // item lands, not on the next poll-driven renderStatus.
+      repaintHoldChrome();
       return handleFor(id);
     }
 
@@ -4173,28 +4235,7 @@
       // The banner and the late cards run off the same clock and the same
       // liveness answer as this line, so they are repainted with it.
       renderWaitBanner(banner);
-      renderHold();
-      // HELD, ON THE COLLAPSED PILL (R10), takes over the late pill's spot
-      // rather than sitting beside it: while Hold is on with anything queued,
-      // that is the more actionable fact ("you did this on purpose, release it
-      // when you're ready"), and a held item is by construction never the one
-      // making the late reading loud (cardWaitFor excludes it, R4).
-      var heldQueued = isHeldNow() ? heldQueuedCount() : 0;
-      if (heldQueued > 0) {
-        var heldTitle = heldQueued + " held. Nothing sends to the agent until you release Hold.";
-        dom.pill.setAttribute("data-lahe-held", "true");
-        dom.pill.removeAttribute("data-lahe-late");
-        dom.pillWait.textContent = heldQueued + " held";
-        dom.pill.title = heldTitle;
-        dom.pill.setAttribute("aria-label", heldTitle);
-      } else {
-        dom.pill.removeAttribute("data-lahe-held");
-        var pill = pillWait(banner);
-        dom.pill.setAttribute("data-lahe-late", pill.late ? "true" : "");
-        dom.pillWait.textContent = pill.text;
-        dom.pill.title = pill.title;
-        dom.pill.setAttribute("aria-label", pill.title);
-      }
+      repaintHoldChrome();
       var agentState = getAgentState();
       Object.keys(cards).forEach(function (id) {
         paintCardHeld(cards[id]);

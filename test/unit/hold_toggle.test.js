@@ -240,6 +240,10 @@ const REVIEW = "review-hold";
 
 /** Simulate sync.js having queued this item's ready event, the way recordItem does. */
 function queueReadyEvent(store, item) {
+  // store.write first: heldQueuedCount reads the item back by id to tell a
+  // real comment from a queued draft, so a test event with no backing record
+  // would silently count as zero, same as a draft does.
+  store.write(REVIEW, item);
   store.queueEvent(REVIEW, {
     event_id: "evt-" + item.id + "-" + item.rev,
     event: "item.ready",
@@ -347,12 +351,32 @@ test("releasing hold flips a held card back to ready in the same call, before an
   assert.equal(rail.getCard(item.id).state, "ready");
 });
 
-test("the toggle's queued count is the outbox's own pendingCount, read live", () => {
+test("the toggle's queued count is distinct comments, not raw outbox events", () => {
   const store = storeModule.createStore();
   const rail = overlay.createRail({ document: null, store: store, reviewId: REVIEW });
   assert.equal(rail.heldCount(), 0);
   rail.setHeld(true);
-  queueReadyEvent(store, readyItem("one"));
+  const one = readyItem("one");
+  queueReadyEvent(store, one);
   queueReadyEvent(store, readyItem("two"));
   assert.equal(rail.heldCount(), 2);
+
+  // A second event for the SAME item (a rework, still queued) is one comment,
+  // not two, and a queued draft (never going to an agent either way, held or
+  // not) is not a comment the reviewer is waiting to release at all.
+  const reworded = Object.assign({}, one, { rev: one.rev + 1, note: "one, reworded" });
+  store.write(REVIEW, reworded);
+  store.queueEvent(REVIEW, { event_id: "evt-extra", event: "item.content", item: reworded.id, rev: reworded.rev, record: reworded });
+  assert.equal(rail.heldCount(), 2, "the rework did not become a third queued comment");
+
+  const draftItem = record.newItem({
+    kind: record.KIND.COMMENT,
+    state: record.STATE.DRAFT,
+    note: "still typing, never sent",
+    page_origin: "http://127.0.0.1:4000",
+    page_path: "/roster"
+  });
+  store.write(REVIEW, draftItem);
+  store.queueEvent(REVIEW, { event_id: "evt-draft", event: "item.content", item: draftItem.id, rev: draftItem.rev, record: draftItem });
+  assert.equal(rail.heldCount(), 2, "a queued draft is not one of the comments Hold is holding");
 });

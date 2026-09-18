@@ -1173,8 +1173,17 @@
       // the still-bound rule covers element picks the text matcher can never
       // re-find (comments loads before replay, so the bridge is here).
       if (createdOnElement) ns.replay.bindElement(item[ns.record.FIELD.ID], createdOnElement);
-      rail.upsertCard(item);
+      // sync.recordItem BEFORE rail.upsertCard, on purpose (docs/features/
+      // 20260917.01_hold_toggle): the card's own paint reads whether this
+      // item's event is sitting in the outbox (store.pendingEvents) to decide
+      // "held" vs "ready", and recordItem is what puts it there. Painting
+      // first read a "ready" card for one tick and only ever self-corrected
+      // when something else happened to trigger a repaint (sync.js holds its
+      // status line steady on purpose and does not repaint on every queued
+      // event, see recomputeStatus), which is what the reviewer's own comment
+      // count is: it stops moving after this many.
       sync.recordItem(item, event === "ready" ? { immediate: "ready" } : undefined);
+      rail.upsertCard(item);
     });
 
     // -------------------------------------------------------------------------
