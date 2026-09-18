@@ -126,20 +126,34 @@ untouched, and it is the smaller change.
 
 ## Acceptance criteria
 
-- [ ] Turning Hold on, leaving three comments, then off: the agent's drain
-      sees all three at once, not as they were typed.
-- [ ] A held item is absent from `review.json` until released.
-- [ ] A held item never fires a wake line and never turns amber.
-- [ ] The toggle shows a live queued count while on, with a real label at
+- [x] Turning Hold on, leaving three comments, then off: the agent's drain
+      sees all three at once, not as they were typed. (unit:
+      `test/unit/hold_toggle.test.js`, "releasing hold flushes the queue
+      immediately, in one pass")
+- [x] A held item is absent from `review.json` until released. (browser:
+      `test/browser/rail_hold.spec.js`)
+- [x] A held item never fires a wake line and never turns amber. (browser
+      and unit: the same spec's wake-feed diff, and
+      `test/unit/hold_toggle.test.js`'s R4 test)
+- [x] The toggle shows a live queued count while on, with a real label at
       zero queued, and is announced to a screen reader on each change.
-- [ ] The collapsed rail's pill shows a neutral held state, distinct from its
-      amber overdue state.
-- [ ] Ending a review with items held flushes them first, no confirm dialog.
-- [ ] Hold survives a page reload.
-- [ ] Turning Hold on suppresses the whole outbox, including anything queued
-      before the toggle was flipped; an in-flight request is not cancelled.
-- [ ] `npm run gate:unit` green; one named browser spec proves the visual and
-      wake-suppression claims; full suite green once at merge.
+      (browser: `holdInfo().countText`/`.countLive`)
+- [x] The collapsed rail's pill shows a neutral held state, distinct from its
+      amber overdue state. (browser: `pillWaitInfo().held`/`.late`)
+- [x] Ending a review with items held flushes them first, no confirm dialog.
+      (browser: "ending a review force-flushes anything still held")
+- [x] Hold survives a page reload. (browser: "Hold survives a page reload")
+- [x] Turning Hold on suppresses the whole outbox, including anything queued
+      before the toggle was flipped (unit: "a flush the moment Hold goes on
+      suppresses anything already sitting in the outbox"); an in-flight
+      request is not cancelled by design (`flush()`'s held check runs only
+      at the START of a new flush call, and the `flushing` guard already
+      prevents a second flush from starting while one is in progress,
+      unchanged by this feature), verified by inspection rather than a
+      dedicated test.
+- [x] `npm run gate:unit` green; one named browser spec proves the visual and
+      wake-suppression claims (`test/browser/rail_hold.spec.js`, three
+      tests, all passing on Chromium); full suite to run once at merge.
 
 ## Design review, 2026-09-17 (`magic-mirror`)
 
@@ -153,3 +167,61 @@ this rail's existing no-`window.confirm` rule.
 ## Progress
 
 - 2026-09-17: spec written, reviewed by `magic-mirror`, findings integrated.
+- 2026-09-18: verified the neutral-token instruction before writing any CSS
+  (read commit `51bfd2a` and the amber card's current code first). Tasks 1-2
+  built TDD: `store.js` gets `setHeld`/`isHeld` in their own best-effort
+  bucket (`lahe.held.v1:<reviewId>`), and `sync.js`'s `flush()` gates on
+  `store.isHeld` with a `force` option that bypasses it for drainOutbox (end
+  review) and for releasing Hold. `test/unit/hold_toggle.test.js` written
+  first, watched red, then green (10 tests). `npm run gate:unit` green.
+- 2026-09-18: Task 3. The toggle (real switch, `aria-pressed`, an
+  `aria-live` queued count) sits in the footer beside the status line. A
+  held card is display-only (`cardDisplayState`, `data-state='held'`),
+  computed from whether THIS item's own event is still sitting in the
+  outbox while held, not from "is Hold on" globally, so an item already
+  delivered before Hold went on stays a plain ready card. Found while
+  building: `cardWaitFor` (the per-card amber ring) computes its wait from
+  the item's own local timestamp, not from anything the helper reported, so
+  a held item was NOT safe from the overdue clock "for free" at the card
+  level (only the banner/pill are, since those read the helper's own
+  `oldest_unanswered_at`). Added an explicit guard, proven by a test that
+  flips the same item's held-ness and shows `overdue` flip with it. 7 more
+  unit tests added (17 total). `npm run gate:unit` green.
+- 2026-09-18: Tasks 4-5, and the R4 integration proof. Wrote
+  `test/browser/rail_hold.spec.js` against the real helper and, new for this
+  feature, a real agent session (`test/helpers/service.js` and
+  `src/service/index.js` gained `reviewSessions`, test-only, because the
+  ordinary `LAHE_REVIEWS` shortcut leaves a review owned by the synthetic
+  "legacy" session, which has no wake feed at all — a wake-line assertion
+  against one would pass whether or not Hold's gate does anything). One test
+  proves review.json absence, an unmoved wake feed file, and an unmoved
+  `agent_liveness.unanswered`/`oldest_unanswered_at` together, then releases
+  Hold and shows all three flip. A second test proves ending a review
+  force-flushes held items, no confirm dialog. A third proves Hold survives
+  a reload.
+  The browser spec caught two real bugs the unit tests could not see (no
+  DOM, no poll loop): the toggle's queued count and a freshly-held card both
+  lagged up to a poll interval behind sync.js's status line, which
+  deliberately holds its reading steady rather than repainting on every
+  queued event; fixed by queuing the event before painting the card
+  (`index.js`) and repainting Hold's own chrome from `upsertCard` directly,
+  not only from the poll-driven `renderStatus`. And `heldQueuedCount`
+  originally read the outbox's raw event count, which over-counted (one
+  comment is more than one event, and a queued draft is not a comment an
+  agent could act on either way); it now counts distinct ready items.
+  All three browser tests pass on Chromium. `npm run gate:unit` green
+  (1185 pass, 2 todo, 0 fail).
+- 2026-09-18: Task 7, docs. One paragraph in `skills/lahe/SKILL.md`. Per
+  CLAUDE.md's rule that `AGENTS.md` and the `contract` field in
+  `review.json` travel together, the same paragraph also went into
+  `AGENTS.md` and the `CONTRACT` array in `src/shared/review_format.js`
+  (with its restated copies in `test/unit/review_format.test.js` and
+  `docs/CONTRACTS.md`, and the sentinel length bumped 43 to 44).
+  `docs/CONTRACTS.md` needed no wire-payload section changes: this feature
+  adds no wire event and no new field.
+- 2026-09-18: Task 6, screenshots. Taken from the real booted layer (not a
+  harness), light and dark, showing the toggle on with "Holding, 1 queued",
+  a held card (dashed neutral border) beside a plain ready card and a
+  draft, the handled card in Done, and the collapsed pill reading "1 held".
+  Saved under the builder's scratchpad (not committed; see the build
+  report for the path).
