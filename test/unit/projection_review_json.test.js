@@ -113,7 +113,12 @@ test("the contract field is in the real projection byte for byte, and names no a
   // reply lands, so redelivery is the dedupe. `lahe wait` is retired and must
   // not survive here either.
   const wholeFile = fs.readFileSync(written, "utf8");
-  assert.ok(/tail -n 0 -f <state-dir>\/agent-sessions\/<agent-session-id>\/wake.log/.test(wholeFile), "the file names the wake feed a host can tail");
+  assert.ok(/<state-dir>\/agent-sessions\/<agent-session-id>\/wake.log/.test(wholeFile), "the file names the wake feed");
+  // Claude Code waits with the monitor in a background Bash call. The Monitor
+  // tool option the old line named was removed from Claude Code on 2026-09-14.
+  assert.ok(/Claude Code: run lahe monitor --session <agent-session-id> with Bash in the background/.test(wholeFile), "the Claude Code line names the background monitor");
+  assert.equal(/persistent/.test(wholeFile), false, "the removed Monitor tool option is named nowhere");
+  assert.ok(/Read this contract once, when you start on a review/.test(wholeFile), "the contract is read once, not on every wake");
   assert.ok(/lahe monitor --session <agent-session-id>/.test(wholeFile), "the file names the scoped keep-up command an agent may run");
   assert.ok(/lahe status --session <agent-session-id> --json --quiet/.test(wholeFile), "the file names the drain command");
   assert.equal(/--seen-file/.test(wholeFile), false, "the retired ledger flag is taught nowhere");

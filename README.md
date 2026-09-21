@@ -93,12 +93,12 @@ Each host wakes an agent differently, so each gets its own instruction. The agen
 
 | Agent | How it keeps up |
 | --- | --- |
-| Claude Code | Arms one persistent Monitor on the review's wake file. Push, sub-second, no polling. |
+| Claude Code | Runs `lahe monitor` with Bash in the background, and runs it again after each batch of work. |
 | Codex | Runs `lahe monitor` as a foreground pending exec call and waits on it. |
 | Antigravity | Runs `lahe monitor` as a background terminal task. Task completion wakes it. |
 | Anything else | Runs `lahe monitor` in the foreground after warning you it owns the chat. |
 
-An idle review costs no model tokens on any of them. The watcher is a small local process or a file tail, never a scheduled model wakeup.
+An idle review costs no model tokens on any of them. The watcher is a small local process, never a scheduled model wakeup.
 
 ## The gestures
 
@@ -129,7 +129,8 @@ The rail also shows these as hints, so you do not need this file open to work th
 
 ## Docs
 
-- [AGENTS.md](AGENTS.md): the playbook an agent reads. Point your agent here.
+- [AGENTS.md](AGENTS.md): how each agent host connects to the tool. Point your agent here.
+- [skills/lahe/SKILL.md](skills/lahe/SKILL.md): the instructions an agent follows during a review.
 - [docs/INSTALL.md](docs/INSTALL.md): install details, the CLI wrapper, and dev-server setup.
 - [docs/CLI.md](docs/CLI.md): every command and flag.
 - [docs/CONTRACTS.md](docs/CONTRACTS.md): the wire protocol, the record shape, and the review file format.

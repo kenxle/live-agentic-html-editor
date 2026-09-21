@@ -910,14 +910,27 @@ test("add prints the review folder, because that is the only way an agent finds 
   }
 });
 
-test("AGENTS.md says where the state directory is, so the folder can be found without add's output", () => {
+// The review instructions moved from AGENTS.md into the skill (Ken, 2026-09-16):
+// hosts load the skill automatically, and AGENTS.md is about the tool.
+test("the skill says where the state directory is, so the folder can be found without add's output", () => {
+  const skill = fs.readFileSync(path.join(REPO_ROOT, "skills", "lahe", "SKILL.md"), "utf8");
+  assert.match(skill, /LAHE_STATE_DIR/, "the first place looked at");
+  assert.match(skill, /XDG_STATE_HOME/, "the second");
+  assert.match(skill, /~\/\.local\/state\/lahe/, "and the default");
+  assert.match(skill, /reviews\/<review-id>/, "and how a review folder is named under it");
+  assert.match(skill, /--session <session-id>/, "the routing identity an agent needs on a shared machine");
+  assert.match(skill, /Watch the session, never one review and never the machine/);
+});
+
+test("AGENTS.md is about the tool: hosts, an install pointer, and doc pointers", () => {
   const agents = fs.readFileSync(path.join(REPO_ROOT, "AGENTS.md"), "utf8");
-  assert.match(agents, /LAHE_STATE_DIR/, "the first place looked at");
-  assert.match(agents, /XDG_STATE_HOME/, "the second");
-  assert.match(agents, /~\/\.local\/state\/lahe/, "and the default");
-  assert.match(agents, /reviews\/<review-id>/, "and how a review folder is named under it");
-  assert.match(agents, /--session <session-id>/, "the routing identity an agent needs on a shared machine");
-  assert.match(agents, /Never monitor globally/);
+  for (const host of ["Claude Code", "Codex", "Antigravity", "Any other host"]) {
+    assert.ok(agents.indexOf(host) !== -1, "names how " + host + " connects");
+  }
+  for (const doc of ["skills/lahe/SKILL.md", "docs/INSTALL.md", "docs/CLI.md", "docs/CONTRACTS.md", "docs/diagrams/"]) {
+    assert.ok(agents.indexOf(doc) !== -1, "points at " + doc);
+  }
+  assert.doesNotMatch(agents, /persistent/, "the removed Monitor tool option is named nowhere");
 });
 
 test("add refuses what it cannot do, with a reason and a non-zero exit", async () => {

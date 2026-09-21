@@ -30,7 +30,7 @@ to build and why we chose what we chose, and it is not rewritten as the tool
 changes. When it disagrees with the tool, the tool is right.
 
 The living truth for how the tool works today is three files: this repo's
-`README.md`, `AGENTS.md` (the playbook an agent follows), and the `contract`
+`README.md`, `skills/lahe/SKILL.md` (the playbook an agent follows), and the `contract`
 field embedded in every `review.json`, which is authored in
 `src/shared/review_format.js` and restated in
 [CONTRACTS.md](CONTRACTS.md).

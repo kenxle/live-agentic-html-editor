@@ -236,43 +236,43 @@ test("skill installation refuses an unrelated file at a target path", () => {
 
 test("the canonical skill rejects the retired and cross-session workflows", () => {
   const skill = fs.readFileSync(installSkills.SOURCE, "utf8");
-  // The model-report section was removed on 2026-09-16: Ken called it operational
-  // instruction, not introduction, and it is gone from AGENTS.md and the skill.
+  // The skill holds every instruction for running a review (Ken, 2026-09-16).
+  // The do-nots are compiled in its Gotchas section as rules with a reason.
   assert.match(skill, /lahe review <target>/);
-  assert.match(skill, /session-scoped/);
   assert.match(skill, /Direct `\.md` and `\.markdown` targets/);
-  assert.match(skill, /Do not use `lahe wait`/);
-  assert.match(skill, /Do not monitor globally/);
-  assert.match(skill, /Do not start `python3 -m http\.server`/);
+  assert.match(skill, /`lahe wait` is removed/);
+  assert.match(skill, /Watch the session, never one review and never the machine/);
+  assert.match(skill, /`python3 -m http\.server` serves no rail/);
   assert.match(skill, /lahe monitor/);
   assert.match(skill, /background terminal task/);
-  // The Claude profile: a persistent tail on the wake feed, armed once. The
-  // literal `persistent: true` parameter is what the instruction has to name.
-  // Prose that only says "persistent" reads as satisfied by a default-timeout
-  // Monitor call, which wakes the model every 300 seconds on nothing.
-  assert.match(skill, /tail -n 0 -f <state-dir>\/agent-sessions\/<id>\/wake\.log/);
-  assert.match(skill, /Monitor tool, once per\s+session/);
-  assert.match(skill, /`persistent: true`/);
-  assert.match(skill, /default 300 second timeout/);
-  assert.match(skill, /nothing to relaunch and\s+nothing to remember/);
+  // The Claude Code profile. The Monitor tool's persistent option was removed
+  // from Claude Code on 2026-09-14, so the wait is our own monitor in a
+  // background Bash call, relaunched after each drain. The removed option must
+  // not be taught anywhere.
+  assert.match(skill, /#### Claude Code\s+Run the printed monitor command with Bash in the background/);
+  assert.match(skill, /`run_in_background: true`/);
+  assert.match(skill, /On 0, drain to empty and launch the same command again in\s+the background/);
+  assert.doesNotMatch(skill, /persistent/);
   // The trap the wake feed exists to avoid, named so nobody re-invents it.
-  assert.match(skill, /Do not `tail -f review\.json`/);
+  assert.match(skill, /Tailing `review\.json` goes deaf/);
   assert.match(skill, /follows a deleted inode/);
   // The drain command, in the one spelling every surface uses.
   assert.match(skill, /lahe status --session <id> --json --quiet/);
   assert.match(skill, /Repeat until it prints nothing/);
-  assert.match(skill, /do not use a Codex Timer/);
-  assert.match(skill, /Never use the native `schedule` timer/);
+  // The contract is read once at the start, not on every wake.
+  assert.match(skill, /once, when you start on a review/);
+  assert.match(skill, /with no Codex\s+Timer/);
+  assert.match(skill, /native\s+`schedule` timer/);
   assert.match(skill, /LAHE ACTION REQUIRED/);
-  assert.match(skill, /Do not treat a monitor result or a wake line as completed work/);
+  assert.match(skill, /Receiving or describing an\s+item is not handling it/);
   assert.match(skill, /detached terminal task does not guarantee a new Codex turn/);
-  assert.match(skill, /Keep the turn\s+pending on the monitor's exec call/);
+  assert.match(skill, /keep the turn\s+pending on the monitor's exec call/);
   // The exit codes a host acts on.
-  assert.match(skill, /`5` the agent session is closed/);
-  assert.match(skill, /`6` another agent took the session over/);
-  assert.match(skill, /Do not relaunch a monitor that exited with 5 or 6/);
+  assert.match(skill, /\| 5 \| The agent session is closed \| Stop \|/);
+  assert.match(skill, /\| 6 \| Another agent took the session over \| Stop \|/);
+  assert.match(skill, /Relaunch a monitor only after exit code 0/);
   assert.match(skill, /lahe session takeover <id>/);
-  assert.match(skill, /Never infer or silently\s+perform a takeover/);
+  assert.match(skill, /Take over only on an explicit request/);
   // Session disambiguation. "Session" is overloaded, and a fresh agent told to
   // "claim the lahe sessions" searched its HOST's sessions because nothing said
   // these are a different thing (2026-08-20). The skill has to say so, name the
@@ -281,25 +281,51 @@ test("the canonical skill rejects the retired and cross-session workflows", () =
   assert.match(skill, /s_0e28da9885a6d67a/);
   assert.match(skill, /not a Claude session, not a terminal session, and\s+not a browser session/);
   assert.match(skill, /claim the lahe session\(s\)/);
-  assert.match(skill, /Run `lahe session list`/);
+  assert.match(skill, /run `lahe session list`/);
   assert.match(skill, /ask the human which id or ids they mean/);
-  assert.match(skill, /Never search your host's sessions for this/);
+  assert.match(skill, /Answer "the lahe session" with `lahe session list`/);
   // The routing description has to carry the trigger phrasing too, or the skill
   // never loads on the sentence that caused this.
   assert.match(skill, /description:.*"claim the lahe session", "take over the lahe session", or "lahe sessions"/);
-  assert.match(skill, /never silently\s+reuse the old session/i);
+  assert.match(skill, /never silently reuse the old session/i);
   assert.match(skill, /Run the printed `lahe monitor` command in the foreground/);
-  assert.match(skill, /Stop this session's wake tail or\s+background monitor/);
+  assert.match(skill, /any running monitor exits with code 5/);
   assert.doesNotMatch(skill, /moderate timer/);
   assert.doesNotMatch(skill, /--seen-file/, "the retired ledger flag is taught nowhere");
   // Orchestration. An agent watching a live review went heads-down for twenty
   // minutes debugging an animation while the reviewer committed an item that
   // made the animation unnecessary (2026-08-20). The skill has to say that the
   // loop comes first and that new intent preempts work in flight.
-  assert.match(skill, /You are an orchestrator first/);
-  assert.match(skill, /goes to a background subagent/);
-  assert.match(skill, /stop or redirect that work rather than\s+finishing it/);
-  assert.match(skill, /break long work into short pieces and\s+drain between the pieces/);
+  assert.match(skill, /Stay an orchestrator while a review is open/);
+  assert.match(skill, /background subagent/);
+  assert.match(skill, /stop or redirect that work/);
+  assert.match(skill, /cut it into short pieces and drain between\s+them/);
+});
+
+test("the skill carries the item and reply rules as a checklist, and reads user settings", () => {
+  const skill = fs.readFileSync(installSkills.SOURCE, "utf8");
+  // Ken, 2026-09-16: the comment and reply rules are instructions, so they
+  // come back into the skill as a short checklist said the contract's way.
+  for (const rule of [
+    /The reviewer's words are `note` and `change`/,
+    /Carry the stamp/,
+    /Apply `after_html`, not the plain text/,
+    /An item with `reverts` is a take-back/,
+    /`--rev` is the rev the item carries/,
+    /Flag with `--needs-see` only/,
+    /Keep it short and about the document/,
+    /Never work out how long ago something\s+happened/
+  ]) {
+    assert.match(skill, rule);
+  }
+  // Personal details live in a per-user settings file outside the repo.
+  assert.match(skill, /~\/\.config\/lahe\/user\.env/);
+  assert.match(skill, /\$XDG_CONFIG_HOME\/lahe\/user\.env/);
+  assert.match(skill, /LAHE_VOICE_PROPOSALS_DIR/);
+  assert.match(skill, /Skip the\s+step and say so once/);
+  assert.doesNotMatch(skill, /context\/personal|personal repo/, "no path from one user's own setup ships");
+  // No keyboard shortcuts in the agent's instructions.
+  assert.doesNotMatch(skill, /Cmd-Shift/);
 });
 
 // ---------------------------------------------------------------------------

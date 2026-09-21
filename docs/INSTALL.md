@@ -62,14 +62,13 @@ pre-existing hand-maintained LAHE skill is preserved once under
 
 The repository keeps the responsibilities separate to limit drift:
 
-- `skills/lahe/SKILL.md` is the short discovery and cold-start workflow.
-- `AGENTS.md` is the detailed operational contract agents follow after the
-  skill activates.
+- `skills/lahe/SKILL.md` holds every instruction for running a review.
+- `AGENTS.md` says how each agent host connects to the tool, and points at
+  install and the docs.
 - `README.md` is the human-facing installation and product guide.
 
 Do not maintain agent-specific variants of the skill. If an agent needs a new
-instruction, change the canonical skill or the shared playbook according to
-that split, test it, and run the installer again.
+instruction, change the canonical skill, test it, and run the installer again.
 
 `npm link` still works as an alternative if you prefer it, and so does running
 from the clone with no install at all (below).
@@ -188,6 +187,31 @@ development-only conditional before pasting it into the layout.
 Do not fork these instructions by agent: Claude, Codex, and Gemini use the same
 CLI and file protocol after discovery, and the repository copy under `skills/` is
 the one source of truth for the skill.
+
+## Your settings file
+
+Some steps in a review use details about you, such as where your voice
+proposals go. Those live in a settings file outside the repository, so nothing
+personal is committed. Create it:
+
+```sh
+mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/lahe"
+cp docs/user.env.example "${XDG_CONFIG_HOME:-$HOME/.config}/lahe/user.env"
+```
+
+Then uncomment the lines you want and fill in your paths. It holds plain
+`KEY=value` lines, and lines starting with `#` are comments:
+
+```sh
+# The folder where voice proposals go at the end of a review.
+# LAHE_VOICE_PROPOSALS_DIR=/path/to/voice_proposals
+
+# The voice documents a proposal is checked against, separated by ":".
+# LAHE_VOICE_DOCS=/path/to/communication_style.md:/path/to/writing_voice.md
+```
+
+The file is optional. An agent skips any step whose setting is missing and
+says so once.
 
 ## Without installing
 
