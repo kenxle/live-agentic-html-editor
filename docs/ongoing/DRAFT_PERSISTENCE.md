@@ -2,6 +2,8 @@
 
 Written 2026-09-21. An analysis, not a change. No code was touched.
 
+Part of the [performance and token work](MEMORY_AUDIT_20260916.md), which links every document from it.
+
 ## Summary
 
 1. A draft (a comment or edit the reviewer has not sent yet) is saved in the browser on every keystroke, and sent to the helper about once a second while the reviewer types.

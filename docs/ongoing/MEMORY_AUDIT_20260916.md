@@ -2,7 +2,32 @@
 
 Ken asked on 2026-09-16, after Claude Code killed several background monitors for low memory and a sibling session blamed Chrome. His point: a leak in the injected layer would show up as Chrome, not as a LAHE process. This is what was measured and what was found. Numbers come from `ps`, a Playwright soak test, and a Python pass over the event logs on disk.
 
-## Where this stands (updated 2026-09-16 19:55)
+## Every document from this work
+
+This page is the hub. Start here; everything else is one click away.
+
+**Open questions, waiting on you**
+
+- [Where unsent comments are saved, and what it costs](DRAFT_PERSISTENCE.md): drafts are 79% of what gets written, plus three oversized-record bugs (the rest of the page saved as "text after", embedded images saved three times, the whole-page highlight). Needs your read before any change.
+
+**Shipped, with their specs**
+
+- [One message per pause, not per keystroke](OUTBOX_COALESCING.md): the design note for the first fix.
+- [The drain stops repeating the agent instructions](../features/20260916.02_contract_once/01_spec_contract_once.md)
+- [The helper stops re-reading every log](../features/20260916.03_helper_lazy_projection/01_spec_lazy_projection.md)
+- [Waiting cards turn amber, and session names](../features/20260916.04_unanswered_prominence/01_spec_unanswered_prominence.md)
+- [Hold: queue comments, release them at once](../features/20260917.01_hold_toggle/01_spec_hold_toggle.md)
+- [The rail follows you through a folder of pages](STATIC_SITE_FOLDER.md)
+- [The merge record for the first batch](CHECKPOINT_20260916.md)
+
+**The agent instructions, rebuilt**
+
+- [The skill](../../skills/lahe/SKILL.md): every instruction for running a review.
+- [AGENTS.md](../../AGENTS.md): about the tool, hosts, and install.
+- [Your seven answers](../AGENTS.next.questions.md) and [where every old rule went](../AGENTS.next.coverage.md).
+- [Who owns a session, and what a handoff guarantees](SESSION_OWNERSHIP.md)
+
+## Where this stands (updated 2026-09-21)
 
 This is the one progress page for all of the memory, CPU, and token work. The merge record for the first batch is in `docs/ongoing/CHECKPOINT_20260916.md` and is not updated any more.
 
@@ -22,7 +47,7 @@ This is the one progress page for all of the memory, CPU, and token work. The me
 | 12. The drain can never print the contract by accident (no flag decides it any more) | ✅ Done. `--quiet` used to silently gate it; now status.js always returns the pointer, with or without `--quiet` |
 | 13. An orchestrator that watches LAHE keeps a small pool of subagents warm instead of spawning fresh ones for medium-size work | 🔨 Proposal below, not built. Needs your read |
 
-| 14. Where unsent comments are saved, and what it costs (79% of new log bytes are drafts) | 🔨 Analysis written, no change yet: `docs/ongoing/DRAFT_PERSISTENCE.md`. Needs your read |
+| 14. Where unsent comments are saved, and what it costs (79% of new log bytes are drafts), plus three oversized-record bugs | 🔨 Analysis written, no change yet. [Read it](DRAFT_PERSISTENCE.md) |
 ✅ done and live · 🔨 in progress · ⬜ not started
 
 ## Short answer
