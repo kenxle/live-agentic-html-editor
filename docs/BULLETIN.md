@@ -5,6 +5,9 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
+- [ ] @ken 2026-09-21 LAHE-verify-recent-updates (due 2026-09-22) -- **Check that all the recent editor updates work the way they should.** Ken shipped a lot of changes to the editor and wants a pass confirming each one does what it needs to right now. Ken: "maybe that's a tomorrow thing."
+
+
 - [x] @claude 2026-09-15 LAHE-ci-failure-email-storm (done 2026-09-15: the throwaway
   branches are deleted from the remote and the rule below is in the repo CLAUDE.md
   and in memory) -- **Ken got seven failed-job emails from GitHub in six hours
