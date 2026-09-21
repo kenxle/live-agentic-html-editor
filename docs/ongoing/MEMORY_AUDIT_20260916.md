@@ -22,6 +22,7 @@ This is the one progress page for all of the memory, CPU, and token work. The me
 | 12. The drain can never print the contract by accident (no flag decides it any more) | ✅ Done. `--quiet` used to silently gate it; now status.js always returns the pointer, with or without `--quiet` |
 | 13. An orchestrator that watches LAHE keeps a small pool of subagents warm instead of spawning fresh ones for medium-size work | 🔨 Proposal below, not built. Needs your read |
 
+| 14. Where unsent comments are saved, and what it costs (79% of new log bytes are drafts) | 🔨 Analysis written, no change yet: `docs/ongoing/DRAFT_PERSISTENCE.md`. Needs your read |
 ✅ done and live · 🔨 in progress · ⬜ not started
 
 ## Short answer
