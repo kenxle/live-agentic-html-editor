@@ -297,3 +297,15 @@ Two small fixes:
 - That `sync.js:1829` is why saves arrive about once a second rather than on pauses.
 - That the re-entered-edit `item.ready` posts put half-typed text in `review.json`.
 - Whether any agent-side script watches `review.json`'s modified time.
+
+## Later findings, 2026-09-21 (with Ken)
+
+While checking why some stored comments are huge (62 of 3,208 are 50 to 500 KB; the comment text itself is a few hundred bytes), three problems turned up. Ken's rule for all three: no truncating. The fix is to store the right reference, not a shorter copy of the wrong thing.
+
+1. **The text after a spot runs to the end of the page.** For a comment on an element with no words of its own (a diagram, an image), the field that should hold the few words after the spot holds everything to the end of the document. One comment on a Mermaid diagram saved 64 KB this way ("Appendix 1: State of the Art..." onward), in both `context.suffix` and `region.ref.suffix`. This is a bug, not a design choice: the field is meant to be nearby words.
+2. **An embedded image is saved three times.** An image written into the page as a `data:` address (the picture itself as text, 171 KB) is stored as `context.subject.src`, again inside `context.subject.html`, and again as `region.ref.probe`: 516 KB for one comment. Ken: fingerprints should be reference pointers to tags, never content. For an image with a real file, the file location already is that pointer. For an embedded image or an inline diagram, use its `id` when it has one, else its tag, its position among its siblings, and its title or first label. Store each piece once.
+3. **A whole-page highlight glitch.** Ken sometimes sees every part of the page highlight after leaving a comment, possibly after something on the page moves. Not yet found in the stored records. Finding 1 is a likely relative: a spot that remembers the entire rest of the page. Next time it happens, leave a comment right then so the record can be pulled while fresh.
+
+These records are what the browser keeps and sends with every draft save. The review file agents read already caps these fields, so agents never see the bulk.
+
+Tab memory, measured the same day from Chrome's Task Manager: LAHE tabs run 60 to 220 MB. About 60 to 70 MB is Chrome's floor for any tab. The largest ("What happened overnight", 160 MB) holds only 36 comments (115 KB) and loads Plotly for six charts. Polling should have zero memory growth over time; a reload of that tab tells whether four days of idle polling added anything. If it did, that is a per-poll leak and a bug by definition.
