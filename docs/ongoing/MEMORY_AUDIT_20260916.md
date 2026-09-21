@@ -14,8 +14,8 @@ This is the one progress page for all of the memory, CPU, and token work. The me
 | 4. Compact or archive the 654 MB of old logs | ⬜ Not started. Easier once 1 has run a while |
 | 5. Close stale agent sessions and their little servers | ⬜ Not started. Cheap |
 | 6. The drain stops repeating the agent instructions (3,800 tokens per wake) | ✅ Done. Spec: `docs/features/20260916.02_contract_once/01_spec_contract_once.md` |
-| 7. Trim the agent playbook (AGENTS.md, 14,000 tokens per session start) | 🔨 In progress. Rebuilt draft is `docs/AGENTS.next.md` (about 5,400 tokens); waiting on your answers in `docs/AGENTS.next.questions.md` |
-| 8. The instructions tell agents to read the summary file once, not every wake | 🔨 In progress. Folded into 7: it changes the instructions inside the review file, and ships with the playbook swap |
+| 7. Trim the agent playbook (AGENTS.md, 14,000 tokens per session start) | ✅ Done 2026-09-21. The skill holds the instructions; AGENTS.md is about 400 tokens |
+| 8. The instructions tell agents to read the summary file once, not every wake | ✅ Done 2026-09-21, with 7 |
 | 9. The rail follows the reviewer through a folder of pages | ✅ Done. (not a performance item, but it shipped in the same batch) |
 | 10. A page load or status call on a big review still reads its whole log once | ✅ Done. |
 | 11. Trim the drain to only the comments and what locates them (drop the pointer line and the field-class table) | ⬜ Not started. Ken, 2026-09-16: it repeats on every wake, so it carries nothing else |
