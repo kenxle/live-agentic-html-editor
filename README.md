@@ -87,6 +87,10 @@ npm run install-cli                       # writes ~/.local/bin/lahe
 lahe review path/to/page.html             # or path/to/notes.md
 ```
 
+## How documents look
+
+Every document Lahe renders ships with International Style, a full document style built in: layout, fonts, and colors, so a Markdown file or HTML page looks designed from the first render, no styling work needed. Want a different look? Lahe Styles offers more style systems, each with its own layout, fonts, colors, and components, at https://www.stclair.ai/lahe-styles.html.
+
 ## Which agents this works with
 
 Each host wakes an agent differently, so each gets its own instruction. The agent reads this from the review itself, so you do not have to remember it.
