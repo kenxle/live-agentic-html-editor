@@ -49,11 +49,11 @@ On a laptop, working all day. Occasionally a computer restart will cause a brows
 - Your own words: "overwhelmed", "feels like I lost my documents".
 - 477 reviews since Aug 13, but many are one review per page from before the Sep 16 registration fix. Folded the way reviews register today, they come to 213 folders, 54 of them since Sep 17. That is a floor: two documents in one folder (a brief and a plan) count once. (`why476.py`, then `docs_count.py`, one row per review in `docs_count_rows.csv`.)
 - Still a large number after the correction, and you expect 20 or more new documents each working day.
-- There is one user. The feeling is strong, but I don't know how often it happens. That's question 1.
+- There is one user, and it bites daily: 20 documents a day, you can't remember their names, and you need to close them to clear your desktop. You need to browse, not search.
 
 ## Status quo
 
-Open tabs are the index: you keep them open because closing one feels like losing it. After a restart they all die at once. Then you ask an agent to find the document, and it greps the disk or its chat history. Or you give up on the document. I don't know the cost in time. That's question 1 too.
+Open tabs are the index: you keep them open because closing one feels like losing it. After a restart they all die at once. Then you ask an agent to find the document, and it greps the disk or its chat history. Or you give up on the document.
 
 ## Premises
 
@@ -67,7 +67,7 @@ Agree or disagree with each one on the page:
 
 ## The case against building this
 
-Nearly all of it can be done today by asking an agent "find the lahe document about the style systems." The records are on disk and an agent can grep them. What's missing is a page to browse when you don't remember the name. If the real pain is only the moment after a restart, a one-line `lahe library` command whose output an agent reads to you might be enough. What would change my mind: you saying you usually do remember what you want, and just can't get it back.
+Nearly all of it can be done today by asking an agent "find the lahe document about the style systems." The records are on disk and an agent can grep them. What's missing is a page to browse when you don't remember the name. If the real pain is only the moment after a restart, a one-line `lahe library` command whose output an agent reads to you might be enough. **Answered:** you can't remember the names, so you need to browse. That rules out the command-only version.
 
 ## What happens if we do nothing
 
@@ -127,6 +127,5 @@ Approach B. Open and Star acting directly is required, and only B does that. Bot
 
 ## Questions for you
 
-1. **How often does this bite?** Every restart, every morning, once a week? And when it does, do you usually know which document you want, or do you need to browse?
-2. **Do you agree with the premises?** Mark any you disagree with.
-3. **Approach B, as described under Recommended approach?**
+1. **Do you agree with the premises?** Mark any you disagree with.
+2. **Approach B, as described under Recommended approach?**
