@@ -28,7 +28,7 @@ Status: DRAFT (waiting on your answers at the bottom)
 You, today:
 
 - You run many agents at once.
-- Each agent hands you pages to review.
+- Each agent hands you pages to review. Everything gets a document: 20 or more a working day right now.
 - You work from the browser and from chat, often by voice.
 - You don't know or want to know where files live. Many are in worktrees or temp folders.
 
@@ -61,7 +61,7 @@ Agree or disagree with each one on the page:
 1. **The Library lists documents, not reviews or sessions.** One row per document. Several reviews on the same file fold into one row.
 2. **An agent is always in the loop to bring something back.** You'll ask an agent to open the Library, so the Library never has to start servers or agents by itself.
 3. **The helper does not need to be running at login.** After a restart, "open the lahe library" starts it. So a browser bookmark to the Library only works once some agent has started LAHE that day.
-4. **Default view is the last 7 days plus starred.** Everything older is reachable by search, never deleted.
+4. **Default view is the last 7 days plus starred.** Everything older is reachable by search, never deleted. At 20 a day that is over 100 rows, so the view groups them by day, newest first, and today is open while older days start collapsed.
 5. **Rows need a name you'd recognize.** The page title does that for most rows. For the rest (untitled pages, duplicate titles like "Brief"), the Library shows the folder and file name under it.
 6. **This comes before the npm package and Product Hunt.** Those bring new users. This fixes a daily pain for the one user you have now. And it doesn't block either launch.
 
