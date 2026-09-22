@@ -46,7 +46,7 @@ Rejected for now: sending only the changed fields (option d3). It changes the lo
 - [x] Cmd-Enter, Hold release, and ending a review still send at once.
 - [x] Typing into a reopened edit never marks it ready before commit.
 - [x] Before-and-after numbers on this page.
-- [ ] `npm run gate:unit` green; full suite green once at merge.
+- [x] `npm run gate:unit` green; full suite green once at merge.
 
 ## Progress
 
@@ -75,6 +75,10 @@ Rejected for now: sending only the changed fields (option d3). It changes the lo
 
   What is left: the outbox is now 52.2% of the browser storage bytes after the change (726,822 of 1,391,152), because it is still rewritten per keystroke with the whole record in each entry. That is the follow-up the Approach section names (send drafts from the stored comments at flush time). Browser storage bytes per keystroke went from 40,309 to 3,864 on this 23-comment review; the old cost grows with the number of comments in the review, the new one with the size of the one being typed.
 - 2026-09-22: `npm run gate:unit` green (1,225 tests: 1,223 pass, 0 fail, 2 todo). Browser specs run on a locally rebuilt bundle (not staged): `rail_durability`, `multi_page_review`, `rail_hold`, `editing_before_pinned`, `editing_commit_outside`, all passing (two skips in `editing_commit_outside` are the file's own). The full browser suite is for the checkpoint run.
+
+- 2026-09-22: code review on the branch. One fix blocked the merge: the first keystroke that turns a ready comment or edit back into a draft now reaches the helper at once, instead of waiting behind the 10 second floor, so the agent stops seeing the old wording as ready. Two small store fixes rode along: a window that takes over the review looks for comments saved just before a crash, and a deleted comment written again survives a reload. The lifecycle diagram now shows the trip back to draft.
+- 2026-09-22: merged to main. The full browser suite ran once: 381 passed, 2 failed. Both were test problems, not code: one test relied on a reopened edit staying ready, which this spec changed on purpose, so it now uses an edit the agent marked not handled; the other leaked a held review into the next test when tests ran one at a time. Both pass after the fix, the unit suite passes (1,228 pass, 0 fail), and the helper was restarted on the new code.
+- Follow-ups on the hub: delete the old whole-list browser copy in a later release, and stop a not-handled edit being sent at typing speed while it is reworded.
 
 ## Design review, 2026-09-22
 
