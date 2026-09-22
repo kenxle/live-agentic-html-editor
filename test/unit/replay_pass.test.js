@@ -1281,3 +1281,91 @@ test("split pass: a rebuilt sibling that differs from the reviewer's still confl
   assert.equal(ran.result.branch, replay.BRANCH.CONTENT_CHANGED);
   assert.equal(replay.counters.regionsWritten, 0);
 });
+
+// Review fixes on the split rule (2026-09-22).
+
+test("split review 1: an edit that drops a trailing paragraph is branch two, not a split already applied", () => {
+  // A blockquote holding three paragraphs; the reviewer deleted the third. The
+  // search binds the blockquote uniquely and it holds the before, so the edit
+  // has not landed. A run of the first two inside it must not overrule that.
+  const quote = el("blockquote", {
+    children: [el("p", { text: "Alpha line." }), el("p", { text: "Beta line." }), el("p", { text: "Gamma line." })]
+  });
+  const root = el("body", { children: [el("p", { text: "Before it." }), quote, el("p", { text: "After it." })] });
+  const item = splitEdit("Alpha line.\n\nBeta line.\n\nGamma line.", "Alpha line.\n\nBeta line.");
+  const anchoredItem = anchored(item, quote, root);
+
+  const ran = runOne(anchoredItem, root);
+
+  assert.equal(ran.result.branch, replay.BRANCH.REAPPLY);
+  assert.equal(ran.result.element, quote, "the unique bind stands");
+  assert.equal(replay.counters.regionsWritten, 1);
+});
+
+test("split review 2: a container holding the before's words as two blocks is not the before", () => {
+  const item = splitEdit("One. Two.", "One, rewritten.");
+  assert.equal(replay.compare(item, "One.\n\nTwo.").branch, replay.BRANCH.CONTENT_CHANGED);
+
+  const div = el("div", { children: [el("p", { text: "One." }), el("p", { text: "Two." })] });
+  const root = el("body", { children: [el("p", { text: "Before it." }), div, el("p", { text: "After it." })] });
+  const anchoredItem = anchored(item, div, root);
+
+  const ran = runOne(anchoredItem, root);
+
+  assert.equal(ran.result.branch, replay.BRANCH.CONTENT_CHANGED);
+  assert.equal(replay.counters.regionsWritten, 0, "the page's two blocks are not flattened into one");
+  assert.equal(div.children.length, 2);
+});
+
+test("split review 3: the page rebuilt the block into paragraphs while the reviewer held it, and the seam raises nothing", () => {
+  const item = splitEdit("(open, your words go here)", "First paragraph.\n\nSecond paragraph.\n\nThird paragraph.");
+  const before = pageOf(["A heading line.", item.before, "The page's next paragraph."]);
+  const anchoredItem = anchored(item, before.blocks[1], before.root);
+  // The rebuild landed around the protected block: the block kept what
+  // protection put back, and the page tried to say only the first paragraph in
+  // it, with the rest arriving as new siblings.
+  const page = pageOf([
+    "A heading line.",
+    "First paragraph.",
+    "Second paragraph.",
+    "Third paragraph.",
+    "The page's next paragraph."
+  ]);
+
+  replay.resetCounters();
+  const outcome = replay.applyRecord(anchoredItem, {
+    root: page.root,
+    element: page.blocks[1],
+    cards: fakeCards(),
+    commit: { item: item.id, element: page.blocks[1], observed: "First paragraph." }
+  });
+
+  assert.notEqual(outcome.branch, replay.BRANCH.CONTENT_CHANGED);
+  assert.equal(replay.counters.regionsConflicted, 0);
+  assert.equal(replay.conflictFor(item.id), null);
+});
+
+test("split review 4: looking for a run inside a container reads each block once and skips blocks without the first piece", () => {
+  const normalize = require("../../src/shared/normalize.js");
+  const fillers = [];
+  for (let i = 0; i < 60; i += 1) fillers.push("Filler paragraph number " + i + ".");
+  const page = pageOf(fillers.concat(["First paragraph.", "Second paragraph.", "Third paragraph."]));
+  const item = splitEdit("(open)", "First paragraph.\n\nSecond paragraph.\n\nThird paragraph.");
+
+  const real = normalize.blockTextFromNode;
+  let reads = 0;
+  normalize.blockTextFromNode = function (node, options) {
+    if (node !== page.root) reads += 1;
+    return real.call(this, node, options);
+  };
+  let found;
+  try {
+    found = replay.splitRegion(item, page.root);
+  } finally {
+    normalize.blockTextFromNode = real;
+  }
+
+  assert.equal(found && found.element, page.blocks[60]);
+  assert.deepEqual(found.following, ["Second paragraph.", "Third paragraph."], "the sibling texts come back for the compare");
+  assert.ok(reads <= page.blocks.length + 2, "each block read about once, not once per run attempt: " + reads);
+});
