@@ -327,3 +327,40 @@ test("an old-bundle write with no stamp lands when the next tab takes the lock",
   assert.equal(incoming.readItem(REVIEW, a.id).note, "first, and the last words");
   assert.equal(JSON.parse(backing.values[itemKey(REVIEW, a.id)]).note, "first, and the last words");
 });
+
+test("a window taking the lock scans again for an item key the index never listed", async () => {
+  // The unlisted-item scan (parseReview's `!scanned[reviewId]` guard) runs at
+  // most once per review per store instance. That is fine for an ordinary
+  // read, but a holder that crashed between writing an item's own key and
+  // writing the index leaves exactly that kind of orphan, and the window
+  // that takes the lock over it must not have already used up its one scan
+  // on an earlier, unrelated read.
+  const backing = spyBacking();
+  const incoming = storeModule.createStore({ backing: backing, locks: fakeLocks(true) });
+
+  // An ordinary read before anything crashed, which uses up this store's one
+  // unlisted-item scan.
+  assert.deepEqual(incoming.read(REVIEW), []);
+
+  // The crash: another tab's item key landed, but its index write never did.
+  const orphan = itemOf({ note: "written, never indexed" });
+  backing.setItem(itemKey(REVIEW, orphan.id), JSON.stringify(orphan));
+
+  // A normal write, so the review's stamp moves and the cache from the first
+  // read is not just being reused unchanged.
+  const seen = itemOf({ note: "written normally, indexed" });
+  incoming.write(REVIEW, seen);
+
+  assert.deepEqual(
+    incoming.read(REVIEW).map((item) => item.note),
+    ["written normally, indexed"],
+    "the scan already ran once for this store, so the orphan is still missed"
+  );
+
+  await incoming.claimWindow(REVIEW, { path: "/plan" });
+  assert.deepEqual(
+    incoming.read(REVIEW).map((item) => item.note).sort(),
+    ["written normally, indexed", "written, never indexed"].sort(),
+    "taking the lock scans again and finds the orphaned key"
+  );
+});

@@ -1411,9 +1411,18 @@
     // whole-list key's merge down. The held copy is dropped so the next read
     // goes back to the bytes: an outgoing old-bundle document may have written
     // that key on its way out, with no stamp to say so.
+    //
+    // The unlisted-item scan (parseReview's `scanned` guard) is also reset
+    // here, so the window taking the lock scans once for orphaned item keys:
+    // an item key written with its index write not yet landed, left behind by
+    // a holder that crashed between the two. `scanned` otherwise runs the scan
+    // at most once per review per store instance, which is fine for an
+    // ordinary read but would leave a lock's new holder never looking, since
+    // the earlier holder that crashed already used up this store's one scan.
     function nowHolding(reviewId) {
       holding[reviewId] = true;
       delete reviewCache[reviewId];
+      delete scanned[reviewId];
     }
 
     function releaseWindow(reviewId) {
