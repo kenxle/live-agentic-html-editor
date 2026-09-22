@@ -1,6 +1,6 @@
 # Progress: LAHE Library
 
-**Phase 2, Brief.** The crucible is accepted (Approach B, a live Library page with direct buttons). The brief is being written. Nothing is waiting on you. Last updated 2026-09-22 08:39.
+**Phase 2, Brief.** The crucible is accepted (Approach B, a live Library page with direct buttons). The brief draft is written and out with the PM reviewer. Nothing is waiting on you. Last updated 2026-09-22 08:39.
 
 **Docs:** [Ideas page](../../ongoing/DOCUMENT_INDEX_IDEAS.md) · [Crucible](00_crucible_lahe_library.md) · [Brief](01_brief_lahe_library.md)
 
@@ -10,7 +10,9 @@ Nothing is waiting on you.
 
 ## Currently working on
 
-Nothing is running. Next: write the brief and send it to the PM reviewer.
+| Agent or task | Doing | Started | Branch |
+|---|---|---|---|
+| PM reviewer | Reviewing the brief draft | 2026-09-22 08:39 | `feat/lahe_library` |
 
 ## Phases
 
