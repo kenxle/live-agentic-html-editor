@@ -3,7 +3,7 @@
 Date: 2026-09-22
 Status: DRAFT (waiting on your answers at the bottom)
 
-**Short version:** I'd build it. My recommendation is Approach A below: the Library is an ordinary LAHE page that an agent serves, and you act on a row by commenting on it. I found one hidden problem. The bookmark idea from the ideas page does not survive a computer restart, because the helper stops when the last session closes and nothing starts it at login. Four questions at the bottom.
+**Short version:** I'd build it. My recommendation is Approach A below: the Library is an ordinary LAHE page that an agent serves, and you act on a row by commenting on it. I found one hidden problem. The bookmark idea from the ideas page does not survive a computer restart, because the helper stops when the last session closes and nothing starts it at login. Questions at the bottom.
 
 ## The idea, as stated
 
@@ -64,7 +64,6 @@ Agree or disagree with each one on the page:
 3. **The helper does not need to be running at login.** After a restart, "open the lahe library" starts it. So a browser bookmark to the Library only works once some agent has started LAHE that day.
 4. **The Library has to manage volume.** At 20 or more documents a day, a plain list stops working within a week. How it manages that (a recent window, grouping by day, stars, collapsing) is a design question for the wireframe, not a premise. Nothing is ever deleted.
 5. **Rows need a name you'd recognize.** The page title does that for most rows. For the rest (untitled pages, duplicate titles like "Brief"), the Library shows the folder and file name under it.
-6. **This comes before the npm package and Product Hunt.** Those bring new users. This fixes a daily pain for the one user you have now. And it doesn't block either launch.
 
 ## The case against building this
 
@@ -127,6 +126,5 @@ Approach A. It gives you a page you can scan, star, and act on without adding an
 ## Questions for you
 
 1. **How often does this bite?** Every restart, every morning, once a week? And when it does, do you usually know which document you want, or do you need to browse?
-2. **Do you agree with the six premises?** Mark any you disagree with.
+2. **Do you agree with the premises?** Mark any you disagree with.
 3. **Approach A?** Or do you want B's instant buttons badly enough to take on the security work?
-4. **Does this go ahead of the npm package, Product Hunt, and today's "verify recent updates" pass?**
