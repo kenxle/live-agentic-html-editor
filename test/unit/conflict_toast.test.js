@@ -236,3 +236,29 @@ test("no storage still stops repeats within the page", () => {
   toasts.sync();
   assert.equal(shown(rail).length, 0);
 });
+
+test("a standing conflict that replay clears by itself is forgotten, so the same clash is told again", () => {
+  const world = { flagged: ["a"], revs: { a: 1 } };
+  const { rail, toasts } = page(world, memoryStorage());
+  assert.equal(shown(rail).length, 1);
+  // Replay cleared it (or another tab resolved it): no resolve call here.
+  world.flagged = [];
+  toasts.sync();
+  assert.equal(shown(rail).length, 0);
+  world.flagged = ["a"];
+  toasts.sync();
+  assert.equal(shown(rail).length, 1, "the same record and rev clashing later is news");
+});
+
+test("a swiped conflict that another tab resolves is forgotten too", () => {
+  const world = { flagged: ["a"], revs: { a: 1 } };
+  const storage = memoryStorage();
+  const { rail, toasts } = page(world, storage);
+  rail.dismissToast(shown(rail)[0].id, overlay.TOAST_GONE.USER);
+  world.flagged = [];
+  toasts.sync();
+  world.flagged = ["a"];
+  toasts.sync();
+  assert.equal(shown(rail).length, 1);
+  assert.deepEqual(toasts.info().dealt, [], "nothing left marked dealt with");
+});

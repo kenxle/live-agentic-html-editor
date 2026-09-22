@@ -26,6 +26,9 @@
 //                      toast, same count rule): the agent may still be writing,
 //                      so a reload with the toast up is likely, and it must not
 //                      take the toast away for good while the conflict stays.
+//                      A conflict that closes (resolved, or cleared by replay
+//                      or another tab) is forgotten, so the same record
+//                      clashing again later is told again.
 //   ONE TOAST          Several collisions share one toast that names the count.
 //                      A new collision while one stands replaces it with the
 //                      new count rather than stacking a second.
@@ -89,6 +92,8 @@
     // within this page life. Two lists of keys: raised, and dealt with.
     var memory = { raised: [], dealt: [] };
     var standing = null; // { toastId, ids, keys }
+    // The ids open at the last sync, so the next one can tell which closed.
+    var lastOpen = [];
     var seq = 0;
 
     function merge(into, from) {
@@ -176,6 +181,15 @@
         return c.id;
       });
 
+      // A conflict that closed since the last sync, however it closed (resolved
+      // here, cleared by replay itself, resolved in another tab), is forgotten:
+      // the same record clashing again at the same rev later is news.
+      var closed = lastOpen.filter(function (id) {
+        return openIds.indexOf(id) === -1;
+      });
+      lastOpen = openIds.slice();
+      if (closed.length) forget(closed);
+
       // A standing toast names only what is still open; empty, it goes.
       if (standing) {
         standing.ids = standing.ids.filter(function (id) {
@@ -238,14 +252,29 @@
       return toastId;
     }
 
-    /** The reviewer chose on the card. Forget the key so a later clash is news. */
-    function resolved(id) {
-      var prefix = String(id) + ":";
+    /** Drop every key of these record ids from both states. */
+    function forget(ids) {
+      var prefixes = ids.map(function (id) {
+        return String(id) + ":";
+      });
       var keep = function (key) {
-        return key.indexOf(prefix) !== 0;
+        return !prefixes.some(function (prefix) {
+          return key.indexOf(prefix) === 0;
+        });
       };
       var state = readState();
-      writeState({ raised: state.raised.filter(keep), dealt: state.dealt.filter(keep) });
+      var next = { raised: state.raised.filter(keep), dealt: state.dealt.filter(keep) };
+      if (next.raised.length !== state.raised.length || next.dealt.length !== state.dealt.length) writeState(next);
+    }
+
+    /**
+     * The reviewer chose on the card: dealt with, so nothing raises it again
+     * even if replay still flags it for a moment. The key is forgotten once
+     * replay stops flagging it (see sync), so a later clash is news.
+     */
+    function resolved(id) {
+      var item = typeof o.itemById === "function" ? o.itemById(id) : null;
+      if (item) markDealt([conflictKey(id, item.rev)]);
       sync();
       return true;
     }
