@@ -1,6 +1,6 @@
 # Progress: LAHE Library
 
-**Phase 2, Brief.** The crucible is accepted (Approach B, a live Library page with direct buttons). The brief draft is written and out with the PM reviewer. Nothing is waiting on you. Last updated 2026-09-22 08:39.
+**Phase 2, Brief.** The crucible is accepted (Approach B, a live Library page with direct buttons). The PM review is in: 17 findings, all accepted and folded into the brief. A plain-language pass is running before it comes to you. Nothing is waiting on you. Last updated 2026-09-22 08:41.
 
 **Docs:** [Ideas page](../../ongoing/DOCUMENT_INDEX_IDEAS.md) · [Crucible](00_crucible_lahe_library.md) · [Brief](01_brief_lahe_library.md)
 
@@ -12,7 +12,7 @@ Nothing is waiting on you.
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| PM reviewer | Reviewing the brief draft | 2026-09-22 08:39 | `feat/lahe_library` |
+| Clarity reader | Plain-language pass on the brief | 2026-09-22 08:41 | `feat/lahe_library` |
 
 ## Phases
 
@@ -61,5 +61,6 @@ Not shipped yet.
 
 ## Log
 
+- **2026-09-22 08:41.** PM review returned 17 findings, 3 of them blockers: the Library dying when the last session closes, the worktree fallback contradicting the serve-only-reviewed-files rule, and Pick this up cutting off a working agent. All accepted. Full review: [PM review](01_brief_lahe_library_reviews.md).
 - **2026-09-22 08:37.** Crucible accepted on the rail. You chose Approach B because Open and Star have to act directly. Launching a new agent is in scope. What a row is, and how the view handles volume, go to the wireframe.
 - **2026-09-22 08:17.** Branch `feat/lahe_library` and its worktree created.
