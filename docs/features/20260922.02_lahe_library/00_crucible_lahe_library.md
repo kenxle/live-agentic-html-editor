@@ -98,7 +98,7 @@ The pile keeps growing at roughly the Sep 17 to Sep 22 pace. Each restart costs 
   - One fixed address to bookmark.
 - **Cons:**
   - Local-only still counts here. Any website open in your browser can send requests to `127.0.0.1`, which is why the helper checks a per-review token on every request (decision D11, "loopback is not a boundary"). A Library route that serves files or launches agents has to pass the same checks. That is known work that reuses existing code, not a new security design.
-  - It breaks the rule that a session owns its servers: the helper would start servers nobody's session owns.
+  - It bends the rule that a session owns its servers. Kept small, it could be fine: one server, owned by the helper, that serves every document the Library brings back. The document's comments still need an agent session to reach anyone.
   - The bookmark still fails after a restart until the helper is up (premise 3).
 - **Reuses:** the review records, the static server code.
 
