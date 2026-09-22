@@ -1,6 +1,6 @@
 # A document index for LAHE
 
-**Short version:** nothing is actually lost. The helper already keeps a record of every review, including the file path and the page title. What's missing is a page that lists them, plus a web address that keeps working after a restart. My recommendation: build a "Library" page served by the helper at one fixed address, with a "bring it back" button on each row.
+**Short version:** nothing is actually lost. The helper already keeps a record of every review, including the file path and the page title. What's missing is a page that lists them, at an address you can bookmark. My recommendation: build a "Library" page served by the helper at one fixed address, with a "bring it back" button on each row.
 
 ## What's on disk today
 
