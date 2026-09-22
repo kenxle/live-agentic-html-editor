@@ -5,6 +5,14 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
+- [ ] @anyone 2026-09-21 LAHE-npm-package -- **Publish Lahe to npm so a new user can `npx` it instead of cloning.** Ken, reviewing the new stclair.ai Lahe page: "we should probably make an npm package for it finally". The zero-runtime-dependency rule still holds: the package ships with `dependencies` empty, so installing it pulls nothing else. Open questions: the package name, what `npx lahe` does on a machine with no agent skill installed yet, and how the skill install fits (today `npm run install-skills`). The site's "How to get it" section and the How to use modal change with it.
+
+- [ ] @ken 2026-09-21 LAHE-product-hunt-launch -- **Launch Lahe on Product Hunt.** Ken called the stclair.ai Lahe page ready for it. Likely waits on the npm package above, so the launch post can say one command. Assets exist: the hero illustration loop and the ai-etudes screen recording, both on the site branch `site-lahe-page` in the personal repo.
+
+- [ ] @anyone 2026-09-21 LAHE-md-edit-no-rerender -- **Editing a Markdown source did not refresh its served page.** A rewrite of `LAHE_HERO_PROMPT.md` in the personal repo still served the old render until `lahe review` was run on the file again. Ken saw the stale page and said so. Check whether the watcher covers Markdown sources.
+
+- [ ] @anyone 2026-09-21 LAHE-anchor-repeated-sections -- **Notes on a page with repeated, near-identical sections all pinned to one spot.** A tear sheet repeated the same hero section four times, each with a different video `src`. Every comment Ken left came through with the same region and "1 of 1", so the agent could not tell which video he meant. The anchor should tell identical sections apart, for example by the media's src or by ordinal.
+
 - [ ] @ken 2026-09-21 LAHE-verify-recent-updates (due 2026-09-22) -- **Check that all the recent editor updates work the way they should.** Ken shipped a lot of changes to the editor and wants a pass confirming each one does what it needs to right now. Ken: "maybe that's a tomorrow thing."
 
 
