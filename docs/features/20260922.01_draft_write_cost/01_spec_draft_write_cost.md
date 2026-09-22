@@ -39,13 +39,13 @@ Rejected for now: sending only the changed fields (option d3). It changes the lo
 
 ## Acceptance criteria
 
-- [ ] A draft save does not rewrite `review.json`.
-- [ ] A keystroke writes one comment to browser storage, not the whole list.
-- [ ] Continuous typing sends the helper at most one draft copy per 10 seconds.
-- [ ] Leaving a box, hiding the tab, or leaving the page sends the draft at once.
-- [ ] Cmd-Enter, Hold release, and ending a review still send at once.
-- [ ] Typing into a reopened edit never marks it ready before commit.
-- [ ] Before-and-after numbers on this page.
+- [x] A draft save does not rewrite `review.json`.
+- [x] A keystroke writes one comment to browser storage, not the whole list.
+- [x] Continuous typing sends the helper at most one draft copy per 10 seconds.
+- [x] Leaving a box, hiding the tab, or leaving the page sends the draft at once.
+- [x] Cmd-Enter, Hold release, and ending a review still send at once.
+- [x] Typing into a reopened edit never marks it ready before commit.
+- [x] Before-and-after numbers on this page.
 - [ ] `npm run gate:unit` green; full suite green once at merge.
 
 ## Progress
@@ -56,6 +56,25 @@ Rejected for now: sending only the changed fields (option d3). It changes the lo
 - 2026-09-22: task 2 done. `store.js` keeps one key per item (`lahe.item.v2:<review>:<item>`), an index (`lahe.index.v2:<review>`, ids in creation order plus the ids deleted here that the old key still carries), and one stamp per review. The old `lahe.items.v1` key is merged per item on every cold read and whenever its stamp moves; only the lock holder writes the merge down, and taking the lock drops the held copy so an unstamped old-bundle write lands too. New `test/unit/store_per_item.test.js` (12 tests; 7 red before). One addition the spec did not name: a delete records the id in the index as removed when the old key still has it, or the next merge would bring the deleted comment back. Three older tests that read the old key directly now read the new keys (`store_item_cache.test.js`, `storage_quota_typing.test.js`, and the rail harness's durability read).
 - 2026-09-22: tasks 3 and 4 done. `protocol.FLUSH.DRAFT_FLOOR_MS` is 10000 and `IMMEDIATE_ON` gains `hide`. `flush` holds back an item only when every queued event for it is a draft and its last draft post was under 10 seconds ago; the floor is a fixed deadline from that post, so the first draft of an item goes within the 750 ms debounce and then at most once per 10 seconds. `scheduleFlush` keeps the earliest deadline. A flush asked for during a post is remembered and runs when it finishes; the follow-up after a post goes through the floor. New `sync.flushNow(reason)`: tab-hide calls it, and the comment surface calls it through a new `onLeave` hook when its input loses focus or the box closes. One reading the spec left open: Cmd-Enter sends its own item at once but leaves other items' young drafts on their floor; leaving (blur, hide, navigation, unload) sends everything. New `test/unit/draft_flush_cadence.test.js` (12 tests; the typing, floor, blur, hide, ordering, Hold-on and queued-during-post tests were red before, the Cmd-Enter ones already passed and stay as guards). `docs/CONTRACTS.md` flush policy updated.
 - 2026-09-22: task 5 done. `editing.js` records, when a block opens, the wording it opened with, whether the edit was ever committed (not a draft, or has history), and whether it was ready. A keystroke on a ready edit sets draft when the wording differs from that and ready when it matches, and posts as content (`existing`), so no more `item.ready` per keystroke. Commit bumps the revision when the edit was ever committed. Two things the spec did not spell out: reopening and leaving with the wording unchanged no longer bumps the revision (it used to, on every reopen); and a crash while withdrawn is handled by a new `editing.recoverWithdrawn()`, which boot runs once the window holds the review: it commits the withdrawn edit as leaving the page would have (new revision, ready, the typed words kept), then schedules replay. New `test/unit/reopened_edit.test.js` (7 tests; 6 red before).
+- 2026-09-22: task 6 done. `scripts/measure_draft_write_cost.js` runs one scripted session against a tree's own `store.js`, `sync.js`, log, projection and `events.append` route, on a virtual clock with the poll loop running: a review already holding 20 ready comments, then three new comments of 120 characters each (360 keystrokes, one every 150 ms), each followed by leaving the box (where the tree has that hook), Cmd-Enter and two seconds idle. "Before" is `git archive 4587b5c src` run through the same script. Every number is a counter the script increments; the change column was computed with Python from the two JSON outputs. Storage bytes are UTF-16 code units times two (key plus value), which is how browsers count quota.
+
+| Measure (one session, 360 keystrokes) | Before (4587b5c) | After | Change |
+| --- | --- | --- | --- |
+| Browser storage writes, all keys | 1,677 | 1,500 | -10.6% |
+| Browser storage bytes, all keys | 14,511,374 | 1,391,152 | -90.4% |
+| Item storage writes | 363 | 366 | +0.8% |
+| Item storage bytes | 13,497,060 | 527,826 | -96.1% |
+| Outbox storage writes | 420 | 375 | -10.7% |
+| Outbox storage bytes | 738,580 | 726,822 | -1.6% |
+| Helper posts | 57 | 12 | -78.9% |
+| Helper post bytes | 59,732 | 14,610 | -75.5% |
+| Draft events posted | 58 | 12 | -79.3% |
+| Ready events posted | 3 | 3 | 0% |
+| `review.json` rewrites | 57 | 3 | -94.7% |
+| `review.json` bytes rewritten | 2,533,431 | 136,695 | -94.6% |
+
+  What is left: the outbox is now 52.2% of the browser storage bytes after the change (726,822 of 1,391,152), because it is still rewritten per keystroke with the whole record in each entry. That is the follow-up the Approach section names (send drafts from the stored comments at flush time). Browser storage bytes per keystroke went from 40,309 to 3,864 on this 23-comment review; the old cost grows with the number of comments in the review, the new one with the size of the one being typed.
+- 2026-09-22: `npm run gate:unit` green (1,225 tests: 1,223 pass, 0 fail, 2 todo). Browser specs run on a locally rebuilt bundle (not staged): `rail_durability`, `multi_page_review`, `rail_hold`, `editing_before_pinned`, `editing_commit_outside`, all passing (two skips in `editing_commit_outside` are the file's own). The full browser suite is for the checkpoint run.
 
 ## Design review, 2026-09-22
 

@@ -175,6 +175,14 @@ The storage format is unchanged, so records and outbox entries written by the ol
 code still load. The stamp is simply absent for them, which reads as "nobody has
 stamped this" and costs one parse.
 
+**Update, 2026-09-22.** The items are no longer one list. Spec
+`docs/features/20260922.01_draft_write_cost/` moved them to one key per item
+(`lahe.item.v2:<review>:<item>`), an index of ids (`lahe.index.v2:<review>`) and
+one stamp per review, so a keystroke writes one item instead of the whole list.
+The same stamp rule applies, per review. The old `lahe.items.v1` list is still
+read and merged per item, and never written or deleted; `store.js` ("The items:
+one key per item") has the rules. The outbox is unchanged and is still one list.
+
 ### The one upgrade hazard
 
 A tab that is still running the PREVIOUS bundle writes the items and outbox keys
