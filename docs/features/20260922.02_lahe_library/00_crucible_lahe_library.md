@@ -1,0 +1,124 @@
+# Crucible: LAHE Library
+
+Date: 2026-09-22
+Status: DRAFT (waiting on your answers at the bottom)
+
+**Short version:** I'd build it. My recommendation is Approach A below: the Library is an ordinary LAHE page that an agent serves, and you act on a row by commenting on it. I found one hidden problem. The bookmark idea from the ideas page does not survive a computer restart, because the helper stops when the last session closes and nothing starts it at login. Four questions at the bottom.
+
+## The idea, as stated
+
+"I want some sort of index, file list, recent files guide, something that will allow me to point at anything that's been worked on in the lahe editor and ask another agent to go pick it up or restart it or bring it back." The decisions you already made on the ideas page (`docs/ongoing/DOCUMENT_INDEX_IDEAS.md`) carry over:
+
+- Bring the document back on any address. The old port doesn't matter.
+- Keep every review. Old ones drop out of the default view but never get deleted.
+- Stars keep important documents on top.
+- A dead worktree path opens the same file in the main repo.
+- Group rows by folder and by agent session.
+- The agent that opens the Library picks up the document you point at. Launching a new agent is a later option.
+
+## Jobs to be done
+
+Get back to a document I was reviewing with an agent, after its tab went dead, without remembering where the file lives. Then hand it to an agent so my comments get answered again.
+
+A second job sits behind it: **stop feeling buried.** New documents arrive faster than you close old ones. The Library has to make the pile feel smaller, not just list it.
+
+## Who the user is
+
+You, today:
+
+- You run many agents at once.
+- Each agent hands you pages to review.
+- You work from the browser and from chat, often by voice.
+- You don't know or want to know where files live. Many are in worktrees or temp folders.
+
+Soon, new users from the npm package and the Product Hunt launch (both on the board). They hit this later than you, because it takes weeks of use to build a pile.
+
+## User context
+
+At a Mac, usually the morning after a restart or after a long day. The browser has a row of tabs that won't load. A Claude Code chat is open, so an agent is already there to act. You're deciding what to pick back up, often mid-way through several other things.
+
+## What already exists
+
+- **In LAHE:** every review is on disk with its file path, page title, created date, owning session, and full comment history. `lahe session list` lists sessions, but not documents, and it shows ids instead of names.
+- **Prior work:** only the ideas page. No brief, no board row.
+- **Prior art:** the "Open Recent" list in editors like VS Code and Obsidian. It is the closest match: most recent first, pin to keep, and it quietly drops entries whose file is gone. Browser history is the status quo and fails here, because each document's address changes every time it is served. Nothing off the shelf reads LAHE's records, so there is nothing to adopt.
+
+## Evidence
+
+- Your own words: "overwhelmed", "feels like I lost my documents".
+- 477 reviews since Aug 13. 70 of them were created from Sep 17 on, after the fix that stopped one review per page. (Counted by `why476.py`.)
+- There is one user. The feeling is strong, but I don't know how often it happens. That's question 1.
+
+## Status quo
+
+Dead tabs. You ask an agent to find the document, and it greps the disk or its chat history. Or you give up on the document. I don't know the cost in time. That's question 1 too.
+
+## Premises
+
+Agree or disagree with each one on the page:
+
+1. **The Library lists documents, not reviews or sessions.** One row per document. Several reviews on the same file fold into one row.
+2. **An agent is always in the loop to bring something back.** You'll ask an agent to open the Library, so the Library never has to start servers or agents by itself.
+3. **The helper does not need to be running at login.** After a restart, "open the lahe library" starts it. So a browser bookmark to the Library only works once some agent has started LAHE that day.
+4. **Default view is the last 7 days plus starred.** Everything older is reachable by search, never deleted.
+5. **Rows need a name you'd recognize.** The page title does that for most rows. For the rest (untitled pages, duplicate titles like "Brief"), the Library shows the folder and file name under it.
+6. **This comes before the npm package and Product Hunt.** Those bring new users. This fixes a daily pain for the one user you have now. And it doesn't block either launch.
+
+## The case against building this
+
+Nearly all of it can be done today by asking an agent "find the lahe document about the style systems." The records are on disk and an agent can grep them. What's missing is a page to browse when you don't remember the name. If the real pain is only the moment after a restart, a one-line `lahe library` command whose output an agent reads to you might be enough. What would change my mind: you saying you usually do remember what you want, and just can't get it back.
+
+## What happens if we do nothing
+
+The pile keeps growing at roughly the Sep 17 to Sep 22 pace. Each restart costs you the full set of open documents, and getting one back means an agent search. Nothing is lost on disk. What you lose is the sense of where your work is.
+
+## Approaches considered
+
+### Approach A: The Library is a LAHE document (recommended)
+
+- **Summary:** `lahe library` builds one HTML page listing every document, then serves it as a normal review in the agent's own session. You act on a row by clicking a button or commenting on it. The action arrives at the agent like any other comment. The agent takes over the document's session and brings it back.
+- **Effort:** M. **Risk:** Low.
+- **Pros:**
+  - Reuses the whole comment-to-agent loop you already use every day.
+  - The page never gets to command the helper. The agent does the work, so there's no new security surface.
+  - Works the same way for Codex and Antigravity.
+- **Cons:**
+  - Starring or opening goes through the agent, so it takes a few seconds, not an instant.
+  - The page is a snapshot. It is rebuilt each time it is opened, not live.
+- **Reuses:** `lahe review`, session takeover, the review records, the Markdown/HTML serving path.
+
+### Approach B: A live Library page inside the helper
+
+- **Summary:** A page at `127.0.0.1:7817/library` that reads the records live. Its Open and Star buttons act directly: the helper starts a server for the document and opens it.
+- **Effort:** L. **Risk:** Med-High.
+- **Pros:**
+  - Instant, and always current.
+  - One fixed address to bookmark.
+- **Cons:**
+  - A web page that can tell the helper "serve this path" is a new attack surface. It needs a security design.
+  - It breaks the rule that a session owns its servers: the helper would start servers nobody's session owns.
+  - The bookmark still fails after a restart until the helper is up (premise 3).
+- **Reuses:** the review records, the static server code.
+
+### Approach C: No page, just a command
+
+- **Summary:** `lahe library` prints a grouped list. You ask an agent "what was I working on", it runs the command and reads you the top items.
+- **Effort:** S. **Risk:** Low.
+- **Pros:** Smallest change, and it ships first.
+- **Cons:** It is the chat-scroll problem you already told me you want less of. No browsing, no stars.
+- **Reuses:** `lahe session list`.
+
+### Do nothing
+
+Agents grep for documents when asked. You lose the browse view and keep the "buried" feeling.
+
+## Recommended approach
+
+Approach A. It gives you a page you can scan, star, and act on without adding anything that lets a web page command your machine. It also follows the way you already said you'll use it: you ask an agent, and that agent does the rest. Approach C falls out of it for free, since the command that builds the page can also print the list.
+
+## Questions for you
+
+1. **How often does this bite?** Every restart, every morning, once a week? And when it does, do you usually know which document you want, or do you need to browse?
+2. **Do you agree with the six premises?** Mark any you disagree with.
+3. **Approach A?** Or do you want B's instant buttons badly enough to take on the security work?
+4. **Does this go ahead of the npm package, Product Hunt, and today's "verify recent updates" pass?**
