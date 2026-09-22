@@ -979,7 +979,9 @@ server-side from the review to its owning agent session. Fields: `state`, `unans
   fills it into sentences with a function replacer so `$&` in a name stays literal.
 
 **Overdue is one rule**, `protocol.AGENT_LIVENESS.overdue(state, waitedMs)`: `no_agent` past
-`QUIET_MS`, `waiting` past `STALE_MS`, `working` and `none` never. The footer line goes loud on it.
+`NO_AGENT_LOUD_MS`, `waiting` past `STALE_MS`, `working` and `none` never. `no_agent` SPEAKS at
+`QUIET_MS` like the others; it just does not go loud until two minutes, because an agent thinking
+through a hard comment leaves no footprint and reads the same as an empty chair. The footer line goes loud on it.
 The banner at the top of the rail shows exactly while the footer is loud, and its one button copies
 `AGENT_LIVENESS.handoffMessage(session_id, session_name, state_dir_flag_needed)` for a new agent: the
 takeover command for that id, and a sentence saying `--state-dir` is needed when it is. A ready card
@@ -996,13 +998,16 @@ The words are `AGENT_LIVENESS.PROMINENT`.
 
 | State | When |
 | --- | --- |
-| `working` | Unanswered items, and a `lahe` command or a folded reply within `ACTIVE_MS` (3m) |
+| `working` | Unanswered items, and a `lahe` command or a folded reply within `ACTIVE_MS` (10m) |
 | `waiting` | Unanswered items, nothing recent |
 | `no_agent` | Unanswered items, nothing recent, and `listening` is FALSE |
 | `none` | Nothing unanswered. The healthy, ordinary state of a review |
 
 Thresholds live in `protocol.AGENT_LIVENESS`: `QUIET_MS` 30s (when the line starts speaking, counted
-from the reviewer's submit), `ACTIVE_MS` 3m, `STALE_MS` 10m (loud), `RECENT_COMMAND_MS` 10m.
+from the reviewer's submit), `ACTIVE_MS` 10m, `NO_AGENT_LOUD_MS` 2m (when `no_agent` goes loud),
+`STALE_MS` 10m (when `waiting` goes loud), `RECENT_COMMAND_MS` 10m. `ACTIVE_MS` and
+`RECENT_COMMAND_MS` are the same number on purpose: an agent counts as working for exactly as long
+as the machine counts somebody as being on the review.
 
 **`listening` is read off the machine, and the wake feed is why the inference is sound.**
 `<state-dir>/agent-sessions/<id>/wake.log` is our file, created for exactly one purpose, and nothing
