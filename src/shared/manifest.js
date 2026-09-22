@@ -164,6 +164,11 @@ var LAYER_FILES = [
     why: "Edits tab contents"
   },
   {
+    path: "src/layer/conflict_toast.js",
+    owner: "conflict-toast",
+    why: "when a replay collision is news, the one toast that says so, and where pressing it goes. Needs nothing; handed the rail and replay"
+  },
+  {
     path: "src/layer/export.js",
     owner: "3C",
     why: "copy and export, calling 0A-wire's frozen human-readable formatter"

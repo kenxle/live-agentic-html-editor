@@ -256,6 +256,13 @@
   //             write. Injected so a test can hand over a fake verdict
   //   highlights the paint surface (1D's highlight.js shared instance). Only
   //             the probable paint goes through it from here
+  //   onPass    optional. Called with the summary at the end of every pass,
+  //             once the conflict map is settled. The conflict toast reads the
+  //             standing collisions here, so several flagged in one pass are
+  //             told as one
+  //   onResolved optional. Called with the record id after the reviewer's
+  //             "keep mine" or "take theirs" succeeds, so the conflict toast
+  //             can go
   var context = {
     root: null,
     items: null,
@@ -267,8 +274,21 @@
     persist: null,
     hooks: null,
     pointing: null,
-    highlights: null
+    highlights: null,
+    onPass: null,
+    onResolved: null
   };
+
+  /** Tell a listener, if there is one. A listener that throws never breaks a pass. */
+  function notify(ctx, name, arg) {
+    if (!ctx || typeof ctx[name] !== "function") return false;
+    try {
+      ctx[name](arg);
+    } catch (err) {
+      return false;
+    }
+    return true;
+  }
 
   /** Write one record back to durable storage, when a caller gave us the seam. */
   function persistItem(ctx, item) {
@@ -522,6 +542,7 @@
 
     lastSummary = summary;
     releaseRetired(ctx);
+    notify(ctx, "onPass", summary);
     // Finding 9: run any pass a colliding repaint owed but that the observer
     // could only remember while replay's own write epoch was open.
     scheduleOwedPass();
@@ -1392,6 +1413,7 @@
       delete conflicts[id];
       forceClearConflict(ctx, id);
       callCard(ctx, "removeCard", id);
+      notify(ctx, "onResolved", id);
       return { resolved: true, choice: choice, reason: null };
     }
 
@@ -1444,6 +1466,7 @@
     lastElement[id] = element;
     delete conflicts[id];
     forceClearConflict(ctx, id);
+    notify(ctx, "onResolved", id);
     return { resolved: true, choice: choice, reason: null };
   }
 

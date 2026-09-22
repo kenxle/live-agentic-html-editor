@@ -31,6 +31,7 @@ flowchart LR
 
 ## What to notice
 
+- **A new conflict is told on the page, not only on the card.** Branch four writes nothing, so the reviewer's words vanish from where they were typing. `src/layer/conflict_toast.js` raises one sticky toast ("Your edit clashed with a change to the page") once per record and rev, held while presenting, and clicking it opens the rail on the card. Resolving takes it away.
 - **The conflict card never picks a default.** "Keep mine" and "take theirs" are drawn with equal weight, because branch four's whole point is that the decision belongs to the reviewer, not the tool.
 - **"Keep mine" is remembered, not just written once.** The choice is stored as an accepted page state on the record. Without that, the very next repaint would render the page's own source again, re-raise the same conflict, and the reviewer's answer would only ever last one pass.
 - **A handled item is never stamped lost.** If an agent already said it made the fix, a failed re-anchor on that item means the fix rewrote the very passage the item pointed at, which is the fix working, not the feedback going missing.
