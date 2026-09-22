@@ -18,9 +18,10 @@ Status: DRAFT (waiting on your answers at the bottom)
 
 ## Jobs to be done
 
-Get back to a document I was reviewing with an agent, after its tab went dead, without remembering where the file lives. Then hand it to an agent so my comments get answered again.
-
-A second job sits behind it: **stop feeling buried.** New documents arrive faster than you close old ones. The Library has to make the pile feel smaller, not just list it.
+1. **Find a prior document.**
+2. **Open it again with the rail on it**, so comments reach an agent.
+3. **Stop feeling buried.** New documents arrive faster than you close old ones. The Library has to make the pile feel smaller, not just list it.
+4. **Close a tab without worrying.** Today you hesitate to close tabs because you don't know how to get the document back. Open tabs are doing the job of the index. The Library should make closing a tab safe.
 
 ## Who the user is
 
@@ -51,7 +52,7 @@ At a Mac, usually the morning after a restart or after a long day. The browser h
 
 ## Status quo
 
-Dead tabs. You ask an agent to find the document, and it greps the disk or its chat history. Or you give up on the document. I don't know the cost in time. That's question 1 too.
+Open tabs are the index: you keep them open because closing one feels like losing it. After a restart they all die at once. Then you ask an agent to find the document, and it greps the disk or its chat history. Or you give up on the document. I don't know the cost in time. That's question 1 too.
 
 ## Premises
 
