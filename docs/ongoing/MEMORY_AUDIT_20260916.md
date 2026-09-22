@@ -47,8 +47,9 @@ This is the one progress page for all of the memory, CPU, and token work. The me
 | 11. Trim the drain to only the comments and what locates them (drop the pointer line and the field-class table) | ⬜ Not started. Ken, 2026-09-16: it repeats on every wake, so it carries nothing else |
 | 12. The drain can never print the contract by accident (no flag decides it any more) | ✅ Done. `--quiet` used to silently gate it; now status.js always returns the pointer, with or without `--quiet` |
 | 13. An orchestrator that watches LAHE keeps a small pool of subagents warm instead of spawning fresh ones for medium-size work | 🔨 Proposal below, not built. Needs your read |
-
 | 14. Where unsent comments are saved, and what it costs (79% of new log bytes are drafts), plus three oversized-record bugs | 🔨 [Analysis](DRAFT_PERSISTENCE.md) done; [the fix](../features/20260922.01_draft_write_cost/01_spec_draft_write_cost.md) approved, building |
+| 15. After the draft fix ships, each existing review keeps its old whole-list copy in browser storage beside the new per-comment copies, so storage doubles until the old copy is deleted | ⬜ Not started. Delete the old copy in the release after the draft fix, then drop the code that merges it |
+| 16. Rewording an edit the agent marked not handled still sends every pause to the helper and rewrites review.json at typing speed | ⬜ Not started. Found in the draft fix's code review. Fix: treat it like rewording a ready edit |
 ✅ done and live · 🔨 in progress · ⬜ not started
 
 ## Short answer
