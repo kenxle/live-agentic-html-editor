@@ -1292,7 +1292,9 @@ test("split review 1: an edit that drops a trailing paragraph is branch two, not
     children: [el("p", { text: "Alpha line." }), el("p", { text: "Beta line." }), el("p", { text: "Gamma line." })]
   });
   const root = el("body", { children: [el("p", { text: "Before it." }), quote, el("p", { text: "After it." })] });
-  const item = splitEdit("Alpha line.\n\nBeta line.\n\nGamma line.", "Alpha line.\n\nBeta line.");
+  const item = Object.assign(splitEdit("Alpha line.\n\nBeta line.\n\nGamma line.", "Alpha line.\n\nBeta line."), {
+    after_html: "<p>Alpha line.</p><p>Beta line.</p>"
+  });
   const anchoredItem = anchored(item, quote, root);
 
   const ran = runOne(anchoredItem, root);

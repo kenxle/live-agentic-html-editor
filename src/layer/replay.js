@@ -804,6 +804,15 @@
 
   // Do these blocks, in order, spell exactly these pieces? A block may hold
   // more than one piece (a line break inside it), never part of one.
+  //
+  // What is NOT checked, on purpose: the blocks' tags, and whatever comes
+  // after the last piece. A Markdown rebuild picks its own tags, and the
+  // blocks after the run are the page's own. That is only safe for an edit
+  // that ADDS text. An edit that drops a trailing paragraph also reads as a
+  // run of its remaining pieces, which is why the run is looked for only when
+  // the bound element holds none of the record's versions (see splitRegion
+  // and its caller): a bound element that still holds the before is branch
+  // two, whatever a run inside it spells.
   function blocksSpell(blocks, pieces) {
     var at = 0;
     for (var b = 0; b < blocks.length && b < pieces.length && at < pieces.length; b += 1) {
@@ -839,7 +848,14 @@
     var here = wordsOf(domText);
     if (!here) return null;
     if (afterWords !== null && here === afterWords) return "after";
-    if (beforeWords !== null && here === beforeWords) return "before";
+    // "before" means branch two, which writes into this one element. A region
+    // holding MORE breaks than the before is a container of several blocks
+    // (a <div> of two <p>), and writing into it would flatten the page's own
+    // blocks into one. So the page may have merged the before's breaks, never
+    // added to them.
+    if (beforeWords !== null && here === beforeWords) {
+      return piecesOf(domText).length <= piecesOf(before).length ? "before" : null;
+    }
     return null;
   }
 
@@ -883,36 +899,57 @@
     return out;
   }
 
-  // Does a run of pieces start at this element?
-  function runStartsAt(element, pieces) {
-    var blocks = [normalize.blockTextFromNode(element)].concat(followingTexts(element, pieces.length - 1));
-    return blocksSpell(blocks, pieces);
+  // Does a run of pieces start at this element? `text` is its break-aware
+  // text, already read. The first piece is compared before any sibling is
+  // read, so a block that cannot start the run costs one read of itself.
+  //
+  // @returns {string[]|null} the following blocks' texts when it does, so the
+  //   compare reuses them instead of reading them again
+  function runAt(element, text, pieces) {
+    var own = piecesOf(text);
+    if (!own.length || own[0] !== pieces[0]) return null;
+    var following = followingTexts(element, pieces.length - 1);
+    return blocksSpell([text].concat(following), pieces) ? following : null;
   }
 
   // The region half of the same rule. The text search binds the innermost
   // element holding all of the probe's words, and when the after is spread over
   // several blocks that element is their CONTAINER: the whole section, whose
-  // text is every paragraph in it. So when the bound element is not itself the
-  // start of the run, look inside it for the one block that is. Exactly one:
-  // two runs of the same paragraphs is ambiguous, and the bind stays where the
-  // search put it (which is what it did before this rule existed).
+  // text is every paragraph in it.
   //
-  // @returns {Element|null} the block the run starts at, or null
-  function splitRegion(item, element) {
+  // The bound element itself is asked first: a run that starts there is the
+  // compare's own rule, and the element does not move. Looking INSIDE it is a
+  // rebind, and only `searchInside` allows it. The caller passes that only
+  // when the bound element holds none of the record's versions (not the after,
+  // the before, an earlier after, or an accepted page state), because a unique
+  // bind that already answers the compare is never overruled by a run found
+  // under it (D9). Inside, exactly one run: two runs of the same paragraphs is
+  // ambiguous, and the bind stays where the search put it.
+  //
+  // @returns {{element, following}|null} where the run starts, and the texts of
+  //   the blocks after it
+  function splitRegion(item, element, searchInside) {
     var pieces = splitPieces(item, record.comparisonMode(item));
     if (!pieces || !element || element.nodeType !== 1) return null;
-    if (runStartsAt(element, pieces)) return element;
+    var here = runAt(element, normalize.blockTextFromNode(element), pieces);
+    if (here) return { element: element, following: here };
+    if (searchInside === false) return null;
     var starts = [];
     collectRunStarts(element, pieces, starts);
     return starts.length === 1 ? starts[0] : null;
   }
 
+  // Each element is read once. One whose words do not contain the first piece
+  // cannot start the run and cannot hold its start, so it is skipped whole.
   function collectRunStarts(node, pieces, out) {
     for (var child = node.firstChild; child; child = child.nextSibling) {
       if (child.nodeType !== 1) continue;
       if (markers && typeof markers.isToolNode === "function" && markers.isToolNode(child)) continue;
-      if (runStartsAt(child, pieces)) {
-        out.push(child);
+      var text = normalize.blockTextFromNode(child);
+      if (wordsOf(text).indexOf(pieces[0]) === -1) continue;
+      var following = runAt(child, text, pieces);
+      if (following) {
+        out.push({ element: child, following: following });
         continue;
       }
       collectRunStarts(child, pieces, out);
@@ -2411,8 +2448,12 @@
     // A record whose after the page carries as several blocks: the text search
     // bound the container that holds them all, and the region is the block the
     // run starts at. Corroboration only; see splitRegion.
-    var splitStart = splitRegion(item, element);
-    if (splitStart) element = splitStart;
+    var split = null;
+    if (splitPieces(item, record.comparisonMode(item))) {
+      var holdsNone = compare(item, domValueOf(element, item)).branch === BRANCH.CONTENT_CHANGED;
+      split = splitRegion(item, element, holdsNone);
+      if (split) element = split.element;
+    }
 
     lastElement[id] = element;
 
@@ -2458,7 +2499,18 @@
       // to raise it again or let it go.
       if (conflicts[id] && conflicts[id].displaced) delete conflicts[id];
       var observed = observedValue(commit);
-      if (typeof observed === "string" && compare(item, observed).branch === BRANCH.CONTENT_CHANGED) {
+      // The siblings are read from the live page, not the snapshot: a rebuild
+      // that split the block while the reviewer held it put the rest of the
+      // paragraphs AFTER the protected block, and protection only restored the
+      // block itself. Without them the seam raised the same false conflict
+      // the DOM compare below no longer does.
+      var seamFollowing = splitPieces(item, record.comparisonMode(item))
+        ? followingTexts(element, splitPieces(item, record.comparisonMode(item)).length - 1)
+        : null;
+      if (
+        typeof observed === "string" &&
+        compare(item, observed, null, seamFollowing).branch === BRANCH.CONTENT_CHANGED
+      ) {
         return flagConflict(ctx, item, id, element, observed, true);
       }
     }
@@ -2466,7 +2518,7 @@
     var domValue = domValueOf(element, item);
     // The markup goes in beside the text so branch one can see emphasis the
     // text comparison is built to ignore (formattingLost).
-    var following = splitStart ? followingTexts(element, splitPieces(item, record.comparisonMode(item)).length - 1) : null;
+    var following = split ? split.following : null;
     var verdictBranch = compare(
       item,
       domValue,
@@ -2640,6 +2692,8 @@
     PASS_ORDER: PASS_ORDER,
     BRANCH: BRANCH,
     formattingLost: formattingLost,
+    // Read-only, for the unit tests: where a split run starts under an element.
+    splitRegion: splitRegion,
     BRANCHES: BRANCHES,
     EARLIER_REVISION_MESSAGE: EARLIER_REVISION_MESSAGE,
     counters: counters,

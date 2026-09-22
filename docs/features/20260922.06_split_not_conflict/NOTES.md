@@ -44,6 +44,37 @@ All in `src/layer/replay.js`.
   paragraphs) is branch two. When before and after have the same words, the
   breaks are the edit, so reflow decides nothing.
 
+## Review fixes
+
+Code review found four problems. Each has a test that was red first.
+
+- **A dropped paragraph read as applied.** A blockquote holding A, B, C,
+  where the reviewer deleted C: the search bound the blockquote, which holds
+  the before, but a run of A and B inside it overruled that. Now replay only
+  searches inside the bound element when that element holds none of the
+  record's versions:
+  - the after
+  - the before
+  - an earlier after
+  - an accepted page state
+
+  So this case is branch two again.
+- **Reflow could let branch two flatten a container.** A `<div>` of two `<p>`
+  holding the before's words matched "before", and the write would have run
+  them into one block. Now "before" counts only when the region has no more
+  pieces than the before.
+- **The commit seam raised the same false conflict.** If the page split the
+  block while the reviewer held it, the seam still compared one block. It now
+  reads the live siblings after the block, like the DOM compare. Skipping the
+  seam for split records was rejected: the seam is how a real collision during
+  protection gets told.
+- **Performance.** The run search reads each block once and checks the first
+  piece before it reads any sibling. It skips any element whose words lack the
+  first piece. The compare reuses the sibling texts the search already read.
+
+`blocksSpell` now says why tags and trailing blocks are not checked. That is
+safe only for edits that add text, given the first fix.
+
 ## Branch two does not write across blocks
 
 Branch two still writes into the one anchored block, as before. That is how a
@@ -63,8 +94,8 @@ Clearing a standing conflict when the reply lands would be a separate change.
 
 ## Tests
 
-- `test/unit/replay_pass.test.js`: 12 new tests, 8 red before the fix. They
-  cover:
+- `test/unit/replay_pass.test.js`: 12 new tests, 8 red before the fix, plus 4
+  for the review findings, all red before their fixes. The first 12 cover:
   - blank-line paragraphs
   - a single line break shown as a new block, or run into one line
   - three pieces, over three blocks or over two with a `<br>`
@@ -78,7 +109,7 @@ Clearing a standing conflict when the reply lands would be a separate change.
   - type three paragraphs, commit, the source becomes three `<p>`, reload: no
     conflict card and no toast (red before the fix)
   - the control, where the last paragraph differs, still conflicts
-- `npm run gate:unit`: 1271 passed, 0 failed.
+- `npm run gate:unit` after the review fixes: 1275 passed, 0 failed.
 - Browser, `--workers=1`, 33 passed:
   - `replay_branches`
   - `replay_human_and_agent`
