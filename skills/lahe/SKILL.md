@@ -145,15 +145,35 @@ tokens. It exits when work lands (code 0), the session closes (5), or another
 agent takes over (6). On 0, drain to empty and launch the same command again in
 the background. On 5 and 6, stop.
 
-**Stop re-arming after three no-op restarts in a row.** The harness can kill a
-backgrounded watch outright under memory pressure, which is not one of the
-three exit codes above and looks, from the agent's side, identical to nothing
-having happened. Relaunching once or twice after that is fine. If the watch
-gets killed three times in a row with no new item landing between any of the
-arms, stop relaunching it and tell the reviewer instead of continuing to
-re-arm: something is wrong with the host or the machine, and a fourth silent
-relaunch is a guess, not a fix. Say what you tried and that you are holding
-until they ask you to watch again.
+**A kill is not work.** Claude Code (since 2.1.193) stops idle background
+commands when it thinks memory is low, and a quiet monitor is exactly what it
+picks. Its memory reading is wrong on macOS, so this happens on machines with
+plenty of room (anthropics/claude-code#90109). The notification says the command
+was stopped, not that it exited with a code. When that happens:
+
+- Do not drain, and do not write to the reviewer. Just launch the same monitor
+  command again in the background.
+- That relaunch is the check. The monitor's first poll prints any unanswered
+  work and exits at once, so nothing that landed during the gap is missed.
+- Keep that turn to the one tool call. A drain, a status note, or a "still
+  watching" message turns every kill into a full no-op turn.
+
+**Ask once for the setting that stops these kills.** The first time a monitor
+is killed this way, tell the human, once per session, that one line in the
+`env` block of their Claude Code `settings.json` turns the killer off:
+
+```json
+{ "env": { "CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP": "1" } }
+```
+
+It is their config, so ask rather than set it. It takes effect in a new session.
+
+**Stop re-arming after three kills in a row.** If the watch is killed three
+times in a row with no new item landing between any of the arms, stop
+relaunching it and tell the reviewer: the machine is genuinely short of memory,
+or the setting above is not in effect, and a fourth relaunch is a guess, not a
+fix. Say what you tried and that you are holding until they ask you to watch
+again.
 
 #### Codex
 
@@ -550,9 +570,9 @@ Each of these is a rule that a live review paid for.
    because it is written atomically and a tail follows a deleted inode.
    `events.jsonl` has no session routing.
 10. **On Claude Code, wait with `lahe monitor` in a background Bash call.** A watch
-    with a timeout wakes the model every few minutes on nothing. If the harness
-    kills it under memory pressure three times running with nothing new landing
-    between arms, stop relaunching it and tell the reviewer.
+    with a timeout wakes the model every few minutes on nothing. When Claude
+    Code stops it for low memory, relaunch it and do nothing else; after three
+    such kills in a row with nothing new landing, stop and tell the reviewer.
 11. **In Codex, keep the turn pending on the monitor's exec call, with no Codex
     Timer.** A detached terminal task does not guarantee a new Codex turn after the
     current one ends.

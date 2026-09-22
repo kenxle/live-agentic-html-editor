@@ -62,10 +62,13 @@ without spending model tokens:
 - **Claude Code** runs `lahe monitor --session <id>` with Bash in the background.
   It exits when work lands (`0`), the session closes (`5`), or another agent takes
   over (`6`). On `0` the agent drains to empty and launches the same command again
-  in the background. The harness can also kill a backgrounded watch outright
-  under memory pressure, outside those three codes. Relaunching after that is
-  fine once or twice; after three such kills in a row with nothing new landed
-  between them, the agent stops relaunching and tells the reviewer instead.
+  in the background. Claude Code can also stop a quiet background command when
+  it thinks memory is low, outside those three codes. On such a kill the agent
+  only relaunches the monitor: its first poll prints any waiting work, so no
+  drain is needed. Setting `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` in the
+  `env` block of Claude Code's settings.json turns the kills off. After three
+  kills in a row with nothing new landed between them, the agent stops
+  relaunching and tells the reviewer instead.
 - **Codex** runs `lahe monitor --session <id>` as a foreground pending exec call
   and keeps waiting on it. It must not detach the process, announce that
   monitoring started, and end the turn: detached task completion alone does not
