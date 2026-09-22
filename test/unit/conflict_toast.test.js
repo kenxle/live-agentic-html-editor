@@ -262,3 +262,13 @@ test("a swiped conflict that another tab resolves is forgotten too", () => {
   assert.equal(shown(rail).length, 1);
   assert.deepEqual(toasts.info().dealt, [], "nothing left marked dealt with");
 });
+
+test("leaving read-only syncs the conflict toast, so a clash found while refused is told", () => {
+  // index.js boots only in a browser, so this reads its source: exitReadOnly
+  // must end by asking the conflict toast to catch up.
+  const source = require("node:fs").readFileSync(require.resolve("../../src/layer/index.js"), "utf8");
+  const start = source.indexOf("function exitReadOnly()");
+  assert.notEqual(start, -1);
+  const body = source.slice(start, source.indexOf("\n    }\n", start));
+  assert.match(body, /conflictToasts\.sync\(\);\s*$/, "the last thing exitReadOnly does");
+});

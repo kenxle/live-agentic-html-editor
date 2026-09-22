@@ -585,6 +585,9 @@
       // The condition ended, so its chip goes too (clear, not dismiss: dismiss
       // would suppress every future refusal's chip).
       rail.failures.clear("SECOND_WINDOW_REFUSED");
+      // A collision flagged while this window was refused was held, not spent.
+      // The reviewer has taken the review back, so tell it now.
+      if (conflictToasts) conflictToasts.sync();
     }
 
     var sync = opts.sync || ns.sync.createSync({
