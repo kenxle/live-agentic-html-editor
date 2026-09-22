@@ -51,6 +51,7 @@ This is the one progress page for all of the memory, CPU, and token work. The me
 | 15. After the draft fix ships, each existing review keeps its old whole-list copy in browser storage beside the new per-comment copies, so storage doubles until the old copy is deleted | ⬜ Not started. Delete the old copy in the release after the draft fix, then drop the code that merges it |
 | 16. Rewording an edit the agent marked not handled still sends every pause to the helper and rewrites review.json at typing speed | ⬜ Not started. Found in the draft fix's code review. Fix: treat it like rewording a ready edit |
 | 17. The drain never goes quiet once a session has an ended review: a run by hand lists every ended review in the session (seven in one session here, the oldest from 2026-09-16) plus the field table, every time, although the docs say it prints nothing when nothing waits | ⬜ Not started. Only the monitor marks an ended review as delivered. Fold into 11 (trim the drain) |
+| 18. Following a link to a document in another folder drops the editor | 🔨 [Proposal](LINKED_DOCS.md), needs your call |
 ✅ done and live · 🔨 in progress · ⬜ not started
 
 ## Short answer
