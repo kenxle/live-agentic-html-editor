@@ -61,7 +61,8 @@ An index fixes the second. For the first, you don't need the old address back, j
   - open comments waiting on an agent
   - whether it's live right now
 - Each row gets an **Open** button. If the document isn't being served, the helper serves it again and opens it. You can read right away; comments wait until an agent picks the session up (option C).
-- Search box and a "last 7 days" default, so 476 rows don't bury you.
+- Search box and a "last 7 days" default, so 476 rows don't bury you. Search reaches every review, however old.
+- A **star** on each row. Starred documents stay at the top no matter how old they get.
 
 ### C. B, plus "hand it to an agent"
 
@@ -84,10 +85,9 @@ An index fixes the second. For the first, you don't need the old address back, j
 
 - **Duplicate names.** Two reviews titled "Brief". The row shows the project folder and file name under the title.
 - **Clutter from agent work.** 88 reviews live in worktrees or temp folders. Default the list to hide files that no longer exist, with a toggle to show them.
-- **Old stuff.** The code names a 30-day limit, but nothing in `src/` deletes old reviews, so today they pile up forever. The Library needs a rule: hide after some age, archive, or keep everything.
-- **Pinning.** Might be worth a star for "this one matters," so the important ones don't sink under new ones.
+- **Old stuff.** Keep everything. Nothing gets deleted; old reviews just drop out of the default view, and search or a star brings them back. The code names a 30-day limit that nothing enforces; the Library build removes that stale constant so nobody wires it up later.
+- **Important ones sinking.** The star (in option B) keeps them on top.
 
 ## Questions for you
 
-1. How far back should the Library show by default, and should anything ever get deleted?
-2. Would you want the Library to start the agent for you (for example, launch Claude Code on that session), or is copy and paste fine?
+1. Would you want the Library to start the agent for you (for example, launch Claude Code on that session), or is copy and paste fine?
