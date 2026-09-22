@@ -609,8 +609,17 @@
       }
     }
 
+    // `removed` only exists to keep an id the OLD whole-list key still carries
+    // from being merged back in (remove()'s own comment). An id the old key no
+    // longer holds needs no such guard, so it is dropped here rather than kept
+    // forever: without this, an id merged out of the old key by an unload
+    // rewrite (a shorter list, or a fresher bundle that drops it) stayed in
+    // `removed` for the life of the review, for nothing.
     function writeIndex(reviewId, state) {
-      writeJson(indexKeyFor(reviewId), { ids: state.ids.slice(), removed: state.removed.slice() });
+      var removed = state.removed.filter(function (id) {
+        return !!state.legacyIds[id];
+      });
+      writeJson(indexKeyFor(reviewId), { ids: state.ids.slice(), removed: removed });
     }
 
     // The stamp, last, with writeList's rule for a stamp that cannot be written.
@@ -723,7 +732,15 @@
       state.byId[id] = stored;
       var pendingAt = state.pending.indexOf(id);
       if (pendingAt !== -1) state.pending.splice(pendingAt, 1);
-      if (!state.indexed[id]) {
+      // An id written again is not removed any more, whatever the index still
+      // says: a removed id can come back (the reviewer recreates the same
+      // record, or a merge revives it), and an index that still lists it as
+      // removed hides the write from every reload until this runs (review
+      // finding, spec 20260922.01).
+      var removedAt = state.removed.indexOf(id);
+      var revived = removedAt !== -1;
+      if (revived) state.removed.splice(removedAt, 1);
+      if (!state.indexed[id] || revived) {
         writeIndex(reviewId, state);
         state.indexed[id] = true;
       }

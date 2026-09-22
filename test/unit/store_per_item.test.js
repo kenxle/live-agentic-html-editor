@@ -292,6 +292,59 @@ test("an item the reviewer deleted does not come back from the old key", async (
   );
 });
 
+test("an id written again is no longer removed, and survives a reload", async () => {
+  const a = itemOf({ note: "from the old bundle" });
+  const backing = spyBacking({ [legacyKey(REVIEW)]: JSON.stringify([a]) });
+  const store = await holder(backing);
+  assert.equal(store.remove(REVIEW, a.id), true);
+  assert.deepEqual(
+    JSON.parse(backing.values[indexKey(REVIEW)]).removed,
+    [a.id],
+    "removed is set, because the old key still carries this id"
+  );
+
+  // The same id comes back: the reviewer (or a merge) recreates it.
+  const revived = Object.assign({}, a, { note: "brought back" });
+  store.write(REVIEW, revived);
+  assert.deepEqual(
+    JSON.parse(backing.values[indexKey(REVIEW)]).removed,
+    [],
+    "writing the id again clears it from removed"
+  );
+
+  const reloaded = await holder(backing);
+  assert.deepEqual(
+    reloaded.read(REVIEW).map((item) => item.note),
+    ["brought back"],
+    "the revived item is not hidden by a stale removed entry"
+  );
+});
+
+test("writing the index drops a removed id the old whole-list key no longer holds", async () => {
+  const a = itemOf({ note: "from the old bundle" });
+  const b = itemOf({ note: "stays" });
+  const backing = spyBacking({ [legacyKey(REVIEW)]: JSON.stringify([a, b]) });
+  const store = await holder(backing);
+  assert.equal(store.remove(REVIEW, a.id), true);
+  assert.deepEqual(JSON.parse(backing.values[indexKey(REVIEW)]).removed, [a.id]);
+
+  // The old key is rewritten (an old-bundle tab's unload write) without `a`
+  // any more, so nothing would ever merge it back in and the guard is dead
+  // weight. Stamped, the way that tab's own write is, so this store notices
+  // the change rather than serving its cached read of the old bytes.
+  backing.setItem(legacyKey(REVIEW), JSON.stringify([b]));
+  backing.setItem(storeModule.GEN_PREFIX + legacyKey(REVIEW), "old-bundle:1");
+
+  // Any write that reaches writeIndex picks this up.
+  const c = itemOf({ note: "new comment" });
+  store.write(REVIEW, c);
+  assert.deepEqual(
+    JSON.parse(backing.values[indexKey(REVIEW)]).removed,
+    [],
+    "a is dropped from removed once the old key no longer holds it"
+  );
+});
+
 test("an old-bundle unload write after migration still lands", async () => {
   const a = itemOf({ note: "typed in the old tab" });
   const backing = spyBacking({ [legacyKey(REVIEW)]: JSON.stringify([a]) });
