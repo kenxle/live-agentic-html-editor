@@ -125,6 +125,25 @@ test("working: something is waiting, and the agent has done something in the las
   assert.equal(stopped.state, STATE.WAITING);
 });
 
+test("a footprint four minutes old is still an agent at work", () => {
+  // The reviewer's complaint: a model thinking through a complex comment leaves
+  // no footprint for minutes, and the old three-minute window called that an
+  // absence. Ten minutes matches how long a command counts as somebody being
+  // on the review.
+  assert.equal(LIVENESS.ACTIVE_MS, 600000);
+  assert.equal(LIVENESS.ACTIVE_MS, LIVENESS.RECENT_COMMAND_MS);
+
+  const thinking = agentSessions.livenessFrom({
+    session: { handoff_rev: 0 },
+    activity: { at: agoMs(4 * 60000) },
+    listening: false,
+    unanswered: 1,
+    oldestUnansweredAt: agoMs(4 * 60000),
+    nowMs: NOW
+  });
+  assert.equal(thinking.state, STATE.WORKING, "a drain four minutes ago is mid-task, not an empty chair");
+});
+
 test("waiting: items are waiting and nothing has come back", () => {
   const out = agentSessions.livenessFrom({
     session: { handoff_rev: 0 },
@@ -273,7 +292,9 @@ test("a lahe command in the last few minutes holds off the no-agent wording", ()
     oldestUnansweredAt: agoMs(300000),
     nowMs: NOW
   });
-  assert.equal(midBatch.state, STATE.WAITING, "still waiting; just not accused of nobody");
+  // ACTIVE_MS and RECENT_COMMAND_MS are now the same ten minutes, so a command
+  // this recent both holds off the accusation and reads as an agent at work.
+  assert.equal(midBatch.state, STATE.WORKING, "mid-batch, and never accused of nobody");
   assert.equal(midBatch.listening, true);
 
   // It buys no quiet, though. The wait is still on the line and still grows.
@@ -809,8 +830,10 @@ test("the line stays quiet for the first two minutes, then says how long", () =>
   assert.equal(rail.statusLine().text, "Stored · nothing back yet, 10m");
   assert.equal(rail.statusLine().loud, true);
 
-  // No agent listening is loud from the moment it is known, because the
-  // reviewer's next move is a different one.
+  // No agent listening says the wait as soon as the line speaks, but it does
+  // not shout for the first couple of minutes: an agent thinking through a hard
+  // comment leaves no footprint, and the machine cannot tell that apart from an
+  // empty chair.
   rail.setAgentLiveness({
     state: STATE.NO_AGENT,
     unanswered: 1,
@@ -818,7 +841,15 @@ test("the line stays quiet for the first two minutes, then says how long", () =>
     listening: false
   });
   assert.equal(rail.statusLine().text, "Stored · nobody has picked this up, 31s");
-  assert.equal(rail.statusLine().loud, true, "waiting longer will not help, so it is not quiet");
+  assert.equal(rail.statusLine().loud, false, "half a minute may just be a long thought");
+
+  rail.setAgentLiveness({
+    state: STATE.NO_AGENT,
+    unanswered: 1,
+    oldest_unanswered_at: waitingSince(LIVENESS.NO_AGENT_LOUD_MS + 1000),
+    listening: false
+  });
+  assert.equal(rail.statusLine().loud, true, "past two minutes, waiting longer will not help");
 
   // And an answered review goes silent again, whatever else is true.
   rail.setAgentLiveness({ state: STATE.NONE, unanswered: 0, oldest_unanswered_at: null });

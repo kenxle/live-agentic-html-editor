@@ -169,7 +169,7 @@ function livenessFrom(input) {
     ? spec.oldestUnansweredAt
     : null;
   var lastReplyAt = typeof spec.lastReplyAt === "string" && spec.lastReplyAt ? spec.lastReplyAt : null;
-  // Mid-task: something the AGENT did, in the last few minutes. A drain stamps
+  // Mid-task: something the AGENT did, in the last ten minutes. A drain stamps
   // activity.json and a folded reply stamps it too, so this is the agent's own
   // footprints rather than a process that happens to be running.
   var active =
