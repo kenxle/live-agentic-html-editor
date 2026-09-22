@@ -14,6 +14,15 @@ I counted with a script (`census.py`, run against `~/.local/state/lahe/reviews`)
 | Reviews on files inside a worktree or temp folder | 88 |
 | Agent sessions | 96 |
 
+Why so many (script `why476.py`, one row per review in `why476_rows.csv`):
+
+- **Clicking around doesn't create reviews.** Pages you click to inside a served folder join the review you started on.
+- **Agents open pages one at a time.** A wireframe set with a dozen screens often became a dozen reviews, because the agent ran `lahe review` once per screen instead of once on the folder.
+- **Many are one-look pages.** 199 of them never got a single comment.
+- **Most came from a few heavy days.** Sep 9 had 95 and Sep 16 had 115.
+
+So the Library should group rows by folder and by agent session, not list each review on its own line.
+
 Every review records:
 
 - the file it points at
