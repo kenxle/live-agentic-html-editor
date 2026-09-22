@@ -92,12 +92,12 @@ The pile keeps growing at roughly the Sep 17 to Sep 22 pace. Each restart costs 
 ### Approach B: A live Library page inside the helper
 
 - **Summary:** A page at `127.0.0.1:7817/library` that reads the records live. Its Open and Star buttons act directly: the helper starts a server for the document and opens it.
-- **Effort:** L. **Risk:** Med-High.
+- **Effort:** L. **Risk:** Med.
 - **Pros:**
   - Instant, and always current.
   - One fixed address to bookmark.
 - **Cons:**
-  - A web page that can tell the helper "serve this path" is a new attack surface. It needs a security design.
+  - Local-only still counts here. Any website open in your browser can send requests to `127.0.0.1`, which is why the helper checks a per-review token on every request (decision D11, "loopback is not a boundary"). A Library route that serves files or launches agents has to pass the same checks. That is known work that reuses existing code, not a new security design.
   - It breaks the rule that a session owns its servers: the helper would start servers nobody's session owns.
   - The bookmark still fails after a restart until the helper is up (premise 3).
 - **Reuses:** the review records, the static server code.
