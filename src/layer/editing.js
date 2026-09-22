@@ -1021,6 +1021,11 @@
       var after = capture(session.block);
       var item = store.readItem(requireReview(), session.itemId);
       if (!item) return null;
+      // Read BEFORE this keystroke's state is decided: this is the one
+      // keystroke that can be the withdrawal, and the record after the
+      // assignment below always reads draft or ready, never which it just
+      // came from.
+      var wasReadyBeforeThisKeystroke = item[record.FIELD.STATE] === record.STATE.READY;
       var next = Object.assign({}, item);
       next[record.FIELD.AFTER] = after.text;
       next[record.FIELD.AFTER_HTML] = after.html;
@@ -1030,7 +1035,15 @@
       }
       // An item this page did not just create is content on a record the helper
       // already holds, whatever state it is in (sync.js eventTypeFor).
-      persist(next, "typed", null, session.wasNew ? null : { existing: true });
+      var postOptions = session.wasNew ? null : { existing: true };
+      if (wasReadyBeforeThisKeystroke && next[record.FIELD.STATE] === record.STATE.DRAFT) {
+        // This is the keystroke that just took the edit off ready. Tell sync
+        // so it posts at once instead of waiting behind a floor left by a
+        // draft from before the edit was ever marked ready (review finding,
+        // spec 20260922.01 requirement 6).
+        postOptions = Object.assign({}, postOptions || {}, { withdrawnFromReady: true });
+      }
+      persist(next, "typed", null, postOptions);
       positionFrame();
       return next;
     }

@@ -1647,9 +1647,11 @@
      * browser storage in this task, and the network happens later or never.
      *
      * @param {Object} item the record as stored
-     * @param {{immediate?: string, existing?: boolean}} [options] `immediate` is
-     *   one of protocol.FLUSH.IMMEDIATE_ON; `existing` says this record already
-     *   exists and only its content changed. See eventTypeFor.
+     * @param {{immediate?: string, existing?: boolean, withdrawnFromReady?: boolean}} [options]
+     *   `immediate` is one of protocol.FLUSH.IMMEDIATE_ON; `existing` says this
+     *   record already exists and only its content changed (see eventTypeFor);
+     *   `withdrawnFromReady` says this write is the keystroke that just took the
+     *   item off ready and back to draft.
      */
     function recordItem(item, options) {
       // A refused window is READ-ONLY (finding 1): it writes nothing to the
@@ -1672,10 +1674,25 @@
         // is the risky moment, so there everything goes.
         scheduleFlush(0, { urgent: opts2.immediate !== "ready" });
       } else if (record.isDraft(item)) {
-        // A draft waits for its item's floor, and at least the debounce, so
-        // the first few keystrokes of a new comment go as one post.
-        var wait = draftDueAt(item[record.FIELD.ID]) - nowMs();
-        scheduleFlush(Math.max(protocol.FLUSH.HELPER_DEBOUNCE_MS, wait));
+        var id = item[record.FIELD.ID];
+        if (opts2.withdrawnFromReady) {
+          // THE FIRST KEYSTROKE THAT TAKES AN ITEM OFF READY IS NOT AN
+          // ORDINARY DRAFT EDIT. Without this, it fell into the branch below
+          // and waited on whatever floor an earlier draft (from before the
+          // item was ever marked ready) had left standing, up to 10 seconds
+          // during which the agent still read the old, ready wording as
+          // current (review finding, spec 20260922.01). This write goes on
+          // the ordinary debounce instead, exactly like ready/created/deleted
+          // events. The floor this item's OWN drafts then reset, so keystroke
+          // two onward still waits its turn, the way requirement 4 asks.
+          delete draftSentAt[id];
+          scheduleFlush(protocol.FLUSH.HELPER_DEBOUNCE_MS);
+        } else {
+          // A draft waits for its item's floor, and at least the debounce, so
+          // the first few keystrokes of a new comment go as one post.
+          var wait = draftDueAt(id) - nowMs();
+          scheduleFlush(Math.max(protocol.FLUSH.HELPER_DEBOUNCE_MS, wait));
+        }
       } else {
         scheduleFlush(protocol.FLUSH.HELPER_DEBOUNCE_MS);
       }

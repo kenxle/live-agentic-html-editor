@@ -1153,7 +1153,7 @@
       done.refresh();
     });
 
-    comments.onChange(function (item, event, createdOnElement) {
+    comments.onChange(function (item, event, createdOnElement, meta) {
       // The reviewer deleted their own item. The card goes, and so does the
       // helper's copy: an item left in review.json after the browser dropped it
       // is work the agent would do that nobody is asking for. sync posts
@@ -1188,7 +1188,14 @@
       // status line steady on purpose and does not repaint on every queued
       // event, see recomputeStatus), which is what the reviewer's own comment
       // count is: it stops moving after this many.
-      sync.recordItem(item, event === "ready" ? { immediate: "ready" } : undefined);
+      sync.recordItem(
+        item,
+        event === "ready"
+          ? { immediate: "ready" }
+          : meta && meta.withdrawnFromReady
+            ? { withdrawnFromReady: true }
+            : undefined
+      );
       rail.upsertCard(item);
     });
 
