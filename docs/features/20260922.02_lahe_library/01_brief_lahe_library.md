@@ -11,7 +11,7 @@ Each document is served at an address with a random port. Close the tab, or rest
 The idea was pressure-tested on two LAHE pages:
 
 - [the ideas page](../../ongoing/DOCUMENT_INDEX_IDEAS.md)
-- [the crucible](00_crucible_lahe_library.md), accepted with Approach B
+- [the crucible](00_crucible_lahe_library.md), which chose a live Library page inside LAHE whose Open and Star buttons act directly (Approach B)
 
 ```mermaid
 flowchart LR
@@ -31,12 +31,12 @@ The key design question, for the wireframe: **what is one row?** A document, a r
 
 ## Non-Goals
 
-- Not keeping old addresses alive. A reopened document gets a new address, and that is fine.
-- Not deleting or archiving anything. Every review stays on disk.
-- Not starting the helper at login. After a restart, an agent starts LAHE, and the Library works from then on.
-- Not a search engine over document contents. Search covers what a row shows.
-- Not letting the page or the helper start an agent or any other program. Only a running agent does, on Ken's click.
-- Not a replacement for `lahe session list`, which stays the agent-facing tool.
+- Keeping old addresses alive. A reopened document gets a new address, and that is fine.
+- Deleting or archiving. Every review stays on disk.
+- Starting LAHE at login. After a restart, an agent starts LAHE, and the Library works from then on.
+- Searching inside documents. Search covers what a row shows.
+- Letting the page or LAHE start an agent or any other program. Only a running agent does that, when Ken clicks.
+- Replacing `lahe session list`, which stays the tool agents use.
 
 ## User & Context
 
@@ -47,7 +47,7 @@ The key design question, for the wireframe: **what is one row?** A document, a r
 ## User Stories
 
 - **As Ken**, I want to browse everything I've reviewed recently, so that I can find a document whose name I don't remember.
-- **As Ken**, I want to open a past document with one click and have the rail on it, so that I can read it right away, and comment knowing when an agent will see it.
+- **As Ken**, I want to open a past document with one click and have the rail on it, so that I can read it right away and know whether an agent will see my comments.
 - **As Ken**, I want the Library to show me what still needs me (documents with waiting comments, starred ones) before the rest, so that the pile feels finite.
 - **As Ken**, I want to star the documents that matter, so that they stay easy to find as new ones pile up.
 - **As Ken**, I want to hand a document to the agent I'm already talking to, so that my comments on it get answered.
@@ -58,11 +58,17 @@ The key design question, for the wireframe: **what is one row?** A document, a r
 ## Solution Outline
 
 1. Ken asks any agent to "open the lahe library." The agent runs one command. It starts LAHE if needed and opens the Library in the browser.
-2. The Library lists every past document, newest first, with the volume handled by the design the wireframe settles.
-3. Each row shows a recognizable name, where the document lives, when it was last worked on, how many comments are waiting, whether it is being served now, and whether an agent is watching it.
+2. The Library lists every past document, newest first. The wireframe decides how the page handles that many rows.
+3. Each row shows:
+   - a name Ken would recognize
+   - where the document lives
+   - when it was last worked on
+   - how many comments are waiting
+   - whether it is being served now
+   - whether an agent is watching it
 4. **Open** brings the document back at a new address with the rail on it, and opens it in a new tab. No agent is needed to read it.
 5. **Star** marks it. Starred documents stay easy to find however old they get.
-6. **Pick this up** tells the agent that opened the Library to take the document over, so comments on it get answered.
+6. **Pick this up** tells the agent attached to the Library to take the document over, so comments on it get answered.
 7. **Launch a new agent** asks that agent to start a fresh one on the document.
 8. Ken can bookmark the Library. The bookmark works whenever LAHE is running, and LAHE keeps running while the Library or a document opened from it is open.
 
@@ -74,17 +80,23 @@ The key design question, for the wireframe: **what is one row?** A document, a r
 
 **R2.** Each row shows a name Ken would recognize: the page title when there is one. When the title is missing or shared with another row, the row also shows the folder and file name.
 
-**R3.** Each row shows where the document lives (project folder), when it was last worked on, and how many comments are waiting on an agent. It also shows two separate signals: whether the document is being served now (so Open will reuse it), and whether an agent is watching it, and which one.
+**R3.** Each row shows:
+
+- where the document lives (project folder)
+- when it was last worked on
+- how many comments are waiting on an agent
+- whether the document is being served now, which means Open will reuse it
+- whether an agent is watching it, and which one
 
 **R4.** The Library keeps a week's volume (100 or more documents at Ken's pace) findable without typing a search. The grouping and default view are settled in the wireframe.
 
 **R4a.** The default view separates documents that need Ken (waiting comments, starred) from documents that don't.
 
-**R5.** Reviews from before Sep 16, when each page in a folder got its own review, appear as one document, the way they would be recorded today. How that shows as rows is settled with Open Question 1.
+**R5.** Before Sep 16, LAHE gave each page in a folder its own review. The Library groups those old reviews by folder, the way LAHE records them today. How that shows as rows is settled with Open Question 1 (what one row is).
 
 **R6.** Search filters rows by everything a row shows (title, file name, folder, agent session name), across all documents regardless of age.
 
-**R7.** A document is missing only when neither its file nor its main-repository copy (R9) exists. Missing documents are hidden by default, with a way to show them. On a missing row, Open is unavailable and says why. Star still works.
+**R7.** A document is missing only when its file is gone and, for a deleted worktree, the same file is also gone from the main repository (R9). Missing documents are hidden by default, with a way to show them. On a missing row, Open is unavailable and says why. Star still works.
 
 ### Acting on a row
 
@@ -96,21 +108,21 @@ The key design question, for the wireframe: **what is one row?** A document, a r
 
 **R10a.** While the Library, or a document opened from it, is open in the browser, LAHE keeps serving them, even after the last agent session closes.
 
-**R10b.** When no agent is watching a document opened from the Library, its rail says so, keeps Ken's comments, and offers Pick this up and the paste-in prompt.
+**R10b.** When no agent is watching a document opened from the Library, its rail says so and keeps Ken's comments. It offers Pick this up, and a prompt Ken can paste into any agent.
 
-**R11. Star** and unstar act directly from the page and persist across helper restarts.
+**R11. Star** and unstar act directly from the page. Stars survive a LAHE restart.
 
-**R12. Pick this up** reaches the agent attached to the Library as ordinary work. That agent takes the document's session over, so comments on it reach that agent.
+**R12. Pick this up** sends a request to the agent attached to the Library, which handles it like any other task. That agent takes over the document's session, so Ken's comments on it reach that agent.
 
 **R12a.** Before Ken clicks, the page names the agent that will receive Pick this up and Launch a new agent. When no agent is attached, the buttons say so ahead of time, not after the click.
 
-**R12b.** Pick this up and Launch a new agent on a document that a live agent is watching ask Ken to confirm first. The confirmation names that agent and lists the other documents that move with the session.
+**R12b.** An agent session can hold several documents, and they all move together. So Pick this up and Launch a new agent on a document a live agent is watching ask Ken to confirm first. The confirmation names that agent and lists the other documents that would move.
 
 **R12c.** After Pick this up or Launch, the row shows that the request is waiting, then which agent took it, or why it failed. A second click on the same row while one is waiting does nothing and says so.
 
 **R13. Launch a new agent** asks the agent attached to the Library to start a fresh agent, already pointed at that document's session. The new agent's session is named after the document, so Ken can tell launched agents apart.
 
-**R14.** When no agent is listening, Pick this up and Launch a new agent say so, and offer a prompt Ken can paste into any agent instead.
+**R14.** When no agent is attached to the Library, Pick this up and Launch a new agent say so. They offer a prompt Ken can paste into any agent instead.
 
 ### Reaching the Library
 
@@ -122,7 +134,7 @@ The key design question, for the wireframe: **what is one row?** A document, a r
 
 ### Safety
 
-**R18.** Every action on the page passes the same request checks every other helper action passes. A website open in the same browser cannot open, star, or launch anything. Tests prove it: requests from another origin are refused for every action.
+**R18.** Every action on the page goes through the same checks as any other request to LAHE. A website open in the same browser cannot open, star, or launch anything. Tests send each action from another website and check that LAHE refuses it.
 
 **R19.** Open serves only a file that was under review, or, for a worktree that no longer exists, the file at the same path in the repository that worktree belonged to (R9). Nothing else. The Library cannot be used to serve an arbitrary path.
 
@@ -132,7 +144,10 @@ Agents act on two of the Library's buttons.
 
 - **Pick this up:** the agent takes the document's session over the way the skill describes, then tells Ken on the Library page which document it picked up.
 - **Launch a new agent:** the agent starts one new agent on that document, then tells Ken on the Library page where it launched (for example, which terminal window). One agent per click, never more.
-- **Never:** pick up or launch without a click from Ken, take over a session he didn't point at, or close any session.
+- **Never:**
+  - pick up or launch without a click from Ken
+  - take over a session he didn't point at
+  - close any session
 - **On failure** (a launch that doesn't start, a takeover that is refused): the Library page shows the reason and the paste-in prompt.
 
 ## Success Metrics
@@ -140,7 +155,7 @@ Agents act on two of the Library's buttons.
 - Ken closes LAHE tabs freely. After two weeks of use, he reports no longer keeping tabs open to hold documents.
 - After a restart, Ken gets any document back with one request to an agent and one click.
 - Given a description of any document from the past week, Ken finds it without typing a search.
-- After two weeks, a script over the helper log reports Opens per working day, and how many were documents older than the default view. A number near zero means the Library is not replacing tabs.
+- After two weeks, a script over LAHE's log reports Opens per working day, and how many of them were documents older than the default view. If Opens per working day stay near zero, the Library is not replacing tabs.
 
 ## UX Notes
 
@@ -150,7 +165,7 @@ Agents act on two of the Library's buttons.
 
 ## Analytics / Logging
 
-The helper log records each Open, Star, Pick up, and Launch, with the review id and the time. The last success metric is counted from it by a script.
+LAHE's log records each Open, Star, Pick up, and Launch, with the review id and the time. A script counts the last success metric from it.
 
 ## Rollout / Flags
 
@@ -164,7 +179,7 @@ No flag. The Library reads records that already exist, so it works on the full h
 
 3. Which app does Launch a new agent open (Terminal, iTerm, the Claude desktop app), and for which hosts (Claude Code, Codex)? Settled in the architecture.
 
-4. How does an agent attach to the Library, so the page can name it (R12a)? From a bookmark, no agent opened it; over a day, several may have. Settled in the architecture.
+4. How does an agent attach to the Library, so the page can name it before Ken clicks (R12a)? Two cases make this hard. A Library opened from a bookmark was opened by no agent. Over a day, several agents may have opened it. Settled in the architecture.
 
 ## PM Review
 
