@@ -1200,7 +1200,7 @@
         ref.prefix = stored.prefix;
         ref.suffix = stored.suffix;
         lastVerdict = uniqueness.selectUnique(workspace.at(level, ref.prefix, ref.suffix), ref);
-        if (lastVerdict.bound && lastVerdict.key === element) {
+        if (lastVerdict.bound && mintedElementFor(lastVerdict.key, ref, scope) === element) {
           ref.ok = true;
           ref.failure = null;
           return ref;

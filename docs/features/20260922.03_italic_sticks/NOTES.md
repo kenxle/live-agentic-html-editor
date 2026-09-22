@@ -41,4 +41,8 @@ The italics button alone fails the same way. Take italics off `<p><em>words</em>
   - `anchor_engine`
 - `npm run gate:unit` passes.
 
+## Known gap
+
+Nested elements of the SAME tag still bind the wrong one: `<div><div>A</div></div>`, with the record made on the outer `div`, still binds the inner `div`. The climb in `mintedElementFor` only runs when the bound tag differs from the saved tag, so two elements sharing a tag never trigger it. A later fix could use `fingerprint.chain` as a tie-breaker.
+
 ![The Intro paragraph, plain after the reload](after_reload.png)

@@ -687,6 +687,19 @@ test("a reference minted on the <em> itself still binds the <em>", () => {
   assert.equal(anchor.resolve(ref, page.root).element, page.em);
 });
 
+test("minting on a <p> whose only child is an <em> reports text_unique: true", () => {
+  // Before the fix, mint's own self-check compared the search's bound key
+  // straight against the clicked element, without the same climb-to-saved-tag
+  // step resolve() uses (mintedElementFor). The search binds the innermost
+  // <em> (same words as the <p>), that never equals the clicked <p>, widening
+  // never stops finding itself "unique", and the reference is saved with
+  // text_unique: false even though the <p> binds cleanly on its own.
+  const page = italicParagraphPage("A");
+  const ref = anchor.mint({ element: page.p, root: page.root });
+  assert.equal(ref.ok, true);
+  assert.equal(ref.text_unique, true, "the p binds cleanly once mint climbs like resolve does");
+});
+
 test("the climb stops at an ancestor with other words: that is a different region", () => {
   const origin = italicParagraphPage("A");
   const ref = mintBlock(origin, 1);
