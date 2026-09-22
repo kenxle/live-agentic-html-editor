@@ -52,6 +52,7 @@ Rejected for now: sending only the changed fields (option d3). It changes the lo
 
 - 2026-09-22: spec written from Ken's decisions on the analysis page.
 - 2026-09-22: Ken approved ("if you feel like this is a thorough writeup, you can continue"). One architecture review (`review-architect`) found two blockers and three important issues, all integrated above.
+- 2026-09-22: task 1 done. `tickReview` compares the projection (without `generated_at`) with the bytes this process last wrote and skips the write when they match and the file exists. New `test/unit/review_json_skip.test.js` (5 tests); the draft-only test was red before the change.
 
 ## Design review, 2026-09-22
 

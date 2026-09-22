@@ -47,11 +47,13 @@
 
 "use strict";
 
+var fs = require("node:fs");
 var protocol = require("../shared/protocol.js");
 var record = require("../shared/record.js");
 var lifecycle = require("../shared/lifecycle.js");
 var reviewFormat = require("../shared/review_format.js");
 var reviewWriter = require("./review_writer.js");
+var stateDir = require("./state_dir.js");
 var replies = require("./replies.js");
 
 var EVENT = protocol.EVENT;
@@ -412,7 +414,7 @@ function createProjector(options) {
   // and `seq` is what the log said the last time this review was written.
   var watched = Object.create(null);
   var timer = null;
-  var counters = { ticks: 0, folds: 0, writes: 0, dropped: 0 };
+  var counters = { ticks: 0, folds: 0, writes: 0, skips: 0, dropped: 0 };
   // event_id of every malformed item event already reported, so a drop is logged
   // once rather than on every regenerate that re-reads the same log (NEW-5).
   var droppedSeen = Object.create(null);
@@ -435,7 +437,7 @@ function createProjector(options) {
   /** The kept fold for a review, minted the first time it is asked for. */
   function entryFor(reviewId) {
     if (!Object.prototype.hasOwnProperty.call(watched, reviewId)) {
-      watched[reviewId] = { fold: createFold(), wroteAt: -1, started: false, epoch: -1 };
+      watched[reviewId] = { fold: createFold(), wroteAt: -1, started: false, epoch: -1, lastBytes: null };
     }
     return watched[reviewId];
   }
@@ -511,6 +513,19 @@ function createProjector(options) {
     return entry;
   }
 
+  /** The projection's bytes with the one field that changes on every build left out. */
+  function comparableBytes(projected) {
+    return stringify(Object.assign({}, projected, { generated_at: "" }));
+  }
+
+  function fileExists(reviewId) {
+    try {
+      return fs.statSync(stateDir.reviewJsonPath(dir, reviewId)).isFile();
+    } catch (err) {
+      return false;
+    }
+  }
+
   function tickReview(reviewId) {
     var entry = entryFor(reviewId);
     // Before the reply fold, so a reply is judged against the item as it stands
@@ -532,7 +547,26 @@ function createProjector(options) {
     var seq = log.currentSeq(reviewId);
     if (entry.wroteAt === entry.fold.seq) return { wrote: false, seq: seq };
 
-    reviewWriter.writeReviewJson(projectFold(reviewId, entry.fold), { dir: dir, review: reviewId });
+    // THE SECOND GATE IS THE BYTES. The fold moving is not the same as the
+    // file changing: a draft save moves the fold and changes nothing an agent
+    // reads, because drafts are withheld. Rewriting the whole file with an
+    // fsync for that was the largest write cost a review had (spec
+    // 20260922.01, requirement 1). So the projection is compared, without its
+    // `generated_at`, against the bytes THIS process last wrote. Comparing the
+    // output rather than inspecting event types means no kind of event can
+    // ever be skipped by mistake. The baseline is empty when the helper starts,
+    // so the first tick always writes (new contract text lands), and a file
+    // someone removed is written again.
+    var projected = projectFold(reviewId, entry.fold);
+    var comparable = comparableBytes(projected);
+    if (entry.lastBytes === comparable && fileExists(reviewId)) {
+      entry.wroteAt = entry.fold.seq;
+      counters.skips += 1;
+      return { wrote: false, seq: seq, summary: summary };
+    }
+
+    reviewWriter.writeReviewJson(projected, { dir: dir, review: reviewId });
+    entry.lastBytes = comparable;
     entry.wroteAt = entry.fold.seq;
     counters.writes += 1;
     return { wrote: true, seq: seq, summary: summary };
