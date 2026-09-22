@@ -1267,8 +1267,43 @@
     var stamped = stampVerdict(reference, scope, options && options.accept);
     if (stamped) return stamped;
     var verdict = uniqueness.selectUnique(candidatesFor(reference, scope), reference);
-    verdict.element = verdict.bound ? verdict.key : null;
+    verdict.element = verdict.bound ? mintedElementFor(verdict.key, reference, scope) : null;
     return verdict;
+  }
+
+  /**
+   * The element the reference was minted on, when the words bound a wrapper
+   * inside it.
+   *
+   * The text search binds the INNERMOST element holding the probe. When a
+   * block's words all sit inside one inline wrapper, as in <p><em>A</em></p>,
+   * the <em> and the <p> hold exactly the same words, and the innermost rule
+   * picks the <em>. For a comment that is harmless. For an edit it is not:
+   * replay writes the record's after markup INTO the bound element, so plain
+   * words land inside the <em> and the paragraph turns italic. That was review
+   * r88dec64b8451 on 2026-09-22: the reviewer took the italics off the Intro,
+   * the page came back on a source that still said *A*, and replay wrote the
+   * plain rewrite into the <em>, giving <p><em>...</em></p>.
+   *
+   * So when the bound element is not the tag the reference was minted on,
+   * climb while each ancestor holds the same words, and take the first one
+   * with the minted tag. Only the same words: an ancestor with any other text
+   * is a different region, and the bind stays where the search put it.
+   *
+   * @returns {Element} the minted element, or `bound` unchanged
+   */
+  function mintedElementFor(bound, ref, scope) {
+    var wanted = ref && ref.fingerprint && typeof ref.fingerprint.tag === "string" ? ref.fingerprint.tag : "";
+    if (!wanted || !isElement(bound) || tagOf(bound) === wanted) return bound;
+    var words = textOf(bound);
+    var hop = bound;
+    while (hop !== scope) {
+      var parent = parentOf(hop);
+      if (!isElement(parent) || textOf(parent) !== words) return bound;
+      if (tagOf(parent) === wanted) return parent;
+      hop = parent;
+    }
+    return bound;
   }
 
   // -------------------------------------------------------------------------
