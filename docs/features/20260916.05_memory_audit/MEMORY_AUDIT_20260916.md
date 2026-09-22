@@ -55,6 +55,7 @@ This is the one progress page for all of the memory, CPU, and token work. The me
 | 19. Any page holding a review's key can tell the agent which file is the source (`source_hint`), so a hostile script on a served page could point the agent at the wrong file | ⬜ Not started. Found in the linked-docs security review. Fix: refuse that field when the request comes from a browser |
 | 20. A linked folder's hidden files (like `.env`) can be fetched from the local page server | ✅ Fixed on main (e4346f1). Page servers already running keep the old code until they restart |
 | 21. The page server's own folder also serves hidden files, such as a `.env` inside the folder under review | ⬜ Not started. Found while fixing 20. Needs a decision: a reviewed folder may legitimately serve something like `.well-known/` |
+| 22. The rail still draws single-side accent stripes (the banned style) in about ten places: every toast, the loud agent reply, the asking block, conflict sides, edit pairs, quotes | ⬜ Next, after the conflict toast merges. One sweep with light and dark screenshots |
 ✅ done and live · 🔨 in progress · ⬜ not started
 
 ## Short answer
