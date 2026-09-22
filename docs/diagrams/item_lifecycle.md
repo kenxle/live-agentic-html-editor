@@ -9,7 +9,9 @@ stateDiagram-v2
     draft --> draft : reviewer keeps typing (every keystroke saved, revision unchanged)
     draft --> ready : reviewer confirms (Cmd-Enter, or an edit committing)
 
-    ready --> ready : reviewer rewords (bumps the revision)
+    ready --> draft : reviewer starts rewording it (first changing keystroke, comment or edit)
+    draft --> ready : reviewer's wording matches the committed text again, or commits (bumps the revision)
+
     ready --> handled : agent, naming the CURRENT revision, says it made the change
     ready --> not_handled : agent, naming the CURRENT revision, says it did not, with a reason
 
@@ -26,7 +28,8 @@ stateDiagram-v2
 
 ## What to notice
 
-- **Every arrow names an actor.** The reviewer is the only one who can move an item from `draft` to `ready`. An agent can never do that. An agent may only move an item OUT of `ready` (to `handled` or `not_handled`), and only for the exact revision it named. If the reviewer reworded the comment after the agent read it, the agent's reply names a revision that no longer applies, and the move is refused rather than silently swallowing the rewording.
+- **Every arrow names an actor.** The reviewer is the only one who can move an item from `draft` to `ready`, or take it back from `ready` to `draft`. An agent can never do either. An agent may only move an item OUT of `ready` (to `handled` or `not_handled`), and only for the exact revision it named. If the reviewer reworded the comment after the agent read it, the agent's reply names a revision that no longer applies, and the move is refused rather than silently swallowing the rewording.
+- **Rewording a ready item takes it off the agent's desk first.** The reviewer's first changing keystroke moves it from `ready` back to `draft`, for both a comment and an edit. Nothing about it reaches an agent while it sits there, the same as any other draft. Typing the wording back to match what was last committed puts it back to `ready` with nothing changed; committing new wording also puts it back to `ready`, and that is the one move that bumps the revision.
 - **The helper never moves anything on its own.** It is not listed as an actor anywhere in the table. It only records moves the reviewer or the agent tell it about, and projects the result.
 - **`question` is a reply status, not a state.** An agent asking a question leaves the item exactly where it is, in `ready`, because the work is still outstanding; the question and its answer live on the card.
 - **`reopened` is a transition, not a fifth box.** It is just the `handled` to `ready` arrow above, drawn for the case where the reviewer decides a fix did not actually land.
