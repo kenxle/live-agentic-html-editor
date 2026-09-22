@@ -3,7 +3,7 @@
 Date: 2026-09-22
 Status: DRAFT (waiting on your answers at the bottom)
 
-**Short version:** I'd build it. My recommendation is Approach A below: the Library is an ordinary LAHE page that an agent serves, and you act on a row by commenting on it. I found one hidden problem. The bookmark idea from the ideas page does not survive a computer restart, because the helper stops when the last session closes and nothing starts it at login. Questions at the bottom.
+**Short version:** I'd build it. My recommendation is now Approach B: a live Library page in the helper, whose Open and Star buttons act directly (you said that's required). Picking a document up and launching a new agent still go through an agent. I found one hidden problem. The bookmark idea from the ideas page does not survive a computer restart, because the helper stops when the last session closes and nothing starts it at login. Questions at the bottom.
 
 ## The idea, as stated
 
@@ -75,7 +75,7 @@ The pile keeps growing at roughly the Sep 17 to Sep 22 pace. Each restart costs 
 
 ## Approaches considered
 
-### Approach A: The Library is a LAHE document (recommended)
+### Approach A: The Library is a LAHE document
 
 - **Summary:** `lahe library` builds one HTML page listing every document, then serves it as a normal review in the agent's own session. You act on a row by clicking a button or commenting on it. The action arrives at the agent like any other comment. The agent takes over the document's session and brings it back.
 - **Effort:** M. **Risk:** Low.
@@ -89,7 +89,7 @@ The pile keeps growing at roughly the Sep 17 to Sep 22 pace. Each restart costs 
   - Each document goes back to its own review and its own session, with its old comments, not into the Library's session. So an agent that picks up five documents ends up holding five sessions. Today that means five monitors; the architecture has to make that manageable.
 - **Reuses:** `lahe review`, session takeover, the review records, the Markdown/HTML serving path.
 
-### Approach B: A live Library page inside the helper
+### Approach B: A live Library page inside the helper (recommended)
 
 - **Summary:** A page at `127.0.0.1:7817/library` that reads the records live. Its Open and Star buttons act directly: the helper starts a server for the document and opens it.
 - **Effort:** L. **Risk:** Med.
@@ -116,7 +116,7 @@ Agents grep for documents when asked. You lose the browse view and keep the "bur
 
 ## Recommended approach
 
-Approach A. It gives you a page you can scan, star, and act on without adding anything that lets a web page command your machine. It also follows the way you already said you'll use it: you ask an agent, and that agent does the rest. Approach C falls out of it for free, since the command that builds the page can also print the list.
+Approach B. Open and Star acting directly is required, and only B does that. Both buttons go through the helper's existing token check. One server, owned by the helper, serves every document the Library brings back. The two actions that need judgment stay with agents: **Pick this up** reaches the agent that opened the Library, and **Launch a new agent** asks that agent to start one. Approach C falls out for free: the same data can print as a list in the terminal.
 
 ## Open questions
 
@@ -129,4 +129,4 @@ Approach A. It gives you a page you can scan, star, and act on without adding an
 
 1. **How often does this bite?** Every restart, every morning, once a week? And when it does, do you usually know which document you want, or do you need to browse?
 2. **Do you agree with the premises?** Mark any you disagree with.
-3. **Approach A?** Or do you want B's instant buttons badly enough to take on the security work?
+3. **Approach B, as described under Recommended approach?**
