@@ -53,7 +53,8 @@ This is the one progress page for all of the memory, CPU, and token work. The me
 | 17. The drain never goes quiet once a session has an ended review: a run by hand lists every ended review in the session (seven in one session here, the oldest from 2026-09-16) plus the field table, every time, although the docs say it prints nothing when nothing waits | ⬜ Not started. Only the monitor marks an ended review as delivered. Fold into 11 (trim the drain) |
 | 18. Following a link to a document in another folder drops the editor | 🔨 [Spec](../20260922.02_linked_docs_rail/01_spec_linked_docs_rail.md) written and security-reviewed, on branch `linked-docs-rail`, waiting on your read |
 | 19. Any page holding a review's key can tell the agent which file is the source (`source_hint`), so a hostile script on a served page could point the agent at the wrong file | ⬜ Not started. Found in the linked-docs security review. Fix: refuse that field when the request comes from a browser |
-| 20. A linked folder's hidden files (like `.env`) can be fetched from the local page server | 🔨 Fixing now, separately from the linked-docs work |
+| 20. A linked folder's hidden files (like `.env`) can be fetched from the local page server | ✅ Fixed on main (e4346f1). Page servers already running keep the old code until they restart |
+| 21. The page server's own folder also serves hidden files, such as a `.env` inside the folder under review | ⬜ Not started. Found while fixing 20. Needs a decision: a reviewed folder may legitimately serve something like `.well-known/` |
 ✅ done and live · 🔨 in progress · ⬜ not started
 
 ## Short answer
