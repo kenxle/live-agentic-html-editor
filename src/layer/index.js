@@ -1528,7 +1528,20 @@
       rail.failures.add(failure);
     }, { helperOrigin: config.helper });
 
-    if (opts.startSync !== false) sync.start();
+    if (opts.startSync !== false) {
+      var started = sync.start();
+      // A committed edit a crashed page left withdrawn (the reviewer was
+      // rewording it) is committed now, once this window holds the review, so
+      // a read-only window writes nothing. Then replay puts it back on the page
+      // (spec 20260922.01, requirement 6).
+      if (started && typeof started.then === "function" && typeof editing.recoverWithdrawn === "function") {
+        started.then(function (lock) {
+          if (!lock || !lock.acquired || readOnlyActive) return;
+          var recovered = editing.recoverWithdrawn();
+          if (recovered.length) ns.replay.schedule(ns.replay.REASON.BOOT);
+        });
+      }
+    }
 
     // The first pass. Replay is what puts committed edits back on a page that
     // was reloaded, so it runs on boot and not only on a later repaint.
