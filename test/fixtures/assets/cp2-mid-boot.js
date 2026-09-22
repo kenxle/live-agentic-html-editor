@@ -242,6 +242,34 @@
       return el.textContent;
     },
 
+    /**
+     * The agent replying not_handled to a committed edit, the way a real
+     * folded reply would land: the record's state moves to `not_handled` and
+     * it carries the reply, with no other field touched (same rev, same
+     * before/after). Used to put a record into the one state that stays
+     * OUTSTANDING (record.isOutstanding) across a reopen: unlike a reopened
+     * `ready` edit, which the first keystroke withdraws to `draft` (a draft is
+     * never replayed), a `not_handled` record keeps its state while the
+     * reviewer types (src/layer/editing.js, captureTyping's `session.wasReady`
+     * guard). That is what a test proving replay's protection check needs: a
+     * record replay would otherwise try to write into while the reviewer is
+     * in it.
+     */
+    markNotHandled: function (selector, reason) {
+      var item = itemForRegion(selector);
+      if (!item) throw new Error("markNotHandled: no item for " + selector);
+      var next = Object.assign({}, item);
+      next[record.FIELD.STATE] = record.STATE.NOT_HANDLED;
+      next[record.FIELD.REPLY] = {
+        status: record.REPLY_STATUS.NOT_HANDLED,
+        reason: reason || "left for the reviewer"
+      };
+      store.write(reviewId, next);
+      refreshItems();
+      rail.upsertCard(next);
+      return next;
+    },
+
     // --- the rail, which is a closed shadow root ----------------------------
     card: function (selector) {
       var item = itemForRegion(selector);

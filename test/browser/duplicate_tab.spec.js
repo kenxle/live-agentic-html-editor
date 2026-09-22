@@ -129,6 +129,16 @@ test.describe("a duplicated tab does not inherit the review", () => {
       const state = await claimState(next);
       expect(state.acquired, "the review was handed back, so the next window has it").toBe(true);
       expect(state.readOnly, "and it can actually review").toBe(false);
+
+      // `next` is now the holder. Closing the context out from under it is an
+      // abrupt teardown, not a navigation, so it sends no goodbye: the helper
+      // is left believing a page that no longer exists still holds the
+      // review, and the next test in this file (which shares REVIEW and the
+      // one helper instance across the whole describe block) is refused
+      // asking for it. Send `next` to about:blank first, the same way the
+      // first half of this test left the original page, so its goodbye goes
+      // out and the review is free before the context comes down.
+      await next.goto("about:blank");
     } finally {
       await stranger.close();
     }

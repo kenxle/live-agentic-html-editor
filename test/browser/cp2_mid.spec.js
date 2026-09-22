@@ -138,10 +138,25 @@ test.describe("CP2-mid: ranked test 2 with real records", () => {
     // in-progress sentence if protection did not stop it. A first-touch draft
     // is never replayed at all (a draft is not outstanding), so it cannot show
     // that anything protected anything.
+    //
+    // A plain reopened `ready` edit will not do here (spec
+    // 20260922.01_draft_write_cost, requirement 6): the first keystroke into a
+    // reopened `ready` edit withdraws it to `draft` until the reviewer commits
+    // again, and a draft is never replayed (record.isOutstanding is false for
+    // it), so `regionsSkippedProtected` would never rise and the test would
+    // stop proving anything. An agent's `not_handled` reply keeps its state
+    // while the reviewer types (editing.js's captureTyping only moves a
+    // record to draft when it reopened `ready`), so it stays outstanding for
+    // every keystroke below, which is what this test needs replay to refuse
+    // to write into.
 
     const firstGo = await editAndCommit(page, "#region-a", " Every Monday.");
     expect(firstGo.state).toBe("ready");
     expect(firstGo.before).toBe(SOURCE.a);
+
+    const notHandled = await page.evaluate(() => window.__laheCp2.markNotHandled("#region-a", "left for the reviewer"));
+    expect(notHandled.state).toBe("not_handled");
+    expect(notHandled.rev).toBe(firstGo.rev);
 
     await enterEdit(page, "#region-a");
     const openItemId = await page.evaluate(() => window.__laheCp2.state().itemId);
@@ -187,6 +202,12 @@ test.describe("CP2-mid: ranked test 2 with real records", () => {
       { message: "region B to hold the reviewer's committed wording again" }
     );
 
+    // The reviewer's typed sentence in region A is still exactly what they
+    // typed, after the page rewrote region B underneath them. Region A and
+    // region B share the same repaint target, so this is the assertion that
+    // protection held region A alone rather than surviving by accident.
+    expect(await page.evaluate(() => window.__laheCp2.text("#region-a"))).toBe(typed.expected);
+
     const countersAfter = await readCounters(page);
     expect(countersAfter.regionsWritten).toBeGreaterThan(countersBefore.regionsWritten);
 
@@ -210,6 +231,7 @@ test.describe("CP2-mid: ranked test 2 with real records", () => {
     const open = await page.evaluate((id) => window.__laheCp2.itemById(id), openItemId);
     expect(open.id, "a re-entry rewords the SAME record").toBe(firstGo.id);
     expect(open.rev).toBe(1);
+    expect(open.state, "not_handled keeps its state while typed into, never sliding to draft").toBe("not_handled");
     expect(open.before, "before is pinned to the page's wording, not to what is on screen").toBe(SOURCE.a);
     expect(open.after).toBe(typed.expected);
   });
