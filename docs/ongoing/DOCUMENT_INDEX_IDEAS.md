@@ -84,7 +84,8 @@ An index fixes the second. For the first, you don't need the old address back, j
 ## New problems this creates, and how I'd handle them
 
 - **Duplicate names.** Two reviews titled "Brief". The row shows the project folder and file name under the title.
-- **Clutter from agent work.** 88 reviews live in worktrees or temp folders. Default the list to hide files that no longer exist, with a toggle to show them.
+- **Documents in worktrees.** Still common: 51 reviews point into a worktree, 19 of them since Sep 17 (for example, yesterday's stclair.ai pages in `personal/.claude/worktrees/site-lahe-page`). A builder serves the page from its own checkout. Once that worktree is merged and removed, the path is dead, but the same file usually lives on in the main repo. The Library should map `repo/.claude/worktrees/<name>/x.html` back to `repo/x.html` and open that one.
+- **Temp-folder pages.** 37 reviews point into temp folders (7 since Sep 17). Default the list to hide files that no longer exist, with a toggle to show them.
 - **Old stuff.** Keep everything. Nothing gets deleted; old reviews just drop out of the default view, and search or a star brings them back. The code names a 30-day limit that nothing enforces; the Library build removes that stale constant so nobody wires it up later.
 - **Important ones sinking.** The star (in option B) keeps them on top.
 
