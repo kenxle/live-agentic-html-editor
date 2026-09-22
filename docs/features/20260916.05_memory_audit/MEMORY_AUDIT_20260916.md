@@ -51,7 +51,9 @@ This is the one progress page for all of the memory, CPU, and token work. The me
 | 15. After the draft fix ships, each existing review keeps its old whole-list copy in browser storage beside the new per-comment copies, so storage doubles until the old copy is deleted | ⬜ Not started. Delete the old copy in the release after the draft fix, then drop the code that merges it |
 | 16. Rewording an edit the agent marked not handled still sends every pause to the helper and rewrites review.json at typing speed | ⬜ Not started. Found in the draft fix's code review. Fix: treat it like rewording a ready edit |
 | 17. The drain never goes quiet once a session has an ended review: a run by hand lists every ended review in the session (seven in one session here, the oldest from 2026-09-16) plus the field table, every time, although the docs say it prints nothing when nothing waits | ⬜ Not started. Only the monitor marks an ended review as delivered. Fold into 11 (trim the drain) |
-| 18. Following a link to a document in another folder drops the editor | 🔨 [Proposal](LINKED_DOCS.md), needs your call |
+| 18. Following a link to a document in another folder drops the editor | 🔨 [Spec](../20260922.02_linked_docs_rail/01_spec_linked_docs_rail.md) written and security-reviewed, on branch `linked-docs-rail`, waiting on your read |
+| 19. Any page holding a review's key can tell the agent which file is the source (`source_hint`), so a hostile script on a served page could point the agent at the wrong file | ⬜ Not started. Found in the linked-docs security review. Fix: refuse that field when the request comes from a browser |
+| 20. A linked folder's hidden files (like `.env`) can be fetched from the local page server | 🔨 Fixing now, separately from the linked-docs work |
 ✅ done and live · 🔨 in progress · ⬜ not started
 
 ## Short answer
