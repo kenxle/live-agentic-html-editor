@@ -8,6 +8,7 @@ This page is the hub. Start here; everything else is one click away.
 
 **Open questions, waiting on you**
 
+- [Stop writing unsent drafts so often](../features/20260922.01_draft_write_cost/01_spec_draft_write_cost.md): the spec from your decisions. Needs your ok to build.
 - [Where unsent comments are saved, and what it costs](DRAFT_PERSISTENCE.md): drafts are 79% of what gets written, plus three oversized-record bugs (the rest of the page saved as "text after", embedded images saved three times, the whole-page highlight). Needs your read before any change.
 
 **Shipped, with their specs**
