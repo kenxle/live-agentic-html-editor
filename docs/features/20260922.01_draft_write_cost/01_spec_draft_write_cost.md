@@ -53,6 +53,7 @@ Rejected for now: sending only the changed fields (option d3). It changes the lo
 - 2026-09-22: spec written from Ken's decisions on the analysis page.
 - 2026-09-22: Ken approved ("if you feel like this is a thorough writeup, you can continue"). One architecture review (`review-architect`) found two blockers and three important issues, all integrated above.
 - 2026-09-22: task 1 done. `tickReview` compares the projection (without `generated_at`) with the bytes this process last wrote and skips the write when they match and the file exists. New `test/unit/review_json_skip.test.js` (5 tests); the draft-only test was red before the change.
+- 2026-09-22: task 2 done. `store.js` keeps one key per item (`lahe.item.v2:<review>:<item>`), an index (`lahe.index.v2:<review>`, ids in creation order plus the ids deleted here that the old key still carries), and one stamp per review. The old `lahe.items.v1` key is merged per item on every cold read and whenever its stamp moves; only the lock holder writes the merge down, and taking the lock drops the held copy so an unstamped old-bundle write lands too. New `test/unit/store_per_item.test.js` (12 tests; 7 red before). One addition the spec did not name: a delete records the id in the index as removed when the old key still has it, or the next merge would bring the deleted comment back. Three older tests that read the old key directly now read the new keys (`store_item_cache.test.js`, `storage_quota_typing.test.js`, and the rail harness's durability read).
 
 ## Design review, 2026-09-22
 

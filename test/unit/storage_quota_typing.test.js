@@ -277,7 +277,7 @@ test("a comment keystroke whose write was refused does not post", (t) => {
   // Room for the outbox and none for the records. This is the state that makes
   // the bug reachable: swallow the record write, let the post through, and the
   // helper acknowledges a wording the disk does not have.
-  backing.state.refuseKey = storeModule.KEY_PREFIX;
+  backing.state.refuseKey = storeModule.ITEM_PREFIX;
   box.type("no room for this");
   backing.state.refuseKey = null;
 

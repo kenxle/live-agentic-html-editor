@@ -289,7 +289,8 @@
       var box = boxes[args.id];
       box.input.value = box.input.value + args.character;
       box.input.dispatchEvent(new Event("input", { bubbles: true }));
-      var raw = localStorage.getItem(LAHE.store.KEY_PREFIX + reviewId);
+      // The item's own key: one key per item since spec 20260922.01.
+      var raw = localStorage.getItem(LAHE.store.ITEM_PREFIX + reviewId + ":" + args.id);
       var outbox = localStorage.getItem(LAHE.store.OUTBOX_PREFIX + reviewId);
       return {
         raw: raw,

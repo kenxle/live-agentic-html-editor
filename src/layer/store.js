@@ -63,7 +63,14 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function (record, merge, failures, elapsed, protocol) {
   "use strict";
 
+  // The OLD whole-list key: every item of a review in one JSON array. Read and
+  // merged, never written, never deleted (see "The items: one key per item").
+  // keyFor still spells it because it is also the review-id guard every bucket
+  // runs.
   var KEY_PREFIX = "lahe.items.v1:";
+  // One key per item, and the review's index of them (spec 20260922.01).
+  var ITEM_PREFIX = "lahe.item.v2:";
+  var INDEX_PREFIX = "lahe.index.v2:";
   var OUTBOX_PREFIX = "lahe.outbox.v1:";
   // The STAMP beside a cached list. See "Reading a list without parsing it"
   // below: the value is opaque and is only ever compared for equality, so a tab
@@ -374,17 +381,315 @@
       });
     }
 
-    function readAll(reviewId) {
-      return readList(keyFor(reviewId), collapseAll).map(detach);
+    // -----------------------------------------------------------------------
+    // The items: one key per item
+    // -----------------------------------------------------------------------
+    //
+    // Spec 20260922.01, requirement 2. The items used to be ONE key holding the
+    // whole list, so every keystroke re-serialized every item in the review
+    // (over 300 KB on the largest one). Now:
+    //
+    //   lahe.item.v2:<review>:<item>        one record
+    //   lahe.index.v2:<review>              {ids, removed}: the ids in creation
+    //                                       order, touched only on create and
+    //                                       delete, plus the ids deleted here
+    //                                       that the old key still carries
+    //   lahe.gen.v1:lahe.index.v2:<review>  one stamp for the whole review
+    //
+    // WRITE ORDER: the item's key, then the index, then the stamp. A crash
+    // between the first two leaves an item key the index does not list, never
+    // an index naming an item that is not there, and the first load in a store
+    // scans for exactly that case (unlisted below). The stamp moving last is the
+    // same cross-tab rule writeList states: a reader that lands in the middle
+    // holds a stamp that is already out of date.
+    //
+    // THE OLD WHOLE-LIST KEY (lahe.items.v1:<review>) is read whenever it is
+    // present and merged per item, newest by revision and then by updated_at.
+    // Every tab SHOWS the merge. Only the tab holding the review's lock WRITES
+    // it down, so a read-only window stays one that writes nothing. It is never
+    // deleted in this release: a tab still running the old bundle can be
+    // mid-unload, or take the review back later, and it writes that key. Its
+    // stamp is watched like ours, and taking the lock re-reads it, so a write
+    // from an old tab lands either way.
+    var reviewCache = Object.create(null);
+    var holding = Object.create(null);
+    var scanned = Object.create(null);
+
+    function itemKeyFor(reviewId, id) {
+      keyFor(reviewId);
+      return ITEM_PREFIX + reviewId + ":" + id;
     }
 
+    function indexKeyFor(reviewId) {
+      keyFor(reviewId);
+      return INDEX_PREFIX + reviewId;
+    }
+
+    function reviewStampKey(reviewId) {
+      return genKeyFor(indexKeyFor(reviewId));
+    }
+
+    function legacyStampKey(reviewId) {
+      return genKeyFor(keyFor(reviewId));
+    }
+
+    function readIndex(reviewId) {
+      var got = readJson(indexKeyFor(reviewId), null);
+      var ids = got && Array.isArray(got.ids) ? got.ids : [];
+      var removed = got && Array.isArray(got.removed) ? got.removed : [];
+      return {
+        ids: ids.filter(isId),
+        removed: removed.filter(isId)
+      };
+    }
+
+    function isId(value) {
+      return typeof value === "string" && value.length > 0;
+    }
+
+    function asSet(list) {
+      var out = Object.create(null);
+      list.forEach(function (id) {
+        out[id] = true;
+      });
+      return out;
+    }
+
+    // Newer by revision, then by updated_at. Ties go to the copy already held,
+    // so an old key that says the same thing writes nothing.
+    function newerThan(candidate, held) {
+      var a = candidate[record.FIELD.REV] || 0;
+      var b = held[record.FIELD.REV] || 0;
+      if (a !== b) return a > b;
+      return String(candidate[record.FIELD.UPDATED_AT] || "") > String(held[record.FIELD.UPDATED_AT] || "");
+    }
+
+    /**
+     * Everything this review holds, off the bytes: ours, anything unlisted, and
+     * the old key merged over it.
+     *
+     * @returns {{ids: string[], byId: Object, indexed: Object, removed: string[],
+     *            legacyIds: Object, pending: string[]}}
+     *   `pending` names the items where the old key's copy won and is not yet
+     *   written into its own key.
+     */
+    function parseReview(reviewId) {
+      var index = readIndex(reviewId);
+      var removed = asSet(index.removed);
+      var ids = [];
+      var byId = Object.create(null);
+      var indexed = Object.create(null);
+
+      index.ids.forEach(function (id) {
+        if (removed[id] || byId[id]) return;
+        var got = readJson(itemKeyFor(reviewId, id), null);
+        if (!got || typeof got !== "object") return;
+        byId[id] = record.collapsePageCheckNote(got);
+        indexed[id] = true;
+        ids.push(id);
+      });
+
+      // Unlisted items: a key whose index write never landed. Looked for once
+      // per review per store, which is once per page load, because a crash is
+      // the only way to leave one and the next load is where it is found.
+      var unlisted = [];
+      if (!scanned[reviewId] && typeof backing.key === "function") {
+        var prefix = ITEM_PREFIX + reviewId + ":";
+        var keys = [];
+        for (var k = 0; k < backing.length; k += 1) {
+          var name = backing.key(k);
+          if (name && name.indexOf(prefix) === 0) keys.push(name);
+        }
+        keys.forEach(function (name) {
+          var id = name.slice(prefix.length);
+          if (!isId(id) || removed[id] || byId[id]) return;
+          var got = readJson(name, null);
+          if (got && typeof got === "object" && got[record.FIELD.ID] === id) unlisted.push(record.collapsePageCheckNote(got));
+        });
+        unlisted.sort(function (x, y) {
+          var a = String(x[record.FIELD.CREATED_AT] || "");
+          var b = String(y[record.FIELD.CREATED_AT] || "");
+          return a < b ? -1 : a > b ? 1 : 0;
+        });
+        unlisted.forEach(function (item) {
+          byId[item[record.FIELD.ID]] = item;
+          ids.push(item[record.FIELD.ID]);
+        });
+      }
+
+      var legacy = readJson(keyFor(reviewId), []);
+      var legacyIds = Object.create(null);
+      var pending = [];
+      (Array.isArray(legacy) ? legacy : []).forEach(function (raw) {
+        if (!raw || typeof raw !== "object" || !isId(raw[record.FIELD.ID])) return;
+        var id = raw[record.FIELD.ID];
+        legacyIds[id] = true;
+        if (removed[id]) return;
+        var old = record.collapsePageCheckNote(raw);
+        if (!byId[id]) {
+          ids.push(id);
+          byId[id] = old;
+          pending.push(id);
+        } else if (newerThan(old, byId[id])) {
+          byId[id] = old;
+          pending.push(id);
+        }
+      });
+
+      return {
+        ids: ids,
+        byId: byId,
+        indexed: indexed,
+        removed: index.removed,
+        legacyIds: legacyIds,
+        pending: pending
+      };
+    }
+
+    /**
+     * The review, from memory when nobody has written since this store looked.
+     *
+     * Same double read of the stamps as readList, for the same reason, with the
+     * old key's stamp watched beside ours.
+     */
+    function loadReview(reviewId) {
+      var stampKey = reviewStampKey(reviewId);
+      var oldStampKey = legacyStampKey(reviewId);
+      var stamp = backing.getItem(stampKey);
+      var oldStamp = backing.getItem(oldStampKey);
+      var held = reviewCache[reviewId];
+      if (held && held.stamp === stamp && held.oldStamp === oldStamp) return held;
+      var state = null;
+      for (var tries = 0; tries < READ_ATTEMPTS; tries += 1) {
+        state = parseReview(reviewId);
+        var after = backing.getItem(stampKey);
+        var oldAfter = backing.getItem(oldStampKey);
+        if (after === stamp && oldAfter === oldStamp) {
+          state.stamp = stamp;
+          state.oldStamp = oldStamp;
+          break;
+        }
+        stamp = after;
+        oldStamp = oldAfter;
+        state.stamp = undefined;
+      }
+      scanned[reviewId] = true;
+      if (state.stamp !== undefined) reviewCache[reviewId] = state;
+      else delete reviewCache[reviewId];
+      if (holding[reviewId]) adoptLegacy(reviewId, state);
+      return state;
+    }
+
+    /**
+     * The lock holder writes the old key's winners into their own keys.
+     *
+     * Best effort from a READ: a full storage here must not stop the rail from
+     * rendering, and the merged view in memory is already right. The next cold
+     * read tries again, and the reviewer's next keystroke on that item writes it
+     * anyway, loudly.
+     */
+    function adoptLegacy(reviewId, state) {
+      var unindexed = state.ids.some(function (id) {
+        return !state.indexed[id];
+      });
+      if (!state.pending.length && !unindexed) return;
+      try {
+        delete reviewCache[reviewId];
+        state.pending.forEach(function (id) {
+          writeJson(itemKeyFor(reviewId, id), state.byId[id]);
+        });
+        writeIndex(reviewId, state);
+        state.pending = [];
+        state.ids.forEach(function (id) {
+          state.indexed[id] = true;
+        });
+        stampReview(reviewId, state);
+      } catch (err) {
+        void err;
+      }
+    }
+
+    function writeIndex(reviewId, state) {
+      writeJson(indexKeyFor(reviewId), { ids: state.ids.slice(), removed: state.removed.slice() });
+    }
+
+    // The stamp, last, with writeList's rule for a stamp that cannot be written.
+    function stampReview(reviewId, state) {
+      cacheTicks += 1;
+      var stamp = cacheSalt + ":" + cacheTicks;
+      try {
+        writeRaw(reviewStampKey(reviewId), stamp);
+      } catch (err) {
+        delete reviewCache[reviewId];
+        try {
+          backing.removeItem(reviewStampKey(reviewId));
+        } catch (ignored) {
+          void ignored;
+        }
+        throw err;
+      }
+      state.stamp = stamp;
+      state.oldStamp = backing.getItem(legacyStampKey(reviewId));
+      reviewCache[reviewId] = state;
+    }
+
+    function readAll(reviewId) {
+      var state = loadReview(reviewId);
+      return state.ids.map(function (id) {
+        return detach(state.byId[id]);
+      });
+    }
+
+    // Replaces the whole set. Only the merge with the helper calls this, and it
+    // writes just the items that differ, so it costs what changed.
     function writeAll(reviewId, items) {
-      writeList(
-        keyFor(reviewId),
-        items.map(function (item) {
-          return detach(record.collapsePageCheckNote(item));
+      var state = loadReview(reviewId);
+      var next = items.map(function (item) {
+        return detach(record.collapsePageCheckNote(item));
+      });
+      var keep = asSet(
+        next.map(function (item) {
+          return item[record.FIELD.ID];
         })
       );
+      delete reviewCache[reviewId];
+      var indexChanged = false;
+      next.forEach(function (item) {
+        var id = item[record.FIELD.ID];
+        var held = state.byId[id];
+        if (!held || !state.indexed[id] || JSON.stringify(held) !== JSON.stringify(item)) {
+          writeJson(itemKeyFor(reviewId, id), item);
+        }
+        if (!state.indexed[id]) indexChanged = true;
+      });
+      var gone = state.ids.filter(function (id) {
+        return !keep[id];
+      });
+      var nextIds = next.map(function (item) {
+        return item[record.FIELD.ID];
+      });
+      if (gone.length || nextIds.join("\n") !== state.ids.join("\n")) indexChanged = true;
+      var removed = state.removed.slice();
+      gone.forEach(function (id) {
+        if (state.legacyIds[id] && removed.indexOf(id) === -1) removed.push(id);
+      });
+      var fresh = {
+        ids: nextIds,
+        byId: Object.create(null),
+        indexed: Object.create(null),
+        removed: removed,
+        legacyIds: state.legacyIds,
+        pending: []
+      };
+      next.forEach(function (item) {
+        fresh.byId[item[record.FIELD.ID]] = item;
+        fresh.indexed[item[record.FIELD.ID]] = true;
+      });
+      if (indexChanged) writeIndex(reviewId, fresh);
+      gone.forEach(function (id) {
+        backing.removeItem(itemKeyFor(reviewId, id));
+      });
+      stampReview(reviewId, fresh);
       return items;
     }
 
@@ -396,6 +701,9 @@
     // Writes one item. SYNCHRONOUS. Returns the item as stored. A quota failure
     // throws rather than being swallowed: R11 says failures are loud, and a
     // silently dropped write is the failure this tool exists to remove.
+    //
+    // A keystroke on an item already listed writes that item's key and the
+    // review's stamp, and nothing else.
     function write(reviewId, item) {
       record.validateItem(item);
       // A content write means this browser holds keystrokes the helper has not
@@ -403,17 +711,23 @@
       // cleared here (finding 10, "clear on the next content write"). The ack is
       // kept in a side-table, NOT on the item, so it never leaks into a snapshot,
       // an export, or review.json; merge reads it through a transient decoration.
-      clearAcknowledged(reviewId, item[record.FIELD.ID]);
-      var items = readAll(reviewId);
-      for (var i = 0; i < items.length; i += 1) {
-        if (items[i][record.FIELD.ID] === item[record.FIELD.ID]) {
-          items[i] = item;
-          writeAll(reviewId, items);
-          return item;
-        }
+      var id = item[record.FIELD.ID];
+      clearAcknowledged(reviewId, id);
+      var state = loadReview(reviewId);
+      var stored = detach(record.collapsePageCheckNote(item));
+      // Dropped first, so a write that fails part way leaves nothing held that
+      // disagrees with the disk: the next read goes back to the bytes.
+      delete reviewCache[reviewId];
+      writeJson(itemKeyFor(reviewId, id), stored);
+      if (!state.byId[id]) state.ids.push(id);
+      state.byId[id] = stored;
+      var pendingAt = state.pending.indexOf(id);
+      if (pendingAt !== -1) state.pending.splice(pendingAt, 1);
+      if (!state.indexed[id]) {
+        writeIndex(reviewId, state);
+        state.indexed[id] = true;
       }
-      items.push(item);
-      writeAll(reviewId, items);
+      stampReview(reviewId, state);
       return item;
     }
 
@@ -481,25 +795,32 @@
     }
 
     function readItem(reviewId, id) {
-      var items = readAll(reviewId);
-      for (var i = 0; i < items.length; i += 1) {
-        if (items[i][record.FIELD.ID] === id) return items[i];
-      }
-      return null;
+      var state = loadReview(reviewId);
+      return state.byId[id] ? detach(state.byId[id]) : null;
     }
 
     // The reviewer deleting their own outstanding work is the only caller.
     // Nothing in the library removes an item on its own initiative.
+    //
+    // The index moves first, then the key goes. An id the old whole-list key
+    // still carries is remembered in the index as removed, or the next merge
+    // with that key would bring the item back.
     function remove(reviewId, id) {
-      var items = readAll(reviewId);
-      for (var i = 0; i < items.length; i += 1) {
-        if (items[i][record.FIELD.ID] === id) {
-          items.splice(i, 1);
-          writeAll(reviewId, items);
-          return true;
-        }
-      }
-      return false;
+      var state = loadReview(reviewId);
+      if (!state.byId[id]) return false;
+      delete reviewCache[reviewId];
+      state.ids = state.ids.filter(function (each) {
+        return each !== id;
+      });
+      delete state.byId[id];
+      delete state.indexed[id];
+      var pendingAt = state.pending.indexOf(id);
+      if (pendingAt !== -1) state.pending.splice(pendingAt, 1);
+      if (state.legacyIds[id] && state.removed.indexOf(id) === -1) state.removed.push(id);
+      writeIndex(reviewId, state);
+      backing.removeItem(itemKeyFor(reviewId, id));
+      stampReview(reviewId, state);
+      return true;
     }
 
     // Every review this origin holds anything for. Copy and export are scoped
@@ -507,9 +828,16 @@
     // origin's slice of a review, and the export says so.
     function reviews() {
       var out = [];
+      var seen = Object.create(null);
       for (var i = 0; i < backing.length; i += 1) {
         var k = backing.key(i);
-        if (k && k.indexOf(KEY_PREFIX) === 0) out.push(k.slice(KEY_PREFIX.length));
+        var id = null;
+        if (k && k.indexOf(KEY_PREFIX) === 0) id = k.slice(KEY_PREFIX.length);
+        else if (k && k.indexOf(INDEX_PREFIX) === 0) id = k.slice(INDEX_PREFIX.length);
+        if (id && !seen[id]) {
+          seen[id] = true;
+          out.push(id);
+        }
       }
       return out;
     }
@@ -995,6 +1323,7 @@
         decided = true;
         clearTimeout(deadline);
         writeJson(holderKey(reviewId), self);
+        nowHolding(reviewId);
         settle({ acquired: true, holder: self, windowId: windowId, failure: null, reason: null, reclaimed: true });
         return new Promise(function (resolve) {
           releaseHeldLock = resolve;
@@ -1016,6 +1345,7 @@
         // a reviewer out of their own review, and a reviewer locked out is a
         // work-losing outcome in a tool whose thesis is never losing work.
         writeJson(holderKey(reviewId), self);
+        nowHolding(reviewId);
         return Promise.resolve({
           acquired: true,
           holder: self,
@@ -1065,6 +1395,7 @@
           return null;
         }
         writeJson(holderKey(reviewId), self);
+        nowHolding(reviewId);
         settle({ acquired: true, holder: self, windowId: windowId, failure: null, reason: null });
         // HELD FOR THE LIFE OF THE SESSION. The promise this returns is what
         // keeps the lock, so it resolves only when releaseWindow is called.
@@ -1076,7 +1407,17 @@
       return answered;
     }
 
+    // This window now holds the review, so it is the one that writes the old
+    // whole-list key's merge down. The held copy is dropped so the next read
+    // goes back to the bytes: an outgoing old-bundle document may have written
+    // that key on its way out, with no stamp to say so.
+    function nowHolding(reviewId) {
+      holding[reviewId] = true;
+      delete reviewCache[reviewId];
+    }
+
     function releaseWindow(reviewId) {
+      if (reviewId) holding[reviewId] = false;
       if (typeof releaseHeldLock === "function") {
         releaseHeldLock();
         releaseHeldLock = null;
@@ -1160,6 +1501,8 @@
 
   return {
     KEY_PREFIX: KEY_PREFIX,
+    ITEM_PREFIX: ITEM_PREFIX,
+    INDEX_PREFIX: INDEX_PREFIX,
     OUTBOX_PREFIX: OUTBOX_PREFIX,
     GEN_PREFIX: GEN_PREFIX,
     CHIPS_PREFIX: CHIPS_PREFIX,
