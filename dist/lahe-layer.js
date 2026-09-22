@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+0b99f75dd242
+ * version 0.2.0+9be3402d5640
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+0b99f75dd242";
+  g.LAHE.version = "0.2.0+9be3402d5640";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -6379,17 +6379,31 @@
     // the difference the reviewer actually asked for: "waiting 10m and nothing
     // has happened" is worth knowing, "waiting 10m while the agent works" is
     // not alarming.
-    ACTIVE_MS: 180000,
+    //
+    // Deliberately the same number as RECENT_COMMAND_MS. A model thinking
+    // through one hard comment leaves no footprint at all while it thinks, and
+    // no monitor is armed while an agent works the batch it was handed. At
+    // three minutes that quiet read as an empty chair, and a reviewer who
+    // commented mid-thought was told nobody had picked it up. One number for
+    // both means the agent counts as working for exactly as long as the machine
+    // counts somebody as being on the review.
+    ACTIVE_MS: 600000,
     // Past this, a wait with nothing happening is loud. Nothing the machine can
     // see about listeners buys quiet here: a file tail can be armed all
     // afternoon over an agent that stopped reading.
     STALE_MS: 600000,
     // How recently a lahe command must have run for the machine to count as
-    // having somebody on it. Wider than ACTIVE_MS on purpose, and only ever used
+    // having somebody on it. The same as ACTIVE_MS on purpose, and only ever used
     // to WITHHOLD the "no agent listening" wording: an exit-on-work monitor is
     // gone the moment work arrives, so an agent can be mid-edit with nothing
     // holding the feed open and no heartbeat.
-    RECENT_COMMAND_MS: 600000
+    RECENT_COMMAND_MS: 600000,
+    // When "nobody has picked this up" goes loud. The words start at QUIET_MS
+    // like every other state, but the amber banner and the late card wait until
+    // here. Not being able to see a listener is weak evidence: an agent can be
+    // mid-thought with nothing holding the feed open, so half a minute of it is
+    // not enough to tell the reviewer their comment landed nowhere.
+    NO_AGENT_LOUD_MS: 120000
   };
 
   /**
@@ -6397,8 +6411,9 @@
    * a waiting card turns amber on it, and the banner at the top of the rail
    * shows on it. Three places, one rule, so they can never disagree.
    *
-   *  - Nothing is listening: overdue once the line starts speaking (QUIET_MS).
-   *    There is nobody to wait for.
+   *  - Nothing is listening: the line speaks at QUIET_MS, but this only goes
+   *    loud after NO_AGENT_LOUD_MS. An agent thinking through a hard comment
+   *    leaves no footprint, and that looks the same as an empty chair.
    *  - Something may be listening, nothing came back: overdue after STALE_MS.
    *  - The agent is working: never. The queue behind it is explained.
    *
@@ -6413,7 +6428,8 @@
     if (typeof state !== "string" || !Object.prototype.hasOwnProperty.call(AGENT_LIVENESS.TEXT, state)) return false;
     if (typeof waitedMs !== "number" || !isFinite(waitedMs) || waitedMs < AGENT_LIVENESS.QUIET_MS) return false;
     if (state === AGENT_LIVENESS.STATE.WORKING) return false;
-    return state === AGENT_LIVENESS.STATE.NO_AGENT || waitedMs >= AGENT_LIVENESS.STALE_MS;
+    if (state === AGENT_LIVENESS.STATE.NO_AGENT) return waitedMs >= AGENT_LIVENESS.NO_AGENT_LOUD_MS;
+    return waitedMs >= AGENT_LIVENESS.STALE_MS;
   }
   AGENT_LIVENESS.overdue = livenessOverdue;
 
@@ -36430,7 +36446,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+0b99f75dd242";
+  var VERSION = "0.2.0+9be3402d5640";
 
   var protocol = ns.protocol;
   var record = ns.record;
