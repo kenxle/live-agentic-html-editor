@@ -62,7 +62,7 @@ Agree or disagree with each one on the page:
 1. **Open: what a row is.** A document, a review, or a session. Given the volume, grouping by review or session may read better than a flat list of documents. The wireframe phase settles it: I'll mock the three groupings on your real data and you pick.
 2. **An agent is always in the loop to bring something back, and the Library can also launch a new one.** Usually the agent that opened the Library picks the document up. A **Launch a new agent** button starts a fresh agent on that document instead, so one agent isn't juggling ten. In scope to explore. The complication: a web page that starts programs on your laptop is the riskiest thing this feature could add. The safe shape is for the button to ask the agent already running, and that agent launches the new one (for example, a new Terminal window running Claude Code with the takeover prompt). The page itself never starts anything.
 3. **The helper does not need to be running at login.** After a restart, "open the lahe library" starts it. So a browser bookmark to the Library only works once some agent has started LAHE that day.
-4. **Default view is the last 7 days plus starred.** Everything older is reachable by search, never deleted. At 20 a day that is over 100 rows, so the view groups them by day, newest first, and today is open while older days start collapsed.
+4. **The Library has to manage volume.** At 20 or more documents a day, a plain list stops working within a week. How it manages that (a recent window, grouping by day, stars, collapsing) is a design question for the wireframe, not a premise. Nothing is ever deleted.
 5. **Rows need a name you'd recognize.** The page title does that for most rows. For the rest (untitled pages, duplicate titles like "Brief"), the Library shows the folder and file name under it.
 6. **This comes before the npm package and Product Hunt.** Those bring new users. This fixes a daily pain for the one user you have now. And it doesn't block either launch.
 
@@ -121,6 +121,7 @@ Approach A. It gives you a page you can scan, star, and act on without adding an
 ## Open questions
 
 - What a row is, and how rows group (premise 1). Settled in the wireframe.
+- How the view keeps the volume manageable (premise 4). Settled in the wireframe.
 - How a new agent gets launched (premise 2): which host (Claude Code, Codex), in which app (Terminal, iTerm, the Claude desktop app), and whether the new agent gets a name you can recognize. Settled in the architecture.
 
 ## Questions for you
