@@ -4,6 +4,15 @@
 
 Clicking a link on a reviewed page to a document in another folder opens it read-only, with no editor. That breaks the rule set on 2026-09-16: anything our own static server serves gets the editor. This spec closes the gap for linked documents. No new review is created by a click. The linked page uses the review the document already has in this session, or else the review of the page you came from.
 
+## Your calls: where the security review narrows your rule
+
+Your rule is that anything our own server serves gets the editor. The security review keeps that for every page you reach by clicking a link, and narrows it in two places. Each needs a yes or no from you.
+
+1. **Pages you did not click to, sitting in a linked folder, stay without the editor.** When a page links to a file in another folder, the server opens that whole folder so the link works. The review puts the editor only on the files a link actually points to, not on their neighbours. Why: the editor's key would otherwise reach every page in any folder a document happens to link into. Say no, and every page in a linked folder gets the editor.
+2. **If the review you came from has been deleted, the linked page opens read-only.** It does not borrow some other review's key. Why: that other review may belong to a different document, so your comment would land somewhere you did not expect. Say no, and it falls back to the newest review on that server.
+
+Separately, and not a narrowing: a linked document that already has its own review now takes you to that review's page, instead of opening a copy with its key. You get your earlier comments that way. It also found a leak that exists today, where hidden files like `.env` in a linked folder can be fetched from the page server. That is being fixed now on its own, without waiting for this spec.
+
 ## Problem
 
 - A reviewed Markdown page can link to a document outside its own folder. The server makes those links work by mounting the target's folder read-only, under `/.lahe-source/<hash>/`.
