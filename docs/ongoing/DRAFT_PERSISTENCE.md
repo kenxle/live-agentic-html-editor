@@ -311,3 +311,15 @@ While checking why some stored comments are huge (62 of 3,208 are 50 to 500 KB; 
 These records are what the browser keeps and sends with every draft save. The review file agents read already caps these fields, so agents never see the bulk.
 
 Tab memory, measured the same day from Chrome's Task Manager: LAHE tabs run 60 to 220 MB. About 60 to 70 MB is Chrome's floor for any tab. The largest ("What happened overnight", 160 MB) holds only 36 comments (115 KB) and loads Plotly for six charts. Polling should have zero memory growth over time; a reload of that tab tells whether four days of idle polling added anything. If it did, that is a per-poll leak and a bug by definition.
+
+## Ken's decisions, 2026-09-22
+
+- **Build (d1), (d2) and (d4) now.** They give up nothing: stop rewriting review.json when only drafts changed; stop the browser rewriting every item on every keystroke; make the pause a real pause, and fix typing into a reopened edit posting it as ready.
+- **Trust browser storage.** Browser makers optimize it for exactly this. Back up to the helper rarely: a floor of about 10 seconds, plus the risky moments (leaving the box, hiding the tab, closing it). Losing a few seconds of typing to a computer crash is acceptable.
+- **Not changing a site's behavior outranks keeping every unsent draft.** A page that clears its own storage can take an unsent draft with it; sent work stays safe in the helper's log.
+- **Don't wire up restoring drafts from the helper.** Rare, not worth the rigor.
+- **Moving between localhost and 127.0.0.1 mid-review** is an edge case we do not design around.
+- **The "drafts N" count** is shown only to agents by `lahe status`, never in the rail.
+- **Send only what changed (d3)** is worth doing, with the shared parts stored once. It changes the log format, so it gets its own spec later.
+- **Code review now checks the cost of writes,** not only correctness. Added to the review checklist.
+
