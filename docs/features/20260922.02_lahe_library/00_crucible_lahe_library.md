@@ -1,9 +1,9 @@
 # Crucible: LAHE Library
 
 Date: 2026-09-22
-Status: DRAFT (waiting on your answers at the bottom)
+Status: ACCEPTED
 
-**Short version:** I'd build it. My recommendation is now Approach B: a live Library page in the helper, whose Open and Star buttons act directly (you said that's required). Picking a document up and launching a new agent still go through an agent. I found one hidden problem. The bookmark idea from the ideas page does not survive a computer restart, because the helper stops when the last session closes and nothing starts it at login. Questions at the bottom.
+**Short version:** Build it, as Approach B: a live Library page in the helper, whose Open and Star buttons act directly (you said that's required). Picking a document up and launching a new agent still go through an agent. I found one hidden problem. The bookmark idea from the ideas page does not survive a computer restart, because the helper stops when the last session closes and nothing starts it at login.
 
 ## The idea, as stated
 
@@ -57,7 +57,7 @@ Open tabs are the index: you keep them open because closing one feels like losin
 
 ## Premises
 
-Agree or disagree with each one on the page:
+Premises 3 and 5 drew no objection and stand. Premises 1, 2 and 4 were revised on your comments, as written.
 
 1. **Open: what a row is.** A document, a review, or a session. Given the volume, grouping by review or session may read better than a flat list of documents. The wireframe phase settles it: I'll mock the three groupings on your real data and you pick.
 2. **An agent is usually in the loop to bring something back, and the Library can also launch a new one.** Usually the agent that opened the Library picks the document up. A **Launch a new agent** button starts a fresh agent on that document instead, so one agent isn't juggling ten. In scope to explore. The complication: a web page that starts programs on your laptop is the riskiest thing this feature could add. The safe shape is for the button to ask the agent already running, and that agent launches the new one (for example, a new Terminal window running Claude Code with the takeover prompt). The page itself never starts anything.
@@ -125,7 +125,24 @@ Approach B. Open and Star acting directly is required, and only B does that. Bot
 - How a new agent gets launched (premise 2): which host (Claude Code, Codex), in which app (Terminal, iTerm, the Claude desktop app), and whether the new agent gets a name you can recognize. Settled in the architecture.
 - What the Library does when no agent is listening (premise 2 says "usually"). The safe way to launch an agent needs a running agent to ask. With none, the page could offer the takeover prompt to copy, or the helper could launch one itself, which brings back the risk. Settled in the architecture.
 
-## Questions for you
+## Challenges you accepted
 
-1. **Do you agree with the premises?** Mark any you disagree with.
-2. **Approach B, as described under Recommended approach?**
+- Local-only is not a boundary: the Library's buttons use the helper's existing token check.
+- Each picked-up document keeps its own review and session, so one agent may hold several sessions.
+
+## Challenges you rejected
+
+- **"Ask an agent to grep for it" is enough.** Rejected: 20 documents a day, you can't remember the names, you need to browse.
+- **Approach A, acting through comments.** Rejected: Open and Star must act directly.
+- **The Library should never start agents.** Rejected: a Launch a new agent button is in scope.
+- **A fixed default view (7 days, grouped by day) as a premise.** Rejected: that is a design question, and the premise is only that volume must be managed.
+- **This must come before the npm package and Product Hunt.** Rejected as not a requirement.
+
+## What we skipped and why
+
+- Future-fit: skipped. More agents means more documents, so this only gets more needed.
+- Roadmap priority: you said ordering is not a requirement.
+
+## The assignment
+
+Write the brief for Approach B, then wireframe the three row groupings (by document, by review, by session) on your real data so you can pick one.
