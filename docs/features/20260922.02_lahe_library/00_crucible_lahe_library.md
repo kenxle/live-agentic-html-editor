@@ -59,7 +59,7 @@ Open tabs are the index: you keep them open because closing one feels like losin
 
 Agree or disagree with each one on the page:
 
-1. **The Library lists documents, not reviews or sessions.** One row per document. Several reviews on the same file fold into one row.
+1. **Open: what a row is.** A document, a review, or a session. Given the volume, grouping by review or session may read better than a flat list of documents. The wireframe phase settles it: I'll mock the three groupings on your real data and you pick.
 2. **An agent is always in the loop to bring something back.** You'll ask an agent to open the Library, so the Library never has to start servers or agents by itself.
 3. **The helper does not need to be running at login.** After a restart, "open the lahe library" starts it. So a browser bookmark to the Library only works once some agent has started LAHE that day.
 4. **Default view is the last 7 days plus starred.** Everything older is reachable by search, never deleted. At 20 a day that is over 100 rows, so the view groups them by day, newest first, and today is open while older days start collapsed.
@@ -117,6 +117,10 @@ Agents grep for documents when asked. You lose the browse view and keep the "bur
 ## Recommended approach
 
 Approach A. It gives you a page you can scan, star, and act on without adding anything that lets a web page command your machine. It also follows the way you already said you'll use it: you ask an agent, and that agent does the rest. Approach C falls out of it for free, since the command that builds the page can also print the list.
+
+## Open questions
+
+- What a row is, and how rows group (premise 1). Settled in the wireframe.
 
 ## Questions for you
 
