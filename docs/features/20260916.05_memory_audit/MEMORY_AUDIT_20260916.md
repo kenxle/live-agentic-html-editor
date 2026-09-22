@@ -8,29 +8,29 @@ This page is the hub. Start here; everything else is one click away.
 
 **Open questions, waiting on you**
 
-- [Stop writing unsent drafts so often](../features/20260922.01_draft_write_cost/01_spec_draft_write_cost.md): the spec from your decisions. Approved, building.
+- [Stop writing unsent drafts so often](../20260922.01_draft_write_cost/01_spec_draft_write_cost.md): the spec from your decisions. Approved, building.
 - [Where unsent comments are saved, and what it costs](DRAFT_PERSISTENCE.md): drafts are 79% of what gets written, plus three oversized-record bugs (the rest of the page saved as "text after", embedded images saved three times, the whole-page highlight). Needs your read before any change.
 
 **Shipped, with their specs**
 
-- [One message per pause, not per keystroke](OUTBOX_COALESCING.md): the design note for the first fix.
-- [The drain stops repeating the agent instructions](../features/20260916.02_contract_once/01_spec_contract_once.md)
-- [The helper stops re-reading every log](../features/20260916.03_helper_lazy_projection/01_spec_lazy_projection.md)
-- [Waiting cards turn amber, and session names](../features/20260916.04_unanswered_prominence/01_spec_unanswered_prominence.md)
-- [Hold: queue comments, release them at once](../features/20260917.01_hold_toggle/01_spec_hold_toggle.md)
-- [The rail follows you through a folder of pages](STATIC_SITE_FOLDER.md)
+- [One message per pause, not per keystroke](../../ongoing/OUTBOX_COALESCING.md): the design note for the first fix.
+- [The drain stops repeating the agent instructions](../20260916.02_contract_once/01_spec_contract_once.md)
+- [The helper stops re-reading every log](../20260916.03_helper_lazy_projection/01_spec_lazy_projection.md)
+- [Waiting cards turn amber, and session names](../20260916.04_unanswered_prominence/01_spec_unanswered_prominence.md)
+- [Hold: queue comments, release them at once](../20260917.01_hold_toggle/01_spec_hold_toggle.md)
+- [The rail follows you through a folder of pages](../../ongoing/STATIC_SITE_FOLDER.md)
 - [The merge record for the first batch](CHECKPOINT_20260916.md)
 
 **The agent instructions, rebuilt**
 
-- [The skill](../../skills/lahe/SKILL.md): every instruction for running a review.
-- [AGENTS.md](../../AGENTS.md): about the tool, hosts, and install.
-- [Your seven answers](../AGENTS.next.questions.md) and [where every old rule went](../AGENTS.next.coverage.md).
-- [Who owns a session, and what a handoff guarantees](SESSION_OWNERSHIP.md)
+- [The skill](../../../skills/lahe/SKILL.md): every instruction for running a review.
+- [AGENTS.md](../../../AGENTS.md): about the tool, hosts, and install.
+- [Your seven answers](../../AGENTS.next.questions.md) and [where every old rule went](../../AGENTS.next.coverage.md).
+- [Who owns a session, and what a handoff guarantees](../../ongoing/SESSION_OWNERSHIP.md)
 
 ## Where this stands (updated 2026-09-21)
 
-This is the one progress page for all of the memory, CPU, and token work. The merge record for the first batch is in `docs/ongoing/CHECKPOINT_20260916.md` and is not updated any more.
+This is the one progress page for all of the memory, CPU, and token work. The merge record for the first batch is in `docs/features/20260916.05_memory_audit/CHECKPOINT_20260916.md` and is not updated any more.
 
 | Work | State |
 | --- | --- |
@@ -47,7 +47,7 @@ This is the one progress page for all of the memory, CPU, and token work. The me
 | 11. Trim the drain to only the comments and what locates them (drop the pointer line and the field-class table) | ⬜ Not started. Ken, 2026-09-16: it repeats on every wake, so it carries nothing else |
 | 12. The drain can never print the contract by accident (no flag decides it any more) | ✅ Done. `--quiet` used to silently gate it; now status.js always returns the pointer, with or without `--quiet` |
 | 13. An orchestrator that watches LAHE keeps a small pool of subagents warm instead of spawning fresh ones for medium-size work | 🔨 Proposal below, not built. Needs your read |
-| 14. Where unsent comments are saved, and what it costs (79% of new log bytes are drafts), plus three oversized-record bugs | ✅ Done. [Analysis](DRAFT_PERSISTENCE.md); [the fix](../features/20260922.01_draft_write_cost/01_spec_draft_write_cost.md) shipped with before and after numbers. The three oversized-record bugs are still open |
+| 14. Where unsent comments are saved, and what it costs (79% of new log bytes are drafts), plus three oversized-record bugs | ✅ Done. [Analysis](DRAFT_PERSISTENCE.md); [the fix](../20260922.01_draft_write_cost/01_spec_draft_write_cost.md) shipped with before and after numbers. The three oversized-record bugs are still open |
 | 15. After the draft fix ships, each existing review keeps its old whole-list copy in browser storage beside the new per-comment copies, so storage doubles until the old copy is deleted | ⬜ Not started. Delete the old copy in the release after the draft fix, then drop the code that merges it |
 | 16. Rewording an edit the agent marked not handled still sends every pause to the helper and rewrites review.json at typing speed | ⬜ Not started. Found in the draft fix's code review. Fix: treat it like rewording a ready edit |
 | 17. The drain never goes quiet once a session has an ended review: a run by hand lists every ended review in the session (seven in one session here, the oldest from 2026-09-16) plus the field table, every time, although the docs say it prints nothing when nothing waits | ⬜ Not started. Only the monitor marks an ended review as delivered. Fold into 11 (trim the drain) |

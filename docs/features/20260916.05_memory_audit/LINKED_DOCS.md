@@ -4,7 +4,7 @@
 
 ## What happened
 
-You clicked from the memory audit hub to the draft write-cost spec. The hub lives in `docs/ongoing/`. The spec lives in `docs/features/...`. The server only puts the editor on pages inside the folder it was started for. A link out of that folder opens a plain read-only copy.
+You clicked from the memory audit hub to the draft write-cost spec. The hub lives in `docs/features/20260916.05_memory_audit/`. The spec lives in `docs/features/...`. The server only puts the editor on pages inside the folder it was started for. A link out of that folder opens a plain read-only copy.
 
 The reason is the editor's token. It is the key that lets a page send comments to the helper. A security review on 2026-09-16 kept that key inside the folder you opened, so a link could not hand it to an unrelated file.
 

@@ -96,7 +96,7 @@ Notes:
 | The page's own script clears browser storage (sign-out, `localStorage.clear()`) | RF4 | helper log **on disk only**; not shown on the rail | **lost** |
 | Reviewer clears site data, or a private window closes | not named in the docs | helper log on disk only | **lost** |
 | Same review opened on another origin (`localhost` vs `127.0.0.1`), another browser, or another profile | RF4, D5 lines 153-155 | helper log on disk only; the rail on the new origin does not show it | **lost from the new origin's view**; still in the first origin's storage |
-| Browser storage full | memory audit | the keystroke is refused and a chip says so; words stay in the box only (`comments.js:1705-1722`, `OUTBOX_COALESCING.md`) | same |
+| Browser storage full | memory audit | the keystroke is refused and a chip says so; words stay in the box only (`comments.js:1705-1722`, `../../ongoing/OUTBOX_COALESCING.md`) | same |
 | Disk full | not named in the docs | neither store can write | same |
 | Two tabs on one review | D5 lines 202-211 | second tab refused and read-only, writes nothing | same |
 | Agent working on the page | R2 | drafts are never in `review.json`, so no agent sees or discards them | same |
@@ -243,7 +243,7 @@ Store one key per item, or write the list only on commit and keep a small per-it
 
 - **Saves:** over 300 KB of serialization and storage writes per keystroke on a large review.
 - **Gives up:** nothing, if the write stays synchronous.
-- **Breaks:** the storage format. Old keys need a one-time migration. The two-tab stamp logic in `store.js` (`OUTBOX_COALESCING.md`) has to cover the new keys.
+- **Breaks:** the storage format. Old keys need a one-time migration. The two-tab stamp logic in `store.js` (`../../ongoing/OUTBOX_COALESCING.md`) has to cover the new keys.
 
 ### (d3) Send only what changed
 
@@ -252,7 +252,7 @@ For a draft `item.content`, send the typing fields only: note, after, after_html
 - **Saves:** the measured envelope plus typing fields come to 531,283 bytes, 15.8% of today's draft bytes (calc-mcp).
 - **Gives up:** nothing.
 - **Breaks:**
-  - The projection has no field-level events. It takes the newest whole record (`OUTBOX_COALESCING.md`, "Why D5 still holds"), so it would need a patch rule.
+  - The projection has no field-level events. It takes the newest whole record (`../../ongoing/OUTBOX_COALESCING.md`, "Why D5 still holds"), so it would need a patch rule.
   - A patch whose base the helper never saw has to be refused or rebuilt.
   - More moving parts than (c) for a smaller saving.
 

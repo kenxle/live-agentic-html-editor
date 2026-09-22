@@ -226,7 +226,7 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
   reviews and regenerates each on the first tick. Fix: project lazily on first
   request per review, keep the folded projection in memory and apply new events to
   it, and compact or archive closed reviews' logs. This is fix 2 in
-  docs/ongoing/MEMORY_AUDIT_20260916.md. Architecture-level: brief first.
+  docs/features/20260916.05_memory_audit/MEMORY_AUDIT_20260916.md. Architecture-level: brief first.
 
 - [ ] @anyone 2026-09-16 LAHE-wireframe-skill-guidance -- **The wireframing skill
   needs firmer guidance on how it lays out a set of pages.** Ken (2026-09-16, on

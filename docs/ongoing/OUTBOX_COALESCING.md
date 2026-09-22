@@ -1,7 +1,7 @@
 # One outbox entry per item, not one per keystroke
 
 Written 2026-09-16, alongside the fix. This is the design note the
-`docs/ongoing/MEMORY_AUDIT_20260916.md` finding 1 asked for, and it covers three
+`docs/features/20260916.05_memory_audit/MEMORY_AUDIT_20260916.md` finding 1 asked for, and it covers three
 changes that all sit on the same hot path:
 
 1. the outbox stops growing one entry per keystroke
