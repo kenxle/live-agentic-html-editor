@@ -432,6 +432,12 @@
         page: page,
         onFailure: function (failure) {
           rail.failures.add(failure);
+        },
+        // Leaving a comment box sends its draft past the 10 second floor.
+        // `sync` is built further down; by the time a reviewer can leave a box
+        // it exists.
+        onLeave: function () {
+          if (sync && typeof sync.flushNow === "function") sync.flushNow("blur");
         }
       });
     comments.bind({ page: page });
@@ -1147,7 +1153,7 @@
       done.refresh();
     });
 
-    comments.onChange(function (item, event, createdOnElement) {
+    comments.onChange(function (item, event, createdOnElement, meta) {
       // The reviewer deleted their own item. The card goes, and so does the
       // helper's copy: an item left in review.json after the browser dropped it
       // is work the agent would do that nobody is asking for. sync posts
@@ -1182,7 +1188,14 @@
       // status line steady on purpose and does not repaint on every queued
       // event, see recomputeStatus), which is what the reviewer's own comment
       // count is: it stops moving after this many.
-      sync.recordItem(item, event === "ready" ? { immediate: "ready" } : undefined);
+      sync.recordItem(
+        item,
+        event === "ready"
+          ? { immediate: "ready" }
+          : meta && meta.withdrawnFromReady
+            ? { withdrawnFromReady: true }
+            : undefined
+      );
       rail.upsertCard(item);
     });
 
@@ -1522,7 +1535,20 @@
       rail.failures.add(failure);
     }, { helperOrigin: config.helper });
 
-    if (opts.startSync !== false) sync.start();
+    if (opts.startSync !== false) {
+      var started = sync.start();
+      // A committed edit a crashed page left withdrawn (the reviewer was
+      // rewording it) is committed now, once this window holds the review, so
+      // a read-only window writes nothing. Then replay puts it back on the page
+      // (spec 20260922.01, requirement 6).
+      if (started && typeof started.then === "function" && typeof editing.recoverWithdrawn === "function") {
+        started.then(function (lock) {
+          if (!lock || !lock.acquired || readOnlyActive) return;
+          var recovered = editing.recoverWithdrawn();
+          if (recovered.length) ns.replay.schedule(ns.replay.REASON.BOOT);
+        });
+      }
+    }
 
     // The first pass. Replay is what puts committed edits back on a page that
     // was reloaded, so it runs on boot and not only on a later repaint.

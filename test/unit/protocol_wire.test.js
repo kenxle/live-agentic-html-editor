@@ -73,7 +73,9 @@ test("an event without an event_id or with an unknown type is refused", () => {
 
 test("the flush policy is pinned, and sendBeacon is forbidden", () => {
   assert.equal(protocol.FLUSH.HELPER_DEBOUNCE_MS, 750);
-  assert.deepEqual(protocol.FLUSH.IMMEDIATE_ON, ["blur", "ready", "navigation", "unload"]);
+  assert.deepEqual(protocol.FLUSH.IMMEDIATE_ON, ["blur", "hide", "ready", "navigation", "unload"]);
+  // Spec 20260922.01: a draft-only item reaches the helper at most once per 10s.
+  assert.equal(protocol.FLUSH.DRAFT_FLOOR_MS, 10000);
   assert.equal(protocol.FLUSH.TRANSPORT_ON_UNLOAD, "fetch keepalive");
   assert.equal(protocol.FLUSH.SEND_BEACON_IS_FORBIDDEN, true);
   assert.equal(protocol.FLUSH.KEEPALIVE_MAX_BYTES, 65536);

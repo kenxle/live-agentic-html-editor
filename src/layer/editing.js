@@ -578,7 +578,7 @@
     }
 
     // The one write path. Storage first, synchronously, then everyone else.
-    function persist(item, event, immediate) {
+    function persist(item, event, immediate, postOptions) {
       var refused = durably(function () {
         store.write(requireReview(), item);
       });
@@ -597,7 +597,9 @@
       if (!refused && sync && typeof sync.recordItem === "function") {
         // The queue is a write into the same storage, so it is guarded too.
         durably(function () {
-          sync.recordItem(item, immediate ? { immediate: immediate } : undefined);
+          var post = Object.assign({}, postOptions || {});
+          if (immediate) post.immediate = immediate;
+          sync.recordItem(item, Object.keys(post).length ? post : undefined);
         });
       }
       return item;
@@ -713,6 +715,17 @@
         // Shift-Enter with the same inputType as a bare Enter.
         lastKey: null,
         wasNew: !existing,
+        // REOPENING A COMMITTED EDIT (spec 20260922.01, requirement 6). The
+        // wording as it stood when the block opened is what "changed" is
+        // measured against while it is open, and whether the edit was ever
+        // committed is what decides the revision at commit. Both are read HERE,
+        // once: the record is a draft while the reviewer rewrites it, so its
+        // state later says nothing about whether this is a first commit.
+        wasCommitted: !!existing && isCommittedEdit(existing),
+        wasReady: !!existing && existing[record.FIELD.STATE] === record.STATE.READY,
+        opened: existing
+          ? { text: existing[record.FIELD.AFTER], html: existing[record.FIELD.AFTER_HTML] }
+          : before,
         startedAt: Date.now()
       };
 
@@ -994,18 +1007,97 @@
 
     // Every keystroke, synchronously, before anything else. The revision does
     // NOT move here: a revision is a committed wording.
+    //
+    // TYPING INTO A READY EDIT TAKES IT BACK OFF THE AGENT'S DESK, the way a
+    // comment being reworded does (comments.js type()). The first keystroke that
+    // changes the wording makes it a draft, which is not in review.json (R7);
+    // typing it back to the committed wording makes it ready again. Before this
+    // the record stayed ready, so every keystroke posted item.ready and the
+    // agent could read half-typed text as an instruction. A handled edit is
+    // never reopened here (itemFor skips it), and a not_handled one keeps its
+    // state, as it always has.
     function captureTyping() {
       if (!session) return null;
       var after = capture(session.block);
       var item = store.readItem(requireReview(), session.itemId);
       if (!item) return null;
+      // Read BEFORE this keystroke's state is decided: this is the one
+      // keystroke that can be the withdrawal, and the record after the
+      // assignment below always reads draft or ready, never which it just
+      // came from.
+      var wasReadyBeforeThisKeystroke = item[record.FIELD.STATE] === record.STATE.READY;
       var next = Object.assign({}, item);
       next[record.FIELD.AFTER] = after.text;
       next[record.FIELD.AFTER_HTML] = after.html;
       next[record.FIELD.UPDATED_AT] = record.nowIso();
-      persist(next, "typed");
+      if (session.wasReady) {
+        next[record.FIELD.STATE] = kindFor(session.opened, after).changed ? record.STATE.DRAFT : record.STATE.READY;
+      }
+      // An item this page did not just create is content on a record the helper
+      // already holds, whatever state it is in (sync.js eventTypeFor).
+      var postOptions = session.wasNew ? null : { existing: true };
+      if (wasReadyBeforeThisKeystroke && next[record.FIELD.STATE] === record.STATE.DRAFT) {
+        // This is the keystroke that just took the edit off ready. Tell sync
+        // so it posts at once instead of waiting behind a floor left by a
+        // draft from before the edit was ever marked ready (review finding,
+        // spec 20260922.01 requirement 6).
+        postOptions = Object.assign({}, postOptions || {}, { withdrawnFromReady: true });
+      }
+      persist(next, "typed", null, postOptions);
       positionFrame();
       return next;
+    }
+
+    // Was this edit ever committed? Not "is it a draft right now": a committed
+    // edit the reviewer is rewriting is a draft until they commit again, and
+    // its history is what still says it was committed before.
+    function isCommittedEdit(item) {
+      if (!record.isDraft(item)) return true;
+      var history = item[record.FIELD.AFTER_HISTORY];
+      return Array.isArray(history) && history.length > 0;
+    }
+
+    /**
+     * A committed edit left withdrawn by a page that died mid-rewording.
+     *
+     * Typing into a committed edit makes it a draft until the reviewer commits,
+     * and leaving the page commits it (commitOnUnload, navigation). A crash or
+     * a killed tab does neither, so the record stays a draft: off the page,
+     * because replay applies only outstanding records, and out of review.json,
+     * because drafts are withheld. The words are all in browser storage (R1),
+     * so the page that next holds the review commits them, exactly as leaving
+     * would have: a new revision, ready, carrying what the reviewer typed.
+     *
+     * Boot calls this once the window holds the review, so a read-only window
+     * never writes. The edit open in this page right now is left alone.
+     *
+     * @returns {Object[]} the records it committed
+     */
+    function recoverWithdrawn() {
+      if (!reviewId) return [];
+      var out = [];
+      store.read(requireReview()).forEach(function (item) {
+        var kind = item[record.FIELD.KIND];
+        if (kind !== record.KIND.EDIT && kind !== record.KIND.FORMAT_ONLY) return;
+        if (!record.isDraft(item) || !isCommittedEdit(item)) return;
+        if (session && session.itemId === item[record.FIELD.ID]) return;
+        var before = { text: item[record.FIELD.BEFORE], html: item[record.FIELD.BEFORE_HTML] };
+        var after = { text: item[record.FIELD.AFTER], html: item[record.FIELD.AFTER_HTML] };
+        var verdict = kindFor(before, after);
+        var committed = record.bumpRev(item, {
+          kind: verdict.changed ? verdict.kind : kind,
+          change: verdict.changed
+            ? record.editChangeText(verdict.kind, before.text, after.text, before.html, after.html)
+            : item[record.FIELD.CHANGE],
+          after: after.text,
+          after_html: after.html,
+          state: record.STATE.READY
+        });
+        record.validateItem(committed);
+        persist(committed, "committed", "ready");
+        out.push(committed);
+      });
+      return out;
     }
 
     // ------------------------------------------------------------------------
@@ -1059,6 +1151,28 @@
       }
 
       var verdict = kindFor(open.before, after);
+      // A committed edit reopened and left with its wording as it was when it
+      // opened is not a rewording: nothing to commit, and the revision stays.
+      // This used to bump the revision on every reopen, typed into or not.
+      if (!open.wasNew && !kindFor(open.opened, after).changed) {
+        protect.release(block);
+        return null;
+      }
+      if (!verdict.changed && open.wasCommitted) {
+        // Reworded back to the page's own original words. That is not an edit
+        // against the page, and it has always been left as captured rather
+        // than committed; the one thing new is that the typing withdrew it, so
+        // it goes back to the state it opened in rather than stranding a
+        // draft nobody will see.
+        if (open.wasReady && record.isDraft(item)) {
+          var restored = Object.assign({}, item);
+          restored[record.FIELD.STATE] = record.STATE.READY;
+          restored[record.FIELD.UPDATED_AT] = record.nowIso();
+          persist(restored, "typed", null, { existing: true });
+        }
+        protect.release(block);
+        return null;
+      }
       if (!verdict.changed) {
         // The reviewer opened a block, read it, and left. That is not an edit.
         // A draft record for it is a row in the rail and a line in the agent's
@@ -1090,7 +1204,11 @@
       );
 
       var committed;
-      if (record.isDraft(item)) {
+      // WHETHER IT WAS EVER COMMITTED, read when the block opened, never whether
+      // the record is a draft now: a committed edit being rewritten is a draft
+      // until this line, and reading its state here would commit the rewording
+      // at the old revision, where a reply to the old wording would still land.
+      if (!open.wasCommitted) {
         // First commit. The revision stays at one; the history gets its first
         // entry, which is what replay's branch three reads.
         committed = Object.assign({}, item);
@@ -2257,6 +2375,7 @@
       format: format,
       undo: undo,
       retire: retire,
+      recoverWithdrawn: recoverWithdrawn,
       capture: capture,
       itemFor: itemFor,
       elementFor: elementFor,

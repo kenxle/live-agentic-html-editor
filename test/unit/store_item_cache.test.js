@@ -75,7 +75,17 @@ function itemOf(overrides) {
   );
 }
 
+// The review's index, and one item's own key (spec 20260922.01: one key per
+// item). The old whole-list key is only read now, never written.
 function itemsKey(reviewId) {
+  return storeModule.INDEX_PREFIX + reviewId;
+}
+
+function itemKey(reviewId, id) {
+  return storeModule.ITEM_PREFIX + reviewId + ":" + id;
+}
+
+function legacyKey(reviewId) {
   return storeModule.KEY_PREFIX + reviewId;
 }
 
@@ -102,7 +112,8 @@ test("a second write does not read the item bucket back out of storage", () => {
     store.write(REVIEW, Object.assign({}, item, { note: note }));
   }
 
-  assert.equal(readsOf(backing, itemsKey(REVIEW)), 0, "the bucket is never parsed again");
+  assert.equal(readsOf(backing, itemsKey(REVIEW)), 0, "the index is never parsed again");
+  assert.equal(readsOf(backing, itemKey(REVIEW, item.id)), 0, "nor the item's own key");
   assert.equal(store.readItem(REVIEW, item.id).note, note, "and it still says what the reviewer typed");
 });
 
@@ -257,29 +268,33 @@ test("a record repaired on the way out of storage is repaired on the way in too"
 
   // And the repair is what was written down, so it holds without a reload and
   // for every other tab too.
-  assert.equal(JSON.parse(backing.values[itemsKey(REVIEW)])[0].note, sentence);
+  assert.equal(JSON.parse(backing.values[itemKey(REVIEW, fromHelper.id)]).note, sentence);
 
   // The ordinary write path as well, not only the merge.
   store.write(REVIEW, Object.assign({}, fromHelper, { note: doubled }));
   assert.equal(store.readItem(REVIEW, fromHelper.id).note, sentence);
 });
 
-test("a bucket written before any stamp existed is still read", () => {
-  // Storage format unchanged: an origin that already holds records from an
-  // older version of this file has no stamp beside them, and those records are
+test("a whole-list bucket written before any stamp existed is still read", () => {
+  // An origin that already holds records from an older version of this file
+  // has the old whole-list key and no stamp beside it, and those records are
   // the reviewer's work.
   const item = itemOf({ note: "written by the old code" });
-  const backing = spyBacking({ [itemsKey(REVIEW)]: JSON.stringify([item]) });
+  const oldBytes = JSON.stringify([item]);
+  const backing = spyBacking({ [legacyKey(REVIEW)]: oldBytes });
   const store = storeModule.createStore({ backing: backing });
 
   assert.equal(store.readItem(REVIEW, item.id).note, "written by the old code");
-  // And a write from here on stamps it, so the next reader can cache it.
+  // A write from here on goes to the item's own key and stamps the review, so
+  // the next reader can cache it. The old key is left exactly as it was.
   store.write(REVIEW, Object.assign({}, item, { note: "and reworded by the new" }));
   assert.equal(store.readItem(REVIEW, item.id).note, "and reworded by the new");
+  assert.equal(JSON.parse(backing.values[itemKey(REVIEW, item.id)]).note, "and reworded by the new");
+  assert.equal(backing.values[legacyKey(REVIEW)], oldBytes, "the old whole-list key is never rewritten");
   assert.equal(
-    JSON.parse(backing.values[itemsKey(REVIEW)])[0].note,
+    storeModule.createStore({ backing: backing }).readItem(REVIEW, item.id).note,
     "and reworded by the new",
-    "the bucket on disk is still a plain array of records"
+    "and a fresh store reads the newer copy over the old key's"
   );
 });
 

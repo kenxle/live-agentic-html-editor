@@ -931,6 +931,16 @@
     // gets a no-op, so the write paths below never have to ask whether it is
     // there.
     var onFailure = typeof opts.onFailure === "function" ? opts.onFailure : null;
+    // The reviewer left a comment box: its input lost focus, or the box closed.
+    // Boot hands this sync.flushNow("blur"), because leaving the box is one of
+    // the moments an unsent draft goes to the helper past its 10 second floor
+    // (spec 20260922.01, requirement 4). Not a change to the record, so it is
+    // not an emit: the listeners that repaint on every emit have nothing to do.
+    var onLeave = typeof opts.onLeave === "function" ? opts.onLeave : null;
+
+    function left() {
+      if (onLeave) onLeave();
+    }
 
     // id -> handle
     var open = Object.create(null);
@@ -1005,12 +1015,12 @@
     // writes to, and a quota failure swallowed around the whole loop would skip
     // every listener registered after it (the Active tab's, among others). One
     // listener that cannot write is not the rest of the rail going quiet.
-    function emit(item, event) {
+    function emit(item, event, meta) {
       var el = createdOn[item && item[record.FIELD.ID]] || null;
       for (var i = 0; i < listenersState.length; i += 1) {
         (function (listener) {
           durably(function () {
-            listener(item, event || "changed", el);
+            listener(item, event || "changed", el, meta);
           });
         })(listenersState[i]);
       }
@@ -1337,6 +1347,7 @@
         // the words really ask for, with nothing held open by the typing rule.
         inputEl.addEventListener("blur", function () {
           grow({ allowShrink: true });
+          left();
         });
         bindGrip();
 
@@ -1686,6 +1697,10 @@
         // became reply-blocking noise: one sentence reworded took rev 1 to 29 on
         // the 2026-08-14 walk. The keystrokes are still durable at once; they are
         // CONTENT. The revision moves once, at the commit, in flushReword.
+        // Read before this keystroke's state is decided: this is the one
+        // keystroke that can be the withdrawal, and `next`'s state below
+        // always reads draft or ready, never which it just came from.
+        var wasReadyBeforeThisKeystroke = current[record.FIELD.STATE] === record.STATE.READY;
         var next = Object.assign({}, current);
         next[record.FIELD.NOTE] = String(text);
         next[record.FIELD.UPDATED_AT] = record.nowIso();
@@ -1718,7 +1733,8 @@
         // Same rule as persist: a keystroke the disk refused posts nothing, so
         // the helper never acknowledges a wording this browser will not have on
         // the next load. The box keeps the words either way.
-        if (!refused) emit(next, "typed");
+        var withdrawnFromReady = wasReadyBeforeThisKeystroke && next[record.FIELD.STATE] === record.STATE.DRAFT;
+        if (!refused) emit(next, "typed", withdrawnFromReady ? { withdrawnFromReady: true } : undefined);
         return next;
       }
 
@@ -1815,6 +1831,7 @@
         delete open[id];
         if (highlights) highlights.setActive(id, false);
         emit(handleItem(), "closed");
+        left();
         return handleItem();
       }
 

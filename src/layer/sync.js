@@ -1400,6 +1400,22 @@
     // outbox is EMPTY (End review) can wait on it instead of being told `busy`
     // and posting anyway. Resolved promises are harmless to hold.
     var flushInFlight = null;
+    // THE DRAFT FLOOR (spec 20260922.01, requirement 4). Item id -> when this
+    // page last posted that item with nothing but drafts queued for it. flush
+    // holds such an item back until protocol.FLUSH.DRAFT_FLOOR_MS after that.
+    // In memory on purpose: after a reload nothing is known, so anything a
+    // previous session left queued is due at once, which is "re-posts on the
+    // next load".
+    var draftSentAt = Object.create(null);
+    // When the armed flush timer fires, and whether it was asked for by
+    // something that skips the floor. The timer keeps the EARLIEST deadline it
+    // is given (requirement 5): a later request never pushes it back.
+    var debounceDue = null;
+    var debounceUrgent = false;
+    // A flush asked for while a post was in flight. It is remembered, not
+    // dropped, and runs the moment that post finishes: a Cmd-Enter pressed
+    // during a draft post must not wait for anything (requirement 5).
+    var rerun = null;
     var deliveredOnce = false;
     // True from pagehide/beforeunload until this document is shown again. A post
     // the browser cancels because the document is going away is NOT the helper
@@ -1631,9 +1647,11 @@
      * browser storage in this task, and the network happens later or never.
      *
      * @param {Object} item the record as stored
-     * @param {{immediate?: string, existing?: boolean}} [options] `immediate` is
-     *   one of protocol.FLUSH.IMMEDIATE_ON; `existing` says this record already
-     *   exists and only its content changed. See eventTypeFor.
+     * @param {{immediate?: string, existing?: boolean, withdrawnFromReady?: boolean}} [options]
+     *   `immediate` is one of protocol.FLUSH.IMMEDIATE_ON; `existing` says this
+     *   record already exists and only its content changed (see eventTypeFor);
+     *   `withdrawnFromReady` says this write is the keystroke that just took the
+     *   item off ready and back to draft.
      */
     function recordItem(item, options) {
       // A refused window is READ-ONLY (finding 1): it writes nothing to the
@@ -1650,12 +1668,82 @@
             "sync.recordItem: immediate must be one of " + protocol.FLUSH.IMMEDIATE_ON.join(", ") + ", got " + opts2.immediate
           );
         }
-        scheduleFlush(0);
+        // A commit goes at once without taking every other item's drafts with
+        // it: the ready item is not draft-only, so flush sends it whole, and
+        // the rest keep their floor. Leaving (blur, hide, navigation, unload)
+        // is the risky moment, so there everything goes.
+        scheduleFlush(0, { urgent: opts2.immediate !== "ready" });
+      } else if (record.isDraft(item)) {
+        var id = item[record.FIELD.ID];
+        if (opts2.withdrawnFromReady) {
+          // THE FIRST KEYSTROKE THAT TAKES AN ITEM OFF READY IS NOT AN
+          // ORDINARY DRAFT EDIT. Without this, it fell into the branch below
+          // and waited on whatever floor an earlier draft (from before the
+          // item was ever marked ready) had left standing, up to 10 seconds
+          // during which the agent still read the old, ready wording as
+          // current (review finding, spec 20260922.01). This write goes on
+          // the ordinary debounce instead, exactly like ready/created/deleted
+          // events. The floor this item's OWN drafts then reset, so keystroke
+          // two onward still waits its turn, the way requirement 4 asks.
+          delete draftSentAt[id];
+          scheduleFlush(protocol.FLUSH.HELPER_DEBOUNCE_MS);
+        } else {
+          // A draft waits for its item's floor, and at least the debounce, so
+          // the first few keystrokes of a new comment go as one post.
+          var wait = draftDueAt(id) - nowMs();
+          scheduleFlush(Math.max(protocol.FLUSH.HELPER_DEBOUNCE_MS, wait));
+        }
       } else {
         scheduleFlush(protocol.FLUSH.HELPER_DEBOUNCE_MS);
       }
       recomputeStatus();
       return event;
+    }
+
+    // When an item's drafts may next go to the helper: the floor after its last
+    // draft post, or now when this page has never posted it.
+    function draftDueAt(itemId) {
+      var at = draftSentAt[itemId];
+      return typeof at === "number" ? at + protocol.FLUSH.DRAFT_FLOOR_MS : 0;
+    }
+
+    /**
+     * Split the queue into what goes now and what waits for the floor.
+     *
+     * AN ITEM WAITS ONLY WHEN EVERY EVENT IT HAS QUEUED IS A DRAFT, and it
+     * waits whole. An item with a ready (or a delete) queued goes whole, its
+     * older draft included and in queue order, so a ready never reaches the
+     * helper ahead of the draft it replaced. Events keep their queue order
+     * either way; this only drops some.
+     *
+     * @returns {{send: Object[], waitUntil: number|null, draftsOnly: Object}}
+     *   `draftsOnly` is item id -> true when everything queued for it is a draft
+     */
+    function splitForFloor(events, now) {
+      var draftsOnly = Object.create(null);
+      events.forEach(function (event) {
+        var id = event[protocol.EVENT_FIELD.ITEM];
+        if (!id) return;
+        var isDraftEvent = event.draft === true;
+        draftsOnly[id] = (draftsOnly[id] === undefined ? true : draftsOnly[id]) && isDraftEvent;
+      });
+      var waitUntil = null;
+      var waiting = Object.create(null);
+      Object.keys(draftsOnly).forEach(function (id) {
+        if (!draftsOnly[id]) return;
+        var due = draftDueAt(id);
+        if (due > now) {
+          waiting[id] = true;
+          if (waitUntil === null || due < waitUntil) waitUntil = due;
+        }
+      });
+      return {
+        send: events.filter(function (event) {
+          return !waiting[event[protocol.EVENT_FIELD.ITEM]];
+        }),
+        waitUntil: waitUntil,
+        draftsOnly: draftsOnly
+      };
     }
 
     // -------------------------------------------------------------------------
@@ -1725,7 +1813,14 @@
      */
     function flush(flushOptions) {
       var fo = flushOptions || {};
-      if (flushing) return Promise.resolve({ sent: 0, remaining: pendingCount(), busy: true });
+      if (flushing) {
+        // Remembered, not dropped. See `rerun`.
+        rerun = {
+          urgent: !!(fo.urgent || (rerun && rerun.urgent)),
+          force: !!(fo.force || (rerun && rerun.force))
+        };
+        return Promise.resolve({ sent: 0, remaining: pendingCount(), busy: true });
+      }
       if (cspRefused) return Promise.resolve({ sent: 0, remaining: pendingCount(), refused: true });
       // HOLD (docs/features/20260917.01_hold_toggle): a gate on this call, not
       // a new state and not a new wire event. The event already sits queued in
@@ -1758,10 +1853,23 @@
       // path's rules.
       var leaving = !!fo.unload || unloading;
 
-      var events = store.pendingEvents(requireReview());
-      if (!events.length) {
+      var queued = store.pendingEvents(requireReview());
+      if (!queued.length) {
         recomputeStatus();
         return Promise.resolve({ sent: 0, remaining: 0 });
+      }
+
+      // THE DRAFT FLOOR, here and nowhere else, so every sender (the typing
+      // timer, the poll loop, the follow-up after a post) goes through it.
+      // Leaving the box, hiding the tab, leaving the page, releasing Hold and
+      // ending the review all skip it.
+      var now = nowMs();
+      var split = splitForFloor(queued, now);
+      var events = fo.urgent || fo.force || leaving ? queued : split.send;
+      if (!events.length) {
+        scheduleFlush(Math.max(0, split.waitUntil - now));
+        recomputeStatus();
+        return Promise.resolve({ sent: 0, remaining: queued.length, waiting: true });
       }
 
       var body = JSON.stringify({ review: requireReview(), events: events });
@@ -1776,6 +1884,17 @@
       flushing = true;
       state = STATE.IN_FLIGHT;
       counters.posts += 1;
+
+      // Start each draft-only item's floor now, when its post goes out, so a
+      // keystroke that lands during the post waits its turn. Kept to put back
+      // if the post fails: a draft that never arrived should not also wait.
+      var floorBefore = Object.create(null);
+      events.forEach(function (event) {
+        var id = event[protocol.EVENT_FIELD.ITEM];
+        if (!id || !split.draftsOnly[id] || id in floorBefore) return;
+        floorBefore[id] = draftSentAt[id];
+        draftSentAt[id] = now;
+      });
 
       var init = { method: "POST", body: body };
       // Keepalive on any flush leaving with the document, not only the one the
@@ -1826,9 +1945,22 @@
           }
           recomputeStatus();
           var remaining = pendingCount();
-          if (remaining > 0 && !leaving) scheduleFlush(0);
+          // What arrived during the post goes through flush again at once, and
+          // flush decides: drafts typed meanwhile wait for their floor, and a
+          // commit or a leaving moment asked for meanwhile goes now. This used
+          // to post everything at once, which is why a typing page reached the
+          // helper about once a second (DRAFT_PERSISTENCE.md section 4).
+          var again = rerun;
+          rerun = null;
+          if ((remaining > 0 || again) && !leaving) scheduleFlush(0, again);
           return { sent: accepted.length, remaining: remaining };
         }
+
+        // Nothing arrived. The floor goes back to where it was, and a flush
+        // remembered during this post is covered by the retry below, which
+        // posts everything queued.
+        restoreFloor(floorBefore);
+        rerun = null;
 
         // The document went away mid-request. Nothing failed and nothing is
         // lost, so nothing is said: the events are in browser storage and the
@@ -1851,6 +1983,31 @@
       });
       flushInFlight = posted;
       return posted;
+    }
+
+    function restoreFloor(before) {
+      Object.keys(before).forEach(function (id) {
+        if (typeof before[id] === "number") draftSentAt[id] = before[id];
+        else delete draftSentAt[id];
+      });
+    }
+
+    /**
+     * Send what is queued now, past the draft floor, because the reviewer is
+     * leaving: the box (`blur`), the tab (`hide`). Hold still applies, so a held
+     * review posts nothing here. A post already in flight is not interrupted;
+     * this is remembered and runs the moment it finishes.
+     *
+     * @param {string} reason one of protocol.FLUSH.IMMEDIATE_ON
+     */
+    function flushNow(reason) {
+      if (protocol.FLUSH.IMMEDIATE_ON.indexOf(reason) === -1) {
+        throw new Error("sync.flushNow: reason must be one of " + protocol.FLUSH.IMMEDIATE_ON.join(", ") + ", got " + reason);
+      }
+      if (readOnly || !store) return Promise.resolve({ sent: 0, remaining: 0 });
+      if (retryTimer) return Promise.resolve({ sent: 0, remaining: pendingCount(), retrying: true });
+      if (pendingCount() === 0 && !flushing) return Promise.resolve({ sent: 0, remaining: 0 });
+      return flush({ urgent: true });
     }
 
     /**
@@ -1925,14 +2082,37 @@
       return store.pendingEvents(requireReview()).length;
     }
 
-    function scheduleFlush(delayMs) {
+    /**
+     * Arm the flush timer.
+     *
+     * IT KEEPS THE EARLIEST DEADLINE IT HAS BEEN GIVEN. A later request never
+     * pushes an armed timer back, so continuous typing cannot starve a post,
+     * and a request that skips the draft floor (`urgent`) is carried to the
+     * flush the timer runs, whichever request set the time.
+     *
+     * @param {number} delayMs
+     * @param {{urgent?: boolean, force?: boolean}} [options]
+     */
+    function scheduleFlush(delayMs, options) {
+      var o = options || {};
+      var due = nowMs() + delayMs;
+      var urgent = !!(o.urgent || o.force);
+      if (debounceTimer && debounceDue !== null && debounceDue <= due) {
+        if (urgent) debounceUrgent = true;
+        return;
+      }
       if (debounceTimer) clearTimeout(debounceTimer);
-      // harness-allow-timer: protocol.FLUSH's 750ms typing-idle debounce. This
-      // is the ONLY debounce in the design and it is on the post to the helper,
-      // never on the write to browser storage.
+      debounceUrgent = urgent || (debounceTimer ? debounceUrgent : false);
+      debounceDue = due;
+      // harness-allow-timer: protocol.FLUSH's post to the helper, at the
+      // debounce or the draft floor. The ONLY wait in the design is on the post
+      // to the helper, never on the write to browser storage.
       debounceTimer = setTimeout(function () {
+        var runUrgent = debounceUrgent;
         debounceTimer = null;
-        flush();
+        debounceDue = null;
+        debounceUrgent = false;
+        flush(runUrgent ? { urgent: true } : undefined);
       }, delayMs);
     }
 
@@ -2173,6 +2353,10 @@
       if (doc && doc.hidden !== true) {
         poll();
         if (pendingCount() > 0 && !retryTimer && !flushing) flush();
+      } else if (doc && doc.hidden === true && started) {
+        // A hidden tab is often the last thing a page hears before the browser
+        // discards it, so the drafts go now rather than at their floor.
+        flushNow("hide");
       }
       if (started) startPolling();
     }
@@ -2899,6 +3083,7 @@
       deleteItem: deleteItem,
       eventFor: eventFor,
       flush: flush,
+      flushNow: flushNow,
       drainOutbox: drainOutbox,
       commitOnUnload: commitOnUnload,
       takeover: takeover,
