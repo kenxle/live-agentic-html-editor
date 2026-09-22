@@ -7,7 +7,8 @@
 // were safe on the conflict card, but nothing told him. This spec is that
 // sequence: the reviewer edits a block, the page's source changes that block
 // underneath them, the reload lands on the source, and the collision has to be
-// TOLD, once, on the page, with the rail closed.
+// TOLD on the page, with the rail closed, and keep being told across reloads
+// until the reviewer deals with it.
 //
 // The helper is deliberately down (a loopback port with nothing on it): the
 // collision is decided entirely in the browser, and nothing here is about sync.
@@ -137,6 +138,18 @@ async function waitForConflictToast(page) {
   );
 }
 
+/** Press in the middle of the toast, move right in steps, and let go. */
+async function swipe(page, rect, distance) {
+  const y = rect.y + rect.height / 2;
+  const from = rect.x + 40;
+  await page.mouse.move(from, y);
+  await page.mouse.down();
+  for (let step = 1; step <= 6; step += 1) {
+    await page.mouse.move(from + (distance * step) / 6, y);
+  }
+  await page.mouse.up();
+}
+
 /** A pass has run and said everything it is going to say. */
 async function afterAPass(page) {
   await pollPage(page, () => window.LAHE.replay.isSettling() === false, undefined, {
@@ -157,7 +170,7 @@ async function shoot(page, toast, scheme) {
   });
 }
 
-test.describe("a collision on reload is told on the page, once", () => {
+test.describe("a collision on reload is told on the page until dealt with", () => {
   let pages;
 
   test.beforeAll(async () => {
@@ -168,7 +181,7 @@ test.describe("a collision on reload is told on the page, once", () => {
     await pages.close();
   });
 
-  test("the toast appears, and a reload with the conflict still open does not raise it again", async ({ page }) => {
+  test("the toast appears, comes back on a reload while untouched, and stays gone once swiped", async ({ page }) => {
     const { id } = await reachTheConflict(page, pages, "conflict-toast-reload");
 
     const toast = await waitForConflictToast(page);
@@ -182,13 +195,30 @@ test.describe("a collision on reload is told on the page, once", () => {
     await afterAPass(page);
     expect((await conflictToasts(page)).length, "one toast, not one per pass").toBe(1);
 
+    // The agent may still be writing, so the page reloads with the toast up and
+    // the conflict still open. The reviewer never dealt with it: it comes back.
     await page.reload();
     await booted(page);
     await pollPage(page, (itemId) => window.__lahe.flaggedIds().indexOf(itemId) !== -1, id, {
       message: "the same collision to be flagged again after the reload"
     });
+    const back = await waitForConflictToast(page);
+    expect(back.text).toBe(TITLE);
     await afterAPass(page);
-    expect(await conflictToasts(page), "already told on this tab: no second toast").toEqual([]);
+    expect((await conflictToasts(page)).length, "exactly one toast after the reload").toBe(1);
+
+    // Swiped away: dealt with. The next reload shows none.
+    await swipe(page, back.rect, 200);
+    await pollUntil(async () => (await conflictToasts(page)).length === 0, {
+      message: "the swipe to take the toast away"
+    });
+    await page.reload();
+    await booted(page);
+    await pollPage(page, (itemId) => window.__lahe.flaggedIds().indexOf(itemId) !== -1, id, {
+      message: "the collision to be flagged after the second reload"
+    });
+    await afterAPass(page);
+    expect(await conflictToasts(page), "swiped on this tab: no toast after a reload").toEqual([]);
   });
 
   test("pressing the toast opens the rail on the conflict card", async ({ page }) => {

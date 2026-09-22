@@ -15,13 +15,17 @@
 //
 // The rules:
 //
-//   ONCE PER CONFLICT  A conflict is a record id plus the rev that conflicted.
-//                      A repaint that re-finds it raises nothing, and neither
-//                      does a reload: the keys already told are kept in
-//                      sessionStorage, the same place the rail keeps its
-//                      overdue notices, so they last as long as the browser tab.
-//                      Resolving a conflict forgets its key, so the same record
-//                      colliding again later is told again.
+//   UNTIL DEALT WITH   A conflict is a record id plus the rev that conflicted.
+//                      Each key has two states, kept in sessionStorage (the
+//                      same place the rail keeps its overdue notices, so they
+//                      last as long as the browser tab): RAISED, and DEALT
+//                      WITH. Dealt with means the reviewer pressed or swiped
+//                      the toast, or resolved the conflict. A repaint that
+//                      re-finds a standing conflict raises nothing. A reload
+//                      raises again every open conflict not yet dealt with (one
+//                      toast, same count rule): the agent may still be writing,
+//                      so a reload with the toast up is likely, and it must not
+//                      take the toast away for good while the conflict stays.
 //   ONE TOAST          Several collisions share one toast that names the count.
 //                      A new collision while one stands replaces it with the
 //                      new count rather than stacking a second.
@@ -51,7 +55,7 @@
 
   var SEEN_PREFIX = "lahe:conflict-notices:";
   // A tab that has been told fifty collisions and resolved none of them is not
-  // helped by the fifty-first key; the oldest go first.
+  // helped by the fifty-first key; the oldest go first (per state).
   var SEEN_MAX = 50;
 
   function titleFor(count) {
@@ -82,30 +86,40 @@
     var storage = o.storage || null;
     var storageKey = SEEN_PREFIX + String(o.reviewId || "");
     // The in-page copy, so a missing or failing storage still stops repeats
-    // within this page life.
-    var memory = [];
-    var standing = null; // { toastId, ids }
+    // within this page life. Two lists of keys: raised, and dealt with.
+    var memory = { raised: [], dealt: [] };
+    var standing = null; // { toastId, ids, keys }
     var seq = 0;
 
-    function readSeen() {
-      var list = memory.slice();
-      if (!storage) return list;
+    function merge(into, from) {
+      (Array.isArray(from) ? from : []).forEach(function (key) {
+        if (typeof key === "string" && into.indexOf(key) === -1) into.push(key);
+      });
+      return into;
+    }
+
+    function readState() {
+      var state = { raised: memory.raised.slice(), dealt: memory.dealt.slice() };
+      if (!storage) return state;
       try {
-        var parsed = JSON.parse(storage.getItem(storageKey) || "[]");
+        var parsed = JSON.parse(storage.getItem(storageKey) || "null");
         if (Array.isArray(parsed)) {
-          parsed.forEach(function (key) {
-            if (list.indexOf(key) === -1) list.push(key);
-          });
+          // The first shape was one list of keys already told, never to be
+          // raised again: that is what dealt with means now.
+          merge(state.dealt, parsed);
+        } else if (parsed && typeof parsed === "object") {
+          merge(state.raised, parsed.raised);
+          merge(state.dealt, parsed.dealt);
         }
       } catch (err) {
         // Unreadable storage is memory-only storage.
       }
-      return list;
+      return state;
     }
 
-    function writeSeen(list) {
-      var kept = list.slice(-SEEN_MAX);
-      memory = kept.slice();
+    function writeState(state) {
+      var kept = { raised: state.raised.slice(-SEEN_MAX), dealt: state.dealt.slice(-SEEN_MAX) };
+      memory = { raised: kept.raised.slice(), dealt: kept.dealt.slice() };
       if (!storage) return kept;
       try {
         storage.setItem(storageKey, JSON.stringify(kept));
@@ -114,6 +128,16 @@
         // to stop repeats until the next reload.
       }
       return kept;
+    }
+
+    /** The reviewer has dealt with these keys: never raise them again. */
+    function markDealt(keys) {
+      if (!keys || !keys.length) return;
+      var state = readState();
+      keys.forEach(function (key) {
+        if (state.dealt.indexOf(key) === -1) state.dealt.push(key);
+      });
+      writeState(state);
     }
 
     function openConflicts() {
@@ -157,31 +181,39 @@
         standing.ids = standing.ids.filter(function (id) {
           return openIds.indexOf(id) !== -1;
         });
+        standing.keys = standing.keys.filter(function (key) {
+          return standing.ids.some(function (id) {
+            return key.indexOf(String(id) + ":") === 0;
+          });
+        });
         if (!standing.ids.length) dropStanding("replaced");
       }
 
       if (!open.length || hidden()) return null;
-      var seen = readSeen();
+      var state = readState();
+      // News is an open conflict the reviewer has not dealt with and the
+      // standing toast does not already name. After a reload nothing stands,
+      // so every open conflict raised and not dealt with comes back.
       var fresh = open.filter(function (c) {
-        return seen.indexOf(c.key) === -1;
+        if (state.dealt.indexOf(c.key) !== -1) return false;
+        return !(standing && standing.ids.indexOf(c.id) !== -1);
       });
       if (!fresh.length) return null;
-      writeSeen(
-        seen.concat(
-          fresh.map(function (c) {
-            return c.key;
-          })
-        )
-      );
+      fresh.forEach(function (c) {
+        if (state.raised.indexOf(c.key) === -1) state.raised.push(c.key);
+      });
+      writeState(state);
 
       var ids = standing ? standing.ids.slice() : [];
+      var keys = standing ? standing.keys.slice() : [];
       fresh.forEach(function (c) {
         if (ids.indexOf(c.id) === -1) ids.push(c.id);
+        if (keys.indexOf(c.key) === -1) keys.push(c.key);
       });
       dropStanding("replaced");
 
       seq += 1;
-      var mine = { toastId: null, ids: ids };
+      var mine = { toastId: null, ids: ids, keys: keys };
       var toastId = rail.showToast({
         // Our own memory is the dedupe; the rail's per-key rule would refuse a
         // conflict that was resolved and came back, so every raise is unique.
@@ -193,8 +225,11 @@
         onOpen: function () {
           openCard(mine.ids);
         },
-        onGone: function () {
+        onGone: function (reason) {
           if (standing === mine) standing = null;
+          // Pressed or swiped: the reviewer has seen it. Replaced by a newer
+          // count, or taken down because its conflicts closed, is not that.
+          if (reason === "user") markDealt(mine.keys);
         }
       });
       if (!toastId) return null;
@@ -206,11 +241,11 @@
     /** The reviewer chose on the card. Forget the key so a later clash is news. */
     function resolved(id) {
       var prefix = String(id) + ":";
-      var seen = readSeen();
-      var kept = seen.filter(function (key) {
+      var keep = function (key) {
         return key.indexOf(prefix) !== 0;
-      });
-      if (kept.length !== seen.length) writeSeen(kept);
+      };
+      var state = readState();
+      writeState({ raised: state.raised.filter(keep), dealt: state.dealt.filter(keep) });
       sync();
       return true;
     }
@@ -244,7 +279,12 @@
     }
 
     function info() {
-      return { standing: standing ? { toastId: standing.toastId, ids: standing.ids.slice() } : null, seen: readSeen() };
+      var state = readState();
+      return {
+        standing: standing ? { toastId: standing.toastId, ids: standing.ids.slice() } : null,
+        raised: state.raised,
+        dealt: state.dealt
+      };
     }
 
     return { sync: sync, resolved: resolved, openCard: openCard, info: info };

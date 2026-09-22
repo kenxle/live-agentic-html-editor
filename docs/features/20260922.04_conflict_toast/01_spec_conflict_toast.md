@@ -2,8 +2,8 @@
 
 Summary: when replay finds that the reviewer's edit and the page's own change
 collide, a sticky toast now says so and opens the conflict card on click. It
-shows once per conflict, even across reloads, and goes away when the conflict
-is resolved.
+comes back after a reload until the reviewer presses it, swipes it, or
+resolves the conflict.
 
 ## Problem
 
@@ -31,8 +31,12 @@ ask: use the toasts to say there was a conflict and he just needs to resolve it.
    - the conflict is resolved (resolving removes it)
 
    It never times out.
-4. Once per conflict, not once per replay pass. A repaint or a reload that
-   finds the same open conflict raises nothing new.
+4. One toast per conflict at a time, not one per replay pass. A repaint that
+   finds the same open conflict raises nothing new. The toast survives reloads
+   until the reviewer deals with it (presses it, swipes or closes it, or
+   resolves the conflict). A reload while the conflict is still open and the
+   toast was never dealt with shows it again, once. A reload after the toast
+   was dealt with shows nothing.
 5. Several conflicts at once make one toast that names the count ("2 of your
    edits clashed with changes to the page"). Clicking it opens the first.
 6. While the tool is hidden for presenting, the toast is held and shown on
@@ -43,12 +47,15 @@ ask: use the toasts to say there was a conflict and he just needs to resolve it.
 - `src/layer/conflict_toast.js` (new) decides when a conflict is news, what the
   toast says, and where a click goes. It draws nothing itself; it calls the
   rail's existing `showToast`.
-- **Once per conflict:** the key is the record id plus the rev that
-  conflicted. Keys already told are kept in `sessionStorage` (per review),
-  the same place the rail keeps its overdue notices. So a reload in the same
-  browser tab does not repeat it, and a new tab starts fresh. Resolving a
-  conflict forgets its key, so the same record colliding again later is told
-  again.
+- **Until dealt with:** the key is the record id plus the rev that
+  conflicted. Each key has two states in `sessionStorage` (per review), the
+  same place the rail keeps its overdue notices:
+  - raised: the toast went up
+  - dealt with: the reviewer pressed or swiped it, or resolved the conflict
+
+  After a reload, every open conflict that is not dealt with is raised again,
+  as one toast. A new tab starts fresh. Resolving a conflict forgets its key,
+  so the same record colliding again later is told again.
 - **One toast:** a new conflict while one stands replaces it with a count toast
   naming all still-open conflicts. When every conflict it names is resolved,
   the toast is removed.

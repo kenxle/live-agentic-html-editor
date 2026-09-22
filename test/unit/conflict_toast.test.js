@@ -95,13 +95,57 @@ test("swiping it away is final for that conflict, however many passes follow", (
   assert.equal(shown(rail).length, 0);
 });
 
-test("a reload with the conflict still open does not raise it again", () => {
+test("a reload with the conflict open and the toast untouched raises it again, once", () => {
   const world = { flagged: ["a"], revs: { a: 1 } };
   const storage = memoryStorage();
   const first = page(world, storage);
   assert.equal(shown(first.rail).length, 1);
+  // The agent may still be writing, so a second reload is likely too.
   const second = page(world, storage);
-  assert.equal(shown(second.rail).length, 0, "the same record at the same rev was already told");
+  second.toasts.sync();
+  assert.equal(shown(second.rail).length, 1, "raised but never dealt with: it comes back");
+  const third = page(world, storage);
+  third.toasts.sync();
+  third.toasts.sync();
+  assert.equal(shown(third.rail).length, 1, "one toast, not one per reload or pass");
+});
+
+test("a reload after the toast was swiped raises nothing", () => {
+  const world = { flagged: ["a"], revs: { a: 1 } };
+  const storage = memoryStorage();
+  const first = page(world, storage);
+  first.rail.dismissToast(shown(first.rail)[0].id, overlay.TOAST_GONE.USER);
+  const second = page(world, storage);
+  assert.equal(shown(second.rail).length, 0, "the reviewer dealt with it");
+});
+
+test("a reload after the toast was pressed raises nothing", () => {
+  const world = { flagged: ["a"], revs: { a: 1 } };
+  const storage = memoryStorage();
+  const first = page(world, storage);
+  first.rail.openToast(shown(first.rail)[0].id);
+  const second = page(world, storage);
+  assert.equal(shown(second.rail).length, 0);
+});
+
+test("after a reload, two open conflicts not dealt with come back as one count toast", () => {
+  const world = { flagged: ["a", "b"], revs: { a: 1, b: 1 } };
+  const storage = memoryStorage();
+  page(world, storage);
+  const second = page(world, storage);
+  const list = shown(second.rail);
+  assert.equal(list.length, 1);
+  assert.equal(list[0].text, "2 of your edits clashed with changes to the page");
+});
+
+test("a count toast replaced by a newer count is not dealt with: a reload still shows it", () => {
+  const world = { flagged: ["a"], revs: { a: 1, b: 1 } };
+  const storage = memoryStorage();
+  const first = page(world, storage);
+  world.flagged = ["a", "b"];
+  first.toasts.sync();
+  const second = page(world, storage);
+  assert.equal(shown(second.rail).length, 1);
 });
 
 test("the same record conflicting at a NEW rev is a new conflict", () => {
