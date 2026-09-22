@@ -31,7 +31,7 @@ Two things break, and they are separate problems:
 1. **The tab's address is dead forever.** Each document is served on a random port (the number after `127.0.0.1:` in the address). After a restart, even if an agent serves the same file again, it gets a new port. Your old tab points at a port nobody answers. Reloading can't fix it.
 2. **You don't know what you had open.** With the tabs dead, there's no list of what you were working on.
 
-An index fixes the second. The first needs a fixed address, or the index doesn't help much: you'd find the document and still have to ask an agent to re-serve it.
+An index fixes the second. For the first, you don't need the old address back, just the document. So the Library's **Open** button re-serves the document itself, on whatever new port, and opens it. No agent needed.
 
 ## Options
 
@@ -60,7 +60,7 @@ An index fixes the second. The first needs a fixed address, or the index doesn't
 - You paste that into any new agent. It already knows how to take over a session from the lahe skill.
 - This covers the "point at it and ask another agent to pick it up" part.
 
-### D. Fix the dead tabs themselves
+### D. Fix the dead tabs themselves (not needed: you only want the document back, not the old address)
 
 - Give each document a stable address, based on the review id instead of a random port. Something like `http://127.0.0.1:7817/r/rc33ca6eb0fe4/`.
 - Then old tabs come back on their own once the helper restarts. Your browser's "reopen tabs" would just work.
@@ -69,7 +69,7 @@ An index fixes the second. The first needs a fixed address, or the index doesn't
 ## What I'd do
 
 1. Build **B + C** first. It's mostly reading records that already exist, so the risk is low.
-2. Then decide on **D** with the Library in hand. If the bookmark is enough, skip D.
+2. Skip **D**. The Open button brings a document back, and the old address doesn't matter.
 
 ## New problems this creates, and how I'd handle them
 
@@ -80,6 +80,5 @@ An index fixes the second. The first needs a fixed address, or the index doesn't
 
 ## Questions for you
 
-1. B + C first, then decide on D? Or go straight to D because the dead tabs are the real pain?
-2. How far back should the Library show by default, and should anything ever get deleted?
-3. Should **Open** work with no agent involved (the helper re-serves the page, you can read and comment, and comments wait until an agent picks them up)?
+1. How far back should the Library show by default, and should anything ever get deleted?
+2. Should **Open** work with no agent involved (the helper re-serves the page, you can read and comment, and comments wait until an agent picks them up)?
