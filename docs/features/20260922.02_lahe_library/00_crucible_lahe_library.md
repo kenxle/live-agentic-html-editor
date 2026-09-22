@@ -36,7 +36,7 @@ Soon, new users from the npm package and the Product Hunt launch (both on the bo
 
 ## User context
 
-At a Mac, usually the morning after a restart or after a long day. The browser has a row of tabs that won't load. A Claude Code chat is open, so an agent is already there to act. You're deciding what to pick back up, often mid-way through several other things.
+On a laptop, working all day. Occasionally a computer restart will cause a browser window to have a row of tabs that are all dead-looking lahe docs. A Claude Code chat is always available. You're deciding what to pick back up, often mid-way through several other things.
 
 ## What already exists
 
