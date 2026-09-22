@@ -76,6 +76,17 @@ An index fixes the second. For the first, you don't need the old address back, j
 - Then old tabs come back on their own once the helper restarts. Your browser's "reopen tabs" would just work.
 - This is the biggest change: it touches how pages are served, and security review would want a look. It's also the one that fully removes the "feels lost" moment.
 
+## How you'd use it
+
+You'll usually have an agent open already, so the Library works through that agent:
+
+1. You tell an agent "open the lahe library."
+2. It runs `lahe library`, which serves the Library as a normal LAHE page and opens it.
+3. You click **Pick this up** on a row (or comment on it).
+4. That arrives at the agent like any other comment. The agent takes over that document's session, brings the page back, and starts answering your comments there.
+
+So the agent that opened the Library is the one that picks the document up. **Copy prompt** stays for handing a document to a different agent, and **Launch a new agent** can come later as an option.
+
 ## What I'd do
 
 1. Build **B + C** first. It's mostly reading records that already exist, so the risk is low.
@@ -91,4 +102,4 @@ An index fixes the second. For the first, you don't need the old address back, j
 
 ## Questions for you
 
-1. Would you want the Library to start the agent for you (for example, launch Claude Code on that session), or is copy and paste fine?
+1. Ready for me to turn this into a feature (brief, design, plan, build)? It adds a command, a page, and the pick-up flow, so it's bigger than a small fix.
