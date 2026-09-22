@@ -47,7 +47,8 @@ On a laptop, working all day. Occasionally a computer restart will cause a brows
 ## Evidence
 
 - Your own words: "overwhelmed", "feels like I lost my documents".
-- 477 reviews since Aug 13. 70 of them were created from Sep 17 on, after the fix that stopped one review per page. (Counted by `why476.py`.)
+- 477 reviews since Aug 13, but many are one review per page from before the Sep 16 registration fix. Folded the way reviews register today, they come to 213 folders, 54 of them since Sep 17. That is a floor: two documents in one folder (a brief and a plan) count once. (`why476.py`, then `docs_count.py`, one row per review in `docs_count_rows.csv`.)
+- Still a large number after the correction, and you expect 20 or more new documents each working day.
 - There is one user. The feeling is strong, but I don't know how often it happens. That's question 1.
 
 ## Status quo
