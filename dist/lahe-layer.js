@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+dba266e231da
+ * version 0.2.0+05deb41f8971
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+dba266e231da";
+  g.LAHE.version = "0.2.0+05deb41f8971";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -5753,10 +5753,19 @@
     // Synchronous, every keystroke, no debounce. A reload, a crash, or a sleep
     // costs nothing.
     TO_BROWSER_STORAGE: "every keystroke, synchronously",
-    // Debounced to the helper at 750ms of typing idle.
+    // To the helper within 750ms of being queued.
     HELPER_DEBOUNCE_MS: 750,
-    // Plus an immediate flush on each of these, with no debounce.
-    IMMEDIATE_ON: ["blur", "ready", "navigation", "unload"],
+    // An item whose queued events are ALL drafts goes to the helper at most
+    // once per this long (spec 20260922.01, requirement 4). The browser already
+    // has every keystroke; the helper copy is a crash backup, and a few seconds
+    // of it is an acceptable loss (Ken, 2026-09-22). It is a deadline from the
+    // item's last draft post, not a timer that typing pushes back. The poll
+    // loop cannot get round it either: flush itself applies it.
+    DRAFT_FLOOR_MS: 10000,
+    // Plus an immediate flush on each of these, with no debounce and no draft
+    // floor. `hide` is the tab being hidden, which is often the last thing a
+    // page hears before the browser discards it.
+    IMMEDIATE_ON: ["blur", "hide", "ready", "navigation", "unload"],
     // THE UNLOAD POST USES fetch(..., {keepalive: true}), NEVER sendBeacon.
     // sendBeacon cannot set the custom header D11 requires and cannot set the
     // JSON content type, so the obvious tool either drops the header (silently
@@ -8042,7 +8051,14 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function (record, merge, failures, elapsed, protocol) {
   "use strict";
 
+  // The OLD whole-list key: every item of a review in one JSON array. Read and
+  // merged, never written, never deleted (see "The items: one key per item").
+  // keyFor still spells it because it is also the review-id guard every bucket
+  // runs.
   var KEY_PREFIX = "lahe.items.v1:";
+  // One key per item, and the review's index of them (spec 20260922.01).
+  var ITEM_PREFIX = "lahe.item.v2:";
+  var INDEX_PREFIX = "lahe.index.v2:";
   var OUTBOX_PREFIX = "lahe.outbox.v1:";
   // The STAMP beside a cached list. See "Reading a list without parsing it"
   // below: the value is opaque and is only ever compared for equality, so a tab
@@ -8353,17 +8369,324 @@
       });
     }
 
-    function readAll(reviewId) {
-      return readList(keyFor(reviewId), collapseAll).map(detach);
+    // -----------------------------------------------------------------------
+    // The items: one key per item
+    // -----------------------------------------------------------------------
+    //
+    // Spec 20260922.01, requirement 2. The items used to be ONE key holding the
+    // whole list, so every keystroke re-serialized every item in the review
+    // (over 300 KB on the largest one). Now:
+    //
+    //   lahe.item.v2:<review>:<item>        one record
+    //   lahe.index.v2:<review>              {ids, removed}: the ids in creation
+    //                                       order, touched only on create and
+    //                                       delete, plus the ids deleted here
+    //                                       that the old key still carries
+    //   lahe.gen.v1:lahe.index.v2:<review>  one stamp for the whole review
+    //
+    // WRITE ORDER: the item's key, then the index, then the stamp. A crash
+    // between the first two leaves an item key the index does not list, never
+    // an index naming an item that is not there, and the first load in a store
+    // scans for exactly that case (unlisted below). The stamp moving last is the
+    // same cross-tab rule writeList states: a reader that lands in the middle
+    // holds a stamp that is already out of date.
+    //
+    // THE OLD WHOLE-LIST KEY (lahe.items.v1:<review>) is read whenever it is
+    // present and merged per item, newest by revision and then by updated_at.
+    // Every tab SHOWS the merge. Only the tab holding the review's lock WRITES
+    // it down, so a read-only window stays one that writes nothing. It is never
+    // deleted in this release: a tab still running the old bundle can be
+    // mid-unload, or take the review back later, and it writes that key. Its
+    // stamp is watched like ours, and taking the lock re-reads it, so a write
+    // from an old tab lands either way.
+    var reviewCache = Object.create(null);
+    var holding = Object.create(null);
+    var scanned = Object.create(null);
+
+    function itemKeyFor(reviewId, id) {
+      keyFor(reviewId);
+      return ITEM_PREFIX + reviewId + ":" + id;
     }
 
+    function indexKeyFor(reviewId) {
+      keyFor(reviewId);
+      return INDEX_PREFIX + reviewId;
+    }
+
+    function reviewStampKey(reviewId) {
+      return genKeyFor(indexKeyFor(reviewId));
+    }
+
+    function legacyStampKey(reviewId) {
+      return genKeyFor(keyFor(reviewId));
+    }
+
+    function readIndex(reviewId) {
+      var got = readJson(indexKeyFor(reviewId), null);
+      var ids = got && Array.isArray(got.ids) ? got.ids : [];
+      var removed = got && Array.isArray(got.removed) ? got.removed : [];
+      return {
+        ids: ids.filter(isId),
+        removed: removed.filter(isId)
+      };
+    }
+
+    function isId(value) {
+      return typeof value === "string" && value.length > 0;
+    }
+
+    function asSet(list) {
+      var out = Object.create(null);
+      list.forEach(function (id) {
+        out[id] = true;
+      });
+      return out;
+    }
+
+    // Newer by revision, then by updated_at. Ties go to the copy already held,
+    // so an old key that says the same thing writes nothing.
+    function newerThan(candidate, held) {
+      var a = candidate[record.FIELD.REV] || 0;
+      var b = held[record.FIELD.REV] || 0;
+      if (a !== b) return a > b;
+      return String(candidate[record.FIELD.UPDATED_AT] || "") > String(held[record.FIELD.UPDATED_AT] || "");
+    }
+
+    /**
+     * Everything this review holds, off the bytes: ours, anything unlisted, and
+     * the old key merged over it.
+     *
+     * @returns {{ids: string[], byId: Object, indexed: Object, removed: string[],
+     *            legacyIds: Object, pending: string[]}}
+     *   `pending` names the items where the old key's copy won and is not yet
+     *   written into its own key.
+     */
+    function parseReview(reviewId) {
+      var index = readIndex(reviewId);
+      var removed = asSet(index.removed);
+      var ids = [];
+      var byId = Object.create(null);
+      var indexed = Object.create(null);
+
+      index.ids.forEach(function (id) {
+        if (removed[id] || byId[id]) return;
+        var got = readJson(itemKeyFor(reviewId, id), null);
+        if (!got || typeof got !== "object") return;
+        byId[id] = record.collapsePageCheckNote(got);
+        indexed[id] = true;
+        ids.push(id);
+      });
+
+      // Unlisted items: a key whose index write never landed. Looked for once
+      // per review per store, which is once per page load, because a crash is
+      // the only way to leave one and the next load is where it is found.
+      var unlisted = [];
+      if (!scanned[reviewId] && typeof backing.key === "function") {
+        var prefix = ITEM_PREFIX + reviewId + ":";
+        var keys = [];
+        for (var k = 0; k < backing.length; k += 1) {
+          var name = backing.key(k);
+          if (name && name.indexOf(prefix) === 0) keys.push(name);
+        }
+        keys.forEach(function (name) {
+          var id = name.slice(prefix.length);
+          if (!isId(id) || removed[id] || byId[id]) return;
+          var got = readJson(name, null);
+          if (got && typeof got === "object" && got[record.FIELD.ID] === id) unlisted.push(record.collapsePageCheckNote(got));
+        });
+        unlisted.sort(function (x, y) {
+          var a = String(x[record.FIELD.CREATED_AT] || "");
+          var b = String(y[record.FIELD.CREATED_AT] || "");
+          return a < b ? -1 : a > b ? 1 : 0;
+        });
+        unlisted.forEach(function (item) {
+          byId[item[record.FIELD.ID]] = item;
+          ids.push(item[record.FIELD.ID]);
+        });
+      }
+
+      var legacy = readJson(keyFor(reviewId), []);
+      var legacyIds = Object.create(null);
+      var pending = [];
+      (Array.isArray(legacy) ? legacy : []).forEach(function (raw) {
+        if (!raw || typeof raw !== "object" || !isId(raw[record.FIELD.ID])) return;
+        var id = raw[record.FIELD.ID];
+        legacyIds[id] = true;
+        if (removed[id]) return;
+        var old = record.collapsePageCheckNote(raw);
+        if (!byId[id]) {
+          ids.push(id);
+          byId[id] = old;
+          pending.push(id);
+        } else if (newerThan(old, byId[id])) {
+          byId[id] = old;
+          pending.push(id);
+        }
+      });
+
+      return {
+        ids: ids,
+        byId: byId,
+        indexed: indexed,
+        removed: index.removed,
+        legacyIds: legacyIds,
+        pending: pending
+      };
+    }
+
+    /**
+     * The review, from memory when nobody has written since this store looked.
+     *
+     * Same double read of the stamps as readList, for the same reason, with the
+     * old key's stamp watched beside ours.
+     */
+    function loadReview(reviewId) {
+      var stampKey = reviewStampKey(reviewId);
+      var oldStampKey = legacyStampKey(reviewId);
+      var stamp = backing.getItem(stampKey);
+      var oldStamp = backing.getItem(oldStampKey);
+      var held = reviewCache[reviewId];
+      if (held && held.stamp === stamp && held.oldStamp === oldStamp) return held;
+      var state = null;
+      for (var tries = 0; tries < READ_ATTEMPTS; tries += 1) {
+        state = parseReview(reviewId);
+        var after = backing.getItem(stampKey);
+        var oldAfter = backing.getItem(oldStampKey);
+        if (after === stamp && oldAfter === oldStamp) {
+          state.stamp = stamp;
+          state.oldStamp = oldStamp;
+          break;
+        }
+        stamp = after;
+        oldStamp = oldAfter;
+        state.stamp = undefined;
+      }
+      scanned[reviewId] = true;
+      if (state.stamp !== undefined) reviewCache[reviewId] = state;
+      else delete reviewCache[reviewId];
+      if (holding[reviewId]) adoptLegacy(reviewId, state);
+      return state;
+    }
+
+    /**
+     * The lock holder writes the old key's winners into their own keys.
+     *
+     * Best effort from a READ: a full storage here must not stop the rail from
+     * rendering, and the merged view in memory is already right. The next cold
+     * read tries again, and the reviewer's next keystroke on that item writes it
+     * anyway, loudly.
+     */
+    function adoptLegacy(reviewId, state) {
+      var unindexed = state.ids.some(function (id) {
+        return !state.indexed[id];
+      });
+      if (!state.pending.length && !unindexed) return;
+      try {
+        delete reviewCache[reviewId];
+        state.pending.forEach(function (id) {
+          writeJson(itemKeyFor(reviewId, id), state.byId[id]);
+        });
+        writeIndex(reviewId, state);
+        state.pending = [];
+        state.ids.forEach(function (id) {
+          state.indexed[id] = true;
+        });
+        stampReview(reviewId, state);
+      } catch (err) {
+        void err;
+      }
+    }
+
+    // `removed` only exists to keep an id the OLD whole-list key still carries
+    // from being merged back in (remove()'s own comment). An id the old key no
+    // longer holds needs no such guard, so it is dropped here rather than kept
+    // forever: without this, an id merged out of the old key by an unload
+    // rewrite (a shorter list, or a fresher bundle that drops it) stayed in
+    // `removed` for the life of the review, for nothing.
+    function writeIndex(reviewId, state) {
+      var removed = state.removed.filter(function (id) {
+        return !!state.legacyIds[id];
+      });
+      writeJson(indexKeyFor(reviewId), { ids: state.ids.slice(), removed: removed });
+    }
+
+    // The stamp, last, with writeList's rule for a stamp that cannot be written.
+    function stampReview(reviewId, state) {
+      cacheTicks += 1;
+      var stamp = cacheSalt + ":" + cacheTicks;
+      try {
+        writeRaw(reviewStampKey(reviewId), stamp);
+      } catch (err) {
+        delete reviewCache[reviewId];
+        try {
+          backing.removeItem(reviewStampKey(reviewId));
+        } catch (ignored) {
+          void ignored;
+        }
+        throw err;
+      }
+      state.stamp = stamp;
+      state.oldStamp = backing.getItem(legacyStampKey(reviewId));
+      reviewCache[reviewId] = state;
+    }
+
+    function readAll(reviewId) {
+      var state = loadReview(reviewId);
+      return state.ids.map(function (id) {
+        return detach(state.byId[id]);
+      });
+    }
+
+    // Replaces the whole set. Only the merge with the helper calls this, and it
+    // writes just the items that differ, so it costs what changed.
     function writeAll(reviewId, items) {
-      writeList(
-        keyFor(reviewId),
-        items.map(function (item) {
-          return detach(record.collapsePageCheckNote(item));
+      var state = loadReview(reviewId);
+      var next = items.map(function (item) {
+        return detach(record.collapsePageCheckNote(item));
+      });
+      var keep = asSet(
+        next.map(function (item) {
+          return item[record.FIELD.ID];
         })
       );
+      delete reviewCache[reviewId];
+      var indexChanged = false;
+      next.forEach(function (item) {
+        var id = item[record.FIELD.ID];
+        var held = state.byId[id];
+        if (!held || !state.indexed[id] || JSON.stringify(held) !== JSON.stringify(item)) {
+          writeJson(itemKeyFor(reviewId, id), item);
+        }
+        if (!state.indexed[id]) indexChanged = true;
+      });
+      var gone = state.ids.filter(function (id) {
+        return !keep[id];
+      });
+      var nextIds = next.map(function (item) {
+        return item[record.FIELD.ID];
+      });
+      if (gone.length || nextIds.join("\n") !== state.ids.join("\n")) indexChanged = true;
+      var removed = state.removed.slice();
+      gone.forEach(function (id) {
+        if (state.legacyIds[id] && removed.indexOf(id) === -1) removed.push(id);
+      });
+      var fresh = {
+        ids: nextIds,
+        byId: Object.create(null),
+        indexed: Object.create(null),
+        removed: removed,
+        legacyIds: state.legacyIds,
+        pending: []
+      };
+      next.forEach(function (item) {
+        fresh.byId[item[record.FIELD.ID]] = item;
+        fresh.indexed[item[record.FIELD.ID]] = true;
+      });
+      if (indexChanged) writeIndex(reviewId, fresh);
+      gone.forEach(function (id) {
+        backing.removeItem(itemKeyFor(reviewId, id));
+      });
+      stampReview(reviewId, fresh);
       return items;
     }
 
@@ -8375,6 +8698,9 @@
     // Writes one item. SYNCHRONOUS. Returns the item as stored. A quota failure
     // throws rather than being swallowed: R11 says failures are loud, and a
     // silently dropped write is the failure this tool exists to remove.
+    //
+    // A keystroke on an item already listed writes that item's key and the
+    // review's stamp, and nothing else.
     function write(reviewId, item) {
       record.validateItem(item);
       // A content write means this browser holds keystrokes the helper has not
@@ -8382,17 +8708,31 @@
       // cleared here (finding 10, "clear on the next content write"). The ack is
       // kept in a side-table, NOT on the item, so it never leaks into a snapshot,
       // an export, or review.json; merge reads it through a transient decoration.
-      clearAcknowledged(reviewId, item[record.FIELD.ID]);
-      var items = readAll(reviewId);
-      for (var i = 0; i < items.length; i += 1) {
-        if (items[i][record.FIELD.ID] === item[record.FIELD.ID]) {
-          items[i] = item;
-          writeAll(reviewId, items);
-          return item;
-        }
+      var id = item[record.FIELD.ID];
+      clearAcknowledged(reviewId, id);
+      var state = loadReview(reviewId);
+      var stored = detach(record.collapsePageCheckNote(item));
+      // Dropped first, so a write that fails part way leaves nothing held that
+      // disagrees with the disk: the next read goes back to the bytes.
+      delete reviewCache[reviewId];
+      writeJson(itemKeyFor(reviewId, id), stored);
+      if (!state.byId[id]) state.ids.push(id);
+      state.byId[id] = stored;
+      var pendingAt = state.pending.indexOf(id);
+      if (pendingAt !== -1) state.pending.splice(pendingAt, 1);
+      // An id written again is not removed any more, whatever the index still
+      // says: a removed id can come back (the reviewer recreates the same
+      // record, or a merge revives it), and an index that still lists it as
+      // removed hides the write from every reload until this runs (review
+      // finding, spec 20260922.01).
+      var removedAt = state.removed.indexOf(id);
+      var revived = removedAt !== -1;
+      if (revived) state.removed.splice(removedAt, 1);
+      if (!state.indexed[id] || revived) {
+        writeIndex(reviewId, state);
+        state.indexed[id] = true;
       }
-      items.push(item);
-      writeAll(reviewId, items);
+      stampReview(reviewId, state);
       return item;
     }
 
@@ -8460,25 +8800,32 @@
     }
 
     function readItem(reviewId, id) {
-      var items = readAll(reviewId);
-      for (var i = 0; i < items.length; i += 1) {
-        if (items[i][record.FIELD.ID] === id) return items[i];
-      }
-      return null;
+      var state = loadReview(reviewId);
+      return state.byId[id] ? detach(state.byId[id]) : null;
     }
 
     // The reviewer deleting their own outstanding work is the only caller.
     // Nothing in the library removes an item on its own initiative.
+    //
+    // The index moves first, then the key goes. An id the old whole-list key
+    // still carries is remembered in the index as removed, or the next merge
+    // with that key would bring the item back.
     function remove(reviewId, id) {
-      var items = readAll(reviewId);
-      for (var i = 0; i < items.length; i += 1) {
-        if (items[i][record.FIELD.ID] === id) {
-          items.splice(i, 1);
-          writeAll(reviewId, items);
-          return true;
-        }
-      }
-      return false;
+      var state = loadReview(reviewId);
+      if (!state.byId[id]) return false;
+      delete reviewCache[reviewId];
+      state.ids = state.ids.filter(function (each) {
+        return each !== id;
+      });
+      delete state.byId[id];
+      delete state.indexed[id];
+      var pendingAt = state.pending.indexOf(id);
+      if (pendingAt !== -1) state.pending.splice(pendingAt, 1);
+      if (state.legacyIds[id] && state.removed.indexOf(id) === -1) state.removed.push(id);
+      writeIndex(reviewId, state);
+      backing.removeItem(itemKeyFor(reviewId, id));
+      stampReview(reviewId, state);
+      return true;
     }
 
     // Every review this origin holds anything for. Copy and export are scoped
@@ -8486,9 +8833,16 @@
     // origin's slice of a review, and the export says so.
     function reviews() {
       var out = [];
+      var seen = Object.create(null);
       for (var i = 0; i < backing.length; i += 1) {
         var k = backing.key(i);
-        if (k && k.indexOf(KEY_PREFIX) === 0) out.push(k.slice(KEY_PREFIX.length));
+        var id = null;
+        if (k && k.indexOf(KEY_PREFIX) === 0) id = k.slice(KEY_PREFIX.length);
+        else if (k && k.indexOf(INDEX_PREFIX) === 0) id = k.slice(INDEX_PREFIX.length);
+        if (id && !seen[id]) {
+          seen[id] = true;
+          out.push(id);
+        }
       }
       return out;
     }
@@ -8974,6 +9328,7 @@
         decided = true;
         clearTimeout(deadline);
         writeJson(holderKey(reviewId), self);
+        nowHolding(reviewId);
         settle({ acquired: true, holder: self, windowId: windowId, failure: null, reason: null, reclaimed: true });
         return new Promise(function (resolve) {
           releaseHeldLock = resolve;
@@ -8995,6 +9350,7 @@
         // a reviewer out of their own review, and a reviewer locked out is a
         // work-losing outcome in a tool whose thesis is never losing work.
         writeJson(holderKey(reviewId), self);
+        nowHolding(reviewId);
         return Promise.resolve({
           acquired: true,
           holder: self,
@@ -9044,6 +9400,7 @@
           return null;
         }
         writeJson(holderKey(reviewId), self);
+        nowHolding(reviewId);
         settle({ acquired: true, holder: self, windowId: windowId, failure: null, reason: null });
         // HELD FOR THE LIFE OF THE SESSION. The promise this returns is what
         // keeps the lock, so it resolves only when releaseWindow is called.
@@ -9055,7 +9412,26 @@
       return answered;
     }
 
+    // This window now holds the review, so it is the one that writes the old
+    // whole-list key's merge down. The held copy is dropped so the next read
+    // goes back to the bytes: an outgoing old-bundle document may have written
+    // that key on its way out, with no stamp to say so.
+    //
+    // The unlisted-item scan (parseReview's `scanned` guard) is also reset
+    // here, so the window taking the lock scans once for orphaned item keys:
+    // an item key written with its index write not yet landed, left behind by
+    // a holder that crashed between the two. `scanned` otherwise runs the scan
+    // at most once per review per store instance, which is fine for an
+    // ordinary read but would leave a lock's new holder never looking, since
+    // the earlier holder that crashed already used up this store's one scan.
+    function nowHolding(reviewId) {
+      holding[reviewId] = true;
+      delete reviewCache[reviewId];
+      delete scanned[reviewId];
+    }
+
     function releaseWindow(reviewId) {
+      if (reviewId) holding[reviewId] = false;
       if (typeof releaseHeldLock === "function") {
         releaseHeldLock();
         releaseHeldLock = null;
@@ -9139,6 +9515,8 @@
 
   return {
     KEY_PREFIX: KEY_PREFIX,
+    ITEM_PREFIX: ITEM_PREFIX,
+    INDEX_PREFIX: INDEX_PREFIX,
     OUTBOX_PREFIX: OUTBOX_PREFIX,
     GEN_PREFIX: GEN_PREFIX,
     CHIPS_PREFIX: CHIPS_PREFIX,
@@ -25050,6 +25428,22 @@
     // outbox is EMPTY (End review) can wait on it instead of being told `busy`
     // and posting anyway. Resolved promises are harmless to hold.
     var flushInFlight = null;
+    // THE DRAFT FLOOR (spec 20260922.01, requirement 4). Item id -> when this
+    // page last posted that item with nothing but drafts queued for it. flush
+    // holds such an item back until protocol.FLUSH.DRAFT_FLOOR_MS after that.
+    // In memory on purpose: after a reload nothing is known, so anything a
+    // previous session left queued is due at once, which is "re-posts on the
+    // next load".
+    var draftSentAt = Object.create(null);
+    // When the armed flush timer fires, and whether it was asked for by
+    // something that skips the floor. The timer keeps the EARLIEST deadline it
+    // is given (requirement 5): a later request never pushes it back.
+    var debounceDue = null;
+    var debounceUrgent = false;
+    // A flush asked for while a post was in flight. It is remembered, not
+    // dropped, and runs the moment that post finishes: a Cmd-Enter pressed
+    // during a draft post must not wait for anything (requirement 5).
+    var rerun = null;
     var deliveredOnce = false;
     // True from pagehide/beforeunload until this document is shown again. A post
     // the browser cancels because the document is going away is NOT the helper
@@ -25281,9 +25675,11 @@
      * browser storage in this task, and the network happens later or never.
      *
      * @param {Object} item the record as stored
-     * @param {{immediate?: string, existing?: boolean}} [options] `immediate` is
-     *   one of protocol.FLUSH.IMMEDIATE_ON; `existing` says this record already
-     *   exists and only its content changed. See eventTypeFor.
+     * @param {{immediate?: string, existing?: boolean, withdrawnFromReady?: boolean}} [options]
+     *   `immediate` is one of protocol.FLUSH.IMMEDIATE_ON; `existing` says this
+     *   record already exists and only its content changed (see eventTypeFor);
+     *   `withdrawnFromReady` says this write is the keystroke that just took the
+     *   item off ready and back to draft.
      */
     function recordItem(item, options) {
       // A refused window is READ-ONLY (finding 1): it writes nothing to the
@@ -25300,12 +25696,82 @@
             "sync.recordItem: immediate must be one of " + protocol.FLUSH.IMMEDIATE_ON.join(", ") + ", got " + opts2.immediate
           );
         }
-        scheduleFlush(0);
+        // A commit goes at once without taking every other item's drafts with
+        // it: the ready item is not draft-only, so flush sends it whole, and
+        // the rest keep their floor. Leaving (blur, hide, navigation, unload)
+        // is the risky moment, so there everything goes.
+        scheduleFlush(0, { urgent: opts2.immediate !== "ready" });
+      } else if (record.isDraft(item)) {
+        var id = item[record.FIELD.ID];
+        if (opts2.withdrawnFromReady) {
+          // THE FIRST KEYSTROKE THAT TAKES AN ITEM OFF READY IS NOT AN
+          // ORDINARY DRAFT EDIT. Without this, it fell into the branch below
+          // and waited on whatever floor an earlier draft (from before the
+          // item was ever marked ready) had left standing, up to 10 seconds
+          // during which the agent still read the old, ready wording as
+          // current (review finding, spec 20260922.01). This write goes on
+          // the ordinary debounce instead, exactly like ready/created/deleted
+          // events. The floor this item's OWN drafts then reset, so keystroke
+          // two onward still waits its turn, the way requirement 4 asks.
+          delete draftSentAt[id];
+          scheduleFlush(protocol.FLUSH.HELPER_DEBOUNCE_MS);
+        } else {
+          // A draft waits for its item's floor, and at least the debounce, so
+          // the first few keystrokes of a new comment go as one post.
+          var wait = draftDueAt(id) - nowMs();
+          scheduleFlush(Math.max(protocol.FLUSH.HELPER_DEBOUNCE_MS, wait));
+        }
       } else {
         scheduleFlush(protocol.FLUSH.HELPER_DEBOUNCE_MS);
       }
       recomputeStatus();
       return event;
+    }
+
+    // When an item's drafts may next go to the helper: the floor after its last
+    // draft post, or now when this page has never posted it.
+    function draftDueAt(itemId) {
+      var at = draftSentAt[itemId];
+      return typeof at === "number" ? at + protocol.FLUSH.DRAFT_FLOOR_MS : 0;
+    }
+
+    /**
+     * Split the queue into what goes now and what waits for the floor.
+     *
+     * AN ITEM WAITS ONLY WHEN EVERY EVENT IT HAS QUEUED IS A DRAFT, and it
+     * waits whole. An item with a ready (or a delete) queued goes whole, its
+     * older draft included and in queue order, so a ready never reaches the
+     * helper ahead of the draft it replaced. Events keep their queue order
+     * either way; this only drops some.
+     *
+     * @returns {{send: Object[], waitUntil: number|null, draftsOnly: Object}}
+     *   `draftsOnly` is item id -> true when everything queued for it is a draft
+     */
+    function splitForFloor(events, now) {
+      var draftsOnly = Object.create(null);
+      events.forEach(function (event) {
+        var id = event[protocol.EVENT_FIELD.ITEM];
+        if (!id) return;
+        var isDraftEvent = event.draft === true;
+        draftsOnly[id] = (draftsOnly[id] === undefined ? true : draftsOnly[id]) && isDraftEvent;
+      });
+      var waitUntil = null;
+      var waiting = Object.create(null);
+      Object.keys(draftsOnly).forEach(function (id) {
+        if (!draftsOnly[id]) return;
+        var due = draftDueAt(id);
+        if (due > now) {
+          waiting[id] = true;
+          if (waitUntil === null || due < waitUntil) waitUntil = due;
+        }
+      });
+      return {
+        send: events.filter(function (event) {
+          return !waiting[event[protocol.EVENT_FIELD.ITEM]];
+        }),
+        waitUntil: waitUntil,
+        draftsOnly: draftsOnly
+      };
     }
 
     // -------------------------------------------------------------------------
@@ -25375,7 +25841,14 @@
      */
     function flush(flushOptions) {
       var fo = flushOptions || {};
-      if (flushing) return Promise.resolve({ sent: 0, remaining: pendingCount(), busy: true });
+      if (flushing) {
+        // Remembered, not dropped. See `rerun`.
+        rerun = {
+          urgent: !!(fo.urgent || (rerun && rerun.urgent)),
+          force: !!(fo.force || (rerun && rerun.force))
+        };
+        return Promise.resolve({ sent: 0, remaining: pendingCount(), busy: true });
+      }
       if (cspRefused) return Promise.resolve({ sent: 0, remaining: pendingCount(), refused: true });
       // HOLD (docs/features/20260917.01_hold_toggle): a gate on this call, not
       // a new state and not a new wire event. The event already sits queued in
@@ -25408,10 +25881,23 @@
       // path's rules.
       var leaving = !!fo.unload || unloading;
 
-      var events = store.pendingEvents(requireReview());
-      if (!events.length) {
+      var queued = store.pendingEvents(requireReview());
+      if (!queued.length) {
         recomputeStatus();
         return Promise.resolve({ sent: 0, remaining: 0 });
+      }
+
+      // THE DRAFT FLOOR, here and nowhere else, so every sender (the typing
+      // timer, the poll loop, the follow-up after a post) goes through it.
+      // Leaving the box, hiding the tab, leaving the page, releasing Hold and
+      // ending the review all skip it.
+      var now = nowMs();
+      var split = splitForFloor(queued, now);
+      var events = fo.urgent || fo.force || leaving ? queued : split.send;
+      if (!events.length) {
+        scheduleFlush(Math.max(0, split.waitUntil - now));
+        recomputeStatus();
+        return Promise.resolve({ sent: 0, remaining: queued.length, waiting: true });
       }
 
       var body = JSON.stringify({ review: requireReview(), events: events });
@@ -25426,6 +25912,17 @@
       flushing = true;
       state = STATE.IN_FLIGHT;
       counters.posts += 1;
+
+      // Start each draft-only item's floor now, when its post goes out, so a
+      // keystroke that lands during the post waits its turn. Kept to put back
+      // if the post fails: a draft that never arrived should not also wait.
+      var floorBefore = Object.create(null);
+      events.forEach(function (event) {
+        var id = event[protocol.EVENT_FIELD.ITEM];
+        if (!id || !split.draftsOnly[id] || id in floorBefore) return;
+        floorBefore[id] = draftSentAt[id];
+        draftSentAt[id] = now;
+      });
 
       var init = { method: "POST", body: body };
       // Keepalive on any flush leaving with the document, not only the one the
@@ -25476,9 +25973,22 @@
           }
           recomputeStatus();
           var remaining = pendingCount();
-          if (remaining > 0 && !leaving) scheduleFlush(0);
+          // What arrived during the post goes through flush again at once, and
+          // flush decides: drafts typed meanwhile wait for their floor, and a
+          // commit or a leaving moment asked for meanwhile goes now. This used
+          // to post everything at once, which is why a typing page reached the
+          // helper about once a second (DRAFT_PERSISTENCE.md section 4).
+          var again = rerun;
+          rerun = null;
+          if ((remaining > 0 || again) && !leaving) scheduleFlush(0, again);
           return { sent: accepted.length, remaining: remaining };
         }
+
+        // Nothing arrived. The floor goes back to where it was, and a flush
+        // remembered during this post is covered by the retry below, which
+        // posts everything queued.
+        restoreFloor(floorBefore);
+        rerun = null;
 
         // The document went away mid-request. Nothing failed and nothing is
         // lost, so nothing is said: the events are in browser storage and the
@@ -25501,6 +26011,31 @@
       });
       flushInFlight = posted;
       return posted;
+    }
+
+    function restoreFloor(before) {
+      Object.keys(before).forEach(function (id) {
+        if (typeof before[id] === "number") draftSentAt[id] = before[id];
+        else delete draftSentAt[id];
+      });
+    }
+
+    /**
+     * Send what is queued now, past the draft floor, because the reviewer is
+     * leaving: the box (`blur`), the tab (`hide`). Hold still applies, so a held
+     * review posts nothing here. A post already in flight is not interrupted;
+     * this is remembered and runs the moment it finishes.
+     *
+     * @param {string} reason one of protocol.FLUSH.IMMEDIATE_ON
+     */
+    function flushNow(reason) {
+      if (protocol.FLUSH.IMMEDIATE_ON.indexOf(reason) === -1) {
+        throw new Error("sync.flushNow: reason must be one of " + protocol.FLUSH.IMMEDIATE_ON.join(", ") + ", got " + reason);
+      }
+      if (readOnly || !store) return Promise.resolve({ sent: 0, remaining: 0 });
+      if (retryTimer) return Promise.resolve({ sent: 0, remaining: pendingCount(), retrying: true });
+      if (pendingCount() === 0 && !flushing) return Promise.resolve({ sent: 0, remaining: 0 });
+      return flush({ urgent: true });
     }
 
     /**
@@ -25575,14 +26110,37 @@
       return store.pendingEvents(requireReview()).length;
     }
 
-    function scheduleFlush(delayMs) {
+    /**
+     * Arm the flush timer.
+     *
+     * IT KEEPS THE EARLIEST DEADLINE IT HAS BEEN GIVEN. A later request never
+     * pushes an armed timer back, so continuous typing cannot starve a post,
+     * and a request that skips the draft floor (`urgent`) is carried to the
+     * flush the timer runs, whichever request set the time.
+     *
+     * @param {number} delayMs
+     * @param {{urgent?: boolean, force?: boolean}} [options]
+     */
+    function scheduleFlush(delayMs, options) {
+      var o = options || {};
+      var due = nowMs() + delayMs;
+      var urgent = !!(o.urgent || o.force);
+      if (debounceTimer && debounceDue !== null && debounceDue <= due) {
+        if (urgent) debounceUrgent = true;
+        return;
+      }
       if (debounceTimer) clearTimeout(debounceTimer);
-      // harness-allow-timer: protocol.FLUSH's 750ms typing-idle debounce. This
-      // is the ONLY debounce in the design and it is on the post to the helper,
-      // never on the write to browser storage.
+      debounceUrgent = urgent || (debounceTimer ? debounceUrgent : false);
+      debounceDue = due;
+      // harness-allow-timer: protocol.FLUSH's post to the helper, at the
+      // debounce or the draft floor. The ONLY wait in the design is on the post
+      // to the helper, never on the write to browser storage.
       debounceTimer = setTimeout(function () {
+        var runUrgent = debounceUrgent;
         debounceTimer = null;
-        flush();
+        debounceDue = null;
+        debounceUrgent = false;
+        flush(runUrgent ? { urgent: true } : undefined);
       }, delayMs);
     }
 
@@ -25823,6 +26381,10 @@
       if (doc && doc.hidden !== true) {
         poll();
         if (pendingCount() > 0 && !retryTimer && !flushing) flush();
+      } else if (doc && doc.hidden === true && started) {
+        // A hidden tab is often the last thing a page hears before the browser
+        // discards it, so the drafts go now rather than at their floor.
+        flushNow("hide");
       }
       if (started) startPolling();
     }
@@ -26549,6 +27111,7 @@
       deleteItem: deleteItem,
       eventFor: eventFor,
       flush: flush,
+      flushNow: flushNow,
       drainOutbox: drainOutbox,
       commitOnUnload: commitOnUnload,
       takeover: takeover,
@@ -27564,6 +28127,16 @@
     // gets a no-op, so the write paths below never have to ask whether it is
     // there.
     var onFailure = typeof opts.onFailure === "function" ? opts.onFailure : null;
+    // The reviewer left a comment box: its input lost focus, or the box closed.
+    // Boot hands this sync.flushNow("blur"), because leaving the box is one of
+    // the moments an unsent draft goes to the helper past its 10 second floor
+    // (spec 20260922.01, requirement 4). Not a change to the record, so it is
+    // not an emit: the listeners that repaint on every emit have nothing to do.
+    var onLeave = typeof opts.onLeave === "function" ? opts.onLeave : null;
+
+    function left() {
+      if (onLeave) onLeave();
+    }
 
     // id -> handle
     var open = Object.create(null);
@@ -27638,12 +28211,12 @@
     // writes to, and a quota failure swallowed around the whole loop would skip
     // every listener registered after it (the Active tab's, among others). One
     // listener that cannot write is not the rest of the rail going quiet.
-    function emit(item, event) {
+    function emit(item, event, meta) {
       var el = createdOn[item && item[record.FIELD.ID]] || null;
       for (var i = 0; i < listenersState.length; i += 1) {
         (function (listener) {
           durably(function () {
-            listener(item, event || "changed", el);
+            listener(item, event || "changed", el, meta);
           });
         })(listenersState[i]);
       }
@@ -27970,6 +28543,7 @@
         // the words really ask for, with nothing held open by the typing rule.
         inputEl.addEventListener("blur", function () {
           grow({ allowShrink: true });
+          left();
         });
         bindGrip();
 
@@ -28319,6 +28893,10 @@
         // became reply-blocking noise: one sentence reworded took rev 1 to 29 on
         // the 2026-08-14 walk. The keystrokes are still durable at once; they are
         // CONTENT. The revision moves once, at the commit, in flushReword.
+        // Read before this keystroke's state is decided: this is the one
+        // keystroke that can be the withdrawal, and `next`'s state below
+        // always reads draft or ready, never which it just came from.
+        var wasReadyBeforeThisKeystroke = current[record.FIELD.STATE] === record.STATE.READY;
         var next = Object.assign({}, current);
         next[record.FIELD.NOTE] = String(text);
         next[record.FIELD.UPDATED_AT] = record.nowIso();
@@ -28351,7 +28929,8 @@
         // Same rule as persist: a keystroke the disk refused posts nothing, so
         // the helper never acknowledges a wording this browser will not have on
         // the next load. The box keeps the words either way.
-        if (!refused) emit(next, "typed");
+        var withdrawnFromReady = wasReadyBeforeThisKeystroke && next[record.FIELD.STATE] === record.STATE.DRAFT;
+        if (!refused) emit(next, "typed", withdrawnFromReady ? { withdrawnFromReady: true } : undefined);
         return next;
       }
 
@@ -28448,6 +29027,7 @@
         delete open[id];
         if (highlights) highlights.setActive(id, false);
         emit(handleItem(), "closed");
+        left();
         return handleItem();
       }
 
@@ -30436,7 +31016,7 @@
     }
 
     // The one write path. Storage first, synchronously, then everyone else.
-    function persist(item, event, immediate) {
+    function persist(item, event, immediate, postOptions) {
       var refused = durably(function () {
         store.write(requireReview(), item);
       });
@@ -30455,7 +31035,9 @@
       if (!refused && sync && typeof sync.recordItem === "function") {
         // The queue is a write into the same storage, so it is guarded too.
         durably(function () {
-          sync.recordItem(item, immediate ? { immediate: immediate } : undefined);
+          var post = Object.assign({}, postOptions || {});
+          if (immediate) post.immediate = immediate;
+          sync.recordItem(item, Object.keys(post).length ? post : undefined);
         });
       }
       return item;
@@ -30571,6 +31153,17 @@
         // Shift-Enter with the same inputType as a bare Enter.
         lastKey: null,
         wasNew: !existing,
+        // REOPENING A COMMITTED EDIT (spec 20260922.01, requirement 6). The
+        // wording as it stood when the block opened is what "changed" is
+        // measured against while it is open, and whether the edit was ever
+        // committed is what decides the revision at commit. Both are read HERE,
+        // once: the record is a draft while the reviewer rewrites it, so its
+        // state later says nothing about whether this is a first commit.
+        wasCommitted: !!existing && isCommittedEdit(existing),
+        wasReady: !!existing && existing[record.FIELD.STATE] === record.STATE.READY,
+        opened: existing
+          ? { text: existing[record.FIELD.AFTER], html: existing[record.FIELD.AFTER_HTML] }
+          : before,
         startedAt: Date.now()
       };
 
@@ -30852,18 +31445,97 @@
 
     // Every keystroke, synchronously, before anything else. The revision does
     // NOT move here: a revision is a committed wording.
+    //
+    // TYPING INTO A READY EDIT TAKES IT BACK OFF THE AGENT'S DESK, the way a
+    // comment being reworded does (comments.js type()). The first keystroke that
+    // changes the wording makes it a draft, which is not in review.json (R7);
+    // typing it back to the committed wording makes it ready again. Before this
+    // the record stayed ready, so every keystroke posted item.ready and the
+    // agent could read half-typed text as an instruction. A handled edit is
+    // never reopened here (itemFor skips it), and a not_handled one keeps its
+    // state, as it always has.
     function captureTyping() {
       if (!session) return null;
       var after = capture(session.block);
       var item = store.readItem(requireReview(), session.itemId);
       if (!item) return null;
+      // Read BEFORE this keystroke's state is decided: this is the one
+      // keystroke that can be the withdrawal, and the record after the
+      // assignment below always reads draft or ready, never which it just
+      // came from.
+      var wasReadyBeforeThisKeystroke = item[record.FIELD.STATE] === record.STATE.READY;
       var next = Object.assign({}, item);
       next[record.FIELD.AFTER] = after.text;
       next[record.FIELD.AFTER_HTML] = after.html;
       next[record.FIELD.UPDATED_AT] = record.nowIso();
-      persist(next, "typed");
+      if (session.wasReady) {
+        next[record.FIELD.STATE] = kindFor(session.opened, after).changed ? record.STATE.DRAFT : record.STATE.READY;
+      }
+      // An item this page did not just create is content on a record the helper
+      // already holds, whatever state it is in (sync.js eventTypeFor).
+      var postOptions = session.wasNew ? null : { existing: true };
+      if (wasReadyBeforeThisKeystroke && next[record.FIELD.STATE] === record.STATE.DRAFT) {
+        // This is the keystroke that just took the edit off ready. Tell sync
+        // so it posts at once instead of waiting behind a floor left by a
+        // draft from before the edit was ever marked ready (review finding,
+        // spec 20260922.01 requirement 6).
+        postOptions = Object.assign({}, postOptions || {}, { withdrawnFromReady: true });
+      }
+      persist(next, "typed", null, postOptions);
       positionFrame();
       return next;
+    }
+
+    // Was this edit ever committed? Not "is it a draft right now": a committed
+    // edit the reviewer is rewriting is a draft until they commit again, and
+    // its history is what still says it was committed before.
+    function isCommittedEdit(item) {
+      if (!record.isDraft(item)) return true;
+      var history = item[record.FIELD.AFTER_HISTORY];
+      return Array.isArray(history) && history.length > 0;
+    }
+
+    /**
+     * A committed edit left withdrawn by a page that died mid-rewording.
+     *
+     * Typing into a committed edit makes it a draft until the reviewer commits,
+     * and leaving the page commits it (commitOnUnload, navigation). A crash or
+     * a killed tab does neither, so the record stays a draft: off the page,
+     * because replay applies only outstanding records, and out of review.json,
+     * because drafts are withheld. The words are all in browser storage (R1),
+     * so the page that next holds the review commits them, exactly as leaving
+     * would have: a new revision, ready, carrying what the reviewer typed.
+     *
+     * Boot calls this once the window holds the review, so a read-only window
+     * never writes. The edit open in this page right now is left alone.
+     *
+     * @returns {Object[]} the records it committed
+     */
+    function recoverWithdrawn() {
+      if (!reviewId) return [];
+      var out = [];
+      store.read(requireReview()).forEach(function (item) {
+        var kind = item[record.FIELD.KIND];
+        if (kind !== record.KIND.EDIT && kind !== record.KIND.FORMAT_ONLY) return;
+        if (!record.isDraft(item) || !isCommittedEdit(item)) return;
+        if (session && session.itemId === item[record.FIELD.ID]) return;
+        var before = { text: item[record.FIELD.BEFORE], html: item[record.FIELD.BEFORE_HTML] };
+        var after = { text: item[record.FIELD.AFTER], html: item[record.FIELD.AFTER_HTML] };
+        var verdict = kindFor(before, after);
+        var committed = record.bumpRev(item, {
+          kind: verdict.changed ? verdict.kind : kind,
+          change: verdict.changed
+            ? record.editChangeText(verdict.kind, before.text, after.text, before.html, after.html)
+            : item[record.FIELD.CHANGE],
+          after: after.text,
+          after_html: after.html,
+          state: record.STATE.READY
+        });
+        record.validateItem(committed);
+        persist(committed, "committed", "ready");
+        out.push(committed);
+      });
+      return out;
     }
 
     // ------------------------------------------------------------------------
@@ -30917,6 +31589,28 @@
       }
 
       var verdict = kindFor(open.before, after);
+      // A committed edit reopened and left with its wording as it was when it
+      // opened is not a rewording: nothing to commit, and the revision stays.
+      // This used to bump the revision on every reopen, typed into or not.
+      if (!open.wasNew && !kindFor(open.opened, after).changed) {
+        protect.release(block);
+        return null;
+      }
+      if (!verdict.changed && open.wasCommitted) {
+        // Reworded back to the page's own original words. That is not an edit
+        // against the page, and it has always been left as captured rather
+        // than committed; the one thing new is that the typing withdrew it, so
+        // it goes back to the state it opened in rather than stranding a
+        // draft nobody will see.
+        if (open.wasReady && record.isDraft(item)) {
+          var restored = Object.assign({}, item);
+          restored[record.FIELD.STATE] = record.STATE.READY;
+          restored[record.FIELD.UPDATED_AT] = record.nowIso();
+          persist(restored, "typed", null, { existing: true });
+        }
+        protect.release(block);
+        return null;
+      }
       if (!verdict.changed) {
         // The reviewer opened a block, read it, and left. That is not an edit.
         // A draft record for it is a row in the rail and a line in the agent's
@@ -30948,7 +31642,11 @@
       );
 
       var committed;
-      if (record.isDraft(item)) {
+      // WHETHER IT WAS EVER COMMITTED, read when the block opened, never whether
+      // the record is a draft now: a committed edit being rewritten is a draft
+      // until this line, and reading its state here would commit the rewording
+      // at the old revision, where a reply to the old wording would still land.
+      if (!open.wasCommitted) {
         // First commit. The revision stays at one; the history gets its first
         // entry, which is what replay's branch three reads.
         committed = Object.assign({}, item);
@@ -32115,6 +32813,7 @@
       format: format,
       undo: undo,
       retire: retire,
+      recoverWithdrawn: recoverWithdrawn,
       capture: capture,
       itemFor: itemFor,
       elementFor: elementFor,
@@ -35081,7 +35780,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+dba266e231da";
+  var VERSION = "0.2.0+05deb41f8971";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -35439,6 +36138,12 @@
         page: page,
         onFailure: function (failure) {
           rail.failures.add(failure);
+        },
+        // Leaving a comment box sends its draft past the 10 second floor.
+        // `sync` is built further down; by the time a reviewer can leave a box
+        // it exists.
+        onLeave: function () {
+          if (sync && typeof sync.flushNow === "function") sync.flushNow("blur");
         }
       });
     comments.bind({ page: page });
@@ -36154,7 +36859,7 @@
       done.refresh();
     });
 
-    comments.onChange(function (item, event, createdOnElement) {
+    comments.onChange(function (item, event, createdOnElement, meta) {
       // The reviewer deleted their own item. The card goes, and so does the
       // helper's copy: an item left in review.json after the browser dropped it
       // is work the agent would do that nobody is asking for. sync posts
@@ -36189,7 +36894,14 @@
       // status line steady on purpose and does not repaint on every queued
       // event, see recomputeStatus), which is what the reviewer's own comment
       // count is: it stops moving after this many.
-      sync.recordItem(item, event === "ready" ? { immediate: "ready" } : undefined);
+      sync.recordItem(
+        item,
+        event === "ready"
+          ? { immediate: "ready" }
+          : meta && meta.withdrawnFromReady
+            ? { withdrawnFromReady: true }
+            : undefined
+      );
       rail.upsertCard(item);
     });
 
@@ -36529,7 +37241,20 @@
       rail.failures.add(failure);
     }, { helperOrigin: config.helper });
 
-    if (opts.startSync !== false) sync.start();
+    if (opts.startSync !== false) {
+      var started = sync.start();
+      // A committed edit a crashed page left withdrawn (the reviewer was
+      // rewording it) is committed now, once this window holds the review, so
+      // a read-only window writes nothing. Then replay puts it back on the page
+      // (spec 20260922.01, requirement 6).
+      if (started && typeof started.then === "function" && typeof editing.recoverWithdrawn === "function") {
+        started.then(function (lock) {
+          if (!lock || !lock.acquired || readOnlyActive) return;
+          var recovered = editing.recoverWithdrawn();
+          if (recovered.length) ns.replay.schedule(ns.replay.REASON.BOOT);
+        });
+      }
+    }
 
     // The first pass. Replay is what puts committed edits back on a page that
     // was reloaded, so it runs on boot and not only on a later repaint.
