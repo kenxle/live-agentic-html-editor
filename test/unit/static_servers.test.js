@@ -14,6 +14,7 @@ const reviewsModule = require("../../src/service/reviews.js");
 const protocol = require("../../src/shared/protocol.js");
 const scriptLine = require("../../src/shared/script_line.js");
 const tabIcon = require("../../src/service/tab_icon.js");
+const markdown = require("../../src/service/markdown.js");
 
 function tempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -611,4 +612,106 @@ test("a page under a mount is not mistaken for an unbacked server", async (t) =>
     [],
     "and it is not reported as an unbacked server, which would also spend the once-only latch"
   );
+});
+
+// ---------------------------------------------------------------------------
+// A mount refuses hidden files.
+//
+// markdown_links.js already refuses a hidden LOCATION when translating a link
+// into a mount, but the request handler above served any path under an
+// already-mounted folder, hidden or not: a reviewed folder that links out to
+// a document sitting beside a .env or a .git/config handed both of those out
+// over HTTP. The own root is unaffected on purpose: it already special-cases
+// its own hidden files (.lahe-doc-style.css, .lahe-fonts/), and mount requests
+// for those same basenames still resolve to the packaged copy, never to a real
+// file on disk, so they are exempt here too.
+
+function notFoundBody(status, response) {
+  assert.equal(response.status, status);
+  if (status === 404) assert.equal(response.body, "not found\n");
+}
+
+test("a mount refuses a hidden file at its root", async (t) => {
+  const state = path.join(tempDir("lahe-static-hidden-state-"), "state");
+  const root = tempDir("lahe-static-hidden-root-");
+  const linked = tempDir("lahe-static-hidden-linked-");
+  fs.writeFileSync(path.join(root, "page.html"), "root page");
+  fs.writeFileSync(path.join(linked, "linked.html"), "linked page");
+  fs.writeFileSync(path.join(linked, ".env"), "SECRET=do-not-serve");
+
+  const server = await staticServers.start({ dir: state, sessionId: "s_hidden", root });
+  t.after(async () => { await staticServers.stopAll(state, "s_hidden"); });
+  const prefix = "/.lahe-source/aaaa01/";
+  await staticServers.registerMount(state, "s_hidden", server.meta, prefix, linked);
+
+  notFoundBody(404, await request(server.meta, prefix + ".env"));
+});
+
+test("a mount refuses a hidden subfolder", async (t) => {
+  const state = path.join(tempDir("lahe-static-hidden-sub-state-"), "state");
+  const root = tempDir("lahe-static-hidden-sub-root-");
+  const linked = tempDir("lahe-static-hidden-sub-linked-");
+  fs.writeFileSync(path.join(root, "page.html"), "root page");
+  fs.mkdirSync(path.join(linked, ".git"));
+  fs.writeFileSync(path.join(linked, ".git", "config"), "[core]\n");
+
+  const server = await staticServers.start({ dir: state, sessionId: "s_hidden_sub", root });
+  t.after(async () => { await staticServers.stopAll(state, "s_hidden_sub"); });
+  const prefix = "/.lahe-source/aaaa02/";
+  await staticServers.registerMount(state, "s_hidden_sub", server.meta, prefix, linked);
+
+  notFoundBody(404, await request(server.meta, prefix + ".git/config"));
+});
+
+test("a mount refuses a normally-named symlink that resolves to a hidden file", async (t) => {
+  const state = path.join(tempDir("lahe-static-hidden-sym-state-"), "state");
+  const root = tempDir("lahe-static-hidden-sym-root-");
+  const linked = tempDir("lahe-static-hidden-sym-linked-");
+  fs.writeFileSync(path.join(root, "page.html"), "root page");
+  fs.writeFileSync(path.join(linked, ".secret"), "do not serve");
+  fs.symlinkSync(path.join(linked, ".secret"), path.join(linked, "innocuous.txt"));
+
+  const server = await staticServers.start({ dir: state, sessionId: "s_hidden_sym", root });
+  t.after(async () => { await staticServers.stopAll(state, "s_hidden_sym"); });
+  const prefix = "/.lahe-source/aaaa03/";
+  await staticServers.registerMount(state, "s_hidden_sym", server.meta, prefix, linked);
+
+  notFoundBody(404, await request(server.meta, prefix + "innocuous.txt"));
+});
+
+test("a mount still serves a normal linked file", async (t) => {
+  const state = path.join(tempDir("lahe-static-hidden-normal-state-"), "state");
+  const root = tempDir("lahe-static-hidden-normal-root-");
+  const linked = tempDir("lahe-static-hidden-normal-linked-");
+  fs.writeFileSync(path.join(root, "page.html"), "root page");
+  fs.writeFileSync(path.join(linked, "linked.html"), "linked page");
+
+  const server = await staticServers.start({ dir: state, sessionId: "s_hidden_normal", root });
+  t.after(async () => { await staticServers.stopAll(state, "s_hidden_normal"); });
+  const prefix = "/.lahe-source/aaaa04/";
+  await staticServers.registerMount(state, "s_hidden_normal", server.meta, prefix, linked);
+
+  const res = await request(server.meta, prefix + "linked.html");
+  assert.equal(res.status, 200);
+  assert.equal(res.body, "linked page");
+});
+
+test("a mount still serves the document stylesheet and its fonts", async (t) => {
+  const state = path.join(tempDir("lahe-static-hidden-style-state-"), "state");
+  const root = tempDir("lahe-static-hidden-style-root-");
+  const linked = tempDir("lahe-static-hidden-style-linked-");
+  fs.writeFileSync(path.join(root, "page.html"), "root page");
+  fs.writeFileSync(path.join(linked, "linked.md"), "# hello\n");
+
+  const server = await staticServers.start({ dir: state, sessionId: "s_hidden_style", root });
+  t.after(async () => { await staticServers.stopAll(state, "s_hidden_style"); });
+  const prefix = "/.lahe-source/aaaa05/";
+  await staticServers.registerMount(state, "s_hidden_style", server.meta, prefix, linked);
+
+  const style = await request(server.meta, prefix + markdown.DOC_STYLE_ASSET);
+  assert.equal(style.status, 200);
+  assert.match(style.headers["content-type"], /^text\/css/);
+
+  const font = await request(server.meta, prefix + markdown.FONT_ASSET_DIR + "/" + markdown.FONT_ASSETS[0]);
+  assert.equal(font.status, 200);
 });
