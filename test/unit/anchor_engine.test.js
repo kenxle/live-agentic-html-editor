@@ -646,3 +646,74 @@ test("an attribute value cannot break out of the opening tag it is quoted in", (
   assert.equal(html.indexOf("<script"), -1, "the value is escaped, so it stays a value");
   assert.match(html, /&quot;/);
 });
+
+// ---------------------------------------------------------------------------
+// A block whose words all sit in one inline wrapper
+// ---------------------------------------------------------------------------
+//
+// Review r88dec64b8451, 2026-09-22. <p><em>A</em></p>: the <em> and the <p>
+// hold the same words, and the innermost rule bound the <em>. Replay writes the
+// record's after markup INTO the bound element, so the reviewer's plain words
+// landed inside the <em> and the paragraph they had just taken the italics off
+// came back italic after the reload.
+
+function italicParagraphPage(words) {
+  const root = el("body");
+  const before = append(root, el("p", { text: "The paragraph above." }));
+  const p = append(root, el("p"));
+  const em = append(p, el("em", { text: words }));
+  const after = append(root, el("p", { text: "The paragraph below." }));
+  return { root: root, blocks: [before, p, after], p: p, em: em };
+}
+
+test("a reference minted on a <p> binds the <p>, not the <em> that holds all its words", () => {
+  const origin = italicParagraphPage("A");
+  const ref = mintBlock(origin, 1);
+  assert.equal(ref.fingerprint.tag, "p");
+
+  const page = italicParagraphPage("A");
+  const got = anchor.resolve(ref, page.root);
+  assert.equal(got.bound, true);
+  assert.equal(got.element, page.p, "the region is the paragraph the record was minted on");
+});
+
+test("a reference minted on the <em> itself still binds the <em>", () => {
+  const origin = italicParagraphPage("A");
+  const ref = anchor.mint({ element: origin.em, root: origin.root });
+  assert.equal(ref.ok, true);
+  assert.equal(ref.fingerprint.tag, "em");
+
+  const page = italicParagraphPage("A");
+  assert.equal(anchor.resolve(ref, page.root).element, page.em);
+});
+
+test("minting on a <p> whose only child is an <em> reports text_unique: true", () => {
+  // Before the fix, mint's own self-check compared the search's bound key
+  // straight against the clicked element, without the same climb-to-saved-tag
+  // step resolve() uses (mintedElementFor). The search binds the innermost
+  // <em> (same words as the <p>), that never equals the clicked <p>, widening
+  // never stops finding itself "unique", and the reference is saved with
+  // text_unique: false even though the <p> binds cleanly on its own.
+  const page = italicParagraphPage("A");
+  const ref = anchor.mint({ element: page.p, root: page.root });
+  assert.equal(ref.ok, true);
+  assert.equal(ref.text_unique, true, "the p binds cleanly once mint climbs like resolve does");
+});
+
+test("the climb stops at an ancestor with other words: that is a different region", () => {
+  const origin = italicParagraphPage("A");
+  const ref = mintBlock(origin, 1);
+
+  // The page now has the words in an <em> inside a <span> inside a <p> that
+  // also says something else. No ancestor with the minted tag holds only these
+  // words, so the bind stays where the search put it.
+  const root = el("body");
+  append(root, el("p", { text: "The paragraph above." }));
+  const p = append(root, el("p"));
+  const em = append(p, el("em", { text: "A" }));
+  append(p, el("span", { text: " and more" }));
+  append(root, el("p", { text: "The paragraph below." }));
+  const got = anchor.resolve(ref, root);
+  assert.equal(got.bound, true);
+  assert.equal(got.element, em, "never widened onto a paragraph with other words");
+});
