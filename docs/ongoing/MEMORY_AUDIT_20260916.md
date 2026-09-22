@@ -8,7 +8,7 @@ This page is the hub. Start here; everything else is one click away.
 
 **Open questions, waiting on you**
 
-- [Stop writing unsent drafts so often](../features/20260922.01_draft_write_cost/01_spec_draft_write_cost.md): the spec from your decisions. Needs your ok to build.
+- [Stop writing unsent drafts so often](../features/20260922.01_draft_write_cost/01_spec_draft_write_cost.md): the spec from your decisions. Approved, building.
 - [Where unsent comments are saved, and what it costs](DRAFT_PERSISTENCE.md): drafts are 79% of what gets written, plus three oversized-record bugs (the rest of the page saved as "text after", embedded images saved three times, the whole-page highlight). Needs your read before any change.
 
 **Shipped, with their specs**
@@ -48,7 +48,7 @@ This is the one progress page for all of the memory, CPU, and token work. The me
 | 12. The drain can never print the contract by accident (no flag decides it any more) | ✅ Done. `--quiet` used to silently gate it; now status.js always returns the pointer, with or without `--quiet` |
 | 13. An orchestrator that watches LAHE keeps a small pool of subagents warm instead of spawning fresh ones for medium-size work | 🔨 Proposal below, not built. Needs your read |
 
-| 14. Where unsent comments are saved, and what it costs (79% of new log bytes are drafts), plus three oversized-record bugs | 🔨 Analysis written, no change yet. [Read it](DRAFT_PERSISTENCE.md) |
+| 14. Where unsent comments are saved, and what it costs (79% of new log bytes are drafts), plus three oversized-record bugs | 🔨 [Analysis](DRAFT_PERSISTENCE.md) done; [the fix](../features/20260922.01_draft_write_cost/01_spec_draft_write_cost.md) approved, building |
 ✅ done and live · 🔨 in progress · ⬜ not started
 
 ## Short answer
