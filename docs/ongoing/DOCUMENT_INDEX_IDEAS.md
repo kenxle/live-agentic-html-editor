@@ -40,7 +40,7 @@ Two things break, and they are separate problems:
 1. **The tab's address is dead forever.** Each document is served on a random port (the number after `127.0.0.1:` in the address). After a restart, even if an agent serves the same file again, it gets a new port. Your old tab points at a port nobody answers. Reloading can't fix it.
 2. **You don't know what you had open.** With the tabs dead, there's no list of what you were working on.
 
-An index fixes the second. For the first, you don't need the old address back, just the document. So the Library's **Open** button re-serves the document itself, on whatever new port, and opens it. No agent needed.
+An index fixes the second. For the first, you don't need the old address back, just the document. So the Library's **Open** button re-serves the document itself, on whatever new port, and opens it. To send comments you still want an agent on it, so Open and **Copy prompt** (option C) work as a pair: open the page, paste the prompt into a new agent, and it takes over that session.
 
 ## Options
 
@@ -60,7 +60,7 @@ An index fixes the second. For the first, you don't need the old address back, j
   - last activity
   - open comments waiting on an agent
   - whether it's live right now
-- Each row gets an **Open** button. If the document isn't being served, the helper serves it again and opens it. You don't need an agent just to read something.
+- Each row gets an **Open** button. If the document isn't being served, the helper serves it again and opens it. You can read right away; comments wait until an agent picks the session up (option C).
 - Search box and a "last 7 days" default, so 476 rows don't bury you.
 
 ### C. B, plus "hand it to an agent"
@@ -90,4 +90,4 @@ An index fixes the second. For the first, you don't need the old address back, j
 ## Questions for you
 
 1. How far back should the Library show by default, and should anything ever get deleted?
-2. Should **Open** work with no agent involved (the helper re-serves the page, you can read and comment, and comments wait until an agent picks them up)?
+2. Would you want the Library to start the agent for you (for example, launch Claude Code on that session), or is copy and paste fine?
