@@ -86,6 +86,7 @@ The pile keeps growing at roughly the Sep 17 to Sep 22 pace. Each restart costs 
 - **Cons:**
   - Starring or opening goes through the agent, so it takes a few seconds, not an instant.
   - The page is a snapshot. It is rebuilt each time it is opened, not live.
+  - Each document goes back to its own review and its own session, with its old comments, not into the Library's session. So an agent that picks up five documents ends up holding five sessions. Today that means five monitors; the architecture has to make that manageable.
 - **Reuses:** `lahe review`, session takeover, the review records, the Markdown/HTML serving path.
 
 ### Approach B: A live Library page inside the helper
