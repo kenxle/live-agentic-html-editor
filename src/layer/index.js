@@ -432,6 +432,12 @@
         page: page,
         onFailure: function (failure) {
           rail.failures.add(failure);
+        },
+        // Leaving a comment box sends its draft past the 10 second floor.
+        // `sync` is built further down; by the time a reviewer can leave a box
+        // it exists.
+        onLeave: function () {
+          if (sync && typeof sync.flushNow === "function") sync.flushNow("blur");
         }
       });
     comments.bind({ page: page });

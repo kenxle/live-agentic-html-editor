@@ -634,10 +634,19 @@
     // Synchronous, every keystroke, no debounce. A reload, a crash, or a sleep
     // costs nothing.
     TO_BROWSER_STORAGE: "every keystroke, synchronously",
-    // Debounced to the helper at 750ms of typing idle.
+    // To the helper within 750ms of being queued.
     HELPER_DEBOUNCE_MS: 750,
-    // Plus an immediate flush on each of these, with no debounce.
-    IMMEDIATE_ON: ["blur", "ready", "navigation", "unload"],
+    // An item whose queued events are ALL drafts goes to the helper at most
+    // once per this long (spec 20260922.01, requirement 4). The browser already
+    // has every keystroke; the helper copy is a crash backup, and a few seconds
+    // of it is an acceptable loss (Ken, 2026-09-22). It is a deadline from the
+    // item's last draft post, not a timer that typing pushes back. The poll
+    // loop cannot get round it either: flush itself applies it.
+    DRAFT_FLOOR_MS: 10000,
+    // Plus an immediate flush on each of these, with no debounce and no draft
+    // floor. `hide` is the tab being hidden, which is often the last thing a
+    // page hears before the browser discards it.
+    IMMEDIATE_ON: ["blur", "hide", "ready", "navigation", "unload"],
     // THE UNLOAD POST USES fetch(..., {keepalive: true}), NEVER sendBeacon.
     // sendBeacon cannot set the custom header D11 requires and cannot set the
     // JSON content type, so the obvious tool either drops the header (silently

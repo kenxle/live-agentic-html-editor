@@ -372,9 +372,17 @@ re-post ambiguous. `(item, rev)` is reserved for lifecycle.
 Stated once, here, because it decides how fast the log grows, the shape of the draft durability test,
 and how much of a sentence a `kill -9` mid-draft can cost (`protocol.FLUSH`):
 
-- **To browser storage: every keystroke, synchronously.** No debounce.
-- **To the helper: debounced at 750ms of typing idle.**
-- **Immediately, with no debounce, on** blur, Cmd-Enter (marking ready), navigation, and unload.
+- **To browser storage: every keystroke, synchronously.** No debounce. One key per item
+  (`lahe.item.v2:<review>:<item>`), so a keystroke writes that item and the review's stamp only.
+- **To the helper: within 750ms of being queued** (`FLUSH.HELPER_DEBOUNCE_MS`). The flush timer keeps
+  the earliest deadline it is given, so typing never pushes a post back.
+- **Drafts at most once per 10 seconds per item** (`FLUSH.DRAFT_FLOOR_MS`, spec 20260922.01). `flush`
+  holds back an item only when every event it has queued is a draft, so a ready never goes ahead of
+  its own older draft. The floor is a deadline from the item's last draft post.
+- **Immediately, past the draft floor, on** leaving the box (`blur`), hiding the tab (`hide`),
+  navigation, and unload. **Immediately on** Cmd-Enter (`ready`), for that item; other items' drafts
+  keep their floor. A request that arrives while a post is in flight is remembered and runs the
+  moment that post finishes. Hold still gates all of these except releasing Hold and ending a review.
 
 **The unload post uses `fetch(..., {keepalive: true})`, never `sendBeacon`.** `sendBeacon` cannot set
 the custom header D11 requires and cannot set the JSON content type, so the obvious tool either drops

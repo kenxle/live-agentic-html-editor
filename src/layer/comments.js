@@ -931,6 +931,16 @@
     // gets a no-op, so the write paths below never have to ask whether it is
     // there.
     var onFailure = typeof opts.onFailure === "function" ? opts.onFailure : null;
+    // The reviewer left a comment box: its input lost focus, or the box closed.
+    // Boot hands this sync.flushNow("blur"), because leaving the box is one of
+    // the moments an unsent draft goes to the helper past its 10 second floor
+    // (spec 20260922.01, requirement 4). Not a change to the record, so it is
+    // not an emit: the listeners that repaint on every emit have nothing to do.
+    var onLeave = typeof opts.onLeave === "function" ? opts.onLeave : null;
+
+    function left() {
+      if (onLeave) onLeave();
+    }
 
     // id -> handle
     var open = Object.create(null);
@@ -1337,6 +1347,7 @@
         // the words really ask for, with nothing held open by the typing rule.
         inputEl.addEventListener("blur", function () {
           grow({ allowShrink: true });
+          left();
         });
         bindGrip();
 
@@ -1815,6 +1826,7 @@
         delete open[id];
         if (highlights) highlights.setActive(id, false);
         emit(handleItem(), "closed");
+        left();
         return handleItem();
       }
 
