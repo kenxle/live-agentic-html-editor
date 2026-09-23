@@ -644,6 +644,20 @@ test.describe("3A: an agent answers by appending one line", () => {
           fontSize: parseFloat(styles.fontSize),
           askBackground: getComputedStyle(ask).backgroundColor,
           cardBackground: getComputedStyle(cardNode).backgroundColor,
+          // The wash the block is SUPPOSED to wear, read off the same custom
+          // property the rule uses, resolved through a real element rather than
+          // compared as a string against the var() text. A deleted wash rule
+          // makes ask.backgroundColor fall back to transparent, which still
+          // differs from the card's paper, so this pins it to the wash itself
+          // rather than merely "not the card".
+          accentWash: (function () {
+            var probe = document.createElement("div");
+            probe.style.background = "var(--accent-wash)";
+            ask.appendChild(probe);
+            var value = getComputedStyle(probe).backgroundColor;
+            probe.remove();
+            return value;
+          })(),
           order: parseFloat(getComputedStyle(cardNode).order),
           marked: cardNode.getAttribute("data-lahe-asking"),
           // The block deliberately carries no control of its own. The one it
@@ -673,9 +687,13 @@ test.describe("3A: an agent answers by appending one line", () => {
       // words, a rule of its own, and first in its pane.
       expect(drawn.fontSize).toBeGreaterThan(drawn.bodyFontSize);
       // No accent rule down the side; the wash behind the block carries the
-      // emphasis instead, so it must read differently from the card's own
-      // paper rather than blend into it.
+      // emphasis instead. Pinned to the wash itself, not just "differs from
+      // the card": a deleted wash rule would leave the block transparent,
+      // which also differs from the card's paper and would pass a weaker
+      // check for the wrong reason.
+      expect(drawn.askBackground).toBe(drawn.accentWash);
       expect(drawn.askBackground).not.toBe(drawn.cardBackground);
+      expect(drawn.askBackground).not.toBe("rgba(0, 0, 0, 0)");
       expect(drawn.order).toBeLessThan(0);
       expect(drawn.marked).toBe("true");
       expect(drawn.buttonsInBlock, "the question block presses nothing of its own").toBe(0);
@@ -1340,6 +1358,51 @@ test.describe("3A: an agent answers by appending one line", () => {
       expect(after.stored.state).toBe("handled");
     } finally {
       await helper.kill9();
+      await app.close();
+    }
+  });
+
+  // .agent.is-loud: rail.setAgentMessage's own "loud" flag (reply.status ===
+  // QUESTION), asserted directly through the rail's public API. The question
+  // flow itself never reaches this class (tab_done.js nulls the agent message
+  // and draws its own ask block instead, see the test above), but the rule is
+  // real, shipped CSS, and a reviewer can reach it any time an agent message
+  // is loud without also being a question. A light-mode regression that makes
+  // a loud reply blend into an ordinary one is a real defect even though no
+  // current caller triggers it today.
+  test("a loud agent message wears a border an ordinary one does not, in light mode", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      await commentOnSelection(page, "p.lede", "shorten this");
+      const item = (await itemsIn(page))[0];
+
+      const drawn = await page.evaluate((id) => {
+        const rail = window.__lahe.rail;
+        rail.setAgentMessage(id, { status: "handled", agent: "claude", text: "cut it down" });
+        const node = rail.cardNode(id).querySelector(".agent");
+        const ordinary = getComputedStyle(node).borderColor;
+
+        rail.setAgentMessage(id, { status: "question", agent: "claude", text: "cut which part?" });
+        const loud = getComputedStyle(node).borderColor;
+        const loudWidth = getComputedStyle(node).borderTopWidth;
+
+        var probe = document.createElement("div");
+        probe.style.borderColor = "var(--accent)";
+        probe.style.borderStyle = "solid";
+        probe.style.borderWidth = "1px";
+        node.appendChild(probe);
+        var accentColor = getComputedStyle(probe).borderColor;
+        probe.remove();
+
+        return { ordinary: ordinary, loud: loud, loudWidth: loudWidth, accentColor: accentColor };
+      }, item.id);
+
+      expect(parseFloat(drawn.loudWidth), "the loud block carries a real border, not a zero-width one").toBeGreaterThanOrEqual(1);
+      expect(drawn.loud, "the loud border is the rail's own accent colour").toBe(drawn.accentColor);
+      expect(drawn.loud, "and it reads differently from an ordinary agent message").not.toBe(drawn.ordinary);
+    } finally {
+      await helper.stop().catch(() => {});
       await app.close();
     }
   });

@@ -680,10 +680,11 @@
     ".agent__head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:3px}",
     ".agent__who{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;",
     "color:var(--ink-faint);display:block}",
-    // The wash alone carries the emphasis; no accent stripe down one side on
-    // top of it, which is the banned single-side colored border.
-    ".agent.is-loud{background:var(--accent-wash);",
-    "color:var(--ink);font-size:14px;line-height:1.55}",
+    // A full border on --accent, the same move .card[data-state='ready'] makes
+    // for its own emphasis, not a stripe down one side (the banned single-side
+    // colored border). Color, size and line-height are not repeated here: they
+    // are already set on .agent above and this rule only adds to it.
+    ".agent.is-loud{background:var(--accent-wash);border:1px solid var(--accent)}",
     ".agent.is-loud .agent__who{color:var(--accent-ink)}",
     // ONE PATH PER LINE, AND IT BREAKS. Repo-relative paths are long and have
     // no natural break points, so joined on one line with normal wrapping they
