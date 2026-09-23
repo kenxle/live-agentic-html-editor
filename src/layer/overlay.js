@@ -623,8 +623,11 @@
     ".card__state[data-state='handled']{color:var(--good);background:transparent;",
     "border:1px solid currentColor}",
     ".card__state[data-state='not_handled']{color:var(--warn);background:var(--warn-wash)}",
-    ".card__quote{font-size:12px;color:var(--ink-soft);border-left:2px solid var(--line);",
-    "padding-left:9px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}",
+    // No accent stripe down the side: the quote is already set off from the
+    // card body by size, colour, and style (italic reads as "quoted" on its
+    // own, the way it does in the comment box's own quote).
+    ".card__quote{font-size:12px;color:var(--ink-soft);font-style:italic;",
+    "display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}",
     ".card__body{font-size:13.5px;line-height:1.5;color:var(--ink);display:flex;",
     "flex-direction:column;gap:8px}",
     ".card__body:empty{display:none}",
@@ -677,7 +680,9 @@
     ".agent__head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:3px}",
     ".agent__who{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;",
     "color:var(--ink-faint);display:block}",
-    ".agent.is-loud{background:var(--accent-wash);border-left:3px solid var(--accent);",
+    // The wash alone carries the emphasis; no accent stripe down one side on
+    // top of it, which is the banned single-side colored border.
+    ".agent.is-loud{background:var(--accent-wash);",
     "color:var(--ink);font-size:14px;line-height:1.55}",
     ".agent.is-loud .agent__who{color:var(--accent-ink)}",
     // ONE PATH PER LINE, AND IT BREAKS. Repo-relative paths are long and have
@@ -904,15 +909,17 @@
     // can politely sit on top of for a few seconds. The collapsed pill is
     // bottom-right, so there is nothing to collide with either way.
     //
-    // It borrows nothing new: the card's own paper, the card's own border, the
-    // accent rule the question block already uses down its left edge.
+    // It borrows nothing new: the card's own paper, the card's own border. No
+    // accent stripe down one edge on top of that, which is the banned
+    // single-side colored border; the full border and the shadow already say
+    // this is a thing floating above the page.
     ".toasts{position:fixed;top:16px;right:16px;pointer-events:none;display:flex;",
     "flex-direction:column;align-items:flex-end;gap:8px;",
     "width:min(560px,calc(100vw - 32px))}",
     ".toasts[hidden]{display:none}",
     ".toast{pointer-events:auto;width:100%;display:flex;align-items:flex-start;gap:8px;",
     "padding:10px 11px;background:var(--paper);color:var(--ink);text-align:left;",
-    "border:1px solid var(--line);border-left:3px solid var(--accent);",
+    "border:1px solid var(--line);",
     "border-radius:var(--radius-sm);box-shadow:var(--shadow);cursor:pointer;",
     // SWIPED, NOT SELECTED. Ken: "because the toasts slide in like a Mac
     // notification, my inclination is to grab them with the mouse and slide

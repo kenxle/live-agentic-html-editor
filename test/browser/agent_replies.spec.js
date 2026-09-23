@@ -642,7 +642,8 @@ test.describe("3A: an agent answers by appending one line", () => {
           text: text.textContent,
           markupInside: text.querySelectorAll("*").length,
           fontSize: parseFloat(styles.fontSize),
-          ruleWidth: parseFloat(getComputedStyle(ask).borderLeftWidth),
+          askBackground: getComputedStyle(ask).backgroundColor,
+          cardBackground: getComputedStyle(cardNode).backgroundColor,
           order: parseFloat(getComputedStyle(cardNode).order),
           marked: cardNode.getAttribute("data-lahe-asking"),
           // The block deliberately carries no control of its own. The one it
@@ -671,7 +672,10 @@ test.describe("3A: an agent answers by appending one line", () => {
       // Loud, as geometry rather than as intent: bigger than the reviewer's own
       // words, a rule of its own, and first in its pane.
       expect(drawn.fontSize).toBeGreaterThan(drawn.bodyFontSize);
-      expect(drawn.ruleWidth).toBeGreaterThanOrEqual(3);
+      // No accent rule down the side; the wash behind the block carries the
+      // emphasis instead, so it must read differently from the card's own
+      // paper rather than blend into it.
+      expect(drawn.askBackground).not.toBe(drawn.cardBackground);
       expect(drawn.order).toBeLessThan(0);
       expect(drawn.marked).toBe("true");
       expect(drawn.buttonsInBlock, "the question block presses nothing of its own").toBe(0);

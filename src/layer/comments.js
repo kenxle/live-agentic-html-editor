@@ -669,14 +669,14 @@
     ".lahe-comment-act--quiet { border-color: transparent; background: none; padding: 3px 5px; }",
     ".lahe-comment-act--quiet:hover { background: rgba(17, 17, 17, 0.04);",
     "  border-color: rgba(17, 17, 17, 0.08); }",
+    // No accent stripe down the side: a single-side colored border is banned
+    // in this repo. Italic reads as "quoted" on its own, the same way
+    // .card__quote in the rail marks the passage without a rule.
     ".lahe-comment-quote {",
     "  margin: 0;",
-    "  padding-left: 8px;",
-    // The accent, not the amber. Amber means "this needs you" everywhere else in
-    // the product, and a quote of the passage being commented on needs nobody.
-    "  border-left: 2px solid rgba(60, 86, 165, 0.75);",
     "  color: rgba(17, 17, 17, 0.62);",
     "  font-size: 12px;",
+    "  font-style: italic;",
     "  max-height: 3.2em;",
     "  overflow: hidden;",
     "}",
@@ -743,8 +743,7 @@
     ":host([data-lahe-scheme='dark']) ." + INPUT_CLASS + " { background: #111113; color: inherit; border-color: rgba(255,255,255,0.18); }",
     ":host([data-lahe-scheme='dark']) ." + OUTLINE_CLASS + " { outline-color: rgba(147, 167, 234, 0.95);",
     "  background: rgba(147, 167, 234, 0.12); }",
-    ":host([data-lahe-scheme='dark']) .lahe-comment-quote { color: rgba(242,242,242,0.66);",
-    "  border-left-color: rgba(147, 167, 234, 0.8); }",
+    ":host([data-lahe-scheme='dark']) .lahe-comment-quote { color: rgba(242,242,242,0.66); }",
     ":host([data-lahe-scheme='dark']) .lahe-comment-foot { color: rgba(242,242,242,0.55); }",
     ":host([data-lahe-scheme='dark']) .lahe-comment-grip {",
     "  background-image: radial-gradient(rgba(255,255,255,0.3) 1px, transparent 1px); }",

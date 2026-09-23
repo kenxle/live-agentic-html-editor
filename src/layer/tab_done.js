@@ -519,10 +519,12 @@
     ".lahe-followup textarea:focus{outline:2px solid var(--accent);outline-offset:1px}",
     ".lahe-followup .cardacts{justify-content:flex-end}",
 
-    // The question. Full bleed to the card's padding, so the rule runs the
-    // whole height of the block rather than sitting in a box inside a box.
-    "." + ASK_CLASS + "{margin:2px -12px -2px;padding:10px 12px 11px 13px;",
-    "border-left:3px solid var(--accent);background:var(--accent-wash);",
+    // The question. Full bleed to the card's padding, so the block runs the
+    // whole width of the card rather than sitting in a box inside a box. The
+    // wash carries the emphasis on its own; no accent stripe down one side of
+    // it, which is the banned single-side colored border.
+    "." + ASK_CLASS + "{margin:2px -12px -2px;padding:10px 12px 11px 12px;",
+    "background:var(--accent-wash);",
     "display:flex;flex-direction:column;gap:7px}",
     "." + ASK_CLASS + " .lahe-ask-who{display:flex;align-items:center;gap:6px;font-size:10px;",
     "font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--accent-ink)}",

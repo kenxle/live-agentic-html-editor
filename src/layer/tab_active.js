@@ -80,6 +80,9 @@
     "  display: flex;",
     "  flex-direction: column;",
     "  background: #ffffff;",
+    // Not the banned single-side colored border: this is a neutral divider
+    // where a screen-docked panel meets the page, the same job a
+    // border-bottom does between list rows, not an accent stripe.
     "  border-left: 1px solid rgba(17, 17, 17, 0.12);",
     "  box-shadow: -12px 0 32px rgba(17, 17, 17, 0.08);",
     // Above the pick-mode outline, which is drawn over the page and must not
@@ -111,12 +114,13 @@
     "  gap: 6px;",
     "}",
     "." + ROW_CLASS + "[data-kind='note'] { border-style: dashed; }",
+    // No accent stripe down the side: a single-side colored border is banned
+    // in this repo. Italic marks it as quoted page text on its own.
     ".lahe-rail-quote {",
     "  margin: 0;",
-    "  padding-left: 8px;",
-    "  border-left: 2px solid rgba(255, 178, 26, 0.9);",
     "  color: rgba(17, 17, 17, 0.6);",
     "  font-size: 12px;",
+    "  font-style: italic;",
     "  max-height: 3.2em;",
     "  overflow: hidden;",
     "}",

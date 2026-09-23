@@ -845,10 +845,10 @@ test.describe("the rail as a shipping surface", () => {
           title: node.querySelector("[data-lahe-conflict-title]").textContent,
           yoursLabel: side("yours").querySelector("[data-lahe-conflict-label]").textContent,
           theirsLabel: side("theirs").querySelector("[data-lahe-conflict-label]").textContent,
-          // A rule per side, and the reviewer's is the accent one, so the pair
-          // reads as a pair rather than as four undifferentiated paragraphs.
-          yoursRule: cs(side("yours")).borderLeftColor,
-          theirsRule: cs(side("theirs")).borderLeftColor,
+          // No rule per side (a single-side colored border is banned here);
+          // the label ink colour is what tells the sides apart instead.
+          yoursLabelColor: cs(side("yours").querySelector("[data-lahe-conflict-label]")).color,
+          theirsLabelColor: cs(side("theirs").querySelector("[data-lahe-conflict-label]")).color,
           labelTransform: cs(side("yours").querySelector("[data-lahe-conflict-label]")).textTransform,
           yoursText: side("yours").querySelector("[data-lahe-conflict-text]").textContent,
           theirsText: side("theirs").querySelector("[data-lahe-conflict-text]").textContent,
@@ -862,7 +862,9 @@ test.describe("the rail as a shipping surface", () => {
       expect(block.yoursLabel).toBe("Your version");
       expect(block.theirsLabel).toBe("On the page now");
       expect(block.labelTransform, "the tab's own eyebrow type").toBe("uppercase");
-      expect(block.yoursRule, "the two rules differ, so the sides do").not.toBe(block.theirsRule);
+      expect(block.yoursLabelColor, "the two labels differ in ink, so the sides do").not.toBe(
+        block.theirsLabelColor
+      );
       // Both versions IN FULL. The mark points at the divergence; it never
       // replaces or truncates either side.
       expect(block.yoursText).toBe(mine);
