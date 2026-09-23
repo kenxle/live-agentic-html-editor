@@ -59,7 +59,9 @@ var USAGE = [
   "                   question (--text asks it)",
   "  --text <words>   what you want to say. `-` reads it from stdin, and stdin is also",
   "                   read when it is a pipe and --text and --reason are both absent",
-  "  --reason <words> why an item was not handled. `-` reads it from stdin",
+  "  --reason <words> why an item was not handled, naming what you checked and what you",
+  "                   found. Required for not_handled, and blank does not count.",
+  "                   `-` reads it from stdin",
   "  --file <path>    a file you changed. Repeat the flag for each one",
   "  --needs-see      the reviewer should read this reply. Needs --text or --reason",
   "  --agent <name>   your name. It goes on the card and names replies-<name>.jsonl",
@@ -197,11 +199,19 @@ function resolveStdin(args, options) {
  * wordless fallback, and an agent that flags one of those flags twelve.
  */
 function validateBody(args) {
-  if (args.status === protocol.REPLY_STATUS.QUESTION && !args.text) {
+  // Blank is not an answer. A reason of "" or "   " used to pass this check on
+  // the not_handled path and land a refusal with no words on the reviewer's
+  // card, which is the same failure as a refusal whose words are "this card is
+  // old": the reviewer is told no and told nothing.
+  var blank = function (value) {
+    return typeof value !== "string" || !value.trim();
+  };
+  if (args.status === protocol.REPLY_STATUS.QUESTION && blank(args.text) && blank(args.reason)) {
     return "--status question needs --text: the question is what the reviewer answers";
   }
-  if (args.status === protocol.REPLY_STATUS.NOT_HANDLED && !args.reason) {
-    return "--status not_handled needs --reason, in words the reviewer will read";
+  if (args.status === protocol.REPLY_STATUS.NOT_HANDLED && blank(args.reason)) {
+    return "--status not_handled needs --reason, in words the reviewer will read, naming what you checked and what you found. " +
+      "An item on the drain is the reviewer's current request whatever its card's age, so \"this card is old\" is not a reason.";
   }
   if (args.needsSee && !args.text && !args.reason) {
     return "--needs-see needs --text or --reason. The contract: \"the flag counts only when the same line carries text or reason; flagging a reply with nothing in it sends the reviewer to a card that says nothing\"";
