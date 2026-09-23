@@ -1371,3 +1371,65 @@ test("split review 4: looking for a run inside a container reads each block once
   assert.deepEqual(found.following, ["Second paragraph.", "Third paragraph."], "the sibling texts come back for the compare");
   assert.ok(reads <= page.blocks.length + 2, "each block read about once, not once per run attempt: " + reads);
 });
+
+// ---------------------------------------------------------------------------
+// The reviewer's words land on the page once (2026-09-22)
+// ---------------------------------------------------------------------------
+//
+// The report: "multiple agents have now duplicated my written text... they
+// just write it again above or below." The page carried the reviewer's
+// paragraphs as blocks of its own, the split check just missed, and branch two
+// wrote every paragraph of the after into the one anchored block. The words
+// then stood twice: merged into that block, and still below it.
+
+test("duplicate: a rebuild that curled a quote and lengthened a dash is still applied", () => {
+  const item = splitEdit("First paragraph.", "First paragraph.\n\nThe builder's day is not over - it starts.");
+  const verdict = replay.compare(item, "First paragraph.", null, [
+    "The builder’s day is not over — it starts."
+  ]);
+  assert.equal(verdict.branch, replay.BRANCH.ALREADY_APPLIED, "typography alone is not a clash");
+});
+
+test("duplicate: typography is read past for a split only, never for one block", () => {
+  // A punctuation fix the reviewer made to a single paragraph still re-applies.
+  const item = splitEdit("The builder's day - old.", "The builder's day - new.");
+  const verdict = replay.compare(item, "The builder’s day — new.");
+  assert.equal(verdict.branch, replay.BRANCH.CONTENT_CHANGED, "one block is compared strictly, as before");
+});
+
+test("duplicate: a write the page's own blocks would double does not happen", () => {
+  const item = splitEdit("First paragraph.", "First paragraph.\n\nSecond paragraph.\n\nThird paragraph.");
+  // The agent carried the split into the source and polished the last
+  // paragraph, so the run misses. The anchored block still reads as the
+  // before, which is branch two, and its write would put all three paragraphs
+  // here while the page still says the second one in the block below.
+  const page = pageOf([
+    "A heading line.",
+    "First paragraph.",
+    "Second paragraph.",
+    "Third paragraph, polished.",
+    "The page's next paragraph."
+  ]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+
+  const ran = runOne(anchoredItem, page.root);
+
+  assert.equal(ran.result.branch, replay.BRANCH.CONTENT_CHANGED, "the clash is told instead");
+  assert.equal(replay.counters.regionsWritten, 0);
+  assert.equal(replay.counters.regionsRefusedDuplicate, 1);
+  assert.deepEqual(
+    page.blocks.map((b) => b.textContent),
+    [
+      "A heading line.",
+      "First paragraph.",
+      "Second paragraph.",
+      "Third paragraph, polished.",
+      "The page's next paragraph."
+    ],
+    "no paragraph is written twice"
+  );
+});
+
+// The other half, that a live page which does NOT carry the split still takes
+// the reviewer's typed break, is a write, and the simulated DOM here cannot be
+// written breaks into. `test/browser/paragraph_break.spec.js` is where it runs.

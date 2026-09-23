@@ -142,6 +142,7 @@
     regionsSkippedEqual: 0, // branch one: the idempotence path
     regionsEarlierRevision: 0, // branch three
     regionsConflicted: 0, // branch four: flagged, nothing written
+    regionsRefusedDuplicate: 0, // a write the page's own blocks would have doubled
     regionsLost: 0, // the anchor bound to zero matches, or to more than one
     regionsLostDeferred: 0, // a lost verdict held back while the page was still settling
     regionsLostCleared: 0, // a later pass found the anchor, so the lost state ended
@@ -792,6 +793,21 @@
     return out;
   }
 
+  // Two pieces that are the same paragraph. The folded compare is the one
+  // place in replay that reads past typography, and it is allowed here for a
+  // reason that is not cosmetic: the question a piece answers is "are these
+  // words already on the page, in a block of their own". A Markdown rebuild
+  // curls a quote and lengthens a dash, so the strict compare says no, and the
+  // only other answer replay has is to write every paragraph of the after into
+  // one block while the page still carries them below. That is the duplicate
+  // the reviewer saw on 2026-09-22. Folding is never used to decide that a
+  // SINGLE block already says the after: a punctuation fix the reviewer made
+  // to one paragraph still re-applies, as it always did.
+  function samePiece(a, b, fold) {
+    if (a === b) return true;
+    return fold === true && normalize.foldTypography(a) === normalize.foldTypography(b);
+  }
+
   // Pieces the after splits into, or null for a record this rule is not for.
   function splitPieces(item, mode) {
     if (mode !== normalize.MODE.TEXT) return null;
@@ -813,14 +829,14 @@
   // the bound element holds none of the record's versions (see splitRegion
   // and its caller): a bound element that still holds the before is branch
   // two, whatever a run inside it spells.
-  function blocksSpell(blocks, pieces) {
+  function blocksSpell(blocks, pieces, fold) {
     var at = 0;
     for (var b = 0; b < blocks.length && b < pieces.length && at < pieces.length; b += 1) {
       if (typeof blocks[b] !== "string") return false;
       var own = piecesOf(blocks[b]);
       if (!own.length) return false;
       for (var k = 0; k < own.length; k += 1) {
-        if (at >= pieces.length || own[k] !== pieces[at]) return false;
+        if (at >= pieces.length || !samePiece(own[k], pieces[at], fold)) return false;
         at += 1;
       }
     }
@@ -831,7 +847,32 @@
     var pieces = splitPieces(item, mode);
     if (!pieces || typeof domText !== "string") return false;
     var blocks = [domText].concat(Array.isArray(following) ? following : []);
-    return blocksSpell(blocks, pieces);
+    return blocksSpell(blocks, pieces, false) || blocksSpell(blocks, pieces, true);
+  }
+
+  // Would writing this record's after into THIS ONE BLOCK leave the reviewer's
+  // words on the page twice?
+  //
+  // A write puts every paragraph of a multi-paragraph after into the one
+  // anchored block. When the block right after it already says the after's
+  // second paragraph, the page ends up holding those words in both places:
+  // merged into the anchored block and still standing below it. That is the
+  // report of 2026-09-22, "they just write it again above or below", and it is
+  // reached whenever the split check just misses: a word the agent polished, a
+  // quote the Markdown curled, a dash it lengthened.
+  //
+  // So this is asked of every write, and a write it would duplicate does not
+  // happen. The record is flagged instead, which is the honest answer: the
+  // page carries some of the reviewer's paragraphs and not the rest, and
+  // choosing which of the page's own blocks to replace is a guess (D9).
+  function wouldDuplicate(item, element) {
+    var pieces = splitPieces(item, record.comparisonMode(item));
+    if (!pieces || !element || element.nodeType !== 1) return false;
+    var next = followingTexts(element, 1);
+    if (!next.length) return false;
+    var own = piecesOf(next[0]);
+    if (!own.length) return false;
+    return samePiece(own[0], pieces[1], true);
   }
 
   // "after", "before", or null: which of the two the region holds once the
@@ -905,11 +946,11 @@
   //
   // @returns {string[]|null} the following blocks' texts when it does, so the
   //   compare reuses them instead of reading them again
-  function runAt(element, text, pieces) {
+  function runAt(element, text, pieces, fold) {
     var own = piecesOf(text);
-    if (!own.length || own[0] !== pieces[0]) return null;
+    if (!own.length || !samePiece(own[0], pieces[0], fold)) return null;
     var following = followingTexts(element, pieces.length - 1);
-    return blocksSpell([text].concat(following), pieces) ? following : null;
+    return blocksSpell([text].concat(following), pieces, fold) ? following : null;
   }
 
   // The region half of the same rule. The text search binds the innermost
@@ -931,28 +972,37 @@
   function splitRegion(item, element, searchInside) {
     var pieces = splitPieces(item, record.comparisonMode(item));
     if (!pieces || !element || element.nodeType !== 1) return null;
-    var here = runAt(element, normalize.blockTextFromNode(element), pieces);
+    // Strict first, and the folded pass only when the strict one finds
+    // nothing, so a page that spells the after exactly is never read through
+    // the looser compare.
+    return regionAt(item, element, pieces, searchInside, false) || regionAt(item, element, pieces, searchInside, true);
+  }
+
+  function regionAt(item, element, pieces, searchInside, fold) {
+    var here = runAt(element, normalize.blockTextFromNode(element), pieces, fold);
     if (here) return { element: element, following: here };
     if (searchInside === false) return null;
     var starts = [];
-    collectRunStarts(element, pieces, starts);
+    collectRunStarts(element, pieces, starts, fold);
     return starts.length === 1 ? starts[0] : null;
   }
 
   // Each element is read once. One whose words do not contain the first piece
   // cannot start the run and cannot hold its start, so it is skipped whole.
-  function collectRunStarts(node, pieces, out) {
+  function collectRunStarts(node, pieces, out, fold) {
+    var wanted = fold === true ? normalize.foldTypography(pieces[0]) : pieces[0];
     for (var child = node.firstChild; child; child = child.nextSibling) {
       if (child.nodeType !== 1) continue;
       if (markers && typeof markers.isToolNode === "function" && markers.isToolNode(child)) continue;
       var text = normalize.blockTextFromNode(child);
-      if (wordsOf(text).indexOf(pieces[0]) === -1) continue;
-      var following = runAt(child, text, pieces);
+      var words = fold === true ? normalize.foldTypography(wordsOf(text)) : wordsOf(text);
+      if (words.indexOf(wanted) === -1) continue;
+      var following = runAt(child, text, pieces, fold);
       if (following) {
         out.push({ element: child, following: following });
         continue;
       }
-      collectRunStarts(child, pieces, out);
+      collectRunStarts(child, pieces, out, fold);
     }
   }
 
@@ -2540,6 +2590,16 @@
     // Branches two and three both write the CURRENT revision. Three also says
     // so on the card: an earlier version of this edit landed somewhere, which
     // the reviewer would otherwise read as their edit being applied twice.
+    //
+    // Unless that write would say the reviewer's words twice. See
+    // wouldDuplicate: the page already carries the rest of their paragraphs in
+    // blocks of its own, and writing the whole after into this one block is
+    // how the same sentences came to stand both merged here and below.
+    if (wouldDuplicate(item, element)) {
+      counters.regionsRefusedDuplicate += 1;
+      return flagConflict(ctx, item, id, element, domValue);
+    }
+
     epoch.write("replay", function () {
       writeRegion(element, item);
     });
