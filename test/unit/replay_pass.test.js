@@ -1446,14 +1446,11 @@ test("duplicate: a first paragraph the page is missing is written, and only that
 });
 
 test("duplicate: Keep mine writes only the piece the page is missing", () => {
-  const item = splitEdit("First paragraph.", "First paragraph.\n\nSecond paragraph.\n\nThird paragraph.");
-  const page = pageOf([
-    "A heading line.",
-    "First paragraph.",
-    "Second paragraph.",
-    "Third paragraph, polished.",
-    "The page's next paragraph."
-  ]);
+  // The page rewrote the reviewer's first paragraph and kept the second, so
+  // the press has one paragraph to put back. The block below is the page's
+  // own and is left alone.
+  const item = splitEdit("Before words.", "First paragraph.\n\nSecond paragraph.");
+  const page = pageOf(["A heading line.", "The agent's own line.", "Second paragraph.", "The page's own ending."]);
   const anchoredItem = anchored(item, page.blocks[1], page.root);
 
   const first = runOne(anchoredItem, page.root);
@@ -1465,19 +1462,54 @@ test("duplicate: Keep mine writes only the piece the page is missing", () => {
   assert.equal(answered.resolved, true, answered.reason || "");
   assert.deepEqual(
     page.blocks.map((b) => b.textContent),
-    [
-      "A heading line.",
-      "First paragraph.",
-      "Second paragraph.",
-      "Third paragraph, polished.",
-      "The page's next paragraph."
-    ],
-    "the press says nothing twice"
+    ["A heading line.", "First paragraph.", "Second paragraph.", "The page's own ending."],
+    "the missing paragraph landed and the press says nothing twice"
   );
+  assert.equal(record.acceptedPageTexts(anchoredItem).length > 0, true, "and the record remembers what it answered");
+});
+
+test("duplicate: Keep mine that cannot place every paragraph leaves the clash standing", () => {
+  // Three paragraphs, and the page carries the first two. Checking only the
+  // second would read this as placed, resolve the press, and leave the
+  // reviewer with a page that has no third paragraph and a card that says
+  // nothing.
+  const item = splitEdit("First paragraph.", "First paragraph.\n\nSecond paragraph.\n\nThird paragraph.");
+  const page = pageOf(["A heading line.", "First paragraph.", "Second paragraph.", "The page's own ending."]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+
+  const first = runOne(anchoredItem, page.root);
+  assert.equal(first.result.branch, replay.BRANCH.CONTENT_CHANGED, "the clash is raised");
+
+  replay.configure({ root: page.root, items: [anchoredItem], cards: first.cards, persist: function () {} });
+  const answered = replay.resolveConflict(item.id, "keep_mine");
+
+  assert.equal(answered.resolved, false, "the press could not place every paragraph");
+  assert.equal(first.cards.notices[item.id], replay.KEEP_MINE_PARTIAL_MESSAGE, "and the card says so, plainly");
+  assert.notEqual(replay.conflictFor(item.id), null, "the clash is still there to answer");
   assert.deepEqual(
-    record.acceptedPageTexts(anchoredItem).length > 0,
-    true,
-    "and the record still remembers what it answered"
+    page.blocks.map((b) => b.textContent),
+    ["A heading line.", "First paragraph.", "Second paragraph.", "The page's own ending."],
+    "nothing doubled, and no paragraph of the page lost"
+  );
+});
+
+test("duplicate: Keep mine with four paragraphs and only the last missing still holds the clash", () => {
+  const item = splitEdit("One.", "One.\n\nTwo.\n\nThree.\n\nFour.");
+  const page = pageOf(["A heading line.", "One.", "Two.", "Three.", "The page's own ending."]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+
+  const first = runOne(anchoredItem, page.root);
+  assert.equal(first.result.branch, replay.BRANCH.CONTENT_CHANGED);
+
+  replay.configure({ root: page.root, items: [anchoredItem], cards: first.cards, persist: function () {} });
+  const answered = replay.resolveConflict(item.id, "keep_mine");
+
+  assert.equal(answered.resolved, false, "the fourth paragraph is not on the page");
+  assert.equal(first.cards.notices[item.id], replay.KEEP_MINE_PARTIAL_MESSAGE);
+  assert.deepEqual(
+    page.blocks.map((b) => b.textContent),
+    ["A heading line.", "One.", "Two.", "Three.", "The page's own ending."],
+    "and the three that are there are each there once"
   );
 });
 

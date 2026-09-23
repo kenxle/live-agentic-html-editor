@@ -67,6 +67,13 @@ the page is missing, and never a block this record does not own.
   "Keep mine" following the same rule matters twice over: writing the whole
   after there doubled the paragraphs AND the next pass then read branch one and
   cleared the conflict, so the doubling stood until a reload.
+- **A press that cannot place every paragraph does not close the clash.** The
+  plan checks every piece past the first against the blocks below, not just the
+  second. A three-paragraph edit whose third paragraph is nowhere on the page
+  looks applied if only the second is asked about, and "Keep mine" would then
+  resolve while that paragraph was missing: a press that looked like it worked.
+  Now the card says `KEEP_MINE_PARTIAL_MESSAGE`, the conflict stays up, and
+  what the block itself owns is still written.
 - **One fold per string.** `folded` memoizes `foldTypography`, which runs four
   regexes, so the folded pass over a container re-reads what the strict pass
   already folded. The memo is dropped whole at 500 entries.
@@ -76,13 +83,21 @@ the page is missing, and never a block this record does not own.
 
 ![The same page, each paragraph once](once_after.png)
 
-## Known limit
+## Known limits
+
+Two, both narrower than the bug and both left as their own change.
 
 A record whose words span several blocks binds the container that holds them
 all. "Keep mine" on such a record still writes the whole after into that
 container, which flattens the page's own blocks inside it. That is older than
-this branch and it is a flatten rather than a duplicate, so it is left as its
-own change.
+this branch and it is a flatten rather than a duplicate.
+
+A write of one piece goes in as plain text. So when the reviewer had bold or
+italic in the first paragraph of a multi-paragraph edit, and the page already
+carries the rest, that paragraph comes back in plain type. The record's markup
+carries every paragraph of the after, which is exactly what must not be written
+here, so the trade is the emphasis rather than a duplicate. The words are
+right; the bold is not.
 
 ## Tests
 
@@ -97,14 +112,19 @@ own change.
     before the fix: the second and third paragraphs were each on the page
     twice)
   - the same, where the agent reworded the last paragraph
-- `test/unit/replay_pass.test.js`, six cases, each red before its fix:
+- `test/unit/replay_pass.test.js`, eight cases, each red before its fix:
   - a folded split is applied
   - one block is still compared strictly
   - an edit whose only change is quotes and dashes is not swallowed
   - a first paragraph the page is missing is written, and only that
   - "Keep mine" writes only the piece the page is missing
+  - "Keep mine" that cannot place every paragraph leaves the clash standing,
+    with the message on the card
+  - the same with four paragraphs and only the last missing
   - a write the page's blocks would double is refused and flagged
-- `npm run gate:unit`: 1282 passed, 0 failed.
+- `npm run gate:unit`: 1284 passed, 0 failed.
 - Browser, `--workers=1`, 39 passed: `split_not_conflict`, `replay_branches`,
   `replay_human_and_agent`, `conflict_toast`, `italic_sticks`, `inline_reword`,
   `reword_rev`, `paragraph_break`, `keep_mine_live_page`, `no_duplicate_text`: 40 passed.
+  The last round reran `no_duplicate_text`, `keep_mine_live_page`, `replay_branches`
+  and `conflict_toast`: 22 passed.

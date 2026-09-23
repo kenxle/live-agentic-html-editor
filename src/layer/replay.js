@@ -923,20 +923,35 @@
    *   {write: "<first piece>"}  the anchored block does not say the first
    *                             piece yet, so that much of the edit has not
    *                             landed and it is written here, alone
-   *   {write: null}             the anchored block already says it: every
-   *                             piece the page is missing is in a block this
-   *                             record does not own, so nothing is written and
-   *                             the clash is flagged
+   *   {write: null}             the anchored block already says it, so there
+   *                             is nothing here to write
    *   null                      not this case at all; write the after as usual
    *
-   * @returns {{write: (string|null)}|null}
+   * `rest` is the other half of the answer, and it is checked piece by piece
+   * rather than by the second one alone. A three-paragraph edit whose third
+   * paragraph is nowhere on the page looks exactly like an applied one if only
+   * the second is asked about, and answering "Keep mine" on it would resolve
+   * the clash while that paragraph was still missing. The reviewer would have
+   * been shown a press that worked and a page without their last paragraph.
+   *
+   *   rest: true   the blocks below carry every piece past the first
+   *   rest: false  at least one is missing, and it belongs to a block this
+   *                record does not own
+   *
+   * @returns {{write: (string|null), rest: boolean}|null}
    */
   function splitWritePlan(item, element) {
     if (!wouldDuplicate(item, element)) return null;
     var pieces = splitPieces(item, record.comparisonMode(item));
+    var fold = mayFold(item);
     var here = piecesOf(normalize.blockTextFromNode(element));
-    var saysFirst = here.length === 1 && samePiece(here[0], pieces[0], mayFold(item));
-    return { write: saysFirst ? null : pieces[0] };
+    var saysFirst = here.length === 1 && samePiece(here[0], pieces[0], fold);
+    var rest = pieces.slice(1);
+    var below = followingTexts(element, rest.length);
+    return {
+      write: saysFirst ? null : pieces[0],
+      rest: blocksSpell(below, rest, false) || (fold && blocksSpell(below, rest, true))
+    };
   }
 
   // "after", "before", or null: which of the two the region holds once the
@@ -1513,6 +1528,13 @@
   // string.
   var EARLIER_REVISION_MESSAGE = "An earlier version of this edit had already landed. Your current version was re-applied.";
 
+  // What the card says when "Keep mine" could only put part of the edit back.
+  // Plain words, because the reviewer is looking at a page that is missing one
+  // of their paragraphs and needs to know that without reading about blocks.
+  var KEEP_MINE_PARTIAL_MESSAGE =
+    "Part of your version is still missing from the page. The page holds those paragraphs in its own blocks, " +
+    "so nothing was written over them. Your agent has your full version.";
+
   // ---------------------------------------------------------------------------
   // What replay says on a card
   // ---------------------------------------------------------------------------
@@ -1805,11 +1827,22 @@
     // conflict away, so the doubling would stand until a reload. That is worse
     // than the bug this rule was added for.
     var keepPlan = splitWritePlan(item, element);
-    if (keepPlan) counters.regionsWroteMissingPiece += 1;
+    var wrote = !keepPlan || keepPlan.write !== null;
+    if (keepPlan && wrote) counters.regionsWroteMissingPiece += 1;
     epoch.write("replay.keep_mine", function () {
-      if (!keepPlan || keepPlan.write !== null) writeRegion(element, item, keepPlan ? keepPlan.write : null);
+      if (wrote) writeRegion(element, item, keepPlan ? keepPlan.write : null);
     });
-    counters.regionsWritten += 1;
+    if (wrote) counters.regionsWritten += 1;
+
+    // A press that could not put every paragraph on the page does not close
+    // the clash. The pieces still missing sit in blocks this record does not
+    // own, and saying "resolved" here would leave the reviewer looking at a
+    // page without their last paragraph and nothing on the card about it.
+    if (keepPlan && keepPlan.rest !== true) {
+      callCard(ctx, "setCardNotice", id, KEEP_MINE_PARTIAL_MESSAGE);
+      lastElement[id] = element;
+      return { resolved: false, choice: choice, reason: KEEP_MINE_PARTIAL_MESSAGE };
+    }
     // Finding 25: this is an ordinary re-apply, so it clears the same two pieces
     // of state the ordinary write path clears. A record that was both lost and
     // conflict-flagged would otherwise keep a stale region.lost stamp (which 3A
@@ -2843,6 +2876,7 @@
     splitRegion: splitRegion,
     BRANCHES: BRANCHES,
     EARLIER_REVISION_MESSAGE: EARLIER_REVISION_MESSAGE,
+    KEEP_MINE_PARTIAL_MESSAGE: KEEP_MINE_PARTIAL_MESSAGE,
     counters: counters,
     resetCounters: resetCounters,
     SETTLE_MS: SETTLE_MS,
