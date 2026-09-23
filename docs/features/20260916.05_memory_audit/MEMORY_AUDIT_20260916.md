@@ -56,6 +56,7 @@ This is the one progress page for all of the memory, CPU, and token work. The me
 | 20. A linked folder's hidden files (like `.env`) can be fetched from the local page server | ✅ Fixed on main (e4346f1). Page servers already running keep the old code until they restart |
 | 21. The page server's own folder also serves hidden files, such as a `.env` inside the folder under review | ⬜ Not started. Found while fixing 20. Needs a decision: a reviewed folder may legitimately serve something like `.well-known/` |
 | 22. The rail still draws single-side accent stripes (the banned style) in about ten places: every toast, the loud agent reply, the asking block, conflict sides, edit pairs, quotes | ⬜ Next, after the conflict toast merges. One sweep with light and dark screenshots |
+| 23. Battery still drains on an idle machine with review tabs open: a visible tab polls the helper every second, and 58 page servers from finished sessions were still running (711 MB) | 🔨 [Issue 16](https://github.com/kenxle/live-agentic-html-editor/issues/16) filed with the measurements. Not started |
 ✅ done and live · 🔨 in progress · ⬜ not started
 
 ## Short answer
