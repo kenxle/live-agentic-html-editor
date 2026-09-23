@@ -143,6 +143,7 @@
     regionsEarlierRevision: 0, // branch three
     regionsConflicted: 0, // branch four: flagged, nothing written
     regionsRefusedDuplicate: 0, // a write the page's own blocks would have doubled
+    regionsWroteMissingPiece: 0, // only the piece the page was missing was written
     regionsLost: 0, // the anchor bound to zero matches, or to more than one
     regionsLostDeferred: 0, // a lost verdict held back while the page was still settling
     regionsLostCleared: 0, // a later pass found the anchor, so the lost state ended
@@ -805,7 +806,42 @@
   // to one paragraph still re-applies, as it always did.
   function samePiece(a, b, fold) {
     if (a === b) return true;
-    return fold === true && normalize.foldTypography(a) === normalize.foldTypography(b);
+    return fold === true && folded(a) === folded(b);
+  }
+
+  // foldTypography runs four regexes over a string, and the split search asks
+  // the same block's text twice: once on the strict pass, once on the folded
+  // one. This memo keeps that to one fold per distinct string. It is cleared
+  // whole when it fills, so a page that rewrites itself all day cannot grow a
+  // dictionary of its own text.
+  var FOLD_MEMO_MAX = 500;
+  var foldMemo = Object.create(null);
+  var foldMemoSize = 0;
+  function folded(text) {
+    var hit = foldMemo[text];
+    if (typeof hit === "string") return hit;
+    var value = normalize.foldTypography(text);
+    if (foldMemoSize >= FOLD_MEMO_MAX) {
+      foldMemo = Object.create(null);
+      foldMemoSize = 0;
+    }
+    foldMemo[text] = value;
+    foldMemoSize += 1;
+    return value;
+  }
+
+  // May this record's pieces be compared with typography folded?
+  //
+  // No, when typography IS the edit. A reviewer who fixed the quotes and the
+  // dashes in three paragraphs has a before and an after that fold to the same
+  // string, and a folded compare would read the page's old quotes as the
+  // reviewer's new ones and call the edit applied. So an edit that changes
+  // nothing else is compared strictly, exactly like a one-block edit.
+  function mayFold(item) {
+    var before = item ? item[record.FIELD.BEFORE] : null;
+    var after = item ? item[record.FIELD.AFTER] : null;
+    if (typeof before !== "string" || typeof after !== "string") return true;
+    return folded(before) !== folded(after);
   }
 
   // Pieces the after splits into, or null for a record this rule is not for.
@@ -847,7 +883,8 @@
     var pieces = splitPieces(item, mode);
     if (!pieces || typeof domText !== "string") return false;
     var blocks = [domText].concat(Array.isArray(following) ? following : []);
-    return blocksSpell(blocks, pieces, false) || blocksSpell(blocks, pieces, true);
+    if (blocksSpell(blocks, pieces, false)) return true;
+    return mayFold(item) && blocksSpell(blocks, pieces, true);
   }
 
   // Would writing this record's after into THIS ONE BLOCK leave the reviewer's
@@ -861,10 +898,8 @@
   // reached whenever the split check just misses: a word the agent polished, a
   // quote the Markdown curled, a dash it lengthened.
   //
-  // So this is asked of every write, and a write it would duplicate does not
-  // happen. The record is flagged instead, which is the honest answer: the
-  // page carries some of the reviewer's paragraphs and not the rest, and
-  // choosing which of the page's own blocks to replace is a guess (D9).
+  // So this is asked of every write, and the answer is never the whole after.
+  // See splitWritePlan for what is written instead.
   function wouldDuplicate(item, element) {
     var pieces = splitPieces(item, record.comparisonMode(item));
     if (!pieces || !element || element.nodeType !== 1) return false;
@@ -873,6 +908,35 @@
     var own = piecesOf(next[0]);
     if (!own.length) return false;
     return samePiece(own[0], pieces[1], true);
+  }
+
+  /**
+   * What to write when the page already carries the rest of the reviewer's
+   * paragraphs in blocks of its own: only the pieces the page is missing.
+   *
+   * The page's following blocks are the page's own, and replacing them means
+   * choosing which of them is the reviewer's, which is a guess (D9). The
+   * anchored block is not a guess: it is the region this record answers for.
+   * So the plan is at most the first piece, into that block, and the blocks
+   * below are left exactly as they are.
+   *
+   *   {write: "<first piece>"}  the anchored block does not say the first
+   *                             piece yet, so that much of the edit has not
+   *                             landed and it is written here, alone
+   *   {write: null}             the anchored block already says it: every
+   *                             piece the page is missing is in a block this
+   *                             record does not own, so nothing is written and
+   *                             the clash is flagged
+   *   null                      not this case at all; write the after as usual
+   *
+   * @returns {{write: (string|null)}|null}
+   */
+  function splitWritePlan(item, element) {
+    if (!wouldDuplicate(item, element)) return null;
+    var pieces = splitPieces(item, record.comparisonMode(item));
+    var here = piecesOf(normalize.blockTextFromNode(element));
+    var saysFirst = here.length === 1 && samePiece(here[0], pieces[0], mayFold(item));
+    return { write: saysFirst ? null : pieces[0] };
   }
 
   // "after", "before", or null: which of the two the region holds once the
@@ -974,8 +1038,11 @@
     if (!pieces || !element || element.nodeType !== 1) return null;
     // Strict first, and the folded pass only when the strict one finds
     // nothing, so a page that spells the after exactly is never read through
-    // the looser compare.
-    return regionAt(item, element, pieces, searchInside, false) || regionAt(item, element, pieces, searchInside, true);
+    // the looser compare. An edit whose only change is typography is never
+    // read through it at all (mayFold).
+    var strict = regionAt(item, element, pieces, searchInside, false);
+    if (strict || !mayFold(item)) return strict;
+    return regionAt(item, element, pieces, searchInside, true);
   }
 
   function regionAt(item, element, pieces, searchInside, fold) {
@@ -990,12 +1057,14 @@
   // Each element is read once. One whose words do not contain the first piece
   // cannot start the run and cannot hold its start, so it is skipped whole.
   function collectRunStarts(node, pieces, out, fold) {
-    var wanted = fold === true ? normalize.foldTypography(pieces[0]) : pieces[0];
+    // Folded through the memo, so the folded pass over a container re-reads
+    // what the strict pass already folded instead of folding it again.
+    var wanted = fold === true ? folded(pieces[0]) : pieces[0];
     for (var child = node.firstChild; child; child = child.nextSibling) {
       if (child.nodeType !== 1) continue;
       if (markers && typeof markers.isToolNode === "function" && markers.isToolNode(child)) continue;
       var text = normalize.blockTextFromNode(child);
-      var words = fold === true ? normalize.foldTypography(wordsOf(text)) : wordsOf(text);
+      var words = fold === true ? folded(wordsOf(text)) : wordsOf(text);
       if (words.indexOf(wanted) === -1) continue;
       var following = runAt(child, text, pieces, fold);
       if (following) {
@@ -1729,8 +1798,16 @@
     if (!element) {
       return { resolved: false, choice: choice, reason: "the region this record points at is not on the page" };
     }
+    // The same rule the ordinary write follows: when the page carries the rest
+    // of the reviewer's paragraphs in blocks of its own, the press writes only
+    // what this block owns. Writing the whole after here would double those
+    // paragraphs, and the next pass would then read branch one and take the
+    // conflict away, so the doubling would stand until a reload. That is worse
+    // than the bug this rule was added for.
+    var keepPlan = splitWritePlan(item, element);
+    if (keepPlan) counters.regionsWroteMissingPiece += 1;
     epoch.write("replay.keep_mine", function () {
-      writeRegion(element, item);
+      if (!keepPlan || keepPlan.write !== null) writeRegion(element, item, keepPlan ? keepPlan.write : null);
     });
     counters.regionsWritten += 1;
     // Finding 25: this is an ordinary re-apply, so it clears the same two pieces
@@ -2591,17 +2668,18 @@
     // so on the card: an earlier version of this edit landed somewhere, which
     // the reviewer would otherwise read as their edit being applied twice.
     //
-    // Unless that write would say the reviewer's words twice. See
-    // wouldDuplicate: the page already carries the rest of their paragraphs in
-    // blocks of its own, and writing the whole after into this one block is
-    // how the same sentences came to stand both merged here and below.
-    if (wouldDuplicate(item, element)) {
+    // Unless the page already carries the rest of the reviewer's paragraphs in
+    // blocks of its own. Then the write is only what the page is missing and
+    // this block owns: the first piece, or nothing. See splitWritePlan.
+    var plan = splitWritePlan(item, element);
+    if (plan && plan.write === null) {
       counters.regionsRefusedDuplicate += 1;
       return flagConflict(ctx, item, id, element, domValue);
     }
+    if (plan) counters.regionsWroteMissingPiece += 1;
 
     epoch.write("replay", function () {
-      writeRegion(element, item);
+      writeRegion(element, item, plan ? plan.write : null);
     });
     counters.regionsWritten += 1;
     clearConflict(ctx, id);
@@ -2679,7 +2757,12 @@
   // before they touched it. That write was the second half of Ken's 2026-08-20
   // report, the "some edit later reverts it" half: the break survived the
   // commit and then the next replay pass flattened the block back to one line.
-  function writeRegion(element, item) {
+  //
+  // `onlyText`, when given, is the one thing the caller decided this block is
+  // missing (splitWritePlan). It is written as text, and the record's markup is
+  // not used: the markup carries every paragraph of the after, which is the
+  // whole of what the page must not be told twice.
+  function writeRegion(element, item, onlyText) {
     var kind = item[record.FIELD.KIND];
     // S8, as an assertion rather than as a promise in a comment. A probable
     // place is the point ladder's guess, and the one thing a guess may never
@@ -2694,6 +2777,10 @@
         "replay: a probable place never receives a write. The point ladder serves the reviewer, " +
           "the write ladder serves the agent, and this record is still lost for the agent."
       );
+    }
+    if (typeof onlyText === "string") {
+      writeTextWithBreaks(element, onlyText);
+      return;
     }
     if (kind === record.KIND.DELETE) {
       if (typeof element.remove === "function") {
