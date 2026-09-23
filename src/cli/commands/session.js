@@ -203,7 +203,7 @@ function reviewWork(dir, reviewId) {
   var open = items.filter(statusCommand.isUnansweredReady);
   var oldest = null;
   open.forEach(function (item) {
-    var at = item.created_at || item.updated_at || null;
+    var at = item.card_first_created_at || item.reviewer_last_changed_at || null;
     if (typeof at === "string" && at && (!oldest || at < oldest)) oldest = at;
   });
   return { unanswered: open.length, oldestUnansweredAt: oldest, lastItemAt: statusCommand.lastItemAt(items) };
