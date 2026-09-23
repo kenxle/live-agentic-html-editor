@@ -57,6 +57,8 @@ This is the one progress page for all of the memory, CPU, and token work. The me
 | 21. The page server's own folder also serves hidden files, such as a `.env` inside the folder under review | ⬜ Not started. Found while fixing 20. Needs a decision: a reviewed folder may legitimately serve something like `.well-known/` |
 | 22. The rail still draws single-side accent stripes (the banned style) in about ten places: every toast, the loud agent reply, the asking block, conflict sides, edit pairs, quotes | ⬜ Next, after the conflict toast merges. One sweep with light and dark screenshots |
 | 23. Battery still drains on an idle machine with review tabs open: a visible tab polls the helper every second, and 58 page servers from finished sessions were still running (711 MB) | 🔨 [Issue 16](https://github.com/kenxle/live-agentic-html-editor/issues/16) filed with the measurements. Not started |
+| 24. A paragraph written on its own (because the page already carries the others) goes in as plain text, so bold or italic in it is dropped | ⬜ Not started. Recorded in the no-duplicate-text notes. Fix: derive that paragraph's markup when the edit's markup splits cleanly |
+| 25. An edit whose words span several blocks still merges them into one when the reviewer presses Keep mine | ⬜ Not started. Older than the duplicate fix. Nothing is doubled and a reload restores the structure |
 ✅ done and live · 🔨 in progress · ⬜ not started
 
 ## Short answer
