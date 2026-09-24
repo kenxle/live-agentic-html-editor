@@ -287,6 +287,14 @@ the source until the page really shows the words, then reply again. Saying an
 item is done is not a way to close it. Comments are not checked: there is
 nothing to look for.
 
+The check reads the built page, so it can be wrong. The renderer may eat a
+character the reviewer typed, or you may have carried their meaning in words of
+your own. When their text genuinely cannot appear on the page as written, reply
+`not_handled` and say which of those it is. A `not_handled` reply is never
+checked, it takes the item off your drain list, and the reviewer reads your
+reason and decides. Do not keep replying `handled` into a check that keeps
+refusing it.
+
 ### Step 5. Reply
 
 ```sh

@@ -193,9 +193,24 @@ function createRebuilder(options) {
   var ttl = typeof opts.ttlMs === "number" ? opts.ttlMs : REBUILD_TTL_MS;
   var askedAt = Object.create(null);
   var lastRenderAt = Object.create(null);
+  // A failure that lasts says itself once. A source an agent deleted, or a
+  // document the renderer cannot take, is asked about twice a second for as
+  // long as the reviewer's page is open, and a line per ask buries every other
+  // thing in helper.log under one unchanging sentence. The reason is part of
+  // the key, so a source that goes missing and then fails to render says both.
+  // A successful render clears it, so the same failure later is news again.
+  var toldAbout = Object.create(null);
 
   function note(message) {
     if (log && typeof log.helperLog === "function") log.helperLog(message);
+  }
+
+  /** Say this once per review per reason, until the next good render. */
+  function noteOnce(id, reason, message) {
+    var key = String(id) + "" + reason;
+    if (toldAbout[key]) return;
+    toldAbout[key] = true;
+    note(message);
   }
 
   /**
@@ -220,7 +235,11 @@ function createRebuilder(options) {
     if (sourceAt === null) {
       // The source moved or was deleted. The artifact on disk is still a real
       // page with the reviewer's review on it, so it is left alone.
-      note("review " + String(id) + ": the Markdown behind this page is gone, so it was not re-rendered");
+      noteOnce(
+        id,
+        "source-missing",
+        "review " + String(id) + ": the Markdown behind this page is gone, so it was not re-rendered"
+      );
       return { rendered: false, reason: "source-missing" };
     }
     var targetAt = mtimeMs(pair.target);
@@ -234,14 +253,20 @@ function createRebuilder(options) {
     } catch (error) {
       // Rule 2. A Markdown file mid-save, or one the renderer cannot take, is
       // not a reason for the poll to fail. The page keeps the render it has.
-      note(
+      noteOnce(
+        id,
+        "render-failed",
         "review " + String(id) + ": could not re-render " + pair.source + ", so the page keeps the render it has: " +
           error.message
       );
       return { rendered: false, reason: "render-failed" };
     }
     mergeMounts(dir, pair.session, pair.target, result.linkMounts, log);
-    if (id) lastRenderAt[id] = new Date(clock()).toISOString();
+    if (id) {
+      lastRenderAt[id] = new Date(clock()).toISOString();
+      delete toldAbout[String(id) + "\u001fsource-missing"];
+      delete toldAbout[String(id) + "\u001frender-failed"];
+    }
     note("review " + String(id) + ": re-rendered " + pair.source + " because it is newer than the page");
     return { rendered: true, reason: "source-is-newer" };
   }

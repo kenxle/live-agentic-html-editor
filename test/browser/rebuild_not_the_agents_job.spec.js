@@ -251,7 +251,7 @@ test.describe("LAHE rebuilds the page, and a handled claim is checked", () => {
       timeoutMs: 20000
     });
     const notice = await page.evaluate((id) => window.__lahe.rail.getCard(id).notice, edit.id);
-    expect(notice).toContain("the change is not on your page");
+    expect(notice).toContain("I could not find the change on your page");
     expect(notice, "and it does not explain the tool to them").not.toContain("render");
     expect(notice, "or the build").not.toContain("rebuild");
 

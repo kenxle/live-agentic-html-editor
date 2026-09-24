@@ -374,3 +374,73 @@ test("the fold carries the finding, so every surface says the same thing", () =>
   assert.equal(folded.length, 1);
   assert.equal(folded[0].handled_not_on_page, true);
 });
+
+// ---------------------------------------------------------------------------
+// The card does not also run the waiting clock
+// ---------------------------------------------------------------------------
+//
+// The item is on the agent's drain list, so record.isUnansweredReady counts it.
+// The rail's overdue clock reads the same predicate, and without a second rule
+// the card goes amber, then loud, and offers to hand the work to another agent,
+// directly above a line saying the agent reported it done. Nobody is being slow
+// here: the answer arrived and did not land.
+
+const storeModule = require("../../src/layer/store.js");
+const overlay = require("../../src/layer/overlay.js");
+
+const RAIL_REVIEW = "rail-review";
+
+function railItem(overrides) {
+  return record.newItem(
+    Object.assign(
+      {
+        kind: record.KIND.EDIT,
+        state: record.STATE.READY,
+        change: "say it in the reviewer's words",
+        before: "The first paragraph.",
+        after: "The reviewer's own sentence.",
+        page_origin: "http://127.0.0.1:4000",
+        page_path: "/guide.html"
+      },
+      overrides || {}
+    )
+  );
+}
+
+function mountOnRail(item, longAgo) {
+  const store = storeModule.createStore();
+  const rail = overlay.createRail({ document: null, store: store, reviewId: RAIL_REVIEW });
+  store.write(RAIL_REVIEW, item);
+  store.queueEvent(RAIL_REVIEW, {
+    event_id: "evt-" + item[record.FIELD.ID] + "-" + item[record.FIELD.REV],
+    event: "item.ready",
+    item: item[record.FIELD.ID],
+    rev: item[record.FIELD.REV],
+    record: item
+  });
+  rail.upsertCard(item);
+  // cardWaitFor computes nothing before STATUS.STORED, so without this the
+  // assertion below would pass for an unrelated reason.
+  rail.setStatusLine(overlay.STATUS.STORED);
+  rail.setAgentLiveness({ state: "no_agent", oldest_unanswered_at: longAgo, unanswered: 1 });
+  return rail;
+}
+
+test("a card the handled check held open never goes late, however long it sits", () => {
+  const longAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const held = railItem({ id: "itm_held_open", updated_at: longAgo, created_at: longAgo });
+  held[record.FIELD.REPLY] = { status: "handled", agent: "claude", at: longAgo };
+  held[record.FIELD.HANDLED_NOT_ON_PAGE] = true;
+
+  assert.ok(record.isUnansweredReady(held), "it is still work the agent has to come back to");
+  const wait = mountOnRail(held, longAgo).cardWait(held[record.FIELD.ID]);
+  assert.equal(wait.overdue, false, "and the card does not accuse anyone of being silent about it");
+  assert.equal(wait.text, "");
+
+  // The same item, the same wait, with nobody having answered: this is what the
+  // rule above is holding back, so the assertion is about the flag and not a
+  // fluke of the harness.
+  const unanswered = railItem({ id: "itm_never_answered", updated_at: longAgo, created_at: longAgo });
+  const other = mountOnRail(unanswered, longAgo).cardWait(unanswered[record.FIELD.ID]);
+  assert.equal(other.overdue, true);
+});

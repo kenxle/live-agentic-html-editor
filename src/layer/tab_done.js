@@ -467,7 +467,7 @@
   // find them, so the item did not retire. The sentence says what the reviewer
   // can see for themselves and stops there: no rebuild, no render, no reply
   // file, nothing about how the page got here. They are looking at a document.
-  var NOT_ON_PAGE_NOTICE = "says this is done, but the change is not on your page. It is still open.";
+  var NOT_ON_PAGE_NOTICE = "says this is done, but I could not find the change on your page. It is still open.";
 
   // The name this file's sheet answers to inside the rail's closed root.
   var SHEET_KEY = "tab_done";

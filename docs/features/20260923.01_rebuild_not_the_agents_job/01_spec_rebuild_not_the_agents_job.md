@@ -136,15 +136,55 @@ change did not arrive.
 
 ### The wording
 
-On the card: `"<agent> says this is done, but the change is not on your page. It
-is still open."` No rebuild, no render, no reply file. The reviewer is looking at
-a document.
+On the card: `"<agent> says this is done, but I could not find the change on
+your page. It is still open."` It says what the helper actually did, because the
+check can be wrong and stating the absence as fact would make the rail sound
+certain about something it only failed to find. No rebuild, no render, no reply
+file: the reviewer is looking at a document.
+
+The card also stops running the waiting clock for a held-open item. It is still
+unanswered work, so it is still in the counts and still on the drain list, but
+nobody has been silent about it: turning the card amber and then loud, offering
+to hand the work to another agent, directly above a line saying the agent
+reported it done, is the contradiction this whole change exists to remove. The
+review-level clock is dated from the reply for the same reason.
 
 One thing that turned up only in the screenshot: the rail's wordless fallback
 for a handled reply says "<agent> carried this change into the source", which sat
 directly above a notice saying it had not arrived. An agent that wrote real
 words still gets them drawn; the invented confirmation is suppressed when the
 check failed.
+
+## What this costs, and where it is weak
+
+Two things a reader should know before trusting it.
+
+**The render is synchronous, on the poll route.** `refresh` runs inside
+`targetMtime`, which runs inside the reply poll, which the reviewer's page makes
+about once a second. When the source has moved, that poll pays for a full marked
+parse, a render and an atomic write before it answers. For a document of the
+size LAHE is used on this is a few milliseconds and nobody sees it. For a very
+large Markdown file it is a slower poll on the tick after the agent saves, once,
+because the artifact is then current again. The TTL means several askers inside
+one window share the one render. If this ever becomes a real cost, the fix is to
+render off the route and let the poll report the old mtime until it lands, not
+to make it a watcher.
+
+**The check is containment, so a short `after` gets little protection.** The
+test is "are these words in the page", which means a one-word edit, or a
+sentence the page already contained somewhere else, passes whether or not the
+agent did anything. That is deliberate: the alternative is an equality test,
+which fails every time the agent legitimately reflows a paragraph or applies
+the same change in three places. The check exists to catch the agent that
+changed nothing at all, which is the reported failure, and it does. It is not a
+proof that the right change was made in the right place.
+
+**And a false negative has a way out.** Some `after` texts genuinely cannot
+appear on the page as written: a renderer eats a character, or the agent carried
+the reviewer's meaning in words of its own. The contract tells the agent to
+reply `not_handled` and say which it is. A `not_handled` reply is never checked,
+so it retires the item off the drain list, and the reviewer reads the reason and
+decides. Without that clause the agent would wake on the same item forever.
 
 ## Tasks
 
@@ -159,6 +199,7 @@ check failed.
 | T7 | Unit tests, red first | done |
 | T8 | Browser spec through the real `lahe review file.md` walk | done |
 | T9 | Screenshot | done |
+| T10 | Review round: card clock, merge with main, the not_handled way out, wording, log once | done |
 
 ## Acceptance criteria
 
@@ -174,13 +215,13 @@ check failed.
 | A8 | A comment is unaffected | unit: "a comment is not checked against the page" |
 | A9 | The page reloads on the agent's `.md` edit alone, and the reviewer's edit survives | browser: "the agent edits the Markdown and reruns nothing, and the page follows" |
 | A10 | The card, `review.json` and the drain all say it | browser: "a handled reply the page does not bear out leaves the item open, and says so" |
+| A11 | A held-open card never runs the waiting clock | unit: "a card the handled check held open never goes late" |
 
 ## Progress
 
 Everything above is built and green.
 
-- `npm run gate:unit`: 1296 pass, 0 fail (lint, no jsdom, manifest complete,
-  1298 tests with 2 pre-existing todos).
+- `npm run gate:unit`: 1309 pass, 0 fail, after merging main.
 - `npx playwright test test/browser/rebuild_not_the_agents_job.spec.js --workers=1`:
   2 passed.
 - `npx playwright test test/browser/markdown_render.spec.js
@@ -188,7 +229,13 @@ Everything above is built and green.
   test/browser/agent_replies.spec.js --workers=1`: 34 passed.
 
 Verified red first: with `src/` stashed, the new unit file is 7 failing, 5
-passing, and the 5 are its negative controls.
+passing, and the 5 are its negative controls. The card-clock test is red on its
+own with `src/layer/overlay.js` stashed.
+
+main is merged in. Both branches touched the outstanding-item printer, the
+contract array and its restated copy, and both changes are kept: main's sentence
+about an item being current whatever its card's age, and this branch's two about
+a checked handled reply.
 
 Not done, and deliberately:
 
