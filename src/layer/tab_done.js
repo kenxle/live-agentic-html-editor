@@ -1138,6 +1138,13 @@
       var reply = item[record.FIELD.REPLY];
       if (!reply) return null;
       var said = reply.text || reply.reason;
+      // NO INVENTED CONFIRMATION UNDER A NOTICE THAT SAYS THE OPPOSITE. The
+      // wordless fallback below puts "carried this change into the source" on
+      // the card. When the helper has just looked at the page and not found the
+      // change, that sentence sits directly above a notice saying it is not
+      // there, and the reviewer has to decide which half of their own rail to
+      // believe. An agent that wrote real words still gets them drawn.
+      if (!said && item[record.FIELD.HANDLED_NOT_ON_PAGE] === true) return null;
       return {
         status: reply.status || null,
         // Agent name and reason are agent-controlled and reach the rail, so they
