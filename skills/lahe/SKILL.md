@@ -276,7 +276,11 @@ re-render is LAHE's job too: edit the `.md` and the page follows.
 #### A handled reply is checked
 
 A `handled` reply for a hand edit is compared against the built page before it
-retires anything. When the item's `after_full` text is not in that page:
+retires anything, and only when nothing in the source or the page has been
+written since the reviewer typed those words. Do real work and your wording is
+never second-guessed. Answer `handled` having changed nothing and it is caught.
+
+When the check fires and the item's `after_full` text is not in that page:
 
 - the item stays `ready` and carries `handled_not_on_page: true`
 - the reviewer's card says the change has not reached their page
