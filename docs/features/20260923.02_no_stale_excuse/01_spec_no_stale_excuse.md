@@ -88,7 +88,11 @@ reply checklist), per CLAUDE.md.
 Two paths, because an agent can take either:
 
 - `lahe reply` (`validateBody`): `not_handled` needs a `--reason` with
-  non-whitespace in it, and `question` needs `--text` or `--reason`. The command
+  non-whitespace in it, and `question` needs a non-blank `--text`. `--reason` does
+  not stand in for it: `protocol.REPLY_REQUIRED.question` is `[item, rev, status,
+  text]`, so a line without text is one the command would exit 0 on and the fold
+  would then reject, leaving the agent believing it asked and the reviewer holding
+  a malformed-line chip. The command
   fails with exit `BAD_USAGE` and writes nothing. The `not_handled` message names
   what to write: "naming what you checked and what you found. An item on the drain
   is the reviewer's current request whatever its card's age, so 'this card is old'
@@ -100,6 +104,17 @@ Two paths, because an agent can take either:
 
 `""` was already caught on both paths; whitespace was the hole, and the CLI's
 question path accepted a blank `--text` the same way.
+
+## Rollout
+
+- **A `review.json` already on disk keeps the old field names** until the next
+  event rewrites it, so an agent polling a quiet review can read a file with
+  `created_at` and `updated_at` for a while. Nothing else is affected: the rail
+  (`routes.js`), `lahe status` and `lahe session` all project fresh from the log
+  on every read.
+- **The contract ships in the layer bundle**, so the checkpoint owes a `dist/`
+  rebuild. Builders do not commit `dist/`; the orchestrator rebuilds and commits
+  it once per checkpoint.
 
 ## Tests
 
@@ -117,7 +132,10 @@ question path accepted a blank `--text` the same way.
 - `not_handled` with `""`, `"   "` and `"\n"` fails, says what to write, and
   leaves no reply file
 - `not_handled` with a real reason still works
-- `question` with a blank `--text` fails
+- `question` with a blank `--text` fails, and `question` with only a `--reason`
+  fails too: the fold requires `text`, so accepting a reason in its place wrote a
+  line the command exited 0 on and the fold then rejected
+- `lahe session` dates the oldest unanswered item by the rework, not the card
 - a hand-appended `not_handled` with a whitespace reason is rejected by
   `parseReplyLine`
 

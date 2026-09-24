@@ -225,3 +225,58 @@ test("a hand-appended refusal with a blank reason is rejected by the fold, not s
   const good = JSON.stringify({ item: "itm_one", rev: 3, status: "not_handled", reason: "checked the page" });
   assert.equal(protocol.parseReplyLine(good, { filenameAgent: null }).ok, true);
 });
+
+test("question with only a --reason is refused, because the fold needs text", async () => {
+  // The fold's own rule (protocol.REPLY_REQUIRED.question) is item, rev, status,
+  // text. A command that accepted a reason instead would exit 0 on a line the
+  // fold then rejects: the agent believes it asked a question, and the reviewer
+  // gets a malformed-line chip and no question.
+  const dir = aStateDir();
+  const refused = await runReply(dir, ["--item", "itm_one", "--rev", "1", "--status", "question", "--reason", "why is this here?"]);
+  assert.equal(refused.code, protocol.CLI_EXIT.BAD_USAGE);
+  assert.match(refused.stderr, /--text/);
+  assert.equal(fs.existsSync(path.join(dir, "reviews", REVIEW, "replies.jsonl")), false);
+
+  const asked = await runReply(dir, ["--item", "itm_one", "--rev", "1", "--status", "question", "--text", "why is this here?"]);
+  assert.equal(asked.code, protocol.CLI_EXIT.OK, asked.stderr);
+  const line = fs.readFileSync(path.join(dir, "reviews", REVIEW, "replies.jsonl"), "utf8").trim();
+  assert.equal(protocol.parseReplyLine(line, { filenameAgent: null }).ok, true, "what the command writes, the fold reads");
+});
+
+test("lahe session dates the oldest unanswered item by the rework, not the card", () => {
+  const sessionCommand = require("../../src/cli/commands/session.js");
+  const agentSessions = require("../../src/service/agent_sessions.js");
+  const reviewsModule = require("../../src/service/reviews.js");
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-session-age-"));
+  const log = logModule.createEventLog({ dir: dir });
+  const reviews = reviewsModule.createReviews({ dir: dir, log: log });
+  agentSessions.createStore({ dir: dir }).create({ id: "s_one" });
+  reviews.create({ id: "r_one", agent_session_id: "s_one" });
+
+  // Made yesterday, reworded a minute ago. Rewording is what makes it work
+  // again, so that is how old the work is.
+  const item = anItem({ rev: 2, created_at: YESTERDAY, updated_at: A_MINUTE_AGO });
+  log.append("r_one", [
+    protocol.newEvent({
+      event: protocol.EVENT.ITEM_READY,
+      event_id: "ev_reworded",
+      review: "r_one",
+      item: item[record.FIELD.ID],
+      rev: item[record.FIELD.REV],
+      page_path: item[record.FIELD.PAGE_PATH],
+      page_seq: item[record.FIELD.PAGE_SEQ],
+      payload: { draft: false, record: item }
+    })
+  ]);
+
+  const rows = sessionCommand.collect({ dir: dir, nowMs: Date.parse("2026-09-23T23:34:00.000Z") });
+  const row = rows.find((r) => r.id === "s_one");
+  assert.ok(row, "the session is listed");
+  assert.equal(row.unanswered_ready, 1);
+  assert.equal(
+    row.liveness[protocol.AGENT_LIVENESS.FIELD.OLDEST_UNANSWERED_AT],
+    A_MINUTE_AGO,
+    "a card reworded a minute ago is a minute old, not a day"
+  );
+});

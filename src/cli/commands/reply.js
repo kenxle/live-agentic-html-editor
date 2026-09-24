@@ -206,8 +206,12 @@ function validateBody(args) {
   var blank = function (value) {
     return typeof value !== "string" || !value.trim();
   };
-  if (args.status === protocol.REPLY_STATUS.QUESTION && blank(args.text) && blank(args.reason)) {
-    return "--status question needs --text: the question is what the reviewer answers";
+  // TEXT ALONE, because that is what the fold requires (protocol.REPLY_REQUIRED
+  // .question). Accepting a reason in its place wrote a line this command exits
+  // 0 on and parseReplyLine then rejects: the agent believes it asked, and the
+  // reviewer gets a malformed-line chip instead of a question.
+  if (args.status === protocol.REPLY_STATUS.QUESTION && blank(args.text)) {
+    return "--status question needs --text: the question is what the reviewer answers, and --reason does not stand in for it";
   }
   if (args.status === protocol.REPLY_STATUS.NOT_HANDLED && blank(args.reason)) {
     return "--status not_handled needs --reason, in words the reviewer will read, naming what you checked and what you found. " +
