@@ -189,6 +189,12 @@ function rejectEventId(reviewId, file, lineNumber, line) {
  *   Whatever is passed has to be CURRENT, not current as of the last tick: this
  *   line's verdict depends on the revision the item is at right now, and the
  *   line before it may have moved it.
+ *
+ *   `pageShows(reviewId, item)` is the second question a handled line has to
+ *   answer: is the change on the page the reviewer is looking at? It returns
+ *   true, false, or null for "cannot tell", and only an explicit false stops an
+ *   item retiring. Passing nothing skips the check entirely, which is what a
+ *   folder built on its own in a test does. See src/service/handled_check.js.
  */
 function createReplyFolder(options) {
   var opts = options || {};
@@ -198,6 +204,7 @@ function createReplyFolder(options) {
   var log = opts.log;
   // Required lazily: the projection reads folded replies back out of the log,
   // so requiring it at load time would be a cycle.
+  var pageShows = typeof opts.pageShows === "function" ? opts.pageShows : null;
   var readItems =
     opts.items ||
     function (reviewId) {
@@ -329,14 +336,40 @@ function createReplyFolder(options) {
       against[record.FIELD.STATE] = record.STATE.READY;
     }
 
-    var decision = lifecycle.applyReply(against, {
+    // DOES THE PAGE BEAR THE CLAIM OUT? Asked only for a handled line, and only
+    // when a checker was supplied. `null` is "cannot tell", and cannot tell is
+    // left out of the decision entirely rather than passed as a doubt: the tool
+    // never holds an item open on a guess.
+    var shows = null;
+    if (pageShows && reply[protocol.REPLY_FIELD.STATUS] === record.REPLY_STATUS.HANDLED) {
+      try {
+        shows = pageShows(reviewId, item);
+      } catch (error) {
+        shows = null;
+        log.helperLog(
+          "review " + reviewId + ": the handled check threw and was ignored for item " +
+            String(item[record.FIELD.ID]) + ": " + error.message
+        );
+      }
+    }
+
+    var decisionInput = {
       rev: reply[protocol.REPLY_FIELD.REV],
       status: reply[protocol.REPLY_FIELD.STATUS],
       agent: reply[protocol.REPLY_FIELD.AGENT],
       reason: reply[protocol.REPLY_FIELD.REASON],
       text: reply[protocol.REPLY_FIELD.TEXT],
       files: reply[protocol.REPLY_FIELD.FILES]
-    });
+    };
+    if (shows === false) decisionInput.page_shows_change = false;
+    var decision = lifecycle.applyReply(against, decisionInput);
+
+    if (decision.not_on_page === true) {
+      log.helperLog(
+        "review " + reviewId + ": item " + String(item[record.FIELD.ID]) +
+          " was answered handled, but the built page does not show its text, so it stays open"
+      );
+    }
 
     var outcome = {
       accepted: decision.accepted,
@@ -345,7 +378,8 @@ function createReplyFolder(options) {
       state: decision.state,
       file: file,
       reply: reply,
-      refusal: decision.refusal
+      refusal: decision.refusal,
+      not_on_page: decision.not_on_page === true
     };
     writeFold(reviewId, file, line, reply, outcome);
     return outcome;
@@ -369,6 +403,10 @@ function createReplyFolder(options) {
         accepted: outcome.accepted === true,
         state: outcome.state || null,
         refusal: outcome.refusal || null,
+        // The agent said handled and the built page does not show the words.
+        // It rides in the fold so the projection, review.json, `lahe status`
+        // and the reviewer's card all say the same thing about one reply.
+        handled_not_on_page: outcome.not_on_page === true,
         file: file,
         reply: {
           status: reply[protocol.REPLY_FIELD.STATUS],

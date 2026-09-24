@@ -3576,6 +3576,14 @@
       var item = card && card.item;
       var none = { overdue: false, waitedMs: null, text: "" };
       if (!item || status !== STATUS.STORED || !record.isUnansweredReady(item)) return none;
+      // AN ANSWER THE PAGE DID NOT BEAR OUT IS STILL AN ANSWER. An item the
+      // handled check held open counts as unanswered above, because it belongs
+      // on the agent's drain list. It must not also run this clock: the card
+      // would go amber, then loud, and offer to hand the work to another agent,
+      // on a card that says in the line below that the agent reported it done.
+      // That contradiction is the thing this whole change exists to remove.
+      // Nobody is being slow here; the answer arrived and did not land.
+      if (item[record.FIELD.HANDLED_NOT_ON_PAGE] === true) return none;
       // R4: a held item never turns amber. This clock is computed off the
       // item's OWN local timestamp, not off anything the helper has said, so
       // an item that has never reached the helper would otherwise start

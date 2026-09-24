@@ -55,6 +55,7 @@ var reviewFormat = require("../shared/review_format.js");
 var reviewWriter = require("./review_writer.js");
 var stateDir = require("./state_dir.js");
 var replies = require("./replies.js");
+var handledCheck = require("./handled_check.js");
 
 var EVENT = protocol.EVENT;
 var F = record.FIELD;
@@ -160,8 +161,12 @@ function foldEvents(state, events, options) {
         // is taken. This is D5's merge rule, on the helper's side of the wire.
         next[F.REPLY] = prev[F.REPLY];
         next[F.STATE] = prev[F.STATE];
+        // The unbacked handled claim is lifecycle, not content, so it travels
+        // with the state rather than with the browser's record.
+        next[F.HANDLED_NOT_ON_PAGE] = prev[F.HANDLED_NOT_ON_PAGE] === true;
       } else {
         next[F.REPLY] = null;
+        next[F.HANDLED_NOT_ON_PAGE] = false;
         delete replyRev[next[F.ID]];
       }
       byId[next[F.ID]] = next;
@@ -186,6 +191,7 @@ function foldEvents(state, events, options) {
       var reopened = Object.assign({}, byId[id]);
       reopened[F.STATE] = record.STATE.READY;
       reopened[F.REPLY] = null;
+      reopened[F.HANDLED_NOT_ON_PAGE] = false;
       byId[id] = reopened;
       delete replyRev[id];
       return;
@@ -200,6 +206,10 @@ function foldEvents(state, events, options) {
       var applied = Object.assign({}, item);
       applied[F.STATE] = event.state || item[F.STATE];
       applied[F.REPLY] = Object.assign({}, event.reply, { at: event[protocol.EVENT_FIELD.TS] || null });
+      // A handled claim the built page does not bear out. The state above is
+      // the item's own, unchanged, so this is the only thing that says the
+      // agent answered and the answer did not arrive.
+      applied[F.HANDLED_NOT_ON_PAGE] = event.handled_not_on_page === true;
       byId[id] = applied;
       replyRev[id] = item[F.REV];
       return;
@@ -398,6 +408,10 @@ function createProjector(options) {
   // as current as a fresh read would have been: the line before this one may
   // have appended a reply.folded event, and a stale fold would judge this line
   // against the wrong revision.
+  // The built page, as the answer to "did that handled change actually land".
+  // It owns the re-render trigger too, so a line appended in the same breath as
+  // the source edit is judged against the render that edit produces.
+  var checker = opts.handledCheck || handledCheck.createHandledCheck({ dir: dir, log: log });
   var folder =
     opts.folder ||
     replies.createReplyFolder({
@@ -405,6 +419,9 @@ function createProjector(options) {
       log: log,
       items: function (reviewId) {
         return itemsOf(catchUp(reviewId).fold);
+      },
+      pageShows: function (reviewId, item) {
+        return checker.pageShows(reviewId, item);
       }
     });
 

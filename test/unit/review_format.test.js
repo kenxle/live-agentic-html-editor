@@ -69,6 +69,9 @@ const CONTRACT_VERBATIM = [
     "The reviewer's rail counts from the moment they submit an item to the moment your reply lands. Thirty seconds in it starts saying nothing has come back, and after ten minutes it goes loud and offers them a button to export their feedback and take it to another agent. Having a wake channel armed does not keep that line calm, and neither does a message in a chat they cannot see: only a reply line does.",
   "Do not use a native model timer, a forever daemon, a global monitor, or a parser pipeline.",
   "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and the rail comes back on its own if a rebuild leaves it out.",
+  "When LAHE renders the page from Markdown, there is nothing for you to rebuild. Edit the .md and the page re-renders and reloads on its own. Do not rerun lahe review for that file, and never tell the reviewer to refresh or clear a cache.",
+  "A handled reply for a hand edit is checked against the built page before it retires anything. When the words in the item's after_full are not in that page, the item stays ready and carries handled_not_on_page: true, the reviewer is told the change has not reached their page, and your next drain lists the item again. Fix the source so the page really shows the words, then reply again. You cannot close an item by saying it is done.",
+  "The check reads the built page, so it can be wrong: the renderer may eat a character the reviewer typed, or you may have carried their meaning in words of your own. If the reviewer's text genuinely cannot appear on the page as written, reply not_handled and say which of those it is. A not_handled reply is never checked, it retires the item off your drain list, and the reviewer reads your reason on the card and decides. Do not keep replying handled into a check that keeps refusing it.",
   "A break the reviewer typed is part of the edit: a blank line in the after text is a paragraph break, and a single newline is a line break. Markdown does not read a single newline as a new paragraph, so write a blank line between the two paragraphs in the source, or the format's own hard-break form for a line break, then rebuild and check the page really shows the break.",
   "An edit's after is the words; after_html is the same words carrying the reviewer's bold and italic, and that formatting is part of the edit. Apply after_html, not after alone. Bold reaches you as <strong> and italic as <em>; in a Markdown source those are ** and _ (or *). When the reviewer took bold or italic OFF words that a page stylesheet makes bold or italic, HTML has no tag that says so, so the record marks that run <not-bold> or <not-italic>: make that true in the source the way the source says it, and never copy either tag into the source. A handled reply for an edit whose formatting you did not carry is a wrong handled.",
   "Links in a Markdown source are source-true: never rewrite an on-disk link to make the browser page work. The renderer translates local links when it builds the page, so fix a broken link only if it is wrong on disk too.",
@@ -140,7 +143,7 @@ test("review.json names no acknowledge command, because there is none", () => {
 
 test("the contract is exported as the module's own constant and is frozen text", () => {
   assert.deepEqual(rf.CONTRACT, CONTRACT_VERBATIM);
-  assert.equal(rf.CONTRACT.length, 45);
+  assert.equal(rf.CONTRACT.length, 48);
 });
 
 // ---------------------------------------------------------------------------
