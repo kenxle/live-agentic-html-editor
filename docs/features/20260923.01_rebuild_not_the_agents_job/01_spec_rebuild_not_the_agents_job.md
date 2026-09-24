@@ -155,6 +155,40 @@ directly above a notice saying it had not arrived. An agent that wrote real
 words still gets them drawn; the invented confirmation is suppressed when the
 check failed.
 
+## What the check looks at, and what it leaves alone
+
+The check fires on one shape only, and then only under one condition. It was
+too broad on both counts when the full browser suite ran, and it held two
+legitimately finished items open.
+
+**Checked: an ordinary EDIT with words in its `after`.** The reviewer typed a
+sentence and asked for that sentence to be on the page. That is the only shape
+where "are these words there" is the question the reviewer is actually asking.
+
+**Not checked, and why:**
+
+| Shape | Why not |
+| --- | --- |
+| A comment | There is nothing to look for. The reviewer asked in words, and the agent decides what that means on the page. |
+| A delete | Its `after` is empty, so the test has no answer. |
+| A format-only record | Its `after` equals its `before` by construction, so finding it proves nothing. |
+| A revert, `record.isRevert` | The reviewer undid a change and is asking for text to be taken OUT. Its `after` is the wording that should stand again, which the agent may never have touched, so containment passes whether or not the take-back happened. The thing that would really prove the work is an absence this test cannot see. |
+| A tool round, `record.toolRoundOf` | A page-check reopen is the tool asking for one specific thing, usually carrying a `data-lahe-id` into the source, and the browser's page check has already formed its own opinion about what is on the page. Two checks arguing means the reviewer's item never closes. |
+| An item whose `after` is empty or blank | Nothing to look for, so every page fails. |
+
+**And the condition: nothing moved.** Even for a checked shape, the words are
+only allowed to convict when nothing in the source or the page has been written
+since the reviewer committed that wording. An agent that touched either one did
+something, and grading whether it is the RIGHT something is the browser's page
+check, which has the reviewer's live page in front of it and its own
+once-per-reopen and cooldown guards.
+
+This is what makes the check safe rather than merely narrow. Without it, an
+agent that applied the change in its own words was held open forever, which is
+`test/browser/reverted_edit.spec.js` and was a real regression. With it, the
+check catches the one thing it was built for: the agent that answered handled
+having changed nothing at all.
+
 ## What this costs, and where it is weak
 
 Two things a reader should know before trusting it.
@@ -173,7 +207,8 @@ to make it a watcher.
 **The check is containment, so a short `after` gets little protection.** The
 test is "are these words in the page", which means a one-word edit, or a
 sentence the page already contained somewhere else, passes whether or not the
-agent did anything. That is deliberate: the alternative is an equality test,
+agent did anything. The nothing-moved condition above carries most of the
+weight here: an agent that wrote nothing is caught whatever its `after` says. That is deliberate: the alternative is an equality test,
 which fails every time the agent legitimately reflows a paragraph or applies
 the same change in three places. The check exists to catch the agent that
 changed nothing at all, which is the reported failure, and it does. It is not a
@@ -200,6 +235,7 @@ decides. Without that clause the agent would wake on the same item forever.
 | T8 | Browser spec through the real `lahe review file.md` walk | done |
 | T9 | Screenshot | done |
 | T10 | Review round: card clock, merge with main, the not_handled way out, wording, log once | done |
+| T11 | Full-suite round: narrow the check to the shapes and the condition where it means something | done |
 
 ## Acceptance criteria
 
@@ -216,12 +252,22 @@ decides. Without that clause the agent would wake on the same item forever.
 | A9 | The page reloads on the agent's `.md` edit alone, and the reviewer's edit survives | browser: "the agent edits the Markdown and reruns nothing, and the page follows" |
 | A10 | The card, `review.json` and the drain all say it | browser: "a handled reply the page does not bear out leaves the item open, and says so" |
 | A11 | A held-open card never runs the waiting clock | unit: "a card the handled check held open never goes late" |
+| A12 | A revert is never checked | unit: "a revert is never checked" |
+| A13 | A page-check reopen is never checked | unit: "a page-check reopen is never checked" |
+| A14 | An empty after, a delete and a format-only record are never checked | unit: "an empty after is never checked", "a delete and a format-only record are never checked" |
+| A15 | An agent that did real work in its own words is not second-guessed | unit: "an agent that rewrote the page in its own words is not second-guessed" |
 
 ## Progress
 
 Everything above is built and green.
 
-- `npm run gate:unit`: 1309 pass, 0 fail, after merging main.
+- `npm run gate:unit`: 1316 pass, 0 fail, after merging main.
+- `npx playwright test --workers=1`, the FULL suite: 394 passed, 1 failed, 3
+  skipped. The one failure is `test/browser/install_walk_3b.spec.js`, which
+  asserts `node_modules` exists in the repo root and then runs `npm link`. A
+  git worktree has no `node_modules` of its own, so that spec cannot pass from
+  a worktree at all. It is unrelated to this change and fails the same way on
+  an untouched worktree.
 - `npx playwright test test/browser/rebuild_not_the_agents_job.spec.js --workers=1`:
   2 passed.
 - `npx playwright test test/browser/markdown_render.spec.js

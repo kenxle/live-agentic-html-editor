@@ -334,6 +334,83 @@ test("a comment is not checked against the page", () => {
   assert.equal(folded[record.FIELD.HANDLED_NOT_ON_PAGE], false);
 });
 
+// ---------------------------------------------------------------------------
+// The shapes the check must keep its hands off
+// ---------------------------------------------------------------------------
+//
+// One test per exempt shape, because each one was, or would have been, a
+// finished item the check held open forever. The two browser specs named in
+// handled_check.js are the ones that actually hung.
+
+test("a revert is never checked: it asks for text to be taken OUT", () => {
+  const setup = markdownReview("# Guide\n\n## One\n\nThe reviewer's own sentence.\n");
+  const handled = anEdit({ state: record.STATE.HANDLED });
+  // The reviewer undoes it. The take-back's after is the ORIGINAL wording, and
+  // what it really asks for is the absence of the agent's change, which no
+  // containment test can see.
+  const taken = record.revertOf(handled, {});
+  assert.ok(record.isRevert(taken), "the fixture really is a take-back");
+  assert.equal(handledCheck.checkable(taken), false);
+
+  const folded = foldHandled(setup, taken);
+  assert.equal(folded[record.FIELD.STATE], record.STATE.HANDLED, "the agent's answer ends it");
+  assert.equal(folded[record.FIELD.HANDLED_NOT_ON_PAGE], false);
+});
+
+test("a page-check reopen is never checked: two checks arguing means the item never closes", () => {
+  const setup = markdownReview("# Guide\n\n## One\n\nThe first paragraph.\n");
+  const handled = anEdit({ id: "itm_tool_round", state: record.STATE.HANDLED });
+  handled[record.FIELD.REPLY] = { status: "handled", agent: "claude", at: "2026-09-23T12:00:00.000Z" };
+  const reopened = record.pageCheckReopenOf(
+    handled,
+    record.PAGE_CHECK_STAMP_NOTE,
+    "2026-09-23T12:01:00.000Z",
+    record.TOOL_ROUND.PAGE_CHECK_STAMP
+  );
+  reopened[record.FIELD.REPLY] = null;
+  assert.ok(record.toolRoundOf(reopened), "the fixture really is a tool round");
+  assert.equal(handledCheck.checkable(reopened), false);
+
+  const folded = foldHandled(setup, reopened);
+  assert.equal(folded[record.FIELD.STATE], record.STATE.HANDLED, "the agent's next handled reply ends it");
+  assert.equal(folded[record.FIELD.HANDLED_NOT_ON_PAGE], false);
+});
+
+test("an empty after is never checked: there is nothing to look for", () => {
+  assert.equal(handledCheck.checkable(anEdit({ after: "" })), false);
+  assert.equal(handledCheck.checkable(anEdit({ after: "   \n  " })), false);
+  assert.equal(handledCheck.checkable(anEdit({ after: null })), false);
+});
+
+test("a delete and a format-only record are never checked", () => {
+  const deleted = record.newItem({
+    id: "itm_deleted",
+    kind: record.KIND.DELETE,
+    state: record.STATE.READY,
+    before: "The first paragraph.",
+    after: "",
+    page_origin: "http://127.0.0.1:4321",
+    page_path: "/guide.html"
+  });
+  assert.equal(handledCheck.checkable(deleted), false);
+
+  const formatOnly = record.newItem({
+    id: "itm_format_only",
+    kind: record.KIND.FORMAT_ONLY,
+    state: record.STATE.READY,
+    before: "The first paragraph.",
+    after: "The first paragraph.",
+    after_html: "<strong>The first paragraph.</strong>",
+    page_origin: "http://127.0.0.1:4321",
+    page_path: "/guide.html"
+  });
+  assert.equal(handledCheck.checkable(formatOnly), false, "its after equals its before by construction");
+});
+
+test("an ordinary edit IS checked, so the exemptions above are exemptions", () => {
+  assert.equal(handledCheck.checkable(anEdit()), true);
+});
+
 test("cannot tell is treated as told: an unreadable page never holds an item open", () => {
   const root = tempRoot();
   const dir = path.join(root, "state");
@@ -443,4 +520,41 @@ test("a card the handled check held open never goes late, however long it sits",
   const unanswered = railItem({ id: "itm_never_answered", updated_at: longAgo, created_at: longAgo });
   const other = mountOnRail(unanswered, longAgo).cardWait(unanswered[record.FIELD.ID]);
   assert.equal(other.overdue, true);
+});
+
+// ---------------------------------------------------------------------------
+// The words only convict when nothing moved
+// ---------------------------------------------------------------------------
+//
+// Containment answers "no" in more cases than it answers "dishonestly no": the
+// agent reflowed the paragraph, split it in two, or said the same thing in its
+// own words. test/browser/reverted_edit.spec.js is that third one, and the
+// check held its finished item open. So the words are only allowed to convict
+// when nothing the review is built from was written since the reviewer typed
+// them, which is the reported failure exactly and nothing else.
+
+test("an agent that rewrote the page in its own words is not second-guessed", () => {
+  const setup = markdownReview("# Guide\n\n## One\n\nThe first paragraph.\n");
+  const item = anEdit({ after: "The reviewer's own sentence." });
+  // The agent did real work and worded it differently, which is its call to
+  // make and the reviewer's to judge.
+  editSource(setup, "# Guide\n\n## One\n\nA sentence of the agent's own.\n");
+
+  const folded = foldHandled(setup, item);
+  assert.equal(folded[record.FIELD.STATE], record.STATE.HANDLED);
+  assert.equal(folded[record.FIELD.HANDLED_NOT_ON_PAGE], false);
+});
+
+test("touchedSince is the gate, and it fails toward leaving the item alone", () => {
+  const setup = markdownReview("# Guide\n\n## One\n\nThe first paragraph.\n");
+  const meta = rebuildModule.readMeta(setup.dir, "review-md");
+  const longAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+  // Committed an hour ago, and the files were written since: not ours to grade.
+  assert.equal(handledCheck.touchedSince(meta, anEdit({ updated_at: longAgo, created_at: longAgo })), true);
+  // Committed now, nothing written since: the words are allowed to speak.
+  const soon = new Date(Date.now() + 60 * 1000).toISOString();
+  assert.equal(handledCheck.touchedSince(meta, anEdit({ updated_at: soon, created_at: soon })), false);
+  // An unreadable time is not evidence of anything.
+  assert.equal(handledCheck.touchedSince(meta, anEdit({ updated_at: "not a date", created_at: "not a date" })), true);
 });

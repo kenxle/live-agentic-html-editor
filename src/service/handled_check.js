@@ -93,10 +93,38 @@ function comparable(text) {
   }
 }
 
-/** Can this item's claim be checked at all? */
+/**
+ * Can this item's claim be checked at all?
+ *
+ * Only one shape can: an ordinary EDIT, where the reviewer typed words and
+ * asked for those words to be on the page. Everything else either has no words
+ * to look for or means something the words cannot answer, and running the check
+ * on it holds a finished item open forever.
+ *
+ *  - NOT A COMMENT, and not a DELETE or a FORMAT_ONLY record. A comment asks for
+ *    something in words and the agent decides what that means on the page. A
+ *    delete's after is empty. A format-only record's after is identical to its
+ *    before by construction, so finding it proves nothing.
+ *  - NOT A REVERT. The reviewer undid a change and is asking for text to be
+ *    TAKEN OUT of the source. Its after is the wording that should stand again,
+ *    which the agent may well have left exactly where it was, so containment
+ *    passes whether or not the take-back happened, and the one thing that would
+ *    really prove the work is an absence this test cannot see. Checking it also
+ *    broke a real flow: test/browser/undo_reaches_helper.spec.js hung waiting
+ *    for a handled reply that was correct to fold.
+ *  - NOT A TOOL ROUND. A page-check reopen is the tool asking the agent for one
+ *    specific thing, usually to carry a data-lahe-id into the source, and the
+ *    page check has already formed its own opinion about what is on the page.
+ *    A second, cruder opinion on top of it is two checks arguing, and the loser
+ *    is the reviewer, whose item never closes. See
+ *    test/browser/reverted_edit.spec.js.
+ *  - NOT AN EMPTY AFTER. There is nothing to look for, so every page fails.
+ */
 function checkable(item) {
   if (!item) return false;
   if (item[record.FIELD.KIND] !== record.KIND.EDIT) return false;
+  if (record.isRevert(item)) return false;
+  if (record.toolRoundOf(item)) return false;
   var after = item[record.FIELD.AFTER];
   return typeof after === "string" && after.trim().length > 0;
 }
@@ -144,6 +172,49 @@ function pageFilesFor(meta, item) {
 }
 
 /**
+ * Has anything this review is built from been written since the reviewer
+ * committed this wording?
+ *
+ * THE SECOND HALF OF THE RULE, and the one that keeps the first half honest.
+ * Containment asks "are the reviewer's words on the page", and the answer is
+ * legitimately no in more cases than it is dishonestly no: the agent reflowed
+ * the paragraph, split it in two, used its own wording for the same meaning,
+ * or the renderer ate a character. Holding an item open on that is the tool
+ * arguing with an agent that did the work, and the reviewer is the one who
+ * pays for the argument.
+ *
+ * So the words are only allowed to convict when nothing moved. An agent that
+ * touched the source or the page made a change, and judging whether it is the
+ * RIGHT change is the browser's page check, which has the reviewer's live page
+ * in front of it and its own once-per-reopen guards. This check is for the one
+ * thing the page check cannot be relied on to catch in time: the agent that
+ * answered handled having changed nothing at all, which is the reported
+ * failure in its entirety.
+ *
+ * Unknown times answer true, which means "not our business". Failing toward
+ * leaving the item alone is the same direction every other doubt here fails.
+ *
+ * @returns {boolean} true when something was written since, or cannot be told
+ */
+function touchedSince(meta, item) {
+  var at = item && (item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT]);
+  var committedAt = typeof at === "string" ? Date.parse(at) : NaN;
+  if (!Number.isFinite(committedAt)) return true;
+  var files = pageFilesFor(meta, item);
+  if (typeof meta.source_path === "string" && meta.source_path) files.push(meta.source_path);
+  for (var i = 0; i < files.length; i += 1) {
+    var stat;
+    try {
+      stat = fs.statSync(files[i]);
+    } catch (error) {
+      continue;
+    }
+    if (stat.mtimeMs > committedAt) return true;
+  }
+  return false;
+}
+
+/**
  * The handled check for one state directory.
  *
  * @param {{dir: string, log?: object, rebuild?: object}} options `rebuild` is a
@@ -180,6 +251,10 @@ function createHandledCheck(options) {
       }
     }
 
+    // Something was written since the reviewer committed these words, so an
+    // agent did something and what it did is not this check's to grade.
+    if (touchedSince(meta, item)) return null;
+
     var needle = comparable(item[record.FIELD.AFTER]);
     if (!needle) return null;
 
@@ -205,6 +280,7 @@ function createHandledCheck(options) {
 
 module.exports = {
   decodeEntities: decodeEntities,
+  touchedSince: touchedSince,
   comparable: comparable,
   checkable: checkable,
   pageFilesFor: pageFilesFor,
