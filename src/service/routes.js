@@ -568,9 +568,11 @@ function workCacheFor(deps) {
  * counting the same items.
  *
  * THE AGE IS THE LAST TRANSITION, not the first. An item the reviewer reopened
- * this minute carries a created_at from hours ago, and reporting that made the
+ * this minute carries a card_first_created_at from hours ago, and reporting that
+ * made the
  * rail say "oldest item 4h" about work that became work four seconds ago.
- * updated_at is when it last became something an agent has to answer.
+ * reviewer_last_changed_at is when it last became something an agent has to
+ * answer.
  */
 function unansweredWork(request, deps) {
   var out = { unanswered: 0, oldest: null, oldestItem: null, lastReplyAt: null };
@@ -614,7 +616,9 @@ function unansweredWork(request, deps) {
       });
       if (!record.isUnansweredReady(item)) return;
       out.unanswered += 1;
-      var at = item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || null;
+      // These are PROJECTED items, so the names are the projection's: when the
+      // reviewer last changed the item, then the card's first-created time.
+      var at = item.reviewer_last_changed_at || item.card_first_created_at || null;
       if (typeof at === "string" && at && (!out.oldest || at < out.oldest)) {
         out.oldest = at;
         out.oldestItem = item[record.FIELD.ID] || null;
