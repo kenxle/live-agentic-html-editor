@@ -759,7 +759,12 @@
     var missing = [];
     REPLY_REQUIRED[status].forEach(function (field) {
       var v = parsed[field];
-      if (v === null || v === undefined || v === "") missing.push(field);
+      // A string of spaces is missing too. A hand-appended not_handled whose
+      // reason is "" or "   " draws a refusal with nothing in it on the
+      // reviewer's card, so it is reported as a malformed line (a dismissible
+      // chip naming the file and the line) rather than shown to them as an
+      // answer.
+      if (v === null || v === undefined || v === "" || (typeof v === "string" && !v.trim())) missing.push(field);
     });
     if (typeof parsed[REPLY_FIELD.ITEM] !== "string") missing.push(REPLY_FIELD.ITEM);
     if (typeof parsed[REPLY_FIELD.REV] !== "number") missing.push(REPLY_FIELD.REV);

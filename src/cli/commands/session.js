@@ -203,7 +203,11 @@ function reviewWork(dir, reviewId) {
   var open = items.filter(statusCommand.isUnansweredReady);
   var oldest = null;
   open.forEach(function (item) {
-    var at = item.created_at || item.updated_at || null;
+    // WHEN IT LAST BECAME WORK, not when the card was opened. A card reworded a
+    // minute ago is a minute of waiting, and "oldest unanswered 1d" about it is
+    // the staleness signal this whole branch exists to take away. Same order as
+    // routes.js unansweredWork.
+    var at = item.reviewer_last_changed_at || item.card_first_created_at || null;
     if (typeof at === "string" && at && (!oldest || at < oldest)) oldest = at;
   });
   return { unanswered: open.length, oldestUnansweredAt: oldest, lastItemAt: statusCommand.lastItemAt(items) };

@@ -180,7 +180,7 @@ function countsOf(items) {
 function lastItemAt(items) {
   var newest = null;
   items.forEach(function (item) {
-    [item.updated_at, item.created_at].forEach(function (at) {
+    [item.reviewer_last_changed_at, item.card_first_created_at].forEach(function (at) {
       if (typeof at === "string" && at && (!newest || at > newest)) newest = at;
     });
   });
@@ -768,6 +768,10 @@ async function run(argv, options) {
       );
     } else {
       open.forEach(function (item) {
+        // WHEN THE REVIEWER LAST CHANGED THESE WORDS, on the item's own line.
+        // An item on this list is outstanding whatever its card's age, and the
+        // age is what an agent refused two reworded cards over on 2026-09-23.
+        var changed = ago(item.reviewer_last_changed_at, nowMs);
         lines.push(
           "  " +
             item.id +
@@ -776,7 +780,8 @@ async function run(argv, options) {
             "  " +
             (item.page && item.page.path ? item.page.path : "?") +
             "  " +
-            excerpt(item)
+            excerpt(item) +
+            (changed ? "  [last changed " + changed + "]" : "")
         );
       });
     }
