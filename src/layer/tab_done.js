@@ -462,6 +462,13 @@
   // A constant, so the test asserts the sentence the reviewer sees.
   var STALE_NOTICE = "answered an older version of this, so it is still open. Nothing was lost.";
 
+  // THE AGENT SAID DONE AND THE PAGE DOES NOT SHOW IT. The helper compared the
+  // words of this edit against the page in front of the reviewer and did not
+  // find them, so the item did not retire. The sentence says what the reviewer
+  // can see for themselves and stops there: no rebuild, no render, no reply
+  // file, nothing about how the page got here. They are looking at a document.
+  var NOT_ON_PAGE_NOTICE = "says this is done, but I could not find the change on your page. It is still open.";
+
   // The name this file's sheet answers to inside the rail's closed root.
   var SHEET_KEY = "tab_done";
 
@@ -976,6 +983,16 @@
           rail.setCardNotice(item[record.FIELD.ID], toolRoundNotice(item));
         } else if (item[record.FIELD.REPLY]) {
           drawComposer(item);
+          // A cold load reads the record out of storage rather than replaying a
+          // fold, so the sentence is put back here too. Otherwise the card that
+          // said the change had not arrived says nothing after a refresh, which
+          // is the silence this whole change exists to remove.
+          if (item[record.FIELD.HANDLED_NOT_ON_PAGE] === true) {
+            rail.setCardNotice(
+              item[record.FIELD.ID],
+              agentName(item[record.FIELD.REPLY]) + " " + NOT_ON_PAGE_NOTICE
+            );
+          }
           if (item[record.FIELD.REPLY].status === record.REPLY_STATUS.QUESTION) {
             rail.setAgentMessage(item[record.FIELD.ID], null);
             drawQuestion(item);
@@ -1121,6 +1138,13 @@
       var reply = item[record.FIELD.REPLY];
       if (!reply) return null;
       var said = reply.text || reply.reason;
+      // NO INVENTED CONFIRMATION UNDER A NOTICE THAT SAYS THE OPPOSITE. The
+      // wordless fallback below puts "carried this change into the source" on
+      // the card. When the helper has just looked at the page and not found the
+      // change, that sentence sits directly above a notice saying it is not
+      // there, and the reviewer has to decide which half of their own rail to
+      // believe. An agent that wrote real words still gets them drawn.
+      if (!said && item[record.FIELD.HANDLED_NOT_ON_PAGE] === true) return null;
       return {
         status: reply.status || null,
         // Agent name and reason are agent-controlled and reach the rail, so they
@@ -2000,12 +2024,17 @@
         at: event[protocol.EVENT_FIELD.TS] || null,
         user_needs_to_see_reply: reply.user_needs_to_see_reply === true
       };
+      var notOnPage = event.handled_not_on_page === true;
+      next[record.FIELD.HANDLED_NOT_ON_PAGE] = notOnPage;
       if (next[record.FIELD.STATE] === record.STATE.HANDLED) forgetLostAnchor(next);
       store.write(reviewId, next);
 
       rail.upsertCard(next);
       rail.setCardState(id, shownState(next));
-      rail.setCardNotice(id, null);
+      // The one sentence that is not "the agent answered": the answer arrived
+      // and the change did not. The card keeps saying it, because the item is
+      // still the reviewer's outstanding work.
+      rail.setCardNotice(id, notOnPage ? agentName(reply) + " " + NOT_ON_PAGE_NOTICE : null);
       if (next[record.FIELD.STATE] === record.STATE.HANDLED) clearAnchorBadges(id);
 
       // THE ANSWER TO A TOOL ROUND. The tool asked, the agent answered, and the
@@ -2181,6 +2210,7 @@
       ASKING_ATTR: ASKING_ATTR,
       UNSEEN_ATTR: UNSEEN_ATTR,
       STALE_NOTICE: STALE_NOTICE,
+      NOT_ON_PAGE_NOTICE: NOT_ON_PAGE_NOTICE,
       mount: mount,
       unmount: unmount,
       refresh: refresh,
@@ -2263,6 +2293,7 @@
     ASKING_ATTR: ASKING_ATTR,
     UNSEEN_ATTR: UNSEEN_ATTR,
     STALE_NOTICE: STALE_NOTICE,
+    NOT_ON_PAGE_NOTICE: NOT_ON_PAGE_NOTICE,
     STYLE: STYLE,
     TOAST_LABEL: TOAST_LABEL,
     NEGLECT_MS: NEGLECT_MS,
