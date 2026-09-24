@@ -12,11 +12,25 @@
 // for a HAND EDIT is checked against the built page before it is allowed to
 // retire anything.
 //
-// WHAT THE CHECK IS. The item's `after` is the words the reviewer put on the
-// page. If those words are in the page's text, the change arrived. That is the
-// whole test. It is deliberately a containment test and not an equality test:
-// the agent may have reflowed the paragraph, moved it, or made the same change
-// in three other places, and none of that is a failure.
+// WHAT THE CHECK IS. Two halves, and an item is only held open when BOTH say so.
+//
+//   1. NOTHING WAS WRITTEN. No file this review is built from, source or page,
+//      has been written since the reviewer committed this wording. See
+//      touchedSince below: this is the gate, and it decides whether the words
+//      are consulted at all.
+//   2. THE WORDS ARE NOT THERE. The item's `after` is the words the reviewer
+//      put on the page, and they are not in the page's text.
+//
+// The second half alone is far too strict to act on. It is a containment test
+// rather than an equality test, so a reflowed paragraph or the same change made
+// in three other places still passes, but an agent that carried the reviewer's
+// meaning in its own words does not, and holding a finished item open on that
+// is the tool arguing with an agent that did the work. The first half is what
+// keeps it honest: an agent that touched anything made a change, and grading
+// whether it is the RIGHT change belongs to the browser's page check, which has
+// the reviewer's live page in front of it and its own once-per-reopen guards.
+// What is left is the one thing this exists for: the agent that answered
+// handled having changed nothing at all.
 //
 // TOLERANT OF TYPOGRAPHY. A Markdown source holds a straight quote where the
 // built HTML holds a curly one, and an agent that types the sentence correctly
@@ -30,6 +44,13 @@
 //    in words and the agent decides what that means on the page. Only an item
 //    carrying the reviewer's own after-text can be checked at all.
 //  - A DELETE. Its after is empty, so "is it there" has no answer.
+//  - A REVIEW SOMETHING HAS WRITTEN TO. touchedSince, the gate above. An agent
+//    that edited the source or the page did work, and this is not the thing
+//    that grades it.
+//  - A REVERT, AND A TOOL ROUND. A take-back asks for text to be taken OUT, and
+//    a page-check reopen is the browser's own check already mid-conversation
+//    with the agent. See checkable below for both, and for the shapes with no
+//    words to look for.
 //  - A REVIEW WHOSE PAGE CANNOT BE READ. A page behind somebody else's dev
 //    server, a file that moved, a folder review whose page cannot be resolved:
 //    all answer "cannot tell", and cannot tell is treated as present. The tool
@@ -175,6 +196,16 @@ function pageFilesFor(meta, item) {
  * Has anything this review is built from been written since the reviewer
  * committed this wording?
  *
+ * THE SCOPE IS THE REVIEW, NOT THE ITEM. Every file the review is built from is
+ * stat'ed, so one write anywhere disarms the check for every item in that
+ * review until the reviewer commits something newer. That is deliberate, and it
+ * is also the shape the reported failure arrived in: an agent that fixes item
+ * one and then answers handled to items one through five leaves two to five
+ * unguarded, because the file it wrote for item one is newer than all of them.
+ * Narrowing it to the passage an item points at would mean resolving a record's
+ * region inside a source file, which is the anchor engine's job and not
+ * something the helper can do from a path and an mtime.
+ *
  * THE SECOND HALF OF THE RULE, and the one that keeps the first half honest.
  * Containment asks "are the reviewer's words on the page", and the answer is
  * legitimately no in more cases than it is dishonestly no: the agent reflowed
@@ -193,6 +224,15 @@ function pageFilesFor(meta, item) {
  *
  * Unknown times answer true, which means "not our business". Failing toward
  * leaving the item alone is the same direction every other doubt here fails.
+ *
+ * THE ASSUMPTION IT RESTS ON. `updated_at` was minted by the reviewer's BROWSER
+ * and the mtimes are read by the HELPER off the filesystem, so this compares two
+ * clocks. Today they are the same machine, which is what makes it safe: the
+ * helper is loopback-only and the page is served from it. If a page clock ever
+ * ran ahead of the filesystem's, a real write would look older than the commit
+ * and the gate would open when it should have stayed shut, which costs a false
+ * "not on your page" rather than a missed one. That is the right direction for
+ * the error to fall, but it is an assumption and not a guarantee.
  *
  * @returns {boolean} true when something was written since, or cannot be told
  */

@@ -189,6 +189,20 @@ agent that applied the change in its own words was held open forever, which is
 check catches the one thing it was built for: the agent that answered handled
 having changed nothing at all.
 
+**The condition covers a REVIEW where nothing moved, not an ITEM where nothing
+moved, and that is a real gap.** Every file the review is built from is stat'ed,
+so one write anywhere disarms the check for every item in that review. An agent
+that fixes item one and then replies handled to items one through five is
+unguarded on two through five, because the file it wrote for item one is newer
+than all of them. That is exactly the batch shape the reported failure arrived
+in, so the check is weakest in the situation that produced it: it catches an
+agent that did nothing at all, and not an agent that did some of it.
+
+Narrowing it to the passage an item points at would mean resolving a record's
+region inside a source file, which is the anchor engine's job and is not
+something the helper can do from a path and a modification time. If this gap is
+worth closing, that is the shape of the work, and it is bigger than this change.
+
 ## What this costs, and where it is weak
 
 Two things a reader should know before trusting it.
