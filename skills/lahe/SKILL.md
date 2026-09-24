@@ -250,8 +250,9 @@ Work each item against this checklist. It is the contract's rules, said short.
   wrong on disk too.
 
 Then make the change in the source and rebuild. `handled` means the reviewer's
-page shows the change now. For a page built from a source, the item's
-`source_hint` names that source file or the build entrypoint:
+page shows the change now, and for a hand edit that is checked rather than taken
+on trust: see "A handled reply is checked" below. For a page built from a
+source, the item's `source_hint` names that source file or the build entrypoint:
 
 ```sh
 # 1. edit the source file the item points at
@@ -263,7 +264,22 @@ grep -n "the new wording" path/to/built/page.html
 
 Their page reloads onto your change by itself and re-applies their outstanding
 comments and edits. It waits while they are mid-edit, and an edit to one page
-never reloads another.
+never reloads another. When the page is one LAHE rendered from Markdown, the
+re-render is LAHE's job too: edit the `.md` and the page follows.
+
+#### A handled reply is checked
+
+A `handled` reply for a hand edit is compared against the built page before it
+retires anything. When the item's `after_full` text is not in that page:
+
+- the item stays `ready` and carries `handled_not_on_page: true`
+- the reviewer's card says the change has not reached their page
+- your next drain lists the item again
+
+What the agent said is still on the card, so a real explanation is not lost. Fix
+the source until the page really shows the words, then reply again. Saying an
+item is done is not a way to close it. Comments are not checked: there is
+nothing to look for.
 
 ### Step 5. Reply
 
@@ -307,7 +323,7 @@ legacy command; use `lahe review` for normal work.)
 
 | What your human is looking at | Open it with | Where your edits go | What `handled` needs |
 | --- | --- | --- | --- |
-| A Markdown file, on its own | `lahe review file.md` | the `.md` itself | rerun the same `lahe review`, check the rendered page |
+| A Markdown file, on its own | `lahe review file.md` | the `.md` itself | nothing: the page re-renders and reloads itself. Check the rendered page |
 | HTML that IS the source: a hand-written one-pager, a mockup | `lahe review page.html` | the page file the item names | in the file and on their screen |
 | A FOLDER of HTML pages that is the document | `lahe review folder` | the page file the item names | in that file and on their screen |
 | One page in a folder they did NOT ask you to touch | `lahe review page.html --only` | that one HTML file | in the file and on their screen |
@@ -332,8 +348,10 @@ several inputs is the multi-source row. When a project already builds with
 Pandoc, keep its command, template, styles, and filters in the project so another
 agent can rebuild the same output.
 
-After a change, rerun the same `lahe review file.md` before you reply `handled`.
-It reuses the session and review and rebuilds the page.
+After a change there is nothing to rerun. LAHE notices the `.md` is newer than
+the page it rendered, renders it again, and the reviewer's page reloads onto the
+new render on its own. Do not rerun `lahe review` for that file, and never tell
+the reviewer to refresh or clear a cache.
 
 A local link that renders as plain text is one the tool cannot serve. It is not a
 bug to fix in the source.
@@ -553,6 +571,8 @@ Each of these is a rule that a live review paid for.
    close that tab: two tabs on one document split the comments in half.
 3. **Rebuild and verify before `handled`.** A reply ahead of the rebuild leaves the
    page saying the old thing, and the reviewer has to ask why nothing changed.
+   For a hand edit, LAHE checks: a `handled` whose words are not in the built
+   page does not retire the item.
 4. **Rebuild as you go.** The page re-applies their work over your changes; a page
    that never reloads until the end is the real failure.
 5. **Write replies with `lahe reply`.** A hand-appended reply with a raw line break
