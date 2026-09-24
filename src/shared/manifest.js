@@ -242,8 +242,6 @@ var NON_BUNDLE_FILES = [
   { path: "src/service/projection.js", owner: "3A", why: "the log projected into review.json and the reply state the library polls" },
   { path: "src/service/review_writer.js", owner: "3A", why: "the single writer of review.json, and the path-safety rules" },
   { path: "src/service/replies.js", owner: "3A", why: "reply file discovery, byte-offset reading, folding, the conflict rule" },
-  { path: "src/service/rebuild.js", owner: "3A", why: "re-renders a Markdown review's page when the source moves, so no agent has to remember to" },
-  { path: "src/service/handled_check.js", owner: "3A", why: "is a handled claim true on the built page; the one thing that stops an item retiring on a claim" },
 
   { path: "src/cli/index.js", owner: "1A", why: "the command dispatcher: serve, add, status, reply" },
   { path: "src/cli/commands/serve.js", owner: "1A", why: "serve" },

@@ -64,10 +64,7 @@ test("lahe review renders Markdown without touching it, serves assets, and reuse
   const sessionId = first.stdout.match(/^\s*session\s+(s_[a-f0-9]+)/m)[1];
   const reviewId = first.stdout.match(/^\s*review\s+(r[a-f0-9]+)/m)[1];
   const open = first.stdout.match(/^\s*open\s+(http:\/\/\S+)/m)[1];
-  // The rebuild is not the agent's job any more: the helper re-renders the
-  // artifact when the Markdown moves (src/service/rebuild.js), so the line that
-  // told an agent to rerun the command would now be telling it to do nothing.
-  assert.match(first.stdout, /rebuild\s+nothing to do\. Edit the Markdown and the page re-renders and reloads itself/);
+  assert.match(first.stdout, /rebuild\s+rerun this same review command after editing the Markdown, before replying handled/);
   // The wake line comes first and names the real path, so a Claude Code Monitor
   // can be armed by copying it rather than by assembling it from a doc.
   const wakePath = first.stdout.match(/^\s*wake\s+tail -n 0 -f (\S+)$/m);

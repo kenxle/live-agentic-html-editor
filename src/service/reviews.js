@@ -53,7 +53,6 @@ var protocol = require("../shared/protocol.js");
 var elapsed = require("../shared/elapsed.js");
 var stateDir = require("./state_dir.js");
 var healModule = require("./heal.js");
-var rebuildModule = require("./rebuild.js");
 var staticServersModule = require("./static_servers.js");
 
 var TOKEN_BYTES = 32;
@@ -676,14 +675,6 @@ function createReviews(options) {
   // that carries the library again. See src/service/heal.js for the rules.
   var healer = healModule.createHealer({ log: log, now: clock });
 
-  // And the same stat, extended again: a review whose page LAHE renders from
-  // Markdown has its page re-rendered here, before the mtime is read, whenever
-  // the Markdown is newer than the render. That is what makes the reload happen
-  // for an agent that edited the source and did not rerun the review command.
-  // It is the only way the page ever moves for that agent, so it must not be
-  // conditional on anything the agent does. See src/service/rebuild.js.
-  var rebuilder = rebuildModule.createRebuilder({ dir: dir, log: log, clock: clock, ttlMs: MTIME_TTL_MS });
-
   /**
    * The origin the healed script line names the helper by.
    *
@@ -797,16 +788,6 @@ function createReviews(options) {
       return selected && Object.prototype.hasOwnProperty.call(cached.byPath, selected)
         ? cached.byPath[selected]
         : null;
-    }
-    // BEFORE THE STAT, NEVER AFTER IT. The number reported below has to be the
-    // new render's, or the page polls once more before it reloads and the
-    // reviewer sees a page that is one beat behind. Fail soft is the rebuilder's
-    // own rule; the try is the second guard on it, because nothing in here may
-    // cost the page the route it depends on.
-    try {
-      rebuilder.refresh(review);
-    } catch (error) {
-      log.helperLog("review " + review.id + ": the re-render trigger threw and was ignored: " + error.message);
     }
     var byPath = Object.create(null);
     var newest = null;

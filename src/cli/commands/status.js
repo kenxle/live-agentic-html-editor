@@ -781,14 +781,7 @@ async function run(argv, options) {
             (item.page && item.page.path ? item.page.path : "?") +
             "  " +
             excerpt(item) +
-            (changed ? "  [last changed " + changed + "]" : "") +
-            // SAID OUT LOUD, not only in the JSON. This item is back because an
-            // agent answered handled and the built page does not show the
-            // words. Without the line, the item simply reappears and reads like
-            // a drain that is not draining.
-            (item.handled_not_on_page === true
-              ? "\n            answered handled already, but the built page does not show this text; it is still open"
-              : "")
+            (changed ? "  [last changed " + changed + "]" : "")
         );
       });
     }

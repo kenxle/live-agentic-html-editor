@@ -618,18 +618,7 @@ function unansweredWork(request, deps) {
       out.unanswered += 1;
       // These are PROJECTED items, so the names are the projection's: when the
       // reviewer last changed the item, then the card's first-created time.
-      //
-      // AN ITEM THE HANDLED CHECK HELD OPEN IS DATED FROM THE REPLY. It is
-      // unanswered work, so it belongs in the count above, but nobody has been
-      // silent on it: the agent answered and the answer did not land on the
-      // page. Dating it from the reviewer's edit would make the rail say
-      // nothing has come back for an hour on a card that shows what the agent
-      // said, and eventually offer to take the work elsewhere.
-      var at =
-        (item.handled_not_on_page === true && item[record.FIELD.REPLY] && item[record.FIELD.REPLY].at) ||
-        item.reviewer_last_changed_at ||
-        item.card_first_created_at ||
-        null;
+      var at = item.reviewer_last_changed_at || item.card_first_created_at || null;
       if (typeof at === "string" && at && (!out.oldest || at < out.oldest)) {
         out.oldest = at;
         out.oldestItem = item[record.FIELD.ID] || null;

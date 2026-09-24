@@ -182,19 +182,9 @@
   // The whole decision about what one reply line does to one item, in one pure
   // function, so the helper (3A) and the library (1B) cannot disagree about it.
   //
-  // `reply.page_shows_change` is the built page's answer to a handled claim,
-  // and only the helper can supply it (it is the thing that can read the file).
-  // False means the agent said it made the change and the words are not on the
-  // reviewer's page. That is not a refusal: the reply is real, the agent's words
-  // belong on the card, and the agent may have done real work. It is a handled
-  // that does not retire. The item stays where it was, and the answer carries
-  // `not_on_page` so every surface can say the same thing about it. Anything
-  // other than exactly false (undefined, null, true) means the ordinary rule:
-  // the check did not run, or it passed.
-  //
   // @param {Object} item the item as it stands now
-  // @param {Object} reply {rev, status, agent, reason, text, files, page_shows_change}
-  // @returns {Object} {accepted, state, refusal, not_on_page}
+  // @param {Object} reply {rev, status, agent, reason, text, files}
+  // @returns {Object} {accepted, state, refusal}
   function applyReply(item, reply) {
     var r = reply || {};
     if (record.REPLY_STATUSES.indexOf(r.status) === -1) {
@@ -216,9 +206,6 @@
     // on the card, and it is not a state change.
     if (r.status === record.REPLY_STATUS.QUESTION) {
       return { accepted: true, state: item[FIELD.STATE], refusal: null };
-    }
-    if (r.status === record.REPLY_STATUS.HANDLED && r.page_shows_change === false) {
-      return { accepted: true, state: item[FIELD.STATE], refusal: null, not_on_page: true };
     }
     var to = r.status === record.REPLY_STATUS.HANDLED ? STATE.HANDLED : STATE.NOT_HANDLED;
     if (!canTransition(item[FIELD.STATE], to, ACTOR.AGENT)) {

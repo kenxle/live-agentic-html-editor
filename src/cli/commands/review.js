@@ -298,7 +298,7 @@ async function run(argv) {
     if (rendered) {
       process.stdout.write(
         "  source    " + originalTarget + "  (Markdown rendered deterministically)\n" +
-        "  rebuild   nothing to do. Edit the Markdown and the page re-renders and reloads itself\n" +
+        "  rebuild   rerun this same review command after editing the Markdown, before replying handled\n" +
         (rendered.linkMounts.length
           ? "  links     " + rendered.linkMounts.length + " linked folder" +
             (rendered.linkMounts.length === 1 ? "" : "s") + " served read-only for this session\n"

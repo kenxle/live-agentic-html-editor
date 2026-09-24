@@ -26,11 +26,7 @@ sequenceDiagram
 
     Note over Ag,Lib: Only the agent's half branches
 
-    alt Markdown, LAHE renders the page
-        Ag->>Ag: edits the .md, and reruns nothing
-        Hp->>Hp: notices the source is newer, renders the page again
-        Hp->>Lib: page reloads onto the new render
-    else Served page, LAHE watches the file
+    alt Served page, LAHE watches the file
         Ag->>Ag: edits source, rebuilds
         Ag->>St: verifies the change, is now in the built page
         Hp->>Lib: page reloads onto the new build
@@ -49,7 +45,6 @@ sequenceDiagram
     end
 
     Ag->>St: appends one reply line
-    Hp->>Hp: for a hand edit, checks the built page really shows it
     Lib->>Hp: polls for replies
     Hp->>Lib: reply arrives
     Lib->>Rv: card updates, highlight clears
@@ -57,25 +52,17 @@ sequenceDiagram
 
 ## What to notice
 
-- Six sequences that are mostly identical would drift. This is one shared
+- Five sequences that are mostly identical would drift. This is one shared
   spine with a labeled fan on the agent's side, because everything up to
   "agent reads review.json" happens the same way regardless of how the page
   is served.
-- The Markdown branch has no agent step for the rebuild, on purpose. The
-  helper renders the page from the `.md` and is the thing that notices the
-  `.md` has moved, so an agent that forgets is not a failure mode. See
-  `src/service/rebuild.js`.
-- The check after the reply line is not bookkeeping. A handled claim for a
-  hand edit is compared against the built page, and an item whose words are
-  not there stays outstanding rather than retiring on the agent's word. See
-  `src/service/handled_check.js`.
 - The `file://` branch is marked because it is the one path where the loop
   can quietly break. There is no server putting the script line into a
   response, so the line is written into the HTML file itself. An agent that
   rewrites the whole page takes the line out with it, and the only way it
   comes back is if a page with a live library is still polling the helper
   when the rewritten file reappears.
-- There is a seventh path with no agent loop at all: the library works with no
+- There is a sixth path with no agent loop at all: the library works with no
   helper running. Everything stays in the browser, and the copy and export
   buttons on the rail carry the reviewer's feedback out by hand. No work is
   lost, there is just nothing to drain.

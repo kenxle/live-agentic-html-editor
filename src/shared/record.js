@@ -86,13 +86,6 @@
     // What the agent said, folded from its reply line.
     REPLY: "reply",
 
-    // The agent replied handled and the built page does not show this edit's
-    // words. True means the claim was checked and failed, so the item did not
-    // retire: it is still the reviewer's outstanding work and still on the
-    // agent's drain list. Absent or false everywhere else, including on every
-    // item whose claim cannot be checked at all.
-    HANDLED_NOT_ON_PAGE: "handled_not_on_page",
-
     // Completed reviewer/agent exchanges, oldest first. The current exchange
     // stays in NOTE/CHANGE + REPLY until the reviewer continues it.
     THREAD: "thread",
@@ -902,7 +895,6 @@
     item[FIELD.SOURCE_HINT] = src.source_hint || page.source_hint || null;
     item[FIELD.REVERTS] = typeof src.reverts === "string" && src.reverts ? src.reverts : null;
     item[FIELD.REPLY] = src.reply || null;
-    item[FIELD.HANDLED_NOT_ON_PAGE] = src.handled_not_on_page === true;
     item[FIELD.THREAD] = Array.isArray(src.thread) ? src.thread.slice() : [];
     item[FIELD.CREATED_AT] = at;
     item[FIELD.UPDATED_AT] = src.updated_at || at;
@@ -938,13 +930,7 @@
    * stopped agreeing the moment the route spelled the rule out a second time.
    */
   function isUnansweredReady(item) {
-    if (!item || item[FIELD.STATE] !== STATE.READY) return false;
-    // A HANDLED CLAIM THE PAGE DOES NOT BEAR OUT IS NOT AN ANSWER. The item
-    // carries a reply, so the plain rule above would drop it off the drain list
-    // and the agent would never hear that its change did not arrive. It is the
-    // one reply that leaves the work exactly where it was.
-    if (item[FIELD.HANDLED_NOT_ON_PAGE] === true) return true;
-    return !item[FIELD.REPLY];
+    return !!item && item[FIELD.STATE] === STATE.READY && !item[FIELD.REPLY];
   }
 
   // Outstanding for the reviewer: still in front of them. A handled item is
