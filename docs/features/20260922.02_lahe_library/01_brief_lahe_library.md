@@ -35,7 +35,6 @@ The key design question, for the wireframe: **what is one row?** A document, a r
 - Deleting or archiving. Every review stays on disk.
 - Starting LAHE at login. After a restart, an agent starts LAHE, and the Library works from then on.
 - Searching inside documents. Search covers what a row shows.
-- Letting the page or LAHE start an agent or any other program. Only a running agent does that, when Ken clicks.
 - Replacing `lahe session list`, which stays the tool agents use.
 
 ## User & Context
