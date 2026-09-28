@@ -117,6 +117,14 @@ function rowLocator(page, reviewId) {
   return page.locator('li[data-review="' + reviewId + '"]');
 }
 
+// Pick this up and Launch sit behind the row's Hand to agent menu.
+async function handTo(page, reviewId, action) {
+  const row = rowLocator(page, reviewId);
+  const menu = row.locator('[data-act="menu"]');
+  if ((await menu.getAttribute("aria-expanded")) !== "true") await menu.click();
+  await row.locator('[data-act="' + action + '"]').click();
+}
+
 test.use({ timezoneId: "UTC", viewport: { width: 1200, height: 900 } });
 
 test.describe("the Library page", () => {
@@ -222,7 +230,7 @@ test.describe("the Library page", () => {
       answers: { "catalog.request": () => ({ status: 200, body: { request_id: "cq_new" } }) }
     });
     await openLibrary(page, helper);
-    await rowLocator(page, "r_mounted").locator('[data-act="pickup"]').click();
+    await handTo(page, "r_mounted", "pickup");
 
     const dialog = page.locator("#lahe-catalog-confirm");
     await expect(dialog).toBeVisible();
@@ -247,10 +255,10 @@ test.describe("the Library page", () => {
     await routeCatalog(page, { list: freshList });
     await openLibrary(page, helper);
     const dialog = page.locator("#lahe-catalog-confirm");
-    await rowLocator(page, "r_mounted").locator('[data-act="launch"]').click();
+    await handTo(page, "r_mounted", "launch");
     await dialog.locator('[data-act="cancel"]').click();
     await expect(dialog).toBeHidden();
-    await rowLocator(page, "r_mounted").locator('[data-act="launch"]').click();
+    await handTo(page, "r_mounted", "launch");
     await expect(dialog).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
@@ -268,7 +276,7 @@ test.describe("the Library page", () => {
     );
     const message = protocol.AGENT_LIVENESS.handoffMessage("s_coach", "coach activity", false);
     for (const action of ["pickup", "launch"]) {
-      await rowLocator(page, "r_mounted").locator('[data-act="' + action + '"]').click();
+      await handTo(page, "r_mounted", action);
       const panel = rowLocator(page, "r_mounted").locator(".lib-panel");
       await expect(panel.locator("p")).toHaveText(
         "No agent is attached. This is the same hand-off message the rail already copies. Paste it into any agent:"
@@ -287,9 +295,9 @@ test.describe("the Library page", () => {
     await openLibrary(page, helper);
     const row = rowLocator(page, "r_brief");
     await expect(row.locator(".lib-note-text")).toHaveText("Waiting for document index.");
-    await row.locator('[data-act="pickup"]').click();
+    await handTo(page, "r_brief", "pickup");
     await expect(row.locator(".lib-note-text")).toHaveText("Already waiting for document index.");
-    await row.locator('[data-act="launch"]').click();
+    await handTo(page, "r_brief", "launch");
     await expect(row.locator(".lib-note-text")).toHaveText("Already waiting for document index.");
     await expectNothingSent(page, sent);
   });
@@ -401,7 +409,8 @@ test.describe("the Library page", () => {
     await routeCatalog(page, { list: freshList });
     await openLibrary(page, helper);
     const coach = page.locator('details[data-session="s_coach"]');
-    await expect(coach.locator("summary .lib-card-watch")).toHaveText("watched by coach activity");
+    // Its watcher is itself, so the card does not repeat its own title.
+    await expect(coach.locator("summary .lib-card-watch")).toHaveText("watched by its own agent");
     await expect(coach.locator('summary .lib-badge[data-badge="watching"]')).toHaveCount(1);
     expect(await coach.locator("li[data-review]").count()).toBeGreaterThan(1);
     await expect(coach.locator('li[data-review] [data-badge="watching"]')).toHaveCount(0);
@@ -411,6 +420,82 @@ test.describe("the Library page", () => {
     // A missing row is listed outside its card, so it keeps the badge.
     await page.locator('[data-act="show-missing"]').click();
     await expect(rowLocator(page, "r_deleted").locator('[data-badge="watching"]')).toHaveText("agent watching: coach activity");
+  });
+
+  test("a row shows Open at rest; Pick this up and Launch open from its one Hand to agent menu", async ({ page }) => {
+    await routeCatalog(page, { list: freshList });
+    await openLibrary(page, helper);
+    const row = rowLocator(page, "r_mounted");
+    await expect(row.locator(".lib-acts > .lib-btn")).toHaveText(["Open"]);
+    await expect(row.locator('[data-act="pickup"], [data-act="launch"]')).toHaveCount(0);
+    const menu = row.locator('[data-act="menu"]');
+    await expect(menu).toHaveText("Hand to agent");
+    await expect(menu).toHaveAttribute("aria-expanded", "false");
+    await menu.click();
+    await expect(menu).toHaveAttribute("aria-expanded", "true");
+    await expect(row.locator(".lib-menu-list .lib-btn")).toHaveText(["Pick this up", "Launch a new agent"]);
+    await expect(row.locator('[data-act="pickup"]')).toBeFocused();
+    // A poll does not close it under the reader.
+    await page.evaluate(() => window.__laheCatalogPollNow());
+    await expect(menu).toHaveAttribute("aria-expanded", "true");
+    await page.keyboard.press("Escape");
+    await expect(row.locator(".lib-menu-list")).toHaveCount(0);
+    await expect(menu).toBeFocused();
+  });
+
+  test("no Hand to agent where the Library's agent already watches, and a disabled one with its reason on a dev-server row", async ({ page }) => {
+    await routeCatalog(page, { list: freshList });
+    await openLibrary(page, helper);
+    // s_ops is watched by document index, the Library's own agent.
+    await expect(rowLocator(page, "r_old4").locator('[data-act="menu"]')).toHaveCount(0);
+    await expect(rowLocator(page, "r_old4").locator('[data-act="open"]')).toBeEnabled();
+    const dev = rowLocator(page, "r_dev");
+    await expect(dev.locator('[data-act="menu"]')).toBeDisabled();
+    await expect(dev.locator(".lib-line")).toContainText([
+      "An app's dev server serves this page, so no agent can take it from here. Start the dev server and open the page yourself."
+    ]);
+  });
+
+  test("the header says no agent attached when the attached session is closed", async ({ page }) => {
+    const list = freshList();
+    list.attached = { session: "s_index", name: "document index", watching: false, closed: true };
+    await routeCatalog(page, { list: () => list });
+    await openLibrary(page, helper);
+    await expect(page.locator("#lahe-catalog-agent")).toHaveText(
+      "No agent attached. Open still works; hand-overs give you a message to paste."
+    );
+  });
+
+  test("at phone width the page never scrolls sideways, and the chevron sits on the name's line", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await routeCatalog(page, { list: freshList });
+    await openLibrary(page, helper);
+    const widths = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, view: window.innerWidth }));
+    expect(widths.scroll, "no sideways scroll").toBeLessThanOrEqual(widths.view);
+    const summary = page.locator('details[data-session="s_ops"] > summary');
+    const chev = await summary.locator(".lib-chev").boundingBox();
+    const title = await summary.locator(".lib-card-title").boundingBox();
+    const titleMid = title.y + Math.min(title.height, 30) / 2;
+    expect(Math.abs(chev.y + chev.height / 2 - titleMid), "the chevron is on the title's first line").toBeLessThan(16);
+    // No meta item is split from its separator: each item's own box starts
+    // with its separator and never holds just a dot.
+    const loneDots = await page.evaluate(() =>
+      Array.from(document.querySelectorAll(".lib-card-meta > span")).filter((s) => s.textContent.trim() === "").length
+    );
+    expect(loneDots).toBe(0);
+  });
+
+  test("the confirm dialog's list bullet sits with its text", async ({ page }) => {
+    await routeCatalog(page, { list: freshList });
+    await openLibrary(page, helper);
+    await handTo(page, "r_mounted", "pickup");
+    const li = page.locator("#lahe-catalog-confirm li").first();
+    const style = await li.evaluate((el) => ({
+      marker: getComputedStyle(el.parentElement).listStyleType,
+      before: getComputedStyle(el, "::before").content
+    }));
+    expect(style.marker).toBe("disc");
+    expect(style.before).toBe("none");
   });
 
   test("screenshots, light and dark", async ({ page, browserName }) => {
@@ -424,5 +509,16 @@ test.describe("the Library page", () => {
     await page.screenshot({ path: path.join(SHOTS, "catalog_page_light.png"), fullPage: true });
     await page.emulateMedia({ colorScheme: "dark" });
     await page.screenshot({ path: path.join(SHOTS, "catalog_page_dark.png"), fullPage: true });
+    // One row's Hand to agent menu open, and the confirm dialog, in dark.
+    await handTo(page, "r_mounted", "pickup");
+    await expect(page.locator("#lahe-catalog-confirm")).toBeVisible();
+    await page.screenshot({ path: path.join(SHOTS, "catalog_confirm_dark.png") });
+    await page.keyboard.press("Escape");
+    await page.emulateMedia({ colorScheme: "light" });
+    await rowLocator(page, "r_mounted").locator('[data-act="menu"]').click();
+    await rowLocator(page, "r_mounted").screenshot({ path: path.join(SHOTS, "catalog_menu_light.png") });
+    await page.keyboard.press("Escape");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({ path: path.join(SHOTS, "catalog_page_phone.png") });
   });
 });

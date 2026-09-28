@@ -258,7 +258,7 @@ test("a named card shows its name, projects, review count, watcher, waiting and 
   assert.deepEqual(c.projects, ["alpha", "beta"]);
   // r_deleted is missing, so it is not one of the card's visible reviews.
   assert.equal(c.reviewsText, "4 reviews");
-  assert.equal(c.watchText, "watched by coach activity");
+  assert.equal(c.watchText, "watched by its own agent", "its watcher is itself, so its name is not repeated");
   assert.equal(c.waitingText, "3 waiting");
   assert.equal(c.lastText, "last 3:40 PM");
 });
@@ -317,12 +317,12 @@ test("one comment is singular, and no project leaves the project out", () => {
   const r = row(build(freshList(), okState()), "r_shared");
   assert.equal(r.counts.comments, "1 comment");
   assert.equal(r.counts.waiting, null);
-  assert.equal(r.where, "loose / shared.html");
+  assert.equal(r.where, "", "the title already says loose / shared.html");
 });
 
 test("a folded row names its folder and says how many reviews it holds", () => {
   const r = row(build(freshList(), okState()), "r_old2");
-  assert.equal(r.where, "alpha / old-pages");
+  assert.equal(r.where, "", "the title says old-pages and the card says alpha");
   assert.equal(r.folded, "3 reviews of this folder, shown as one");
 });
 
@@ -339,7 +339,7 @@ test("a watched card names its agent once: on the card, and on none of its rows"
   assert.equal(card(build(freshList(), okState()), "s_badsession").watched, false);
   assert.ok(c.rows.length > 1, "the card has several rows");
   const texts = [c.watchText].concat(...c.rows.map((r) => r.badges));
-  assert.equal(texts.filter((t) => t.includes("coach activity")).length, 1);
+  assert.equal(texts.filter((t) => t.startsWith("watched by") || t.startsWith("agent watching")).length, 1);
 });
 
 test("a row shown outside its card keeps the watching badge, since no card line names its watcher", () => {
@@ -414,7 +414,8 @@ test("a worktree row says the main repository's copy will open", () => {
 test("a via-agent row with an agent can be opened through the agent", () => {
   const r = row(build(freshList(), okState()), "r_dev");
   assert.equal(r.buttons.open.enabled, true);
-  assert.deepEqual(r.notices, []);
+  // r_dev is a dev server's: its only notice is why no agent can take it.
+  assert.deepEqual(r.notices.map((n) => n.text), [vm.TEXT.DEV_SERVER_NO_HANDOFF]);
 });
 
 test("a via-agent row with no agent has Open disabled and offers the hand-off message", () => {
@@ -422,7 +423,7 @@ test("a via-agent row with no agent has Open disabled and offers the hand-off me
   list.attached = null;
   const r = row(build(list, okState()), "r_dev");
   assert.equal(r.buttons.open.enabled, false);
-  assert.deepEqual(r.notices.map((n) => n.text), ["Needs an agent to reopen. No agent is attached."]);
+  assert.deepEqual(r.notices.map((n) => n.text), ["Needs an agent to reopen. No agent is attached.", vm.TEXT.DEV_SERVER_NO_HANDOFF]);
   assert.equal(r.offerHandoff, true);
   assert.equal(vm.decide(list, okState(), "r_dev", "open", {}).kind, "handoff");
 });
@@ -1053,4 +1054,113 @@ test("Open is clickable again once its answer arrives, success or failure", () =
   state = vm.beginOpen(state, list, "r_mounted", { handoff: true });
   state = vm.afterOpen(state, list, "r_mounted", { ok: false, unreachable: true }, NOW);
   assert.equal(row(build(list, state), "r_mounted").buttons.open.busy, false);
+});
+
+// ---------------------------------------------------------------------------
+// Story walk and design review (phase 7, Builder C)
+// ---------------------------------------------------------------------------
+
+test("the header says no agent attached when the attached session is closed", () => {
+  const list = freshList();
+  list.attached = { session: "s_index", name: "document index", watching: false, closed: true };
+  const view = build(list, okState());
+  assert.equal(view.agent.attached, false);
+  assert.equal(view.agent.text, "No agent attached. Open still works; hand-overs give you a message to paste.");
+});
+
+test("an attached, open session that stopped watching still says so", () => {
+  const list = freshList();
+  list.attached = { session: "s_index", name: "document index", watching: false, closed: false };
+  assert.equal(
+    build(list, okState()).agent.text,
+    "document index is attached but has stopped watching. Open still works; hand-overs give you a message to paste."
+  );
+});
+
+test("each row has one Hand to agent menu, closed until opened, holding Pick this up and Launch", () => {
+  const list = freshList();
+  let r = row(build(list, okState()), "r_mounted");
+  assert.equal(r.buttons.handTo.label, "Hand to agent");
+  assert.equal(r.buttons.handTo.hidden, false);
+  assert.equal(r.buttons.handTo.enabled, true);
+  assert.equal(r.buttons.handTo.expanded, false);
+  const state = vm.withMenu(okState(), "r_mounted");
+  r = row(build(list, state), "r_mounted");
+  assert.equal(r.buttons.handTo.expanded, true);
+  assert.equal(row(build(list, state), "r_stale").buttons.handTo.expanded, false, "only the one row's menu opens");
+  assert.equal(vm.withMenu(state, null).menu, null);
+});
+
+test("the menu is busy while a pick-up or launch waits", () => {
+  const r = row(build(freshList(), okState()), "r_brief");
+  assert.equal(r.buttons.handTo.busy, true);
+  assert.equal(row(build(freshList(), okState()), "r_mounted").buttons.handTo.busy, false);
+});
+
+test("Hand to agent is hidden where the attached agent already watches the session", () => {
+  // s_ops is watched by s_index, the agent that opened this Library.
+  const r = row(build(freshList(), okState()), "r_old4");
+  assert.equal(r.buttons.handTo.hidden, true);
+  // s_coach is watched by another agent, so the menu stays.
+  assert.equal(row(build(freshList(), okState()), "r_mounted").buttons.handTo.hidden, false);
+});
+
+test("Hand to agent is disabled with a reason on a dev-server row", () => {
+  const r = row(build(freshList(), okState()), "r_dev");
+  assert.equal(r.buttons.handTo.enabled, false);
+  assert.equal(r.buttons.pickup.enabled, false);
+  assert.equal(r.buttons.launch.enabled, false);
+  assert.equal(r.buttons.handTo.reason, "An app's dev server serves this page, so no agent can take it from here. Start the dev server and open the page yourself.");
+  assert.ok(r.notices.some((n) => n.text === r.buttons.handTo.reason), "the reason is on the row, not only in a tooltip");
+});
+
+test("a refusal clears once the agent that refused is no longer the attached, live agent", () => {
+  const list = freshList();
+  assert.match(row(build(list, okState()), "r_notes").note.text, /couldn't take it/);
+  list.attached = { session: "s_new", name: "fresh agent", watching: true };
+  assert.equal(row(build(list, okState()), "r_notes").note, null);
+  list.attached = null;
+  assert.equal(row(build(list, okState()), "r_notes").note, null);
+});
+
+test("a card watched by its own agent does not repeat the card's title", () => {
+  const list = freshList();
+  // s_coach is named "coach activity" and watched by itself.
+  assert.equal(card(build(list, okState()), "s_coach").watchText, "watched by its own agent");
+  // A launched session, named after its document, reads the same way.
+  sessionIn(list, "s_coach").name = "Feature Brief: Coach Activity";
+  sessionIn(list, "s_coach").watching = { session: "s_coach", name: "Feature Brief: Coach Activity" };
+  assert.equal(card(build(list, okState()), "s_coach").watchText, "watched by its own agent");
+  // A watcher whose name differs from the card is still named.
+  sessionIn(list, "s_coach").watching = { session: "s_other", name: "other agent" };
+  assert.equal(card(build(list, okState()), "s_coach").watchText, "watched by other agent");
+});
+
+test("the path line shows only what the title does not already say", () => {
+  const view = build(freshList(), okState());
+  // Title is "loose / shared.html": nothing to add.
+  assert.equal(row(view, "r_shared").where, "");
+  // A real title: the path adds where it lives. s_coach spans two projects,
+  // so the project stays.
+  assert.equal(row(view, "r_brief").where, "alpha / docs / brief.html");
+  // s_ops is all "alpha", and the card already says so.
+  assert.equal(row(view, "r_old4").where, "old-pages / p4.html");
+  // Title "old-pages", project on the card: nothing to add.
+  assert.equal(row(view, "r_old2").where, "");
+});
+
+test("a row outside its card keeps its project on the path line", () => {
+  const state = vm.withShowMissing(okState(), true);
+  assert.equal(row(build(freshList(), state), "r_wt_vanished").where, "alpha");
+});
+
+test("a pick-up answered with no request id says the agent already has it, not waiting", () => {
+  // The helper queues nothing when the attached agent already owns or
+  // watches the document, and answers request_id: null.
+  const list = freshList();
+  const state = vm.afterRequest(okState(), list, "r_mounted", "pickup", { ok: true, body: { request_id: null } }, NOW);
+  const r = row(build(list, state), "r_mounted");
+  assert.equal(r.note.text, "document index already has it. Nothing was sent.");
+  assert.equal(r.note.busy, false);
+  assert.equal(r.buttons.handTo.busy, false);
 });
