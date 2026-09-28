@@ -58,9 +58,16 @@ The Library page never takes a session over itself. Pick this up and Launch a
 new agent queue a request for the agent attached to the Library, and that
 agent does the takeover (or starts a new agent that does).
 
+An agent attaches one of two ways. With no LAHE session, it runs plain
+`lahe library`, which starts a new session (no reviews) and attaches it.
+With one, it passes `--session`. Plain `lahe library` never reuses the
+attached session, because the command cannot tell one agent from another.
+
 ```mermaid
 flowchart TD
-    Attach["agent runs<br/>lahe library --session its-own-id"] --> AttachFile[("catalog-attach.json<br/>the last agent attached")]
+    Bare["agent with no session runs<br/>lahe library"] --> Mint["a new agent session,<br/>no reviews"]
+    Mint --> AttachFile[("catalog-attach.json<br/>the last agent attached")]
+    Attach["agent with a session runs<br/>lahe library --session its-own-id"] --> AttachFile
     Click["reviewer clicks Pick this up<br/>or Launch a new agent"] --> Watched{"is another agent<br/>watching that session?"}
     Watched -->|"yes"| Confirm["the page asks first, naming that agent<br/>and the other reviews that move"]
     Watched -->|"no"| Queue

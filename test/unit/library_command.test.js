@@ -92,15 +92,16 @@ test("lahe library starts the helper, attaches the session, and prints the helpe
   const attach = JSON.parse(fs.readFileSync(stateDir.catalogAttachPath(dir), "utf8"));
   assert.equal(attach.session, "s_agent");
 
-  // No --session: the attach is left as it is, and the command says who it is.
-  const second = await run(["--state-dir", dir, "--port", String(port)]);
+  // The same --session again: nothing new is made, and the command says who it is.
+  const second = await run(["--session", "s_agent", "--state-dir", dir, "--port", String(port)]);
   assert.equal(second.code, protocol.CLI_EXIT.OK, second.stderr);
   assert.match(second.stdout, new RegExp("http://127\\.0\\.0\\.1:" + port + "/catalog"));
   assert.match(second.stdout, /attached\s+document index \(s_agent\)/);
   assert.equal(JSON.parse(fs.readFileSync(stateDir.catalogAttachPath(dir), "utf8")).session, "s_agent");
-  const json = JSON.parse((await run(["--state-dir", dir, "--port", String(port), "--json"])).stdout.trim());
+  const json = JSON.parse((await run(["--session", "s_agent", "--state-dir", dir, "--port", String(port), "--json"])).stdout.trim());
   assert.equal(json.helper_started, false, "an answering helper is left where it is");
   assert.equal(json.attached.session, "s_agent");
+  assert.deepEqual(sessionIds(dir), ["s_agent", "s_second"], "--session never makes a session");
 
   // A later --session replaces the attach: the last agent to run it is attached.
   const later = await run(["--session", "s_second", "--state-dir", dir, "--port", String(port)]);
@@ -146,74 +147,44 @@ test("lahe library with nobody attached mints a session with no reviews, attache
   assert.ok(out.stdout.includes("lahe session close " + id));
 });
 
-test("lahe library run again reuses the attached open session instead of minting another", async (t) => {
+test("lahe library with no --session always starts a new session and attaches it, even over an open attached one", async (t) => {
   const dir = tempDir();
   const port = await freePort();
   t.after(async () => { await sessionCommand.stopVerifiedHelper(dir); });
 
+  // The command cannot tell one agent from another, so it never hands out a
+  // session that is already attached: that may be another agent's live one.
   const first = JSON.parse((await run(["--state-dir", dir, "--port", String(port), "--json"])).stdout.trim());
   assert.equal(first.session_created, true);
   assert.equal(first.attached.session, first.session);
 
-  const again = await run(["--name", "someone else", "--state-dir", dir, "--port", String(port)]);
+  const again = await run(["--name", "second agent", "--state-dir", dir, "--port", String(port)]);
   assert.equal(again.code, protocol.CLI_EXIT.OK, again.stderr);
-  assert.deepEqual(sessionIds(dir), [first.session], "no second session");
-  assert.match(again.stdout, new RegExp("session\\s+" + first.session + "\\s+\\(reused: the Library's attached session"));
-  assert.match(again.stdout, /--new-session/);
-  assert.ok(again.stdout.includes(agentSessions.commandBlock({ dir, session: first.session })));
-  // A reused session may be another agent's, so its name is not this call's to change.
-  assert.equal(agentSessions.createStore({ dir }).read(first.session).name, undefined);
-  assert.match(again.stderr, /--name was not applied/);
-
-  const json = JSON.parse((await run(["--state-dir", dir, "--port", String(port), "--json"])).stdout.trim());
-  assert.equal(json.session, first.session);
-  assert.equal(json.session_created, false);
+  const ids = sessionIds(dir);
+  assert.equal(ids.length, 2);
+  const second = ids.find((id) => id !== first.session);
+  assert.equal(JSON.parse(fs.readFileSync(stateDir.catalogAttachPath(dir), "utf8")).session, second);
+  assert.equal(agentSessions.createStore({ dir }).read(second).name, "second agent");
+  assert.equal(agentSessions.createStore({ dir }).read(first.session).name, undefined, "the first session is untouched");
+  assert.equal(again.stderr, "");
+  assert.match(again.stdout, /--session/, "the output says to pass --session next time");
 });
 
-test("lahe library mints a new session when the attached one is closed", async (t) => {
+test("lahe library has no --new-session: a new session is already the default", async () => {
   const dir = tempDir();
-  const port = await freePort();
-  const store = agentSessions.createStore({ dir });
-  store.create({ id: "s_old" });
-  store.create({ id: "s_keepalive" });
-  catalogRequests.writeAttach(dir, "s_old", Date.now());
-  store.close("s_old");
-  t.after(async () => { await sessionCommand.stopVerifiedHelper(dir); });
-
-  const json = JSON.parse((await run(["--state-dir", dir, "--port", String(port), "--json"])).stdout.trim());
-  assert.equal(json.session_created, true);
-  assert.notEqual(json.session, "s_old");
-  assert.equal(json.attached.session, json.session);
-  assert.equal(sessionIds(dir).length, 3);
+  const out = await run(["--new-session", "--state-dir", dir, "--port", "1"]);
+  assert.equal(out.code, protocol.CLI_EXIT.BAD_USAGE);
+  assert.match(out.stderr, /unknown option "--new-session"/);
+  assert.deepEqual(sessionIds(dir), []);
 });
 
-test("lahe library --new-session mints and attaches even when an open session is attached", async (t) => {
-  const dir = tempDir();
-  const port = await freePort();
-  const store = agentSessions.createStore({ dir });
-  store.create({ id: "s_first" });
-  catalogRequests.writeAttach(dir, "s_first", Date.now());
-  t.after(async () => { await sessionCommand.stopVerifiedHelper(dir); });
-
-  const out = await run(["--new-session", "--name", "second agent", "--state-dir", dir, "--port", String(port), "--json"]);
-  assert.equal(out.code, protocol.CLI_EXIT.OK, out.stderr);
-  const json = JSON.parse(out.stdout.trim());
-  assert.equal(json.session_created, true);
-  assert.notEqual(json.session, "s_first");
-  assert.equal(json.attached.session, json.session);
-  assert.equal(json.attached.name, "second agent");
-});
-
-test("lahe library --session with --name names that session; --new-session with --session is bad usage", async (t) => {
+test("lahe library --session with --name names that session", async (t) => {
   const dir = tempDir();
   const port = await freePort();
   const store = agentSessions.createStore({ dir });
   store.create({ id: "s_agent" });
   t.after(async () => { await sessionCommand.stopVerifiedHelper(dir); });
 
-  const both = await run(["--session", "s_agent", "--new-session", "--state-dir", dir, "--port", String(port)]);
-  assert.equal(both.code, protocol.CLI_EXIT.BAD_USAGE);
-  assert.equal(fs.existsSync(stateDir.catalogAttachPath(dir)), false);
   assert.equal((await run(["--name", "--state-dir", dir])).code, protocol.CLI_EXIT.BAD_USAGE);
 
   const named = await run(["--session", "s_agent", "--name", "doc agent", "--state-dir", dir, "--port", String(port)]);
