@@ -694,3 +694,39 @@ test("CR1: the sweep leaves alone a session an Open is part way through bringing
   const after = await actions.sweepReopened(T0);
   assert.deepEqual(after.closed, ["s_doc"], "closed once the Open is done and it is quiet");
 });
+
+test("CR2: star and unstar act on every review in a fold, so a star never sticks when the fold's lead changes", async () => {
+  const catalogActions = require("../../src/service/catalog_actions.js");
+  const catalogReader = require("../../src/service/catalog_reader.js");
+  const fixture = require("../fixtures/catalog_state.js");
+  const installed = fixture.install();
+  const reader = catalogReader.createReader({ dir: installed.dir, home: installed.home, pidAlive: () => true, probe: async () => false });
+  const actions = catalogActions.createCatalogActions({
+    dir: installed.dir,
+    reader,
+    queue: { readAttached: () => null },
+    store: catalogStore.createCatalogStore({ dir: installed.dir }),
+    ops: {},
+    sessions: agentSessions.createStore({ dir: installed.dir }),
+    log: () => {}
+  });
+  const foldRow = async () => {
+    const list = await reader.list(installed.nowMs);
+    for (const s of list.sessions) {
+      const found = s.reviews.find((r) => ["r_old1", "r_old2", "r_old3"].includes(r.id));
+      if (found) return found;
+    }
+    return null;
+  };
+  const lead = (await foldRow()).id;
+  assert.equal((await actions.star({ review: lead, starred: false }, installed.nowMs)).status, 200);
+  assert.equal((await foldRow()).starred, false, "unstarring the lead unstars the whole fold");
+  assert.equal((await actions.star({ review: lead, starred: true }, installed.nowMs)).status, 200);
+  // Another review in the fold becomes the newest, so the lead changes.
+  const other = ["r_old1", "r_old2", "r_old3"].find((id) => id !== lead);
+  const later = new Date(installed.nowMs);
+  fs.utimesSync(stateDir.eventsPath(installed.dir, other), later, later);
+  assert.equal((await foldRow()).id, other, "the lead changed");
+  assert.equal((await actions.star({ review: other, starred: false }, installed.nowMs)).status, 200);
+  assert.equal((await foldRow()).starred, false, "unstarred through the new lead");
+});

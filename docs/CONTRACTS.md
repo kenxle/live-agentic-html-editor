@@ -949,7 +949,7 @@ root or a URL, and fields a route does not list are never read.
 |---|---|---|
 | `catalog.list` | none | the list response (architecture, "The list response"), plus `notice`. Marks `catalog_seen_at` |
 | `catalog.open` | `{review, handoff, confirmed}` | `{url, request_id, not_asked}` |
-| `catalog.star` | `{review, starred}`, `starred` a boolean | `{review, starred}` |
+| `catalog.star` | `{review, starred}`, `starred` a boolean | `{review, starred}`. On a folded row every review in the fold is starred or unstarred |
 | `catalog.request` | `{review, action, confirmed}`, `action` `pickup` or `launch` | `{request_id}` |
 
 - **Open restarts only the recorded server that covers the review's recorded file**

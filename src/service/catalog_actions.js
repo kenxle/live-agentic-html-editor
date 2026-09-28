@@ -276,8 +276,14 @@ function createCatalogActions(options) {
     if (found.outcome) return found.outcome;
     if (typeof body.starred !== "boolean") return badRequest("starred must be true or false");
     var d = found.described;
-    var written = store.setStar(d.review, body.starred, iso(nowMs));
-    if (!written.ok) return fail(written.code || "PROTO_CATALOG_UNREADABLE");
+    // EVERY REVIEW IN THE FOLD (fix round CR2). The list shows a folded row as
+    // starred when any part is, so a star or unstar on the lead alone would
+    // stick the moment another part became the lead.
+    var ids = Array.isArray(d.fold) && d.fold.length ? d.fold : [d.review];
+    for (var i = 0; i < ids.length; i += 1) {
+      var written = store.setStar(ids[i], body.starred, iso(nowMs));
+      if (!written.ok) return fail(written.code || "PROTO_CATALOG_UNREADABLE");
+    }
     logAction(body.starred ? protocol.CATALOG_LOG.ACTION.STAR : protocol.CATALOG_LOG.ACTION.UNSTAR, d, nowMs);
     return { status: 200, body: { review: d.review, starred: body.starred } };
   }

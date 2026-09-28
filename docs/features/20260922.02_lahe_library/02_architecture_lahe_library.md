@@ -229,7 +229,7 @@ On a new port, the helper registers `http://127.0.0.1:<new>` and `http://localho
 
 ### Star
 
-`POST catalog.star {review, starred}`. The helper writes `catalog.json` and answers. The row changes when the answer comes back. A failed star puts the row back and says why. No agent.
+`POST catalog.star {review, starred}`. The helper writes `catalog.json` and answers. On a folded row it stars or unstars every review in the fold, since the list shows the row starred when any of them is (fix round CR2). The row changes when the answer comes back. A failed star puts the row back and says why. No agent.
 
 ### Launch a new agent
 

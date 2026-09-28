@@ -771,7 +771,7 @@ function createReader(options) {
    * @returns {{review: string, session: string, display_name: string, title: string|null,
    *            path: string|null, kind: string, openable: string, candidate: string|null,
    *            server: string|null, url_path: string|null, served_path: string|null,
-   *            watching: object|null, last: string}|null}
+   *            watching: object|null, last: string, fold: string[]}|null}
    *   `display_name` is the name of the row the review shows on (a folded
    *   review's is its folder's). `path` is the document's own path on disk.
    *   `candidate` is the checked main-repository copy for a gone worktree.
@@ -779,7 +779,9 @@ function createReader(options) {
    *   covers the review's served file and `url_path` that file's path on it
    *   (both null when none does); `served_path` is the file itself, `watching`
    *   the session's watcher as the list shows it, and `last` the review's own
-   *   newest event time.
+   *   newest event time. `fold` is every review on the same row, this one
+   *   included (just this one for a row that is not a fold), so Star can act
+   *   on the whole row the way the list reads it.
    */
   function describeReview(reviewId, now) {
     if (!protocol.isSafeId(reviewId)) return null;
@@ -805,7 +807,8 @@ function createReader(options) {
             url_path: part.covering ? part.covering.urlPath : null,
             served_path: part.info.servedPath,
             watching: watchingOf(s.id, nowMs),
-            last: iso(part.info.lastMs)
+            last: iso(part.info.lastMs),
+            fold: row.parts.map(function (p) { return p.info.id; }).sort()
           };
         }
       }
