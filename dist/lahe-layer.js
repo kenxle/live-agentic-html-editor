@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+9d6d6470b328
+ * version 0.2.0+fa6a5e8d7d0d
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+9d6d6470b328";
+  g.LAHE.version = "0.2.0+fa6a5e8d7d0d";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -14078,6 +14078,9 @@
     ".card__state[data-state='handled']{color:var(--good);background:transparent;",
     "border:1px solid currentColor}",
     ".card__state[data-state='not_handled']{color:var(--warn);background:var(--warn-wash)}",
+    // A quote rule, which is what a quote has looked like since print. It is
+    // decoration, not a signal: it says "these are the page's words, not the
+    // reviewer's," and it never means anything is new or unread.
     ".card__quote{font-size:12px;color:var(--ink-soft);border-left:2px solid var(--line);",
     "padding-left:9px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}",
     ".card__body{font-size:13.5px;line-height:1.5;color:var(--ink);display:flex;",
@@ -14132,8 +14135,11 @@
     ".agent__head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:3px}",
     ".agent__who{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;",
     "color:var(--ink-faint);display:block}",
-    ".agent.is-loud{background:var(--accent-wash);border-left:3px solid var(--accent);",
-    "color:var(--ink);font-size:14px;line-height:1.55}",
+    // An attention marker: a loud reply is one the reviewer has not dealt with
+    // yet, so the accent rule down the edge earns its place. Color, size and
+    // line-height are NOT repeated here; they are already set on .agent above,
+    // and this rule only adds to it.
+    ".agent.is-loud{background:var(--accent-wash);border-left:3px solid var(--accent)}",
     ".agent.is-loud .agent__who{color:var(--accent-ink)}",
     // ONE PATH PER LINE, AND IT BREAKS. Repo-relative paths are long and have
     // no natural break points, so joined on one line with normal wrapping they
@@ -14359,15 +14365,19 @@
     // can politely sit on top of for a few seconds. The collapsed pill is
     // bottom-right, so there is nothing to collide with either way.
     //
-    // It borrows nothing new: the card's own paper, the card's own border, the
-    // accent rule the question block already uses down its left edge.
+    // It borrows nothing new: the card's own paper, the card's own border. No
+    // accent stripe down one edge on top of that. A stripe is how the layer
+    // says "you have not seen this yet," and a toast does not need to say it:
+    // it slides in, which is the loudest attention signal the layer has. Ken:
+    // "the pop-up toast should not have it because that's gonna be seen
+    // already by virtue of its movement, its animation."
     ".toasts{position:fixed;top:16px;right:16px;pointer-events:none;display:flex;",
     "flex-direction:column;align-items:flex-end;gap:8px;",
     "width:min(560px,calc(100vw - 32px))}",
     ".toasts[hidden]{display:none}",
     ".toast{pointer-events:auto;width:100%;display:flex;align-items:flex-start;gap:8px;",
     "padding:10px 11px;background:var(--paper);color:var(--ink);text-align:left;",
-    "border:1px solid var(--line);border-left:3px solid var(--accent);",
+    "border:1px solid var(--line);",
     "border-radius:var(--radius-sm);box-shadow:var(--shadow);cursor:pointer;",
     // SWIPED, NOT SELECTED. Ken: "because the toasts slide in like a Mac
     // notification, my inclination is to grab them with the mouse and slide
@@ -21027,6 +21037,10 @@
 
     // The question. Full bleed to the card's padding, so the rule runs the
     // whole height of the block rather than sitting in a box inside a box.
+    // The accent rule stays: this block is the layer asking the reviewer for
+    // something, and nothing has happened until they answer. That is exactly
+    // what a stripe is for here. It does not move or animate, so the stripe is
+    // the only thing pulling the eye to it.
     "." + ASK_CLASS + "{margin:2px -12px -2px;padding:10px 12px 11px 13px;",
     "border-left:3px solid var(--accent);background:var(--accent-wash);",
     "display:flex;flex-direction:column;gap:7px}",
@@ -22956,6 +22970,10 @@
   // and the tab cannot drift from the chrome around it.
   var STYLE = [
     "." + ROW_CLASS + "{display:flex;flex-direction:column;gap:6px}",
+    // The rule per pair stays, and so does the accent on an edit row. This is
+    // the tab's new-versus-old signal: scanning a column of rows, the accent
+    // rule is what separates the reviewer's own edits from everything else.
+    // Drop it and the tab is one undifferentiated stack.
     "." + ROW_CLASS + "__pair{display:flex;flex-direction:column;gap:4px;",
     "border-left:2px solid var(--line);padding-left:9px}",
     "." + ROW_CLASS + "[data-kind='edit'] ." + ROW_CLASS + "__pair{border-left-color:var(--accent)}",
@@ -34919,6 +34937,12 @@
   // Drawn as two labelled panes rather than five paragraphs of one size: an
   // eyebrow per side, a left rule (the reviewer's in the accent, the page's in
   // the neutral line colour), and the two buttons under both.
+  //
+  // The rules stay. They are not decoration: they are what tells the two
+  // versions apart at a glance, in a rail where a conflict card sits among
+  // ordinary ones. The accent on 'yours' says which half is the reviewer's own
+  // new text; the label alone does that too slowly when several cards are
+  // stacked.
   var CONFLICT_STYLE = [
     "[data-lahe-conflict]{display:flex;flex-direction:column;gap:9px;",
     "border-top:1px solid var(--line-soft);padding-top:9px}",
@@ -36730,7 +36754,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+9d6d6470b328";
+  var VERSION = "0.2.0+fa6a5e8d7d0d";
 
   var protocol = ns.protocol;
   var record = ns.record;
