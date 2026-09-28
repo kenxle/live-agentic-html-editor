@@ -108,7 +108,7 @@ One writer per file, so a star and an attach cannot overwrite each other.
 - A request expires when the attached session id changes to a different one, when the `for` session's monitor is dead, or after `REQUEST_EXPIRY_MS` unanswered. Re-attaching the same session id is not a change.
 - Expiry is worked out on each read from `now`. The helper appends the `expired` line the first time it sees one, so the file stays the single record.
 - An answered or expired request no longer counts toward one-per-review or `QUEUE_CAP`.
-- A torn last line is skipped with a helper log line. The list and the drain still work.
+- A torn last line is skipped with a helper log line, logged once rather than on every poll. The list and the drain still work.
 
 **The Library token** is minted in memory at each helper start and never written to disk. It exists only inside the served page.
 
