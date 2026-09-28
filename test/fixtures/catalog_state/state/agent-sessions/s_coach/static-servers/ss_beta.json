@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "id": "ss_beta",
+  "session_id": "s_coach",
+  "instance": "inst_ss_beta",
+  "root": "${ROOT}/home/projects/beta/specs",
+  "logical_root": "${ROOT}/home/projects/beta/specs",
+  "host": "127.0.0.1",
+  "port": 54011,
+  "pid": 515151,
+  "started_at": "2026-09-20T10:00:00.000Z",
+  "stopped_at": null,
+  "mounts": {}
+}

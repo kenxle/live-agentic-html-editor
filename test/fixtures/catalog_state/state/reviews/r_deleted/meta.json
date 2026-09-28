@@ -1,0 +1,15 @@
+{
+  "id": "r_deleted",
+  "token": "fixture-token-r_deleted-not-a-secret",
+  "origins": [
+    "http://127.0.0.1:54000"
+  ],
+  "target_path": "${ROOT}/home/projects/alpha/docs/deleted.html",
+  "target_paths": [
+    "${ROOT}/home/projects/alpha/docs/deleted.html"
+  ],
+  "source_path": null,
+  "only_recorded_pages": false,
+  "created_at": "2026-09-19T16:00:00.000Z",
+  "agent_session_id": "s_coach"
+}

@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "id": "ss_old3pages",
+  "session_id": "s_old3",
+  "instance": "inst_ss_old3pages",
+  "root": "${ROOT}/home/projects/alpha/old-pages",
+  "logical_root": "${ROOT}/home/projects/alpha/old-pages",
+  "host": "127.0.0.1",
+  "port": 54030,
+  "pid": 515151,
+  "started_at": "2026-09-20T10:00:00.000Z",
+  "stopped_at": "2026-09-21T10:00:00.000Z",
+  "mounts": {}
+}

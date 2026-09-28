@@ -250,7 +250,6 @@ var NON_BUNDLE_FILES = [
   {
     path: "src/service/catalog_reader.js",
     owner: "Library 1.1",
-    planned: true,
     why: "builds catalog.list from the state dir, and describeReview, which the drain calls too"
   },
   {
