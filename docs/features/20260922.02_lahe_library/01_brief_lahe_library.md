@@ -14,7 +14,7 @@ The idea was pressure-tested on two LAHE pages:
 - [the crucible](00_crucible_lahe_library.md), which chose a live Library page inside LAHE whose Open and Star buttons act directly (Approach B)
 
 ```mermaid
-flowchart LR
+flowchart TD
   A["Agent writes a document"] --> B["lahe review serves it<br/>on a random port"]
   B --> C["Ken reviews in a tab"]
   C --> D{"tab closed<br/>or laptop restarted"}
