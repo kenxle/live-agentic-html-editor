@@ -265,6 +265,36 @@ test("a ready item whose event is still queued while held reads as a distinct 'h
   assert.equal(rail.getCard(item.id).state, "held");
 });
 
+test("setCardState(ready) on a held item keeps it drawn held, the way the Active tab's refresh calls it", () => {
+  // tab_active.refresh calls upsertCard and then setCardState(id, item.state)
+  // for every row. setCardState used to stamp the raw "ready" over the held
+  // reading upsertCard had just drawn, and nothing repainted it until the
+  // agent line next changed. On a slow CI runner that never happened inside
+  // rail_hold.spec.js's window, so the card read "ready" while held.
+  const store = storeModule.createStore();
+  const rail = overlay.createRail({ document: null, store: store, reviewId: REVIEW });
+  const item = readyItem("held, then refreshed by the Active tab");
+
+  store.setHeld(REVIEW, true);
+  queueReadyEvent(store, item);
+  rail.upsertCard(item);
+  rail.setCardState(item.id, record.STATE.READY);
+
+  assert.equal(rail.getCard(item.id).state, "held");
+});
+
+test("setCardState(ready) with Hold off still draws a plain ready card", () => {
+  const store = storeModule.createStore();
+  const rail = overlay.createRail({ document: null, store: store, reviewId: REVIEW });
+  const item = readyItem("queued for a retry, not held");
+
+  queueReadyEvent(store, item);
+  rail.upsertCard(item);
+  rail.setCardState(item.id, record.STATE.READY);
+
+  assert.equal(rail.getCard(item.id).state, "ready");
+});
+
 test("an item already sent and acknowledged before Hold went on stays a plain ready card", () => {
   const store = storeModule.createStore();
   const rail = overlay.createRail({ document: null, store: store, reviewId: REVIEW });
