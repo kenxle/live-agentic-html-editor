@@ -1574,6 +1574,12 @@
   // Drawn as two labelled panes rather than five paragraphs of one size: an
   // eyebrow per side, a left rule (the reviewer's in the accent, the page's in
   // the neutral line colour), and the two buttons under both.
+  //
+  // The rules stay. They are not decoration: they are what tells the two
+  // versions apart at a glance, in a rail where a conflict card sits among
+  // ordinary ones. The accent on 'yours' says which half is the reviewer's own
+  // new text; the label alone does that too slowly when several cards are
+  // stacked.
   var CONFLICT_STYLE = [
     "[data-lahe-conflict]{display:flex;flex-direction:column;gap:9px;",
     "border-top:1px solid var(--line-soft);padding-top:9px}",

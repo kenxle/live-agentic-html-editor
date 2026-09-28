@@ -847,8 +847,26 @@ test.describe("the rail as a shipping surface", () => {
           theirsLabel: side("theirs").querySelector("[data-lahe-conflict-label]").textContent,
           // A rule per side, and the reviewer's is the accent one, so the pair
           // reads as a pair rather than as four undifferentiated paragraphs.
+          // This is a new-versus-old signal, so it is asserted twice over: the
+          // two rules differ from each other AND the reviewer's is really the
+          // accent at a real width. A rule deleted outright falls back to the
+          // element's own colour, which could still differ side to side; the
+          // width and accent checks close that.
           yoursRule: cs(side("yours")).borderLeftColor,
           theirsRule: cs(side("theirs")).borderLeftColor,
+          yoursRuleWidth: parseFloat(cs(side("yours")).borderLeftWidth),
+          theirsRuleWidth: parseFloat(cs(side("theirs")).borderLeftWidth),
+          accentColor: (function () {
+            var probe = document.createElement("div");
+            probe.style.borderLeft = "2px solid var(--accent)";
+            side("yours").appendChild(probe);
+            var value = cs(probe).borderLeftColor;
+            probe.remove();
+            return value;
+          })(),
+          // The label ink differs too, and always did.
+          yoursLabelColor: cs(side("yours").querySelector("[data-lahe-conflict-label]")).color,
+          theirsLabelColor: cs(side("theirs").querySelector("[data-lahe-conflict-label]")).color,
           labelTransform: cs(side("yours").querySelector("[data-lahe-conflict-label]")).textTransform,
           yoursText: side("yours").querySelector("[data-lahe-conflict-text]").textContent,
           theirsText: side("theirs").querySelector("[data-lahe-conflict-text]").textContent,
@@ -863,6 +881,12 @@ test.describe("the rail as a shipping surface", () => {
       expect(block.theirsLabel).toBe("On the page now");
       expect(block.labelTransform, "the tab's own eyebrow type").toBe("uppercase");
       expect(block.yoursRule, "the two rules differ, so the sides do").not.toBe(block.theirsRule);
+      expect(block.yoursRuleWidth, "the reviewer's rule is really drawn").toBeGreaterThanOrEqual(2);
+      expect(block.theirsRuleWidth, "and so is the page's").toBeGreaterThanOrEqual(2);
+      expect(block.yoursRule, "the reviewer's side wears the rail's accent").toBe(block.accentColor);
+      expect(block.yoursLabelColor, "the two labels differ in ink, so the sides do").not.toBe(
+        block.theirsLabelColor
+      );
       // Both versions IN FULL. The mark points at the divergence; it never
       // replaces or truncates either side.
       expect(block.yoursText).toBe(mine);

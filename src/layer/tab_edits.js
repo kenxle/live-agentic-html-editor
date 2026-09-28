@@ -138,6 +138,10 @@
   // and the tab cannot drift from the chrome around it.
   var STYLE = [
     "." + ROW_CLASS + "{display:flex;flex-direction:column;gap:6px}",
+    // The rule per pair stays, and so does the accent on an edit row. This is
+    // the tab's new-versus-old signal: scanning a column of rows, the accent
+    // rule is what separates the reviewer's own edits from everything else.
+    // Drop it and the tab is one undifferentiated stack.
     "." + ROW_CLASS + "__pair{display:flex;flex-direction:column;gap:4px;",
     "border-left:2px solid var(--line);padding-left:9px}",
     "." + ROW_CLASS + "[data-kind='edit'] ." + ROW_CLASS + "__pair{border-left-color:var(--accent)}",

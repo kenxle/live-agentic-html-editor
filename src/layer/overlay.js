@@ -623,6 +623,9 @@
     ".card__state[data-state='handled']{color:var(--good);background:transparent;",
     "border:1px solid currentColor}",
     ".card__state[data-state='not_handled']{color:var(--warn);background:var(--warn-wash)}",
+    // A quote rule, which is what a quote has looked like since print. It is
+    // decoration, not a signal: it says "these are the page's words, not the
+    // reviewer's," and it never means anything is new or unread.
     ".card__quote{font-size:12px;color:var(--ink-soft);border-left:2px solid var(--line);",
     "padding-left:9px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}",
     ".card__body{font-size:13.5px;line-height:1.5;color:var(--ink);display:flex;",
@@ -677,8 +680,11 @@
     ".agent__head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:3px}",
     ".agent__who{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;",
     "color:var(--ink-faint);display:block}",
-    ".agent.is-loud{background:var(--accent-wash);border-left:3px solid var(--accent);",
-    "color:var(--ink);font-size:14px;line-height:1.55}",
+    // An attention marker: a loud reply is one the reviewer has not dealt with
+    // yet, so the accent rule down the edge earns its place. Color, size and
+    // line-height are NOT repeated here; they are already set on .agent above,
+    // and this rule only adds to it.
+    ".agent.is-loud{background:var(--accent-wash);border-left:3px solid var(--accent)}",
     ".agent.is-loud .agent__who{color:var(--accent-ink)}",
     // ONE PATH PER LINE, AND IT BREAKS. Repo-relative paths are long and have
     // no natural break points, so joined on one line with normal wrapping they
@@ -904,15 +910,19 @@
     // can politely sit on top of for a few seconds. The collapsed pill is
     // bottom-right, so there is nothing to collide with either way.
     //
-    // It borrows nothing new: the card's own paper, the card's own border, the
-    // accent rule the question block already uses down its left edge.
+    // It borrows nothing new: the card's own paper, the card's own border. No
+    // accent stripe down one edge on top of that. A stripe is how the layer
+    // says "you have not seen this yet," and a toast does not need to say it:
+    // it slides in, which is the loudest attention signal the layer has. Ken:
+    // "the pop-up toast should not have it because that's gonna be seen
+    // already by virtue of its movement, its animation."
     ".toasts{position:fixed;top:16px;right:16px;pointer-events:none;display:flex;",
     "flex-direction:column;align-items:flex-end;gap:8px;",
     "width:min(560px,calc(100vw - 32px))}",
     ".toasts[hidden]{display:none}",
     ".toast{pointer-events:auto;width:100%;display:flex;align-items:flex-start;gap:8px;",
     "padding:10px 11px;background:var(--paper);color:var(--ink);text-align:left;",
-    "border:1px solid var(--line);border-left:3px solid var(--accent);",
+    "border:1px solid var(--line);",
     "border-radius:var(--radius-sm);box-shadow:var(--shadow);cursor:pointer;",
     // SWIPED, NOT SELECTED. Ken: "because the toasts slide in like a Mac
     // notification, my inclination is to grab them with the mouse and slide

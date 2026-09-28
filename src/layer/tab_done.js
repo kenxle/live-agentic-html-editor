@@ -528,6 +528,10 @@
 
     // The question. Full bleed to the card's padding, so the rule runs the
     // whole height of the block rather than sitting in a box inside a box.
+    // The accent rule stays: this block is the layer asking the reviewer for
+    // something, and nothing has happened until they answer. That is exactly
+    // what a stripe is for here. It does not move or animate, so the stripe is
+    // the only thing pulling the eye to it.
     "." + ASK_CLASS + "{margin:2px -12px -2px;padding:10px 12px 11px 13px;",
     "border-left:3px solid var(--accent);background:var(--accent-wash);",
     "display:flex;flex-direction:column;gap:7px}",
