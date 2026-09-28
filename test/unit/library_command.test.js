@@ -9,7 +9,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
-const net = require("node:net");
 const os = require("node:os");
 const path = require("node:path");
 
@@ -19,6 +18,7 @@ const agentSessions = require("../../src/service/agent_sessions.js");
 const catalogRequests = require("../../src/service/catalog_requests.js");
 const sessionCommand = require("../../src/cli/commands/session.js");
 const library = require("../../src/cli/commands/library.js");
+const { onFreePort } = require("../helpers/free_port.js");
 const cli = require("../../src/cli/index.js");
 
 const C = protocol.CATALOG;
@@ -27,16 +27,6 @@ function tempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "lahe-library-command-"));
 }
 
-async function freePort() {
-  const server = net.createServer();
-  await new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
-  });
-  const port = server.address().port;
-  await new Promise((resolve) => server.close(resolve));
-  return port;
-}
 
 async function run(argv, extra) {
   const stdout = [];
@@ -70,14 +60,18 @@ test("lahe library rejects bad usage without starting anything", async () => {
 
 test("lahe library starts the helper, attaches the session, and prints the helper's own /catalog URL", async (t) => {
   const dir = tempDir();
-  const port = await freePort();
-  assert.notEqual(port, protocol.DEFAULT_PORT);
   const store = agentSessions.createStore({ dir });
   store.create({ id: "s_agent", name: "document index" });
   store.create({ id: "s_second" });
   t.after(async () => { await sessionCommand.stopVerifiedHelper(dir); });
 
-  const first = await run(["--session", "s_agent", "--state-dir", dir, "--port", String(port), "--json"]);
+  const started = await onFreePort(
+    (p) => run(["--session", "s_agent", "--state-dir", dir, "--port", String(p), "--json"]),
+    (out) => out.code !== protocol.CLI_EXIT.OK
+  );
+  const port = started.port;
+  assert.notEqual(port, protocol.DEFAULT_PORT);
+  const first = started.result;
   assert.equal(first.code, protocol.CLI_EXIT.OK, first.stderr);
   assert.ok(fs.existsSync(stateDir.readyPath(dir)), "the readiness file appeared in the temporary state dir");
   const printed = JSON.parse(first.stdout.trim());
@@ -124,7 +118,9 @@ function reviewCount(dir) {
 
 test("lahe library with nobody attached mints a session with no reviews, attaches it, and prints its commands", async (t) => {
   const dir = tempDir();
-  const port = await freePort();
+  // The helper is started first, so a port another test took is retried
+  // before any session is made (test/helpers/free_port.js).
+  const { port } = await onFreePort((p) => sessionCommand.startHelper(dir, p));
   t.after(async () => { await sessionCommand.stopVerifiedHelper(dir); });
 
   const out = await run(["--name", "library bot", "--state-dir", dir, "--port", String(port)]);
@@ -149,7 +145,9 @@ test("lahe library with nobody attached mints a session with no reviews, attache
 
 test("lahe library with no --session always starts a new session and attaches it, even over an open attached one", async (t) => {
   const dir = tempDir();
-  const port = await freePort();
+  // The helper is started first, so a port another test took is retried
+  // before any session is made (test/helpers/free_port.js).
+  const { port } = await onFreePort((p) => sessionCommand.startHelper(dir, p));
   t.after(async () => { await sessionCommand.stopVerifiedHelper(dir); });
 
   // The command cannot tell one agent from another, so it never hands out a
@@ -180,7 +178,9 @@ test("lahe library has no --new-session: a new session is already the default", 
 
 test("lahe library --session with --name names that session", async (t) => {
   const dir = tempDir();
-  const port = await freePort();
+  // The helper is started first, so a port another test took is retried
+  // before any session is made (test/helpers/free_port.js).
+  const { port } = await onFreePort((p) => sessionCommand.startHelper(dir, p));
   const store = agentSessions.createStore({ dir });
   store.create({ id: "s_agent" });
   t.after(async () => { await sessionCommand.stopVerifiedHelper(dir); });

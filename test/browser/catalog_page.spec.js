@@ -7,9 +7,8 @@
 //    7817) serves /catalog and its assets, so the content policy, the token meta
 //    tag and the script loading are the ones that ship.
 //  - catalog.list goes to that helper first, so its auth is real: after a helper
-//    restart the old token really gets a 401. A 2xx or a 501 (Task 2.1's routes
-//    are not wired yet) is then answered with test/fixtures/catalog_list.json, so
-//    the page is built against the reader's real output either way.
+//    restart the old token really gets a 401. A 200 is then answered with
+//    test/fixtures/catalog_list.json, so the page draws a fixed list.
 //  - open, star and request are answered by the test, which also checks that
 //    the page sent the Library's own headers.
 //
@@ -73,11 +72,37 @@ async function routeCatalog(page, options) {
       const body = JSON.parse(req.postData() || "{}");
       calls.push({ name, body, headers });
       const answer = (options.answers && options.answers[name]) || (() => ({ status: 200, body: {} }));
-      const out = answer(body);
+      const out = await answer(body);
       await route.fulfill({ status: out.status, contentType: "application/json", body: JSON.stringify(out.body) });
     });
   }
   return calls;
+}
+
+// Record every action POST the page starts, from the moment it is called.
+// page.on("request") fires when the browser starts a request, before any route
+// handler runs, so a click's request cannot slip past it.
+function recordActions(page) {
+  const paths = ["catalog.open", "catalog.star", "catalog.request"].map((n) => protocol.route(n).path);
+  const sent = [];
+  page.on("request", (req) => {
+    const url = new URL(req.url());
+    if (req.method() === "POST" && paths.indexOf(url.pathname) !== -1) sent.push(url.pathname);
+  });
+  return sent;
+}
+
+// "Nothing was sent": one more poll-now round trip first, so a request a click
+// started has had every chance to show up before the count is read.
+async function expectNothingSent(page, sent, message) {
+  await page.evaluate(() => window.__laheCatalogPollNow());
+  expect(sent, message).toEqual([]);
+}
+
+// Screenshots are written only on request (LAHE_SHOTS=1) and only on Chromium,
+// so an ordinary run never rewrites a committed image.
+function shotsWanted(browserName) {
+  return process.env.LAHE_SHOTS === "1" && browserName === "chromium";
 }
 
 async function openLibrary(page, helper) {
@@ -191,6 +216,7 @@ test.describe("the Library page", () => {
   });
 
   test("a watched session asks before a hand-over, naming the agent and the other reviews", async ({ page }) => {
+    const sent = recordActions(page);
     const calls = await routeCatalog(page, {
       list: freshList,
       answers: { "catalog.request": () => ({ status: 200, body: { request_id: "cq_new" } }) }
@@ -206,7 +232,7 @@ test.describe("the Library page", () => {
     );
     await expect(dialog.locator("li")).toHaveText(["Feature Brief: Coach Activity", "specs / spec.html", "Coach Notes", "Deleted Page"]);
     await expect(dialog.locator("button")).toHaveText(["Move the session", "Just open it to read", "Cancel"]);
-    expect(calls.length, "nothing is sent before the reader decides").toBe(0);
+    await expectNothingSent(page, sent, "nothing is sent before the reader decides");
 
     await dialog.locator('[data-act="move"]').click();
     await expect(dialog).toBeHidden();
@@ -217,7 +243,8 @@ test.describe("the Library page", () => {
   });
 
   test("Cancel and Escape leave the watched session alone", async ({ page }) => {
-    const calls = await routeCatalog(page, { list: freshList });
+    const sent = recordActions(page);
+    await routeCatalog(page, { list: freshList });
     await openLibrary(page, helper);
     const dialog = page.locator("#lahe-catalog-confirm");
     await rowLocator(page, "r_mounted").locator('[data-act="launch"]').click();
@@ -227,13 +254,14 @@ test.describe("the Library page", () => {
     await expect(dialog).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
-    expect(calls.length).toBe(0);
+    await expectNothingSent(page, sent);
   });
 
   test("with no agent attached, Pick this up and Launch show the hand-off message", async ({ page }) => {
     const list = freshList();
     list.attached = null;
-    const calls = await routeCatalog(page, { list: () => list });
+    const sent = recordActions(page);
+    await routeCatalog(page, { list: () => list });
     await openLibrary(page, helper);
     await expect(page.locator("#lahe-catalog-agent")).toHaveText(
       "No agent attached. Open still works; hand-overs give you a message to paste."
@@ -250,11 +278,12 @@ test.describe("the Library page", () => {
       await panel.locator('[data-act="close-panel"]').click();
       await expect(panel).toHaveCount(0);
     }
-    expect(calls.length).toBe(0);
+    await expectNothingSent(page, sent);
   });
 
   test("a second click while a request waits does nothing and says so", async ({ page }) => {
-    const calls = await routeCatalog(page, { list: freshList });
+    const sent = recordActions(page);
+    await routeCatalog(page, { list: freshList });
     await openLibrary(page, helper);
     const row = rowLocator(page, "r_brief");
     await expect(row.locator(".lib-note-text")).toHaveText("Waiting for document index.");
@@ -262,7 +291,42 @@ test.describe("the Library page", () => {
     await expect(row.locator(".lib-note-text")).toHaveText("Already waiting for document index.");
     await row.locator('[data-act="launch"]').click();
     await expect(row.locator(".lib-note-text")).toHaveText("Already waiting for document index.");
-    expect(calls.length).toBe(0);
+    await expectNothingSent(page, sent);
+  });
+
+  test("a double click on Open sends one request and shows Open busy until it answers", async ({ page, context }) => {
+    const sent = recordActions(page);
+    let release;
+    const held = new Promise((resolve) => {
+      release = resolve;
+    });
+    const tabs = [];
+    context.on("page", (p) => tabs.push(p));
+    await routeCatalog(page, {
+      list: freshList,
+      answers: {
+        "catalog.open": async () => {
+          await held;
+          return { status: 200, body: { url: "http://evil.test/", request_id: null, not_asked: null } };
+        }
+      }
+    });
+    await openLibrary(page, helper);
+    const open = rowLocator(page, "r_stale").locator('[data-act="open"]');
+    await open.dblclick();
+    await expect(rowLocator(page, "r_stale").locator('[data-act="open"]')).toHaveAttribute("aria-busy", "true");
+    await rowLocator(page, "r_stale").locator('[data-act="open"]').click();
+    await expect.poll(() => sent.length).toBe(1);
+    release();
+    // The answer is refused (not loopback), which closes the one tab and ends
+    // the busy state. Its note is the sign the answer arrived.
+    await expect(rowLocator(page, "r_stale").locator(".lib-note-text")).toHaveText(
+      "LAHE answered with an address that is not on this computer, so the Library did not open it."
+    );
+    await expect(rowLocator(page, "r_stale").locator('[data-act="open"]')).not.toHaveAttribute("aria-busy", "true");
+    await page.evaluate(() => window.__laheCatalogPollNow());
+    expect(sent).toEqual([protocol.route("catalog.open").path]);
+    expect(tabs.length, "one tab for one Open").toBe(1);
   });
 
   test("the missing toggle shows and hides missing rows", async ({ page }) => {
@@ -312,10 +376,9 @@ test.describe("the Library page", () => {
   test("restarting the helper under an open Library says so, and a reload recovers", async ({ page }) => {
     const calls = await routeCatalog(page, { list: freshList });
     await openLibrary(page, helper);
-    // The real helper passed the page's token (501 until Task 2.1 wires the
-    // list, 200 after): not a refusal.
+    // The real helper passed the page's token: not a refusal.
     expect(calls.realStatuses.length).toBeGreaterThan(0);
-    calls.realStatuses.forEach((status) => expect([200, 501]).toContain(status));
+    calls.realStatuses.forEach((status) => expect(status).toBe(200));
     const port = helper.port;
     const stateDir = helper.stateDir;
     await helper.stop();
@@ -350,7 +413,8 @@ test.describe("the Library page", () => {
     await expect(rowLocator(page, "r_deleted").locator('[data-badge="watching"]')).toHaveText("agent watching: coach activity");
   });
 
-  test("screenshots, light and dark", async ({ page }) => {
+  test("screenshots, light and dark", async ({ page, browserName }) => {
+    test.skip(!shotsWanted(browserName), "screenshots are written only with LAHE_SHOTS=1 on Chromium");
     const list = freshList();
     await routeCatalog(page, { list: () => list });
     await openLibrary(page, helper);

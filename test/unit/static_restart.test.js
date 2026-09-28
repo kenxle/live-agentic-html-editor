@@ -70,17 +70,9 @@ function closeServer(server) {
   return new Promise((resolve) => server.close(() => resolve()));
 }
 
-/** A free loopback port, for an origin nothing is listening on. */
-function freePort() {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const port = server.address().port;
-      server.close(() => resolve(port));
-    });
-  });
-}
+// freePort: a free loopback port, for an origin nothing is listening on.
+// portInUse: whether a parallel test took a freed port.
+const { freePort, portInUse } = require("../helpers/free_port.js");
 
 /**
  * One session with one single-page review, served by one static server, the
@@ -170,6 +162,15 @@ test("a restart reuses the old port when it is free, and the record keeps its po
 
   const result = await f.ops.reopenForCatalog(f.sessionId, f.first.meta.id);
   assert.equal(result.started, true);
+  if (result.server.port !== oldPort) {
+    // Between the stop and the restart, another test running in parallel can
+    // bind the freed port. Then the restart rightly takes a new one; that is
+    // accepted only when a holder really has the old port, and the record
+    // must still keep its history.
+    assert.equal(await portInUse(oldPort), true, "the old port was skipped although nothing holds it");
+    assert.deepEqual(result.server.ports, [oldPort, result.server.port]);
+    return;
+  }
   assert.equal(result.server.port, oldPort, "the old port, so an old tab's URL works again");
   assert.deepEqual(result.server.ports, [oldPort], "a reused port is not recorded twice");
   assert.equal((await rawGet(oldPort, "/page.html", "127.0.0.1:" + oldPort)).status, 200);
@@ -343,6 +344,11 @@ test("restartAll prefers each server's old port", async (t) => {
   await staticServers.stopAll(f.state, f.sessionId);
   assert.equal(await staticServers.restartAll(f.state, f.sessionId), 1);
   const now = staticServers.list(f.state, f.sessionId)[0];
+  if (now.port !== oldPort) {
+    // A parallel test took the freed port: accepted only when one really did.
+    assert.equal(await portInUse(oldPort), true, "the old port was skipped although nothing holds it");
+    return;
+  }
   assert.equal(now.port, oldPort);
   assert.equal(http.STATUS_CODES[(await rawGet(oldPort, "/page.html", "localhost:" + oldPort)).status], "OK");
 });

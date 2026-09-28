@@ -30,6 +30,7 @@ const staticServers = require("../../src/service/static_servers.js");
 const sessionCommand = require("../../src/cli/commands/session.js");
 const catalogStore = require("../../src/service/catalog_store.js");
 const { pollUntil } = require("../helpers/poll.js");
+const { onFreePort } = require("../helpers/free_port.js");
 
 const C = protocol.CATALOG;
 
@@ -37,16 +38,6 @@ function tempDir() {
   return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lahe-catalog-lifetime-")));
 }
 
-async function freePort() {
-  const server = net.createServer();
-  await new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
-  });
-  const port = server.address().port;
-  await new Promise((resolve) => server.close(resolve));
-  return port;
-}
 
 function raw(port, options) {
   return new Promise((resolve, reject) => {
@@ -105,12 +96,11 @@ async function close(dir, sessionId, nowMs) {
 /** One open agent session and a helper started for it, the way the CLI starts one. */
 async function started(t) {
   const dir = path.join(tempDir(), "state");
-  const port = await freePort();
-  assert.notEqual(port, protocol.DEFAULT_PORT);
   const store = agentSessions.createStore({ dir });
   store.create({ id: "s_last" });
   t.after(async () => { await sessionCommand.stopVerifiedHelper(dir).catch(() => {}); });
-  await sessionCommand.startHelper(dir, port);
+  const { port } = await onFreePort((p) => sessionCommand.startHelper(dir, p));
+  assert.notEqual(port, protocol.DEFAULT_PORT);
   return { dir, port, store };
 }
 
