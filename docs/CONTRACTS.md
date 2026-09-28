@@ -1047,7 +1047,8 @@ The one read path, and the one keep-up loop. Before it, every agent hand-rolled 
     `PROJECTED_FIELD_CLASS` (`catalog_requests[].title` and so on) and fenced like every other data
     field. `title` is the Library's display name for the row, so it is never null for a real row.
     `candidate` is the main-repository copy of a worktree row, checked when the entry is built, or null.
-    `handoff` is the rail's own hand-off message for the document's session.
+    `handoff` is the rail's own hand-off message for the document's session. It never carries a
+    session name read off a page's title (`name_source: "page"`).
   - These fields come from the catalog reader's `describeReview`, the same description the Library's
     list uses.
   - **Wake once.** A new pending request gets past `--quiet`, including for a session with no reviews
@@ -1156,7 +1157,7 @@ are our plumbing. A unit test asserts none of those words appears in `TEXT`, `CO
 `replies.poll` answers with an `agent_liveness` object (`protocol.AGENT_LIVENESS`), resolved
 server-side from the review to its owning agent session. Fields: `state`, `unanswered`,
 `oldest_unanswered_at`, `oldest_unanswered_item`, `last_reply_at`, `listening`, `monitor_at`,
-`activity_at`, `session_id`, `session_name`, `state_dir_flag_needed`.
+`activity_at`, `session_id`, `session_name`, `session_name_from_page`, `state_dir_flag_needed`.
 
 - `oldest_unanswered_item` is the id of the waiting item `oldest_unanswered_at` belongs to (its
   wait-start, `updated_at` first), or null.
@@ -1168,13 +1169,17 @@ server-side from the review to its owning agent session. Fields: `state`, `unans
   `lahe session name`), or null. The helper strips control characters, zero-width characters,
   U+2028/U+2029 and direction overrides. It is display text: the rail sets it with `textContent`, and
   fills it into sentences with a function replacer so `$&` in a name stays literal.
+- `session_name_from_page` is true when that name was read off a page's own title (`lahe session
+  name --from-review`, recorded as `name_source: "page"` in `session.json`). The rail still shows the
+  name, but its hand-off message leaves it out.
 
 **Overdue is one rule**, `protocol.AGENT_LIVENESS.overdue(state, waitedMs)`: `no_agent` past
 `NO_AGENT_LOUD_MS`, `waiting` past `STALE_MS`, `working` and `none` never. `no_agent` SPEAKS at
 `QUIET_MS` like the others; it just does not go loud until two minutes, because an agent thinking
 through a hard comment leaves no footprint and reads the same as an empty chair. The footer line goes loud on it.
 The banner at the top of the rail shows exactly while the footer is loud, and its one button copies
-`AGENT_LIVENESS.handoffMessage(session_id, session_name, state_dir_flag_needed)` for a new agent: the
+`AGENT_LIVENESS.handoffMessage(session_id, session_name, state_dir_flag_needed)` for a new agent (with
+`session_name` null when `session_name_from_page` is true): the
 takeover command for that id, and a sentence saying `--state-dir` is needed when it is. A ready card
 with no reply turns amber when its own wait passes the same rule. With the rail collapsed, the pill
 goes amber on the same rule, shows the wait, and carries the banner's sentence as its hover text.
@@ -1362,7 +1367,11 @@ lahe library answer <request-id> --session <id> --status done|refused --text "..
 
 `lahe session name <id> --from-review <review>` names a session after that review's display name, as
 the Library shows it. The CLI reads the name itself, so a page-set title never passes through a shell
-command. The review must belong to the named session.
+command. The review must belong to the named session. The session record gets `name_source: "page"`,
+and no hand-off message carries a page-sourced name: not the drain's `handoff`, not the Library's
+copy panel (its list marks the session `name_from_page: true`), not the rail's banner. A hand-off is
+a new agent's first prompt, and a page must not be able to write into it. A name set any other way
+clears the mark.
 
 ### `lahe wait` is retired
 

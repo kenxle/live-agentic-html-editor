@@ -512,7 +512,8 @@ function readerDescriber(dir, nowMs) {
     var name = null;
     try {
       var session = sessions.read(sessionId);
-      name = session ? agentSessionsModule.cleanName(session.name) : null;
+      // Never a name read off a page's title: this is a new agent's first prompt.
+      name = agentSessionsModule.handoffName(session);
     } catch (err) {
       name = null;
     }

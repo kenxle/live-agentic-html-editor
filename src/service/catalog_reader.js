@@ -176,6 +176,12 @@ function createReader(options) {
     return s.state === "ok" ? agentSessions.cleanName(s.value.name) : null;
   }
 
+  /** Was the session's name read off a page's title? Then no hand-off carries it. */
+  function nameFromPage(sessionId) {
+    var s = readSession(sessionId);
+    return s.state === "ok" && !!agentSessions.cleanName(s.value.name) && s.value.name_source === agentSessions.NAME_SOURCE_PAGE;
+  }
+
   /** Is this session's monitor live? Read only through livenessFrom. */
   function monitorLive(sessionId, nowMs) {
     if (sessionId === LEGACY || !protocol.isSafeId(sessionId)) return { live: false, beat: null };
@@ -745,6 +751,7 @@ function createReader(options) {
       return {
         id: s.id,
         name: s.state === "ok" ? nameOf(s.id) : null,
+        name_from_page: s.state === "ok" && nameFromPage(s.id),
         projects: projects.sort(),
         watching: watchingOf(s.id, nowMs),
         last: reviews.length ? reviews[0].last : null,

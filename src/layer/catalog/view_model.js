@@ -319,7 +319,9 @@
 
   function handoffFor(session) {
     var isLegacy = !session || session.id === LEGACY_SESSION;
-    return protocol.AGENT_LIVENESS.handoffMessage(isLegacy ? null : session.id, isLegacy ? null : session.name || null, false);
+    // A name read off a page's title stays out: the message is a new agent's prompt.
+    var name = isLegacy || session.name_from_page === true ? null : session.name || null;
+    return protocol.AGENT_LIVENESS.handoffMessage(isLegacy ? null : session.id, name, false);
   }
 
   function sameWatcher(a, b) {

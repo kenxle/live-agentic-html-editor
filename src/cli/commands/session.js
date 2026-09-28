@@ -448,7 +448,7 @@ async function run(argv, options) {
         }
         newName = described.display_name;
       }
-      var renamed = store.setName(args.id, newName);
+      var renamed = store.setName(args.id, newName, args.fromReview ? { source: sessions.NAME_SOURCE_PAGE } : undefined);
       out(
         "agent session " + args.id +
           (renamed.name ? " is named " + JSON.stringify(renamed.name) : " has no name now") + "\n"

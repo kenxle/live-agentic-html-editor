@@ -3619,7 +3619,9 @@
     function waitBanner(line) {
       var current = line || statusLine();
       var sessionId = agentLiveness ? agentLiveness[AGENT_FIELD.SESSION_ID] : null;
-      var name = sessionName();
+      // A name read off a page's title is shown on the rail but never put in the
+      // hand-off message: that text is a new agent's first prompt.
+      var name = agentLiveness && agentLiveness[AGENT_FIELD.NAME_FROM_PAGE] === true ? null : sessionName();
       var message = protocol.AGENT_LIVENESS.handoffMessage(
         typeof sessionId === "string" ? sessionId : null,
         name,

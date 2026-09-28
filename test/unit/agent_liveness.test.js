@@ -490,6 +490,7 @@ test("replies.poll answers with how long it has been, not with a claim", () => {
     "oldest_unanswered_item",
     "session_id",
     "session_name",
+    "session_name_from_page",
     "state",
     "state_dir_flag_needed",
     "unanswered"

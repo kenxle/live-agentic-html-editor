@@ -55,12 +55,38 @@ function cleanName(value) {
   return stripped || null;
 }
 
-/** Put a cleaned name on a session record, or take the field off for none. */
-function applyName(session, value) {
+// Where a name came from. "page" marks a name read off a document's own title
+// (`lahe session name <id> --from-review`): text the page chose. The rail and
+// the Library may show it, but no hand-off message carries it, since a hand-off
+// is the first prompt a new agent reads. Any other name is the human's.
+var NAME_SOURCE_PAGE = "page";
+
+/**
+ * Put a cleaned name on a session record, or take the field off for none.
+ *
+ * @param {object} session
+ * @param {*} value
+ * @param {string} [source] NAME_SOURCE_PAGE for a page-derived name
+ */
+function applyName(session, value, source) {
   var name = cleanName(value);
   if (name) session.name = name;
   else delete session.name;
+  if (name && source === NAME_SOURCE_PAGE) session.name_source = NAME_SOURCE_PAGE;
+  else delete session.name_source;
   return session;
+}
+
+/**
+ * The name a hand-off message may carry: the human's name, or null when there
+ * is none or the name came from a page.
+ *
+ * @param {object|null} session
+ * @returns {string|null}
+ */
+function handoffName(session) {
+  if (!session || session.name_source === NAME_SOURCE_PAGE) return null;
+  return cleanName(session.name);
 }
 
 function mintId() {
@@ -201,6 +227,9 @@ function livenessFrom(input) {
   out[protocol.AGENT_LIVENESS.FIELD.STATE_DIR_FLAG] = spec.stateDirFlagNeeded === true;
   // Which agent, in the human's words, so the rail can say which window to check.
   out[protocol.AGENT_LIVENESS.FIELD.NAME] = cleanName(spec.session && spec.session.name);
+  // A name read off a page's title is shown, but the rail's hand-off leaves it out.
+  out[protocol.AGENT_LIVENESS.FIELD.NAME_FROM_PAGE] =
+    !!out[protocol.AGENT_LIVENESS.FIELD.NAME] && !!spec.session && spec.session.name_source === NAME_SOURCE_PAGE;
   return out;
 }
 
@@ -308,11 +337,13 @@ function createStore(options) {
    *
    * @param {string} id
    * @param {string|null} name
+   * @param {{source?: string}} [options] source NAME_SOURCE_PAGE for a name
+   *   read off a page's title
    */
-  function setName(id, name) {
+  function setName(id, name, options) {
     var session = read(id);
     if (!session || session.synthetic) throw new Error("unknown agent session " + JSON.stringify(id));
-    return write(applyName(session, name));
+    return write(applyName(session, name, options && options.source));
   }
 
   function list() {
@@ -566,7 +597,9 @@ module.exports = {
   SCHEMA: SCHEMA,
   LEGACY_ID: LEGACY_ID,
   NAME_MAX: NAME_MAX,
+  NAME_SOURCE_PAGE: NAME_SOURCE_PAGE,
   cleanName: cleanName,
+  handoffName: handoffName,
   mintId: mintId,
   handoffRev: handoffRev,
   pidAlive: pidAlive,

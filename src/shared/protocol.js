@@ -1375,7 +1375,11 @@
       OLDEST_ITEM: "oldest_unanswered_item",
       // The human's name for the owning session (set with --name or `lahe
       // session name`), or null. Display text: the rail draws it as text only.
-      NAME: "session_name"
+      NAME: "session_name",
+      // true when NAME was read off a page's own title (`lahe session name
+      // --from-review`). The rail still shows it, but its hand-off message,
+      // which a new agent reads as its first prompt, leaves it out.
+      NAME_FROM_PAGE: "session_name_from_page"
     },
     // THE WORDS, SPELLED ONCE, HERE. They used to be hand-copied into the layer,
     // which is two spellings of one wire value: rename a state and the rail
