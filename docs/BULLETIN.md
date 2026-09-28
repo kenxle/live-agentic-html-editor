@@ -5,6 +5,8 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
+- [ ] @anyone 2026-09-28 LAHE-render-forge-structure -- **Teach LAHE's Markdown renderer the feature-forge structure, so it is code again and not something each agent hand-writes.** The forge's old HTML build made the nav bar (Crucible, Brief, Architecture, Plan, Wireframes, Progress), the callout boxes (`::: callout-req` and friends), and the reviews section automatic, which is why those docs were consistent. LAHE's renderer shows Markdown as written: it ignores `:::` blocks and has no feature-folder nav, so agents drop or improvise them. Ken wants the structure kept and the St. Clair AI style on top. Related: the forge build's own stylesheet is being moved to the St. Clair style now.
+
 - [ ] @anyone 2026-09-28 LAHE-static-server-host-check -- **The page servers do not check the Host header, so a DNS-rebinding page could read review tokens out of served pages.** Found by the security review of the linked-docs rail change. True before that change; the change makes it reach linked pages too. The helper already checks Host (decision D11); the session static servers should refuse a Host that is not their own loopback address and port.
 
 - [ ] @anyone 2026-09-28 LAHE-linked-files-follow-ups -- **Three loose ends from the linked-docs rail code review, left out of that change on purpose.**
