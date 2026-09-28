@@ -139,16 +139,16 @@ test.describe("CP2-mid: ranked test 2 with real records", () => {
     // is never replayed at all (a draft is not outstanding), so it cannot show
     // that anything protected anything.
     //
-    // A plain reopened `ready` edit will not do here (spec
-    // 20260922.01_draft_write_cost, requirement 6): the first keystroke into a
-    // reopened `ready` edit withdraws it to `draft` until the reviewer commits
-    // again, and a draft is never replayed (record.isOutstanding is false for
-    // it), so `regionsSkippedProtected` would never rise and the test would
-    // stop proving anything. An agent's `not_handled` reply keeps its state
-    // while the reviewer types (editing.js's captureTyping only moves a
-    // record to draft when it reopened `ready`), so it stays outstanding for
-    // every keystroke below, which is what this test needs replay to refuse
-    // to write into.
+    // THE FIRST CHANGING KEYSTROKE WITHDRAWS IT (spec
+    // 20260922.01_draft_write_cost, requirement 6). A reopened edit, ready or
+    // not_handled, goes to `draft` on the first keystroke that changes its
+    // wording, and a draft is never replayed (record.isOutstanding is false for
+    // it). So replay's refusal to write into the region the reviewer is in is
+    // proved in the window where the record IS outstanding: the block is open
+    // and protected, nothing typed yet, and the page repaints. The typing below
+    // then proves the reviewer's sentence and caret survive the repaints.
+    // The `not_handled` reply stays in the setup so the rewording of a refused
+    // edit is covered end to end, withdrawal included.
 
     const firstGo = await editAndCommit(page, "#region-a", " Every Monday.");
     expect(firstGo.state).toBe("ready");
@@ -173,6 +173,16 @@ test.describe("CP2-mid: ranked test 2 with real records", () => {
     // the library asked to be left alone. The fixture's own protection is OFF,
     // so nothing but src/layer/protect.js is protecting anything here.
     await configureFixture(page, { flavor: "morph", target: "#live-frame", protection: "off" });
+
+    // Replay REFUSES to write into the region the reviewer is in, rather than
+    // never having considered it: the record is still outstanding here.
+    await forceRepaint(page, { flavor: "morph" });
+    await pollPage(
+      page,
+      (args) => window.__lahe.counters.regionsSkippedProtected > args[0],
+      [countersBefore.regionsSkippedProtected],
+      { message: "a replay pass to skip region A because the reviewer is in it" }
+    );
 
     // The reviewer types, with the page reverting itself underneath them, for
     // at least five replay passes.
@@ -215,10 +225,6 @@ test.describe("CP2-mid: ranked test 2 with real records", () => {
     expect(countersAfter.regionsBlockedChanged - countersBefore.regionsBlockedChanged).toBe(0);
     expect(await page.evaluate(() => window.__laheCp2.flaggedIds())).toEqual([]);
 
-    // Replay REFUSED to write into the region the reviewer was in, rather than
-    // never having considered it.
-    expect(countersAfter.regionsSkippedProtected).toBeGreaterThan(countersBefore.regionsSkippedProtected);
-
     // The deleted block stays deleted, however many times the page puts it back.
     expect(await page.evaluate(() => window.__laheCp2.exists("#region-d"))).toBe(false);
 
@@ -231,7 +237,7 @@ test.describe("CP2-mid: ranked test 2 with real records", () => {
     const open = await page.evaluate((id) => window.__laheCp2.itemById(id), openItemId);
     expect(open.id, "a re-entry rewords the SAME record").toBe(firstGo.id);
     expect(open.rev).toBe(1);
-    expect(open.state, "not_handled keeps its state while typed into, never sliding to draft").toBe("not_handled");
+    expect(open.state, "rewording a refused edit takes it off the agent's desk until commit").toBe("draft");
     expect(open.before, "before is pinned to the page's wording, not to what is on screen").toBe(SOURCE.a);
     expect(open.after).toBe(typed.expected);
   });

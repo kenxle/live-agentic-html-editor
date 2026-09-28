@@ -329,9 +329,15 @@ function createReplyFolder(options) {
     // rivals, not a sequence. So the rival is judged against the state the item
     // was in before the first answer, which is `ready`, and latest wins. A reply
     // naming any OTHER revision still goes through the ordinary path and is
-    // still refused as stale.
+    // still refused as stale. A DRAFT is never judged as ready: a draft that
+    // carries a reply at its own revision is the reviewer rewording an
+    // answered item, and lifecycle refuses every reply to it.
     var against = item;
-    if (item[record.FIELD.REPLY] && item[record.FIELD.REV] === reply[protocol.REPLY_FIELD.REV]) {
+    if (
+      item[record.FIELD.REPLY] &&
+      item[record.FIELD.REV] === reply[protocol.REPLY_FIELD.REV] &&
+      !record.isDraft(item)
+    ) {
       against = Object.assign({}, item);
       against[record.FIELD.STATE] = record.STATE.READY;
     }
