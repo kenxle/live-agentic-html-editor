@@ -81,6 +81,24 @@
     },
     {
       from: STATE.READY,
+      to: STATE.DRAFT,
+      actor: ACTOR.REVIEWER,
+      why: "the reviewer starts rewording it: the first changing keystroke takes it off the agent's desk until commit"
+    },
+    {
+      from: STATE.NOT_HANDLED,
+      to: STATE.DRAFT,
+      actor: ACTOR.REVIEWER,
+      why: "the reviewer starts rewording an edit the agent said no to, the same way as a ready one"
+    },
+    {
+      from: STATE.DRAFT,
+      to: STATE.NOT_HANDLED,
+      actor: ACTOR.REVIEWER,
+      why: "the reviewer types a withdrawn not_handled edit back to its wording: the agent's answer still stands"
+    },
+    {
+      from: STATE.READY,
       to: STATE.HANDLED,
       actor: ACTOR.AGENT,
       why: "a reply naming the item's CURRENT rev says it made the change"

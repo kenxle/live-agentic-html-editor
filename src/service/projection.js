@@ -94,6 +94,10 @@ function createFold() {
     order: [],
     // id -> the revision the current reply answered. Rule 2 above reads it.
     replyRev: Object.create(null),
+    // id -> the state an answered item was in when the reviewer started
+    // rewording it at the same revision (see "A REWORDING TAKES IT OFF THE
+    // DESK" below). Present only while the item is withdrawn.
+    withdrawnFrom: Object.create(null),
     times: { started_at: null, ended_at: null, agent_session_id: "legacy" },
     sourcePath: null,
     seq: 0
@@ -117,6 +121,7 @@ function foldEvents(state, events, options) {
   var onDropped = typeof opts.onDropped === "function" ? opts.onDropped : null;
   var byId = state.byId;
   var replyRev = state.replyRev;
+  var withdrawnFrom = state.withdrawnFrom;
 
   (events || []).forEach(function (event) {
     var seq = event[protocol.EVENT_FIELD.SEQ];
@@ -161,14 +166,34 @@ function foldEvents(state, events, options) {
         // Same revision: the helper's lifecycle stands, the browser's content
         // is taken. This is D5's merge rule, on the helper's side of the wire.
         next[F.REPLY] = prev[F.REPLY];
-        next[F.STATE] = prev[F.STATE];
         // The unbacked handled claim is lifecycle, not content, so it travels
         // with the state rather than with the browser's record.
         next[F.HANDLED_NOT_ON_PAGE] = prev[F.HANDLED_NOT_ON_PAGE] === true;
+        // A REWORDING TAKES IT OFF THE DESK. The one lifecycle move the
+        // browser makes at the same revision as a reply is the reviewer's
+        // withdrawal: typing into an answered item that is still in front of
+        // someone (ready with a question, or not_handled) makes it a draft
+        // until they commit, which bumps the revision, or type the wording
+        // back, which restores the state it was withdrawn from. Without this
+        // the helper kept the old state and put the half-typed words in
+        // review.json on every draft post (spec 20260922.01, review finding
+        // 5). A handled item is never withdrawn: its state stands as before.
+        var id2 = next[F.ID];
+        var from = withdrawnFrom[id2] || prev[F.STATE];
+        if (record.isDraft(next) && (from === record.STATE.READY || from === record.STATE.NOT_HANDLED)) {
+          withdrawnFrom[id2] = from;
+          next[F.STATE] = record.STATE.DRAFT;
+        } else {
+          // Restored, or an ordinary same-revision content write. The state
+          // is the helper's, never the browser's claim.
+          next[F.STATE] = from;
+          delete withdrawnFrom[id2];
+        }
       } else {
         next[F.REPLY] = null;
         next[F.HANDLED_NOT_ON_PAGE] = false;
         delete replyRev[next[F.ID]];
+        delete withdrawnFrom[next[F.ID]];
       }
       byId[next[F.ID]] = next;
       return;
@@ -178,6 +203,7 @@ function foldEvents(state, events, options) {
       if (!id || !byId[id]) return;
       delete byId[id];
       delete replyRev[id];
+      delete withdrawnFrom[id];
       state.order = state.order.filter(function (each) {
         return each !== id;
       });
@@ -195,6 +221,7 @@ function foldEvents(state, events, options) {
       reopened[F.HANDLED_NOT_ON_PAGE] = false;
       byId[id] = reopened;
       delete replyRev[id];
+      delete withdrawnFrom[id];
       return;
     }
 
@@ -213,6 +240,7 @@ function foldEvents(state, events, options) {
       applied[F.HANDLED_NOT_ON_PAGE] = event.handled_not_on_page === true;
       byId[id] = applied;
       replyRev[id] = item[F.REV];
+      delete withdrawnFrom[id];
       return;
     }
 
