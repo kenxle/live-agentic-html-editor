@@ -736,3 +736,16 @@ test("CR2: star and unstar act on every review in a fold, so a star never sticks
   assert.equal((await actions.star({ review: other, starred: false }, installed.nowMs)).status, 200);
   assert.equal((await foldRow()).starred, false, "unstarred through the new lead");
 });
+
+test("CL2: an agent whose monitor exited to work a batch still counts as watching, so a hand-over asks first", async (t) => {
+  const w = await world(t);
+  // The monitor beat long ago and exited on work; the agent ran a lahe
+  // command just now, which is what the queue counts as listening too.
+  beat(w.store, "s_doc", T0 - 10 * protocol.MONITOR.HEARTBEAT_FRESH_MS, "s_doc");
+  stateDir.writeAtomic(stateDir.activityPath(w.dir, "s_doc"), JSON.stringify({ [protocol.MONITOR.ACTIVITY_FIELD.AT]: new Date(T0).toISOString() }) + "\n");
+  const res = await api(w, "catalog.open", { review: "r_page", handoff: true });
+  assert.equal(res.status, 409, res.text);
+  assert.equal(res.json.error.code, "PROTO_CONFIRM_NEEDED");
+  const listed = await api(w, "catalog.list");
+  assert.deepEqual(listed.json.sessions.find((s) => s.id === "s_doc").watching, { session: "s_doc", name: "doc session" });
+});

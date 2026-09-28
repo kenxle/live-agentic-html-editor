@@ -148,6 +148,7 @@ Rules the reader owns:
 - **`openable: yes`** when `static_servers.servesPath(...)` is true for a recorded server of the session. That counts mounts.
 - **`kind`** tells the agent how to re-serve a `via-agent` row.
 - **`watching`** is null or `{session, name}`, taken from the `primary` field of the session's `monitor.json` heartbeat. So a session picked up by another agent names that agent.
+- **Who counts as watching** is the rule the request queue uses, read through `livenessFrom` with the session's activity stamp: a fresh heartbeat on the current handoff rev whose pid is alive, or a lahe command in the last few minutes. `lahe monitor` exits when it wakes on work, so a heartbeat alone would read "nobody is watching" exactly while that agent works a batch, and Open would skip the "another agent is watching" confirm step then (fix round CL2). With no heartbeat on disk, the session names itself.
 - **`attached.watching`** is false when the attached session's monitor is dead. An attach with no session on disk behind it reads as no agent.
 - **`request`** is the latest request on that review. An answer stays until the next request on the review, or `ANSWER_SHOWN_MS`.
 - **`pages[].path`** is a URL path on the review's server. Page rows are informational; they have no Open of their own.

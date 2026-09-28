@@ -15,7 +15,8 @@
 //                     here (REPROJECT_MAX_BYTES), in which case the one review
 //                     is projected in memory with the helper's own projection
 //   session.json      the session's name
-//   monitor.json      who is watching, through agent_sessions.livenessFrom
+//   monitor.json      who is watching, through agent_sessions.livenessFrom,
+//   activity.json     with the recent-command stamp the request queue counts
 //   ss_*.json         whether Open can restart a server for the review, and
 //                     (with a probe) whether one is serving it right now
 //   catalog.json      stars, through catalog_store
@@ -236,35 +237,48 @@ function createReader(options) {
     return s.state === "ok" ? agentSessions.cleanName(s.value.name) : null;
   }
 
-  /** Is this session's monitor live? Read only through livenessFrom. */
+  /**
+   * Is an agent listening on this session? Read only through livenessFrom,
+   * with the same inputs the request queue uses (fix round CL2): a fresh
+   * heartbeat on this handoff rev whose pid is alive, OR a lahe command in the
+   * last few minutes. The second matters because `lahe monitor` exits when it
+   * wakes on work, so a heartbeat alone reads "nobody" exactly while the agent
+   * is working a batch. `beat` is the heartbeat record, stale or not, for its
+   * `primary`.
+   */
   function monitorLive(sessionId, nowMs) {
     if (sessionId === LEGACY || !protocol.isSafeId(sessionId)) return { live: false, beat: null };
     var beat = null;
+    var activity = null;
     try {
       var got = cachedJson(stateDir.monitorPath(dir, sessionId));
       beat = got.state === "ok" ? got.value : null;
     } catch (err) {
       beat = null;
     }
-    if (!beat) return { live: false, beat: null };
+    try {
+      var act = cachedJson(stateDir.activityPath(dir, sessionId));
+      activity = act.state === "ok" ? act.value : null;
+    } catch (err) {
+      activity = null;
+    }
+    if (!beat && !activity) return { live: false, beat: null };
     var s = readSession(sessionId);
     var liveness = agentSessions.livenessFrom({
       session: s.state === "ok" ? s.value : null,
       monitor: beat,
-      activity: null,
+      activity: activity,
       listening: null,
       nowMs: nowMs,
       pidAlive: pidAlive
     });
-    // With no activity and no feed answer, `listening` is true only for a
-    // fresh heartbeat, on this handoff rev, whose pid is alive.
     return { live: liveness[protocol.AGENT_LIVENESS.FIELD.LISTENING] === true, beat: beat };
   }
 
   function watchingOf(sessionId, nowMs) {
     var m = monitorLive(sessionId, nowMs);
     if (!m.live) return null;
-    var primary = m.beat[HEARTBEAT.PRIMARY];
+    var primary = m.beat ? m.beat[HEARTBEAT.PRIMARY] : null;
     var who = typeof primary === "string" && protocol.isSafeId(primary) ? primary : sessionId;
     return { session: who, name: nameOf(who) };
   }
