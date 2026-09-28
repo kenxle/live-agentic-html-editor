@@ -52,6 +52,7 @@ var protocol = require("../shared/protocol.js");
 var record = require("../shared/record.js");
 var lifecycle = require("../shared/lifecycle.js");
 var reviewFormat = require("../shared/review_format.js");
+var staticServers = require("./static_servers.js");
 var reviewWriter = require("./review_writer.js");
 var stateDir = require("./state_dir.js");
 var replies = require("./replies.js");
@@ -299,6 +300,30 @@ function sourceHintOf(state) {
 }
 
 /**
+ * The file on disk behind every linked page an item was made on, as
+ * {page path: real path or null}.
+ *
+ * `linkedFileFor` is the helper's mount lookup (static_servers.linkedFileForPage
+ * bound to one review), so the file an agent is told to edit comes from the
+ * helper and never from the page (spec 20260922.02, requirement 6). With no
+ * lookup every linked page maps to null, which review_format reads as unknown.
+ */
+function linkedFilesOf(items, linkedFileFor) {
+  var out = {};
+  items.forEach(function (item) {
+    var pagePath = item[F.PAGE_PATH];
+    if (!reviewFormat.isLinkedPage(pagePath)) return;
+    if (Object.prototype.hasOwnProperty.call(out, pagePath)) return;
+    var file = null;
+    if (typeof linkedFileFor === "function") {
+      try { file = linkedFileFor(pagePath); } catch (err) { file = null; }
+    }
+    out[pagePath] = typeof file === "string" && file ? file : null;
+  });
+  return out;
+}
+
+/**
  * The whole `review.json` body for a fold, wherever that fold got to.
  *
  * The route adds `seq`; nothing else is added anywhere, so what an agent reads
@@ -317,7 +342,8 @@ function projectFold(reviewId, state, options) {
     agent_session_id: state.times.agent_session_id,
     generated_at: opts.generated_at || undefined,
     items: actionableItems(itemsOf(state)),
-    source_hint: sourceHintOf(state)
+    source_hint: sourceHintOf(state),
+    linked_files: linkedFilesOf(actionableItems(itemsOf(state)), opts.linkedFileFor)
   });
 }
 
@@ -451,6 +477,20 @@ function createProjector(options) {
     );
   }
 
+  /**
+   * The helper's mount lookup for one review's linked pages: the review's own
+   * agent session is read off its meta.json, and the static servers of that
+   * session are asked (static_servers.linkedFileForPage).
+   */
+  function linkedLookup(reviewId) {
+    return function (pagePath) {
+      var meta;
+      try { meta = JSON.parse(fs.readFileSync(stateDir.metaPath(dir, reviewId), "utf8")); } catch (err) { return null; }
+      if (!meta || typeof meta.agent_session_id !== "string") return null;
+      return staticServers.linkedFileForPage(dir, meta.agent_session_id, reviewId, pagePath);
+    };
+  }
+
   /** The kept fold for a review, minted the first time it is asked for. */
   function entryFor(reviewId) {
     if (!Object.prototype.hasOwnProperty.call(watched, reviewId)) {
@@ -574,7 +614,7 @@ function createProjector(options) {
     // ever be skipped by mistake. The baseline is empty when the helper starts,
     // so the first tick always writes (new contract text lands), and a file
     // someone removed is written again.
-    var projected = projectFold(reviewId, entry.fold);
+    var projected = projectFold(reviewId, entry.fold, { linkedFileFor: linkedLookup(reviewId) });
     var comparable = comparableBytes(projected);
     if (entry.lastBytes === comparable && fileExists(reviewId)) {
       entry.wroteAt = entry.fold.seq;
@@ -604,7 +644,7 @@ function createProjector(options) {
   function currentProjection(reviewId) {
     var entry = catchUp(reviewId);
     return {
-      projection: projectFold(reviewId, entry.fold),
+      projection: projectFold(reviewId, entry.fold, { linkedFileFor: linkedLookup(reviewId) }),
       draft_count: itemsOf(entry.fold).filter(function (item) {
         return item[F.STATE] === record.STATE.DRAFT;
       }).length

@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+eb2c9886f4d4
+ * version 0.2.0+e33fb371130c
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+eb2c9886f4d4";
+  g.LAHE.version = "0.2.0+e33fb371130c";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -6697,6 +6697,7 @@
     "A break the reviewer typed is part of the edit: a blank line in the after text is a paragraph break, and a single newline is a line break. Markdown does not read a single newline as a new paragraph, so write a blank line between the two paragraphs in the source, or the format's own hard-break form for a line break, then rebuild and check the page really shows the break.",
     "An edit's after is the words; after_html is the same words carrying the reviewer's bold and italic, and that formatting is part of the edit. Apply after_html, not after alone. Bold reaches you as <strong> and italic as <em>; in a Markdown source those are ** and _ (or *). When the reviewer took bold or italic OFF words that a page stylesheet makes bold or italic, HTML has no tag that says so, so the record marks that run <not-bold> or <not-italic>: make that true in the source the way the source says it, and never copy either tag into the source. A handled reply for an edit whose formatting you did not carry is a wrong handled.",
     "Links in a Markdown source are source-true: never rewrite an on-disk link to make the browser page work. The renderer translates local links when it builds the page, so fix a broken link only if it is wrong on disk too.",
+    "A page whose path starts with /.lahe-source/ is a document the reviewed page links to, opened by following that link. Its items belong to this review, and that page's linked_file and source_hint name the linked document's own file on disk, worked out by this tool. Edit that file, not the page that linked to it. If linked_file is null, ask the reviewer which file they mean before editing anything.",
     "The only way to say you handled an item is to append a reply line."
   ];
 
@@ -7047,7 +7048,7 @@
    *   record itself carries none. It is what the agent reads at the top of the
    *   page group, so the two answers cannot disagree.
    */
-  function projectItem(it, pageHint) {
+  function projectItem(it, pageHint, linkedHint) {
     var F = record.FIELD;
     var ctx = it[F.CONTEXT] || {};
     var out = {};
@@ -7135,7 +7136,8 @@
       it[F.REGION],
       record.pageCanCarryStamp({
         path: it[F.PAGE_PATH],
-        source_hint: it[F.SOURCE_HINT] || pageHint || null
+        // A linked page's hint is the helper's, never the record's own claim.
+        source_hint: linkedHint !== undefined ? linkedHint : it[F.SOURCE_HINT] || pageHint || null
       }),
       it
     );
@@ -7229,6 +7231,34 @@
     return false;
   }
 
+  // A page served under a /.lahe-source/ mount is a document a reviewed page
+  // links to (spec 20260922.02). Its source file is worked out by the helper,
+  // off the static server's mount table, and handed in as
+  // review.linked_files[page path]. Whatever the page itself claimed is never
+  // used for it, and a page the helper could not map reads as unknown rather
+  // than falling back to the linking page's source, which is the wrong file.
+  var LINKED_PAGE_PREFIX = "/.lahe-source/";
+
+  // Any spelling that DECODES under the prefix counts as a linked page, so an
+  // encoded one (/%2Elahe-source/...) never falls back to the review-wide
+  // source. The helper maps only the literal spelling, which is the only one
+  // the static server serves, so an encoded one reads as unknown.
+  function isLinkedPage(pagePath) {
+    if (typeof pagePath !== "string") return false;
+    if (pagePath.indexOf(LINKED_PAGE_PREFIX) === 0) return true;
+    try {
+      return decodeURIComponent(pagePath).indexOf(LINKED_PAGE_PREFIX) === 0;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function linkedHintOf(review, pagePath) {
+    var table = review.linked_files && typeof review.linked_files === "object" ? review.linked_files : {};
+    var file = Object.prototype.hasOwnProperty.call(table, pagePath) ? table[pagePath] : null;
+    return typeof file === "string" && file ? { known: true, path: file } : null;
+  }
+
   function projectReview(review) {
     requireReview(review);
     var groups = pageGroups(review.items);
@@ -7261,12 +7291,19 @@
           // Markdown --source) recorded, so a known source is not reported as
           // unknown merely because no item on this page ever carried it itself
           // (see projection.js's reviewSourceHint).
-          source_hint: sourceHint(g.hint || review.source_hint || null),
+          source_hint: sourceHint(
+            isLinkedPage(g.path) ? linkedHintOf(review, g.path) : g.hint || review.source_hint || null
+          ),
+          // The linked document's file on disk, when this page is one a
+          // reviewed page links to and the helper could map it. Null
+          // otherwise.
+          linked_file: isLinkedPage(g.path) && linkedHintOf(review, g.path) ? linkedHintOf(review, g.path).path : null,
           // lahe status reads this to say when a page connected over file://
           // rather than (or in addition to) the served origin above, so a
           // half-configured review is visible instead of silent.
           file_origin_seen: !!g.file_origin_seen,
           items: g.items.map(function (it) {
+            if (isLinkedPage(g.path)) return projectItem(it, null, linkedHintOf(review, g.path));
             return projectItem(it, g.hint || review.source_hint || null);
           })
         };
@@ -7457,6 +7494,7 @@
     sourceHint: sourceHint,
     pageGroups: pageGroups,
     projectItem: projectItem,
+    isLinkedPage: isLinkedPage,
     projectReview: projectReview,
     stringifyReview: stringifyReview,
     countItems: countItems,
@@ -36735,7 +36773,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+eb2c9886f4d4";
+  var VERSION = "0.2.0+e33fb371130c";
 
   var protocol = ns.protocol;
   var record = ns.record;

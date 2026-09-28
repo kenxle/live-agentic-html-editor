@@ -66,6 +66,10 @@ var path = require("node:path");
 var normalize = require("../shared/normalize.js");
 var record = require("../shared/record.js");
 var rebuildModule = require("./rebuild.js");
+var markdown = require("./markdown.js");
+var markdownLinks = require("./markdown_links.js");
+var staticServers = require("./static_servers.js");
+var reviewFormat = require("../shared/review_format.js");
 
 // THE RENDERER ESCAPES THE REVIEWER'S PUNCTUATION. marked writes an apostrophe
 // as `&#39;`, so a page holding the reviewer's exact sentence does not hold
@@ -291,6 +295,15 @@ function createHandledCheck(options) {
       }
     }
 
+    // AN ITEM MADE ON A LINKED DOCUMENT is judged against that document, not
+    // the page that linked to it (spec 20260922.02). The file comes from the
+    // same mount lookup that names it in review.json; one it cannot vouch for
+    // is "cannot tell".
+    var pagePath = item[record.FIELD.PAGE_PATH];
+    if (reviewFormat.isLinkedPage(pagePath)) {
+      return linkedPageShows(meta, reviewId, item, pagePath);
+    }
+
     // Something was written since the reviewer committed these words, so an
     // agent did something and what it did is not this check's to grade.
     if (touchedSince(meta, item)) return null;
@@ -313,6 +326,40 @@ function createHandledCheck(options) {
     }
     if (read === 0) return null;
     return false;
+  }
+
+  function linkedPageShows(meta, reviewId, item, pagePath) {
+    var file = null;
+    try {
+      file = staticServers.linkedFileForPage(dir, meta.agent_session_id, reviewId, pagePath);
+    } catch (error) {
+      file = null;
+    }
+    if (!file) return null;
+    var at = item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT];
+    var committedAt = typeof at === "string" ? Date.parse(at) : NaN;
+    if (!Number.isFinite(committedAt)) return null;
+    try {
+      if (fs.statSync(file).mtimeMs > committedAt) return null;
+    } catch (error) {
+      return null;
+    }
+    var needle = comparable(item[record.FIELD.AFTER]);
+    if (!needle) return null;
+    var html;
+    try {
+      // The page the reviewer sees is the render, so a Markdown file is read
+      // the way the server renders it. A throwaway registry: nothing is
+      // mounted or recorded by a check.
+      html = markdown.isMarkdown(file)
+        ? markdown.render(file, { links: markdownLinks.createRegistry({}) })
+        : fs.readFileSync(file, "utf8");
+    } catch (error) {
+      return null;
+    }
+    var hay = comparable(html);
+    if (!hay) return null;
+    return hay.indexOf(needle) !== -1;
   }
 
   return { pageShows: pageShows, rebuild: rebuild };

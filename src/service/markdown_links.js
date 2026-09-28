@@ -19,6 +19,21 @@ var fs = require("node:fs");
 var os = require("node:os");
 var path = require("node:path");
 
+var heal = require("./heal.js");
+
+// The Markdown extensions, spelled once. markdown.js reads them from here,
+// since it requires this module and not the other way round.
+var MARKDOWN_EXTENSIONS = [".md", ".markdown"];
+
+/**
+ * Is `file` a page: something the server renders or serves as HTML, and so
+ * something the rail can sit on? A linked script or data file is served as
+ * bytes and is never a file an agent is told to edit for a comment.
+ */
+function isPage(file) {
+  return MARKDOWN_EXTENSIONS.indexOf(path.extname(file).toLowerCase()) !== -1 || heal.isStaticPage(file);
+}
+
 // The bound on distinct directories one render may mount. A document that links
 // out to more than this many folders is linking to a tree, not to siblings, and
 // mounting the tree is not something a review should do silently.
@@ -59,12 +74,22 @@ function createRegistry(options) {
   var mounts = Object.assign({}, opts.mounts || {});
   var consumed = (opts.consumed || []).slice();
   var added = [];
+  // The real path of every file a link in this render now points at, whether
+  // the link was translated into another folder's mount or rewritten under the
+  // document's own. The static server puts a rail on these files and on no
+  // other file in a mounted folder (spec 20260922.02, requirement 5).
+  var linked = [];
   var skipped = 0;
   return {
     cap: cap,
     mounts: mounts,
     added: added,
+    linked: linked,
     get skipped() { return skipped; },
+    note: function (target) {
+      if (typeof target !== "string" || !target || !isPage(target)) return;
+      if (linked.indexOf(target) === -1) linked.push(target);
+    },
     add: function (dir) {
       var prefix = mountPrefix(dir);
       if (mounts[prefix]) return prefix;
@@ -90,6 +115,21 @@ function isExternal(href) {
   return !href || href.slice(0, 2) === "//" || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(href);
 }
 
+// A relative link stays under the document's own mount, but it is still a link
+// to a real file, so it is noted the same way a translated one is. Only a file
+// that exists, stays inside the document's folder by real path, and crosses no
+// hidden segment: the same file the server would agree to hand out.
+function noteRelative(candidate, root, registry) {
+  if (!registry || typeof registry.note !== "function") return;
+  var real;
+  try { real = fs.realpathSync(candidate); } catch (err) { return; }
+  var realRoot;
+  try { realRoot = fs.realpathSync(root); } catch (err) { return; }
+  if (!within(real, realRoot) || hasHiddenSegment(real, realRoot)) return;
+  try { if (!fs.statSync(real).isFile()) return; } catch (err) { return; }
+  registry.note(real);
+}
+
 // Decide what one href becomes in the rendered output.
 //
 //   external  leave it alone (scheme, protocol-relative, empty)
@@ -111,7 +151,10 @@ function classify(href, sourceDir, registry) {
     candidate = path.resolve(decoded);
   } else {
     candidate = path.resolve(root, decoded);
-    if (within(candidate, root)) return { kind: "relative" };
+    if (within(candidate, root)) {
+      noteRelative(candidate, root, registry);
+      return { kind: "relative" };
+    }
   }
   var home = homeRoot();
   var real;
@@ -130,6 +173,7 @@ function classify(href, sourceDir, registry) {
   var dir = path.dirname(real);
   var prefix = registry ? registry.add(dir) : mountPrefix(dir);
   if (!prefix) return { kind: "inert", target: candidate, reason: "cap" };
+  if (registry && typeof registry.note === "function") registry.note(real);
   return {
     kind: "translate",
     url: prefix + encodeURIComponent(path.basename(real)) + split.suffix,
@@ -140,6 +184,8 @@ function classify(href, sourceDir, registry) {
 
 module.exports = {
   MOUNT_CAP: MOUNT_CAP,
+  MARKDOWN_EXTENSIONS: MARKDOWN_EXTENSIONS,
+  isPage: isPage,
   homeRoot: homeRoot,
   mountPrefix: mountPrefix,
   createRegistry: createRegistry,

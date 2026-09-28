@@ -10,6 +10,7 @@ const path = require("node:path");
 
 const reviewCommand = require("../../src/cli/commands/review.js");
 const sessionCommand = require("../../src/cli/commands/session.js");
+const scriptLine = require("../../src/shared/script_line.js");
 
 function tempDir(prefix) {
   return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
@@ -57,7 +58,7 @@ function write(file, body) {
   return file;
 }
 
-test("a reviewed Markdown document's local links serve rendered documents, hop to hop", async (t) => {
+test("a reviewed Markdown document's local links serve rendered documents with its rail, hop to hop", async (t) => {
   const home = tempDir("lahe-linked-home-");
   const state = path.join(tempDir("lahe-linked-state-"), "state");
   const previousHome = process.env.LAHE_HOME_DIR;
@@ -101,6 +102,9 @@ test("a reviewed Markdown document's local links serve rendered documents, hop t
 
   const page = await request(open);
   assert.equal(page.status, 200);
+  const hubReview = scriptLine.reviewAlreadyInFile(page.body);
+  assert.ok(hubReview, "the reviewed page carries its own rail");
+  const reviewsBefore = fs.readdirSync(path.join(state, "reviews")).sort();
   // A link out of the document's folder became a mounted URL; a link LAHE
   // cannot serve became inert text naming the path on disk.
   const crucibleHref = page.body.match(/href="(\/\.lahe-source\/[a-f0-9]+\/SKILL\.md)"/)[1];
@@ -111,17 +115,22 @@ test("a reviewed Markdown document's local links serve rendered documents, hop t
   assert.equal(template.status, 200, "the sibling template inside the document's own folder resolves");
   assert.match(template.type, /text\/html/);
   assert.match(template.body, /A sibling template\./);
-  assert.match(template.body, /Read-only rendered view of <code>[^<]*document-templates\.md<\/code>\. This document is not under review\./);
+  // THE RAIL FOLLOWS THE LINK (spec 20260922.02): a linked document with no
+  // review of its own carries the rail of the page that linked to it, and
+  // nothing is created to make that happen.
+  assert.equal(scriptLine.reviewAlreadyInFile(template.body), hubReview, "a sibling the page links to rides its review");
+  assert.doesNotMatch(template.body, /This document is not under review/);
 
   const crucible = await request(new URL(crucibleHref, open).href);
   assert.equal(crucible.status, 200, "hop one renders");
-  assert.match(crucible.body, /Read-only rendered view of/);
-  assert.doesNotMatch(crucible.body, /lahe-layer\.js/, "a rendered linked document is not enrolled in the review");
+  assert.equal(scriptLine.reviewAlreadyInFile(crucible.body), hubReview, "a document in another folder rides it too");
 
   const subHref = crucible.body.match(/href="(\/\.lahe-source\/[a-f0-9]+\/SUB\.md)"/)[1];
   const sub = await request(new URL(subHref, open).href);
   assert.equal(sub.status, 200, "hop two renders behind a mount the server registered for itself");
   assert.match(sub.body, /The third hop\./);
+  assert.equal(scriptLine.reviewAlreadyInFile(sub.body), hubReview, "and a chain rides the first review");
+  assert.deepEqual(fs.readdirSync(path.join(state, "reviews")).sort(), reviewsBefore, "no review was created by a click");
 
   const pictureHref = crucible.body.match(/src="([^"]*picture\.txt)"|href="([^"]*picture\.txt)"/);
   const picture = await request(new URL(pictureHref[1] || pictureHref[2], open).href);
