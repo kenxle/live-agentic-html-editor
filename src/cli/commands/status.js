@@ -520,6 +520,10 @@ function readerDescriber(dir, nowMs) {
     // "legacy" is not a session anybody can take over; the message then points
     // the new agent at `lahe session list` instead.
     var takeable = protocol.isSafeId(sessionId) && sessionId !== agentSessionsModule.LEGACY_ID;
+    // A legacy or worktree row has no session a new agent could take over, so
+    // it gets no hand-off at all: never one that sends a new agent to
+    // `lahe session list` to pick a session nobody named (adversary fixes).
+    var noTakeover = !described || described.kind === "legacy" || described.kind === "worktree";
     return {
       kind: described ? described.kind : null,
       origin: described && described.origin ? described.origin : null,
@@ -529,7 +533,7 @@ function readerDescriber(dir, nowMs) {
       folder: described ? projectFolder(launchRoot(described)) : null,
       // The rail's hand-off message in its Library form: take-over wording,
       // with the real --state-dir when it is not the default.
-      handoff: protocol.AGENT_LIVENESS.handoffMessage(takeable ? sessionId : null, takeable ? name : null, false, {
+      handoff: noTakeover ? null : protocol.AGENT_LIVENESS.handoffMessage(takeable ? sessionId : null, takeable ? name : null, false, {
         library: true,
         stateDir: stateDirModule.flagFor(dir)
       })

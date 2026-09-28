@@ -54,6 +54,9 @@ function iso(ms) {
   return new Date(ms).toISOString();
 }
 
+// Row kinds a new agent cannot be launched on: no session to take over.
+var NO_LAUNCH_KINDS = ["legacy", "worktree"];
+
 function fail(code, detail) {
   return { status: protocol.statusFor(code), error: { code: code, detail: detail === undefined ? null : detail } };
 }
@@ -323,6 +326,12 @@ function createCatalogActions(options) {
     // A missing review has nothing an agent could open, so it is refused here
     // exactly as Open refuses it.
     if (d.openable === "missing") return fail("PROTO_NOT_OPENABLE", "missing");
+    // A launched agent's first prompt takes the document's session over. A
+    // legacy review has no session, and a worktree row's session serves a
+    // folder that is gone, so a launch there would send a new agent hunting
+    // for a session nobody pointed at (adversary fixes). Pick this up serves
+    // those rows instead.
+    if (action === ACTION.LAUNCH && NO_LAUNCH_KINDS.indexOf(d.kind) !== -1) return fail("PROTO_NO_LAUNCH", d.kind);
     var agent = liveAgent(nowMs);
     if (!agent) return fail("PROTO_NO_AGENT");
     // A pick-up of a served document the attached agent already has asks for

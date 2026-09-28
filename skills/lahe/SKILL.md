@@ -602,6 +602,7 @@ lahe monitor --session <your-session-id> --session <session>
 
 **Launch a new agent** (`action: launch`). Start one new agent, never more.
 Do not take the session over yourself: the new agent does that.
+A launch request is only for a static row: the Library refuses one on a legacy or worktree row, and if one reaches you anyway its handoff is null, so answer refused.
 
 On macOS, with a host that has a command line (`claude` for Claude Code,
 `codex` for Codex):

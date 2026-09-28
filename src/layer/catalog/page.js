@@ -308,6 +308,7 @@
       "data-key": row.id + ":" + key,
       "data-primary": primary ? "true" : null,
       "aria-busy": b.busy ? "true" : null,
+      title: b.reason || null,
       disabled: !b.enabled
     });
   }
@@ -432,15 +433,17 @@
       kids.push(
         h("div", { class: "lib-panel", role: "region", "aria-label": row.handoffLabel }, [
           h("p", { text: row.panel.intro }),
-          h("pre", { text: row.panel.message }),
+          row.panel.message ? h("pre", { text: row.panel.message }) : null,
           h("div", { class: "lib-panel-acts" }, [
-            button(row.panel.copyLabel, {
-              "data-act": "copy",
-              "data-review": row.id,
-              "data-key": row.id + ":copy",
-              "data-message": row.panel.message,
-              "data-primary": "true"
-            }),
+            row.panel.message
+              ? button(row.panel.copyLabel, {
+                  "data-act": "copy",
+                  "data-review": row.id,
+                  "data-key": row.id + ":copy",
+                  "data-message": row.panel.message,
+                  "data-primary": "true"
+                })
+              : null,
             button(row.panel.closeLabel, { "data-act": "close-panel", "data-review": row.id, "data-key": row.id + ":close" }),
             row.panel.copyStatus ? h("span", { class: "lib-copy-status", role: "status", text: row.panel.copyStatus }) : null
           ])

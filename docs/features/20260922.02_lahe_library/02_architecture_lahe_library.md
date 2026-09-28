@@ -343,6 +343,7 @@ This amends D11: one new credential, the Library token, that can list, open (res
   | `PROTO_QUEUE_FULL` | 429 | `QUEUE_CAP` reached |
   | `PROTO_NO_AGENT` | 409 | no attached agent, or its monitor is dead |
   | `PROTO_CONFIRM_NEEDED` | 409 | a hand-over on a watched session without `confirmed` |
+  | `PROTO_NO_LAUNCH` | 409 | A launch on a legacy or worktree row, which has no session a new agent could take over (adversary fixes) |
   | `PROTO_CATALOG_UNREADABLE` | 500 | `catalog.json` is corrupt |
 
   Each code has a remedy line in `protocol.js`, and the page shows that remedy.
