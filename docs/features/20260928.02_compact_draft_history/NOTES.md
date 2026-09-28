@@ -4,9 +4,10 @@ A one-time repair for log bloat the tool caused. Before the draft write-cost fix
 
 ## Summary
 
-- On a copy of this machine's 515 reviews, the dry run takes the logs from 733,973,648 bytes (700.0 MB) to 79,309,320 bytes (75.6 MB).
-- It drops 152,829 events. Every one is a draft snapshot that the same item's next `item.content` replaces.
-- 238 reviews have something to drop. All 238 pass the projection check. None fails.
+- On a fresh copy of this machine's 515 reviews, the dry run takes the logs from 734,024,360 bytes (700.0 MB) to 79,351,026 bytes (75.7 MB).
+- It drops 152,834 events. Every one is a draft snapshot that the same item's next `item.content` replaces.
+- 239 reviews have something to drop. All 239 pass the projection check. None fails.
+- The dropped event_ids are listed beside each log, and the helper counts them as already seen. So a browser re-posting a dropped draft cannot bring it back.
 - The script refuses to run while the helper or any static server is running.
 - It is a dry run unless you pass `--apply`.
 
@@ -52,20 +53,39 @@ If anything differs, the review is left untouched and the report says what diffe
 
 **Ignored fields:** only `generated_at`. `projectReview` stamps it with the current time on every projection, so both sides get the same pinned value. `linked_files` is not ignored. The proof passes no static-server lookup to either side, so both sides build the same map from the items' page paths, and those paths are compared.
 
-As a separate check, I ran `--apply` on the full scratch copy. I then re-read all 238 compacted logs with the helper's own reader (`createEventLog().read`). I compared `project()` and `itemsFrom()` against the original restored from each `.gz`. All 238 matched.
+As a separate check, I ran `--apply` on a second scratch copy. I then re-read all 239 compacted logs with the helper's own reader (`createEventLog().read`). I compared `project()` and `itemsFrom()` against the original restored from each `.gz`. All 239 matched.
 
 ## The write
 
 For each review with something to drop, `--apply` does these steps in order:
 
-1. It gzips the original to a temp file and fsyncs it. It reads it back and confirms it restores the exact bytes. Then it renames it to `events.jsonl.pre-compact.gz`.
-2. It writes the compacted log to a temp file in the same folder, mode 0600, and fsyncs it.
-3. It stats `events.jsonl` again. If the file changed since it was read, the script undoes its own temp and backup files and leaves the review alone.
-4. It renames the temp file over `events.jsonl`, fsyncs the folder, and reads the log back to confirm the bytes.
+1. It opens `events.jsonl` and holds that handle to the end. It reads the log through the handle.
+2. It gzips the original to a temp file and fsyncs it. It reads it back and confirms it restores the exact bytes. Then it renames it to `events.jsonl.pre-compact.gz`.
+3. It writes the dropped event_ids to `events.jsonl.compacted-ids`, one JSON string per line, fsynced, by temp file and rename. (See the next section.)
+4. It fsyncs the folder, so both renames are on disk before the log is touched.
+5. It writes the compacted log to a temp file in the same folder, mode 0600, and fsyncs it.
+6. It stats `events.jsonl` again. If the file changed since it was read, the script undoes its own files and leaves the review alone.
+7. It renames the temp file over `events.jsonl`.
+8. It checks the old file's size through the held handle. If the old file grew, the script copies the new bytes onto the new log, and repeats until the old file stops growing. The report counts these bytes.
+9. It fsyncs the folder again and reads the log back to confirm the bytes.
+
+Once step 7 has happened, the script never removes the backup or the id list. If anything fails after that point, it still copies any late bytes. It reports the review as "applied, but ... check the log", names the backup, and exits with code 3.
+
+**fsync on macOS.** Node has no separate call for `F_FULLFSYNC`, and none is needed. `fs.fsyncSync` goes through libuv's `uv__fs_fsync`, which on Apple already calls `fcntl(F_FULLFSYNC)`. If the file system refuses that, libuv falls back to `F_BARRIERFSYNC` and then `fsync(2)`. That is in libuv's `src/unix/fs.c`; Node 20.19 ships libuv 1.46.0. I could not trace the system calls to confirm it on this machine, because `dtruss` needs root.
 
 The script never writes `review.json`, `meta.json`, or reply files. If `events.jsonl.pre-compact.gz` already exists from an earlier run, the review is left alone, so the true original is never overwritten.
 
-To restore a review: `gunzip -c events.jsonl.pre-compact.gz > events.jsonl`, with the helper stopped.
+To restore a review, stop the helper and run `gunzip -c events.jsonl.pre-compact.gz > events.jsonl`. You can leave `events.jsonl.compacted-ids` in place. Every id in it is back in the log, so the helper would count it as seen anyway.
+
+## Re-posted drafts: the id list the helper reads
+
+The helper's log reader keeps a set of every event_id on disk. When an event arrives with an id already in that set, the helper answers "duplicate" and appends nothing. Browsers rely on this. The browser keeps each event in its outbox until the helper acknowledges it, and re-posts it on the next load. A page closed mid-post never reads the answer, so it re-posts events that are already on disk.
+
+Without the id list, a dropped draft's id would leave that set. A browser re-posting it would get it appended as new, after the commit that replaced it. The item would fall back to an old draft that the agent never sees. The reviewer reproduced this.
+
+So `src/service/log.js` now reads `events.jsonl.compacted-ids` in `load()`, the first time a process touches a review, and adds every id to the seen set. It reads the file again whenever it notices the log was rewritten. The helper only ever reads this file; the compaction script is its only writer. It is on disk, so it holds across helper restarts, and every CLI command that opens the log reads it too. `src/service/state_dir.js` names the file (`compactedIdsPath`). The test re-posts a dropped id through two fresh log readers, standing in for a helper restart. Both answer "duplicate", and the item stays at its committed revision.
+
+On the applied scratch copy, the id lists for all 239 reviews total 4,737,854 bytes (4.5 MB).
 
 ## Never racing the helper
 
@@ -74,7 +94,12 @@ The helper holds no per-review lock that a script could take. `windows.json` rec
 - `service.json` names a pid that is alive
 - any static server record under `agent-sessions/*/static-servers/` is unstopped and names a pid that is alive
 
-The refusal names each process and how to stop it: `lahe session close <session-id>` (the last close also stops the helper), or `kill <pid>`. A pid that answers counts as running even if it might be a reused pid. A wrong "running" only costs a refusal. A wrong "stopped" could lose an event. The re-stat before each rename is a second guard, against a writer that starts after the check.
+The refusal names each process and how to stop it: `lahe session close <session-id>` (the last close also stops the helper), or `kill <pid>`. A pid that answers counts as running even if it might be a reused pid. A wrong "running" only costs a refusal. A wrong "stopped" could lose an event.
+
+That check cannot see `lahe add` or `lahe review`. Both can append to a log with no helper up. Two guards in the write cover them:
+
+- The re-stat before the rename (step 6) leaves the review alone if the log changed after it was read.
+- The late-append copy (step 8) catches anything that lands between that re-stat and the rename, or reaches the old file after the rename.
 
 A running helper would also cope with the rewrite. `log.js` sees the inode change and re-reads the log from the top.
 
@@ -93,28 +118,41 @@ Exit codes:
 - `0`: done
 - `1`: a usage error
 - `2`: refused, because something is running
-- `3`: done, but at least one review was left alone (the report says why)
+- `3`: done, but at least one review was left alone or needs its log checked (the report says why)
 
 ## Dry-run totals from a copy of the real state
 
-I copied `~/.local/state/lahe/reviews` to a scratch folder. Then I ran `node scripts/compact_draft_history.js --state-dir <scratch>`. Every number below is the script's own output.
+After the review fixes, I copied `~/.local/state/lahe/reviews` to a fresh scratch folder. Then I ran `node scripts/compact_draft_history.js --state-dir <scratch>`. Every number below is the script's own output.
 
 | | |
 | --- | --- |
 | Reviews | 515 |
-| Reviews with drafts to drop | 238 |
-| Bytes before | 733,973,648 (700.0 MB) |
-| Bytes after | 79,309,320 (75.6 MB) |
-| Events dropped | 152,829 of 156,365 draft `item.content` events |
-| Kept as an item's last draft | 3,310 |
+| Reviews with drafts to drop | 239 |
+| Bytes before | 734,024,360 (700.0 MB) |
+| Bytes after | 79,351,026 (75.7 MB) |
+| Events dropped | 152,834 of 156,375 draft `item.content` events |
+| Kept as an item's last draft | 3,315 |
 | Kept by rule 2 (next event not `item.content`) | 226 |
 | Kept by rule 3 (fold would differ) | 0 |
 | Kept by rule 4 (order would move) | 0 |
-| Projection check passed / failed / nothing to drop | 238 / 0 / 277 |
+| Projection check passed / failed / nothing to drop | 239 / 0 / 276 |
 
-The dry run took 4.9 seconds of wall time.
+The dry run took 5.86 seconds of wall time.
 
-I then ran `--apply` on the same scratch copy. It swapped all 238 logs. The 238 backups take 55,844,734 bytes (53.3 MB) of gzip, so the folder holds 128.9 MB in total until the backups are removed. A second dry run over the compacted copy found nothing to drop.
+I then ran `--apply` on a second copy of that folder:
+
+- It swapped all 239 logs.
+- It copied 0 late bytes.
+- It flagged 0 reviews to check.
+
+Space on that copy after the swap:
+
+| | |
+| --- | --- |
+| Compacted logs | 79,351,026 bytes (75.7 MB) |
+| The 239 gzip backups | 55,849,204 bytes (53.3 MB) |
+| The 239 id lists | 4,737,854 bytes (4.5 MB) |
+| Total, until the backups are removed | 139,938,084 bytes (133.5 MB) |
 
 A small side effect: the compacted logs have gaps in `seq`. Readers use seq only as an "after this" cursor, so gaps are safe. The one visible effect: the reply poll's in-memory tail buffer can fall back to a full read when a page's cursor sits inside a gap. That is slower, but the answer is the same.
 

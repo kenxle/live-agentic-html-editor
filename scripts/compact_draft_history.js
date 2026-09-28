@@ -35,17 +35,25 @@
 //   - the review.json bytes, with `generated_at` pinned (IGNORED_FIELDS)
 //   - the list of malformed item events the fold reports
 //
-// THE WRITE. The compacted log goes to a temp file in the same folder and is
-// fsynced. The original is gzipped to `events.jsonl.pre-compact.gz` beside it,
-// fsynced, and read back to confirm it restores the exact bytes. Then the temp
-// file is renamed over `events.jsonl`. review.json, meta.json and reply files
-// are never opened for writing.
+// THE WRITE. The log is opened before it is read, and that handle is held to
+// the end. The original is gzipped to `events.jsonl.pre-compact.gz`, fsynced,
+// read back to confirm it restores the exact bytes, and renamed into place.
+// The dropped event_ids go to `events.jsonl.compacted-ids`, which the helper's
+// log reader (src/service/log.js load) counts as already seen, so a browser
+// re-posting a dropped draft from its outbox is answered as a duplicate
+// instead of being appended after the commit that replaced it. The folder is
+// fsynced, then the compacted log is written to a temp file, fsynced, and
+// renamed over `events.jsonl`. Anything that reached the old file after it
+// was read is copied onto the new one through the held handle. Once the
+// rename has happened, the backup and the id list are never removed.
+// review.json, meta.json and reply files are never opened for writing.
 //
 // NEVER RACE THE HELPER. The helper keeps no per-review lock a script could
 // take, so the script refuses to run at all while the helper or any static
 // server is running (service.json and the static server records, with a live
-// pid). As a second guard, the log is stat'ed again right before the rename;
-// if it changed since it was read, that review is left alone.
+// pid). `lahe add` and `lahe review` can append with no helper up, which that
+// check cannot see, so the log is stat'ed again right before the rename (a
+// change leaves the review alone) and late appends are copied after it.
 //
 // Dry run by default. `--apply` does the writes.
 //
@@ -298,9 +306,14 @@ function compactBuffer(buffer, reviewId, planner) {
   var lines = splitLines(buffer);
   var plan = (planner || planDrops)(lines, reviewId);
   var narrowed = Object.assign({ next_not_content: 0, fold_differs: 0, order_would_move: 0 }, plan.narrowed || {});
+  var droppedIds = [];
+  plan.drops.forEach(function (i) {
+    if (lines[i] && lines[i].event) droppedIds.push(lines[i].event[EF.EVENT_ID]);
+  });
   return {
     compacted: assemble(buffer, lines, plan.drops),
     dropped: plan.drops.size,
+    droppedIds: droppedIds,
     narrowed: narrowed,
     drafts: plan.drafts || 0,
     last_drafts: plan.last_drafts || 0
@@ -361,6 +374,10 @@ function proveSame(originalBuffer, compactedBuffer, reviewId) {
 // The write
 // ---------------------------------------------------------------------------
 
+// fs.fsyncSync is libuv's uv__fs_fsync. On macOS that already calls
+// fcntl(F_FULLFSYNC), falling back to F_BARRIERFSYNC and then fsync(2) when the
+// file system refuses it (libuv src/unix/fs.c; Node 20 ships libuv 1.46). Node
+// exposes no separate F_FULLFSYNC call, and none is needed: this is the one.
 function writeSynced(target, bytes) {
   var fd = fs.openSync(target, "wx", stateDir.FILE_MODE);
   try {
@@ -392,15 +409,63 @@ function removeQuietly(target) {
   try { fs.unlinkSync(target); } catch (err) { /* already gone */ }
 }
 
+/** Every byte of an open file, read through its handle. */
+function readWhole(fd) {
+  var size = fs.fstatSync(fd).size;
+  var buffer = Buffer.alloc(size);
+  var at = 0;
+  while (at < size) {
+    var got = fs.readSync(fd, buffer, at, size - at, at);
+    if (got <= 0) break;
+    at += got;
+  }
+  return at === size ? buffer : buffer.subarray(0, at);
+}
+
 /**
- * Compact one review. Dry run unless `apply`.
+ * Copy whatever landed on the OLD log after it was read onto the new one.
  *
- * @param {{dir: string, review: string, apply?: boolean, planner?: function}} args
- * @returns {object} the report line for this review
+ * The old file is still open through `fd`, so this sees appends that reached
+ * it by any route: a `lahe add` or `lahe review` writing by path in the
+ * instant before the rename (neither needs a helper, so the running-process
+ * check cannot see them), or a writer that opened the old file earlier and
+ * writes after the rename. It repeats until the old file stops growing.
+ *
+ * @returns {Buffer} the bytes copied, in order
  */
-function compactReview(args) {
-  var reviewId = args.review;
-  var report = {
+function copyLateAppends(fd, from, target) {
+  var copied = [];
+  var at = from;
+  var quiet = 0;
+  for (var round = 0; round < 50 && quiet < 2; round += 1) {
+    var size = fs.fstatSync(fd).size;
+    if (size <= at) {
+      quiet += 1;
+      continue;
+    }
+    quiet = 0;
+    var chunk = Buffer.alloc(size - at);
+    var got = fs.readSync(fd, chunk, 0, chunk.length, at);
+    chunk = chunk.subarray(0, got);
+    if (!chunk.length) {
+      quiet += 1;
+      continue;
+    }
+    var out = fs.openSync(target, "a");
+    try {
+      fs.writeSync(out, chunk);
+      fs.fsyncSync(out);
+    } finally {
+      fs.closeSync(out);
+    }
+    copied.push(chunk);
+    at += chunk.length;
+  }
+  return Buffer.concat(copied);
+}
+
+function emptyReport(reviewId) {
+  return {
     review: reviewId,
     bytes_before: 0,
     bytes_after: 0,
@@ -410,8 +475,22 @@ function compactReview(args) {
     narrowed: { next_not_content: 0, fold_differs: 0, order_would_move: 0 },
     check: "not run",
     applied: false,
+    late_bytes_copied: 0,
     reason: null
   };
+}
+
+/**
+ * Compact one review. Dry run unless `apply`.
+ *
+ * @param {{dir: string, review: string, apply?: boolean, planner?: function,
+ *   hooks?: {step?: function, beforeSwap?: function, afterSwap?: function}}} args
+ *   `planner` and `hooks` are for tests only.
+ * @returns {object} the report line for this review
+ */
+function compactReview(args) {
+  var reviewId = args.review;
+  var report = emptyReport(reviewId);
   var eventsPath;
   try {
     eventsPath = stateDir.eventsPath(args.dir, reviewId);
@@ -424,8 +503,23 @@ function compactReview(args) {
     return report;
   }
 
-  var statBefore = fs.statSync(eventsPath);
-  var original = fs.readFileSync(eventsPath);
+  // Opened BEFORE anything is read, and held until the end: after the swap this
+  // handle still names the old file, which is how a late append is found.
+  var fd = fs.openSync(eventsPath, "r");
+  try {
+    return compactOpen(args, report, eventsPath, fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function compactOpen(args, report, eventsPath, fd) {
+  var reviewId = args.review;
+  var hooks = args.hooks || {};
+  var step = typeof hooks.step === "function" ? hooks.step : function () {};
+
+  var statBefore = fs.fstatSync(fd);
+  var original = readWhole(fd);
   report.bytes_before = original.length;
   report.bytes_after = original.length;
 
@@ -448,17 +542,29 @@ function compactReview(args) {
   report.bytes_after = result.compacted.length;
   if (!args.apply) return report;
 
+  var folder = path.dirname(eventsPath);
   var backupPath = eventsPath + BACKUP_SUFFIX;
   if (fs.existsSync(backupPath)) {
     report.reason = path.basename(backupPath) + " already exists from an earlier run, and it is the true original; this review is left alone";
     return report;
   }
+  var idsPath = stateDir.compactedIdsPath(args.dir, reviewId);
+  var previousIds = null;
+  try { previousIds = fs.readFileSync(idsPath); } catch (err) { previousIds = null; }
+  var idsBytes = Buffer.concat([
+    previousIds || Buffer.alloc(0),
+    Buffer.from(result.droppedIds.map(function (id) { return JSON.stringify(id) + "\n"; }).join(""))
+  ]);
 
   var stamp = process.pid + "." + Date.now();
   var tempLog = eventsPath + ".compact." + stamp + ".tmp";
   var tempBackup = backupPath + "." + stamp + ".tmp";
+  var tempIds = idsPath + "." + stamp + ".tmp";
   var backupWritten = false;
+  var idsWritten = false;
+  var swapped = false;
   try {
+    // 1. The original, gzipped, proven to restore, and renamed into place.
     writeSynced(tempBackup, zlib.gzipSync(original, { level: 9 }));
     if (!zlib.gunzipSync(fs.readFileSync(tempBackup)).equals(original)) {
       throw new Error("the gzipped original did not read back to the same bytes");
@@ -466,31 +572,71 @@ function compactReview(args) {
     stateDir.assertNotSymlink(backupPath);
     fs.renameSync(tempBackup, backupPath);
     backupWritten = true;
+    step("backup renamed");
 
+    // 2. The dropped ids, so the log reader keeps them as already seen. They
+    // go down before the swap: a log without them and no list would let a
+    // re-posted draft in again.
+    writeSynced(tempIds, idsBytes);
+    stateDir.assertNotSymlink(idsPath);
+    fs.renameSync(tempIds, idsPath);
+    idsWritten = true;
+    step("ids written");
+
+    // 3. Both renames durable before the log is touched.
+    fsyncDir(folder);
+    step("folder synced");
+
+    // 4. The compacted log, then the swap.
     writeSynced(tempLog, result.compacted);
-
-    // The second guard against a writer that started after the refusal check.
     stateDir.assertNotSymlink(eventsPath);
     if (!sameFile(statBefore, fs.statSync(eventsPath))) {
       throw new Error("events.jsonl changed while it was being compacted (something appended to it)");
     }
+    if (typeof hooks.beforeSwap === "function") hooks.beforeSwap();
     fs.renameSync(tempLog, eventsPath);
-    fsyncDir(path.dirname(eventsPath));
+    swapped = true;
+    step("log swapped");
+    if (typeof hooks.afterSwap === "function") hooks.afterSwap();
 
-    if (!fs.readFileSync(eventsPath).equals(result.compacted)) {
-      // The swap happened and the bytes are not what was proven. Say so loudly:
-      // the gz beside it restores the original.
-      report.applied = true;
-      report.reason = "the log read back differently after the swap; restore it from " + path.basename(backupPath);
-      return report;
-    }
+    // 5. Anything that reached the old file after it was read.
+    var late = copyLateAppends(fd, original.length, eventsPath);
+    report.late_bytes_copied = late.length;
+    fsyncDir(folder);
+    step("folder synced after swap");
+
     report.applied = true;
+    if (!fs.readFileSync(eventsPath).equals(Buffer.concat([result.compacted, late]))) {
+      report.reason =
+        "applied, but the log read back differently than written; check the log. The original is in " +
+        path.basename(backupPath);
+    }
     return report;
   } catch (err) {
+    if (swapped) {
+      // The log is already the compacted one. Never remove the backup or the
+      // id list now, and still carry over anything that landed late.
+      try {
+        report.late_bytes_copied = copyLateAppends(fd, original.length, eventsPath).length;
+      } catch (copyErr) { /* reported below through the same reason */ }
+      fsyncDir(folder);
+      report.applied = true;
+      report.reason =
+        "applied, but " + err.message + " after the swap; check the log. The original is in " + path.basename(backupPath);
+      return report;
+    }
     removeQuietly(tempLog);
     removeQuietly(tempBackup);
+    removeQuietly(tempIds);
+    if (idsWritten) {
+      if (previousIds) {
+        try { stateDir.writeAtomic(idsPath, previousIds); } catch (restoreErr) { /* the extra ids only mark lines already on disk */ }
+      } else {
+        removeQuietly(idsPath);
+      }
+    }
     if (backupWritten) removeQuietly(backupPath);
-    fsyncDir(path.dirname(eventsPath));
+    fsyncDir(folder);
     report.reason = err.message + "; this review is left alone";
     return report;
   }
@@ -616,7 +762,9 @@ function totalsOf(reports) {
     check_failed: 0,
     nothing_to_drop: 0,
     applied: 0,
-    left_alone: 0
+    late_bytes_copied: 0,
+    left_alone: 0,
+    applied_check_log: 0
   };
   reports.forEach(function (r) {
     totals.bytes_before += r.bytes_before;
@@ -632,7 +780,9 @@ function totalsOf(reports) {
     if (r.check === "failed") totals.check_failed += 1;
     if (r.check === "nothing to drop") totals.nothing_to_drop += 1;
     if (r.applied) totals.applied += 1;
-    if (r.reason) totals.left_alone += 1;
+    totals.late_bytes_copied += r.late_bytes_copied || 0;
+    if (r.reason && !r.applied) totals.left_alone += 1;
+    if (r.reason && r.applied) totals.applied_check_log += 1;
   });
   return totals;
 }
@@ -641,7 +791,7 @@ function totalsOf(reports) {
  * @param {string[]} argv
  * @param {{stdout?: {write: function}, stderr?: {write: function}}} [io]
  * @returns {number} exit code: 0 done, 1 usage, 2 refused (something running),
- *   3 done but at least one review was left alone
+ *   3 done but at least one review was left alone or needs its log checked
  */
 function main(argv, io) {
   var stdout = (io && io.stdout) || process.stdout;
@@ -732,7 +882,9 @@ function main(argv, io) {
         "  projection check: passed " + totals.check_passed + ", failed " + totals.check_failed +
           ", nothing to drop " + totals.nothing_to_drop,
         args.apply ? "  applied: " + totals.applied : null,
+        args.apply ? "  bytes copied from appends that raced the swap: " + totals.late_bytes_copied : null,
         "  left alone with a reason: " + totals.left_alone,
+        args.apply ? "  applied, but check the log: " + totals.applied_check_log : null,
         "  ignored when comparing projections: " + IGNORED_FIELDS.join(", ")
       ]
         .filter(function (line) {
@@ -741,7 +893,7 @@ function main(argv, io) {
         .join("\n") + "\n"
     );
   }
-  return totals.left_alone > 0 ? 3 : 0;
+  return totals.left_alone > 0 || totals.applied_check_log > 0 ? 3 : 0;
 }
 
 module.exports = {
