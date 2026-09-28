@@ -1,6 +1,6 @@
 # Progress: LAHE Library
 
-**Phase 6, Implement.** You cleared the design, and the plan's three reviews are folded in. The shared names are in (commit 000c40b), and Phase 1 is merged (1449 unit tests pass). The Library's actions are wired and merged (1490 unit tests pass). The page builder is still working. Nothing is waiting on you. Last updated 2026-09-28 17:36.
+**Phase 6, Implement.** You cleared the design, and the plan's three reviews are folded in. The shared names are in (commit 000c40b), and Phase 1 is merged (1449 unit tests pass). Phases 1 and 2 are merged: the helper side and the page both work (1585 unit tests pass). Three close-out builders are working. Nothing is waiting on you. Last updated 2026-09-28 17:39.
 
 **Docs:** [Crucible](http://127.0.0.1:54705/00_crucible.html) · [Brief](http://127.0.0.1:54705/01_brief_lahe_library.html) · [Wireframes](http://127.0.0.1:54705/wireframes/index.html) · [Architecture](http://127.0.0.1:54705/02_architecture_lahe_library.html) · [Plan](http://127.0.0.1:54705/03_plan_lahe_library.html) · [Ideas page](http://127.0.0.1:55480/DOCUMENT_INDEX_IDEAS-b09cd11f2a84063f.html)
 
@@ -12,7 +12,9 @@ Nothing is waiting on you.
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Builder 2.2 | The Library page itself, with screenshots in light and dark | 2026-09-28 17:16 | `task/lib-page` |
+| Builder 3.1 + 3.4 | Agent instructions, the contract, the CLI docs, and the diagrams | 2026-09-28 17:39 | `task/lib-docs` |
+| Builder 3.2 | End-to-end and cross-site browser tests, and screenshots of an opened document | 2026-09-28 17:39 | `task/lib-e2e` |
+| Builder 3.3 + fixes | The count script; name the watching agent once per session card instead of on every row; read the request file once per refresh | 2026-09-28 17:39 | `task/lib-fixes` |
 
 ## Phases
 
@@ -38,6 +40,7 @@ Nothing is waiting on you.
 | 0 | 1 | shared names | done | commit 000c40b | Routes, auth class, error codes, constants and manifest entries landed; unit gate green. |
 | 1 | 1 | list reader and star store | merged | `task/lib-reader`, progress/phase1_task1_reader.md | Builds the Library's list from records on disk, folds old per-page reviews, and never reads a large log. A corrupt stars file is refused, never overwritten. 1366 unit tests pass. One rule is copied from the server code for now; step 2.1 moves it to one place. |
 | 1 | 2 | auth and page serving | merged | `task/lib-auth`, progress/phase1_task2_auth.md | The Library's key lives only in the page; every Library request passes the same-site checks; the page and its files are served with no cross-site access. It also closed an old gap: a page on another local port could get preflight approval for any path. 1330 unit tests pass. |
+| 2 | 2 | the Library page | merged | `task/lib-page`, progress/phase2_task2_page.md | The page, built on wireframe B, with every state unit-tested and 12 browser tests passing. Screenshots below. |
 | 2 | 1 | wiring and lifetime | merged | `task/lib-wiring`, progress/phase2_task1_wiring.md | List, Open, Star and hand-over requests work end to end on the helper; LAHE stays up while the Library is open; quiet reopened sessions close again. The copied server rule now lives in one place. The helper's version number went up, so an older running helper gets replaced. |
 | 1 | 4 | request queue and CLI | merged | `task/lib-queue`, progress/phase1_task4_queue.md | The queue that hands a document to an agent, its place in the agent's drain, `lahe library`, and a monitor that watches several sessions. 1373 unit tests pass. |
 | 1 | 3 | restart and Host check | merged | `task/lib-restart`, progress/phase1_task3_restart.md | A restarted server tries its old port first and swaps its origin; every page server now refuses a foreign Host. 1331 unit tests pass. |
@@ -70,6 +73,11 @@ Not shipped yet.
 
 ## Log
 
+- **2026-09-28 17:39.** The Library page is built. First look, from the page's own browser test (fixture data, not your real records):
+
+  ![The Library, light](catalog_page_light.png)
+
+  One change is on the way: each row repeated "agent watching", so the session card will say it once instead.
 - **2026-09-28 16:53.** Plan reviewed by three agents (engineering manager, code lead, testing): 67 findings, all accepted, 4 of them with one part turned down (written in the plan's tables). You cleared the design on the architecture page, so the plan went straight to building; the plain-language pass on the plan was skipped. One addition to confirm when you read the plan: `lahe session name --from-review`, so a launched agent is named after its document without the title passing through a shell command.
 - **2026-09-28 16:53.** The linked-docs fix shipped: [PR #17](https://github.com/kenxle/live-agentic-html-editor/pull/17) merged after the Hold test fix, [PR #18](https://github.com/kenxle/live-agentic-html-editor/pull/18). It goes live here once the main checkout catches up and the helper restarts.
 - **2026-09-28 16:33.** Architecture reviewed: the architect found 4 blockers and security found 4, all accepted. The biggest change: handing a document to an agent no longer goes through a comment in an inbox review (a page could have forged it, and it would never have reached the agent). It is now a queue only the helper writes, shown to the agent as its own section of the drain. Open only restarts servers a review already had, and anything else goes through an agent. The Library's address is `/catalog`, because "library" already means the in-page script in this code.
