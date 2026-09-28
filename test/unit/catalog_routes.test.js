@@ -667,6 +667,9 @@ test("CR1: two concurrent Opens on a closed session start one server, answer on 
 test("CR1: the sweep leaves alone a session an Open is part way through bringing back", async () => {
   const catalogActions = require("../../src/service/catalog_actions.js");
   const dir = path.join(tempDir(), "state");
+  // The Open owner check (SEC4) stats the record's root, so it has to be a
+  // real folder this user owns, or Open refuses before the restart step.
+  const root = tempDir();
   const store = agentSessions.createStore({ dir });
   store.create({ id: "s_doc", name: "doc session" });
   store.close("s_doc");
@@ -676,7 +679,7 @@ test("CR1: the sweep leaves alone a session an Open is part way through bringing
     dir,
     reader: {
       describeReview: (id) => ({
-        review: id, session: "s_doc", openable: "yes", server: "ss_one", url_path: "/page.html",
+        review: id, session: "s_doc", openable: "yes", server: "ss_one", server_root: root, url_path: "/page.html",
         served_path: null, path: null, watching: null, last: new Date(T0).toISOString()
       })
     },
