@@ -157,7 +157,12 @@ function itemsOf(projection) {
   var out = [];
   ((projection && projection.pages) || []).forEach(function (page) {
     (page.items || []).forEach(function (item) {
-      out.push(Object.assign({ page: { path: page.path, origin: page.origin, title: page.title } }, item));
+      var where = { path: page.path, origin: page.origin, title: page.title };
+      // An item made on a document a reviewed page links to names that
+      // document's file on disk, as the helper worked it out (spec
+      // 20260922.02). Only then, so every other drain line stays as it was.
+      if (typeof page.linked_file === "string" && page.linked_file) where.linked_file = page.linked_file;
+      out.push(Object.assign({ page: where }, item));
     });
   });
   return out;

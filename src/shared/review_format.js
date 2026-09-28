@@ -457,7 +457,7 @@
    *   record itself carries none. It is what the agent reads at the top of the
    *   page group, so the two answers cannot disagree.
    */
-  function projectItem(it, pageHint) {
+  function projectItem(it, pageHint, linkedHint) {
     var F = record.FIELD;
     var ctx = it[F.CONTEXT] || {};
     var out = {};
@@ -545,7 +545,8 @@
       it[F.REGION],
       record.pageCanCarryStamp({
         path: it[F.PAGE_PATH],
-        source_hint: it[F.SOURCE_HINT] || pageHint || null
+        // A linked page's hint is the helper's, never the record's own claim.
+        source_hint: linkedHint !== undefined ? linkedHint : it[F.SOURCE_HINT] || pageHint || null
       }),
       it
     );
@@ -639,6 +640,24 @@
     return false;
   }
 
+  // A page served under a /.lahe-source/ mount is a document a reviewed page
+  // links to (spec 20260922.02). Its source file is worked out by the helper,
+  // off the static server's mount table, and handed in as
+  // review.linked_files[page path]. Whatever the page itself claimed is never
+  // used for it, and a page the helper could not map reads as unknown rather
+  // than falling back to the linking page's source, which is the wrong file.
+  var LINKED_PAGE_PREFIX = "/.lahe-source/";
+
+  function isLinkedPage(pagePath) {
+    return typeof pagePath === "string" && pagePath.indexOf(LINKED_PAGE_PREFIX) === 0;
+  }
+
+  function linkedHintOf(review, pagePath) {
+    var table = review.linked_files && typeof review.linked_files === "object" ? review.linked_files : {};
+    var file = Object.prototype.hasOwnProperty.call(table, pagePath) ? table[pagePath] : null;
+    return typeof file === "string" && file ? { known: true, path: file } : null;
+  }
+
   function projectReview(review) {
     requireReview(review);
     var groups = pageGroups(review.items);
@@ -671,12 +690,19 @@
           // Markdown --source) recorded, so a known source is not reported as
           // unknown merely because no item on this page ever carried it itself
           // (see projection.js's reviewSourceHint).
-          source_hint: sourceHint(g.hint || review.source_hint || null),
+          source_hint: sourceHint(
+            isLinkedPage(g.path) ? linkedHintOf(review, g.path) : g.hint || review.source_hint || null
+          ),
+          // The linked document's file on disk, when this page is one a
+          // reviewed page links to and the helper could map it. Null
+          // otherwise.
+          linked_file: isLinkedPage(g.path) && linkedHintOf(review, g.path) ? linkedHintOf(review, g.path).path : null,
           // lahe status reads this to say when a page connected over file://
           // rather than (or in addition to) the served origin above, so a
           // half-configured review is visible instead of silent.
           file_origin_seen: !!g.file_origin_seen,
           items: g.items.map(function (it) {
+            if (isLinkedPage(g.path)) return projectItem(it, null, linkedHintOf(review, g.path));
             return projectItem(it, g.hint || review.source_hint || null);
           })
         };

@@ -130,6 +130,61 @@ function writeMeta(dir, sessionId, meta) {
   return meta;
 }
 
+/**
+ * Two `linked_files` tables as one. Each maps a linked file's real path to the
+ * reviews whose pages linked to it, in the order they were first recorded.
+ * Nothing is ever dropped: reviews are never deleted, and a table that only
+ * grows is one no two writers can shrink by racing.
+ */
+function mergeLinkedFiles(a, b) {
+  var out = {};
+  [a, b].forEach(function (table) {
+    if (!table || typeof table !== "object") return;
+    Object.keys(table).forEach(function (file) {
+      if (!Array.isArray(table[file])) return;
+      var into = out[file] || (out[file] = []);
+      table[file].forEach(function (review) {
+        if (typeof review === "string" && protocol.isSafeId(review) && into.indexOf(review) === -1) into.push(review);
+      });
+    });
+  });
+  return out;
+}
+
+/**
+ * Record that `reviewId`'s page links to each of `targets` (real paths), on the
+ * static server `serverId` of this session.
+ *
+ * THIS IS WHAT PUTS A RAIL ON A LINKED DOCUMENT, and the only thing. A mount
+ * serves the linked file's whole folder so the link works, but the rail goes
+ * only on the files a reviewed page actually linked to, and it rides the
+ * review of the page that linked (spec 20260922.02, requirements 2 and 5).
+ * Three writers call it: `lahe review` after its own render, the helper's
+ * re-render (rebuild.js), and the server when it renders a linked document
+ * that itself carries a rail, which is how a chain rides the first review.
+ *
+ * It writes the server's own metadata file and nothing in the review store.
+ * Read-merge-write, like the mounts beside it.
+ *
+ * @returns {boolean} whether anything new was written
+ */
+function recordLinks(dir, sessionId, serverId, reviewId, targets) {
+  if (!protocol.isSafeId(reviewId) || !Array.isArray(targets) || !targets.length) return false;
+  var file = stateDir.staticServerPath(dir, sessionId, serverId);
+  var current = readJson(file);
+  if (!current || current.session_id !== sessionId) return false;
+  var addition = {};
+  targets.forEach(function (target) {
+    if (typeof target !== "string" || !path.isAbsolute(target)) return;
+    addition[target] = [reviewId];
+  });
+  var merged = mergeLinkedFiles(current.linked_files, addition);
+  if (JSON.stringify(merged) === JSON.stringify(mergeLinkedFiles(current.linked_files, {}))) return false;
+  current.linked_files = merged;
+  stateDir.writeAtomic(file, JSON.stringify(current, null, 2) + "\n");
+  return true;
+}
+
 async function registerMount(dir, sessionId, meta, prefix, rootInput) {
   if (!/^\/\.lahe-source\/[a-f0-9]+\/$/.test(prefix)) throw new Error("invalid static source mount " + JSON.stringify(prefix));
   if (!(await isExactServer(meta))) throw new Error("refusing to update a static server whose identity is no longer live");
@@ -140,6 +195,9 @@ async function registerMount(dir, sessionId, meta, prefix, rootInput) {
   var next = Object.assign({}, meta);
   next.mounts = Object.assign({}, meta.mounts || {}, onDisk && onDisk.mounts ? onDisk.mounts : {});
   if (onDisk && Array.isArray(onDisk.auto_mounts)) next.auto_mounts = onDisk.auto_mounts.slice();
+  // The same for which review linked to which file: the server and the helper
+  // write it while this caller holds an older copy.
+  next.linked_files = mergeLinkedFiles(meta.linked_files, onDisk && onDisk.linked_files);
   next.mounts[prefix] = fs.realpathSync(path.resolve(rootInput));
   writeMeta(dir, sessionId, next);
   try { process.kill(meta.pid, "SIGHUP"); }
@@ -536,12 +594,208 @@ function servesPath(dir, sessionId, filePath) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Linked documents: pages under a /.lahe-source/ mount.
+//
+// Spec: docs/features/20260922.02_linked_docs_rail/01_spec_linked_docs_rail.md.
+// A reviewed Markdown page links to a document in another folder, and the
+// server mounts that folder so the link works. The reviewer who follows the
+// link keeps the rail, by reuse and never by creating anything:
+//
+//  1. THE DOCUMENT'S OWN REVIEW, by redirect. A document with a review of its
+//     own in this agent session is sent to the page that review already
+//     serves. Its token is never carried over to this URL: the rail groups
+//     items by page path, the earlier comments were made on the review's own
+//     page, and carrying the token here would need a new origin written onto
+//     that review.
+//  2. THE LINKING PAGE'S REVIEW. Otherwise a file some reviewed page linked to
+//     (linked_files, see recordLinks) carries the rail of the newest review
+//     that linked to it. An `--only` review keeps its links read-only.
+//  3. NOTHING. Any other file under a mount is served as it always was.
+//
+// Every fact is read off disk, never off the request: the page that linked is
+// never taken from a Referer header or anything else the browser sends.
+
+function realOrNull(target) {
+  try { return fs.realpathSync(target); } catch (err) { return null; }
+}
+
+function withinDir(candidate, base) {
+  return candidate === base || candidate.indexOf(base + path.sep) === 0;
+}
+
+/** This agent session's reviews, straight off disk: [{id, meta}]. */
+function sessionReviews(dir, sessionId) {
+  var root;
+  try { root = stateDir.reviewsRoot(dir); } catch (err) { return []; }
+  var entries;
+  try { entries = fs.readdirSync(root, { withFileTypes: true }); } catch (err) { return []; }
+  var out = [];
+  entries.forEach(function (entry) {
+    if (!entry.isDirectory() || !protocol.isSafeId(entry.name)) return;
+    var meta = readJson(stateDir.metaPath(dir, entry.name));
+    if (!meta || typeof meta.token !== "string" || meta.agent_session_id !== sessionId) return;
+    out.push({ id: entry.name, meta: meta });
+  });
+  return out;
+}
+
+function targetsOf(meta) {
+  var targets = Array.isArray(meta.target_paths) ? meta.target_paths.slice() : [];
+  if (typeof meta.target_path === "string" && meta.target_path && targets.indexOf(meta.target_path) === -1) {
+    targets.push(meta.target_path);
+  }
+  return targets;
+}
+
+function createdAt(meta) {
+  return typeof meta.created_at === "string" ? meta.created_at : "";
+}
+
+/**
+ * A live static server of this session serving `page`, as the absolute URL of
+ * that page on it, or null. "Live" is the cheap check servesPath uses: an
+ * unstopped lease and a pid that answers.
+ */
+function liveUrlFor(dir, sessionId, page) {
+  var realPage = realOrNull(page);
+  if (!realPage) return null;
+  var entries;
+  try { entries = list(dir, sessionId); } catch (err) { return null; }
+  var url = null;
+  entries.some(function (meta) {
+    if (meta.stopped_at || typeof meta.pid !== "number" || typeof meta.port !== "number") return false;
+    try { process.kill(meta.pid, 0); } catch (err) { return false; }
+    var base = realOrNull(meta.root);
+    if (!base || !withinDir(realPage, base) || realPage === base) return false;
+    var relative = path.relative(base, realPage).split(path.sep).map(encodeURIComponent).join("/");
+    url = "http://" + (meta.host || HOST) + ":" + meta.port + "/" + relative;
+    return true;
+  });
+  return url;
+}
+
+/**
+ * Requirement 1: the page of this document's own review in this session, or
+ * null. A Markdown document matches a review's source_path and is sent to the
+ * rendered page that review serves; an HTML document matches a recorded target.
+ * Newest review wins. Null when that review's server is not running, so the
+ * caller falls through to the linking page's review.
+ */
+function ownReviewUrl(dir, sessionId, realFile) {
+  var isMd = markdown.isMarkdown(realFile);
+  var best = null;
+  sessionReviews(dir, sessionId).forEach(function (entry) {
+    var page = null;
+    if (isMd) {
+      if (typeof entry.meta.source_path === "string" && realOrNull(entry.meta.source_path) === realFile &&
+          typeof entry.meta.target_path === "string") {
+        page = entry.meta.target_path;
+      }
+    } else if (targetsOf(entry.meta).some(function (target) { return realOrNull(target) === realFile; })) {
+      page = realFile;
+    }
+    if (!page) return;
+    if (best && createdAt(entry.meta) <= createdAt(best.meta)) return;
+    best = { meta: entry.meta, page: page };
+  });
+  return best ? liveUrlFor(dir, sessionId, best.page) : null;
+}
+
+/**
+ * Requirement 2: the review a linked file rides, from this server's own
+ * linked_files table.
+ *
+ * @returns {{review: string, token: string}|{readOnly: true}|{missing: true}|null}
+ *   null when no reviewed page linked to this file at all; readOnly when every
+ *   review that did is `--only`; missing when none of them is in this session,
+ *   which should not happen, since reviews are never deleted.
+ */
+function linkingReview(dir, sessionId, serverFile, realFile) {
+  var meta = readJson(serverFile);
+  var table = meta && meta.linked_files && typeof meta.linked_files === "object" ? meta.linked_files : null;
+  var registrants = table && Array.isArray(table[realFile]) ? table[realFile] : [];
+  if (!registrants.length) return null;
+  var known = sessionReviews(dir, sessionId).filter(function (entry) {
+    return registrants.indexOf(entry.id) !== -1;
+  });
+  if (!known.length) return { missing: true };
+  var open = known.filter(function (entry) { return entry.meta.only_recorded_pages !== true; });
+  if (!open.length) return { readOnly: true };
+  var best = null;
+  open.forEach(function (entry) {
+    var candidate = { review: entry.id, token: entry.meta.token, at: createdAt(entry.meta) };
+    if (newer(candidate, best)) best = candidate;
+  });
+  return { review: best.review, token: best.token };
+}
+
+/**
+ * The real file a linked page's browser path names, for an item made on it, or
+ * null (requirements 6 and 7).
+ *
+ * THE HELPER WORKS THIS OUT; THE PAGE NEVER SUPPLIES IT. The page path is
+ * mapped through this session's static server mount tables, read off disk the
+ * same way the server reads them. The result must sit inside the mount's folder
+ * by real path, cross no hidden segment, be a file, and be one this very review
+ * put its rail on (linked_files). Anything else names no file.
+ *
+ * @param {string} dir the state directory
+ * @param {string} sessionId the review's own agent session
+ * @param {string} reviewId
+ * @param {string} pagePath the page's location.pathname, as the item carries it
+ * @returns {string|null}
+ */
+function linkedFileForPage(dir, sessionId, reviewId, pagePath) {
+  if (typeof dir !== "string" || typeof sessionId !== "string" || typeof pagePath !== "string") return null;
+  if (!protocol.isSafeId(reviewId)) return null;
+  var decoded;
+  try { decoded = decodeURIComponent(pagePath); } catch (err) { return null; }
+  var match = decoded.match(/^(\/\.lahe-source\/[a-f0-9]+\/)(.+)$/);
+  if (!match) return null;
+  var reviewMeta = readJson(stateDir.metaPath(dir, reviewId));
+  if (!reviewMeta || reviewMeta.agent_session_id !== sessionId) return null;
+  var entries;
+  try { entries = list(dir, sessionId); } catch (err) { return null; }
+  var found = null;
+  entries.some(function (meta) {
+    if (!meta.mounts || typeof meta.mounts[match[1]] !== "string") return false;
+    var base = realOrNull(meta.mounts[match[1]]);
+    if (!base) return false;
+    var candidate = path.resolve(base, match[2]);
+    if (!withinDir(candidate, base) || candidate === base) return false;
+    var real = realOrNull(candidate);
+    if (!real || !withinDir(real, base)) return false;
+    if (hasHiddenSegment(base, candidate) || hasHiddenSegment(base, real)) return false;
+    try { if (!fs.statSync(real).isFile()) return false; } catch (err) { return false; }
+    var table = meta.linked_files && typeof meta.linked_files === "object" ? meta.linked_files : {};
+    if (!Array.isArray(table[real]) || table[real].indexOf(reviewId) === -1) return false;
+    found = real;
+    return true;
+  });
+  return found;
+}
+
+/** `html` with a visible note placed just inside <body>, or at the top. */
+function placeNote(html, note) {
+  var text = String(html);
+  var body = text.match(/<body\b[^>]*>/i);
+  if (!body) return note + text;
+  var at = body.index + body[0].length;
+  return text.slice(0, at) + note + text.slice(at);
+}
+
+function openReviewCommand(realFile, sessionId) {
+  return "lahe review " + realFile + " --session " + sessionId;
+}
+
 function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInput) {
   var root = fs.realpathSync(rootInput);
   var logicalRoot = typeof logicalRootInput === "string" && logicalRootInput ? logicalRootInput : root;
   var prior = readJson(file);
   var mounts = prior && prior.root === root && prior.mounts && typeof prior.mounts === "object" ? prior.mounts : {};
   var autoMounts = prior && prior.root === root && Array.isArray(prior.auto_mounts) ? prior.auto_mounts.slice() : [];
+  var priorLinks = prior && prior.root === root ? mergeLinkedFiles(prior.linked_files, {}) : {};
   function reloadMounts() {
     var current = readJson(file);
     if (!current || current.root !== root || !current.mounts || typeof current.mounts !== "object") return;
@@ -570,16 +824,34 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
     catch (err) { /* the render still answers; the mount is re-derived next start */ }
   }
 
-  // A Markdown file inside a mount is answered with the SAME deterministic
-  // rendering the review artifact uses: read-only, enrolled in no review, no
-  // library script line and no token. Links out of it are translated the same
-  // way, so a chain of documents keeps working.
-  function renderMarkdown(candidate, req, res) {
+  // A Markdown file is answered with the SAME deterministic rendering the
+  // review artifact uses, and links out of it are translated the same way, so
+  // a chain of documents keeps working.
+  //
+  // Three shapes, chosen by the caller (see serveLinked):
+  //  - `match`: a linked document riding the linking page's review. No
+  //    read-only note, the review's script line in the response, and the links
+  //    this render translated are recorded against that same review, which is
+  //    how a chain (hub to B to C) rides the hub's review.
+  //  - `missing`: a linked document whose linking review is not in this
+  //    session. Read-only, with a note that says so and names the command.
+  //  - neither: read-only, enrolled in no review, no script line, no token.
+  function renderMarkdown(candidate, req, res, options) {
+    var opts = options || {};
     var registry = markdownLinks.createRegistry({ mounts: mounts, consumed: autoMounts });
+    var renderOptions = { readOnlyNote: true, links: registry };
+    if (opts.match) renderOptions.note = "";
+    else if (opts.missing) renderOptions.note = markdown.missingReviewNote(candidate, openReviewCommand(opts.realFile || candidate, sessionId));
     var html;
-    try { html = markdown.render(candidate, { readOnlyNote: true, links: registry }); }
+    try { html = markdown.render(candidate, renderOptions); }
     catch (err) { return send(res, 500, "could not render " + path.basename(candidate) + "\n"); }
     persistAutoMounts(registry.added);
+    if (opts.match) {
+      try { recordLinks(dir, sessionId, id, opts.match.review, registry.linked); }
+      catch (err) { /* the page still answers; its links ride no review until the next render */ }
+      var injected = injectForMatch(dir, opts.match, candidate, html);
+      if (injected !== null) html = injected;
+    }
     var body = Buffer.from(html, "utf8");
     res.writeHead(200, {
       "cache-control": "no-store",
@@ -589,6 +861,53 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
     });
     if (req.method === "HEAD") return res.end();
     res.end(body);
+  }
+
+  function sendHtml(req, res, html) {
+    var body = Buffer.from(html, "utf8");
+    res.writeHead(200, {
+      "cache-control": "no-store",
+      "content-length": body.length,
+      "content-type": "text/html; charset=utf-8",
+      "x-content-type-options": "nosniff"
+    });
+    if (req.method === "HEAD") return res.end();
+    res.end(body);
+  }
+
+  // A page under a mount: a document some reviewed page linked to, or a file
+  // beside one. See "Linked documents" above for the three outcomes. Returns
+  // false when the plain read-only answer below should be sent instead.
+  var saidMissing = Object.create(null);
+  function serveLinked(candidate, realFile, req, res) {
+    var own = ownReviewUrl(dir, sessionId, realFile);
+    if (own) {
+      res.writeHead(302, { "cache-control": "no-store", location: own, "x-content-type-options": "nosniff" });
+      res.end();
+      return true;
+    }
+    var linking = linkingReview(dir, sessionId, file, realFile);
+    if (linking && linking.missing && !saidMissing[realFile]) {
+      saidMissing[realFile] = true;
+      say("static server " + id + ": " + realFile + " was linked from a reviewed page whose review is not in this session; served read-only, nothing created");
+    }
+    var isMd = markdown.isMarkdown(candidate);
+    if (isMd) {
+      if (linking && linking.review) renderMarkdown(candidate, req, res, { match: linking });
+      else if (linking && linking.missing) renderMarkdown(candidate, req, res, { missing: true, realFile: realFile });
+      else renderMarkdown(candidate, req, res);
+      return true;
+    }
+    if (!linking || linking.readOnly) return false;
+    var html;
+    try { html = fs.readFileSync(candidate, "utf8"); } catch (err) { return false; }
+    if (linking.missing) {
+      sendHtml(req, res, placeNote(html, markdown.missingReviewNote(candidate, openReviewCommand(realFile, sessionId))));
+      return true;
+    }
+    var injected = injectForMatch(dir, linking, candidate, html);
+    sendHtml(req, res, tabIcon.ensure(injected !== null ? injected : html));
+    return true;
   }
   // The built bundle, streamed straight out of the clone. Read-only like
   // everything else here, and unauthenticated like the helper's own
@@ -738,8 +1057,11 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
       else return send(res, 404, "not found\n");
       try { stat = fs.statSync(candidate); } catch (missing) { return send(res, 404, "not found\n"); }
     }
-    if (markdown.isMarkdown(candidate)) return renderMarkdown(candidate, req, res);
-    if (heal.isStaticPage(candidate)) {
+    if (isMount && (markdown.isMarkdown(candidate) || heal.isStaticPage(candidate)) && real) {
+      if (serveLinked(candidate, real, req, res)) return;
+    } else if (markdown.isMarkdown(candidate)) {
+      return renderMarkdown(candidate, req, res);
+    } else if (heal.isStaticPage(candidate)) {
       var filePaths = [candidate];
       if (real && real !== candidate) filePaths.push(real);
       // Only for the unmounted root: a review's target_path was recorded
@@ -753,9 +1075,8 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
       var match = findReviewForRequest(dir, {
         filePaths: filePaths,
         sessionId: sessionId,
-        // The server's OWN root only. A mounted folder holds documents a
-        // rendered Markdown page links to, and those are served read-only by
-        // design, so nothing there is put on a review.
+        // The server's OWN root only. A page under a mount never reaches
+        // here: serveLinked above decides it from linked_files.
         roots: ownRoot ? [root, logicalRoot] : []
       });
       if (!match && ownRoot) noReviewBacksThisServer();
@@ -805,7 +1126,10 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
       pid: process.pid,
       started_at: startedAt,
       stopped_at: null,
-      mounts: mounts
+      mounts: mounts,
+      // Which review linked to which file outlives a restart, or every linked
+      // document would lose its rail until each hub was rendered again.
+      linked_files: mergeLinkedFiles(priorLinks, (readJson(file) || {}).linked_files)
     };
     stateDir.writeAtomic(file, JSON.stringify(meta, null, 2) + "\n");
   });
@@ -832,6 +1156,8 @@ module.exports = {
   SCHEMA: SCHEMA,
   LIBRARY_PATH: LIBRARY_PATH,
   servesPath: servesPath,
+  recordLinks: recordLinks,
+  linkedFileForPage: linkedFileForPage,
   serverId: serverId,
   isExactServer: isExactServer,
   list: list,

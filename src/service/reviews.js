@@ -783,6 +783,23 @@ function createReviews(options) {
   function targetMtime(reviewId, pagePath) {
     var review = get(reviewId);
     if (!review) return null;
+    // A LINKED DOCUMENT RELOADS ON ITS OWN FILE (spec 20260922.02, requirement
+    // 7). A page under a /.lahe-source/ mount rides the review of the page that
+    // linked to it, and targetForPage below would map it to that review's own
+    // target: the linked page would reload when the hub changed and never when
+    // it did. So its path goes through the same mount lookup that names its
+    // file in review.json, and that file is stat'ed. STAT ONLY, NEVER HEAL: the
+    // script line goes into the response, and a linked file is somebody's own
+    // document. A path the lookup cannot vouch for reloads nothing.
+    if (typeof pagePath === "string" && pagePath.indexOf("/.lahe-source/") === 0) {
+      var linkedFile = null;
+      try {
+        linkedFile = staticServersModule.linkedFileForPage(dir, review.agent_session_id, review.id, pagePath);
+      } catch (error) {
+        linkedFile = null;
+      }
+      return linkedFile ? healer.consider({ path: linkedFile }) : null;
+    }
     var paths = targetPathsOf(review);
     if (paths.length === 0) return null;
     // THE PAGE IS PART OF THE CACHE KEY. A folder review resolves each poll to a
