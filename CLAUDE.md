@@ -208,6 +208,21 @@ files where they are. Removals happen in one batch at the end, by the
 orchestrator, with the whole list in front of Ken. Files under `/tmp` are never
 removed at all; the operating system owns that folder.
 
+## Read the result, then push
+
+Run the browser suite as its own command, read the pass and fail counts, and
+push as a separate step. A chained `suite; git push` pushes whatever the suite
+said: on 2026-09-23 two specs failed, the push went out anyway, and main
+carried a regression until it was reverted. The gate is a person reading
+"0 failed", not the shell's exit code.
+
+## Undoing a revert before re-merging
+
+Reverting a merge commit leaves git believing the branch is already merged, so
+a later merge of the fixed branch brings nothing or conflicts in every file the
+revert touched. Revert the revert first (`git revert <the revert>`), then merge
+the branch with its fixes on top.
+
 ## Commit conventions
 
 - No em dashes anywhere: not in commit messages, not in code comments, not
