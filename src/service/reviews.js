@@ -945,7 +945,14 @@ function createReviews(options) {
 
   /** The last time the page checked in, as an ISO string, or null. */
   function lastSeenAt(reviewId) {
-    return Object.prototype.hasOwnProperty.call(lastSeen, reviewId) ? lastSeen[reviewId] : null;
+    if (Object.prototype.hasOwnProperty.call(lastSeen, reviewId)) return lastSeen[reviewId];
+    // A RESTARTED HELPER HAS NOT HEARD FROM THE PAGE YET, and an unfocused page
+    // only beats every five minutes. The session table restored from
+    // windows.json knows when the holder last spoke, so `lahe status` says
+    // that rather than "no page has connected" while a page is open.
+    var holder = sessions[reviewId];
+    if (holder && typeof holder.last_seen === "number") return new Date(holder.last_seen).toISOString();
+    return null;
   }
 
   /**

@@ -13,11 +13,12 @@
 //   focused_idle     the tab is visible and focused, and nobody touches it
 //   focused_active   visible and focused, a key press every 2 seconds and a
 //                    click every 10 seconds, the whole window
-//   unfocused        focused at boot, then the window loses focus (the
-//                    reviewer switched to another app) and stays visible
+//   visible_unfocused  focused at boot, then the window loses focus (the
+//                    reviewer switched to the terminal beside it) and stays
+//                    visible
 //   hidden           focused at boot, then the window loses focus and the tab
 //                    is hidden (window blur plus visibilitychange)
-//   closed           unfocused for the whole window, then the tab is closed
+//   closed           hidden for the whole window, then the tab is closed
 //                    (pagehide); counts only what the close itself sends,
 //                    because a closed page runs nothing afterwards
 //
@@ -317,7 +318,7 @@ async function main() {
   );
 
   results.push(
-    await runState("unfocused", async function (page) {
+    await runState("visible_unfocused", async function (page) {
       page.blur();
       await advance(WINDOW_MS);
     })
@@ -332,7 +333,7 @@ async function main() {
 
   results.push(
     await runState("closed", async function (page) {
-      page.blur();
+      page.hide();
       await advance(WINDOW_MS);
       // Only what the close sends is counted: the counters start again here,
       // and a closed page runs nothing after it.

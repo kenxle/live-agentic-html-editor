@@ -11,11 +11,13 @@
 //   - Focus is the switch. Focused: the reply poll runs once a second,
 //     steadily, as before. Keystrokes, clicks and selection changes cost
 //     nothing: no request, no storage write, no timer.
-//   - Unfocused or hidden: no reply poll and no read-only re-ask at all. The
-//     only request is a "still open" heartbeat every 5 minutes, after the next
-//     ordinary beat has told the helper `quiet`. A blur sends nothing itself.
-//   - Refocus polls at once, once, shows what arrived, and does any reload a
-//     rebuild owes; then the focused schedule resumes.
+//   - Visible but not focused (beside the terminal): the reply poll and the
+//     read-only re-ask every 15 seconds; the ordinary 10 second heartbeat.
+//   - Hidden: no reply poll and no read-only re-ask at all. The only request
+//     is a "still open" heartbeat every 5 minutes, after a granted beat has
+//     told the helper `quiet`. A blur sends nothing itself.
+//   - Focus, or becoming visible from hidden, polls at once, once, shows what
+//     arrived, and does any reload a rebuild owes; then the new pace runs.
 //   - Closing the tab while unfocused still says goodbye.
 //   - The helper holds a quiet holder for 390s and any other for 30s.
 //
@@ -94,10 +96,10 @@ function rig(t, options) {
   };
   const requests = [];
   let seq = 0;
-  let focused = true;
+  let focused = !opts.startHidden;
   const doc = Object.assign(eventTarget(), {
-    hidden: false,
-    visibilityState: "visible",
+    hidden: !!opts.startHidden,
+    visibilityState: opts.startHidden ? "hidden" : "visible",
     location: { pathname: "/plan" },
     hasFocus: () => focused
   });
@@ -250,11 +252,12 @@ function draftItem(note) {
 // The constants
 // ---------------------------------------------------------------------------
 
-test("the poll is once a second focused, and does not run at all away", () => {
+test("the poll is once a second focused, every 15 seconds visible, and not at all hidden", () => {
   assert.equal(FAST, 1000);
   assert.equal(syncModule.pollIntervalFor({ hidden: false, hasFocus: () => true }), 1000);
   assert.equal(syncModule.pollIntervalFor({ hidden: true }), null, "hidden: no poll");
-  assert.equal(syncModule.pollIntervalFor({ hidden: false, hasFocus: () => false }), null, "unfocused: no poll");
+  assert.equal(syncModule.pollIntervalFor({ hidden: false, hasFocus: () => false }), 15000, "visible, unfocused");
+  assert.equal(syncModule.VISIBLE_POLL_INTERVAL_MS, 15000);
   assert.equal(syncModule.pollIntervalFor({ hidden: false }), 1000, "no hasFocus to ask is treated as focused");
   assert.equal(syncModule.isAway(null), false);
 });
@@ -303,6 +306,7 @@ test("200 key presses, clicks and selection changes in a row cost nothing at all
   for (let i = 0; i < 200; i += 1) {
     r.doc.fire("keydown");
     r.doc.fire("selectionchange");
+    r.doc.fire("pointermove");
     if (i % 10 === 0) r.doc.fire("pointerdown");
   }
   await r.drain();
@@ -332,14 +336,62 @@ test("200 key presses spread over 10 seconds leave the poll on its clock", async
 // Away: no polling at all
 // ---------------------------------------------------------------------------
 
-test("an unfocused tab sends no reply poll at all", async (t) => {
+test("a visible page without focus polls every 15 seconds and keeps the ordinary heartbeat", async (t) => {
   const r = rig(t);
   await started(r);
-  await r.advance(3000);
+  await r.advance(3500);
   const at = Date.now();
   r.blur();
+  await r.drain();
+  assert.equal(r.requests.filter((q) => q.at >= at).length, 0, "the blur itself sends nothing");
+  await r.advance(60000, 500);
+  const polls = r.polls().filter((p) => p > at);
+  assert.equal(polls.length, 4, "four polls in a minute: " + polls.map((p) => p - at).join(","));
+  gaps(polls).forEach((g) => assert.equal(g, 15000));
+  const beats = r.claims().filter((c) => c.at > at);
+  assert.ok(beats.length >= 5, "the 10 second beat carries on: " + beats.length);
+  beats.forEach((b) => assert.equal(b.body.quiet, false, "never quiet: it keeps the 30 second window"));
+});
+
+test("a visible page without focus shows a reply within 15 seconds", async (t) => {
+  const r = rig(t);
+  await started(r);
+  await r.advance(3500);
+  r.blur();
+  await r.advance(20000, 500);
+  r.helper.replies = [{ event: "item.reply", item: "i1", seq: 1 }];
+  await r.advance(15000, 500);
+  assert.equal(r.sync.repliesSeen().length, 1, "the reply is on the page");
+});
+
+test("becoming visible from hidden, without focus, polls at once and then every 15 seconds", async (t) => {
+  const r = rig(t);
+  await started(r);
+  r.hide();
   await r.advance(LONG, 1000);
-  assert.deepEqual(r.polls().filter((p) => p > at), [], "no poll in 15 minutes unfocused");
+  const at = Date.now();
+  r.show();
+  await r.drain();
+  assert.deepEqual(r.polls().filter((p) => p >= at), [at], "one poll right away");
+  await r.advance(31000, 500);
+  assert.deepEqual(gaps(r.polls().filter((p) => p >= at)), [15000, 15000]);
+});
+
+test("a page that goes hidden and back to visible keeps the claim right both ways", async (t) => {
+  const r = rig(t);
+  await started(r);
+  await r.advance(3500);
+  r.hide();
+  await r.advance(20000, 500);
+  assert.ok(r.claims().some((c) => c.body && c.body.quiet === true), "hidden: the helper was told quiet");
+  const at = Date.now();
+  r.show();
+  await r.drain();
+  const back = r.claims().filter((c) => c.at >= at);
+  assert.equal(back.length, 1, "visible again: one beat at once");
+  assert.equal(back[0].body.quiet, false, "saying it is not quiet, so the 30 second window is back");
+  await r.advance(21000, 500);
+  assert.equal(r.claims().filter((c) => c.at >= at).length, 3, "then the 10 second beat");
 });
 
 test("a hidden tab sends no reply poll at all", async (t) => {
@@ -352,15 +404,15 @@ test("a hidden tab sends no reply poll at all", async (t) => {
   assert.deepEqual(r.polls().filter((p) => p > at), []);
 });
 
-test("an unfocused tab's only requests are one heartbeat per 5 minutes", async (t) => {
+test("a hidden tab's only requests are one heartbeat per 5 minutes", async (t) => {
   const r = rig(t);
   await started(r);
   // Half way between two polls, so nothing is on the wire at the blur.
   await r.advance(3500);
   const at = Date.now();
-  r.blur();
+  r.hide();
   await r.drain();
-  assert.equal(r.requests.filter((q) => q.at >= at).length, 0, "the blur itself sends nothing");
+  assert.equal(r.requests.filter((q) => q.at >= at).length, 0, "hiding with nothing queued sends nothing");
   await r.advance(LONG, 1000);
   const sent = r.requests.filter((q) => q.at >= at);
   assert.ok(sent.every((q) => q.route === "claim"), "nothing but heartbeats: " + sent.map((q) => q.route).join(","));
@@ -374,9 +426,10 @@ test("an unfocused tab's only requests are one heartbeat per 5 minutes", async (
 test("focusing the window polls at once, then at one second", async (t) => {
   const r = rig(t);
   await started(r);
-  r.blur();
+  r.hide();
   await r.advance(60000, 1000);
   const at = Date.now();
+  r.show();
   r.focus();
   await r.drain();
   assert.deepEqual(r.polls().filter((p) => p >= at), [at], "one poll, right away");
@@ -392,16 +445,16 @@ test("coming back to a hidden tab polls once, whichever of visibility and focus 
   const at = Date.now();
   r.show();
   await r.drain();
-  assert.deepEqual(r.polls().filter((p) => p >= at), [], "visible in an unfocused window is still away");
+  assert.deepEqual(r.polls().filter((p) => p >= at), [at], "becoming visible polls at once");
   r.focus();
   await r.drain();
-  assert.deepEqual(r.polls().filter((p) => p >= at), [at], "one poll for the whole return");
+  assert.deepEqual(r.polls().filter((p) => p >= at), [at], "and the focus right after it adds no second poll");
 });
 
 test("a key or click while the page thinks it is away, with focus actually back, is a return", async (t) => {
   const r = rig(t);
   await started(r);
-  r.blur();
+  r.hide();
   await r.advance(30000, 1000);
   const at = Date.now();
   r.focusSilently();
@@ -508,11 +561,87 @@ test("against a helper that never offers the slow beat, the page keeps the fast 
   beats.forEach((b) => assert.notEqual(b.body.quiet, true));
 });
 
+// ---------------------------------------------------------------------------
+// Review fixes
+// ---------------------------------------------------------------------------
+
+test("a page that loads hidden still records the version it shows, so a rebuild before return reloads it", async (t) => {
+  // The page reloaded for a rebuild and the reviewer switched to the terminal
+  // while it loaded. The agent rebuilds again. On return the page must know it
+  // is showing the older file.
+  const r = rig(t, { startHidden: true });
+  await started(r);
+  await r.drain();
+  assert.equal(r.polls().length, 1, "one poll at load, even hidden, to learn the version on screen");
+  r.helper.mtime = "2026-09-28T11:20:00.000Z";
+  await r.advance(LONG, 1000);
+  assert.equal(r.polls().length, 1, "and no repeating poll while away");
+  r.show();
+  r.focus();
+  await r.drain();
+  await r.advance(syncModule.RELOAD_DEBOUNCE_MS + 200);
+  assert.equal(r.reloads.length, 1, "the newer file reloads the page on return");
+});
+
+test("the beat that would tell the helper quiet fails, so the next beat stays fast and says quiet again", async (t) => {
+  const r = rig(t);
+  await started(r);
+  await r.advance(3500);
+  r.hide();
+  // The helper is being replaced at exactly the beat that says quiet.
+  r.helper.down = true;
+  await r.advance(10000, 500);
+  const failed = r.claims().filter((c) => c.body && c.body.quiet === true);
+  assert.equal(failed.length, 1, "precondition: the quiet beat went out into a helper that was down");
+  r.helper.down = false;
+  const at = failed[0].at;
+  await r.advance(25000, 500);
+  const next = r.claims().filter((c) => c.at > at);
+  assert.ok(next.length >= 1, "beat again");
+  assert.ok(next[0].at - at <= 10000, "at the fast pace, because nothing ever answered the quiet beat: " + (next[0].at - at));
+  assert.equal(next[0].body.quiet, true, "saying quiet again");
+  // Once a grant has answered it, the slow beat starts.
+  const confirmedAt = next[0].at;
+  await r.advance(QUIET_BEAT, 1000);
+  const after = r.claims().filter((c) => c.at > confirmedAt);
+  assert.ok(after.length >= 1, "the slow beat did come");
+  // Timed from the grant, which this rig delivers within one clock step.
+  const gap = after[0].at - confirmedAt;
+  assert.ok(gap >= QUIET_BEAT && gap <= QUIET_BEAT + 1000, "five minutes after the granted quiet beat: " + gap);
+});
+
+test("coming back by clicking straight into a frame on the page is noticed on the next pointer move", async (t) => {
+  const r = rig(t);
+  await started(r);
+  r.hide();
+  await r.advance(30000, 1000);
+  const at = Date.now();
+  // Focus is inside a frame: the top page gets no focus and no click.
+  r.focusSilently();
+  r.doc.fire("pointermove");
+  await r.drain();
+  assert.deepEqual(r.polls().filter((p) => p >= at), [at], "polled at once, as on focus");
+});
+
+test("after a helper restart, the page's last-seen time comes from the saved session table", () => {
+  const first = registry("lahe-quiet-lastseen-");
+  first.reviews.claimWindow("rquiet1", { window_id: "a", quiet: true });
+  first.at.ms += 120000;
+  const second = first.make();
+  second.create({ id: "rquiet1", origins: ["null"] });
+  second.loadSessions();
+  assert.equal(
+    second.lastSeenAt("rquiet1"),
+    new Date(first.at.ms - 120000).toISOString(),
+    "an unfocused page that has not beaten since the restart is still seen as open"
+  );
+});
+
 test("an away tab with the helper down does not retry every second", async (t) => {
   const r = rig(t);
   await started(r);
   await r.advance(3000);
-  r.blur();
+  r.hide();
   await r.advance(12000, 500);
   r.helper.down = true;
   const at = Date.now();
@@ -521,7 +650,7 @@ test("an away tab with the helper down does not retry every second", async (t) =
   assert.ok(tries <= 3, "one try per slow beat, not one a second: " + tries);
 });
 
-test("a read-only window re-asks every 10 seconds focused, not at all away, and at once on return", async (t) => {
+test("a read-only window re-asks every 10 seconds focused, not at all hidden, and at once on return", async (t) => {
   const r = rig(t, { refuse: true });
   await started(r);
   assert.equal(r.sync.isReadOnly(), true, "precondition: the helper refused this window");
@@ -529,17 +658,29 @@ test("a read-only window re-asks every 10 seconds focused, not at all away, and 
   await r.advance(25000, 500);
   assert.deepEqual(gaps(r.claims().filter((c) => c.at > at).map((c) => c.at)), [10000]);
 
-  r.blur();
+  r.hide();
   at = Date.now();
   await r.advance(LONG, 1000);
-  assert.equal(r.claims().filter((c) => c.at > at).length, 0, "no re-ask while away");
+  assert.equal(r.claims().filter((c) => c.at > at).length, 0, "no re-ask while hidden");
 
   at = Date.now();
+  r.show();
   r.focus();
   await r.drain();
   assert.equal(r.claims().filter((c) => c.at >= at).length, 1, "re-asked at once on return");
   await r.advance(10000, 500);
   assert.equal(r.claims().filter((c) => c.at >= at).length, 2, "and every 10 seconds again");
+});
+
+test("a read-only window beside the terminal re-asks every 15 seconds", async (t) => {
+  const r = rig(t, { refuse: true });
+  await started(r);
+  await r.advance(3500);
+  r.blur();
+  const at = Date.now();
+  await r.advance(46000, 500);
+  const asks = r.claims().filter((c) => c.at > at).map((c) => c.at);
+  assert.deepEqual(gaps(asks), [15000, 15000]);
 });
 
 // ---------------------------------------------------------------------------
