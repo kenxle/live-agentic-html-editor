@@ -1,12 +1,14 @@
 # Keep the editor when you follow a link
 
-## Built, waiting on review
+## Status
 
-The fix is built and its tests pass. A code review and a security review are running on it now. One thing the builder did differently from your call, which needs a yes or no:
+**Built and reviewed. Waiting on its final CI run, then it merges.** Last updated 2026-09-28 16:52.
 
-- **The "open a review" button copies a command instead of opening a review.** This is the rare case where a linked page finds no review. A button that opened one directly would need a new way for a browser click to create a review, and the security review never looked at that. So the page offers a Copy button for the command instead, and you paste it to any agent. **Settled 2026-09-28: the Copy button is fine for now.**
-
-The screenshot of the editor on a linked page is at the end of the Progress section.
+- PR: [#17](https://github.com/kenxle/live-agentic-html-editor/pull/17).
+- Reviews: code review found nothing real; the security review's three findings are fixed with tests.
+- Tests: unit gate green; the full browser suite green on this machine except `install_walk_3b` (this folder has no installed packages; it passes in CI).
+- Held up by: main's CI was red on an unrelated Hold test. Fixed and merged as [#18](https://github.com/kenxle/live-agentic-html-editor/pull/18).
+- Your calls: both settled, and the Copy button in the missing-review case is fine for now.
 
 ## Summary
 
