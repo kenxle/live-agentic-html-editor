@@ -23,7 +23,9 @@
 // `attachment(now)` returns the attach record ({session, at}, or 1.4's
 // readAttached with its own `watching`) or null, and `requestFor(reviewId,
 // now)` returns the latest request on a review (1.4's shape, with `by_name`
-// already filled, or a bare record with `by` and `for`) or null.
+// already filled, or a bare record with `by` and `for`) or null. The helper
+// also passes `requestsAt(now)`, the same answers from one read of the queue,
+// so a list reads catalog-requests.jsonl once rather than once per row.
 //
 // ONE CORRUPT FILE DEGRADES ONE ROW. Every read is caught and turned into
 // `unreadable: true` on the row it belongs to; the rest of the list returns.
@@ -92,7 +94,8 @@ function hasHiddenSegment(rel) {
 
 /**
  * @param {{dir: string, home?: string, readFile?: function, pidAlive?: function,
- *          probe?: function, attachment?: function, requestFor?: function}} options
+ *          probe?: function, attachment?: function, requestFor?: function,
+ *          requestsAt?: function}} options
  *   `readFile` defaults to fs.readFileSync; tests pass a counting one.
  *   `probe(meta)` resolves true when the recorded server is really that server;
  *   it defaults to static_servers.isExactServer.
@@ -107,6 +110,10 @@ function createReader(options) {
   var probe = typeof opts.probe === "function" ? opts.probe : staticServers.isExactServer;
   var attachment = typeof opts.attachment === "function" ? opts.attachment : function () { return null; };
   var requestFor = typeof opts.requestFor === "function" ? opts.requestFor : function () { return null; };
+  // `requestsAt(now)` returns a `(reviewId) => request` lookup built from one
+  // read of the queue. When given, list uses it once per call instead of
+  // calling requestFor once per row.
+  var requestsAt = typeof opts.requestsAt === "function" ? opts.requestsAt : null;
   var store = catalogStore.createCatalogStore({ dir: dir, readFile: readFile });
 
   // ---------------------------------------------------------------------------
@@ -621,8 +628,8 @@ function createReader(options) {
   // The response
   // ---------------------------------------------------------------------------
 
-  function requestOf(reviewId, nowMs) {
-    var r = requestFor(reviewId, nowMs);
+  function requestOf(reviewId, nowMs, lookup) {
+    var r = lookup(reviewId);
     if (!r || typeof r !== "object") return null;
     var answered = typeof r.answered_at === "string" && r.answered_at ? r.answered_at : null;
     if ((r.state === "done" || r.state === "refused") && answered) {
@@ -656,7 +663,7 @@ function createReader(options) {
     return { session: a.session, name: nameOf(a.session), watching: watching };
   }
 
-  function rowOut(row, nowMs, servedUrl) {
+  function rowOut(row, nowMs, servedUrl, lookup) {
     var lead = row.lead;
     var info = lead.info;
     var waiting = 0;
@@ -694,7 +701,7 @@ function createReader(options) {
       kind: lead.kind,
       starred: row.starred,
       unreadable: row.parts.some(function (p) { return p.unreadable; }),
-      request: requestOf(info.id, nowMs),
+      request: requestOf(info.id, nowMs, lookup),
       pages: pages,
       folded_from: row.parts.slice(1).map(function (p) { return p.info.id; }).sort()
     };
@@ -723,9 +730,13 @@ function createReader(options) {
     });
     await Promise.all(jobs);
 
+    // The request queue is read once per list, not once per row.
+    var lookup = requestsAt
+      ? requestsAt(nowMs)
+      : function (reviewId) { return requestFor(reviewId, nowMs); };
     var sessions = scanned.sessions.map(function (s) {
       var reviews = s.rows
-        .map(function (row) { return rowOut(row, nowMs, row.served); })
+        .map(function (row) { return rowOut(row, nowMs, row.served, lookup); })
         .sort(function (a, b) { return a.last < b.last ? 1 : a.last > b.last ? -1 : a.id < b.id ? 1 : -1; });
       var projects = [];
       reviews.forEach(function (r) {
@@ -808,6 +819,21 @@ function createReader(options) {
   };
 }
 
+/**
+ * The reader's two inputs from the request queue (Library 1.4), spelled once so
+ * the helper and the tests wire them the same way.
+ *
+ * @param {object} queue a catalog_requests.createQueue
+ */
+function queueInputs(queue) {
+  return {
+    attachment: queue.readAttached,
+    requestFor: queue.requestFor,
+    requestsAt: queue.requestsAt
+  };
+}
+
 module.exports = {
-  createReader: createReader
+  createReader: createReader,
+  queueInputs: queueInputs
 };

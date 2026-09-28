@@ -541,6 +541,40 @@ test("wired to 1.4's real queue: attached comes from readAttached and each row's
   assert.equal(row(list, "r_notes").request, null);
 });
 
+test("one list call reads catalog-requests.jsonl once, not once per row, and every row still gets its request", async () => {
+  // The page polls every POLL_MS; before this, each row's requestFor re-read
+  // and re-folded the whole queue file, so a few hundred rows meant a few
+  // hundred reads per poll.
+  const catalogRequests = require("../../src/service/catalog_requests.js");
+  const stateDir = require("../../src/service/state_dir.js");
+  const installed = fixture.install();
+  const now = installed.nowMs;
+  require("../../src/service/agent_sessions.js").createStore({ dir: installed.dir }).reopen("s_index");
+  catalogRequests.writeAttach(installed.dir, "s_index", now - 5 * MINUTE);
+  const queueFile = stateDir.catalogRequestsPath(installed.dir);
+  let queueReads = 0;
+  const queue = catalogRequests.createQueue({
+    dir: installed.dir, writeExpired: true, pidAlive: () => true, log: () => {},
+    readFile: (file, encoding) => {
+      if (file === queueFile) queueReads += 1;
+      return fs.readFileSync(file, encoding);
+    }
+  });
+  const brief = queue.append({ action: "pickup", review: "r_brief", session: "s_coach", for: "s_index" }, now - 2 * MINUTE);
+  const spec = queue.append({ action: "launch", review: "r_spec", session: "s_coach", for: "s_index" }, now - 2 * MINUTE);
+  // Wired exactly as src/service/index.js wires the helper's reader.
+  const reader = catalogReader.createReader(Object.assign({
+    dir: installed.dir, home: installed.home, pidAlive: () => true, probe: async () => false
+  }, catalogReader.queueInputs(queue)));
+  queueReads = 0;
+  const list = await reader.list(now);
+  assert.ok(rows(list).length > 2, "the fixture has many rows");
+  assert.equal(queueReads, 1, "one read of the queue file per list call");
+  assert.equal(row(list, "r_brief").request.id, brief.request.id);
+  assert.equal(row(list, "r_spec").request.id, spec.request.id);
+  assert.equal(row(list, "r_notes").request, null);
+});
+
 test("attached.watching is the queue's own answer when the attach carries one, so the header and Open agree", async () => {
   const catalogRequests = require("../../src/service/catalog_requests.js");
   const installed = fixture.install();

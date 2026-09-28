@@ -258,13 +258,19 @@ test("a named card shows its name, projects, review count, watcher, waiting and 
   assert.deepEqual(c.projects, ["alpha", "beta"]);
   // r_deleted is missing, so it is not one of the card's visible reviews.
   assert.equal(c.reviewsText, "4 reviews");
-  assert.equal(c.watchText, "an agent is watching");
+  assert.equal(c.watchText, "watched by coach activity");
   assert.equal(c.waitingText, "3 waiting");
   assert.equal(c.lastText, "last 3:40 PM");
 });
 
 test("the card names the Library's own agent when it is the watcher", () => {
-  assert.equal(card(build(freshList(), okState()), "s_ops").watchText, "the agent that opened this Library is watching it");
+  assert.equal(card(build(freshList(), okState()), "s_ops").watchText, "watched by document index, the agent that opened this Library");
+});
+
+test("a watcher with no name is named by its session id on the card", () => {
+  const list = freshList();
+  sessionIn(list, "s_coach").watching = { session: "s_coach", name: null };
+  assert.equal(card(build(list, okState()), "s_coach").watchText, "watched by s_coach");
 });
 
 test("a card with no watcher and nothing waiting says so and shows no waiting count", () => {
@@ -320,11 +326,25 @@ test("a folded row names its folder and says how many reviews it holds", () => {
   assert.equal(r.folded, "3 reviews of this folder, shown as one");
 });
 
-test("badges: review ended, being served now, and who is watching", () => {
+test("badges: review ended and being served now; a row in its own card does not repeat the card's watcher", () => {
   const view = build(freshList(), okState());
-  assert.deepEqual(row(view, "r_notes").badges, ["review ended", "agent watching: coach activity"]);
-  assert.deepEqual(row(view, "r_spec").badges, ["being served now", "agent watching: coach activity"]);
+  assert.deepEqual(row(view, "r_notes").badges, ["review ended"]);
+  assert.deepEqual(row(view, "r_spec").badges, ["being served now"]);
   assert.deepEqual(row(view, "r_badsession").badges, []);
+});
+
+test("a watched card names its agent once: on the card, and on none of its rows", () => {
+  const c = card(build(freshList(), okState()), "s_coach");
+  assert.equal(c.watched, true, "the card carries the watching mark the rows used to");
+  assert.equal(card(build(freshList(), okState()), "s_badsession").watched, false);
+  assert.ok(c.rows.length > 1, "the card has several rows");
+  const texts = [c.watchText].concat(...c.rows.map((r) => r.badges));
+  assert.equal(texts.filter((t) => t.includes("coach activity")).length, 1);
+});
+
+test("a row shown outside its card keeps the watching badge, since no card line names its watcher", () => {
+  const view = build(freshList(), vm.withShowMissing(okState(), true));
+  assert.deepEqual(row(view, "r_deleted").badges, ["agent watching: coach activity"]);
 });
 
 test("a review with several pages lists them; one page lists nothing", () => {

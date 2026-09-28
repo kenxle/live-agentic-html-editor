@@ -332,6 +332,22 @@ test.describe("the Library page", () => {
     await expect(banner).toHaveText("");
   });
 
+  test("a watched card names its agent once, on its summary line, and its rows do not repeat it", async ({ page }) => {
+    await routeCatalog(page, { list: freshList });
+    await openLibrary(page, helper);
+    const coach = page.locator('details[data-session="s_coach"]');
+    await expect(coach.locator("summary .lib-card-watch")).toHaveText("watched by coach activity");
+    await expect(coach.locator('summary .lib-badge[data-badge="watching"]')).toHaveCount(1);
+    expect(await coach.locator("li[data-review]").count()).toBeGreaterThan(1);
+    await expect(coach.locator('li[data-review] [data-badge="watching"]')).toHaveCount(0);
+    await expect(page.locator('details[data-session="s_ops"] summary .lib-card-watch')).toHaveText(
+      "watched by document index, the agent that opened this Library"
+    );
+    // A missing row is listed outside its card, so it keeps the badge.
+    await page.locator('[data-act="show-missing"]').click();
+    await expect(rowLocator(page, "r_deleted").locator('[data-badge="watching"]')).toHaveText("agent watching: coach activity");
+  });
+
   test("screenshots, light and dark", async ({ page }) => {
     const list = freshList();
     await routeCatalog(page, { list: () => list });

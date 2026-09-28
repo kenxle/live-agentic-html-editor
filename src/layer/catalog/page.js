@@ -415,7 +415,13 @@
       return h("span", { class: "lib-project", text: p });
     });
     metaKids.push(h("span", { text: card.reviewsText }));
-    metaKids.push(h("span", { text: card.watchText }));
+    // The card names its watcher once, with the watching dot the rows used to
+    // carry each; nested, so the meta line's separator rule leaves it alone.
+    metaKids.push(
+      card.watched
+        ? h("span", { class: "lib-card-watch" }, [h("span", { class: "lib-badge", "data-badge": "watching", text: card.watchText })])
+        : h("span", { class: "lib-card-watch", text: card.watchText })
+    );
     if (card.waitingText) metaKids.push(h("span", { class: "lib-waiting", text: card.waitingText }));
     metaKids.push(h("span", { text: card.lastText }));
     var details = h("details", { class: "lib-card", "data-session": card.id, open: card.open }, [

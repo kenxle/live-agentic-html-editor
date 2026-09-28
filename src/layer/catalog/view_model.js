@@ -70,8 +70,11 @@
     SHOW_MISSING: "Show {n} missing",
     MISSING_HEADING: "Missing ({n}). Neither the file nor a main-repo copy exists.",
     HIDE: "Hide",
-    WATCH_LIBRARY_AGENT: "the agent that opened this Library is watching it",
-    WATCH_OTHER: "an agent is watching",
+    // The card names its watcher once, so its rows need not repeat it. The
+    // Page Spec's card wording did not name the agent; a row's badge did, on
+    // every row of the card.
+    WATCH_LIBRARY_AGENT: "watched by {agent}, the agent that opened this Library",
+    WATCH_OTHER: "watched by {agent}",
     WATCH_NONE: "no agent watching",
     UNNAMED_SESSION: 'Unnamed session, started on "{name}"',
     // Not in the Page Spec: the reader's "legacy" group is lahe add reviews
@@ -319,12 +322,17 @@
     return protocol.AGENT_LIVENESS.handoffMessage(isLegacy ? null : session.id, isLegacy ? null : session.name || null, false);
   }
 
+  function sameWatcher(a, b) {
+    return !!(a && b && a.session === b.session);
+  }
+
   function watchText(session, list) {
     var w = session.watching;
     if (!w) return TEXT.WATCH_NONE;
     var attached = list && list.attached;
-    if (attached && attached.session && w.session === attached.session) return TEXT.WATCH_LIBRARY_AGENT;
-    return TEXT.WATCH_OTHER;
+    var agent = agentLabel(w);
+    if (attached && attached.session && w.session === attached.session) return fill(TEXT.WATCH_LIBRARY_AGENT, { agent: agent });
+    return fill(TEXT.WATCH_OTHER, { agent: agent });
   }
 
   // ---------------------------------------------------------------------------
@@ -411,7 +419,9 @@
     };
   }
 
-  function buildRow(review, session, list, state, now, opts) {
+  // `cardWatching` is the watcher the row's card already names, or null when
+  // the row is shown outside a card (the missing section).
+  function buildRow(review, session, list, state, now, opts, cardWatching) {
     var agent = liveAgent(list);
     var missing = review.openable === "missing";
     var viaAgent = review.openable === "via-agent";
@@ -446,7 +456,9 @@
     var badges = [];
     if (review.ended) badges.push(TEXT.BADGE_ENDED);
     if (review.served_url) badges.push(TEXT.BADGE_SERVED);
-    if (session.watching) badges.push(fill(TEXT.BADGE_WATCHING, { agent: agentLabel(session.watching) }));
+    if (session.watching && !sameWatcher(session.watching, cardWatching)) {
+      badges.push(fill(TEXT.BADGE_WATCHING, { agent: agentLabel(session.watching) }));
+    }
 
     var folded = review.folded_from && review.folded_from.length
       ? fill(TEXT.FOLDED, { n: review.folded_from.length + 1 })
@@ -674,11 +686,12 @@
         projects: (session.projects || []).slice(),
         reviewsText: plural(visible.length, "review", "reviews"),
         watchText: watchText(session, list),
+        watched: !!session.watching,
         waitingText: waiting > 0 ? waiting + " waiting" : null,
         lastText: "last " + formatTime(session.last, now, opts.timeZone),
         open: open,
         rows: visible.map(function (r) {
-          return buildRow(r, session, list, state, now, opts);
+          return buildRow(r, session, list, state, now, opts, session.watching || null);
         })
       });
     });
@@ -702,7 +715,7 @@
               heading: fill(TEXT.MISSING_HEADING, { n: missingRows.length }),
               hideText: TEXT.HIDE,
               rows: missingRows.map(function (m) {
-                return buildRow(m.review, m.session, list, state, now, opts);
+                return buildRow(m.review, m.session, list, state, now, opts, null);
               })
             }
           : null

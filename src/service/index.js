@@ -245,12 +245,10 @@ async function serve(options) {
     pidAlive: opts.pidAlive,
     log: function (line) { log.helperLog(line); }
   });
-  var catalogReaderInstance = catalogReader.createReader({
+  var catalogReaderInstance = catalogReader.createReader(Object.assign({
     dir: dir,
-    pidAlive: opts.pidAlive,
-    attachment: catalogQueue.readAttached,
-    requestFor: catalogQueue.requestFor
-  });
+    pidAlive: opts.pidAlive
+  }, catalogReader.queueInputs(catalogQueue)));
   var catalogOps = staticServers.createCatalogOps({ dir: dir, reviews: reviews, sessions: agentSessions });
   var catalogActionsInstance = catalogActions.createCatalogActions({
     dir: dir,
