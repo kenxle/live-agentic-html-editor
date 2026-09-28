@@ -245,6 +245,33 @@ var NON_BUNDLE_FILES = [
   { path: "src/service/rebuild.js", owner: "3A", why: "re-renders a Markdown review's page when the source moves, so no agent has to remember to" },
   { path: "src/service/handled_check.js", owner: "3A", why: "is a handled claim true on the built page; the one thing that stops an item retiring on a claim" },
 
+  // --- the Library (docs/features/20260922.02_lahe_library). Planned until
+  // each task lands its file; a builder flips `planned` off on its own lines.
+  {
+    path: "src/service/catalog_reader.js",
+    owner: "Library 1.1",
+    planned: true,
+    why: "builds catalog.list from the state dir, and describeReview, which the drain calls too"
+  },
+  {
+    path: "src/service/catalog_store.js",
+    owner: "Library 1.1",
+    planned: true,
+    why: "the only reader and writer of catalog.json (stars and the reopened map). Never overwrites a corrupt file"
+  },
+  {
+    path: "src/service/catalog_requests.js",
+    owner: "Library 1.4",
+    planned: true,
+    why: "the helper-written request queue, catalog-requests.jsonl: append, answer, expire, pending"
+  },
+  {
+    path: "src/service/catalog_page.js",
+    owner: "Library 1.2 (2.2 writes the template body)",
+    planned: true,
+    why: "the Library page's HTML template, with the token in its meta tag"
+  },
+
   { path: "src/cli/index.js", owner: "1A", why: "the command dispatcher: serve, add, status, reply" },
   { path: "src/cli/commands/serve.js", owner: "1A", why: "serve" },
   { path: "src/cli/commands/review.js", owner: "1A", why: "session-owning public review entrypoint" },
@@ -252,14 +279,38 @@ var NON_BUNDLE_FILES = [
   { path: "src/cli/commands/add.js", owner: "3B", why: "add" },
   { path: "src/cli/commands/status.js", owner: "3A", why: "status: the one agent-facing read path" },
   { path: "src/cli/commands/reply.js", owner: "3A", why: "reply: the one agent-facing write path, so no shell hand-encodes JSON" },
-  { path: "src/cli/commands/monitor.js", owner: "3A", why: "exit-on-work local monitor over session-scoped status" }
+  { path: "src/cli/commands/monitor.js", owner: "3A", why: "exit-on-work local monitor over session-scoped status" },
+  {
+    path: "src/cli/commands/library.js",
+    owner: "Library 1.4",
+    planned: true,
+    why: "lahe library (print the Library URL, attach a session) and lahe library answer"
+  }
+];
+
+// The Library page's own scripts. NOT in the bundle: the helper serves them raw
+// from src/ through catalog.asset, so they never touch dist/. Listed so the
+// ownership question has an answer for them too.
+var CATALOG_PAGE = [
+  {
+    path: "src/layer/catalog/view_model.js",
+    owner: "Library 2.2",
+    planned: true,
+    why: "a pure module, no DOM: a list response and the page's state into sections, rows and button states"
+  },
+  {
+    path: "src/layer/catalog/page.js",
+    owner: "Library 2.2 (1.2 lands a placeholder)",
+    planned: true,
+    why: "the Library page script: token from the meta tag, the poll, rendering with textContent, Open's tab sequence"
+  }
 ];
 
 var BUNDLE_OUTPUT = "dist/lahe-layer.js";
 var GLOBAL_NAMESPACE = "LAHE";
 
 function allFiles() {
-  return LAYER_FILES.concat(NON_BUNDLE_FILES);
+  return LAYER_FILES.concat(NON_BUNDLE_FILES, CATALOG_PAGE);
 }
 
 function entryFor(path) {
@@ -301,6 +352,7 @@ function cutFiles() {
 module.exports = {
   LAYER_FILES: LAYER_FILES,
   NON_BUNDLE_FILES: NON_BUNDLE_FILES,
+  CATALOG_PAGE: CATALOG_PAGE,
   BUNDLE_OUTPUT: BUNDLE_OUTPUT,
   GLOBAL_NAMESPACE: GLOBAL_NAMESPACE,
   allFiles: allFiles,

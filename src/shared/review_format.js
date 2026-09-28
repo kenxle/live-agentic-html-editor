@@ -212,7 +212,16 @@
     "thread[].agent.reason": record.CLASS_DATA,
     "thread[].agent.text": record.CLASS_DATA,
     "thread[].agent.files": record.CLASS_DATA,
-    "thread[].agent.at": record.CLASS_DATA
+    "thread[].agent.at": record.CLASS_DATA,
+    // The drain's catalog_requests section (`lahe status`, LAHE Library). The
+    // id and helper-value fields (request, action, review, session, kind,
+    // moves_with, at) are not listed; these four carry page-derived text and
+    // are fenced like every other data field. A title holding the fence marker
+    // or a newline cannot break out of its entry.
+    "catalog_requests[].title": record.CLASS_DATA,
+    "catalog_requests[].path": record.CLASS_DATA,
+    "catalog_requests[].candidate": record.CLASS_DATA,
+    "catalog_requests[].handoff": record.CLASS_DATA
   };
 
   // ---------------------------------------------------------------------------

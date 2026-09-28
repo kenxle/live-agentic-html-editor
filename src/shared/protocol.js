@@ -138,12 +138,20 @@
     REQUEST_ID: "x-lahe-request-id",
     CONTENT_TYPE: "content-type",
     ORIGIN: "origin",
-    HOST: "host"
+    HOST: "host",
+    // Set by the browser, never by a script. The Library's routes read it to
+    // tell their own page apart from a document on another loopback port,
+    // which sends "same-site" (see CATALOG_ROUTES).
+    SEC_FETCH_SITE: "sec-fetch-site"
   };
 
   var CLIENT_LAYER = "layer";
   var CLIENT_CLI = "cli";
   var CLIENTS = [CLIENT_LAYER, CLIENT_CLI];
+  // The Library page's client value. NOT in CLIENTS on purpose: CLIENTS is what
+  // the per-review routes accept, and the Library page holds no review token,
+  // so its client value must not pass a review route's custom header check.
+  var CLIENT_CATALOG = "catalog";
 
   var JSON_CONTENT_TYPE = "application/json";
 
@@ -158,7 +166,13 @@
     // Liveness only. Carries no review data, so it needs no credential.
     NONE: "none",
     // A valid token for the review named in the request.
-    REVIEW_TOKEN: "review_token"
+    REVIEW_TOKEN: "review_token",
+    // The Library token (a D11 amendment): minted in memory at each helper
+    // start, carried only by the served Library page. It can list, open
+    // (restart recorded servers only), star, and queue a request. It cannot
+    // post to a review, read comment text, or name a file to serve. Which
+    // checks each catalog route runs is the per-route table in CATALOG_ROUTES.
+    CATALOG_TOKEN: "catalog_token"
   };
 
   // Review ids and agent names are path components, so they are constrained to
@@ -185,7 +199,7 @@
       auth: AUTH.NONE,
       mutating: false,
       why: "liveness and version only, so `add` can tell a helper that is up from one that is not",
-      response: "{ok, version, api, service_contract, started_at}"
+      response: "{ok, version, api, service_contract, started_at, catalog_seen_at}"
     },
     {
       name: "events.append",
@@ -303,12 +317,123 @@
     }
   ];
 
+  // ---------------------------------------------------------------------------
+  // The Library's routes (LAHE Library, D11 amendment)
+  // ---------------------------------------------------------------------------
+  //
+  // A separate list from ROUTES on purpose. ROUTES is the per-review wire: the
+  // router binds a handler to every entry at load and matches paths exactly.
+  // The Library is its own credential (AUTH.CATALOG_TOKEN) with its own check
+  // table, and catalog.asset is a path prefix, so the helper binds these itself.
+  // route(name) finds a route in either list.
+  //
+  // `checks` is the architecture's per-route check table as data. The page is
+  // loaded by navigation and its assets by <script> and <link>, so neither can
+  // carry a header; the page carries the token (CATALOG_TOKEN_META) and its
+  // script sends it on every API call.
+  //
+  //   host            always: 127.0.0.1:<port> or localhost:<port> at the
+  //                   helper's actual port, on every route
+  //   sec_fetch_site  the values HEADER.SEC_FETCH_SITE may take; a missing one
+  //                   is refused
+  //   token           the client header CLIENT_CATALOG plus the Library token
+  //   json_body       the JSON content type
+  //   origin          "exact": Origin must equal "http://" + the request's Host
+  //
+  // No catalog route sends a CORS header, and preflight never approves one.
+  var CATALOG_PAGE_PATH = "/catalog";
+  var CATALOG_API_BASE = BASE + "/catalog";
+
+  var CATALOG_ROUTES = [
+    {
+      name: "catalog.page",
+      method: "GET",
+      path: CATALOG_PAGE_PATH,
+      auth: AUTH.CATALOG_TOKEN,
+      mutating: false,
+      checks: { sec_fetch_site: ["none", "same-origin"], token: false, json_body: false, origin: null },
+      why: "the Library page itself, with the Library token in its meta tag",
+      response: "text/html"
+    },
+    {
+      name: "catalog.asset",
+      method: "GET",
+      path: CATALOG_PAGE_PATH + "/assets/",
+      prefix: true,
+      auth: AUTH.CATALOG_TOKEN,
+      mutating: false,
+      checks: { sec_fetch_site: ["none", "same-origin"], token: false, json_body: false, origin: null },
+      why:
+        "the page's script, view model, protocol.js, the style bundle and the fonts, served raw from src/ " +
+        "from a fixed allowlist. Any other name is a 404 with no file bytes",
+      request: "<allowlisted name> after the path",
+      response: "the file"
+    },
+    {
+      name: "catalog.list",
+      method: "GET",
+      path: CATALOG_API_BASE + "/list",
+      auth: AUTH.CATALOG_TOKEN,
+      mutating: false,
+      checks: { sec_fetch_site: ["same-origin"], token: true, json_body: false, origin: null },
+      why: "every review, grouped by session. Only an authenticated list updates catalog_seen_at",
+      response: "{attached, sessions: [...]}"
+    },
+    {
+      name: "catalog.open",
+      method: "POST",
+      path: CATALOG_API_BASE + "/open",
+      auth: AUTH.CATALOG_TOKEN,
+      mutating: true,
+      checks: { sec_fetch_site: ["same-origin"], token: true, json_body: true, origin: "exact" },
+      why: "restart a review's recorded server and return its URL; never serves a path the helper did not serve before",
+      request: "{review, handoff, confirmed}",
+      response: "{url, request_id, not_asked}"
+    },
+    {
+      name: "catalog.star",
+      method: "POST",
+      path: CATALOG_API_BASE + "/star",
+      auth: AUTH.CATALOG_TOKEN,
+      mutating: true,
+      checks: { sec_fetch_site: ["same-origin"], token: true, json_body: true, origin: "exact" },
+      why: "star or unstar a review in catalog.json",
+      request: "{review, starred}",
+      response: "{review, starred}"
+    },
+    {
+      name: "catalog.request",
+      method: "POST",
+      path: CATALOG_API_BASE + "/request",
+      auth: AUTH.CATALOG_TOKEN,
+      mutating: true,
+      checks: { sec_fetch_site: ["same-origin"], token: true, json_body: true, origin: "exact" },
+      why: "queue a pick-up or a launch for the attached agent. Ids only; extra body fields are dropped",
+      request: "{review, action, confirmed}",
+      response: "{request_id}"
+    }
+  ];
+
+  // The <meta name> the Library page carries its token in. script-src 'self'
+  // forbids an inline script, so a meta tag is where the token can live.
+  var CATALOG_TOKEN_META = "lahe-catalog-token";
+
   function route(name) {
-    for (var i = 0; i < ROUTES.length; i += 1) {
-      if (ROUTES[i].name === name) return ROUTES[i];
+    var lists = [ROUTES, CATALOG_ROUTES];
+    for (var l = 0; l < lists.length; l += 1) {
+      for (var i = 0; i < lists[l].length; i += 1) {
+        if (lists[l][i].name === name) return lists[l][i];
+      }
     }
     throw new Error("unknown route: " + String(name) + ". Routes are listed in src/shared/protocol.js");
   }
+
+  // Field names on the health response that other code reads by name.
+  var HEALTH_FIELD = {
+    // The time of the last authenticated catalog.list, or null. `lahe session
+    // close` reads it to decide whether the Library keeps the helper up.
+    CATALOG_SEEN_AT: "catalog_seen_at"
+  };
 
   // Header requirements as data, so the helper's checks and the library's
   // request builder read from one list rather than two.
@@ -338,7 +463,9 @@
     CONTENT_TYPE: "content_type",
     REVIEW_KNOWN: "review_known",
     TOKEN: "token",
-    ORIGIN: "origin"
+    ORIGIN: "origin",
+    // Catalog routes only (see CATALOG_ROUTES[].checks.sec_fetch_site).
+    SEC_FETCH_SITE: "sec_fetch_site"
   };
 
   var CHECKS = [
@@ -371,6 +498,13 @@
       name: CHECK.ORIGIN,
       code: "PROTO_FORBIDDEN_ORIGIN",
       why: "the origin comes from the request's own header, never from its body, and must be one the add step registered"
+    },
+    {
+      name: CHECK.SEC_FETCH_SITE,
+      code: "PROTO_CROSS_SITE",
+      why:
+        "catalog routes only. A document under review on another loopback port sends same-site, and it is the page " +
+        "most likely to run a script the reviewer did not write, so the Library's API takes exactly same-origin"
     }
   ];
 
@@ -494,7 +628,16 @@
     PROTO_UNKNOWN_ITEM: 404,
     PROTO_STALE_REV: 409,
     PROTO_SECOND_WINDOW: 409,
-    PROTO_SECOND_INSTANCE: 409
+    PROTO_SECOND_INSTANCE: 409,
+    // The Library's codes. Messages and remedies are in failures.js, like every
+    // other code; the page shows the remedy.
+    PROTO_CROSS_SITE: 403,
+    PROTO_NOT_OPENABLE: 409,
+    PROTO_REQUEST_PENDING: 409,
+    PROTO_QUEUE_FULL: 429,
+    PROTO_NO_AGENT: 409,
+    PROTO_CONFIRM_NEEDED: 409,
+    PROTO_CATALOG_UNREADABLE: 500
   };
 
   function statusFor(code) {
@@ -516,6 +659,56 @@
   }
 
   // ---------------------------------------------------------------------------
+  // The Library's constants
+  // ---------------------------------------------------------------------------
+  //
+  // Every number the Library's rules use, spelled once. No other file types a
+  // literal for any of these. Every expiry and freshness check takes `now` as
+  // an argument, so tests pass a clock rather than shrinking a constant.
+  var CATALOG = {
+    // An unanswered request expires.
+    REQUEST_EXPIRY_MS: 30 * 60 * 1000,
+    // A Library poll this recent keeps the helper up when the last session closes.
+    LIBRARY_SEEN_MS: 2 * 60 * 1000,
+    // A quiet Library-reopened session closes.
+    REOPENED_AUTOCLOSE_MS: 30 * 60 * 1000,
+    // Pending requests across the whole Library.
+    QUEUE_CAP: 5,
+    // The largest review log the reader will re-project.
+    REPROJECT_MAX_BYTES: 5 * 1024 * 1024,
+    // The page's poll, and how long a server probe is cached.
+    POLL_MS: 15000,
+    // How long an answer stays on its row.
+    ANSWER_SHOWN_MS: 24 * 60 * 60 * 1000,
+    // The longest answer `lahe library answer` accepts, in characters.
+    ANSWER_TEXT_MAX: 500,
+    // Sessions active this recently are open in the default view.
+    DEFAULT_VIEW_DAYS: 7,
+    // Reviews created before this instant (midnight US Eastern, 2026-09-17)
+    // can fold into one row per folder.
+    FOLD_CUTOFF: "2026-09-17T04:00:00Z"
+  };
+
+  // ---------------------------------------------------------------------------
+  // The Library's helper log line
+  // ---------------------------------------------------------------------------
+  //
+  // One line per action, read by scripts/catalog_opens.py. age_days is whole
+  // days from the review's `last` to the action.
+  //
+  //   catalog <open|star|unstar|pickup|launch> review=<id> age_days=<n>
+  var CATALOG_LOG = {
+    PREFIX: "catalog",
+    ACTION: { OPEN: "open", STAR: "star", UNSTAR: "unstar", PICKUP: "pickup", LAUNCH: "launch" },
+    FORMAT: "catalog <action> review=<id> age_days=<n>"
+  };
+
+  /** The one spelling of the Library's log line. */
+  function catalogLogLine(action, reviewId, ageDays) {
+    return CATALOG_LOG.PREFIX + " " + String(action) + " review=" + String(reviewId) + " age_days=" + String(ageDays);
+  }
+
+  // ---------------------------------------------------------------------------
   // The events.jsonl line (D5)
   // ---------------------------------------------------------------------------
   //
@@ -525,6 +718,10 @@
   var EVENT = {
     REVIEW_CREATED: "review.created",
     ORIGIN_REGISTERED: "origin.registered",
+    // {origin}. A restarted static server's earlier loopback origins, and only
+    // those, are removed. Recovery applies it in order with origin.registered,
+    // so a removed origin stays removed after a helper restart.
+    ORIGIN_REMOVED: "origin.removed",
     PAGE_VISITED: "page.visited",
     ITEM_CREATED: "item.created",
     // Every content change, INCLUDING every draft keystroke batch. This is the
@@ -1378,12 +1575,18 @@
     CLIENT_LAYER: CLIENT_LAYER,
     CLIENT_CLI: CLIENT_CLI,
     CLIENTS: CLIENTS,
+    CLIENT_CATALOG: CLIENT_CATALOG,
     JSON_CONTENT_TYPE: JSON_CONTENT_TYPE,
     AUTH: AUTH,
     SAFE_ID: SAFE_ID,
     isSafeId: isSafeId,
 
     ROUTES: ROUTES,
+    CATALOG_ROUTES: CATALOG_ROUTES,
+    CATALOG_PAGE_PATH: CATALOG_PAGE_PATH,
+    CATALOG_API_BASE: CATALOG_API_BASE,
+    CATALOG_TOKEN_META: CATALOG_TOKEN_META,
+    HEALTH_FIELD: HEALTH_FIELD,
     route: route,
     requiredHeaders: requiredHeaders,
 
@@ -1396,6 +1599,10 @@
     STATUS_FOR_CODE: STATUS_FOR_CODE,
     statusFor: statusFor,
     errorBody: errorBody,
+
+    CATALOG: CATALOG,
+    CATALOG_LOG: CATALOG_LOG,
+    catalogLogLine: catalogLogLine,
 
     EVENT: EVENT,
     EVENT_TYPES: EVENT_TYPES,

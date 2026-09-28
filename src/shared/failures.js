@@ -237,6 +237,60 @@
       "Use the running one, or stop it first."
     ),
 
+    // --- the Library's refusals (LAHE Library, D11 amendment) ---------------
+    //
+    // The Library page shows the remedy line, so each one says what the
+    // reviewer can do next. Statuses are in protocol.js STATUS_FOR_CODE.
+    PROTO_CROSS_SITE: def(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "This request did not come from the Library page itself, so it was refused.",
+      "Use the Library page at the helper's own address, /catalog."
+    ),
+    PROTO_NOT_OPENABLE: def(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "This document cannot be opened from the Library: its files are missing, or it has no recorded server.",
+      "Ask your agent to serve it again with lahe review."
+    ),
+    PROTO_REQUEST_PENDING: def(
+      SEVERITY.INFO,
+      false,
+      SURFACE.CLI,
+      "This document already has a request waiting for an agent.",
+      "Wait for the agent to answer. Its answer shows on the row."
+    ),
+    PROTO_QUEUE_FULL: def(
+      SEVERITY.WARNING,
+      false,
+      SURFACE.CLI,
+      "Too many requests are already waiting for an agent.",
+      "Wait for the agent to answer some of them, then try again."
+    ),
+    PROTO_NO_AGENT: def(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "No agent is attached to the Library, or the attached agent has stopped watching.",
+      "Ask an agent to run lahe library with its own session, or copy the hand-off message into a new agent."
+    ),
+    PROTO_CONFIRM_NEEDED: def(
+      SEVERITY.INFO,
+      false,
+      SURFACE.CLI,
+      "Another agent is watching this document's session, so moving it needs your say-so.",
+      "Choose Move the session to confirm, or open it just to read."
+    ),
+    PROTO_CATALOG_UNREADABLE: def(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "The Library's saved stars file cannot be read, so stars cannot change. LAHE leaves the file as it is.",
+      "Fix or move aside catalog.json in the LAHE state folder, then try again."
+    ),
+
     // --- the CLI -----------------------------------------------------------
     CLI_NO_REVIEW: def(SEVERITY.INFO, false, SURFACE.CLI, "No review has anything ready.", null),
     CLI_REVIEW_ENDED: def(
