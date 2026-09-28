@@ -210,7 +210,9 @@ test.describe("the Library page", () => {
 
     await dialog.locator('[data-act="move"]').click();
     await expect(dialog).toBeHidden();
-    expect(calls.map((c) => c.body)).toEqual([{ review: "r_mounted", action: "pickup", confirmed: true }]);
+    // The dialog closes before the request is routed, so poll for it rather than
+    // reading the call list the instant the dialog hides.
+    await expect.poll(() => calls.map((c) => c.body)).toEqual([{ review: "r_mounted", action: "pickup", confirmed: true }]);
     await expect(rowLocator(page, "r_mounted").locator(".lib-note-text")).toHaveText("Waiting for document index.");
   });
 
