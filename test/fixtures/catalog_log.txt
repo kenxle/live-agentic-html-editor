@@ -1,0 +1,10 @@
+2026-09-21T14:00:00.000Z catalog open review=r_new age_days=1
+2026-09-21T15:00:00.000Z catalog open review=r_page age_days=16
+2026-09-22T10:00:00.000Z catalog star review=r_page age_days=16
+2026-09-23T09:00:00.000Z catalog open review=r_page age_days=17
+2026-09-23T09:05:00.000Z catalog unstar review=r_page age_days=17
+2026-09-24T16:00:00.000Z catalog pickup review=r_new age_days=4
+2026-09-25T17:00:00.000Z catalog open review=r_new age_days=5
+2026-09-26T12:00:00.000Z catalog open review=r_page age_days=21
+2026-09-28T08:00:00.000Z catalog launch review=r_dev age_days=13
+2026-09-28T08:30:00.000Z catalog open review=r_new age_days=7

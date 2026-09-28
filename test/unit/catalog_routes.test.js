@@ -61,6 +61,8 @@ async function world(t, options) {
   fs.mkdirSync(site);
   const page = path.join(site, "page.html");
   fs.writeFileSync(page, "<!doctype html><title>Synthetic page</title><p>the page body</p>");
+  const page2 = path.join(site, "page2.html");
+  fs.writeFileSync(page2, "<!doctype html><title>Second synthetic page</title><p>second</p>");
   const gone = path.join(site, "gone.html");
   const store = agentSessions.createStore({ dir });
   store.create({ id: "s_doc", name: "doc session" });
@@ -68,11 +70,14 @@ async function world(t, options) {
   const log = logModule.createEventLog({ dir });
   const reviews = reviewsModule.createReviews({ dir, log });
   reviews.create({ id: "r_page", agent_session_id: "s_doc", target_path: page });
+  reviews.create({ id: "r_new", agent_session_id: "s_doc", target_path: page2 });
   reviews.create({ id: "r_dev", agent_session_id: "s_doc" });
   reviews.create({ id: "r_gone", agent_session_id: "s_doc", target_path: gone });
   const first = await staticServers.start({ dir, sessionId: "s_doc", root: site });
   reviews.registerOrigin("r_page", "http://127.0.0.1:" + first.meta.port);
   reviews.registerOrigin("r_page", "http://localhost:" + first.meta.port);
+  reviews.registerOrigin("r_new", "http://127.0.0.1:" + first.meta.port);
+  reviews.registerOrigin("r_new", "http://localhost:" + first.meta.port);
   t.after(async () => {
     await staticServers.stopAll(dir, "s_doc").catch(() => {});
   });
@@ -527,4 +532,51 @@ test("the helper runs the sweep on its own timer every POLL_MS, at its own clock
   w.clock.now = T0 + C.REOPENED_AUTOCLOSE_MS;
   await ticks[0].fn();
   assert.ok(w.store.read("s_doc").closed_at, "the timer's run closed the quiet session");
+});
+
+// ---------------------------------------------------------------------------
+// The captured log, for the count script (Task 3.3)
+// ---------------------------------------------------------------------------
+
+const LOG_FIXTURE = path.join(__dirname, "..", "fixtures", "catalog_log.txt");
+
+test("a week of Library actions through the real routes writes the catalog lines committed as test/fixtures/catalog_log.txt", async (t) => {
+  // Rerun with LAHE_WRITE_CATALOG_LOG=1 to rewrite the fixture after a format change.
+  const w = await world(t, { attach: false });
+  // Each review's `last` is its log's modified time, pinned so every age is fixed.
+  const pin = (reviewId, isoTime) => {
+    const at = new Date(isoTime);
+    fs.utimesSync(stateDir.eventsPath(w.dir, reviewId), at, at);
+  };
+  pin("r_page", "2026-09-05T12:00:00.000Z");
+  pin("r_new", "2026-09-20T12:00:00.000Z");
+  pin("r_dev", "2026-09-14T12:00:00.000Z");
+  catalogRequests.writeAttach(w.dir, "s_agent", Date.parse("2026-09-21T13:00:00.000Z"));
+  const at = (isoTime) => {
+    w.clock.now = Date.parse(isoTime);
+    beat(w.store, "s_agent", w.clock.now);
+  };
+  const ok = async (name, body) => {
+    const res = await api(w, name, body);
+    assert.equal(res.status, 200, name + " " + JSON.stringify(body) + ": " + res.text);
+  };
+
+  at("2026-09-21T14:00:00.000Z"); await ok("catalog.open", { review: "r_new" });            // Monday
+  at("2026-09-21T15:00:00.000Z"); await ok("catalog.open", { review: "r_page" });
+  at("2026-09-22T10:00:00.000Z"); await ok("catalog.star", { review: "r_page", starred: true }); // Tuesday
+  at("2026-09-23T09:00:00.000Z"); await ok("catalog.open", { review: "r_page" });           // Wednesday
+  at("2026-09-23T09:05:00.000Z"); await ok("catalog.star", { review: "r_page", starred: false });
+  at("2026-09-24T16:00:00.000Z"); await ok("catalog.request", { review: "r_new", action: "pickup" }); // Thursday
+  at("2026-09-25T17:00:00.000Z"); await ok("catalog.open", { review: "r_new" });            // Friday
+  at("2026-09-26T12:00:00.000Z"); await ok("catalog.open", { review: "r_page" });           // Saturday
+  at("2026-09-28T08:00:00.000Z"); await ok("catalog.request", { review: "r_dev", action: "launch" }); // Monday
+  at("2026-09-28T08:30:00.000Z"); await ok("catalog.open", { review: "r_new" });
+
+  const captured = catalogLogLines(w.dir).join("\n") + "\n";
+  if (process.env.LAHE_WRITE_CATALOG_LOG === "1") fs.writeFileSync(LOG_FIXTURE, captured);
+  assert.equal(captured, fs.readFileSync(LOG_FIXTURE, "utf8"));
+  const opens = captured.split("\n").filter((line) => / catalog open /.test(line));
+  assert.equal(opens.length, 6);
+  assert.match(captured, /^2026-09-28T08:30:00\.000Z catalog open review=r_new age_days=7$/m, "r_new is 7 whole days old on the last Open");
+  assert.match(captured, /^2026-09-26T12:00:00\.000Z catalog open review=r_page age_days=21$/m);
 });
