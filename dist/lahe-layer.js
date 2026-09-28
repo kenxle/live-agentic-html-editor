@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+f20b50400075
+ * version 0.2.0+2ef74c4d959e
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+f20b50400075";
+  g.LAHE.version = "0.2.0+2ef74c4d959e";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -858,6 +858,98 @@
     return reduce(html, [], true);
   }
 
+  /**
+   * A fragment of markup cut into its top-level paragraphs, each as markup.
+   *
+   * Replay needs this when it writes one paragraph of a multi-paragraph edit
+   * (the page already carries the others). The paragraph's bold, italic and
+   * links live in the record's after_html, and this finds that paragraph's
+   * share of it. The cuts are made only at the top level:
+   *
+   *   - a block element (<p>, <div>, <li> and the rest of BLOCK_TAGS) is one
+   *     paragraph, and its INNER markup is what comes back
+   *   - a <br> or an <hr> ends the loose inline run before it
+   *   - loose inline content between those is one paragraph
+   *
+   * Anything deeper is left inside its paragraph, so a block nested in an
+   * inline element, or a list inside a paragraph, stays whole and reads as
+   * more than one paragraph to the caller, which then refuses it. Whitespace
+   * runs are dropped. A run that holds markup but no words (an image alone)
+   * cannot be matched to a paragraph of text, so the answer is null.
+   *
+   * The markup goes through cleanMarkup first, so every piece is balanced and
+   * carries only what cleanMarkup lets through.
+   *
+   * @param {string} html
+   * @returns {string[]|null} one markup string per paragraph, or null when the
+   *   fragment does not cut cleanly
+   */
+  function topLevelBlocks(html) {
+    if (typeof html !== "string") return null;
+    var clean = cleanMarkup(html);
+    var out = [];
+    var run = "";
+    var depth = 0;
+    var blockStart = -1;
+    var failed = false;
+
+    function flush(piece) {
+      var markup = piece.trim();
+      if (!markup) return;
+      if (!normalizeText(textOf(markup))) {
+        failed = true;
+        return;
+      }
+      out.push(markup);
+    }
+
+    var i = 0;
+    while (i < clean.length) {
+      var lt = clean.indexOf("<", i);
+      var textEnd = lt === -1 ? clean.length : lt;
+      if (textEnd > i && blockStart === -1) run += clean.slice(i, textEnd);
+      if (lt === -1) break;
+      var tag = parseTag(clean, lt);
+      if (!tag) {
+        if (blockStart === -1) run += "<";
+        i = lt + 1;
+        continue;
+      }
+      i = tag.end;
+      var markup = clean.slice(lt, tag.end);
+      var isVoid = hasOwn(VOID_TAGS, tag.name) || tag.selfClosing;
+      if (depth === 0 && !tag.closing) {
+        if (tag.name === "br" || tag.name === "hr") {
+          flush(run);
+          run = "";
+          continue;
+        }
+        if (!isVoid && hasOwn(BLOCK_TAGS, tag.name)) {
+          flush(run);
+          run = "";
+          blockStart = tag.end;
+          depth = 1;
+          continue;
+        }
+      }
+      if (tag.closing) {
+        depth -= 1;
+        if (depth < 0) return null;
+        if (depth === 0 && blockStart !== -1) {
+          flush(clean.slice(blockStart, lt));
+          blockStart = -1;
+          continue;
+        }
+      } else if (!isVoid) {
+        depth += 1;
+      }
+      if (blockStart === -1) run += markup;
+    }
+    if (depth !== 0 || blockStart !== -1) return null;
+    flush(run);
+    return failed ? null : out;
+  }
+
   // ---------------------------------------------------------------------------
   // The two comparison modes (D7's format-only branch, D9's one normalizer)
   // ---------------------------------------------------------------------------
@@ -1229,6 +1321,7 @@
     normalizeBlockText: normalizeBlockText,
     blockTextEquals: blockTextEquals,
     blockText: blockText,
+    topLevelBlocks: topLevelBlocks,
     blockTextFromNode: blockTextFromNode,
     STRUCTURAL_TAGS: STRUCTURAL_TAGS,
     NOT_BOLD_TAG: NOT_BOLD_TAG,
@@ -34333,6 +34426,11 @@
    *                             is nothing here to write
    *   null                      not this case at all; write the after as usual
    *
+   * `markup` is that first piece as markup, so its bold, italic and links are
+   * written with it (see pieceMarkup). It is null when the record's after_html
+   * does not cut into the same paragraphs as its text, and the piece is then
+   * written as plain text.
+   *
    * `rest` is the other half of the answer, and it is checked piece by piece
    * rather than by the second one alone. A three-paragraph edit whose third
    * paragraph is nowhere on the page looks exactly like an applied one if only
@@ -34344,7 +34442,7 @@
    *   rest: false  at least one is missing, and it belongs to a block this
    *                record does not own
    *
-   * @returns {{write: (string|null), rest: boolean}|null}
+   * @returns {{write: (string|null), markup: (string|null), rest: boolean}|null}
    */
   function splitWritePlan(item, element) {
     if (!wouldDuplicate(item, element)) return null;
@@ -34356,8 +34454,68 @@
     var below = followingTexts(element, rest.length);
     return {
       write: saysFirst ? null : pieces[0],
+      markup: saysFirst ? null : pieceMarkup(item, pieces, 0),
       rest: blocksSpell(below, rest, false) || (fold && blocksSpell(below, rest, true))
     };
+  }
+
+  /**
+   * One piece of the after, as the markup the reviewer left it in, or null.
+   *
+   * The record's after_html carries every paragraph of the after, and the
+   * write here is one of them. So the markup is cut at its top level
+   * (normalize.topLevelBlocks) and used only when the cut gives exactly one
+   * paragraph per piece of the text, each saying that piece's words. Any
+   * other shape (a list inside a paragraph, a block nested in a bold, markup
+   * that is a wording behind the text) is not a clean cut, and choosing which
+   * part of it is this paragraph would be a guess. The answer is then null and
+   * the caller writes the plain words, which is what it did before.
+   *
+   * The compare is strict: both sides come from the same capture, so there is
+   * no rebuild typography to read past.
+   *
+   * The piece written must also be inline markup only. A first paragraph that
+   * sat in a wrapper (<ul><li>, <blockquote><h2>) cuts to its inner markup,
+   * which is still a block: written into the anchored <p>, it would put a
+   * bullet or a heading inside the paragraph. A piece holding any block tag or
+   * a <br> is refused, and the words go in as plain text.
+   */
+  function pieceMarkup(item, pieces, index) {
+    var html = item ? item[record.FIELD.AFTER_HTML] : null;
+    if (typeof html !== "string" || !html) return null;
+    var blocks = normalize.topLevelBlocks(html);
+    if (!blocks || blocks.length !== pieces.length) return null;
+    for (var i = 0; i < blocks.length; i += 1) {
+      var own = piecesOf(decodeBasicEntities(blocks[i]));
+      if (own.length !== 1 || own[0] !== pieces[i]) return null;
+    }
+    return inlineOnly(blocks[index]) ? blocks[index] : null;
+  }
+
+  // Does this markup hold only inline elements: no block tag and no <br>?
+  // The markup has been through cleanMarkup, so every tag is lowercase.
+  function inlineOnly(markup) {
+    var tagName = /<\/?([a-z][a-z0-9-]*)/g;
+    var match = tagName.exec(markup);
+    while (match) {
+      var name = match[1];
+      if (name === "br" || Object.prototype.hasOwnProperty.call(normalize.BLOCK_TAGS, name)) return false;
+      match = tagName.exec(markup);
+    }
+    return true;
+  }
+
+  // The five entities markup must use for text that the record's plain after
+  // spells as characters. For the compare in pieceMarkup only; nothing decoded
+  // here is ever written.
+  function decodeBasicEntities(markup) {
+    return markup
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#0?39;/g, "'")
+      .replace(/&apos;/g, "'")
+      .replace(/&amp;/g, "&");
   }
 
   // "after", "before", or null: which of the two the region holds once the
@@ -35242,7 +35400,7 @@
     var wrote = !keepPlan || keepPlan.write !== null;
     if (keepPlan && wrote) counters.regionsWroteMissingPiece += 1;
     epoch.write("replay.keep_mine", function () {
-      if (wrote) writeRegion(element, item, keepPlan ? keepPlan.write : null);
+      if (wrote) writeRegion(element, item, keepPlan ? keepPlan.write : null, keepPlan ? keepPlan.markup : null);
     });
     if (wrote) counters.regionsWritten += 1;
 
@@ -36124,7 +36282,7 @@
     if (plan) counters.regionsWroteMissingPiece += 1;
 
     epoch.write("replay", function () {
-      writeRegion(element, item, plan ? plan.write : null);
+      writeRegion(element, item, plan ? plan.write : null, plan ? plan.markup : null);
     });
     counters.regionsWritten += 1;
     clearConflict(ctx, id);
@@ -36204,10 +36362,12 @@
   // commit and then the next replay pass flattened the block back to one line.
   //
   // `onlyText`, when given, is the one thing the caller decided this block is
-  // missing (splitWritePlan). It is written as text, and the record's markup is
-  // not used: the markup carries every paragraph of the after, which is the
-  // whole of what the page must not be told twice.
-  function writeRegion(element, item, onlyText) {
+  // missing (splitWritePlan). The record's whole markup is not used for it: the
+  // markup carries every paragraph of the after, which is the whole of what the
+  // page must not be told twice. `onlyHtml` is that one paragraph's share of
+  // the markup (pieceMarkup), so its bold, italic and links come with it. When
+  // there is none, the paragraph is written as plain text.
+  function writeRegion(element, item, onlyText, onlyHtml) {
     var kind = item[record.FIELD.KIND];
     // S8, as an assertion rather than as a promise in a comment. A probable
     // place is the point ladder's guess, and the one thing a guess may never
@@ -36224,7 +36384,8 @@
       );
     }
     if (typeof onlyText === "string") {
-      writeTextWithBreaks(element, onlyText);
+      if (typeof onlyHtml === "string" && onlyHtml) element.innerHTML = onlyHtml;
+      else writeTextWithBreaks(element, onlyText);
       return;
     }
     if (kind === record.KIND.DELETE) {
@@ -36797,7 +36958,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+f20b50400075";
+  var VERSION = "0.2.0+2ef74c4d959e";
 
   var protocol = ns.protocol;
   var record = ns.record;
