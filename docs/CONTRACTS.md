@@ -905,7 +905,8 @@ refusal logs the name of the check that failed:
 | `origin` | `PROTO_FORBIDDEN_ORIGIN` | POSTs only: exactly `http://` + the request's own Host. So `localhost` against a `127.0.0.1` Host, another port, `null` and a missing Origin are all refused |
 
 **Serving.** Every catalog response, refusals and 404s included, sends no CORS header of any kind, and
-carries `Content-Security-Policy: script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+carries `Content-Security-Policy: default-src 'none'; script-src 'self'; connect-src 'self'; img-src 'self' data:; font-src 'self'; style-src 'self' 'sha256-<hash of the page's one inline style>'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`
+(the hash is computed from `PAGE_STYLE` when the module loads, so no `'unsafe-inline'` is needed),
 `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store` and
 `X-Content-Type-Options: nosniff` (`src/service/catalog_page.js`). The preflight handler never approves a
 catalog path, whatever origin asks, including one a review registered: it answers `PROTO_CROSS_SITE`

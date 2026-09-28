@@ -23,6 +23,7 @@
 
 "use strict";
 
+var crypto = require("node:crypto");
 var fs = require("node:fs");
 var path = require("node:path");
 
@@ -49,14 +50,9 @@ markdown.FONT_ASSETS.forEach(function (font) {
 });
 
 // Every catalog response carries these, refusals included. No CORS header is
-// ever among them: the Library is same-origin only.
-var CONTENT_SECURITY_POLICY = [
-  "script-src 'self'",
-  "object-src 'none'",
-  "base-uri 'none'",
-  "form-action 'none'",
-  "frame-ancestors 'none'"
-].join("; ");
+// ever among them: the Library is same-origin only. CONTENT_SECURITY_POLICY is
+// set below PAGE_STYLE, since it carries that style's hash.
+var CONTENT_SECURITY_POLICY;
 
 function securityHeaders() {
   return {
@@ -101,8 +97,8 @@ function escapeAttribute(value) {
 }
 
 // The page's own look, on top of the St. Clair AI document style the helper
-// serves. Inline because the asset allowlist is fixed; the policy sets no
-// style-src, so an inline <style> is allowed while an inline script is not.
+// serves. Inline because the asset allowlist is fixed; the policy allows this
+// one <style> by its sha256 hash, so no other inline style or script runs.
 //
 // Colours go through --lib-* names that point at the shared tokens, so the
 // shared tokens are never redefined here (system-tokens.css forbids it), and a
@@ -277,6 +273,23 @@ var PAGE_STYLE = [
   ".lib-panel{grid-column:1 / -1}}",
   "@media (prefers-reduced-motion: reduce){*{animation:none !important;transition:none !important}}"
 ].join("");
+
+// Everything defaults to 'none'. Each kind the page uses comes from its own
+// origin: its scripts, its list and action calls, the style bundle and its
+// fonts. Images also allow data:, which the document style's callout icons
+// use. The one inline <style> is allowed by hash, never by 'unsafe-inline'.
+CONTENT_SECURITY_POLICY = [
+  "default-src 'none'",
+  "script-src 'self'",
+  "connect-src 'self'",
+  "img-src 'self' data:",
+  "font-src 'self'",
+  "style-src 'self' 'sha256-" + crypto.createHash("sha256").update(PAGE_STYLE, "utf8").digest("base64") + "'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'none'",
+  "frame-ancestors 'none'"
+].join("; ");
 
 /**
  * The Library page. The token is hex from the helper, escaped anyway.
