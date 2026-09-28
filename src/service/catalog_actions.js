@@ -91,6 +91,30 @@ function createCatalogActions(options) {
   // Shared steps
   // -------------------------------------------------------------------------
 
+  // ONE OPEN AT A TIME PER SERVER RECORD (fix round CR1). Two Opens on a
+  // closed session would each see the record stopped and each spawn a server:
+  // one is orphaned, and the second origin swap drops the first tab's origin.
+  // So the restart step runs in a chain per "<session> <server>", and the
+  // second Open finds the first one's server already up. `openingSessions`
+  // counts the Opens in flight per session, so the sweep never closes a
+  // session an Open is part way through bringing back.
+  var openChains = Object.create(null);
+  var openingSessions = Object.create(null);
+
+  function oneAtATime(sessionId, serverId, fn) {
+    var key = sessionId + " " + serverId;
+    var prior = openChains[key] || Promise.resolve();
+    openingSessions[sessionId] = (openingSessions[sessionId] || 0) + 1;
+    var run = prior.then(fn);
+    var tail = run.then(function () {}, function () {});
+    openChains[key] = tail;
+    return run.finally(function () {
+      if (openChains[key] === tail) delete openChains[key];
+      openingSessions[sessionId] -= 1;
+      if (openingSessions[sessionId] <= 0) delete openingSessions[sessionId];
+    });
+  }
+
   /** One `catalog` line, in the format protocol.js spells. */
   function logAction(action, described, nowMs) {
     var lastMs = described && described.last ? Date.parse(described.last) : NaN;
@@ -197,31 +221,36 @@ function createCatalogActions(options) {
     var agent = handoff ? liveAgent(nowMs) : null;
     if (handoff && agent && watchedByAnother(d, agent) && !confirmed) return fail("PROTO_CONFIRM_NEEDED");
 
-    var before = sessions.read(d.session);
-    var wasClosed = !!(before && before.closed_at);
-    if (wasClosed) {
-      // The Library is about to reopen it, so the sweep may close it again
-      // once it goes quiet. A session that was already open is somebody
-      // else's. RECORDED FIRST: a reopen the sweep cannot see is a session
-      // left open for good, so a catalog.json that cannot take the record
-      // refuses the Open before anything is reopened or started.
-      var saved = store.setReopened(d.session, { at: iso(nowMs), handoff_rev: agentSessions.handoffRev(before) });
-      if (!saved.ok) {
-        log("Library Open of review " + d.review + " refused: session " + d.session +
-          " is closed and its reopen could not be recorded: " + saved.code, nowMs);
-        return fail(saved.code || "PROTO_CATALOG_UNREADABLE");
+    var restart = await oneAtATime(d.session, d.server, async function () {
+      var before = sessions.read(d.session);
+      var wasClosed = !!(before && before.closed_at);
+      if (wasClosed) {
+        // The Library is about to reopen it, so the sweep may close it again
+        // once it goes quiet. A session that was already open is somebody
+        // else's. RECORDED FIRST: a reopen the sweep cannot see is a session
+        // left open for good, so a catalog.json that cannot take the record
+        // refuses the Open before anything is reopened or started.
+        var saved = store.setReopened(d.session, { at: iso(nowMs), handoff_rev: agentSessions.handoffRev(before) });
+        if (!saved.ok) {
+          log("Library Open of review " + d.review + " refused: session " + d.session +
+            " is closed and its reopen could not be recorded: " + saved.code, nowMs);
+          return { ok: false, outcome: fail(saved.code || "PROTO_CATALOG_UNREADABLE") };
+        }
       }
-    }
-    var reopened;
-    try {
-      // Starts the server before it reopens the session, so a failed start
-      // leaves the session closed.
-      reopened = await ops.reopenForCatalog(d.session, d.server);
-    } catch (err) {
-      if (wasClosed) store.clearReopened(d.session);
-      log("Library Open of review " + d.review + " could not restart its server: " + err.message, nowMs);
-      return fail("PROTO_NOT_OPENABLE", "the recorded server could not be restarted");
-    }
+      var restarted;
+      try {
+        // Starts the server before it reopens the session, so a failed start
+        // leaves the session closed.
+        restarted = await ops.reopenForCatalog(d.session, d.server);
+      } catch (err) {
+        if (wasClosed) store.clearReopened(d.session);
+        log("Library Open of review " + d.review + " could not restart its server: " + err.message, nowMs);
+        return { ok: false, outcome: fail("PROTO_NOT_OPENABLE", "the recorded server could not be restarted") };
+      }
+      return { ok: true, value: restarted };
+    });
+    if (!restart.ok) return restart.outcome;
+    var reopened = restart.value;
 
     var requestId = null;
     var notAsked = null;
@@ -322,7 +351,7 @@ function createCatalogActions(options) {
    *   - a session reopened with `lahe session reopen` (it is not in the map)
    *   - a session taken over since (its handoff_rev moved past the recorded
    *     one); its entry is dropped, since it is an agent's now
-   *   - a session whose monitor is live
+   *   - a session whose monitor is live, or that an Open is bringing back
    *
    * A closed session's entry is cleared, whoever closed it.
    *
@@ -353,7 +382,8 @@ function createCatalogActions(options) {
         out.cleared.push(sessionId);
         continue;
       }
-      if (monitorLive(sessionId, session, nowMs)) {
+      if (openingSessions[sessionId] || monitorLive(sessionId, session, nowMs)) {
+        // An Open part way through bringing it back is activity too.
         out.kept.push(sessionId);
         continue;
       }

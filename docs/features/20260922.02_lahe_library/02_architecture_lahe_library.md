@@ -285,6 +285,9 @@ flowchart TD
   - a session reopened with `lahe session reopen` (it is not in the map)
   - a session taken over since (its `handoff_rev` moved past the recorded one)
   - a session whose monitor is live
+  - a session an Open is part way through bringing back
+
+  The helper runs Open's restart step one at a time per server record (fix round CR1), so two Opens of a closed session start one server and both answer on its port.
 
   After a close, it clears the session's `reopened` entry.
 - **After a helper restart,** the old token is refused. On `PROTO_UNAUTHORIZED` the page stops polling and shows "LAHE restarted, reload this page." Reloading fetches a fresh token.

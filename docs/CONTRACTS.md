@@ -976,7 +976,11 @@ root or a URL, and fields a route does not list are never read.
 the helper stays) each session the Library reopened once nothing has happened in it for
 `CATALOG.REOPENED_AUTOCLOSE_MS`: not the reopen itself, and no held window of any of its reviews. It
 leaves alone a session reopened with `lahe session reopen` (not in the map), one taken over since (its
-`handoff_rev` moved; the entry is dropped), and one whose monitor is live.
+`handoff_rev` moved; the entry is dropped), one whose monitor is live, and one an Open is part way
+through bringing back.
+
+**One Open at a time per server record.** The helper runs Open's restart step in a chain per session
+and server, so two Opens of a closed session start one server, and both answer on its recorded port.
 
 **Residual risk, stated.** The Library token is readable by any script running on the Library page
 itself. That page runs only the helper's own scripts under `script-src 'self'` and renders page-derived

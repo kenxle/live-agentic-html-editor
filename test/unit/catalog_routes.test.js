@@ -626,3 +626,71 @@ test("CR4: with catalog.json corrupt, Open on an already open session still open
   const res = await api(w, "catalog.open", { review: "r_page" });
   assert.equal(res.status, 200, res.text);
 });
+
+/** Pids of static server processes serving this record file, from the process table. */
+function serverPids(file) {
+  const out = require("node:child_process").spawnSync("pgrep", ["-f", file], { encoding: "utf8" });
+  return (out.stdout || "").split("\n").filter(Boolean).map(Number);
+}
+
+test("CR1: two concurrent Opens on a closed session start one server, answer on its recorded port, and keep its origin", async (t) => {
+  if (process.platform === "win32") return t.skip("pgrep is not on this platform");
+  const w = await world(t);
+  await staticServers.stopAll(w.dir, "s_doc");
+  w.store.close("s_doc");
+  const recordFile = stateDir.staticServerPath(w.dir, "s_doc", w.first.meta.id);
+  t.after(() => serverPids(recordFile).forEach((pid) => { try { process.kill(pid, "SIGTERM"); } catch (err) { /* gone */ } }));
+  const [a, b] = await Promise.all([
+    api(w, "catalog.open", { review: "r_page" }),
+    api(w, "catalog.open", { review: "r_new" })
+  ]);
+  assert.equal(a.status, 200, a.text);
+  assert.equal(b.status, 200, b.text);
+  const records = staticServers.list(w.dir, "s_doc");
+  assert.equal(records.length, 1, "one ss_ record");
+  const port = records[0].port;
+  assert.equal(new URL(a.json.url).port, String(port));
+  assert.equal(new URL(b.json.url).port, String(port));
+  assert.deepEqual(serverPids(recordFile), [records[0].pid], "one server process, no orphan");
+  for (const id of ["r_page", "r_new"]) {
+    assert.ok(w.helper.reviews.get(id).origins.includes("http://127.0.0.1:" + port), id + " keeps the live origin");
+  }
+});
+
+test("CR1: the sweep leaves alone a session an Open is part way through bringing back", async () => {
+  const catalogActions = require("../../src/service/catalog_actions.js");
+  const dir = path.join(tempDir(), "state");
+  const store = agentSessions.createStore({ dir });
+  store.create({ id: "s_doc", name: "doc session" });
+  store.close("s_doc");
+  let release;
+  const closed = [];
+  const actions = catalogActions.createCatalogActions({
+    dir,
+    reader: {
+      describeReview: (id) => ({
+        review: id, session: "s_doc", openable: "yes", server: "ss_one", url_path: "/page.html",
+        served_path: null, path: null, watching: null, last: new Date(T0).toISOString()
+      })
+    },
+    queue: { readAttached: () => null },
+    store: catalogStore.createCatalogStore({ dir }),
+    ops: {
+      reopenForCatalog: (sessionId) => new Promise((resolve) => {
+        release = () => { store.reopen(sessionId); resolve({ origin: "http://127.0.0.1:1" }); };
+      }),
+      closeQuiet: async (sessionId) => { closed.push(sessionId); store.close(sessionId); }
+    },
+    sessions: store,
+    log: () => {}
+  });
+  const opening = actions.open({ review: "r_page" }, T0 - 2 * C.REOPENED_AUTOCLOSE_MS);
+  await new Promise((resolve) => setImmediate(resolve));
+  store.reopen("s_doc");
+  const during = await actions.sweepReopened(T0);
+  assert.deepEqual(during.closed, [], "not closed while its Open is in flight");
+  release();
+  assert.equal((await opening).status, 200);
+  const after = await actions.sweepReopened(T0);
+  assert.deepEqual(after.closed, ["s_doc"], "closed once the Open is done and it is quiet");
+});
