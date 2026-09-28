@@ -901,6 +901,9 @@ async function run(argv, options) {
         }) + "\n"
       );
     } else {
+      // Parse refuses --quiet without --json today; this keeps the rule if
+      // that ever loosens: quiet with nothing waiting prints nothing.
+      if (args.quiet && catalogPending.length === 0) return EXIT.OK;
       out(
         catalogLines(catalogPending, dir).join("\n") +
           "lahe status: no reviews in " + stateDirModule.reviewsRoot(dir) + ". Start one with `lahe review <page>`.\n"

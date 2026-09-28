@@ -399,3 +399,18 @@ test("CL6: the monitor's drain describes a request once; the second poll filters
   assert.equal(second.text, "");
   assert.equal(described, 1, "the describe step is not called on the second poll");
 });
+
+// Adversary fixes, finding 4 (did not reproduce): `--quiet` with no reviews
+// and no Library request prints nothing on stdout. Without --json it is refused
+// at parse time, as it was before the Library, so the "no reviews" line is
+// never reached.
+test("--quiet with no reviews and nothing queued prints nothing on stdout, with or without --json", async () => {
+  const dir = tempDir();
+  for (const argv of [["--quiet"], ["--quiet", "--json"]]) {
+    const stdout = [];
+    const stderr = [];
+    await status.run(argv.concat(["--state-dir", dir]), { stdout: (t) => stdout.push(t), stderr: (t) => stderr.push(t), now: T0 });
+    assert.equal(stdout.join(""), "", argv.join(" ") + " printed: " + stdout.join(""));
+    assert.equal(/no reviews in/.test(stderr.join("")), false, argv.join(" "));
+  }
+});
