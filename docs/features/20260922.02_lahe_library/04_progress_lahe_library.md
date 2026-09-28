@@ -1,8 +1,8 @@
 # Progress: LAHE Library
 
-**Phase 4, Architecture.** The architecture is written and both reviews are folded in. The plan is next. Nothing is waiting on you. Last updated 2026-09-28 16:33.
+**Phase 6, Implement.** You cleared the design, and the plan's three reviews are folded in. Building has started: first one commit of shared names, then four builders in parallel. Nothing is waiting on you. Last updated 2026-09-28 16:53.
 
-**Docs:** [Crucible](http://127.0.0.1:54705/00_crucible.html) · [Brief](http://127.0.0.1:54705/01_brief_lahe_library.html) · [Wireframes](http://127.0.0.1:54705/wireframes/index.html) · [Architecture](http://127.0.0.1:54705/02_architecture_lahe_library.html) · [Ideas page](http://127.0.0.1:55480/DOCUMENT_INDEX_IDEAS-b09cd11f2a84063f.html)
+**Docs:** [Crucible](http://127.0.0.1:54705/00_crucible.html) · [Brief](http://127.0.0.1:54705/01_brief_lahe_library.html) · [Wireframes](http://127.0.0.1:54705/wireframes/index.html) · [Architecture](http://127.0.0.1:54705/02_architecture_lahe_library.html) · [Plan](http://127.0.0.1:54705/03_plan_lahe_library.html) · [Ideas page](http://127.0.0.1:55480/DOCUMENT_INDEX_IDEAS-b09cd11f2a84063f.html)
 
 ## Needs your attention
 
@@ -10,7 +10,9 @@ Nothing is waiting on you.
 
 ## Currently working on
 
-Nothing is running. Next: the architecture, then its two reviews.
+| Agent or task | Doing | Started | Branch |
+|---|---|---|---|
+| Phase 0 builder | Landing every shared name (routes, error codes, constants, manifest entries) in one commit | 2026-09-28 16:53 | `feat/lahe_library` |
 
 ## Phases
 
@@ -21,8 +23,8 @@ Nothing is running. Next: the architecture, then its two reviews.
 | 2 Brief | done | 2026-09-22 |
 | 3 Wireframe | done | 2026-09-28 |
 | 4 Architecture | done | 2026-09-28 |
-| 5 Plan | in progress | 2026-09-28 |
-| 6 Implement | not started | |
+| 5 Plan | done | 2026-09-28 |
+| 6 Implement | in progress | 2026-09-28 |
 | 7 Review | not started | |
 | 8 Ship and land | not started | |
 | 9 Cleanup | not started | |
@@ -59,6 +61,8 @@ Not shipped yet.
 
 ## Log
 
+- **2026-09-28 16:53.** Plan reviewed by three agents (engineering manager, code lead, testing): 67 findings, all accepted, 4 of them with one part turned down (written in the plan's tables). You cleared the design on the architecture page, so the plan went straight to building; the plain-language pass on the plan was skipped. One addition to confirm when you read the plan: `lahe session name --from-review`, so a launched agent is named after its document without the title passing through a shell command.
+- **2026-09-28 16:53.** The linked-docs fix shipped: [PR #17](https://github.com/kenxle/live-agentic-html-editor/pull/17) merged after the Hold test fix, [PR #18](https://github.com/kenxle/live-agentic-html-editor/pull/18). It goes live here once the main checkout catches up and the helper restarts.
 - **2026-09-28 16:33.** Architecture reviewed: the architect found 4 blockers and security found 4, all accepted. The biggest change: handing a document to an agent no longer goes through a comment in an inbox review (a page could have forged it, and it would never have reached the agent). It is now a queue only the helper writes, shown to the agent as its own section of the drain. Open only restarts servers a review already had, and anything else goes through an agent. The Library's address is `/catalog`, because "library" already means the in-page script in this code.
 - **2026-09-28 16:17.** The forge doc template now uses the St. Clair AI style; only its stylesheet changed, and new builds pick it up. The brief and crucible are rebuilt with it.
 
