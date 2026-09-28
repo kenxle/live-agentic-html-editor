@@ -749,3 +749,14 @@ test("CL2: an agent whose monitor exited to work a batch still counts as watchin
   const listed = await api(w, "catalog.list");
   assert.deepEqual(listed.json.sessions.find((s) => s.id === "s_doc").watching, { session: "s_doc", name: "doc session" });
 });
+
+test("catalog.request refuses a missing review with PROTO_NOT_OPENABLE, as Open does, and queues nothing", async (t) => {
+  const w = await world(t);
+  for (const action of ["pickup", "launch"]) {
+    const res = await api(w, "catalog.request", { review: "r_gone", action });
+    assert.equal(res.status, 409, action + ": " + res.text);
+    assert.equal(res.json.error.code, "PROTO_NOT_OPENABLE");
+    assert.match(res.json.error.detail, /missing/);
+  }
+  assert.equal(queueLines(w.dir).length, 0);
+});

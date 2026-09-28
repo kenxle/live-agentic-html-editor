@@ -221,7 +221,7 @@ sequenceDiagram
   - **legacy** (`lahe add` script-line reviews, recovered as session "legacy"): there is no session to take over, so the agent runs `lahe review <path>` in its own session.
   - **worktree:** see below.
 - **Worktree fallback (R9):** when the recorded root is gone and sits under `<repo>/.claude/worktrees/<name>/`, the row says "The worktree is gone. An agent will open the main repository's copy, which may differ from what you reviewed." The request carries only the review id. The drain derives and checks the candidate (see the drain section). The agent serves it with `lahe review`, so the path goes through the CLI's own checks.
-- **Missing:** Open is refused with `PROTO_NOT_OPENABLE`, reason `missing`.
+- **Missing:** Open is refused with `PROTO_NOT_OPENABLE`, reason `missing`. So is a Pick up or Launch request on a missing row.
 - **Folded rows:** Open targets the newest review in the fold.
 
 ### Stale origins

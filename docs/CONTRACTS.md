@@ -935,7 +935,7 @@ with no file bytes. An allowlisted file not on disk yet is a 404 too.
 | Code | Status | When |
 |---|---|---|
 | `PROTO_CROSS_SITE` | 403 | The `Sec-Fetch-Site` check fails, or a preflight names a catalog path |
-| `PROTO_NOT_OPENABLE` | 409 | Open on a missing row or one with no recorded server; carries a `reason` |
+| `PROTO_NOT_OPENABLE` | 409 | Open on a missing row or one with no recorded server, or a request on a missing row; carries a `reason` |
 | `PROTO_REQUEST_PENDING` | 409 | The review already has a pending request |
 | `PROTO_QUEUE_FULL` | 429 | `CATALOG.QUEUE_CAP` pending requests reached |
 | `PROTO_NO_AGENT` | 409 | No attached agent, or its monitor is dead |

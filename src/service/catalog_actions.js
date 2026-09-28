@@ -300,6 +300,9 @@ function createCatalogActions(options) {
       return badRequest("action must be one of " + catalogRequests.ACTIONS.join(", "));
     }
     var d = found.described;
+    // A missing review has nothing an agent could open, so it is refused here
+    // exactly as Open refuses it.
+    if (d.openable === "missing") return fail("PROTO_NOT_OPENABLE", "missing");
     var agent = liveAgent(nowMs);
     if (!agent) return fail("PROTO_NO_AGENT");
     if (watchedByAnother(d, agent) && body.confirmed !== true) return fail("PROTO_CONFIRM_NEEDED");
