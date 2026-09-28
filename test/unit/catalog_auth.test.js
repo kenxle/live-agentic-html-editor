@@ -61,6 +61,11 @@ async function startHelper(dir) {
  * Star and a pick-up all succeed.
  */
 async function startOpenableHelper(t) {
+  return (await openableWorld(t)).helper;
+}
+
+/** startOpenableHelper's world, with its state dir, for a test that restarts on it. */
+async function openableWorld(t) {
   const root = fs.realpathSync(tempDir());
   const dir = path.join(root, "state");
   const site = path.join(root, "site");
@@ -87,7 +92,8 @@ async function startOpenableHelper(t) {
     at: new Date(now).toISOString(),
     primary: true
   });
-  return service.serve({ port: 0, stateDir: dir, quiet: true });
+  const helper = await service.serve({ port: 0, stateDir: dir, quiet: true });
+  return { helper, dir };
 }
 
 /** One raw request. Headers are sent exactly as given: no Host is added. */
@@ -546,16 +552,21 @@ function everyFile(dir) {
   return out;
 }
 
-test("the token changes across a helper restart and is written nowhere: no state file, not the helper log, not health, not catalog.list", async () => {
-  const dir = tempDir();
-  const first = await startHelper(dir);
+test("the token changes across a helper restart and is written nowhere: no state file, not the helper log, not health, not catalog.list", async (t) => {
+  // The openable world, so the run includes one successful Open (T13): the
+  // path that restarts or reuses a static server and writes its records.
+  const world = await openableWorld(t);
+  const dir = world.dir;
+  const first = world.helper;
   let firstToken;
   const seen = [];
   try {
     firstToken = await libraryToken(first.port);
     // A full run: every route, good and refused, so every log line is written.
     for (const r of API_ROUTES) {
-      seen.push((await callApi(first.port, firstToken, r)).text);
+      const good = await callApi(first.port, firstToken, r);
+      assert.equal(good.status, 200, r.name + " succeeds once: " + good.text);
+      seen.push(good.text);
       seen.push((await callApi(first.port, firstToken, r, { "sec-fetch-site": "same-site" })).text);
       seen.push((await callApi(first.port, firstToken, r, { [protocol.HEADER.TOKEN]: firstToken + "x" })).text);
     }
@@ -565,7 +576,7 @@ test("the token changes across a helper restart and is written nowhere: no state
     await first.close();
   }
 
-  const second = await startHelper(dir);
+  const second = await service.serve({ port: 0, stateDir: dir, quiet: true });
   let secondToken;
   try {
     secondToken = await libraryToken(second.port);
