@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Crucible: LAHE Library</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%94%A8</text></svg>">
+  <style>
+    :root {
+      --ink: #0f172a;
+      --accent: #2563eb;
+      --accent-soft: #eff6ff;
+      --muted: #64748b;
+      --rule: #e2e8f0;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --table-head: #f1f5f9;
+
+      /* Callout types */
+      --req-bg: #f0fdf4;      --req-bar: #16a34a;
+      --nongoal-bg: #f8fafc;  --nongoal-bar: #94a3b8;
+      --metric-bg: #f0f9ff;   --metric-bar: #0284c7;
+      --question-bg: #fffbeb; --question-bar: #d97706;
+      --flag-bg: #fef2f2;     --flag-bar: #dc2626;
+      --suggest-bg: #faf5ff;  --suggest-bar: #7c3aed;
+    }
+
+    html { scroll-behavior: smooth; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+    body {
+      font-family: "Inter", "Helvetica Neue", -apple-system, system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.7;
+      color: var(--ink);
+      background: var(--bg);
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 48px 32px 100px;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    /* Title block (pandoc emits <header id="title-block-header">) */
+    header#title-block-header {
+      border-bottom: 3px solid var(--accent);
+      padding-bottom: 22px;
+      margin-bottom: 8px;
+    }
+    header#title-block-header h1.title {
+      font-size: 2rem;
+      font-weight: 800;
+      margin: 0 0 6px;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+    }
+    header#title-block-header p.subtitle {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin: 0;
+    }
+
+    /* Cross-doc nav (injected by the build before the TOC) */
+    .doc-nav {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin: 24px 0 8px;
+      padding: 12px 16px;
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 10px;
+      font-size: 0.84rem;
+    }
+    .doc-nav .doc-nav-label { color: var(--muted); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
+    .doc-nav a {
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--accent-soft);
+      padding: 4px 12px;
+      border-radius: 16px;
+      text-decoration: none;
+      border: 1px solid rgba(37,99,235,0.18);
+      transition: background 0.15s;
+    }
+    .doc-nav a:hover { background: #dbeafe; }
+    .doc-nav a.current { background: var(--accent); color: #fff; border-color: transparent; cursor: default; }
+
+    /* TOC (pandoc emits <nav id="TOC">) */
+    nav#TOC {
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 12px;
+      padding: 18px 24px;
+      margin: 16px 0 36px;
+      font-size: 0.88rem;
+    }
+    nav#TOC::before {
+      content: "Contents";
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+    nav#TOC ul { list-style: none; padding-left: 0; margin: 0; }
+    nav#TOC ul ul { padding-left: 16px; margin-top: 4px; }
+    nav#TOC li { margin-bottom: 4px; }
+    nav#TOC a { color: var(--ink); text-decoration: none; }
+    nav#TOC a:hover { color: var(--accent); }
+
+    /* Headings */
+    h1, h2, h3, h4 { font-weight: 700; line-height: 1.3; }
+    h2 {
+      font-size: 1.35rem;
+      margin: 52px 0 16px;
+      padding-top: 24px;
+      border-top: 1px solid var(--rule);
+      letter-spacing: -0.01em;
+    }
+    h3 { font-size: 1.1rem; margin: 34px 0 12px; color: var(--accent); }
+    h4 {
+      font-size: 0.9rem; margin: 24px 0 8px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    table + h2, blockquote + h2, ul + h2, ol + h2, pre + h2, .callout + h2 { margin-top: 60px; }
+
+    p { margin: 0 0 16px; }
+
+    a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(37,99,235,0.3); word-break: break-word; }
+    a:hover { border-bottom-color: var(--accent); background: var(--accent-soft); }
+
+    strong { color: var(--ink); font-weight: 700; }
+
+    ul, ol { margin: 0 0 16px; padding-left: 24px; }
+    li { margin: 0 0 6px; }
+    li::marker { color: var(--accent); }
+
+    /* Callout boxes (from ::: callout-* fenced divs) */
+    .callout {
+      border-radius: 0 10px 10px 0;
+      padding: 12px 18px;
+      margin: 18px 0;
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+    .callout > :first-child { margin-top: 0; }
+    .callout > :last-child { margin-bottom: 0; }
+    .callout::before {
+      display: block;
+      font-size: 0.66rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+    .callout-req     { background: var(--req-bg);     border-left: 4px solid var(--req-bar); }
+    .callout-req::before     { content: "Requirement"; color: var(--req-bar); }
+    .callout-nongoal { background: var(--nongoal-bg); border-left: 4px solid var(--nongoal-bar); }
+    .callout-nongoal::before { content: "Non-Goals";   color: var(--nongoal-bar); }
+    .callout-metric  { background: var(--metric-bg);  border-left: 4px solid var(--metric-bar); }
+    .callout-metric::before  { content: "Metrics";     color: var(--metric-bar); }
+    .callout-question { background: var(--question-bg); border-left: 4px solid var(--question-bar); }
+    .callout-question::before { content: "Open Question"; color: var(--question-bar); }
+    .callout-flag    { background: var(--flag-bg);    border-left: 4px solid var(--flag-bar); }
+    .callout-flag::before    { content: "Red Flag";    color: var(--flag-bar); }
+    .callout-suggest { background: var(--suggest-bg); border-left: 4px solid var(--suggest-bar); }
+    .callout-suggest::before { content: "Suggestion";  color: var(--suggest-bar); }
+
+    /* Reviews section: the _reviews.md files are merged into the HTML below this
+       banner (they stay separate files on disk for agents). */
+    .reviews-banner {
+      background: #faf3f2;
+      border: 1px solid #e3b9b3;
+      border-radius: 10px;
+      padding: 12px 18px;
+      margin: 0 0 28px;
+      font-size: 0.9rem;
+      line-height: 1.55;
+      color: #7a3a32;
+    }
+    /* Jump target for spec → review-detail links; offset so the heading clears. */
+    .finding-anchor { display: inline-block; scroll-margin-top: 1.5rem; }
+    td a[href^="#"] { font-weight: 700; text-decoration: none; border-bottom: 1px dotted currentColor; }
+    td a[href^="#"]:hover { text-decoration: none; border-bottom-style: solid; }
+    .reviews-banner::before {
+      display: block;
+      content: "Reviews (full prose)";
+      font-size: 0.66rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+      color: #b0463b;
+    }
+
+    /* Inline xref deep-dive (from ::: xref fenced div) */
+    .xref {
+      font-size: 0.82rem;
+      background: var(--accent-soft);
+      border-left: 3px solid var(--accent);
+      border-radius: 0 7px 7px 0;
+      padding: 9px 14px;
+      margin: 0 0 18px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .xref::before {
+      content: "\21B3  See";
+      font-size: 0.66rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--accent);
+      margin-right: 8px;
+    }
+    .xref > * { display: inline; margin: 0; }
+    .xref a { border-bottom: none; font-weight: 700; color: var(--ink); }
+    .xref a:hover { color: var(--accent); background: none; }
+
+    /* Tables */
+    /* The build wraps every table in .table-scroll so a wide table scrolls
+       inside the reading column instead of spilling past it. The scrolling
+       behavior itself is in shared-assets/doc_fixes.css; this is the look. */
+    .table-scroll {
+      margin: 20px 0 28px;
+      border-radius: 10px;
+      box-shadow: 0 1px 3px rgba(15,23,42,0.06), 0 0 0 1px var(--rule);
+    }
+    .table-scroll table { margin: 0; box-shadow: none; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 20px 0 28px;
+      font-size: 0.88rem;
+      background: var(--card);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(15,23,42,0.06), 0 0 0 1px var(--rule);
+      line-height: 1.5;
+    }
+    thead th {
+      background: var(--table-head);
+      text-align: left;
+      font-weight: 700;
+      padding: 10px 14px;
+      border-bottom: 2px solid var(--accent);
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: var(--muted);
+    }
+    tbody td { padding: 9px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:nth-child(even) { background: #f8fafc; }
+
+    /* Disposition status words rendered by the build (Accepted/Rejected/Deferred) */
+    td .accepted, span.accepted { color: #16a34a; font-weight: 700; }
+    td .rejected, span.rejected { color: #dc2626; font-weight: 700; }
+    td .deferred, span.deferred { color: #d97706; font-weight: 700; }
+
+    /* Inline + block code */
+    code {
+      font-family: "SF Mono", "JetBrains Mono", Menlo, monospace;
+      font-size: 0.82em;
+      background: var(--accent-soft);
+      padding: 2px 6px;
+      border-radius: 5px;
+      color: var(--accent);
+    }
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 16px 20px;
+      border-radius: 10px;
+      overflow-x: auto;
+      margin: 20px 0;
+      line-height: 1.55;
+      /* Wrap long lines instead of forcing a horizontal scroll (readability). */
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    pre code { background: none; color: inherit; padding: 0; font-size: 0.8rem; }
+    /* Mermaid should NOT wrap its source before the script swaps it for SVG. */
+    pre.mermaid { white-space: pre; }
+
+    /* Mermaid blocks: pandoc renders ```mermaid as <pre class="mermaid">; the
+       Mermaid script replaces the text with SVG. Reset the dark pre styling. */
+    pre.mermaid {
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 10px;
+      padding: 20px;
+      text-align: center;
+      color: var(--ink);
+    }
+
+    blockquote {
+      margin: 18px 0;
+      padding: 10px 18px;
+      background: #f8fafc;
+      border-left: 4px solid var(--muted);
+      border-radius: 0 8px 8px 0;
+      color: var(--muted);
+    }
+    blockquote p { margin: 0; }
+
+    hr { border: none; border-top: 1px solid var(--rule); margin: 32px 0; }
+    hr:has(+ h2) { display: none; }
+
+    /* Task-list checkboxes from "- [ ]" lists */
+    ul.task-list { list-style: none; padding-left: 4px; }
+    ul.task-list li input[type="checkbox"] { margin-right: 8px; }
+
+    @page { size: letter; margin: 0.7in 0.65in; }
+    @media (max-width: 620px) {
+      body { padding: 28px 16px 60px; font-size: 15px; }
+      header#title-block-header h1.title { font-size: 1.6rem; }
+      table { font-size: 0.8rem; }
+    }
+    @media print {
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      body { background: #fff; max-width: 100%; font-size: 11pt; padding: 0; }
+      .doc-nav { display: none; }
+      a { color: var(--ink); border-bottom: none; }
+      .callout, table, pre, blockquote { break-inside: avoid; }
+      h2, h3 { break-after: avoid; }
+    }
+  </style>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: false, theme: "neutral", securityLevel: "loose" });
+    /* Pandoc emits ```mermaid blocks as <pre class="mermaid"><code>…</code></pre> with the
+       diagram source HTML-entity-encoded. Mermaid 10 reads innerHTML, so it sees the literal
+       <code> tag and &quot;/&gt; entities and throws syntax errors. Flatten each block to a
+       single decoded text node first (textContent decodes entities and drops the wrapper),
+       then render. Same fix as the personal-repo report builds (commit d525c50 there). */
+    function renderMermaid() {
+      document.querySelectorAll("pre.mermaid").forEach(function (el) {
+        if (!el.dataset.mflattened) {
+          el.textContent = el.textContent;
+          el.dataset.mflattened = "1";
+        }
+      });
+      mermaid.run({ querySelector: "pre.mermaid" });
+    }
+    if (document.readyState === "loading") {
+      window.addEventListener("DOMContentLoaded", renderMermaid);
+    } else {
+      renderMermaid();
+    }
+  </script>
+
+  <!-- The review comment module and the shared document fixes are injected here
+       at build time from ~/.claude/skills/shared-assets/ (comment_module.html +
+       doc_fixes.css) by shared_assets.resolve_header(). Do not paste a copy back
+       into this file. -->
+  <style>
+  /* Shared document fixes: one source for both document builds.
+
+     Injected at build time alongside comment_module.html, in place of the
+     <!-- SHARED_ASSETS --> placeholder in each pandoc header. Because it lands
+     last in <head>, these rules win over the same-specificity rules earlier in a
+     header without needing !important.
+
+     Keep this file to fixes that are true for every document we build. Anything
+     that depends on a skill's own look (colors, radius, shadow) belongs in that
+     skill's header. */
+
+  /* --- Tables: never spill past the reading column (plan Task 4.3, defect 1) ---
+     Two halves to the fix, and both are needed.
+     1. A wide table scrolls inside its wrapper. Both builds wrap every table in
+        <div class="table-scroll">.
+     2. Long unbroken strings (URLs, tokens, absolute paths) wrap instead of
+        setting a min-content width that forces the table wider than the page.
+        Without this the table is simply wider than the wrapper and the text is
+        cut off at the wrapper edge. */
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+  .table-scroll > table { margin: 0; }
+  table { max-width: 100%; }
+  thead th, tbody td { overflow-wrap: anywhere; word-break: break-word; }
+  thead th code, tbody td code,
+  thead th a, tbody td a { overflow-wrap: anywhere; word-break: break-word; }
+
+  /* Print/PDF has no scrollbars, so show the whole table and let it shrink. */
+  @media print {
+    .table-scroll { overflow: visible; }
+  }
+
+  /* --- Charts: never let a chart set the page width (plan Task 4.3, defect 2) ---
+     The label-truncation fix itself is Plotly's automargin, applied in the
+     report header's render script. This is the CSS guard next to it: a chart
+     that computes a wider layout than its column stays inside the column
+     instead of pushing the whole page sideways. */
+  figure.plotly-chart,
+  figure.plotly-chart > div,
+  figure.chart svg,
+  figure.plotly-chart .main-svg { max-width: 100%; }
+
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Crucible: LAHE Library</h1>
+</header>
+
+<div class="doc-nav"><span class="doc-nav-label">Docs</span><a href="00_crucible.html" class="current">Crucible</a><a href="01_brief_lahe_library.html">Brief</a><a href="02_architecture_lahe_library.html">Architecture</a><a href="03_plan_lahe_library.html">Plan</a><a href="wireframes/index.html">Index</a><a href="http://127.0.0.1:55480/04_progress_lahe_library-fdf092f7193a770f.html">Progress</a></div>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#the-idea-as-stated" id="toc-the-idea-as-stated">The idea,
+as stated</a></li>
+<li><a href="#jobs-to-be-done" id="toc-jobs-to-be-done">Jobs to be
+done</a></li>
+<li><a href="#who-the-user-is" id="toc-who-the-user-is">Who the user
+is</a></li>
+<li><a href="#user-context" id="toc-user-context">User context</a></li>
+<li><a href="#what-already-exists" id="toc-what-already-exists">What
+already exists</a></li>
+<li><a href="#evidence" id="toc-evidence">Evidence</a></li>
+<li><a href="#status-quo" id="toc-status-quo">Status quo</a></li>
+<li><a href="#premises" id="toc-premises">Premises</a></li>
+<li><a href="#the-case-against-building-this"
+id="toc-the-case-against-building-this">The case against building
+this</a></li>
+<li><a href="#what-happens-if-we-do-nothing"
+id="toc-what-happens-if-we-do-nothing">What happens if we do
+nothing</a></li>
+<li><a href="#approaches-considered"
+id="toc-approaches-considered">Approaches considered</a></li>
+<li><a href="#recommended-approach"
+id="toc-recommended-approach">Recommended approach</a></li>
+<li><a href="#open-questions" id="toc-open-questions">Open
+questions</a></li>
+<li><a href="#challenges-you-accepted"
+id="toc-challenges-you-accepted">Challenges you accepted</a></li>
+<li><a href="#challenges-you-rejected"
+id="toc-challenges-you-rejected">Challenges you rejected</a></li>
+<li><a href="#what-we-skipped-and-why"
+id="toc-what-we-skipped-and-why">What we skipped and why</a></li>
+<li><a href="#the-assignment" id="toc-the-assignment">The
+assignment</a></li>
+</ul>
+</nav>
+<p>Date: 2026-09-22 Status: ACCEPTED</p>
+<p><strong>Short version:</strong> Build it, as Approach B: a live
+Library page in the helper, whose Open and Star buttons act directly
+(you said that's required). Picking a document up and launching a new
+agent still go through an agent. I found one hidden problem. The
+bookmark idea from the ideas page does not survive a computer restart,
+because the helper stops when the last session closes and nothing starts
+it at login.</p>
+<h2 id="the-idea-as-stated">The idea, as stated</h2>
+<p>"I want some sort of index, file list, recent files guide, something
+that will allow me to point at anything that's been worked on in the
+lahe editor and ask another agent to go pick it up or restart it or
+bring it back." The decisions you already made on the ideas page
+(<code>docs/ongoing/DOCUMENT_INDEX_IDEAS.md</code>) carry over:</p>
+<ul>
+<li>Bring the document back on any address. The old port doesn't
+matter.</li>
+<li>Keep every review. Old ones drop out of the default view but never
+get deleted.</li>
+<li>Stars keep important documents on top.</li>
+<li>A dead worktree path opens the same file in the main repo.</li>
+<li>Group rows by folder and by agent session.</li>
+<li>The agent that opens the Library picks up the document you point at.
+Launching a new agent is a later option.</li>
+</ul>
+<h2 id="jobs-to-be-done">Jobs to be done</h2>
+<ol type="1">
+<li><strong>Find a prior document.</strong></li>
+<li><strong>Open it again with the rail on it</strong>, so comments
+reach an agent.</li>
+<li><strong>Stop feeling buried.</strong> New documents arrive faster
+than you close old ones. The Library has to make the pile feel smaller,
+not just list it.</li>
+<li><strong>Close a tab without worrying.</strong> Today you hesitate to
+close tabs because you don't know how to get the document back. Open
+tabs are doing the job of the index. The Library should make closing a
+tab safe.</li>
+</ol>
+<h2 id="who-the-user-is">Who the user is</h2>
+<p>You, today:</p>
+<ul>
+<li>You run many agents at once.</li>
+<li>Each agent hands you pages to review. Everything gets a document: 20
+or more a working day right now.</li>
+<li>You work from the browser and from chat, often by voice.</li>
+<li>You don't know or want to know where files live. Many are in
+worktrees or temp folders.</li>
+</ul>
+<p>Soon, new users from the npm package and the Product Hunt launch
+(both on the board). They hit this later than you, because it takes
+weeks of use to build a pile.</p>
+<h2 id="user-context">User context</h2>
+<p>On a laptop, working all day. Occasionally a computer restart will
+cause a browser window to have a row of tabs that are all dead-looking
+lahe docs. A Claude Code chat is always available. You're deciding what
+to pick back up, often mid-way through several other things.</p>
+<h2 id="what-already-exists">What already exists</h2>
+<ul>
+<li><strong>In LAHE:</strong> every review is on disk with its file
+path, page title, created date, owning session, and full comment
+history. <code>lahe session list</code> lists sessions, but not
+documents, and it shows ids instead of names.</li>
+<li><strong>Prior work:</strong> only the ideas page. No brief, no board
+row.</li>
+<li><strong>Prior art:</strong> the "Open Recent" list in editors like
+VS Code and Obsidian. It is the closest match: most recent first, pin to
+keep, and it quietly drops entries whose file is gone. Browser history
+is the status quo and fails here, because each document's address
+changes every time it is served. Nothing off the shelf reads LAHE's
+records, so there is nothing to adopt.</li>
+</ul>
+<h2 id="evidence">Evidence</h2>
+<ul>
+<li>Your own words: "overwhelmed", "feels like I lost my
+documents".</li>
+<li>477 reviews since Aug 13, but many are one review per page from
+before the Sep 16 registration fix. Folded the way reviews register
+today, they come to 213 folders, 54 of them since Sep 17. That is a
+floor: two documents in one folder (a brief and a plan) count once.
+(<code>why476.py</code>, then <code>docs_count.py</code>, one row per
+review in <code>docs_count_rows.csv</code>.)</li>
+<li>Still a large number after the correction, and you expect 20 or more
+new documents each working day.</li>
+<li>There is one user, and it bites daily: 20 documents a day, you can't
+remember their names, and you need to close them to clear your desktop.
+You need to browse, not search.</li>
+</ul>
+<h2 id="status-quo">Status quo</h2>
+<p>Open tabs are the index: you keep them open because closing one feels
+like losing it. After a restart they all die at once. Then you ask an
+agent to find the document, and it greps the disk or its chat history.
+Or you give up on the document.</p>
+<h2 id="premises">Premises</h2>
+<p>Premises 3 and 5 drew no objection and stand. Premises 1, 2 and 4
+were revised on your comments, as written.</p>
+<ol type="1">
+<li><strong>Open: what a row is.</strong> A document, a review, or a
+session. Given the volume, grouping by review or session may read better
+than a flat list of documents. The wireframe phase settles it: I'll mock
+the three groupings on your real data and you pick.</li>
+<li><strong>An agent is usually in the loop to bring something back, and
+the Library can also launch a new one.</strong> Usually the agent that
+opened the Library picks the document up. A <strong>Launch a new
+agent</strong> button starts a fresh agent on that document instead, so
+one agent isn't juggling ten. In scope to explore. The complication: a
+web page that starts programs on your laptop is the riskiest thing this
+feature could add. The safe shape is for the button to ask the agent
+already running, and that agent launches the new one (for example, a new
+Terminal window running Claude Code with the takeover prompt). The page
+itself never starts anything.</li>
+<li><strong>The helper does not need to be running at login.</strong>
+After a restart, "open the lahe library" starts it. So a browser
+bookmark to the Library only works once some agent has started LAHE that
+day.</li>
+<li><strong>The Library has to manage volume.</strong> At 20 or more
+documents a day, a plain list stops working within a week. How it
+manages that (a recent window, grouping by day, stars, collapsing) is a
+design question for the wireframe, not a premise. Nothing is ever
+deleted.</li>
+<li><strong>Rows need a name you'd recognize.</strong> The page title
+does that for most rows. For the rest (untitled pages, duplicate titles
+like "Brief"), the Library shows the folder and file name under it.</li>
+</ol>
+<h2 id="the-case-against-building-this">The case against building
+this</h2>
+<p>Nearly all of it can be done today by asking an agent "find the lahe
+document about the style systems." The records are on disk and an agent
+can grep them. What's missing is a page to browse when you don't
+remember the name. If the real pain is only the moment after a restart,
+a one-line <code>lahe library</code> command whose output an agent reads
+to you might be enough. <strong>Answered:</strong> you can't remember
+the names, so you need to browse. That rules out the command-only
+version.</p>
+<h2 id="what-happens-if-we-do-nothing">What happens if we do
+nothing</h2>
+<p>The pile keeps growing at roughly the Sep 17 to Sep 22 pace. Each
+restart costs you the full set of open documents, and getting one back
+means an agent search. Nothing is lost on disk. What you lose is the
+sense of where your work is.</p>
+<h2 id="approaches-considered">Approaches considered</h2>
+<h3 id="approach-a-the-library-is-a-lahe-document">Approach A: The
+Library is a LAHE document</h3>
+<ul>
+<li><strong>Summary:</strong> <code>lahe library</code> builds one HTML
+page listing every document, then serves it as a normal review in the
+agent's own session. You act on a row by clicking a button or commenting
+on it. The action arrives at the agent like any other comment. The agent
+takes over the document's session and brings it back.</li>
+<li><strong>Effort:</strong> M. <strong>Risk:</strong> Low.</li>
+<li><strong>Pros:</strong>
+<ul>
+<li>Reuses the whole comment-to-agent loop you already use every
+day.</li>
+<li>The page never gets to command the helper. The agent does the work,
+so there's no new security surface.</li>
+<li>Works the same way for Codex and Antigravity.</li>
+</ul></li>
+<li><strong>Cons:</strong>
+<ul>
+<li>Starring or opening goes through the agent, so it takes a few
+seconds, not an instant.</li>
+<li>The page is a snapshot. It is rebuilt each time it is opened, not
+live.</li>
+<li>Each document goes back to its own review and its own session, with
+its old comments, not into the Library's session. So an agent that picks
+up five documents ends up holding five sessions. Today that means five
+monitors; the architecture has to make that manageable.</li>
+</ul></li>
+<li><strong>Reuses:</strong> <code>lahe review</code>, session takeover,
+the review records, the Markdown/HTML serving path.</li>
+</ul>
+<h3
+id="approach-b-a-live-library-page-inside-the-helper-recommended">Approach
+B: A live Library page inside the helper (recommended)</h3>
+<ul>
+<li><strong>Summary:</strong> A page at
+<code>127.0.0.1:7817/library</code> that reads the records live. Its
+Open and Star buttons act directly: the helper starts a server for the
+document and opens it.</li>
+<li><strong>Effort:</strong> L. <strong>Risk:</strong> Med.</li>
+<li><strong>Pros:</strong>
+<ul>
+<li>Instant, and always current.</li>
+<li>One fixed address to bookmark.</li>
+</ul></li>
+<li><strong>Cons:</strong>
+<ul>
+<li>Local-only still counts here. Any website open in your browser can
+send requests to <code>127.0.0.1</code>, which is why the helper checks
+a per-review token on every request (decision D11, "loopback is not a
+boundary"). A Library route that serves files or launches agents has to
+pass the same checks. That is known work that reuses existing code, not
+a new security design.</li>
+<li>It bends the rule that a session owns its servers. Kept small, it
+could be fine: one server, owned by the helper, that serves every
+document the Library brings back. The document's comments still need an
+agent session to reach anyone.</li>
+<li>The bookmark still fails after a restart until the helper is up
+(premise 3).</li>
+</ul></li>
+<li><strong>Reuses:</strong> the review records, the static server
+code.</li>
+</ul>
+<h3 id="approach-c-no-page-just-a-command">Approach C: No page, just a
+command</h3>
+<ul>
+<li><strong>Summary:</strong> <code>lahe library</code> prints a grouped
+list. You ask an agent "what was I working on", it runs the command and
+reads you the top items.</li>
+<li><strong>Effort:</strong> S. <strong>Risk:</strong> Low.</li>
+<li><strong>Pros:</strong> Smallest change, and it ships first.</li>
+<li><strong>Cons:</strong> It is the chat-scroll problem you already
+told me you want less of. No browsing, no stars.</li>
+<li><strong>Reuses:</strong> <code>lahe session list</code>.</li>
+</ul>
+<h3 id="do-nothing">Do nothing</h3>
+<p>Agents grep for documents when asked. You lose the browse view and
+keep the "buried" feeling.</p>
+<h2 id="recommended-approach">Recommended approach</h2>
+<p>Approach B. Open and Star acting directly is required, and only B
+does that. Both buttons go through the helper's existing token check.
+One server, owned by the helper, serves every document the Library
+brings back. The two actions that need judgment stay with agents:
+<strong>Pick this up</strong> reaches the agent that opened the Library,
+and <strong>Launch a new agent</strong> asks that agent to start one.
+Approach C falls out for free: the same data can print as a list in the
+terminal.</p>
+<h2 id="open-questions">Open questions</h2>
+<ul>
+<li>What a row is, and how rows group (premise 1). Settled in the
+wireframe.</li>
+<li>How the view keeps the volume manageable (premise 4). Settled in the
+wireframe.</li>
+<li>How a new agent gets launched (premise 2): which host (Claude Code,
+Codex), in which app (Terminal, iTerm, the Claude desktop app), and
+whether the new agent gets a name you can recognize. Settled in the
+architecture.</li>
+<li>What the Library does when no agent is listening (premise 2 says
+"usually"). The safe way to launch an agent needs a running agent to
+ask. With none, the page could offer the takeover prompt to copy, or the
+helper could launch one itself, which brings back the risk. Settled in
+the architecture.</li>
+</ul>
+<h2 id="challenges-you-accepted">Challenges you accepted</h2>
+<ul>
+<li>Local-only is not a boundary: the Library's buttons use the helper's
+existing token check.</li>
+<li>Each picked-up document keeps its own review and session, so one
+agent may hold several sessions.</li>
+</ul>
+<h2 id="challenges-you-rejected">Challenges you rejected</h2>
+<ul>
+<li><strong>"Ask an agent to grep for it" is enough.</strong> Rejected:
+20 documents a day, you can't remember the names, you need to
+browse.</li>
+<li><strong>Approach A, acting through comments.</strong> Rejected: Open
+and Star must act directly.</li>
+<li><strong>The Library should never start agents.</strong> Rejected: a
+Launch a new agent button is in scope.</li>
+<li><strong>A fixed default view (7 days, grouped by day) as a
+premise.</strong> Rejected: that is a design question, and the premise
+is only that volume must be managed.</li>
+<li><strong>This must come before the npm package and Product
+Hunt.</strong> Rejected as not a requirement.</li>
+</ul>
+<h2 id="what-we-skipped-and-why">What we skipped and why</h2>
+<ul>
+<li>Future-fit: skipped. More agents means more documents, so this only
+gets more needed.</li>
+<li>Roadmap priority: you said ordering is not a requirement.</li>
+</ul>
+<h2 id="the-assignment">The assignment</h2>
+<p>Write the brief for Approach B, then wireframe the three row
+groupings (by document, by review, by session) on your real data so you
+can pick one.</p>
+</body>
+</html>

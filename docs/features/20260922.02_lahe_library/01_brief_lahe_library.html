@@ -1,0 +1,1464 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Feature Brief: LAHE Library</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%94%A8</text></svg>">
+  <style>
+    :root {
+      --ink: #0f172a;
+      --accent: #2563eb;
+      --accent-soft: #eff6ff;
+      --muted: #64748b;
+      --rule: #e2e8f0;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --table-head: #f1f5f9;
+
+      /* Callout types */
+      --req-bg: #f0fdf4;      --req-bar: #16a34a;
+      --nongoal-bg: #f8fafc;  --nongoal-bar: #94a3b8;
+      --metric-bg: #f0f9ff;   --metric-bar: #0284c7;
+      --question-bg: #fffbeb; --question-bar: #d97706;
+      --flag-bg: #fef2f2;     --flag-bar: #dc2626;
+      --suggest-bg: #faf5ff;  --suggest-bar: #7c3aed;
+    }
+
+    html { scroll-behavior: smooth; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+    body {
+      font-family: "Inter", "Helvetica Neue", -apple-system, system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.7;
+      color: var(--ink);
+      background: var(--bg);
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 48px 32px 100px;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    /* Title block (pandoc emits <header id="title-block-header">) */
+    header#title-block-header {
+      border-bottom: 3px solid var(--accent);
+      padding-bottom: 22px;
+      margin-bottom: 8px;
+    }
+    header#title-block-header h1.title {
+      font-size: 2rem;
+      font-weight: 800;
+      margin: 0 0 6px;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+    }
+    header#title-block-header p.subtitle {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin: 0;
+    }
+
+    /* Cross-doc nav (injected by the build before the TOC) */
+    .doc-nav {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      margin: 24px 0 8px;
+      padding: 12px 16px;
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 10px;
+      font-size: 0.84rem;
+    }
+    .doc-nav .doc-nav-label { color: var(--muted); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
+    .doc-nav a {
+      font-weight: 600;
+      color: var(--accent);
+      background: var(--accent-soft);
+      padding: 4px 12px;
+      border-radius: 16px;
+      text-decoration: none;
+      border: 1px solid rgba(37,99,235,0.18);
+      transition: background 0.15s;
+    }
+    .doc-nav a:hover { background: #dbeafe; }
+    .doc-nav a.current { background: var(--accent); color: #fff; border-color: transparent; cursor: default; }
+
+    /* TOC (pandoc emits <nav id="TOC">) */
+    nav#TOC {
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 12px;
+      padding: 18px 24px;
+      margin: 16px 0 36px;
+      font-size: 0.88rem;
+    }
+    nav#TOC::before {
+      content: "Contents";
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+    nav#TOC ul { list-style: none; padding-left: 0; margin: 0; }
+    nav#TOC ul ul { padding-left: 16px; margin-top: 4px; }
+    nav#TOC li { margin-bottom: 4px; }
+    nav#TOC a { color: var(--ink); text-decoration: none; }
+    nav#TOC a:hover { color: var(--accent); }
+
+    /* Headings */
+    h1, h2, h3, h4 { font-weight: 700; line-height: 1.3; }
+    h2 {
+      font-size: 1.35rem;
+      margin: 52px 0 16px;
+      padding-top: 24px;
+      border-top: 1px solid var(--rule);
+      letter-spacing: -0.01em;
+    }
+    h3 { font-size: 1.1rem; margin: 34px 0 12px; color: var(--accent); }
+    h4 {
+      font-size: 0.9rem; margin: 24px 0 8px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    table + h2, blockquote + h2, ul + h2, ol + h2, pre + h2, .callout + h2 { margin-top: 60px; }
+
+    p { margin: 0 0 16px; }
+
+    a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(37,99,235,0.3); word-break: break-word; }
+    a:hover { border-bottom-color: var(--accent); background: var(--accent-soft); }
+
+    strong { color: var(--ink); font-weight: 700; }
+
+    ul, ol { margin: 0 0 16px; padding-left: 24px; }
+    li { margin: 0 0 6px; }
+    li::marker { color: var(--accent); }
+
+    /* Callout boxes (from ::: callout-* fenced divs) */
+    .callout {
+      border-radius: 0 10px 10px 0;
+      padding: 12px 18px;
+      margin: 18px 0;
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+    .callout > :first-child { margin-top: 0; }
+    .callout > :last-child { margin-bottom: 0; }
+    .callout::before {
+      display: block;
+      font-size: 0.66rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+    .callout-req     { background: var(--req-bg);     border-left: 4px solid var(--req-bar); }
+    .callout-req::before     { content: "Requirement"; color: var(--req-bar); }
+    .callout-nongoal { background: var(--nongoal-bg); border-left: 4px solid var(--nongoal-bar); }
+    .callout-nongoal::before { content: "Non-Goals";   color: var(--nongoal-bar); }
+    .callout-metric  { background: var(--metric-bg);  border-left: 4px solid var(--metric-bar); }
+    .callout-metric::before  { content: "Metrics";     color: var(--metric-bar); }
+    .callout-question { background: var(--question-bg); border-left: 4px solid var(--question-bar); }
+    .callout-question::before { content: "Open Question"; color: var(--question-bar); }
+    .callout-flag    { background: var(--flag-bg);    border-left: 4px solid var(--flag-bar); }
+    .callout-flag::before    { content: "Red Flag";    color: var(--flag-bar); }
+    .callout-suggest { background: var(--suggest-bg); border-left: 4px solid var(--suggest-bar); }
+    .callout-suggest::before { content: "Suggestion";  color: var(--suggest-bar); }
+
+    /* Reviews section: the _reviews.md files are merged into the HTML below this
+       banner (they stay separate files on disk for agents). */
+    .reviews-banner {
+      background: #faf3f2;
+      border: 1px solid #e3b9b3;
+      border-radius: 10px;
+      padding: 12px 18px;
+      margin: 0 0 28px;
+      font-size: 0.9rem;
+      line-height: 1.55;
+      color: #7a3a32;
+    }
+    /* Jump target for spec → review-detail links; offset so the heading clears. */
+    .finding-anchor { display: inline-block; scroll-margin-top: 1.5rem; }
+    td a[href^="#"] { font-weight: 700; text-decoration: none; border-bottom: 1px dotted currentColor; }
+    td a[href^="#"]:hover { text-decoration: none; border-bottom-style: solid; }
+    .reviews-banner::before {
+      display: block;
+      content: "Reviews (full prose)";
+      font-size: 0.66rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+      color: #b0463b;
+    }
+
+    /* Inline xref deep-dive (from ::: xref fenced div) */
+    .xref {
+      font-size: 0.82rem;
+      background: var(--accent-soft);
+      border-left: 3px solid var(--accent);
+      border-radius: 0 7px 7px 0;
+      padding: 9px 14px;
+      margin: 0 0 18px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .xref::before {
+      content: "\21B3  See";
+      font-size: 0.66rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--accent);
+      margin-right: 8px;
+    }
+    .xref > * { display: inline; margin: 0; }
+    .xref a { border-bottom: none; font-weight: 700; color: var(--ink); }
+    .xref a:hover { color: var(--accent); background: none; }
+
+    /* Tables */
+    /* The build wraps every table in .table-scroll so a wide table scrolls
+       inside the reading column instead of spilling past it. The scrolling
+       behavior itself is in shared-assets/doc_fixes.css; this is the look. */
+    .table-scroll {
+      margin: 20px 0 28px;
+      border-radius: 10px;
+      box-shadow: 0 1px 3px rgba(15,23,42,0.06), 0 0 0 1px var(--rule);
+    }
+    .table-scroll table { margin: 0; box-shadow: none; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 20px 0 28px;
+      font-size: 0.88rem;
+      background: var(--card);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(15,23,42,0.06), 0 0 0 1px var(--rule);
+      line-height: 1.5;
+    }
+    thead th {
+      background: var(--table-head);
+      text-align: left;
+      font-weight: 700;
+      padding: 10px 14px;
+      border-bottom: 2px solid var(--accent);
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: var(--muted);
+    }
+    tbody td { padding: 9px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:nth-child(even) { background: #f8fafc; }
+
+    /* Disposition status words rendered by the build (Accepted/Rejected/Deferred) */
+    td .accepted, span.accepted { color: #16a34a; font-weight: 700; }
+    td .rejected, span.rejected { color: #dc2626; font-weight: 700; }
+    td .deferred, span.deferred { color: #d97706; font-weight: 700; }
+
+    /* Inline + block code */
+    code {
+      font-family: "SF Mono", "JetBrains Mono", Menlo, monospace;
+      font-size: 0.82em;
+      background: var(--accent-soft);
+      padding: 2px 6px;
+      border-radius: 5px;
+      color: var(--accent);
+    }
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 16px 20px;
+      border-radius: 10px;
+      overflow-x: auto;
+      margin: 20px 0;
+      line-height: 1.55;
+      /* Wrap long lines instead of forcing a horizontal scroll (readability). */
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    pre code { background: none; color: inherit; padding: 0; font-size: 0.8rem; }
+    /* Mermaid should NOT wrap its source before the script swaps it for SVG. */
+    pre.mermaid { white-space: pre; }
+
+    /* Mermaid blocks: pandoc renders ```mermaid as <pre class="mermaid">; the
+       Mermaid script replaces the text with SVG. Reset the dark pre styling. */
+    pre.mermaid {
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 10px;
+      padding: 20px;
+      text-align: center;
+      color: var(--ink);
+    }
+
+    blockquote {
+      margin: 18px 0;
+      padding: 10px 18px;
+      background: #f8fafc;
+      border-left: 4px solid var(--muted);
+      border-radius: 0 8px 8px 0;
+      color: var(--muted);
+    }
+    blockquote p { margin: 0; }
+
+    hr { border: none; border-top: 1px solid var(--rule); margin: 32px 0; }
+    hr:has(+ h2) { display: none; }
+
+    /* Task-list checkboxes from "- [ ]" lists */
+    ul.task-list { list-style: none; padding-left: 4px; }
+    ul.task-list li input[type="checkbox"] { margin-right: 8px; }
+
+    @page { size: letter; margin: 0.7in 0.65in; }
+    @media (max-width: 620px) {
+      body { padding: 28px 16px 60px; font-size: 15px; }
+      header#title-block-header h1.title { font-size: 1.6rem; }
+      table { font-size: 0.8rem; }
+    }
+    @media print {
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      body { background: #fff; max-width: 100%; font-size: 11pt; padding: 0; }
+      .doc-nav { display: none; }
+      a { color: var(--ink); border-bottom: none; }
+      .callout, table, pre, blockquote { break-inside: avoid; }
+      h2, h3 { break-after: avoid; }
+    }
+  </style>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: false, theme: "neutral", securityLevel: "loose" });
+    /* Pandoc emits ```mermaid blocks as <pre class="mermaid"><code>…</code></pre> with the
+       diagram source HTML-entity-encoded. Mermaid 10 reads innerHTML, so it sees the literal
+       <code> tag and &quot;/&gt; entities and throws syntax errors. Flatten each block to a
+       single decoded text node first (textContent decodes entities and drops the wrapper),
+       then render. Same fix as the personal-repo report builds (commit d525c50 there). */
+    function renderMermaid() {
+      document.querySelectorAll("pre.mermaid").forEach(function (el) {
+        if (!el.dataset.mflattened) {
+          el.textContent = el.textContent;
+          el.dataset.mflattened = "1";
+        }
+      });
+      mermaid.run({ querySelector: "pre.mermaid" });
+    }
+    if (document.readyState === "loading") {
+      window.addEventListener("DOMContentLoaded", renderMermaid);
+    } else {
+      renderMermaid();
+    }
+  </script>
+
+  <!-- The review comment module and the shared document fixes are injected here
+       at build time from ~/.claude/skills/shared-assets/ (comment_module.html +
+       doc_fixes.css) by shared_assets.resolve_header(). Do not paste a copy back
+       into this file. -->
+  <style>
+  /* Shared document fixes: one source for both document builds.
+
+     Injected at build time alongside comment_module.html, in place of the
+     <!-- SHARED_ASSETS --> placeholder in each pandoc header. Because it lands
+     last in <head>, these rules win over the same-specificity rules earlier in a
+     header without needing !important.
+
+     Keep this file to fixes that are true for every document we build. Anything
+     that depends on a skill's own look (colors, radius, shadow) belongs in that
+     skill's header. */
+
+  /* --- Tables: never spill past the reading column (plan Task 4.3, defect 1) ---
+     Two halves to the fix, and both are needed.
+     1. A wide table scrolls inside its wrapper. Both builds wrap every table in
+        <div class="table-scroll">.
+     2. Long unbroken strings (URLs, tokens, absolute paths) wrap instead of
+        setting a min-content width that forces the table wider than the page.
+        Without this the table is simply wider than the wrapper and the text is
+        cut off at the wrapper edge. */
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+  .table-scroll > table { margin: 0; }
+  table { max-width: 100%; }
+  thead th, tbody td { overflow-wrap: anywhere; word-break: break-word; }
+  thead th code, tbody td code,
+  thead th a, tbody td a { overflow-wrap: anywhere; word-break: break-word; }
+
+  /* Print/PDF has no scrollbars, so show the whole table and let it shrink. */
+  @media print {
+    .table-scroll { overflow: visible; }
+  }
+
+  /* --- Charts: never let a chart set the page width (plan Task 4.3, defect 2) ---
+     The label-truncation fix itself is Plotly's automargin, applied in the
+     report header's render script. This is the CSS guard next to it: a chart
+     that computes a wider layout than its column stays inside the column
+     instead of pushing the whole page sideways. */
+  figure.plotly-chart,
+  figure.plotly-chart > div,
+  figure.chart svg,
+  figure.plotly-chart .main-svg { max-width: 100%; }
+
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Feature Brief: LAHE Library</h1>
+</header>
+
+<div class="doc-nav"><span class="doc-nav-label">Docs</span><a href="00_crucible.html">Crucible</a><a href="01_brief_lahe_library.html" class="current">Brief</a><a href="02_architecture_lahe_library.html">Architecture</a><a href="03_plan_lahe_library.html">Plan</a><a href="wireframes/index.html">Index</a><a href="http://127.0.0.1:55480/04_progress_lahe_library-fdf092f7193a770f.html">Progress</a></div>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#context" id="toc-context">Context</a></li>
+<li><a href="#goal--problem" id="toc-goal--problem">Goal /
+Problem</a></li>
+<li><a href="#non-goals" id="toc-non-goals">Non-Goals</a></li>
+<li><a href="#user--context" id="toc-user--context">User &amp;
+Context</a></li>
+<li><a href="#user-stories" id="toc-user-stories">User Stories</a></li>
+<li><a href="#solution-outline" id="toc-solution-outline">Solution
+Outline</a></li>
+<li><a href="#requirements" id="toc-requirements">Requirements</a></li>
+<li><a href="#ai-behavior" id="toc-ai-behavior">AI Behavior</a></li>
+<li><a href="#success-metrics" id="toc-success-metrics">Success
+Metrics</a></li>
+<li><a href="#ux-notes" id="toc-ux-notes">UX Notes</a></li>
+<li><a href="#analytics--logging" id="toc-analytics--logging">Analytics
+/ Logging</a></li>
+<li><a href="#rollout--flags" id="toc-rollout--flags">Rollout /
+Flags</a></li>
+<li><a href="#open-questions" id="toc-open-questions">Open
+Questions</a></li>
+<li><a href="#pm-review" id="toc-pm-review">PM Review</a></li>
+<li><a href="#reviews-lahe-library-brief"
+id="toc-reviews-lahe-library-brief">Reviews: LAHE Library brief</a>
+<ul>
+<li><a href="#pm-review-round-1" id="toc-pm-review-round-1">PM Review
+(Round 1)</a></li>
+</ul></li>
+</ul>
+</nav>
+<p><strong>Summary:</strong> A page that lists every document ever
+reviewed in LAHE, so Ken can browse them, bring one back with its
+comments and rail, and close tabs without worrying. Open and Star act
+directly from the page. Picking a document up, or launching a fresh
+agent on it, goes through an agent.</p>
+<h2 id="context">Context</h2>
+<p>LAHE is now how Ken reads almost everything his agents produce: 20 or
+more documents a working day. Every review is kept on disk with its file
+path, page title, dates, owning agent session, and full comment history.
+Nothing lists them.</p>
+<p>Each document is served at an address with a random port. Close the
+tab, or restart the laptop, and that address is gone for good. So Ken
+keeps tabs open as the only index he has, hesitates to close them, and
+loses the whole set on a restart.</p>
+<p>The idea was pressure-tested on two LAHE pages:</p>
+<ul>
+<li><a
+href="http://127.0.0.1:55480/DOCUMENT_INDEX_IDEAS-b09cd11f2a84063f.html">the
+ideas page</a></li>
+<li><a href="00_crucible.html">the crucible</a>, which chose a live
+Library page inside LAHE whose Open and Star buttons act directly
+(Approach B)</li>
+</ul>
+<pre class="mermaid"><code>flowchart TD
+  A[&quot;Agent writes a document&quot;] --&gt; B[&quot;lahe review serves it&lt;br/&gt;on a random port&quot;]
+  B --&gt; C[&quot;Ken reviews in a tab&quot;]
+  C --&gt; D{&quot;tab closed&lt;br/&gt;or laptop restarted&quot;}
+  D --&gt; E[&quot;address is dead;&lt;br/&gt;the document is on disk,&lt;br/&gt;but nothing lists it&quot;]
+  E -.-&gt;|&quot;this feature&quot;| F[&quot;Library: browse, Open, Star,&lt;br/&gt;Pick up, Launch agent&quot;]
+  F --&gt; C</code></pre>
+<h2 id="goal--problem">Goal / Problem</h2>
+<p>Ken needs to find a past document without remembering its name, open
+it again with the rail on it, and hand it to an agent, all from one
+page. The pile of documents should feel smaller, and closing a tab
+should feel safe.</p>
+<p>The key design question, for the wireframe: <strong>what is one
+row?</strong> A document, a review, or an agent session. At 20 documents
+a day, the answer decides whether the page reads as a list or as a
+wall.</p>
+<h2 id="non-goals">Non-Goals</h2>
+<div class="callout callout-nongoal">
+<ul>
+<li>Keeping old addresses alive. A reopened document can have a
+different port, that's not a big deal. If you can also keep the same
+port, that would be fine too.</li>
+<li>Deleting or archiving. Every review stays on disk.</li>
+<li>Starting LAHE at login. After a restart, an agent starts LAHE, and
+the Library works from then on.</li>
+<li>Searching inside documents. Search covers what a row shows.</li>
+<li>Replacing <code>lahe session list</code>, which stays the tool
+agents use.</li>
+</ul>
+</div>
+<h2 id="user--context">User &amp; Context</h2>
+<p><strong>Who:</strong> Ken, a single power user. He runs many agents
+at once, and each hands him pages to review: 20 or more a working day.
+He works from the browser and from chat, often by voice. He does not
+know or want to know where files live; many sit in worktrees or temp
+folders. Later, new users from the npm package and the Product Hunt
+launch will reach the same pile after a few weeks of use.</p>
+<p><strong>Where:</strong> on a laptop, working all day. Occasionally a
+restart leaves a browser window of dead-looking LAHE tabs. A Claude Code
+chat is always available. He is deciding what to pick back up, often
+mid-way through several other things.</p>
+<h2 id="user-stories">User Stories</h2>
+<ul>
+<li><strong>As Ken</strong>, I want to browse everything I've reviewed
+recently, so that I can find a document whose name I don't
+remember.</li>
+<li><strong>As Ken</strong>, I want to open a past document easily and
+have the rail on it, so that I can get back to reading, writing,
+editing.</li>
+<li><strong>As Ken</strong>, I want the Library to show me what still
+needs me (documents with waiting comments, starred ones) before the
+rest, so that the pile feels finite.</li>
+<li><strong>As Ken</strong>, I want to star the documents that matter,
+so that they stay easy to find as new ones pile up.</li>
+<li><strong>As Ken</strong>, I want to hand a document to the agent I'm
+already talking to, so that my comments on it get answered.</li>
+<li><strong>As Ken</strong>, I want to launch a fresh agent on a
+document, so that I can keep my agents' context focused and not poisoned
+by wildly different topics and tasks.</li>
+<li><strong>As Ken</strong>, I want to close a tab knowing I can get the
+document back, so that I can clear my desktop.</li>
+<li><strong>As Ken, after a restart</strong>, I want one thing to ask an
+agent for ("open the lahe library"), so that I don't have to reconstruct
+what I had open.</li>
+</ul>
+<h2 id="solution-outline">Solution Outline</h2>
+<ol type="1">
+<li>Ken asks any agent to "open the lahe library." The agent runs one
+command. It starts LAHE if needed and opens the Library in the
+browser.</li>
+<li>The Library lists every past document, newest first. The wireframe
+decides how the page handles that many rows.</li>
+<li>Each row shows:
+<ul>
+<li>a name Ken would recognize</li>
+<li>where the document lives</li>
+<li>when it was last worked on</li>
+<li>how many comments are waiting, and the total</li>
+<li>whether the review was ended</li>
+<li>whether it is being served now</li>
+<li>whether an agent is watching it</li>
+</ul></li>
+<li><strong>Open</strong> brings the document back with the rail on it,
+opens it in a new tab, and has an agent watching it by default, so Ken
+does not have to come back and ask. With no agent available, the
+document still opens and is readable, and the rail says no agent is
+watching.</li>
+<li><strong>Star</strong> marks it. Starred documents stay easy to find
+however old they get.</li>
+<li><strong>Pick this up</strong> is the same hand-over without opening
+a tab: it tells the agent attached to the Library to take the document
+over, so comments on it get answered.</li>
+<li><strong>Launch a new agent</strong> asks that agent to start a fresh
+one on the document.</li>
+<li>Ken can bookmark the Library. The bookmark works whenever LAHE is
+running, and LAHE keeps running while the Library or a document opened
+from it is open.</li>
+</ol>
+<h2 id="requirements">Requirements</h2>
+<h3 id="listing">Listing</h3>
+<div class="callout callout-req">
+<p><strong>R1.</strong> The Library lists every review on disk.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R2.</strong> Each row shows a name Ken would recognize: the
+page title when there is one. When the title is missing or shared with
+another row, the row also shows the folder and file name.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R3.</strong> Each row shows:</p>
+<ul>
+<li>where the document lives (project folder)</li>
+<li>when it was last worked on</li>
+<li>how many comments are waiting on an agent, and how many comments it
+has in total</li>
+<li>whether the review was ended with the rail's end-review button</li>
+<li>whether the document is being served now, which means Open will
+reuse it</li>
+<li>whether an agent is watching it, and which one</li>
+</ul>
+</div>
+<div class="callout callout-req">
+<p><strong>R4.</strong> The Library keeps a week's volume (100 or more
+documents at Ken's pace) findable without typing a search. The grouping
+and default view are settled in the wireframe.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R4a.</strong> The default view separates documents that need
+Ken (waiting comments, starred) from documents that don't.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R5.</strong> Before Sep 16, LAHE wrongly gave each page in a
+folder its own review. The Library shows those old reviews together, the
+way LAHE records a folder today.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R6.</strong> Search filters rows by everything a row shows
+(title, file name, folder, agent session name), across all documents
+regardless of age.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R7.</strong> A document is missing only when its file is gone
+and, for a deleted worktree, the same file is also gone from the main
+repository (R9). Missing documents are hidden by default, with a way to
+show them. On a missing row, Open is unavailable and says why. Star
+still works.</p>
+</div>
+<h3 id="acting-on-a-row">Acting on a row</h3>
+<div class="callout callout-req">
+<p><strong>R8. Open</strong> brings the document back with its rail and
+its existing comments, and opens it in a new tab. By default an agent is
+watching it when it opens: Open includes the hand-over that Pick this up
+does (R12). When no agent is available, the document still opens and is
+readable, and the rail says no agent is watching (R10b).</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R9.</strong> A document that lived in a worktree that is gone
+opens from the same path in the repository that worktree belonged to,
+when that file exists there. The page tells Ken he is seeing the main
+repository's copy, which may differ from the version he reviewed.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R10.</strong> A document that is already being served opens
+at its current address instead of starting a second copy. A second tab
+on the same document is handled the way LAHE already handles two tabs;
+the Library adds nothing of its own.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R10a.</strong> While the Library, or a document opened from
+it, is open in the browser, LAHE keeps serving them, even after the last
+agent session closes.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R10b.</strong> When no agent is watching a document opened
+from the Library, its rail says so and keeps Ken's comments. It offers
+Pick this up, and a prompt Ken can paste into any agent.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R11. Star</strong> and unstar act directly from the page.
+Stars survive a LAHE restart.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R12. Pick this up</strong> uses LAHE's existing hand-over,
+not a new one: the agent attached to the Library takes the document's
+session over the way a takeover already works, so Ken's comments on it
+reach that agent.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R12a.</strong> Before Ken clicks, the page names the agent
+that will receive Pick this up and Launch a new agent. When no agent is
+attached, the buttons say so ahead of time, not after the click.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R12b.</strong> An agent session can hold several documents,
+and they all move together. So Pick this up and Launch a new agent on a
+document a live agent is watching ask Ken to confirm first. The
+confirmation names that agent and lists the other documents that would
+move.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R12c.</strong> After Pick this up or Launch, the row shows
+that the request is waiting, then which agent took it, or why it failed.
+A second click on the same row while one is waiting does nothing and
+says so.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R13. Launch a new agent</strong> asks the agent attached to
+the Library to start a fresh agent, already pointed at that document's
+session. The new agent's session is named after the document, so Ken can
+tell launched agents apart.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R14.</strong> When no agent is attached to the Library, Pick
+this up and Launch a new agent say so, and offer the same hand-off
+message the rail already copies for pasting into any agent.</p>
+</div>
+<h3 id="reaching-the-library">Reaching the Library</h3>
+<div class="callout callout-req">
+<p><strong>R15.</strong> One command opens the Library. It starts LAHE
+if it isn't running.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R16.</strong> The Library has a fixed address Ken can
+bookmark. It loads whenever LAHE is running.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R17.</strong> The agent skill tells agents how to open the
+Library and how to handle Pick this up and Launch a new agent.</p>
+</div>
+<h3 id="safety">Safety</h3>
+<div class="callout callout-req">
+<p><strong>R18.</strong> Every action on the page goes through the same
+checks as any other request to LAHE. A website open in the same browser
+cannot open, star, or launch anything. Tests send each action from
+another website and check that LAHE refuses it.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R19.</strong> Open serves only a file that was under review,
+or, for a worktree that no longer exists, the file at the same path in
+the repository that worktree belonged to (R9). Nothing else. The Library
+cannot be used to serve an arbitrary path.</p>
+</div>
+<h2 id="ai-behavior">AI Behavior</h2>
+<p>Agents act on two of the Library's buttons.</p>
+<ul>
+<li><strong>Pick this up:</strong> the agent takes the document's
+session over the way the skill describes, then tells Ken on the Library
+page which document it picked up.</li>
+<li><strong>Launch a new agent:</strong> the agent starts one new agent
+on that document, then tells Ken on the Library page where it launched
+(for example, which terminal window). One agent per click, never
+more.</li>
+<li><strong>Never:</strong>
+<ul>
+<li>pick up or launch without a click from Ken</li>
+<li>take over a session he didn't point at</li>
+<li>close any session</li>
+</ul></li>
+<li><strong>On failure</strong> (a launch that doesn't start, a takeover
+that is refused): the Library page shows the reason and the paste-in
+prompt.</li>
+</ul>
+<h2 id="success-metrics">Success Metrics</h2>
+<div class="callout callout-metric">
+<ul>
+<li>Ken closes LAHE tabs freely. After two weeks of use, he reports no
+longer keeping tabs open to hold documents.</li>
+<li>After a restart, Ken gets any document back with one request to an
+agent and one click.</li>
+<li>Given a description of any document from the past week, Ken finds it
+without typing a search.</li>
+<li>After two weeks, a script over LAHE's log reports Opens per working
+day, and how many of them were documents older than the default view. If
+Opens per working day stay near zero, the Library is not replacing
+tabs.</li>
+</ul>
+</div>
+<h2 id="ux-notes">UX Notes</h2>
+<ul>
+<li>Uses the St. Clair AI document style, like every other LAHE
+page.</li>
+<li>Works in light and dark.</li>
+<li>Desktop first. It should still read on a narrow window, since Ken
+often has the rail open beside it.</li>
+</ul>
+<h2 id="analytics--logging">Analytics / Logging</h2>
+<p>LAHE's log records each Open, Star, Pick up, and Launch, with the
+review id and the time. A script counts the last success metric from
+it.</p>
+<h2 id="rollout--flags">Rollout / Flags</h2>
+<p>No flag. The Library reads records that already exist, so it works on
+the full history from the first run.</p>
+<h2 id="open-questions">Open Questions</h2>
+<div class="callout callout-question">
+<ol type="1">
+<li><p>What is one row: a document, a review, or an agent session?
+Settled in the wireframe, on real data.</p>
+<ul>
+<li><strong>A review</strong> is one document (or one folder of pages)
+and the comments on it.</li>
+<li><strong>An agent session</strong> is one agent's stream of work. It
+can hold many reviews: the session writing this brief holds seven,
+including the crucible, this brief, the progress page, and the
+wireframes. When one agent hands work to another, the whole session
+moves.</li>
+</ul></li>
+</ol>
+</div>
+<div class="callout callout-question">
+<ol start="2" type="1">
+<li>How does the default view keep the volume manageable (a recent
+window, grouping by day, collapsing)? Settled in the wireframe.</li>
+</ol>
+</div>
+<div class="callout callout-question">
+<ol start="3" type="1">
+<li>Which app does Launch a new agent open (Terminal, iTerm, the Claude
+desktop app), and for which hosts (Claude Code, Codex)? Settled in the
+architecture.</li>
+</ol>
+</div>
+<div class="callout callout-question">
+<ol start="4" type="1">
+<li>How does an agent attach to the Library, so the page can name it
+before Ken clicks (R12a)? Two cases make this hard. A Library opened
+from a bookmark was opened by no agent. Over a day, several agents may
+have opened it. Settled in the architecture.</li>
+</ol>
+</div>
+<div class="callout callout-question">
+<ol start="5" type="1">
+<li>Can the Library launch an agent straight from the page, with no
+running agent in between, and what does that look like? This is in scope
+to explore. The architecture weighs it, and the security review looks at
+it, since it means a click on a web page starts a program on the
+laptop.</li>
+</ol>
+</div>
+<h2 id="pm-review">PM Review</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RF1</td>
+<td>Closing the last session kills the Library and its documents</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R10a: LAHE keeps serving while they are open</td>
+</tr>
+<tr>
+<td>RF2</td>
+<td>R9 contradicts R19</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R19 allows the worktree fallback only; R9 says it is the main repo's
+copy</td>
+</tr>
+<tr>
+<td>RF3</td>
+<td>Pick this up can cut off a working agent and move other
+documents</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R3 shows who is watching; R12b confirms first</td>
+</tr>
+<tr>
+<td>RF4</td>
+<td>Which agent receives Pick this up is undefined</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R12a names it before the click; how it attaches is Open Question
+4</td>
+</tr>
+<tr>
+<td>RF5</td>
+<td>Comments on an unwatched document reach nobody silently</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R10b; story reworded</td>
+</tr>
+<tr>
+<td>RF6</td>
+<td>"Open right now" is ambiguous</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R3 now has two signals: served, and agent watching</td>
+</tr>
+<tr>
+<td>RF7</td>
+<td>No click feedback; double click launches twice</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R12c</td>
+</tr>
+<tr>
+<td>RF8</td>
+<td>"The page never starts a program" is missing</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Added as a non-goal; R14 answers the no-agent case</td>
+</tr>
+<tr>
+<td>RF9</td>
+<td>AI Behavior presumes the Library has a rail</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Reworded at product level</td>
+</tr>
+<tr>
+<td>RF10</td>
+<td>Metrics disagree with R4; one is a test</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R4 now covers a week; cross-origin test moved to R18; log-counted
+metric added</td>
+</tr>
+<tr>
+<td>RF11</td>
+<td>No story for "stop feeling buried"</td>
+<td><span class="accepted">Accepted</span></td>
+<td>New story and R4a</td>
+</tr>
+<tr>
+<td>RF12</td>
+<td>R7 misses the worktree case and Open on a hidden row</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R7 reworded</td>
+</tr>
+<tr>
+<td>RF13</td>
+<td>Open can create a second tab that splits comments</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Added to R10</td>
+</tr>
+<tr>
+<td>RF14</td>
+<td>Launched agents need a recognizable name</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Added to R13</td>
+</tr>
+<tr>
+<td>RF15</td>
+<td>R5 in internal history, presumes row answer</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R5 reworded</td>
+</tr>
+<tr>
+<td>RF16</td>
+<td>Rollout compatibility note is build detail</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Cut</td>
+</tr>
+<tr>
+<td>RF17</td>
+<td>Search leaves out session name</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R6 covers everything a row shows</td>
+</tr>
+</tbody>
+</table></div>
+<hr class="reviews-divider" style="margin:4.5rem 0 1.5rem;border:0;border-top:3px solid #b0463b">
+
+<div class="reviews-banner">
+<p>The sections below are the full verbatim persona + human reviews for
+this document. They live in a separate <code>_reviews.md</code> file (so
+agents read the lean spec), merged here for review.</p>
+</div>
+<h1 id="reviews-lahe-library-brief">Reviews: LAHE Library brief</h1>
+<h2 id="pm-review-round-1">PM Review (Round 1)</h2>
+<p><strong>Short version:</strong> The brief is faithful to the crucible
+and mostly free of build detail. Three blockers:</p>
+<ul>
+<li>The Library can die under Ken the same way his tabs do today.</li>
+<li>R9 (opening a dead worktree document from the main repo) contradicts
+R19 (only serve files already under review).</li>
+<li>Pick this up can take a whole session away from an agent that is
+still working on it.</li>
+</ul>
+<p>The rest are gaps a user would hit in the first week, plus a few
+wording fixes.</p>
+<p>Two context notes. <code>docs/ongoing/PRD.md</code> does not exist in
+this repo, so there was no product bar to check against.
+<code>docs/diagrams/INDEX.md</code> does not exist either; I read
+<code>docs/diagrams/README.md</code> and
+<code>session_ownership.md</code> in its place.</p>
+<h3
+id="rf1-the-library-and-every-document-it-opened-stop-when-the-last-agent-session-closes">RF1.
+The Library and every document it opened stop when the last agent
+session closes</h3>
+<ul>
+<li><strong>severity:</strong> blocker</li>
+<li><strong>kind:</strong> defect</li>
+<li><strong>where:</strong> R8, R16, Non-Goals ("Not starting the helper
+at login"), job 4 in the crucible</li>
+<li><strong>what:</strong> The skill tells every agent to close its
+session when a review ends, and closing the last open session stops the
+shared helper. The brief never says what happens to the Library, or to
+documents opened from it, at that moment.</li>
+<li><strong>why:</strong> Ken reads a document opened from the Library
+while no agent is running, which R8 says is supported. Then some other
+agent finishes its review and closes its session. The helper stops, and
+the Library tab and every document tab it opened go dead. That is the
+dead-tab problem this feature exists to fix, and job 4 ("close a tab
+without worrying") fails with it.</li>
+<li><strong>fix:</strong> Add a requirement: "While the Library or a
+document opened from it is open in the browser, LAHE keeps serving them,
+even after the last agent session closes." If Ken would rather accept
+the helper stopping, say so as a non-goal, and have the page tell him
+plainly that LAHE has stopped, instead of showing a browser error.</li>
+</ul>
+<h3 id="rf2-r9-and-r19-contradict-each-other">RF2. R9 and R19 contradict
+each other</h3>
+<ul>
+<li><strong>severity:</strong> blocker</li>
+<li><strong>kind:</strong> defect</li>
+<li><strong>where:</strong> R9 (dead worktree document opens from the
+main repo), R19 (Open serves only files already under review)</li>
+<li><strong>what:</strong> The main-repo copy of a worktree file was
+never under review, so R19 forbids exactly what R9 requires.</li>
+<li><strong>why:</strong> The architecture will have to pick one. Either
+the worktree fallback is dropped, or the safety rule gets quietly
+widened with no one having decided how far.</li>
+<li><strong>fix:</strong> Reword R19: "Open serves only a file that was
+under review, or, for a worktree that no longer exists, the file at the
+same path in the repository that worktree belonged to. Nothing else."
+Then add to R9: "The page tells Ken it is showing the main repository's
+copy, which may differ from the version he reviewed." A merged builder's
+file is usually the same, but an abandoned worktree's is not, and old
+comments may not line up with the text.</li>
+</ul>
+<h3
+id="rf3-pick-this-up-can-take-a-whole-session-from-an-agent-that-is-still-working">RF3.
+Pick this up can take a whole session from an agent that is still
+working</h3>
+<ul>
+<li><strong>severity:</strong> blocker</li>
+<li><strong>kind:</strong> risk</li>
+<li><strong>where:</strong> R12, R13, AI Behavior ("Never ... take over
+a session he didn't point at")</li>
+<li><strong>what:</strong> A takeover moves the whole session, with
+every review in it, and stops the old agent's monitor. Clicking one row
+points at one document, not at the session or at the other documents
+inside it.</li>
+<li><strong>why:</strong> Ken clicks Pick this up on a document that
+another agent is actively answering. That agent is cut off mid-work, and
+several other documents move with it without Ken knowing. The AI
+Behavior rule does not stop this, because the click counts as
+pointing.</li>
+<li><strong>fix:</strong> Add two requirements:
+<ul>
+<li>"Each row shows whether an agent is watching that document right
+now, and which one."</li>
+<li>"Pick this up and Launch a new agent on a document that a live agent
+is watching ask Ken to confirm first. The confirmation names that agent
+and lists the other documents that move with it."</li>
+</ul></li>
+</ul>
+<h3 id="rf4-it-is-not-defined-which-agent-receives-pick-this-up">RF4. It
+is not defined which agent receives Pick this up</h3>
+<ul>
+<li><strong>severity:</strong> important</li>
+<li><strong>kind:</strong> defect</li>
+<li><strong>where:</strong> R12, R13, R14, R16</li>
+<li><strong>what:</strong> R12 sends Pick this up to "the agent that
+opened the Library." R16 lets Ken open the Library from a bookmark,
+which no agent opened. Over a day, several agents may each have opened
+the Library too.</li>
+<li><strong>why:</strong> From a bookmark, the page either has no target
+or picks one Ken cannot see. The work lands in the wrong chat, or the
+fallback in R14 (no agent listening) fires every time he uses the
+bookmark.</li>
+<li><strong>fix:</strong> Add a requirement: "Before Ken clicks, the
+page names the agent that will receive Pick this up and Launch a new
+agent. When no agent is attached, the buttons say so ahead of time, not
+after the click." Leave how an agent attaches to the Library to the
+architecture, and add it to Open Questions.</li>
+</ul>
+<h3
+id="rf5-a-document-opened-without-an-agent-takes-comments-that-reach-nobody-silently">RF5.
+A document opened without an agent takes comments that reach nobody,
+silently</h3>
+<ul>
+<li><strong>severity:</strong> important</li>
+<li><strong>kind:</strong> risk</li>
+<li><strong>where:</strong> R8, User Stories ("open a past document ...
+so that I can read and comment on it right away")</li>
+<li><strong>what:</strong> Open works without an agent, but nothing says
+what happens to a comment Ken leaves on that document before someone
+picks it up.</li>
+<li><strong>why:</strong> The skill's first gotcha is that "comments on
+a page ... reach nobody" is the failure users hate most. Ken writes
+three comments, waits, and gets no answer, with nothing on screen
+telling him why.</li>
+<li><strong>fix:</strong> Add a requirement: "When no agent is watching
+a document opened from the Library, its rail says so, keeps Ken's
+comments, and offers Pick this up and the paste-in prompt from the
+rail." Change the user story to "read it right away, and comment knowing
+when an agent will see it."</li>
+</ul>
+<h3 id="rf6-open-right-now-means-three-different-things">RF6. "Open
+right now" means three different things</h3>
+<ul>
+<li><strong>severity:</strong> important</li>
+<li><strong>kind:</strong> defect</li>
+<li><strong>where:</strong> R3, Solution Outline step 3</li>
+<li><strong>what:</strong> The phrase could mean the document is being
+served, is open in a browser tab, or has an agent watching it. These are
+three separate states.</li>
+<li><strong>why:</strong> Ken uses this column for two decisions: "can I
+close this tab" and "is an agent on it." A single ambiguous flag answers
+neither, and each builder will pick a different meaning.</li>
+<li><strong>fix:</strong> Replace it with two plain signals: "being
+served now (Open will reuse it)" and "agent watching (and which one)."
+Tie the second to RF3. Drop "open in a tab" unless the wireframe finds a
+way to show it.</li>
+</ul>
+<h3
+id="rf7-the-page-never-says-a-click-was-received-and-a-double-click-can-launch-two-agents">RF7.
+The page never says a click was received, and a double click can launch
+two agents</h3>
+<ul>
+<li><strong>severity:</strong> important</li>
+<li><strong>kind:</strong> defect</li>
+<li><strong>where:</strong> R12, R13, AI Behavior ("one agent per
+click")</li>
+<li><strong>what:</strong> Pick this up goes to the agent "as ordinary
+work," so the agent may be busy for a while. Nothing on the page shows
+the request is waiting, and nothing stops a second click.</li>
+<li><strong>why:</strong> Ken clicks, sees nothing, and clicks again.
+With Launch, "one agent per click" then means two agents on one session,
+and the second one fences the first.</li>
+<li><strong>fix:</strong> Add a requirement: "After Pick this up or
+Launch, the row shows that the request is waiting, then which agent took
+it. A second click on the same row while one is waiting does nothing and
+says so."</li>
+</ul>
+<h3
+id="rf8-the-rule-that-the-page-never-starts-a-program-itself-is-missing">RF8.
+The rule that the page never starts a program itself is missing</h3>
+<ul>
+<li><strong>severity:</strong> important</li>
+<li><strong>kind:</strong> risk</li>
+<li><strong>where:</strong> R13, R14, Non-Goals</li>
+<li><strong>what:</strong> Crucible premise 2 settled that "the page
+itself never starts anything," and the crucible's open question left the
+no-agent case open. The brief implies the answer in R14 but never states
+the rule.</li>
+<li><strong>why:</strong> The architecture phase could reopen "the
+helper launches an agent itself" as the easy fix for the no-agent case.
+That is the riskiest thing this feature could add, and nothing in the
+brief would stop it.</li>
+<li><strong>fix:</strong> Add a non-goal: "The Library page and the
+helper never start an agent or any other program. Only a running agent
+does, on Ken's click." Mark the crucible's no-agent question as answered
+by R14.</li>
+</ul>
+<h3
+id="rf9-the-ai-behavior-section-decides-the-architecture-the-library-has-a-rail">RF9.
+The AI Behavior section decides the architecture: the Library has a
+rail</h3>
+<ul>
+<li><strong>severity:</strong> important</li>
+<li><strong>kind:</strong> defect</li>
+<li><strong>where:</strong> AI Behavior (the "Library's rail" appears
+twice), Open Questions</li>
+<li><strong>what:</strong> Replying <code>not_handled</code> "on the
+Library's rail" assumes the Library is itself a review in an agent's
+session. That is Approach A's shape, which Ken rejected. The section
+also names internal steps like "arms its wake channel" and "drains the
+catch-up list."</li>
+<li><strong>why:</strong> The architect will read this as a settled
+design choice. It also mixes build steps into a product doc, and the
+skill already owns those steps.</li>
+<li><strong>fix:</strong> Say it at product level: "The agent tells Ken,
+on the Library page, which document it picked up or where it launched
+the new agent. On failure, the page shows the reason and the paste-in
+prompt." Replace the takeover detail with "the agent takes the session
+over the way the skill describes." Leave how messages reach the page to
+the architecture.</li>
+</ul>
+<h3
+id="rf10-success-metrics-disagree-with-r4-and-one-is-a-test-not-a-metric">RF10.
+Success metrics disagree with R4, and one is a test, not a metric</h3>
+<ul>
+<li><strong>severity:</strong> important</li>
+<li><strong>kind:</strong> defect</li>
+<li><strong>where:</strong> Success Metrics, R4, Analytics /
+Logging</li>
+<li><strong>what:</strong> R4 keeps one day's volume scannable. The
+metric promises one screen for a whole week, which is 100 or more
+documents at Ken's pace. "Zero requests from other origins" is a test
+result. The Analytics section says the log records actions, then says
+the metric is checked by asking Ken, so the log checks nothing.</li>
+<li><strong>why:</strong> A metric that contradicts a requirement cannot
+be passed. A metric with no measurement cannot be failed. Neither tells
+Ken whether the feature worked.</li>
+<li><strong>fix:</strong>
+<ul>
+<li>Align the find metric with R4, or state it as a task: "Ken finds any
+document from the past week, given a description of it, without typing a
+search."</li>
+<li>Move the cross-origin line into R18 as its acceptance test.</li>
+<li>Add one metric the log can answer, produced by a script from the
+log: "After two weeks, how many Opens per working day, and how many of
+them were documents older than the default view." A number near zero
+means the Library is not replacing tabs.</li>
+</ul></li>
+</ul>
+<h3
+id="rf11-no-user-story-or-requirement-covers-the-stop-feeling-buried-job">RF11.
+No user story or requirement covers the "stop feeling buried" job</h3>
+<ul>
+<li><strong>severity:</strong> important</li>
+<li><strong>kind:</strong> defect</li>
+<li><strong>where:</strong> User Stories; crucible job 3</li>
+<li><strong>what:</strong> The crucible names four jobs. Stories cover
+finding a document, opening it, and closing tabs safely. Nothing covers
+"the pile should feel smaller, not just be listed."</li>
+<li><strong>why:</strong> The wireframe will be judged on scannability
+alone. The volume job is the one Ken used his strongest words about
+("overwhelmed").</li>
+<li><strong>fix:</strong> Add a story: "As Ken, I want the Library to
+show me what still needs me (documents with waiting comments, starred
+ones) before the rest, so that the pile feels finite." Give it a
+requirement the wireframe must meet: "The default view separates
+documents that need Ken from documents that don't."</li>
+</ul>
+<h3
+id="rf12-r7-hide-missing-files-has-no-answer-for-the-worktree-case-or-for-open-on-a-hidden-row">RF12.
+R7 (hide missing files) has no answer for the worktree case or for Open
+on a hidden row</h3>
+<ul>
+<li><strong>severity:</strong> minor</li>
+<li><strong>kind:</strong> defect</li>
+<li><strong>where:</strong> R7, R9</li>
+<li><strong>what:</strong> A document whose worktree is gone but whose
+main-repo copy exists is "missing" under R7 and "openable" under R9.
+When Ken shows a truly missing document, nothing says what Open
+does.</li>
+<li><strong>why:</strong> Rows Ken could open get hidden, and a revealed
+row offers a button that fails.</li>
+<li><strong>fix:</strong> Reword R7: "A document is missing only when
+neither its file nor its main-repository copy exists. Missing documents
+are hidden by default, with a way to show them. On a missing row, Open
+is unavailable and says why. Star still works."</li>
+</ul>
+<h3
+id="rf13-open-can-create-the-split-comments-tab-the-skill-warns-about">RF13.
+Open can create the split-comments tab the skill warns about</h3>
+<ul>
+<li><strong>severity:</strong> minor</li>
+<li><strong>kind:</strong> risk</li>
+<li><strong>where:</strong> R10</li>
+<li><strong>what:</strong> R10 reuses the running server, but Open still
+opens a new tab, even when the document is already open in another
+tab.</li>
+<li><strong>why:</strong> The skill's second gotcha is that two tabs on
+one document split the comments. The Library would make that easy.</li>
+<li><strong>fix:</strong> Add to R10: "When the document is already
+being served, the page says so and warns that a second tab splits the
+comments." Leave whether it can bring the existing tab forward to the
+architecture.</li>
+</ul>
+<h3
+id="rf14-the-crucible-asked-for-launched-agents-to-have-a-recognizable-name-the-brief-dropped-it">RF14.
+The crucible asked for launched agents to have a recognizable name; the
+brief dropped it</h3>
+<ul>
+<li><strong>severity:</strong> minor</li>
+<li><strong>kind:</strong> defect</li>
+<li><strong>where:</strong> R13, Open Questions item 3</li>
+<li><strong>what:</strong> The crucible's open question includes
+"whether the new agent gets a name you can recognize." The brief's open
+question leaves it out.</li>
+<li><strong>why:</strong> After three launches Ken has three terminal
+windows and cannot tell which is which. That is the same naming problem
+this feature solves for documents.</li>
+<li><strong>fix:</strong> Add it back to Open Questions, or add to R13:
+"The launched agent's session is named after the document, so the rail
+and <code>lahe session list</code> show a name Ken recognizes."</li>
+</ul>
+<h3
+id="rf15-r5-is-written-in-internal-history-and-it-presumes-the-answer-to-what-is-one-row">RF15.
+R5 is written in internal history, and it presumes the answer to "what
+is one row"</h3>
+<ul>
+<li><strong>severity:</strong> minor</li>
+<li><strong>kind:</strong> taste</li>
+<li><strong>where:</strong> R5</li>
+<li><strong>what:</strong> "The old one-review-per-page registration"
+means nothing to a reader who wasn't there. "Show together" quietly
+settles part of Open Question 1 (what is one row).</li>
+<li><strong>why:</strong> Ken has to decode it, and the wireframe is
+told the answer before it asks the question.</li>
+<li><strong>fix:</strong> "Reviews from before Sep 16, when each page in
+a folder got its own review, appear as one document, the way they would
+be recorded today. How that shows as rows is settled with Open Question
+1."</li>
+</ul>
+<h3 id="rf16-cut-the-rollouts-compatibility-note">RF16. Cut the
+rollout's compatibility note</h3>
+<ul>
+<li><strong>severity:</strong> minor</li>
+<li><strong>kind:</strong> taste</li>
+<li><strong>where:</strong> Rollout / Flags ("older helpers ignore
+it")</li>
+<li><strong>what:</strong> How older helpers treat a new stored field is
+build detail.</li>
+<li><strong>why:</strong> It adds nothing Ken needs, and the
+architecture owns it.</li>
+<li><strong>fix:</strong> Keep "No flag. It works on the full history
+from the first run." Drop the last sentence.</li>
+</ul>
+<h3 id="rf17-search-leaves-out-the-agent-session-name">RF17. Search
+leaves out the agent session name</h3>
+<ul>
+<li><strong>severity:</strong> minor</li>
+<li><strong>kind:</strong> taste</li>
+<li><strong>where:</strong> R6, Non-Goals ("Search covers what a row
+shows")</li>
+<li><strong>what:</strong> Rows may be grouped by agent session (Open
+Question 1), and sessions now carry a human name. R6 does not search
+it.</li>
+<li><strong>why:</strong> Ken often remembers the agent ("the style
+systems one") better than the file. If the wireframe shows session
+names, the non-goal promises they are searchable and R6 does not
+deliver.</li>
+<li><strong>fix:</strong> Change R6 to "title, file name, folder, and
+agent session name," or to "everything a row shows," so the wireframe's
+choice carries through.</li>
+</ul>
+</body>
+</html>

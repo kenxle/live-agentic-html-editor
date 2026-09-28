@@ -2,8 +2,6 @@
 
 **Summary:** A page that lists every document ever reviewed in LAHE, so Ken can browse them, bring one back with its comments and rail, and close tabs without worrying. Open and Star act directly from the page. Picking a document up, or launching a fresh agent on it, goes through an agent.
 
-**Docs:** [Progress](http://127.0.0.1:55480/04_progress_lahe_library-fdf092f7193a770f.html) · [Ideas page](http://127.0.0.1:55480/DOCUMENT_INDEX_IDEAS-b09cd11f2a84063f.html) · [Crucible](http://127.0.0.1:55480/00_crucible_lahe_library-56928901ee317935.html) · [PM review](http://127.0.0.1:55480/01_brief_lahe_library_reviews-9a16a4ec86995c20.html) · [Wireframes](http://127.0.0.1:54222/index.html)
-
 ## Context
 
 LAHE is now how Ken reads almost everything his agents produce: 20 or more documents a working day. Every review is kept on disk with its file path, page title, dates, owning agent session, and full comment history. Nothing lists them.
@@ -12,8 +10,8 @@ Each document is served at an address with a random port. Close the tab, or rest
 
 The idea was pressure-tested on two LAHE pages:
 
-- [the ideas page](../../ongoing/DOCUMENT_INDEX_IDEAS.md)
-- [the crucible](00_crucible_lahe_library.md), which chose a live Library page inside LAHE whose Open and Star buttons act directly (Approach B)
+- [the ideas page](http://127.0.0.1:55480/DOCUMENT_INDEX_IDEAS-b09cd11f2a84063f.html)
+- [the crucible](00_crucible.html), which chose a live Library page inside LAHE whose Open and Star buttons act directly (Approach B)
 
 ```mermaid
 flowchart TD
@@ -33,11 +31,13 @@ The key design question, for the wireframe: **what is one row?** A document, a r
 
 ## Non-Goals
 
+::: callout-nongoal
 - Keeping old addresses alive. A reopened document can have a different port, that's not a big deal. If you can also keep the same port, that would be fine too.
 - Deleting or archiving. Every review stays on disk.
 - Starting LAHE at login. After a restart, an agent starts LAHE, and the Library works from then on.
 - Searching inside documents. Search covers what a row shows.
 - Replacing `lahe session list`, which stays the tool agents use.
+:::
 
 ## User & Context
 
@@ -78,10 +78,15 @@ The key design question, for the wireframe: **what is one row?** A document, a r
 
 ### Listing
 
+::: callout-req
 **R1.** The Library lists every review on disk.
+:::
 
+::: callout-req
 **R2.** Each row shows a name Ken would recognize: the page title when there is one. When the title is missing or shared with another row, the row also shows the folder and file name.
+:::
 
+::: callout-req
 **R3.** Each row shows:
 
 - where the document lives (project folder)
@@ -90,56 +95,101 @@ The key design question, for the wireframe: **what is one row?** A document, a r
 - whether the review was ended with the rail's end-review button
 - whether the document is being served now, which means Open will reuse it
 - whether an agent is watching it, and which one
+:::
 
+::: callout-req
 **R4.** The Library keeps a week's volume (100 or more documents at Ken's pace) findable without typing a search. The grouping and default view are settled in the wireframe.
+:::
 
+::: callout-req
 **R4a.** The default view separates documents that need Ken (waiting comments, starred) from documents that don't.
+:::
 
+::: callout-req
 **R5.** Before Sep 16, LAHE wrongly gave each page in a folder its own review. The Library shows those old reviews together, the way LAHE records a folder today.
+:::
 
+::: callout-req
 **R6.** Search filters rows by everything a row shows (title, file name, folder, agent session name), across all documents regardless of age.
+:::
 
+::: callout-req
 **R7.** A document is missing only when its file is gone and, for a deleted worktree, the same file is also gone from the main repository (R9). Missing documents are hidden by default, with a way to show them. On a missing row, Open is unavailable and says why. Star still works.
+:::
 
 ### Acting on a row
 
+::: callout-req
 **R8. Open** brings the document back with its rail and its existing comments, and opens it in a new tab. By default an agent is watching it when it opens: Open includes the hand-over that Pick this up does (R12). When no agent is available, the document still opens and is readable, and the rail says no agent is watching (R10b).
+:::
 
+::: callout-req
 **R9.** A document that lived in a worktree that is gone opens from the same path in the repository that worktree belonged to, when that file exists there. The page tells Ken he is seeing the main repository's copy, which may differ from the version he reviewed.
+:::
 
+::: callout-req
 **R10.** A document that is already being served opens at its current address instead of starting a second copy. A second tab on the same document is handled the way LAHE already handles two tabs; the Library adds nothing of its own.
+:::
 
+::: callout-req
 **R10a.** While the Library, or a document opened from it, is open in the browser, LAHE keeps serving them, even after the last agent session closes.
+:::
 
+::: callout-req
 **R10b.** When no agent is watching a document opened from the Library, its rail says so and keeps Ken's comments. It offers Pick this up, and a prompt Ken can paste into any agent.
+:::
 
+::: callout-req
 **R11. Star** and unstar act directly from the page. Stars survive a LAHE restart.
+:::
 
+::: callout-req
 **R12. Pick this up** uses LAHE's existing hand-over, not a new one: the agent attached to the Library takes the document's session over the way a takeover already works, so Ken's comments on it reach that agent.
+:::
 
+::: callout-req
 **R12a.** Before Ken clicks, the page names the agent that will receive Pick this up and Launch a new agent. When no agent is attached, the buttons say so ahead of time, not after the click.
+:::
 
+::: callout-req
 **R12b.** An agent session can hold several documents, and they all move together. So Pick this up and Launch a new agent on a document a live agent is watching ask Ken to confirm first. The confirmation names that agent and lists the other documents that would move.
+:::
 
+::: callout-req
 **R12c.** After Pick this up or Launch, the row shows that the request is waiting, then which agent took it, or why it failed. A second click on the same row while one is waiting does nothing and says so.
+:::
 
+::: callout-req
 **R13. Launch a new agent** asks the agent attached to the Library to start a fresh agent, already pointed at that document's session. The new agent's session is named after the document, so Ken can tell launched agents apart.
+:::
 
+::: callout-req
 **R14.** When no agent is attached to the Library, Pick this up and Launch a new agent say so, and offer the same hand-off message the rail already copies for pasting into any agent.
+:::
 
 ### Reaching the Library
 
+::: callout-req
 **R15.** One command opens the Library. It starts LAHE if it isn't running.
+:::
 
+::: callout-req
 **R16.** The Library has a fixed address Ken can bookmark. It loads whenever LAHE is running.
+:::
 
+::: callout-req
 **R17.** The agent skill tells agents how to open the Library and how to handle Pick this up and Launch a new agent.
+:::
 
 ### Safety
 
+::: callout-req
 **R18.** Every action on the page goes through the same checks as any other request to LAHE. A website open in the same browser cannot open, star, or launch anything. Tests send each action from another website and check that LAHE refuses it.
+:::
 
+::: callout-req
 **R19.** Open serves only a file that was under review, or, for a worktree that no longer exists, the file at the same path in the repository that worktree belonged to (R9). Nothing else. The Library cannot be used to serve an arbitrary path.
+:::
 
 ## AI Behavior
 
@@ -155,10 +205,12 @@ Agents act on two of the Library's buttons.
 
 ## Success Metrics
 
+::: callout-metric
 - Ken closes LAHE tabs freely. After two weeks of use, he reports no longer keeping tabs open to hold documents.
 - After a restart, Ken gets any document back with one request to an agent and one click.
 - Given a description of any document from the past week, Ken finds it without typing a search.
 - After two weeks, a script over LAHE's log reports Opens per working day, and how many of them were documents older than the default view. If Opens per working day stay near zero, the Library is not replacing tabs.
+:::
 
 ## UX Notes
 
@@ -176,18 +228,28 @@ No flag. The Library reads records that already exist, so it works on the full h
 
 ## Open Questions
 
+::: callout-question
 1. What is one row: a document, a review, or an agent session? Settled in the wireframe, on real data.
 
    - **A review** is one document (or one folder of pages) and the comments on it.
    - **An agent session** is one agent's stream of work. It can hold many reviews: the session writing this brief holds seven, including the crucible, this brief, the progress page, and the wireframes. When one agent hands work to another, the whole session moves.
+:::
 
+::: callout-question
 2. How does the default view keep the volume manageable (a recent window, grouping by day, collapsing)? Settled in the wireframe.
+:::
 
+::: callout-question
 3. Which app does Launch a new agent open (Terminal, iTerm, the Claude desktop app), and for which hosts (Claude Code, Codex)? Settled in the architecture.
+:::
 
+::: callout-question
 4. How does an agent attach to the Library, so the page can name it before Ken clicks (R12a)? Two cases make this hard. A Library opened from a bookmark was opened by no agent. Over a day, several agents may have opened it. Settled in the architecture.
+:::
 
+::: callout-question
 5. Can the Library launch an agent straight from the page, with no running agent in between, and what does that look like? This is in scope to explore. The architecture weighs it, and the security review looks at it, since it means a click on a web page starts a program on the laptop.
+:::
 
 ## PM Review
 
