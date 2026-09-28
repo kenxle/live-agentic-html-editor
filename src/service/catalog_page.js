@@ -134,7 +134,8 @@ var PAGE_STYLE = [
   "--lib-tint-warn:color-mix(in srgb,var(--purple) 45%,var(--ink));",
   "--lib-ok:var(--sage-fill);--lib-warn:color-mix(in srgb,var(--purple) 30%,var(--white));",
   "--lib-focus:var(--sage-fill);",
-  "--lib-attn:color-mix(in srgb,var(--purple) 30%,var(--white));",
+  // Saturated enough to stand apart from the quiet grey dots on a dark page.
+  "--lib-attn:color-mix(in srgb,var(--purple) 55%,#c9b6ff);--lib-dot:var(--lib-faint);",
   "--lib-primary:#93a7ea;--lib-on-primary:#12151a}}",
   "body{background:var(--lib-bg);color:var(--lib-fg);font-size:var(--text-small);line-height:1.5}",
   ":focus-visible{outline-color:var(--lib-focus)}",

@@ -49,6 +49,13 @@ const { buildWorld } = require("./support/catalog_world");
 
 const protocol = require("../../src/shared/protocol.js");
 
+// Pick this up sits behind the row's Hand to agent menu.
+async function pickUp(rowLocator) {
+  const menu = rowLocator.locator('[data-act="menu"]');
+  if ((await menu.getAttribute("aria-expanded")) !== "true") await menu.click();
+  await rowLocator.locator('[data-act="pickup"]').click();
+}
+
 test.describe.configure({ mode: "serial" });
 
 const POST_ROUTES = ["catalog.open", "catalog.star", "catalog.request"];
@@ -335,7 +342,7 @@ async function libraryStillWorks(context, starDoc) {
     await expect(row.locator('[data-act="star"]')).toHaveAttribute("aria-pressed", "true");
     expect(JSON.parse(world.catalogFileText()).stars).toHaveProperty(world.docs[starDoc].review);
 
-    await row.locator('[data-act="pickup"]').click();
+    await pickUp(row);
     await pollUntil(() => world.requestsFileText() !== before.requests, {
       message: "the real Library's pick-up to reach catalog-requests.jsonl"
     });

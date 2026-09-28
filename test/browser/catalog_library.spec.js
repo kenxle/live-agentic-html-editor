@@ -33,6 +33,13 @@ const { pollUntil, pollPage } = require("../helpers/poll");
 const { buildWorld, REPO_ROOT, CLI } = require("./support/catalog_world");
 
 const protocol = require("../../src/shared/protocol.js");
+
+// Pick this up sits behind the row's Hand to agent menu.
+async function pickUp(rowLocator) {
+  const menu = rowLocator.locator('[data-act="menu"]');
+  if ((await menu.getAttribute("aria-expanded")) !== "true") await menu.click();
+  await rowLocator.locator('[data-act="pickup"]').click();
+}
 const VM = require("../../src/layer/catalog/view_model.js");
 
 const SHOTS = path.join(REPO_ROOT, "docs", "features", "20260922.02_lahe_library");
@@ -234,7 +241,7 @@ test.describe("the Library, end to end, with a stub agent on the real CLI", () =
     await openLibrary(page);
     const target = row(page, world.docs.pick.review);
     refreshStubAgent();
-    await target.locator('[data-act="pickup"]').click();
+    await pickUp(target);
     await expect(target.locator(".lib-note-text")).toHaveText(fill(T.WAITING, { agent: AGENT_NAME }));
 
     const req = await requestFor(world.docs.pick.review, "pickup");
@@ -246,7 +253,7 @@ test.describe("the Library, end to end, with a stub agent on the real CLI", () =
 
     // A second click while it waits sends nothing and says so.
     refreshStubAgent();
-    await target.locator('[data-act="pickup"]').click();
+    await pickUp(target);
     await expect(target.locator(".lib-note-text")).toHaveText(fill(T.ALREADY_WAITING, { agent: AGENT_NAME }));
     expect(world.drainRequests().filter((r) => r.review === world.docs.pick.review)).toHaveLength(1);
 
@@ -266,7 +273,7 @@ test.describe("the Library, end to end, with a stub agent on the real CLI", () =
     await openLibrary(page);
     const target = row(page, world.docs.watched.review);
     refreshStubAgent();
-    await target.locator('[data-act="pickup"]').click();
+    await pickUp(target);
 
     const dialog = page.locator("#lahe-catalog-confirm");
     await expect(dialog).toBeVisible();
