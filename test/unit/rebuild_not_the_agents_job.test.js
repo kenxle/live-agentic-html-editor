@@ -558,3 +558,217 @@ test("touchedSince is the gate, and it fails toward leaving the item alone", () 
   // An unreadable time is not evidence of anything.
   assert.equal(handledCheck.touchedSince(meta, anEdit({ updated_at: "not a date", created_at: "not a date" })), true);
 });
+
+// ---------------------------------------------------------------------------
+// The check is per edit, not per review
+// ---------------------------------------------------------------------------
+//
+// The gate above covers the REVIEW: one write anywhere disarms it for every
+// item. An agent that fixes one of five edits and answers handled to all five
+// used to slip the other four past it. So each edit is also judged on its own
+// passage: the item's BEFORE, found as whole blocks on the built page exactly
+// once, means nobody touched that passage, and then a missing after convicts.
+// If the before is gone, the agent changed that passage in some words of its
+// own, and the reply stands.
+
+const FIVE = [
+  "The first point is short.",
+  "The second point is vague.",
+  "The third point is enough.",
+  "The fourth point is long.",
+  "The fifth point is late."
+];
+
+function fiveParagraphs(lines) {
+  return "# Guide\n\n## One\n\n" + lines.join("\n\n") + "\n";
+}
+
+/** Several items, one handled line each, folded in one tick. */
+function foldAllHandled(setup, items) {
+  items.forEach(function (item) {
+    postItem(setup.log, "review-md", item);
+  });
+  items.forEach(function (item) {
+    appendReply(setup.dir, "review-md", item);
+  });
+  const projector = projection.createProjector({ dir: setup.dir, log: setup.log });
+  projector.tickReview("review-md");
+  const byId = {};
+  projection.itemsFrom(setup.log.read("review-md")).forEach(function (each) {
+    byId[each[record.FIELD.ID]] = each;
+  });
+  return items.map(function (item) {
+    return byId[item[record.FIELD.ID]];
+  });
+}
+
+function fiveEdits() {
+  return FIVE.map(function (line, i) {
+    return anEdit({
+      id: "itm_five_" + (i + 1),
+      before: line,
+      after: line.replace(/is \w+\.$/, "is now what the reviewer typed, number " + (i + 1) + ".")
+    });
+  });
+}
+
+function assertHeldOpen(folded, label) {
+  assert.equal(folded[record.FIELD.STATE], record.STATE.READY, label + " did not retire");
+  assert.equal(folded[record.FIELD.HANDLED_NOT_ON_PAGE], true, label + " says why");
+}
+
+function assertRetired(folded, label) {
+  assert.equal(folded[record.FIELD.STATE], record.STATE.HANDLED, label + " retired");
+  assert.equal(folded[record.FIELD.HANDLED_NOT_ON_PAGE], false, label + " carries no finding");
+}
+
+test("five edits, one fixed, five handled replies: the four untouched stay open and the fixed one retires", () => {
+  const setup = markdownReview(fiveParagraphs(FIVE));
+  const items = fiveEdits();
+  // The agent fixes the third, exactly as the reviewer typed it, and nothing
+  // else. The write it made is newer than every item, which is what used to
+  // disarm the check for all five.
+  const fixed = FIVE.slice();
+  fixed[2] = items[2][record.FIELD.AFTER];
+  editSource(setup, fiveParagraphs(fixed));
+
+  const folded = foldAllHandled(setup, items);
+  assertRetired(folded[2], "the fixed third edit");
+  [0, 1, 3, 4].forEach(function (i) {
+    assertHeldOpen(folded[i], "untouched edit " + (i + 1));
+    assert.ok(record.isUnansweredReady(folded[i]), "edit " + (i + 1) + " is back on the drain list");
+  });
+});
+
+test("an agent that rewords the passage in its own words retires, even with other edits held", () => {
+  const setup = markdownReview(fiveParagraphs(FIVE));
+  const items = fiveEdits();
+  // The reviewer asked for "is now what the reviewer typed, number 3". The
+  // agent wrote "is plenty". That is its call to make and the reviewer's to
+  // judge, never this check's.
+  const reworded = FIVE.slice();
+  reworded[2] = "The third point is plenty.";
+  editSource(setup, fiveParagraphs(reworded));
+
+  const folded = foldAllHandled(setup, items);
+  assertRetired(folded[2], "the reworded third edit");
+  assertHeldOpen(folded[0], "the untouched first edit");
+});
+
+test("an agent that kept the reviewer's old sentence and added its own is not held: the passage is whole blocks, not a substring", () => {
+  const setup = markdownReview(fiveParagraphs(FIVE));
+  const item = anEdit({ before: FIVE[2], after: "The third point is enough, and it is ready." });
+  // The old sentence is still a substring of the page. The paragraph is not the
+  // paragraph it was, so somebody worked on it.
+  const expanded = FIVE.slice();
+  expanded[2] = "The third point is enough. The agent says it is ready now.";
+  editSource(setup, fiveParagraphs(expanded));
+
+  assertRetired(foldHandled(setup, item), "the expanded passage");
+});
+
+test("a before found twice on the page is ambiguous and passes: the check never guesses", () => {
+  const lines = ["To be decided.", "The middle paragraph.", "To be decided."];
+  const setup = markdownReview(fiveParagraphs(lines));
+  const item = anEdit({ before: "To be decided.", after: "Decided: we ship Tuesday." });
+  // Something else was written, so the review-level gate is open, and the
+  // passage cannot be told apart from its twin.
+  const other = lines.slice();
+  other[1] = "The middle paragraph, reworked.";
+  editSource(setup, fiveParagraphs(other));
+
+  assertRetired(foldHandled(setup, item), "the ambiguous edit");
+});
+
+test("a before that was on the page twice when the reviewer edited it passes, even once only one copy is left", () => {
+  const lines = ["To be decided.", "The middle paragraph.", "To be decided."];
+  const setup = markdownReview(fiveParagraphs(lines));
+  const item = anEdit({ before: "To be decided.", after: "Decided: we ship Tuesday." });
+  // The reviewer's page recorded that these words were not unique.
+  item[record.FIELD.REGION] = { ref: { text_unique: false }, label: null, lost: false };
+  // The agent changed the right copy in its own words. One "To be decided."
+  // is left, and it is the OTHER one.
+  const done = lines.slice();
+  done[0] = "Settled: Tuesday.";
+  editSource(setup, fiveParagraphs(done));
+
+  assertRetired(foldHandled(setup, item), "the edit whose twin is left");
+});
+
+test("a short before is judged as a whole block: a unique heading left alone is held, one the agent expanded retires", () => {
+  const body = "# Guide\n\n## Summary\n\nThe first paragraph.\n\n## Other\n\nA second paragraph.\n";
+  const renamed = anEdit({ before: "Summary", after: "Overview" });
+
+  const untouched = markdownReview(body);
+  editSource(untouched, body.replace("A second paragraph.", "A second paragraph, reworked."));
+  assertHeldOpen(foldHandled(untouched, renamed), "the untouched heading");
+
+  const expanded = markdownReview(body);
+  editSource(expanded, body.replace("## Summary", "## Summary of findings"));
+  assertRetired(foldHandled(expanded, anEdit({ before: "Summary", after: "Overview" })), "the expanded heading");
+});
+
+test("a reviewer who trimmed words is held when the passage is untouched, though the trimmed words are on the page inside it", () => {
+  const setup = markdownReview(fiveParagraphs(FIVE));
+  const item = anEdit({ before: FIVE[2], after: "The third point" });
+  const other = FIVE.slice();
+  other[0] = "The first point, reworked by the agent.";
+  editSource(setup, fiveParagraphs(other));
+
+  assertHeldOpen(foldHandled(setup, item), "the untouched trim");
+});
+
+test("a reviewer who split a paragraph in two is not held once the agent made the split", () => {
+  const setup = markdownReview(fiveParagraphs(FIVE));
+  const item = anEdit({ before: FIVE[2], after: FIVE[2] + "\n\nA new paragraph the reviewer added." });
+  const split = FIVE.slice();
+  split[2] = FIVE[2] + "\n\nA new paragraph the reviewer added.";
+  editSource(setup, fiveParagraphs(split));
+
+  // The first block of the after IS the before, so the before is still on the
+  // page once, but the after runs past it.
+  assertRetired(foldHandled(setup, item), "the applied split");
+});
+
+test("an edit whose before and after differ only in typography is never held on its passage", () => {
+  const setup = markdownReview(fiveParagraphs(["It's the first point.", "The second point."]));
+  const item = anEdit({ before: "It's the first point.", after: "It’s the first point." });
+  editSource(setup, fiveParagraphs(["It's the first point.", "The second point, reworked."]));
+
+  assertRetired(foldHandled(setup, item), "the typography-only edit");
+});
+
+test("an insertion has no passage to find, so only the review-level gate can hold it", () => {
+  const item = function () {
+    return anEdit({ before: "", after: "A paragraph the reviewer added." });
+  };
+
+  // Nothing written since: the agent changed nothing at all, which is the
+  // original failure, and it is still caught.
+  const idle = markdownReview(fiveParagraphs(FIVE));
+  assertHeldOpen(foldHandled(idle, item()), "the insertion with nothing written");
+
+  // Something written: there is no passage to say it was not this one.
+  const busy = markdownReview(fiveParagraphs(FIVE));
+  const other = FIVE.slice();
+  other[0] = "The first point, reworked by the agent.";
+  editSource(busy, fiveParagraphs(other));
+  assertRetired(foldHandled(busy, item()), "the insertion after a write");
+});
+
+test("a reviewer who only added words is not held when the agent kept the old block and added its own", () => {
+  // test/browser/reverted_edit.spec.js, in unit form. The reviewer's after is
+  // their before plus a sentence ("is enough"). The agent left the block as it
+  // was and put the sentence in a paragraph of its own, in its own words ("is
+  // plenty"). The before is still on the page, and that proves nothing: an
+  // edit that only adds words keeps its before whether or not the work was done.
+  const lines = ["Warm up before every session.", "Stretch after."];
+  const setup = markdownReview(fiveParagraphs(lines));
+  const item = anEdit({
+    before: "Warm up before every session.",
+    after: "Warm up before every session. Five minutes of easy jogging is enough."
+  });
+  editSource(setup, fiveParagraphs(["Warm up before every session.", "Five minutes of easy jogging is plenty.", "Stretch after."]));
+
+  assertRetired(foldHandled(setup, item), "the addition the agent made its own way");
+});

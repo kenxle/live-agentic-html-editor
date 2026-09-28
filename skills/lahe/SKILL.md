@@ -280,11 +280,16 @@ re-render is LAHE's job too: edit the `.md` and the page follows.
 #### A handled reply is checked
 
 A `handled` reply for a hand edit is compared against the built page before it
-retires anything, and only when nothing in the source or the page has been
-written since the reviewer typed those words. Do real work and your wording is
-never second-guessed. Answer `handled` having changed nothing and it is caught.
+retires anything. It is held only when the item's `after_full` text is not in
+that page and the passage was left alone:
 
-When the check fires and the item's `after_full` text is not in that page:
+- the item's `before` is still on the page, exactly once, or
+- nothing in the source or the page was written since the reviewer typed.
+
+Change the passage in any words and your reply stands. Fix one of five edits and
+answer `handled` to all five, and the four you did not touch are held.
+
+When the check holds an item:
 
 - the item stays `ready` and carries `handled_not_on_page: true`
 - the reviewer's card says the change has not reached their page
@@ -295,10 +300,9 @@ the source until the page really shows the words, then reply again. Saying an
 item is done is not a way to close it. Comments are not checked: there is
 nothing to look for.
 
-The check reads the built page, so it can be wrong. The renderer may eat a
-character the reviewer typed, or you may have carried their meaning in words of
-your own. When their text genuinely cannot appear on the page as written, reply
-`not_handled` and say which of those it is. A `not_handled` reply is never
+The check reads the built page, so it can be wrong: the renderer may eat a
+character the reviewer typed. When their text genuinely cannot appear on the
+page as written, reply `not_handled` and say why. A `not_handled` reply is never
 checked, it takes the item off your drain list, and the reviewer reads your
 reason and decides. Do not keep replying `handled` into a check that keeps
 refusing it.

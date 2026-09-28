@@ -12,26 +12,27 @@
 // for a HAND EDIT is checked against the built page before it is allowed to
 // retire anything.
 //
-// WHAT THE CHECK IS. Two halves, and an item is only held open when BOTH say so.
+// WHAT THE CHECK IS. An item is held open only when its `after` (the words the
+// reviewer put on the page) is not in the page's text AND something says the
+// item's own passage was never touched. Either of two things can say so:
 //
 //   1. NOTHING WAS WRITTEN. No file this review is built from, source or page,
 //      has been written since the reviewer committed this wording. See
-//      touchedSince below: this is the gate, and it decides whether the words
-//      are consulted at all.
-//   2. THE WORDS ARE NOT THERE. The item's `after` is the words the reviewer
-//      put on the page, and they are not in the page's text.
+//      touchedSince below. It covers the whole review, so it catches an agent
+//      that did nothing at all, whatever shape the item is.
+//   2. THE PASSAGE IS STILL THERE. The item's `before` is on the page as whole
+//      blocks, exactly once. This one is per item, so an agent that fixes one
+//      of five edits and answers handled to all five has the other four held.
+//      See verdictFor below.
 //
-// The second half alone is far too strict to act on. It is a containment test
-// rather than an equality test, so a reflowed paragraph or the same change made
-// in three other places still passes, but an agent that carried the reviewer's
-// meaning in its own words does not, and holding a finished item open on that
-// is the tool arguing with an agent that did the work. The first half is what
-// keeps it honest: an agent that touched anything made a change, and grading
-// whether it is the RIGHT change belongs to the browser's page check, which has
-// the reviewer's live page in front of it and its own once-per-reopen guards.
-// What is left is the one thing this exists for: the agent that answered
-// handled having changed nothing at all.
-//
+// Containment alone is far too strict to act on: an agent that carried the
+// reviewer's meaning in its own words fails it, and holding a finished item
+// open on that is the tool arguing with an agent that did the work. Both
+// witnesses above only speak when the passage was left alone. An agent that
+// changed the passage, in any words, has removed its `before`, and the reply
+// stands. Grading whether it is the RIGHT change belongs to the browser's page
+// check, which has the reviewer's live page in front of it.
+
 // TOLERANT OF TYPOGRAPHY. A Markdown source holds a straight quote where the
 // built HTML holds a curly one, and an agent that types the sentence correctly
 // would otherwise fail this check forever. normalize.foldTypography is the
@@ -44,9 +45,12 @@
 //    in words and the agent decides what that means on the page. Only an item
 //    carrying the reviewer's own after-text can be checked at all.
 //  - A DELETE. Its after is empty, so "is it there" has no answer.
-//  - A REVIEW SOMETHING HAS WRITTEN TO. touchedSince, the gate above. An agent
-//    that edited the source or the page did work, and this is not the thing
-//    that grades it.
+//  - A PASSAGE THE AGENT CHANGED. Its `before` is gone from the page, so the
+//    agent did work there, and this is not the thing that grades it.
+//  - A PASSAGE IT CANNOT PLACE, once something was written: an insertion (no
+//    `before`), a `before` found twice or recorded as not unique (D9: never
+//    guess), and an edit that only added words, whose old block can stand
+//    untouched while the agent does the work beside it. See passageOf below.
 //  - A REVERT, AND A TOOL ROUND. A take-back asks for text to be taken OUT, and
 //    a page-check reopen is the browser's own check already mid-conversation
 //    with the agent. See checkable below for both, and for the shapes with no
@@ -116,6 +120,143 @@ function comparable(text) {
   } catch (error) {
     return null;
   }
+}
+
+/**
+ * The page's words, one entry per block, each folded the way comparable folds.
+ *
+ * textOf separates blocks with a paragraph break, so splitting on it gives the
+ * blocks back, and folding each one with foldTypography is the same fold as
+ * comparable: `blocksOf(x).join(" ") === comparable(x)` for a page with no
+ * head. The head is dropped because the reviewer never sees it, and a Markdown
+ * render's <title> repeats its first heading, which would make every edit to
+ * that heading look like a twin.
+ *
+ * @returns {string[]|null}
+ */
+function blocksOf(text) {
+  try {
+    var body = String(text).replace(/<head\b[^>]*>[\s\S]*?<\/head\s*>/i, "");
+    return decodeEntities(normalize.textOf(body))
+      .split(normalize.PARAGRAPH_BREAK)
+      .map(function (block) {
+        return normalize.foldTypography(block);
+      })
+      .filter(function (block) {
+        return block.length > 0;
+      });
+  } catch (error) {
+    return null;
+  }
+}
+
+/**
+ * The item's own passage, as the blocks its `before` was.
+ *
+ * An edit is made on one block, and `before` is that block's text as the
+ * reviewer's page read it, so the passage is found as WHOLE blocks and never as
+ * a substring. That is what keeps an agent's own wording safe: an agent that
+ * kept the old sentence and added one of its own has changed the block, and a
+ * substring test would say it had not.
+ *
+ * Answers null when there is no passage to look for:
+ *  - an empty `before`: an insertion has no old words on the page;
+ *  - a `before` the reviewer's page recorded as not unique
+ *    (`region.ref.text_unique === false`): once the agent changes the right
+ *    twin, the other one is still there and would look untouched;
+ *  - an `after` that holds the whole `before`: the reviewer only ADDED words.
+ *    An agent can do that work and leave the old block exactly as it was,
+ *    putting the new words in a block of its own and in its own wording
+ *    (test/browser/reverted_edit.spec.js), so the old block still being there
+ *    proves nothing. This also covers a typography-only or break-only edit,
+ *    whose before and after fold to the same words.
+ *
+ * @returns {string[]|null}
+ */
+function passageOf(item) {
+  var before = item[record.FIELD.BEFORE];
+  if (typeof before !== "string" || !before.trim()) return null;
+  var region = item[record.FIELD.REGION];
+  if (region && region.ref && region.ref.text_unique === false) return null;
+  var foldedBefore = comparable(before);
+  var foldedAfter = comparable(item[record.FIELD.AFTER]);
+  if (!foldedBefore || !foldedAfter || foldedAfter.indexOf(foldedBefore) !== -1) return null;
+  var blocks = blocksOf(before);
+  return blocks && blocks.length ? blocks : null;
+}
+
+/** Every block index at which the passage starts, in one page's blocks. */
+function passageStarts(blocks, passage) {
+  var starts = [];
+  for (var i = 0; i + passage.length <= blocks.length; i += 1) {
+    var whole = true;
+    for (var j = 0; j < passage.length; j += 1) {
+      if (blocks[i + j] !== passage[j]) {
+        whole = false;
+        break;
+      }
+    }
+    if (whole) starts.push(i);
+  }
+  return starts;
+}
+
+/**
+ * The handled verdict for one item against the pages it could be on.
+ *
+ * Held open (false) only when the after is not on the page AND one of these
+ * says the item's own passage was never touched:
+ *  - NOTHING WAS WRITTEN since the reviewer committed (the review-level gate);
+ *  - THE BEFORE IS STILL THERE, as whole blocks, exactly once across the pages.
+ *    Gone means the agent changed it, in whatever words, and the reply stands.
+ *    Twice means the check cannot tell which one the reviewer meant, and it
+ *    never guesses (D9).
+ *
+ * When the passage is found, an after that sits wholly inside it does not count
+ * as the change: a reviewer who trimmed words from a paragraph has an after
+ * that the untouched paragraph already contains.
+ *
+ * @param {string[]} pages the HTML of every page read
+ * @param {object} item
+ * @param {boolean} nothingWritten
+ * @returns {boolean|null} true shown, false held open, null not ours to grade
+ */
+function verdictFor(pages, item, nothingWritten) {
+  var needle = comparable(item[record.FIELD.AFTER]);
+  if (!needle) return null;
+  var passage = passageOf(item);
+  var read = [];
+  var found = [];
+  pages.forEach(function (html) {
+    var blocks = blocksOf(html);
+    if (!blocks) return;
+    read.push(blocks);
+    if (!passage) return;
+    passageStarts(blocks, passage).forEach(function (start) {
+      found.push({ page: read.length - 1, start: start });
+    });
+  });
+  if (read.length === 0) return null;
+
+  var untouched = found.length === 1 ? found[0] : null;
+  if (!untouched && !nothingWritten) return null;
+
+  for (var p = 0; p < read.length; p += 1) {
+    var blocks = read[p];
+    var hay = blocks.join(" ");
+    var from = -1;
+    var to = -1;
+    if (untouched && untouched.page === p) {
+      from = blocks.slice(0, untouched.start).join(" ").length + (untouched.start > 0 ? 1 : 0);
+      to = from + passage.join(" ").length;
+    }
+    var at = hay.indexOf(needle);
+    while (at !== -1) {
+      if (!(at >= from && at + needle.length <= to)) return true;
+      at = hay.indexOf(needle, at + 1);
+    }
+  }
+  return false;
 }
 
 /**
@@ -201,30 +342,16 @@ function pageFilesFor(meta, item) {
  * committed this wording?
  *
  * THE SCOPE IS THE REVIEW, NOT THE ITEM. Every file the review is built from is
- * stat'ed, so one write anywhere disarms the check for every item in that
- * review until the reviewer commits something newer. That is deliberate, and it
- * is also the shape the reported failure arrived in: an agent that fixes item
- * one and then answers handled to items one through five leaves two to five
- * unguarded, because the file it wrote for item one is newer than all of them.
- * Narrowing it to the passage an item points at would mean resolving a record's
- * region inside a source file, which is the anchor engine's job and not
- * something the helper can do from a path and an mtime.
+ * stat'ed, so one write anywhere turns this witness off for every item in that
+ * review. On its own that let an agent fix item one, answer handled to items
+ * one through five, and slip two to five past the check. The per-item witness
+ * in verdictFor (the item's own `before`, still on the page) closes that.
  *
- * THE SECOND HALF OF THE RULE, and the one that keeps the first half honest.
- * Containment asks "are the reviewer's words on the page", and the answer is
- * legitimately no in more cases than it is dishonestly no: the agent reflowed
- * the paragraph, split it in two, used its own wording for the same meaning,
- * or the renderer ate a character. Holding an item open on that is the tool
- * arguing with an agent that did the work, and the reviewer is the one who
- * pays for the argument.
- *
- * So the words are only allowed to convict when nothing moved. An agent that
- * touched the source or the page made a change, and judging whether it is the
- * RIGHT change is the browser's page check, which has the reviewer's live page
- * in front of it and its own once-per-reopen guards. This check is for the one
- * thing the page check cannot be relied on to catch in time: the agent that
- * answered handled having changed nothing at all, which is the reported
- * failure in its entirety.
+ * WHY IT IS KEPT alongside the per-item witness. When nothing at all was
+ * written, the agent changed nothing, and that holds for shapes the per-item
+ * witness cannot place: an insertion, a `before` with a twin, a page whose
+ * blocks do not line up with the reviewer's. It never second-guesses real work,
+ * because it only speaks when there was none.
  *
  * Unknown times answer true, which means "not our business". Failing toward
  * leaving the item alone is the same direction every other doubt here fails.
@@ -304,28 +431,18 @@ function createHandledCheck(options) {
       return linkedPageShows(meta, reviewId, item, pagePath);
     }
 
-    // Something was written since the reviewer committed these words, so an
-    // agent did something and what it did is not this check's to grade.
-    if (touchedSince(meta, item)) return null;
-
-    var needle = comparable(item[record.FIELD.AFTER]);
-    if (!needle) return null;
-
-    var read = 0;
-    var files = pageFilesFor(meta, item);
-    for (var i = 0; i < files.length; i += 1) {
-      var html;
+    // Both halves of the per-item rule live in verdictFor: the review-level
+    // gate (nothing written) and the item's own passage (its before, still on
+    // the page exactly once).
+    var pages = [];
+    pageFilesFor(meta, item).forEach(function (file) {
       try {
-        html = fs.readFileSync(files[i], "utf8");
+        pages.push(fs.readFileSync(file, "utf8"));
       } catch (error) {
-        continue;
+        // An unreadable file is not evidence either way.
       }
-      read += 1;
-      var hay = comparable(html);
-      if (hay && hay.indexOf(needle) !== -1) return true;
-    }
-    if (read === 0) return null;
-    return false;
+    });
+    return verdictFor(pages, item, !touchedSince(meta, item));
   }
 
   function linkedPageShows(meta, reviewId, item, pagePath) {
@@ -338,14 +455,12 @@ function createHandledCheck(options) {
     if (!file) return null;
     var at = item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT];
     var committedAt = typeof at === "string" ? Date.parse(at) : NaN;
-    if (!Number.isFinite(committedAt)) return null;
+    var nothingWritten;
     try {
-      if (fs.statSync(file).mtimeMs > committedAt) return null;
+      nothingWritten = Number.isFinite(committedAt) && fs.statSync(file).mtimeMs <= committedAt;
     } catch (error) {
       return null;
     }
-    var needle = comparable(item[record.FIELD.AFTER]);
-    if (!needle) return null;
     var html;
     try {
       // The page the reviewer sees is the render, so a Markdown file is read
@@ -357,9 +472,7 @@ function createHandledCheck(options) {
     } catch (error) {
       return null;
     }
-    var hay = comparable(html);
-    if (!hay) return null;
-    return hay.indexOf(needle) !== -1;
+    return verdictFor([html], item, nothingWritten);
   }
 
   return { pageShows: pageShows, rebuild: rebuild };
@@ -369,6 +482,9 @@ module.exports = {
   decodeEntities: decodeEntities,
   touchedSince: touchedSince,
   comparable: comparable,
+  blocksOf: blocksOf,
+  passageOf: passageOf,
+  verdictFor: verdictFor,
   checkable: checkable,
   pageFilesFor: pageFilesFor,
   createHandledCheck: createHandledCheck
