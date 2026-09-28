@@ -409,6 +409,72 @@
     return null;
   }
 
+  // ---------------------------------------------------------------------------
+  // The element a selection is about
+  // ---------------------------------------------------------------------------
+  //
+  // A selection's region is the smallest element holding the words the
+  // reviewer selected. It used to be the element around both ENDS of the
+  // range, and those are not the same thing: a triple-click selects a
+  // paragraph with a range that ends at the very start of the NEXT block, so
+  // the element around both ends was their shared parent. On a flat page that
+  // is <main> or <body>. The record then carried the whole page as its
+  // region, its stamp went on the whole page, and any change anywhere could
+  // wash every character (docs/features/20260928.03_oversized_records,
+  // cause 3). Ends that select no visible character are not part of the
+  // selection, so they do not get a say.
+
+  /**
+   * The first and last text nodes the range selects at least one visible
+   * character of, or null when it selects none.
+   */
+  function selectedTextEnds(range) {
+    var within = range && range.commonAncestorContainer;
+    if (!within) return null;
+    var doc = within.ownerDocument || (within.nodeType === 9 ? within : null);
+    if (!doc || typeof doc.createTreeWalker !== "function") return null;
+    var walker = doc.createTreeWalker(within, 4 /* NodeFilter.SHOW_TEXT */);
+    var first = null;
+    var last = null;
+    var node = within.nodeType === 3 ? within : walker.nextNode();
+    while (node) {
+      if (typeof range.intersectsNode !== "function" || range.intersectsNode(node)) {
+        var data = String(node.data || "");
+        var from = node === range.startContainer ? range.startOffset : 0;
+        var to = node === range.endContainer ? range.endOffset : data.length;
+        if (/\S/.test(data.slice(from, to))) {
+          if (!first) first = node;
+          last = node;
+        }
+      }
+      node = within.nodeType === 3 ? null : walker.nextNode();
+    }
+    return first ? { first: first, last: last } : null;
+  }
+
+  /**
+   * The element a selection is about: the smallest element holding every
+   * character it selects. Falls back to the element around the range's ends
+   * when it selects no visible character at all.
+   *
+   * @param {Range} range
+   * @returns {Element|null}
+   */
+  function selectionElementOf(range) {
+    if (!range) return null;
+    var ends = selectedTextEnds(range);
+    var node = range.commonAncestorContainer;
+    if (ends) {
+      var doc = ends.first.ownerDocument;
+      var tight = doc.createRange();
+      tight.setStart(ends.first, 0);
+      tight.setEnd(ends.last, 0);
+      node = tight.commonAncestorContainer;
+    }
+    while (node && node.nodeType !== 1) node = node.parentNode;
+    return node && node.nodeType === 1 ? node : null;
+  }
+
   function headingTextFor(element, doc) {
     if (!element) return null;
     var body = doc ? doc.body : null;
@@ -1987,7 +2053,7 @@
       var range = selection.getRangeAt(0).cloneRange();
       var quote = String(selection.toString()).trim();
       if (!quote) return null;
-      var element = blockOf(range.commonAncestorContainer);
+      var element = selectionElementOf(range);
       var handle = openBox({
         page: src.page,
         quote: quote,
@@ -3235,6 +3301,7 @@
     // The heading walk's pure half, exported for test/unit/comments_surface.test.js.
     HEADING_SCAN_CAP: HEADING_SCAN_CAP,
     headingTextFor: headingTextFor,
+    selectionElementOf: selectionElementOf,
     createComments: createComments
   };
 });

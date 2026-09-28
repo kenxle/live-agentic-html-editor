@@ -2135,7 +2135,15 @@
     var scope = engine.scopeOf(ctx.root, null);
     if (!scope) return null;
     var found = engine.findByStamp(scope, ref.stamp);
-    return found.length === 1 ? found[0] : null;
+    if (found.length !== 1) return null;
+    // A stamp on an element that holds the whole page says nothing about which
+    // passage the comment is on. Its words are every word on the page, so any
+    // change anywhere reads as "the passage was reworded", and taking that as a
+    // certain place painted the entire page as the comment's passage
+    // (docs/features/20260928.03_oversized_records, cause 3). Not certain, so
+    // the pass goes on to the honest answer: lost, and the point ladder's turn.
+    if (typeof engine.isPageSized === "function" && engine.isPageSized(found[0], scope)) return null;
+    return found[0];
   }
 
   /**

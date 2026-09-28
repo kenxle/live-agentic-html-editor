@@ -281,6 +281,66 @@
     return Object.prototype.hasOwnProperty.call(SAFE_SCHEMES, beforeColon.toLowerCase());
   }
 
+  // ---------------------------------------------------------------------------
+  // Embedded values: a data: URL is content, not a pointer to it
+  // ---------------------------------------------------------------------------
+  //
+  // An image written into the page as a data: URL carries the picture itself as
+  // text, often hundreds of kilobytes of it. A record stores such a value ONCE,
+  // whole, and refers to it everywhere else (docs/features/
+  // 20260928.03_oversized_records, cause 2). These two functions are the whole
+  // vocabulary for that: what counts as embedded, and the fixed-size name a
+  // comparison can use in place of the value.
+
+  function isEmbeddedValue(value) {
+    return typeof value === "string" && /^\s*data:/i.test(value);
+  }
+
+  /**
+   * A 64-bit digest of a string, as 16 hex characters. cyrb53's mixing (bryc,
+   * public domain) over both 32-bit lanes, kept whole rather than cut to 53
+   * bits. Pure arithmetic on UTF-16 code units, so the browser and Node agree
+   * on every value.
+   *
+   * It is a NAME for a value, never a check that two values are safe to treat
+   * as one for a write: the uniqueness predicate still decides that, over
+   * candidates found on the page.
+   */
+  function digestOf(value) {
+    var s = String(value);
+    var h1 = 0xdeadbeef;
+    var h2 = 0x41c6ce57;
+    for (var i = 0; i < s.length; i += 1) {
+      var ch = s.charCodeAt(i);
+      h1 = Math.imul(h1 ^ ch, 2654435761);
+      h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return hex8(h2 >>> 0) + hex8(h1 >>> 0);
+  }
+
+  function hex8(n) {
+    var out = n.toString(16);
+    while (out.length < 8) out = "0" + out;
+    return out;
+  }
+
+  /**
+   * The fixed-size stand-in for an embedded value inside a comparison key:
+   * `embedded:<media type>:<length>:<digest>`. The media type and the length
+   * are readable on their own ("image/png;base64", 171364), the digest tells
+   * two pictures of one size apart. A value that is not embedded is returned
+   * unchanged.
+   */
+  function embeddedName(value) {
+    if (!isEmbeddedValue(value)) return value;
+    var text = String(value).replace(/^\s+/, "");
+    var comma = text.indexOf(",");
+    var media = comma === -1 ? "" : text.slice(5, comma);
+    return "embedded:" + media + ":" + text.length + ":" + digestOf(text);
+  }
+
   function escapeAttrValue(value) {
     return String(value)
       .replace(/&/g, "&amp;")
@@ -1095,6 +1155,9 @@
     // the agent with the same escaping cleanMarkup uses, rather than spelling a
     // second one.
     escapeAttrValue: escapeAttrValue,
+    isEmbeddedValue: isEmbeddedValue,
+    digestOf: digestOf,
+    embeddedName: embeddedName,
     canonicalTarget: canonicalTarget,
     isLoopbackHost: isLoopbackHost,
     targetSlug: targetSlug,

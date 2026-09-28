@@ -78,16 +78,23 @@
   var browser = typeof window !== "undefined" && !!window.document;
   if (browser) {
     root.LAHE = root.LAHE || {};
-    root.LAHE.anchor = factory(root.LAHE.normalize, root.LAHE.uniqueness, root.LAHE.regions, root.LAHE.markers);
+    root.LAHE.anchor = factory(
+      root.LAHE.normalize,
+      root.LAHE.uniqueness,
+      root.LAHE.regions,
+      root.LAHE.markers,
+      root.LAHE.record
+    );
   } else {
     module.exports = factory(
       require("../shared/normalize.js"),
       require("../shared/uniqueness.js"),
       require("../shared/regions.js"),
-      require("../shared/markers.js")
+      require("../shared/markers.js"),
+      require("../shared/record.js")
     );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (normalize, uniqueness, regions, markers) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (normalize, uniqueness, regions, markers, record) {
   "use strict";
 
   // Elements that carry no reviewable prose. Their text would otherwise join
@@ -487,8 +494,20 @@
    * The value is field-delimited, so a longer value in one field can never read
    * as a whole other element's signature: "img|src=a.png|alt=|srcset=" is not a
    * substring of "img|src=a.png|alt=Square|srcset=".
+   *
+   * AN EMBEDDED VALUE IS NAMED, NOT COPIED. A data: URL is the picture itself,
+   * and the record already stores it whole in subject.src. The signature holds
+   * normalize.embeddedName of it instead: media type, length and a 64-bit
+   * digest of the whole value, so two pictures that differ anywhere are two
+   * signatures, and two copies of one picture are one, exactly as before. The
+   * uniqueness predicate still decides every write over candidates found on
+   * the page (D9); only the size of the key changed.
+   *
+   * `legacy` computes the signature the way a reference minted before this
+   * stored it, with the value in full. resolve() asks for it only when the
+   * reference's own probe is written that way. See isLegacyProbe.
    */
-  function signatureOf(node) {
+  function signatureOf(node, legacy) {
     if (!isElement(node)) return "";
     var tag = tagOf(node);
     var names = signatureAttrNamesFor(tag);
@@ -498,6 +517,7 @@
     for (i = 0; i < names.length; i += 1) {
       var value = normalize.normalizeText(attrOf(node, names[i]) || "");
       if (value) said = true;
+      if (!legacy) value = normalize.embeddedName(value);
       parts.push(names[i] + "=" + value);
     }
     if (Object.prototype.hasOwnProperty.call(DESCRIBED_BY_CHILD_TAGS, tag)) {
@@ -770,24 +790,24 @@
    *     its OWN attributes, so it almost never matches a descendant's, but when
    *     it somehow does, the inner element is the region, exactly as with text.
    */
-  function findSignatureMatches(node, probe, out) {
+  function findSignatureMatches(node, probe, out, legacy) {
     var matchedBelow = false;
     var kids = elementChildren(node);
     for (var i = 0; i < kids.length; i += 1) {
       var kid = kids[i];
       if (isElementOnly(kid)) {
-        if (matchKind(signatureOf(kid), probe)) {
+        if (matchKind(signatureOf(kid, legacy), probe)) {
           out.push(kid);
           matchedBelow = true;
         }
         continue;
       }
       if (isSkipped(kid)) continue;
-      if (findSignatureMatches(kid, probe, out)) matchedBelow = true;
+      if (findSignatureMatches(kid, probe, out, legacy)) matchedBelow = true;
     }
     if (matchedBelow) return true;
     if (!isElement(node)) return false;
-    if (matchKind(signatureOf(node), probe)) {
+    if (matchKind(signatureOf(node, legacy), probe)) {
       out.push(node);
       return true;
     }
@@ -798,11 +818,22 @@
     return ref && ref.probe_kind === PROBE.ELEMENT ? PROBE.ELEMENT : PROBE.TEXT;
   }
 
+  /**
+   * Was this signature written before embedded values were named? Such a probe
+   * carries a data: URL in full after one of its `name=` fields. Records on
+   * disk still hold them, and they must still find their image, so the
+   * candidates are asked for the same old spelling. A new signature never
+   * contains "=data:": every such value is written as "=embedded:".
+   */
+  function isLegacyProbe(kind, probe) {
+    return kind === PROBE.ELEMENT && typeof probe === "string" && /(^|\|)[^|=]+=\s*data:/i.test(probe);
+  }
+
   // What this candidate says about itself, in whichever content the reference
   // was minted from. One function, so the walk, the match kind on the
   // descriptor, and mint's own check cannot drift apart.
-  function contentOf(node, kind) {
-    return kind === PROBE.ELEMENT ? signatureOf(node) : textOf(node);
+  function contentOf(node, kind, legacy) {
+    return kind === PROBE.ELEMENT ? signatureOf(node, legacy) : textOf(node);
   }
 
   /** Elements the page author named with the same region attribute. */
@@ -897,7 +928,7 @@
   function stampTextAgrees(ref, node, accept) {
     var probe = typeof ref.probe === "string" ? normalize.normalizeText(ref.probe) : "";
     if (!probe) return true;
-    var raw = probeKindOf(ref) === PROBE.ELEMENT ? signatureOf(node) : textOf(node);
+    var raw = contentOf(node, probeKindOf(ref), isLegacyProbe(probeKindOf(ref), probe));
     var now = normalize.normalizeText(raw || "");
     if (!now) return false;
     if (now === probe || now.indexOf(probe) !== -1) return true;
@@ -932,12 +963,13 @@
   function candidatesFor(ref, scope) {
     var probe = typeof ref.probe === "string" ? normalize.normalizeText(ref.probe) : "";
     var kind = probeKindOf(ref);
+    var legacy = isLegacyProbe(kind, probe);
     var out = [];
     if (!isElement(scope) || !probe) return out;
 
     var nodes = [];
     if (kind === PROBE.ELEMENT) {
-      findSignatureMatches(scope, probe, nodes);
+      findSignatureMatches(scope, probe, nodes, legacy);
     } else {
       findMatches(scope, probe, nodes);
     }
@@ -966,7 +998,7 @@
       var context = foundContextFor(node, scope, ref);
       out.push({
         key: node,
-        match: matchKind(contentOf(node, kind), probe),
+        match: matchKind(contentOf(node, kind, legacy), probe),
         prefix: context.prefix,
         suffix: context.suffix,
         structure: typeof ref.path === "string" && ref.path === pathOf(node, scope),
@@ -1022,16 +1054,17 @@
   function candidateWorkspace(ref, scope) {
     var kind = probeKindOf(ref);
     var probe = typeof ref.probe === "string" ? normalize.normalizeText(ref.probe) : "";
+    var legacy = isLegacyProbe(kind, probe);
     var nodes = [];
     if (isElement(scope) && probe) {
-      if (kind === PROBE.ELEMENT) findSignatureMatches(scope, probe, nodes);
+      if (kind === PROBE.ELEMENT) findSignatureMatches(scope, probe, nodes, legacy);
       else findMatches(scope, probe, nodes);
     }
 
     var base = nodes.map(function (node) {
       return {
         key: node,
-        match: matchKind(contentOf(node, kind), probe),
+        match: matchKind(contentOf(node, kind, legacy), probe),
         structure: typeof ref.path === "string" && ref.path === pathOf(node, scope),
         heading: typeof ref.heading === "string" && ref.heading !== null && ref.heading === headingOf(node, scope),
         rings: Object.create(null)
@@ -1225,6 +1258,21 @@
     // rail can say something useful at the moment it happens. The path and the
     // fingerprint were taken above and they describe exactly the element the
     // reviewer clicked.
+    //
+    // AND ITS CONTEXT IS ITS NEAREST NEIGHBOURS, not the last ring tried. The
+    // loop above leaves prefix and suffix at the widest ring it reached, which
+    // near the top of a document is the next whole sections of the page: 64 KB
+    // of "text after" on one comment on a Mermaid diagram, stored again on
+    // every save (docs/features/20260928.03_oversized_records). No ring made
+    // the region unique, so no ring's context earned its place. What is kept
+    // is the ring a text selection keeps when it is unique on the first try:
+    // one whole sibling each side, read from the nearest ring. It is what the
+    // point ladder reads as "text before" and "text after", and it is what
+    // tells the reviewer where a removed passage used to be.
+    var nearest = storedContextAt(contextTextsOf(element, scope, 0), 1);
+    ref.context_level = 0;
+    ref.prefix = nearest.prefix;
+    ref.suffix = nearest.suffix;
     ref.ok = true;
     ref.text_unique = false;
     ref.failure = null;
@@ -1357,15 +1405,35 @@
    * attributes left out. Not the subtree: an agent needs to recognize the
    * element in its source, and a whole <svg> body is a wall of path data.
    */
-  function openingTagOf(node) {
+  function openingTagOf(node, options) {
     if (!isElement(node)) return null;
+    var srcRef = options && typeof options.srcRef === "string" ? options.srcRef : null;
     var out = "<" + tagOf(node);
     var pairs = attrPairsOf(node);
     for (var i = 0; i < pairs.length; i += 1) {
       if (markers && typeof markers.isToolAttrName === "function" && markers.isToolAttrName(pairs[i].name)) continue;
-      out += " " + pairs[i].name + "=\"" + normalize.escapeAttrValue(pairs[i].value) + "\"";
+      // An embedded source is stored once, in subject.src; the tag points at
+      // it. See record.SUBJECT_SRC_REF.
+      var value =
+        srcRef && pairs[i].name === "src" && normalize.isEmbeddedValue(pairs[i].value) ? srcRef : pairs[i].value;
+      out += " " + pairs[i].name + "=\"" + normalize.escapeAttrValue(value) + "\"";
     }
     return out + ">";
+  }
+
+  // Media whose content is named by child <source> tags rather than, or as well
+  // as, its own src. The source list is part of what the element IS, so it
+  // rides along with the opening tag.
+  var MEDIA_TAGS = { video: 1, audio: 1, picture: 1 };
+
+  function sourceTagsOf(node) {
+    if (!Object.prototype.hasOwnProperty.call(MEDIA_TAGS, tagOf(node))) return "";
+    var out = "";
+    var kids = elementChildren(node);
+    for (var i = 0; i < kids.length; i += 1) {
+      if (tagOf(kids[i]) === "source") out += openingTagOf(kids[i]);
+    }
+    return out;
   }
 
   // The nearest page text around the element: the sibling after it if that one
@@ -1470,11 +1538,41 @@
     var scope = scopeOf(root, element);
     return {
       tag: tagOf(element),
+      // The one place a record keeps an embedded source, whole.
       src: attrOf(element, "src"),
       alt: attrOf(element, "alt"),
-      html: openingTagOf(element),
+      // The opening tag, minus the library's own attributes, plus any child
+      // <source> tags. An embedded src is written as record.SUBJECT_SRC_REF;
+      // record.subjectHtmlOf puts it back for whoever reads the tag.
+      html: openingTagOf(element, { srcRef: record.SUBJECT_SRC_REF }) + sourceTagsOf(element),
       near: nearTextOf(element, scope)
     };
+  }
+
+  /**
+   * Does this element hold every word the page has?
+   *
+   * The page itself does, and so does a wrapper around all of it: a <main> or
+   * a <div id="app"> with nothing beside it that has words. Such an element is
+   * never a passage. A comment whose region is one is about the page, so its
+   * stamp says nothing about where the comment is, and a paint over its whole
+   * contents washes every character the reviewer can see (docs/features/
+   * 20260928.03_oversized_records, cause 3).
+   *
+   * @param {Element} element
+   * @param {Element|Document} [root] the page; the element's own document
+   *   when omitted
+   * @returns {boolean}
+   */
+  function isPageSized(element, root) {
+    if (!isElement(element)) return false;
+    var tag = tagOf(element);
+    if (tag === "body" || tag === "html") return true;
+    var scope = scopeOf(root, element);
+    if (!isElement(scope)) return false;
+    if (element === scope) return true;
+    var words = textOf(element);
+    return !!words && words === textOf(scope);
   }
 
   return {
@@ -1486,6 +1584,7 @@
     NEAR_MAX: NEAR_MAX,
     signatureOf: signatureOf,
     subjectFor: subjectFor,
+    isPageSized: isPageSized,
     descriptorFor: descriptorFor,
     openingTagOf: openingTagOf,
     ordinalInSection: ordinalInSection,

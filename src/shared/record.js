@@ -862,6 +862,34 @@
     return { quote: null, prefix: null, suffix: null, heading: null, element: null, subject: null };
   }
 
+  // AN EMBEDDED SOURCE IS STORED ONCE, in subject.src, whole.
+  //
+  // An image written into the page as a data: URL is the picture itself as
+  // text. It used to be stored three times on one record: subject.src, inside
+  // subject.html, and inside the region's signature. 516 KB for one comment,
+  // written again on every save (docs/features/20260928.03_oversized_records).
+  // Ken's rule: store what identifies a thing once, and never cut it short.
+  //
+  // So subject.src keeps the value, the signature keeps a fixed-size name for
+  // it (normalize.embeddedName), and subject.html carries this pointer where
+  // the value would be. subjectHtmlOf puts the value back for any reader, so
+  // an agent is handed the same opening tag it always was. A record written
+  // before this carries the whole tag and no pointer, and reads unchanged.
+  var SUBJECT_SRC_REF = "lahe:subject.src";
+
+  /**
+   * The subject's opening tag with an embedded source put back in place.
+   *
+   * @param {Object|null} subject a context.subject
+   * @returns {string|null}
+   */
+  function subjectHtmlOf(subject) {
+    if (!subject || typeof subject.html !== "string") return null;
+    var pointer = ' src="' + SUBJECT_SRC_REF + '"';
+    if (subject.html.indexOf(pointer) === -1 || typeof subject.src !== "string") return subject.html;
+    return subject.html.split(pointer).join(' src="' + normalize.escapeAttrValue(subject.src) + '"');
+  }
+
   // Creates a record with every field present. Every field present always is
   // deliberate: the merge rule never has to distinguish "absent" from "null",
   // and an agent reading review.json sees a stable shape.
@@ -1616,6 +1644,8 @@
     nowIso: nowIso,
     emptyRegion: emptyRegion,
     emptyContext: emptyContext,
+    SUBJECT_SRC_REF: SUBJECT_SRC_REF,
+    subjectHtmlOf: subjectHtmlOf,
     emptyPage: emptyPage,
     pageFrom: pageFrom,
     pageKey: pageKey,

@@ -1005,6 +1005,44 @@ test("a comment whose element still carries the agent's stamp is found, not gues
   assert.equal(cards.notices[item.id], undefined, "with nothing on the card");
 });
 
+test("a stamp on an element holding the whole page is not a certain place for a comment", () => {
+  // Oversized records, cause 3 (docs/features/20260928.03_oversized_records).
+  // A selection that climbed to the page's own wrapper put its stamp on
+  // <main>. Every word on the page is that region's words, so ANY change
+  // anywhere read as "the passage was reworded, and the stamp says where it
+  // is", and the whole page was painted as the comment's passage. A stamp over
+  // the whole page says nothing about which passage the comment is on: the
+  // record is honestly lost, and nothing is painted over the page.
+  const item = fixtures.comment();
+  const blocks = [el("p", { text: "Still open" }), el("p", { text: "The next paragraph." }), el("p", { text: "The last one." })];
+  const main = el("main", { attrs: { "data-lahe-id": "e-page" }, children: blocks });
+  const root = el("body", { children: [main] });
+  const anchoredItem = anchored(item, main, root);
+  assert.equal(anchoredItem.region.ref.stamp, "e-page");
+
+  const highlights = fakeHighlights();
+  const cards = fakeCards();
+  const context = {
+    root: root,
+    items: [anchoredItem],
+    cards: cards,
+    document: fakeDocument(),
+    highlights: highlights,
+    pointing: fakePointing(null)
+  };
+
+  replay.resetCounters();
+  replay.noteSettling(0);
+  // Something else on the page changed. Not the passage the reviewer meant.
+  blocks[2].textContent = "The last one, edited by the agent for another comment.";
+
+  const outcome = replay.runPass(replay.REASON.MUTATION, context).results[0];
+
+  assert.notEqual(outcome.element, main, "the whole page is not where this comment lives");
+  assert.ok(anchoredItem.region.lost, "so the record says it could not be placed");
+  assert.equal(highlights.painted[item.id], undefined, "and the page is not washed");
+});
+
 test("an edit whose stamp points at different words is still refused", () => {
   const item = fixtures.edit();
   const page = pageOf([

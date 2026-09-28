@@ -61,11 +61,15 @@
   var browser = typeof window !== "undefined" && !!window.document;
   if (browser) {
     root.LAHE = root.LAHE || {};
-    root.LAHE.highlight = factory(root.LAHE.markers, root.LAHE.normalize);
+    root.LAHE.highlight = factory(root.LAHE.markers, root.LAHE.normalize, root.LAHE.anchor);
   } else {
-    module.exports = factory(require("../shared/markers.js"), require("../shared/normalize.js"));
+    module.exports = factory(
+      require("../shared/markers.js"),
+      require("../shared/normalize.js"),
+      require("./anchor.js")
+    );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, normalize) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, normalize, anchor) {
   "use strict";
 
   // The namespace. Every name the library registers starts with this, so a page
@@ -437,6 +441,27 @@
     return systemScheme(win);
   }
 
+  /**
+   * Is this range the whole contents of an element that holds the whole page?
+   *
+   * No passage is the whole page. A paint over all of it is the "every part of
+   * the page highlights after I leave a comment" report (docs/features/
+   * 20260928.03_oversized_records, cause 3): a region minted on <main> or
+   * <body>, then painted end to end by a whole-element paint. Every paint goes
+   * through this file, so the refusal is here once rather than at each caller.
+   * A range the reviewer drew over their own words (select all included)
+   * starts and ends inside text, and is never refused.
+   */
+  function coversWholePage(range) {
+    if (!anchor || typeof anchor.isPageSized !== "function" || !range) return false;
+    var start = range.startContainer;
+    if (!start || start !== range.endContainer || start.nodeType !== 1) return false;
+    if (range.startOffset !== 0) return false;
+    var count = start.childNodes ? start.childNodes.length : 0;
+    if (range.endOffset !== count) return false;
+    return anchor.isPageSized(start, start.ownerDocument || null);
+  }
+
   function createHighlights(options) {
     var opts = options || {};
     var doc = opts.document || (typeof document !== "undefined" ? document : null);
@@ -551,6 +576,9 @@
       if (!range || typeof range.cloneRange !== "function") {
         throw new TypeError("highlight.paint: a live Range is required");
       }
+      // Refused, and said so with null: the record, the card and the agent's
+      // copy are untouched; only the wash is withheld.
+      if (coversWholePage(range)) return null;
       var which = NAMES.indexOf(name) === -1 ? NAME.COMMENT : name;
       ensureStylesheet();
       var previous = painted[id];
@@ -610,7 +638,7 @@
       // A second click replaces the first rather than stacking two washes and
       // two timers, so the last thing clicked is the thing lit.
       clearEmphasis();
-      paint(EMPHASIS_KEY, range, NAME.EMPHASIS);
+      if (!paint(EMPHASIS_KEY, range, NAME.EMPHASIS)) return null;
       var g = global();
       var hold = typeof ms === "number" && ms > 0 ? ms : EMPHASIS_MS;
       if (g && typeof g.setTimeout === "function") {
@@ -683,7 +711,7 @@
       if (!supported()) return false;
       var id = changedKeyFor(key);
       clearChanged(key);
-      paint(id, range, NAME.CHANGED);
+      if (!paint(id, range, NAME.CHANGED)) return false;
       var hold = typeof ms === "number" && ms > 0 ? ms : CHANGED_MS;
       var g = global();
       if (!g || typeof g.setTimeout !== "function") return true;
@@ -925,6 +953,7 @@
   var shared = createHighlights();
 
   return {
+    coversWholePage: coversWholePage,
     PREFIX: PREFIX,
     NAME: NAME,
     NAMES: NAMES,
