@@ -151,9 +151,19 @@ Do not hand-convert Markdown to HTML or start a separate server; the
 renderer exists so that never happens.
 
 Relative images and local links work: they are served from the source folder,
-and a link to another local `.md` opens as another rendered page, marked
-read-only. Links stay source-true on disk; the renderer translates them for
-the browser at build time.
+and a link to another local `.md` opens as another rendered page. Links stay
+source-true on disk; the renderer translates them for the browser at build time.
+
+The rail follows the link (spec `docs/features/20260922.02_linked_docs_rail/`):
+
+- A linked document with its own review in this agent session redirects to
+  that review's page, so its earlier comments are there.
+- Otherwise it carries the rail of the review whose page linked to it, and a
+  comment there lands in that review naming the linked file on disk.
+- Nothing is created by the click: no review, no enrollment.
+- Only the files a page actually links to get the rail. Their neighbours in the
+  mounted folder, and anything hidden, do not.
+- An `--only` review keeps its links read-only.
 
 ## Use case 3: a document built from several sources
 

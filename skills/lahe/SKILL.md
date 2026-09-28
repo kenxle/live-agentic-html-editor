@@ -254,6 +254,10 @@ Work each item against this checklist. It is the contract's rules, said short.
   so the next rebuild does not bring it back.
 - **Links in a Markdown source stay as they are on disk.** Fix one only if it is
   wrong on disk too.
+- **A page under `/.lahe-source/` is a linked document.** The reviewer followed
+  a link and commented there. Its page's `linked_file` names that document on
+  disk: edit it, not the page that linked to it. If `linked_file` is null, ask
+  which file they mean.
 
 Then make the change in the source and rebuild. `handled` means the reviewer's
 page shows the change now, and for a hand edit that is checked rather than taken
