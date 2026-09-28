@@ -79,7 +79,53 @@ Security: the key (token) that lets a page send comments now reaches linked docu
 
 ## Progress
 
-(none yet)
+**2026-09-28: built on branch `linked-docs-rail`, tests first. `npm run gate:unit` green; `test/browser/linked_docs_rail.spec.js` green (Chromium). Not yet reviewed, not merged.**
+
+![The rail on a linked page, after a comment](linked_page_rail.png)
+
+The screenshot is from the browser spec's own run: the hub's rail on the draft spec reached by clicking its link, with the comment just made there.
+
+### What was built, file by file
+
+- `src/service/markdown_links.js`: the render registry now lists the real path of every file a link points at (`registry.linked`). That covers links translated into another folder's mount and relative links under the document's own folder.
+- `src/service/markdown.js`: `writeArtifact` returns `linked`. `render` takes a `note` override. `missingReviewNote` builds the note for a linked page whose linking review is gone.
+- `src/service/static_servers.js`:
+  - `linked_files` on the server's metadata: each linked file's real path, and the reviews whose pages linked to it. `recordLinks` writes it, read-merge-write.
+  - `registerMount` merges it from disk, and a restart keeps it.
+  - A request under a mount goes through `serveLinked`. A document with its own review in this session gets a 302 to that review's page on its live server. Otherwise a recorded link target gets the newest linking review's rail. Anything else is served as before.
+  - `--only` linking reviews keep links read-only. A linking review missing from the session gives the note, one log line, and nothing created.
+  - `linkedFileForPage` maps an item's page path to the real file. It checks the mount, containment by real path, no hidden segment, is a file, and that this review is recorded against that file.
+- `src/cli/commands/review.js`: after `add` has made the review, records its render's links against it (`recordedReviewFor`).
+- `src/service/rebuild.js`: the helper's re-render records the links the new render has.
+- `src/shared/review_format.js` and `src/service/projection.js`: a page under `/.lahe-source/` gets `linked_file` and `source_hint` from the helper's lookup. The page's own claim is ignored, and an unmapped page reads as unknown. Every other page carries `linked_file: null`. One contract line added.
+- `src/cli/commands/status.js`: a drain line carries `page.linked_file` when set, and only then.
+- `src/service/reviews.js`: `targetMtime` stats the linked file for a linked page. It uses stat only and never heals.
+- `src/service/handled_check.js`: a handled check for an item on a linked page reads that linked file (rendered, for Markdown), not the hub.
+- Docs: the D11 residual sentence, `docs/CONTRACTS.md` (contract copy and a paragraph on `linked_file`), `docs/CLI.md` (`--only`), `skills/lahe/SKILL.md`, `docs/ongoing/STATIC_SITE_FOLDER.md`, `docs/ongoing/SERVING_ARCHITECTURES.md`.
+- Tests: `test/unit/linked_docs_rail.test.js` (new, 24 tests), `test/unit/markdown_linked_docs.test.js` (now expects the rail hop to hop and no new review), `test/unit/review_format.test.js` (contract copy and count), `test/browser/linked_docs_rail.spec.js` (new).
+
+### Deviations from the spec
+
+- **The "open a review" button copies a command instead of opening one.** When a linked page's linking review is gone, the page says so and shows `lahe review <file> --session <id>` with a Copy button. A button that really opened a review would need a new route that creates a review from a browser click with no token. That is a new write path into the review store, and the security review never looked at one. Ken's call if he wants the real button.
+- **Links are recorded per file, not per mount.** `linked_files` is keyed by the linked file's real path. A folder linked from two hubs, to two different files, gives each file its own hub rather than the newest hub for both.
+- **Requirement 1 matches exact targets only**, as the spec says. A linked HTML file inside a folder review's folder is not redirected to that folder review; it rides the linking review.
+- **Items on a linked page get a stricter file check.** The helper names a file only if this very review is recorded as linking to it. The spec asked for the mount and real-path checks; this adds one more.
+
+### Surprises
+
+- A third registration path the spec did not name: `rebuild.js` re-renders a Markdown review when its source changes. It now records links too.
+- The handled check (`handled_check.js`) would have flagged every handled edit on a linked page as not on the page, because it read the hub. Fixed in the same change.
+- `lahe review` registers mounts before `add` creates the review, so the review id is not known at `registerMount` time. The links are recorded after `add` returns instead.
+
+### Follow-ups
+
+- `npm run install-skills` was not run from this branch, since the skill change is unmerged. Run it after merge.
+- The `review.write` source-hint gap stays open, as the spec says. It needs its own board row.
+- The Markdown served at a server's own root (not under a mount) still renders read-only, as before.
+
+### To delete at cleanup
+
+- Nothing.
 
 ## Security review, 2026-09-22
 
