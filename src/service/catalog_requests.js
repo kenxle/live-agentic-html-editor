@@ -420,7 +420,10 @@ function createQueue(options) {
       session: attach.session,
       name: agentSessions.cleanName(session.name),
       at: attach.at,
-      watching: listening(attach.session, nowMs)
+      watching: listening(attach.session, nowMs),
+      // A closed session is no agent at all, not one that stopped watching:
+      // the Library's header says "No agent attached" for it.
+      closed: !!session.closed_at
     };
   }
 

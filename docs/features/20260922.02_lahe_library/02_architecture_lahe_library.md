@@ -120,7 +120,7 @@ One writer per file, so a star and an attach cannot overwrite each other.
 
 ```json
 {
-  "attached": { "session": "s_...", "name": "document index", "watching": true },
+  "attached": { "session": "s_...", "name": "document index", "watching": true, "closed": false },
   "sessions": [{
     "id": "s_...", "name": "coach activity", "projects": ["steady-thread"],
     "watching": { "session": "s_...", "name": "free writing lahe" }, "last": "2026-09-28T15:40:00Z",
@@ -150,7 +150,7 @@ Rules the reader owns:
 - **`kind`** tells the agent how to re-serve a `via-agent` row.
 - **`watching`** is null or `{session, name}`, taken from the `primary` field of the session's `monitor.json` heartbeat. So a session picked up by another agent names that agent.
 - **Who counts as watching** is the rule the request queue uses, read through `livenessFrom` with the session's activity stamp: a fresh heartbeat on the current handoff rev whose pid is alive, or a lahe command in the last few minutes. `lahe monitor` exits when it wakes on work, so a heartbeat alone would read "nobody is watching" exactly while that agent works a batch, and Open would skip the "another agent is watching" confirm step then (fix round CL2). With no heartbeat on disk, the session names itself. A session watched from another session's multi-session monitor (its heartbeat names that session as `primary`, on its current handoff rev) counts as watched while that primary session is listening by the same rule, so the card does not say "no agent" right after the agent answers.
-- **`attached.watching`** is false when the attached session's monitor is dead. An attach with no session on disk behind it reads as no agent.
+- **`attached.watching`** is false when the attached session's monitor is dead. An attach with no session on disk behind it reads as no agent. **`attached.closed`** is true when the attached session has been closed (`closed_at` is set); the page's header then says "No agent attached" rather than "stopped watching".
 - **`request`** is the latest request on that review. An answer stays until the next request on the review, or `ANSWER_SHOWN_MS`. `reason` is why an expired request expired, and null in every other state.
 - **`pages[].path`** is a URL path on the review's server. Page rows are informational; they have no Open of their own.
 - **`unreadable: true`** marks a row whose `review.json`, `meta.json`, `session.json` or `ss_*.json` is corrupt. That row degrades; the rest of the list returns.

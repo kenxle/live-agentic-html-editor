@@ -858,7 +858,9 @@ function createReader(options) {
     // session behind it, and `watching` with the same liveness rule it uses to
     // hand out and expire requests. Taking its answer keeps the header and
     // Open from disagreeing.
-    return { session: a.session, name: nameOf(a.session), watching: a.watching === true };
+    // `closed` is true when the attached session has been closed; the page
+    // then reads it as no agent rather than one that stopped watching.
+    return { session: a.session, name: nameOf(a.session), watching: a.watching === true, closed: a.closed === true };
   }
 
   function rowOut(row, nowMs, servedUrl, lookup) {

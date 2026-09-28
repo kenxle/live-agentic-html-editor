@@ -491,7 +491,7 @@ test("watching turns stale exactly at HEARTBEAT_FRESH_MS", async () => {
 test("attached names the attached session and whether its monitor is live", async () => {
   const { reader, installed } = setup();
   const list = await reader.list(installed.nowMs);
-  assert.deepEqual(list.attached, { session: "s_index", name: "document index", watching: true });
+  assert.deepEqual(list.attached, { session: "s_index", name: "document index", watching: true, closed: false });
 });
 
 /** A reader wired to the real queue over the fixture, as the helper wires it. */
@@ -518,7 +518,7 @@ test("attached: a stale heartbeat gives watching false", async () => {
   const installed = fixture.install();
   catalogRequests.writeAttach(installed.dir, "s_old3", Date.parse("2026-09-28T15:50:00.000Z"));
   const list = await queueReader(installed).list(installed.nowMs);
-  assert.deepEqual(list.attached, { session: "s_old3", name: null, watching: false });
+  assert.deepEqual(list.attached, { session: "s_old3", name: null, watching: false, closed: true });
 });
 
 test("attached: an attach with nothing on disk behind it is no agent", async () => {
@@ -574,7 +574,7 @@ test("wired to 1.4's real queue: attached comes from readAttached and each row's
     requestFor: queue.requestFor
   });
   const list = await reader.list(now);
-  assert.deepEqual(list.attached, { session: "s_index", name: "document index", watching: true });
+  assert.deepEqual(list.attached, { session: "s_index", name: "document index", watching: true, closed: false });
   assert.deepEqual(row(list, "r_brief").request, {
     id: waiting.request.id, action: "pickup", at: waiting.request.at, state: "waiting",
     by_name: "document index", text: null, answered_at: null, reason: null
@@ -632,7 +632,21 @@ test("attached.watching is the queue's own answer when the attach carries one, s
     dir: installed.dir, home: installed.home, pidAlive: () => true, probe: async () => false,
     attachment: queue.readAttached, requestFor: queue.requestFor
   });
-  assert.deepEqual((await reader.list(installed.nowMs)).attached, { session: "s_index", name: "document index", watching: false });
+  assert.deepEqual((await reader.list(installed.nowMs)).attached, { session: "s_index", name: "document index", watching: false, closed: true });
+});
+
+test("attached.closed is true when the attached session has closed_at, and false once it is reopened", async () => {
+  // The page's header reads it: a closed attached session says "No agent
+  // attached", not "stopped watching".
+  const catalogRequests = require("../../src/service/catalog_requests.js");
+  const installed = fixture.install();
+  catalogRequests.writeAttach(installed.dir, "s_index", installed.nowMs - 5 * MINUTE);
+  const reader = queueReader(installed);
+  assert.equal((await reader.list(installed.nowMs)).attached.closed, true, "the fixture's s_index is closed");
+  require("../../src/service/agent_sessions.js").createStore({ dir: installed.dir }).reopen("s_index");
+  const reopened = (await reader.list(installed.nowMs)).attached;
+  assert.equal(reopened.closed, false);
+  assert.equal(reopened.watching, true);
 });
 
 // --- corrupt files ---------------------------------------------------------------

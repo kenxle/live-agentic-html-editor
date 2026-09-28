@@ -311,9 +311,18 @@ test("readAttached: the session, its name, and whether its monitor is live", () 
     session: "s_attached",
     name: "document index",
     at: new Date(T0).toISOString(),
-    watching: true
+    watching: true,
+    closed: false
   });
   assert.equal(w.queue.readAttached(T0 + protocol.MONITOR.HEARTBEAT_FRESH_MS + 1).watching, false);
+});
+
+test("readAttached: closed is true when the attached session has closed_at", () => {
+  const w = world();
+  w.store.close("s_attached");
+  const attached = w.queue.readAttached(T0 + 1);
+  assert.equal(attached.closed, true);
+  assert.equal(attached.watching, false, "a closed session is not listening either");
 });
 
 test("readAttached: no attach file, a corrupt one, or an attach with no session on disk is no agent", () => {

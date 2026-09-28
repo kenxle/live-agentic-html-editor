@@ -376,7 +376,7 @@ test("catalog.list carries attached and each review's request, and marks the Lib
   assert.equal(queued.status, 200);
   const res = await api(w, "catalog.list");
   assert.equal(res.status, 200, res.text);
-  assert.deepEqual(res.json.attached, { session: "s_agent", name: "library agent", watching: true });
+  assert.deepEqual(res.json.attached, { session: "s_agent", name: "library agent", watching: true, closed: false });
   const session = res.json.sessions.find((s) => s.id === "s_doc");
   const row = session.reviews.find((r) => r.id === "r_page");
   assert.equal(row.request.id, queued.json.request_id);

@@ -2,7 +2,8 @@
   "attached": {
     "session": "s_index",
     "name": "document index",
-    "watching": true
+    "watching": true,
+    "closed": false
   },
   "notice": null,
   "sessions": [
