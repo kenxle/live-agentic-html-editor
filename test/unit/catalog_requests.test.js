@@ -150,6 +150,11 @@ test("monitor dead: pending just inside HEARTBEAT_FRESH_MS, expired once the liv
   const id = ask(w.queue, "r_one", T0).request.id;
   const inside = T0 + protocol.MONITOR.HEARTBEAT_FRESH_MS - 1;
   assert.deepEqual(w.queue.pending(inside).map((r) => r.id), [id]);
+  // Pinned: a heartbeat exactly HEARTBEAT_FRESH_MS old is still fresh. A change
+  // to an exclusive comparison fails here, not somewhere downstream.
+  const exactly = T0 + protocol.MONITOR.HEARTBEAT_FRESH_MS;
+  assert.deepEqual(w.queue.pending(exactly).map((r) => r.id), [id], "exactly HEARTBEAT_FRESH_MS is still fresh");
+  assert.equal(w.queue.requestFor("r_one", exactly).state, "waiting");
   const stale = T0 + protocol.MONITOR.HEARTBEAT_FRESH_MS + 1;
   assert.deepEqual(w.queue.pending(stale), []);
   assert.equal(w.queue.requestFor("r_one", stale).reason, "monitor_dead");
