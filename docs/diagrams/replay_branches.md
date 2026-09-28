@@ -17,7 +17,10 @@ flowchart TD
 
   Conflict --> Card["conflict card shows BOTH<br/>versions in full: the<br/>reviewer's and the page's"]
   Card --> Choice{"reviewer picks"}
-  Choice -- "keep mine" --> KeepMine["write the reviewer's version;<br/>remembered as accepted, so the<br/>next pass reads it as a normal<br/>reapply, not a repeat conflict"]
+  Choice -- "keep mine" --> KeepMine["write the pieces the page<br/>is missing; remembered as accepted,<br/>so the next pass reads it as a normal<br/>reapply, not a repeat conflict"]
+  KeepMine --> Partial{"did every paragraph<br/>of the reviewer's version<br/>reach the page?"}
+  Partial -- "yes" --> Done["the clash is answered"]
+  Partial -- "no" --> Held["the clash stays open;<br/>the card says part of<br/>the version is still missing"]
   Choice -- "take theirs" --> TakeTheirs["record retires;<br/>nothing written,<br/>the page already says it"]
 ```
 
@@ -35,6 +38,7 @@ flowchart LR
 - **A split is branch one, not branch four.** When the after has paragraph or line breaks and the source carries them as separate blocks, the anchored block plus the blocks right after it are read in order against the after split on its breaks. The first piece must be the anchored block, and only as many consecutive blocks as the after has pieces are read. When the text search bound the container holding all those blocks, replay takes the one block inside it where the run starts. Branch two never writes across blocks. See `docs/features/20260922.06_split_not_conflict/NOTES.md`.
 - **A write never says the reviewer's words twice.** Before branch two or three writes a multi-paragraph after into the one anchored block, replay asks whether the block right after it already says the after's second paragraph. When it does, the write would leave those words merged into the anchored block and still standing below, so nothing is written and the record is flagged instead. The split compare reads past curly quotes and em dashes for the same reason: a Markdown rebuild's typography is not a reason to rewrite the paragraph. See `docs/features/20260922.08_no_duplicate_text/NOTES.md`.
 - **The conflict card never picks a default.** "Keep mine" and "take theirs" are drawn with equal weight, because branch four's whole point is that the decision belongs to the reviewer, not the tool.
+- **"Keep mine" writes only what the page is missing, and does not claim a press that fell short.** The press follows the same rule an ordinary write follows: when the page already carries some of the reviewer's paragraphs in blocks of their own, only the missing ones are written, or the words would stand twice. If a piece could not be placed, the press does not resolve the clash. The card says part of the version is still missing, and the conflict stays open rather than leaving the reviewer with a page missing a paragraph and nothing saying so.
 - **"Keep mine" is remembered, not just written once.** The choice is stored as an accepted page state on the record. Without that, the very next repaint would render the page's own source again, re-raise the same conflict, and the reviewer's answer would only ever last one pass.
 - **A handled item is never stamped lost.** If an agent already said it made the fix, a failed re-anchor on that item means the fix rewrote the very passage the item pointed at, which is the fix working, not the feedback going missing.
 - **The same pass runs for both directions of editing.** When the agent lands a change and the page reloads itself, that reload is just another repaint: the agent's change is the new page, the reviewer's outstanding records are re-applied on top of it, and a genuine collision between the two is exactly the "matches none of these" branch, surfaced rather than fought over silently.

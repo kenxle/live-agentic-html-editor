@@ -6,23 +6,26 @@ The picture below is a ladder. Every rung is a way of finding the element again 
 
 ```mermaid
 flowchart TD
-  Start(["a record needs its region"]) --> Text{"search the page for the<br/>normalized text (or, for a region<br/>with no words, its content signature:<br/>an image's src, an svg's title/desc,<br/>an aria-label)"}
+  Start(["a record needs its region"]) --> Stamp{"does one element carry<br/>the record's data-lahe-id stamp,<br/>holding words the record knows?"}
+
+  Stamp -- "yes, exactly one" --> Bind["BIND: write here"]
+  Stamp -- "two carry it" --> Lost
+  Stamp -- "it points at different words" --> Lost
+  Stamp -- "no stamp on the page" --> Text{"search the page for the<br/>normalized text (or, for a region<br/>with no words, its content signature:<br/>an image's src, an svg's title/desc,<br/>an aria-label)"}
 
   Text -- "zero hits" --> Lost
-  Text -- "exactly one hit" --> Bind["BIND: write here"]
+  Text -- "exactly one hit" --> Bind
   Text -- "more than one hit" --> Narrow{"narrow using stored<br/>tie-breakers: tag, position<br/>under parent, and a ring of<br/>neighboring text"}
 
   Narrow -- "exactly one survives" --> Bind
   Narrow -- "zero, or still more than one" --> Lost["LOST: surfaced honestly,<br/>never guessed"]
-
-  Stamp["data-lahe-id stamp,<br/>written on every element<br/>the reviewer touches"] -. "meant to let an agent's edit<br/>carry the id into the source,<br/>so a rebuild reproduces it" .-> Text
 ```
 
 ## What to notice
 
 - **Tie-breakers corroborate, they never overrule.** Tag, position under the parent, and the context ring only narrow a tie among candidates that already matched on content. A position-only match after the content moved is exactly the wrong-element bug this rule exists to prevent: two identical list items that swapped places would otherwise get each other's edit.
 - **The content signature is not a fallback rung tried after text fails.** It is chosen once, at the moment the comment or edit is made: an element with words is anchored by its words, and an element with none (an image, an icon, a diagram) is anchored by what it IS instead. A region that had text and later loses it does not fall through to the signature; it falls through to LOST, because the signature was never taken for it.
-- **The stamp is drawn off to the side because it is still being built.** The amended decision (D9, amended 2026-08-26) describes `data-lahe-id` as the fastest and surest rung on the ladder. As of this diagram, that rung is work in progress rather than committed behavior: the committed `resolve()` re-finds a region from text and the content signature, and does not consult a stamp. Someone is actively wiring the stamp up, so this is a diagram that will need a second pass, not a defect to go fix. When the stamp becomes a real rung, redraw it into the main ladder above the text rung.
-- **Nothing depends on the stamp existing.** Even once it is wired in, a page that cannot be written to, an element the agent never touched, or a rebuild that dropped the attribute all fall straight through to the text and signature rungs. The stamp is meant to be the fastest rung, never the only one.
+- **The stamp is the top rung, and it is real.** `data-lahe-id` is written onto every element the reviewer touches (D9, amended 2026-08-26). The agent carries that attribute into the source when it edits the element, so the next build reproduces it and the page finds the element with certainty. `anchor.js` `stampVerdict` asks first: exactly one element carrying the stamp, and still holding words the record knows, binds. Two elements carrying it, or one carrying words the record has never held, is a refusal with its own reason on the card ("two elements carry this id", "the stamp points at different words"), not a fall-through to the text rung.
+- **Nothing depends on the stamp existing.** A page that cannot be written to, an element the agent never touched, or a rebuild that dropped the attribute all fall straight through to the text and signature rungs. The stamp is meant to be the fastest rung, never the only one.
 - **A bind climbs back to the saved tag when an inline wrapper holds all the words.** After BIND finds a match, if the tag it landed on differs from the tag the record was minted on, it climbs through parents that hold exactly the same words and takes the first one with the saved tag (`<p><em>A</em></p>`: a record minted on the `<p>` binds the `<p>`, not the `<em>` that happens to hold the same words). This step corroborates the bind found by text; it never counts toward uniqueness, and it stops the moment an ancestor holds any other words.
 - **LOST is an honest answer, not a bug.** A record that cannot be placed uniquely is surfaced as lost, on the page and in `review.json`, rather than being silently dropped or bound to the nearest thing that looks right.

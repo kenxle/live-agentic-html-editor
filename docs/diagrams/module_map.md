@@ -28,14 +28,14 @@ flowchart TD
     subgraph SERVICE["service slash - runs in the helper process"]
         SV_CORE["routes.js, auth.js, log.js<br/>the router, the per-request check block,<br/>the events.jsonl appender"]
         SV_SESS["agent_sessions.js, wake_feed.js,<br/>watchers.js, static_servers.js<br/>session lifecycle and heartbeat,<br/>the wake feed a host tails, liveness checks,<br/>session-owned static servers"]
-        SV_STORE["state_dir.js, reviews.js, review_writer.js,<br/>projection.js, replies.js<br/>on-disk layout, review creation and tokens,<br/>the single writer of review.json,<br/>log-to-projection, reply folding"]
-        SV_MISC["markdown.js, markdown_links.js, tab_icon.js,<br/>heal.js, source_stamp.js<br/>Markdown rendering, link rewriting,<br/>fallback tab icon, putting the script line<br/>back after a rebuild, helper-version check"]
+        SV_STORE["state_dir.js, reviews.js, review_writer.js,<br/>projection.js, replies.js, handled_check.js<br/>on-disk layout, review creation and tokens,<br/>the single writer of review.json,<br/>log-to-projection, reply folding,<br/>is a handled claim true on the built page"]
+        SV_MISC["markdown.js, markdown_links.js, rebuild.js,<br/>tab_icon.js, heal.js, source_stamp.js<br/>Markdown rendering, link rewriting,<br/>re-rendering a Markdown review when its<br/>source moves, fallback tab icon, putting the<br/>script line back after a rebuild,<br/>helper-version check"]
         SV_INDEX["index.js<br/>serve"]
     end
 
     subgraph CLI["cli slash - the command surface"]
         CLI_INDEX["index.js<br/>the command dispatcher"]
-        CLI_CMDS["serve, review, session,<br/>add, status, monitor"]
+        CLI_CMDS["serve, review, session,<br/>add, status, reply, monitor"]
         CLI_INDEX --> CLI_CMDS
     end
 
@@ -49,7 +49,7 @@ flowchart TD
 
 ## What to notice
 
-- **What each folder is for.** `shared/` is the one place a wire-protocol field name or item-record shape gets spelled out. Both `layer/` and `service/` import from it instead of each defining their own copy. `layer/` is the code that runs in the reviewer's browser. `service/` is the code that runs in the local helper process. `cli/` is the set of commands (`serve`, `review`, `session`, `add`, `status`, `monitor`) a person or an agent types.
+- **What each folder is for.** `shared/` is the one place a wire-protocol field name or item-record shape gets spelled out. Both `layer/` and `service/` import from it instead of each defining their own copy. `layer/` is the code that runs in the reviewer's browser. `service/` is the code that runs in the local helper process. `cli/` is the set of commands (`serve`, `review`, `session`, `add`, `status`, `reply`, `monitor`) a person or an agent types.
 - **Which way dependencies point.** Both `layer/` and `service/` depend on `shared/`. Neither depends on the other. If you find yourself wanting `layer/` code to call `service/` code directly, or the reverse, that is a sign the shared piece belongs in `shared/` instead.
 - **Why `layer/` is an ordered list, not a cloud.** The browser has no module loader, so the whole library ships as one concatenated file (`dist/lahe-layer.js`). The order files are glued in is the order they can depend on each other: a file may only use something a file above it in the list already registered. `manifest.js` writes that order down, and the diagram's chain (`listeners.js` through `index.js`) is that same order.
 - **The three frozen files**, shaded red above: `manifest.js`, `review_format.js`, and `layer/selection.js`. A change to any of them goes through the orchestrator rather than through whichever builder happens to be touching nearby code, because other files depend on their exact shape.
