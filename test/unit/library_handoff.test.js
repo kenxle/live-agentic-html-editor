@@ -1,13 +1,14 @@
 "use strict";
 
-// The Library's own hand-off message (story walk, Library fix round).
+// The Library's hand-off message (story walk, Library fix round; merged into
+// the rail's builder in the seam round).
 //
-// The rail's message says the earlier agent "stopped answering my comments",
-// which is wrong for a Library hand-over: the session may be closed, or the
-// reviewer may simply want a new agent on it. It also said "add --state-dir
-// ... ask me" without the folder, though the helper knows it. The Library gets
-// its own wording (taking a session over, no blame) with the real --state-dir
-// when it is not the default. The rail keeps its message for its own case.
+// There is one hand-off builder, `AGENT_LIVENESS.handoffMessage`. The rail
+// calls it as it always has. The Library calls it with `{library: true,
+// stateDir}`: the opener says the session is being taken over (no "stopped
+// answering", since the session may be closed or the reviewer may just want a
+// new agent), and a non-default --state-dir is written into the command
+// instead of asked for. Everything after the opener is the rail's text.
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -27,7 +28,8 @@ const vm = require("../../src/layer/catalog/view_model.js");
 
 const LIST = require(path.join(__dirname, "..", "fixtures", "catalog_list.json"));
 const T0 = Date.parse("2026-09-28T16:00:00.000Z");
-const libraryHandoff = protocol.AGENT_LIVENESS.libraryHandoffMessage;
+const libraryHandoff = (sessionId, name, dir) =>
+  protocol.AGENT_LIVENESS.handoffMessage(sessionId, name, false, { library: true, stateDir: dir });
 
 test("the Library's message takes a session over with the real --state-dir, and blames nobody", () => {
   const custom = "/Users/me/lahe state";
@@ -52,8 +54,25 @@ test("with no session to take, it points at the session list in the right state 
   assert.ok(message.includes("lahe session takeover <session-id> --state-dir /srv/lahe"), message);
 });
 
-test("the rail keeps its own message for its own case", () => {
+test("the rail keeps its own opener for its own case", () => {
   assert.match(protocol.AGENT_LIVENESS.handoffMessage("s_doc", null, false), /stopped answering my comments/);
+});
+
+test("there is one hand-off builder: the Library's message is the rail's with only the opener changed", () => {
+  assert.equal(protocol.AGENT_LIVENESS.libraryHandoffMessage, undefined, "no second builder");
+  const afterOpener = (m) => m.slice(m.indexOf("\n"));
+  for (const [id, name] of [["s_doc", null], ["s_doc", "coach activity"], [null, null]]) {
+    const rail = protocol.AGENT_LIVENESS.handoffMessage(id, name, false);
+    const library = libraryHandoff(id, name, null);
+    assert.equal(afterOpener(library), afterOpener(rail), "same command and closing text for " + id);
+    assert.equal(library.split("\n")[0].split(". ")[0], rail.split("\n")[0].split(". ")[0], "same first sentence");
+  }
+});
+
+test("the rail's --state-dir question is not added in the Library form, which writes the folder instead", () => {
+  const message = protocol.AGENT_LIVENESS.handoffMessage("s_doc", null, true, { library: true, stateDir: "/srv/lahe" });
+  assert.equal(/ask me/i.test(message), false);
+  assert.ok(message.includes("lahe session takeover s_doc --state-dir /srv/lahe"), message);
 });
 
 test("the drain's handoff is the Library's message, with the drained state dir", async () => {

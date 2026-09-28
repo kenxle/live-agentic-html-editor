@@ -1072,13 +1072,13 @@ The one read path, and the one keep-up loop. Before it, every agent hand-rolled 
     `candidate` is the main-repository copy of a worktree row, checked when the entry is built, or null.
     `folder` is where a Launch starts the new agent: the repository holding the document (or the
     candidate), else the document's own folder, or null.
-    `handoff` is the Library's hand-off message for the document's session,
-    `AGENT_LIVENESS.libraryHandoffMessage(session, name, state_dir)`: it asks the new agent to take the
-    session over, blames nobody (the session may be closed, or the reviewer wants a new agent), and
-    writes the real `--state-dir` into the command when it is not the default. The Library's copy
-    panel shows the same message. The rail keeps `handoffMessage` for its own case, an agent that
-    stopped answering. It never carries a
-    session name read off a page's title (`name_source: "page"`).
+    `handoff` is the rail's hand-off message in its Library form,
+    `AGENT_LIVENESS.handoffMessage(session, name, false, {library: true, stateDir: state_dir})`.
+    It is the rail's text with one sentence changed: it asks the new agent to take the session over
+    and blames nobody (the session may be closed, or the reviewer wants a new agent). It also writes
+    the real `--state-dir` into the command when it is not the default, where the rail asks for it.
+    The Library's copy panel shows the same message. It never carries a session name read off a
+    page's title (`name_source: "page"`).
   - These fields come from the catalog reader's `describeReview`, the same description the Library's
     list uses.
   - **Wake once.** A new pending request gets past `--quiet`, including for a session with no reviews
@@ -1208,7 +1208,8 @@ server-side from the review to its owning agent session. Fields: `state`, `unans
 `QUIET_MS` like the others; it just does not go loud until two minutes, because an agent thinking
 through a hard comment leaves no footprint and reads the same as an empty chair. The footer line goes loud on it.
 The banner at the top of the rail shows exactly while the footer is loud, and its one button copies
-`AGENT_LIVENESS.handoffMessage(session_id, session_name, state_dir_flag_needed)` for a new agent (with
+`AGENT_LIVENESS.handoffMessage(session_id, session_name, state_dir_flag_needed)` for a new agent (the
+same builder the Library calls with `{library: true}`; with
 `session_name` null when `session_name_from_page` is true): the
 takeover command for that id, and a sentence saying `--state-dir` is needed when it is. A ready card
 with no reply turns amber when its own wait passes the same rule. With the rail collapsed, the pill

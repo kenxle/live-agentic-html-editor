@@ -353,10 +353,13 @@
     var isLegacy = !session || session.id === LEGACY_SESSION;
     // A name read off a page's title stays out: the message is a new agent's prompt.
     var name = isLegacy || session.name_from_page === true ? null : session.name || null;
-    // The Library's own wording, with the state dir the list names (null for
-    // the default one).
+    // The rail's hand-off message in its Library form, with the state dir the
+    // list names (null for the default one).
     var dirPath = list && typeof list.state_dir === "string" && list.state_dir ? list.state_dir : null;
-    return protocol.AGENT_LIVENESS.libraryHandoffMessage(isLegacy ? null : session.id, name, dirPath);
+    return protocol.AGENT_LIVENESS.handoffMessage(isLegacy ? null : session.id, name, false, {
+      library: true,
+      stateDir: dirPath
+    });
   }
 
   function sameWatcher(a, b) {

@@ -1537,39 +1537,59 @@
 
   /**
    * The message the reviewer pastes into a fresh agent to hand this doc over.
+   * The rail's banner and the Library (its drain's Launch prompt and its copy
+   * panel) both build it here, so there is one hand-off message.
    *
    * It is written to the NEW AGENT, so unlike the rail's own words it names the
    * command. Pasting it is the human's explicit request, which is the one thing
    * `lahe session takeover` requires. It carries the command and nothing else
    * off the wire: no token, no review secret.
    *
+   * Two cases differ in one sentence and in what is known about the state dir:
+   *   - The rail (no options): the earlier agent stopped answering, and the
+   *     page only knows whether a non-default --state-dir is needed, so the
+   *     message asks for it.
+   *   - The Library (`options.library`): the session may be closed, or the
+   *     reviewer wants a new agent, so the opener blames nobody. The helper
+   *     knows the state dir, so a non-default one is written into the command.
+   *
+   * `name` is shown quoted. Callers never pass a name read off a page's title
+   * (`name_source: "page"`): this text is a new agent's first prompt.
+   *
    * @param {string|null} sessionId AGENT_LIVENESS.FIELD.SESSION_ID, or null for
    *   a review with no agent session, which gets pointed at the list instead
    * @param {string|null} [name] AGENT_LIVENESS.FIELD.NAME, quoted when present
-   * @param {boolean} [stateDirFlagNeeded] AGENT_LIVENESS.FIELD.STATE_DIR_FLAG
+   * @param {boolean} [stateDirFlagNeeded] AGENT_LIVENESS.FIELD.STATE_DIR_FLAG;
+   *   the rail's case only, ignored when `options.library` is set
+   * @param {{library?: boolean, stateDir?: string|null}} [options] the
+   *   Library's case: `stateDir` is the state directory when it is not the
+   *   default one, else null
    * @returns {string} plain text
    */
-  function handoffMessage(sessionId, name, stateDirFlagNeeded) {
+  function handoffMessage(sessionId, name, stateDirFlagNeeded, options) {
+    var library = !!(options && options.library === true);
+    var dirPath = library && typeof options.stateDir === "string" && options.stateDir ? options.stateDir : null;
+    var flag = stateDirFlag(dirPath);
     var hasId = typeof sessionId === "string" && isSafeId(sessionId);
-    var elsewhere = stateDirFlagNeeded === true
+    var elsewhere = !library && stateDirFlagNeeded === true
       ? [
           "This review keeps its files outside LAHE's default folder, so add --state-dir with the folder the earlier agent's lahe commands used. If you cannot find it, ask me.",
           ""
         ]
       : [];
     var run = hasId
-      ? ["Run this command:", "", "    " + takeoverCommand(sessionId, null), ""].concat(elsewhere)
+      ? ["Run this command:", "", "    " + takeoverCommand(sessionId, dirPath), ""].concat(elsewhere)
       : [
-          "Run `lahe session list` to find the session for this document, then take it over with:",
+          "Run `lahe session list" + flag + "` to find the session for this document, then take it over with:",
           "",
-          "    lahe session takeover <session-id>",
+          "    lahe session takeover <session-id>" + flag,
           ""
         ].concat(elsewhere);
     var named = typeof name === "string" && name ? ", the session named " + JSON.stringify(name) : "";
-    return [
-      "Please take over my live LAHE review" + named + ". The agent that was working on it stopped answering my comments, and I am asking you to continue it.",
-      ""
-    ]
+    var why = library
+      ? "I am handing it to you from the LAHE Library so you can continue it."
+      : "The agent that was working on it stopped answering my comments, and I am asking you to continue it.";
+    return ["Please take over my live LAHE review" + named + ". " + why, ""]
       .concat(run)
       .concat([
         "It prints the commands to catch up. Then work every comment that is waiting and reply to each one, and keep watching for new ones."
@@ -1577,49 +1597,6 @@
       .join("\n");
   }
   AGENT_LIVENESS.handoffMessage = handoffMessage;
-
-  /**
-   * The Library's hand-off message: the text a new agent gets when the
-   * reviewer hands a document's session over from the Library (the Launch
-   * prompt, and the copy panel when no agent is attached).
-   *
-   * Not the rail's message. The rail's case is an agent that stopped
-   * answering; a Library hand-over may be a closed session, or a reviewer who
-   * simply wants a new agent on it, so this one blames nobody. And the Library
-   * knows the state directory, so a non-default one is written into the
-   * command rather than asked about.
-   *
-   * @param {string|null} sessionId the session to take over, or null for a
-   *   review with no session, which gets pointed at the list instead
-   * @param {string|null} [name] the human's name for the session, quoted when
-   *   present. Never a name read off a page's title.
-   * @param {string|null} [stateDirPath] the state directory when it is not the
-   *   default one, else null
-   * @returns {string} plain text
-   */
-  function libraryHandoffMessage(sessionId, name, stateDirPath) {
-    var flag = stateDirFlag(stateDirPath);
-    var hasId = typeof sessionId === "string" && isSafeId(sessionId);
-    var named = typeof name === "string" && name ? ", the session named " + JSON.stringify(name) : "";
-    var run = hasId
-      ? ["Run this command:", "", "    " + takeoverCommand(sessionId, stateDirPath), ""]
-      : [
-          "Run `lahe session list" + flag + "` to find the session for this document, then take it over with:",
-          "",
-          "    lahe session takeover <session-id>" + flag,
-          ""
-        ];
-    return [
-      "Please take over my live LAHE review" + named + ". I am handing it to you from the LAHE Library so you can continue it.",
-      ""
-    ]
-      .concat(run)
-      .concat([
-        "It prints the commands to catch up. Then work every comment that is waiting and reply to each one, and keep watching for new ones."
-      ])
-      .join("\n");
-  }
-  AGENT_LIVENESS.libraryHandoffMessage = libraryHandoffMessage;
 
   return {
     API_VERSION: API_VERSION,

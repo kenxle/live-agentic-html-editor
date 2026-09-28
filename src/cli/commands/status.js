@@ -527,13 +527,12 @@ function readerDescriber(dir, nowMs) {
       path: described ? described.path : null,
       candidate: described ? described.candidate : null,
       folder: described ? projectFolder(described.candidate || described.path) : null,
-      // The Library's own wording, with the real --state-dir when it is not
-      // the default. The rail's message is for an agent that stopped answering.
-      handoff: protocol.AGENT_LIVENESS.libraryHandoffMessage(
-        takeable ? sessionId : null,
-        takeable ? name : null,
-        stateDirModule.flagFor(dir)
-      )
+      // The rail's hand-off message in its Library form: take-over wording,
+      // with the real --state-dir when it is not the default.
+      handoff: protocol.AGENT_LIVENESS.handoffMessage(takeable ? sessionId : null, takeable ? name : null, false, {
+        library: true,
+        stateDir: stateDirModule.flagFor(dir)
+      })
     };
   };
 }
