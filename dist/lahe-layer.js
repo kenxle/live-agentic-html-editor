@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+9d6d6470b328
+ * version 0.2.0+eb2c9886f4d4
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+9d6d6470b328";
+  g.LAHE.version = "0.2.0+eb2c9886f4d4";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -16473,7 +16473,12 @@
         throw new Error("setCardState: unknown state " + String(state));
       }
       if (!cards[id]) return null;
-      cards[id].state = state;
+      // HELD IS A DRAWING OF READY, so it survives a caller naming "ready". The
+      // Active tab's refresh calls this right after upsertCard for every row,
+      // and stamping the raw lifecycle state here undid the held reading
+      // upsertCard had just drawn. Nothing repainted it until the agent line
+      // next changed, which on a slow machine was not soon.
+      cards[id].state = state === record.STATE.READY && isItemHeld(id) ? "held" : state;
       cards[id].item = Object.assign({}, cards[id].item);
       cards[id].item[record.FIELD.STATE] = state;
       cards[id].pane = paneForItem(cards[id].item);
@@ -36730,7 +36735,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+9d6d6470b328";
+  var VERSION = "0.2.0+eb2c9886f4d4";
 
   var protocol = ns.protocol;
   var record = ns.record;
