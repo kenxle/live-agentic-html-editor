@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "id": "ss_wtgone",
+  "session_id": "s_ops",
+  "instance": "inst_ss_wtgone",
+  "root": "${ROOT}/home/projects/alpha/.claude/worktrees/wt-gone/docs",
+  "logical_root": "${ROOT}/home/projects/alpha/.claude/worktrees/wt-gone/docs",
+  "host": "127.0.0.1",
+  "port": 54023,
+  "pid": 515151,
+  "started_at": "2026-09-20T10:00:00.000Z",
+  "stopped_at": "2026-09-21T10:00:00.000Z",
+  "mounts": {}
+}

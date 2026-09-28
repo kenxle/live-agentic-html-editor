@@ -1,0 +1,689 @@
+{
+  "attached": {
+    "session": "s_index",
+    "name": "document index",
+    "watching": true
+  },
+  "notice": null,
+  "sessions": [
+    {
+      "id": "s_coach",
+      "name": "coach activity",
+      "projects": [
+        "alpha",
+        "beta"
+      ],
+      "watching": {
+        "session": "s_coach",
+        "name": "coach activity"
+      },
+      "last": "2026-09-28T15:40:00.000Z",
+      "reviews": [
+        {
+          "id": "r_brief",
+          "title": "Feature Brief: Coach Activity",
+          "display_name": "Feature Brief: Coach Activity",
+          "file": "brief.html",
+          "folder": "docs",
+          "path_hint": "~/projects/alpha/docs",
+          "project": "alpha",
+          "last": "2026-09-28T15:40:00.000Z",
+          "waiting": 3,
+          "total": 5,
+          "counts_as_of": "2026-09-28T15:40:00.000Z",
+          "ended": false,
+          "served_url": null,
+          "openable": "yes",
+          "kind": "static",
+          "starred": true,
+          "unreadable": false,
+          "request": {
+            "id": "cq_waiting1",
+            "action": "pickup",
+            "at": "2026-09-28T15:58:00.000Z",
+            "state": "waiting",
+            "by_name": "document index",
+            "text": null,
+            "answered_at": null
+          },
+          "pages": [
+            {
+              "title": "Feature Brief: Coach Activity",
+              "path": "/"
+            }
+          ],
+          "folded_from": []
+        },
+        {
+          "id": "r_spec",
+          "title": "Shared Title",
+          "display_name": "specs / spec.html",
+          "file": "spec.html",
+          "folder": "specs",
+          "path_hint": "~/projects/beta/specs",
+          "project": "beta",
+          "last": "2026-09-26T16:00:00.000Z",
+          "waiting": 0,
+          "total": 1,
+          "counts_as_of": "2026-09-26T16:00:00.000Z",
+          "ended": false,
+          "served_url": "http://127.0.0.1:54011/spec.html",
+          "openable": "yes",
+          "kind": "static",
+          "starred": false,
+          "unreadable": false,
+          "request": {
+            "id": "cq_done1",
+            "action": "pickup",
+            "at": "2026-09-28T15:20:00.000Z",
+            "state": "done",
+            "by_name": "document index",
+            "text": "watching Shared Title",
+            "answered_at": "2026-09-28T15:25:00.000Z"
+          },
+          "pages": [
+            {
+              "title": "Shared Title",
+              "path": "/"
+            }
+          ],
+          "folded_from": []
+        },
+        {
+          "id": "r_notes",
+          "title": "Coach Notes",
+          "display_name": "Coach Notes",
+          "file": "notes.md",
+          "folder": "docs",
+          "path_hint": "~/projects/alpha/docs",
+          "project": "alpha",
+          "last": "2026-09-25T16:00:00.000Z",
+          "waiting": 0,
+          "total": 2,
+          "counts_as_of": "2026-09-25T16:00:00.000Z",
+          "ended": true,
+          "served_url": null,
+          "openable": "yes",
+          "kind": "static",
+          "starred": false,
+          "unreadable": false,
+          "request": {
+            "id": "cq_refused1",
+            "action": "launch",
+            "at": "2026-09-28T15:00:00.000Z",
+            "state": "refused",
+            "by_name": "document index",
+            "text": "I can't open a terminal here.",
+            "answered_at": "2026-09-28T15:02:00.000Z"
+          },
+          "pages": [
+            {
+              "title": "Coach Notes",
+              "path": "/"
+            }
+          ],
+          "folded_from": []
+        },
+        {
+          "id": "r_mounted",
+          "title": null,
+          "display_name": "shared / figure.html",
+          "file": "figure.html",
+          "folder": "shared",
+          "path_hint": "~/projects/alpha/shared",
+          "project": "alpha",
+          "last": "2026-09-24T16:00:00.000Z",
+          "waiting": 0,
+          "total": 0,
+          "counts_as_of": "2026-09-24T16:00:00.000Z",
+          "ended": false,
+          "served_url": null,
+          "openable": "yes",
+          "kind": "static",
+          "starred": false,
+          "unreadable": false,
+          "request": null,
+          "pages": [],
+          "folded_from": []
+        },
+        {
+          "id": "r_deleted",
+          "title": "Deleted Page",
+          "display_name": "Deleted Page",
+          "file": "deleted.html",
+          "folder": "docs",
+          "path_hint": "~/projects/alpha/docs",
+          "project": "alpha",
+          "last": "2026-09-22T16:00:00.000Z",
+          "waiting": 1,
+          "total": 1,
+          "counts_as_of": "2026-09-22T16:00:00.000Z",
+          "ended": false,
+          "served_url": null,
+          "openable": "missing",
+          "kind": "static",
+          "starred": false,
+          "unreadable": false,
+          "request": null,
+          "pages": [
+            {
+              "title": "Deleted Page",
+              "path": "/"
+            }
+          ],
+          "folded_from": []
+        }
+      ]
+    },
+    {
+      "id": "s_dev",
+      "name": "app dev",
+      "projects": [
+        "beta"
+      ],
+      "watching": null,
+      "last": "2026-09-27T16:00:00.000Z",
+      "reviews": [
+        {
+          "id": "r_dev",
+          "title": "App Home",
+          "display_name": "App Home",
+          "file": "beta",
+          "folder": "projects",
+          "path_hint": "~/projects",
+          "project": "beta",
+          "last": "2026-09-27T16:00:00.000Z",
+          "waiting": 1,
+          "total": 1,
+          "counts_as_of": "2026-09-27T16:00:00.000Z",
+          "ended": false,
+          "served_url": null,
+          "openable": "via-agent",
+          "kind": "dev-server",
+          "starred": false,
+          "unreadable": false,
+          "request": null,
+          "pages": [
+            {
+              "title": "App Home",
+              "path": "/"
+            }
+          ],
+          "folded_from": []
+        }
+      ]
+    },
+    {
+      "id": "s_badsession",
+      "name": null,
+      "projects": [],
+      "watching": null,
+      "last": "2026-09-26T17:00:00.000Z",
+      "reviews": [
+        {
+          "id": "r_badsession",
+          "title": null,
+          "display_name": "loose / b.html",
+          "file": "b.html",
+          "folder": "loose",
+          "path_hint": "~/loose",
+          "project": null,
+          "last": "2026-09-26T17:00:00.000Z",
+          "waiting": 0,
+          "total": 0,
+          "counts_as_of": "2026-09-26T17:00:00.000Z",
+          "ended": false,
+          "served_url": null,
+          "openable": "yes",
+          "kind": "static",
+          "starred": false,
+          "unreadable": true,
+          "request": null,
+          "pages": [],
+          "folded_from": []
+        }
+      ]
+    },
+    {
+      "id": "s_ssbroken",
+      "name": "broken server record",
+      "projects": [],
+      "watching": null,
+      "last": "2026-09-26T17:00:00.000Z",
+      "reviews": [
+        {
+          "id": "r_ssbroken",
+          "title": null,
+          "display_name": "loose / c.html",
+          "file": "c.html",
+          "folder": "loose",
+          "path_hint": "~/loose",
+          "project": null,
+          "last": "2026-09-26T17:00:00.000Z",
+          "waiting": 0,
+          "total": 0,
+          "counts_as_of": "2026-09-26T17:00:00.000Z",
+          "ended": false,
+          "served_url": null,
+          "openable": "via-agent",
+          "kind": "dev-server",
+          "starred": false,
+          "unreadable": true,
+          "request": null,
+          "pages": [],
+          "folded_from": []
+        }
+      ]
+    },
+    {
+      "id": "s_ops",
+      "name": "ops fixes",
+      "projects": [
+        "alpha"
+      ],
+      "watching": {
+        "session": "s_index",
+        "name": "document index"
+      },
+      "last": "2026-09-24T17:00:00.000Z",
+      "reviews": [
+        {
+          "id": "r_wt_live",
+          "title": null,
+          "display_name": "wt-live / page.html",
+          "file": "page.html",
+          "folder": "wt-live",
+          "path_hint": "~/projects/alpha/.claude/worktrees/wt-live",
+          "project": "alpha",
+          "last": "2026-09-24T17:00:00.000Z",
+          "waiting": 0,
+          "total": 0,
+          "counts_as_of": "2026-09-24T17:00:00.000Z",
+          "ended": false,
+          "served_url": null,
+          "openable": "yes",
+          "kind": "static",
+          "starred": false,
+          "unreadable": false,
+          "request": null,
+          "pages": [],
+          "folded_from": []
+        },
+        {
+          "id": "r_wt_vanished",
+          "title": null,
+          "display_name": "docs / vanished.html",
+          "file": "vanished.html",
+          "folder": "docs",
+          "path_hint": "~/projects/alpha/.claude/worktrees/wt-gone/docs",
+          "project": "alpha",
+          "last": "2026-09-23T18:00:00.000Z",
+          "waiting": 0,
+          "total": 0,
+          "counts_as_of": "2026-09-23T18:00:00.000Z",
+          "ended": false,
+          "served_url": null,
+          "openable": "missing",
+          "kind": "static",
+          "starred": false,
+          "unreadable": false,
+          "request": null,
+          "pages": [],
+          "folded_from": []
+        },
+        {
+          "id": "r_wt_gone",
+          "title": "Worktree Brief",
+          "display_name": "Worktree Brief",
+          "file": "brief.html",
+          "folder": "docs",
+          "path_hint": "~/projects/alpha/.claude/worktrees/wt-gone/docs",
+          "project": "alpha",
+          "last": "2026-09-23T17:00:00.000Z",
+          "waiting": 1,
+          "total": 1,
+          "counts_as_of": "2026-09-23T17:00:00.000Z",
+          "ended": false,
+          "served_url": null,
+          "openable": "via-agent",
+          "kind": "worktree",
+          "starred": false,
+          "unreadable": false,
+          "request": {
+            "id": "cq_expired1",
+            "action": "pickup",
+            "at": "2026-09-28T14:30:00.000Z",
+            "state": "expired",
+            "by_name": "document index",
+            "text": null,
+            "answered_at": null
+          },
+          "pages": [
+            {
+              "title": "Worktree Brief",
+              "path": "/"
+            }
+          ],
+          "folded_from": []
+        },
+        {
+          "id": "r_old4",
+          "title": "Page Four",
+          "display_name": "Page Four",
+          "file": "p4.html",
+          "folder": "old-pages",
+          "path_hint": "~/projects/alpha/old-pages",
+          "project": "alpha",
+          "last": "2026-09-20T04:00:00.000Z",
+          "waiting": 1,
+          "total": 1,
+          "counts_as_of": "2026-09-20T04:00:00.000Z",
+          "ended": false,
+          "served_url": null,
+          "openable": "yes",
+          "kind": "static",
+          "starred": false,
+          "unreadable": false,
+          "request": null,
+          "pages": [
+            {
+              "title": "Page Four",
+              "path": "/"
+            }
+          ],
+          "folded_from": []
+        },
+        {
+          "id": "r_old2",
+          "title": "old-pages",
+          "display_name": "old-pages",
+          "file": null,
+          "folder": "old-pages",
+          "path_hint": "~/projects/alpha/old-pages",
+          "project": "alpha",
+          "last": "2026-09-19T04:00:00.000Z",
+          "waiting": 3,
+          "total": 6,
+          "counts_as_of": "2026-09-19T04:00:00.000Z",
+          "ended": false,
+          "served_url": null,
+          "openable": "yes",
+          "kind": "static",
+          "starred": true,
+          "unreadable": false,
+          "request": null,
+          "pages": [
+            {
+              "title": "Page Two",
+              "path": "/"
+            }
+          ],
+          "folded_from": [
+            "r_old1",
+            "r_old3"
+          ]
+        },
+        {
+          "id": "r_other",
+          "title": null,
+          "display_name": "other / x.html",
+          "file": "x.html",
+          "folder": "other",
+          "path_hint": "~/projects/alpha/other",
+          "project": "alpha",
+          "last": "2026-09-14T05:00:00.000Z",
+          "waiting": 0,
+          "total": 0,
+          "counts_as_of": "2026-09-14T05:00:00.000Z",
+          "ended": false,
+          "served_url": null,
+          "openable": "yes",
+          "kind": "static",
+          "starred": false,
+          "unreadable": false,
+          "request": null,
+          "pages": [],
+          "folded_from": []
+        },
+        {
+          "id": "r_oldfolder",
+          "title": null,
+          "display_name": "alpha / old-pages",
+          "file": "old-pages",
+          "folder": "alpha",
+          "path_hint": "~/projects/alpha",
+          "project": "alpha",
+          "last": "2026-09-13T05:00:00.000Z",
+          "waiting": 0,
+          "total": 0,
+          "counts_as_of": "2026-09-13T05:00:00.000Z",
+          "ended": false,
+          "served_url": null,
+          "openable": "yes",
+          "kind": "static",
+          "starred": false,
+          "unreadable": false,
+          "request": null,
+          "pages": [],
+          "folded_from": []
+        }
+      ]
+    },
+    {
+      "id": "s_old3",
+      "name": null,
+      "projects": [
+        "alpha"
+      ],
+      "watching": null,
+      "last": "2026-09-20T17:00:00.000Z",
+      "reviews": [
+        {
+          "id": "r_stale",
+          "title": "Stale Projection",
+          "display_name": "Stale Projection",
+          "file": "stale.html",
+          "folder": "loose",
+          "path_hint": "~/loose",
+          "project": null,
+          "last": "2026-09-20T17:00:00.000Z",
+          "waiting": 2,
+          "total": 2,
+          "counts_as_of": "2026-09-20T17:00:00.000Z",
+          "ended": false,
+          "served_url": null,
+          "openable": "yes",
+          "kind": "static",
+          "starred": false,
+          "unreadable": false,
+          "request": null,
+          "pages": [
+            {
+              "title": "Stale Projection",
+              "path": "/"
+            }
+          ],
+          "folded_from": []
+        },
+        {
+          "id": "r_big",
+          "title": "Big Log",
+          "display_name": "Big Log",
+          "file": "big.html",
+          "folder": "loose",
+          "path_hint": "~/loose",
+          "project": null,
+          "last": "2026-09-20T16:00:00.000Z",
+          "waiting": 1,
+          "total": 1,
+          "counts_as_of": "2026-09-19T16:00:00.000Z",
+          "ended": false,
+          "served_url": null,
+          "openable": "yes",
+          "kind": "static",
+          "starred": false,
+          "unreadable": false,
+          "request": null,
+          "pages": [
+            {
+              "title": "Big Log",
+              "path": "/"
+            }
+          ],
+          "folded_from": []
+        },
+        {
+          "id": "r_shared",
+          "title": "Shared Title",
+          "display_name": "loose / shared.html",
+          "file": "shared.html",
+          "folder": "loose",
+          "path_hint": "~/loose",
+          "project": null,
+          "last": "2026-09-19T16:00:00.000Z",
+          "waiting": 0,
+          "total": 1,
+          "counts_as_of": "2026-09-19T16:00:00.000Z",
+          "ended": false,
+          "served_url": null,
+          "openable": "yes",
+          "kind": "static",
+          "starred": false,
+          "unreadable": false,
+          "request": null,
+          "pages": [
+            {
+              "title": "Shared Title",
+              "path": "/"
+            }
+          ],
+          "folded_from": []
+        },
+        {
+          "id": "r_badreview",
+          "title": null,
+          "display_name": "loose / review.html",
+          "file": "review.html",
+          "folder": "loose",
+          "path_hint": "~/loose",
+          "project": null,
+          "last": "2026-09-18T19:00:00.000Z",
+          "waiting": 0,
+          "total": 0,
+          "counts_as_of": "2026-09-18T19:00:00.000Z",
+          "ended": false,
+          "served_url": null,
+          "openable": "yes",
+          "kind": "static",
+          "starred": false,
+          "unreadable": true,
+          "request": null,
+          "pages": [],
+          "folded_from": []
+        },
+        {
+          "id": "r_badmeta",
+          "title": null,
+          "display_name": "r_badmeta",
+          "file": null,
+          "folder": null,
+          "path_hint": null,
+          "project": null,
+          "last": "2026-09-18T18:00:00.000Z",
+          "waiting": 0,
+          "total": 0,
+          "counts_as_of": "2026-09-18T18:00:00.000Z",
+          "ended": false,
+          "served_url": null,
+          "openable": "missing",
+          "kind": "dev-server",
+          "starred": false,
+          "unreadable": true,
+          "request": null,
+          "pages": [],
+          "folded_from": []
+        },
+        {
+          "id": "r_notitle",
+          "title": null,
+          "display_name": "loose / untitled.html",
+          "file": "untitled.html",
+          "folder": "loose",
+          "path_hint": "~/loose",
+          "project": null,
+          "last": "2026-09-18T17:00:00.000Z",
+          "waiting": 0,
+          "total": 0,
+          "counts_as_of": "2026-09-18T17:00:00.000Z",
+          "ended": false,
+          "served_url": null,
+          "openable": "yes",
+          "kind": "static",
+          "starred": false,
+          "unreadable": false,
+          "request": null,
+          "pages": [],
+          "folded_from": []
+        },
+        {
+          "id": "r_s3page",
+          "title": null,
+          "display_name": "old-pages / p5.html",
+          "file": "p5.html",
+          "folder": "old-pages",
+          "path_hint": "~/projects/alpha/old-pages",
+          "project": "alpha",
+          "last": "2026-09-15T05:00:00.000Z",
+          "waiting": 0,
+          "total": 0,
+          "counts_as_of": "2026-09-15T05:00:00.000Z",
+          "ended": false,
+          "served_url": null,
+          "openable": "yes",
+          "kind": "static",
+          "starred": false,
+          "unreadable": false,
+          "request": null,
+          "pages": [],
+          "folded_from": []
+        }
+      ]
+    },
+    {
+      "id": "legacy",
+      "name": null,
+      "projects": [],
+      "watching": null,
+      "last": "2026-09-09T16:00:00.000Z",
+      "reviews": [
+        {
+          "id": "r_legacy",
+          "title": "Legacy Page",
+          "display_name": "Legacy Page",
+          "file": "legacy.html",
+          "folder": "loose",
+          "path_hint": "~/loose",
+          "project": null,
+          "last": "2026-09-09T16:00:00.000Z",
+          "waiting": 1,
+          "total": 1,
+          "counts_as_of": "2026-09-09T16:00:00.000Z",
+          "ended": false,
+          "served_url": null,
+          "openable": "via-agent",
+          "kind": "legacy",
+          "starred": false,
+          "unreadable": false,
+          "request": null,
+          "pages": [
+            {
+              "title": "Legacy Page",
+              "path": "/"
+            }
+          ],
+          "folded_from": []
+        }
+      ]
+    }
+  ]
+}

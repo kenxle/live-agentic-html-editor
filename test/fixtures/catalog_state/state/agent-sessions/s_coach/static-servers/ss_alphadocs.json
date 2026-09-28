@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "id": "ss_alphadocs",
+  "session_id": "s_coach",
+  "instance": "inst_ss_alphadocs",
+  "root": "${ROOT}/home/projects/alpha/docs",
+  "logical_root": "${ROOT}/home/projects/alpha/docs",
+  "host": "127.0.0.1",
+  "port": 54010,
+  "pid": 515151,
+  "started_at": "2026-09-20T10:00:00.000Z",
+  "stopped_at": "2026-09-21T10:00:00.000Z",
+  "mounts": {}
+}

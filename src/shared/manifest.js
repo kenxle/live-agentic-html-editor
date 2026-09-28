@@ -250,13 +250,11 @@ var NON_BUNDLE_FILES = [
   {
     path: "src/service/catalog_reader.js",
     owner: "Library 1.1",
-    planned: true,
     why: "builds catalog.list from the state dir, and describeReview, which the drain calls too"
   },
   {
     path: "src/service/catalog_store.js",
     owner: "Library 1.1",
-    planned: true,
     why: "the only reader and writer of catalog.json (stars and the reopened map). Never overwrites a corrupt file"
   },
   {
