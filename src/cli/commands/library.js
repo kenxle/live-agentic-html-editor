@@ -22,6 +22,11 @@
 // `--session`, which the output tells the agent to pass from then on. The new
 // session owns no review, so it is not an empty review.
 
+// SERVING. `lahe library serve` serves the document a legacy or worktree
+// pickup names. It reads the path itself, from the request's review, re-runs the
+// candidate checks at serve time, and runs `lahe review` with the path as one
+// argv entry. A page-derived path never passes through a shell string.
+
 // ANSWERING. `lahe library answer` is the only CLI writer of
 // catalog-requests.jsonl, and the only line it writes is the answer. The
 // helper appends requests and recorded expiries.
@@ -30,18 +35,24 @@
 
 "use strict";
 
+var childProcess = require("node:child_process");
 var fs = require("node:fs");
+var path = require("node:path");
 
 var protocol = require("../../shared/protocol.js");
 var stateDir = require("../../service/state_dir.js");
 var agentSessions = require("../../service/agent_sessions.js");
 var catalogRequests = require("../../service/catalog_requests.js");
+var catalogReader = require("../../service/catalog_reader.js");
+
+var BIN = path.join(__dirname, "..", "..", "..", "bin", "lahe.js");
 
 var EXIT = protocol.CLI_EXIT;
 var C = protocol.CATALOG;
 
 var USAGE = [
   "usage: lahe library [--session <id>] [--name <name>] [--json] [--port <n>] [--state-dir <path>]",
+  "       lahe library serve <request-id> --session <id> [--port <n>] [--state-dir <path>]",
   "       lahe library answer <request-id> --session <id> --status done|refused --text \"...\" [--state-dir <path>]",
   "",
   "  lahe library           start the helper if it is not running, then print the Library's",
@@ -54,6 +65,10 @@ var USAGE = [
   "  --json                 print {url, attached, helper_started, session, session_created} as one JSON line",
   "  --port <n>             the helper's port. Default " + protocol.DEFAULT_PORT,
   "",
+  "  serve                  serve the document a legacy or worktree pickup names, as `lahe review`",
+  "                         does. It reads the path itself, so no page text passes through a shell.",
+  "                         --session is your own session, the one the request is for.",
+  "",
   "  answer                 answer one request from the catalog_requests section of the drain.",
   "                         --session is your own session, the one the request is for.",
   "                         --text is at most " + C.ANSWER_TEXT_MAX + " characters and shows on the Library row.",
@@ -65,6 +80,7 @@ function parse(argv) {
   var list = argv || [];
   var out = {
     answer: false,
+    serve: false,
     id: null,
     session: null,
     name: null,
@@ -77,8 +93,9 @@ function parse(argv) {
     error: null
   };
   var i = 0;
-  if (list[0] === "answer") {
-    out.answer = true;
+  if (list[0] === "answer" || list[0] === "serve") {
+    out.answer = list[0] === "answer";
+    out.serve = list[0] === "serve";
     i = 1;
     if (list[1] !== undefined && !/^--/.test(String(list[1]))) {
       out.id = String(list[1]);
@@ -89,10 +106,10 @@ function parse(argv) {
     var arg = list[i];
     if (arg === "--help" || arg === "-h") {
       out.help = true;
-    } else if (arg === "--json" && !out.answer) {
+    } else if (arg === "--json" && !out.answer && !out.serve) {
       out.json = true;
     } else if (arg === "--session" || arg === "--state-dir" || arg === "--port" ||
-      (!out.answer && arg === "--name") ||
+      (!out.answer && !out.serve && arg === "--name") ||
       (out.answer && (arg === "--status" || arg === "--text"))) {
       if (list[i + 1] === undefined) {
         out.error = arg + " needs a value";
@@ -129,6 +146,11 @@ function parse(argv) {
     else if (catalogRequests.ANSWER_STATUSES.indexOf(out.status) === -1) {
       out.error = "answer needs --status " + catalogRequests.ANSWER_STATUSES.join("|");
     } else if (out.text === null) out.error = "answer needs --text \"...\", which shows on the Library row";
+  }
+  if (out.serve) {
+    if (!out.id) out.error = "serve needs the request id: lahe library serve <request-id> --session <id>";
+    else if (!protocol.isSafeId(out.id)) out.error = "the request id must be a safe id: " + String(protocol.SAFE_ID);
+    else if (!out.session) out.error = "serve needs --session <id>, your own session";
   }
   return out;
 }
@@ -283,6 +305,78 @@ function runAnswer(args, opts, out, err) {
 }
 
 /**
+ * The file or folder a pickup serves, checked now, or a reason it cannot be.
+ *
+ * legacy: the review's own document, which must still be there and be this
+ * user's. worktree: the main-repo candidate, which describeReview re-checks on
+ * this read (real path under the repository, not hidden, a page, this user's,
+ * no quote or control character). Every other kind is not served.
+ */
+function serveTarget(described) {
+  if (!described) return { error: "its review is gone; answer refused" };
+  if (described.kind === "legacy") {
+    var stat = null;
+    try { stat = described.path ? fs.statSync(described.path) : null; } catch (error) { stat = null; }
+    if (!stat || !(stat.isFile() || stat.isDirectory())) return { error: "its document is gone; answer refused" };
+    if (typeof process.getuid === "function" && stat.uid !== process.getuid()) {
+      return { error: "its document belongs to another user; answer refused" };
+    }
+    return { target: described.path };
+  }
+  if (described.kind === "worktree") {
+    if (!described.candidate) return { error: "its worktree is gone and no main-repo copy passes the checks; answer refused" };
+    return { target: described.candidate };
+  }
+  return {
+    error: "its row is kind " + described.kind + ": serve is for legacy and worktree rows. " +
+      (described.kind === "static" ? "Take the session over instead" : "Answer refused")
+  };
+}
+
+async function runServe(args, opts, out, err) {
+  var nowMs = typeof opts.now === "number" ? opts.now : Date.now();
+  var dir;
+  try {
+    dir = resolveDir(args);
+  } catch (error) {
+    err("lahe library serve: " + error.message + "\n");
+    return EXIT.BAD_USAGE;
+  }
+  var request = catalogRequests.createQueue({ dir: dir }).pendingFor(args.session, nowMs).filter(function (r) {
+    return r.id === args.id;
+  })[0];
+  if (!request) {
+    err("lahe library serve: no pending Library request " + args.id + " for agent session " + args.session + "\n");
+    return EXIT.BAD_USAGE;
+  }
+  if (request.action !== catalogRequests.ACTION.PICKUP) {
+    err("lahe library serve: request " + args.id + " is a " + request.action + ", not a pickup\n");
+    return EXIT.BAD_USAGE;
+  }
+  var chosen = serveTarget(catalogReader.createReader({ dir: dir }).describeReview(request.review, nowMs));
+  if (chosen.error) {
+    err("lahe library serve: request " + args.id + ": " + chosen.error + "\n");
+    return EXIT.BAD_USAGE;
+  }
+  // argv, never a shell: the path is page text and arrives as one argument.
+  var argv = [BIN, "review", chosen.target, "--session", args.session];
+  if (args.stateDir) argv.push("--state-dir", args.stateDir);
+  if (args.port !== null) argv.push("--port", String(args.port));
+  var code = await new Promise(function (resolve) {
+    var child = childProcess.spawn(process.execPath, argv, { stdio: ["ignore", "pipe", "pipe"], shell: false });
+    child.stdout.on("data", function (chunk) { out(String(chunk)); });
+    child.stderr.on("data", function (chunk) { err(String(chunk)); });
+    child.on("error", function (error) {
+      err("lahe library serve: " + error.message + "\n");
+      resolve(1);
+    });
+    child.on("close", function (status) { resolve(typeof status === "number" ? status : 1); });
+  });
+  if (code === EXIT.OK) agentSessions.createStore({ dir: dir }).touchActivity(args.session);
+  return code;
+}
+
+/**
  * @param {string[]} argv everything after `library`
  * @param {{stdout?: function, stderr?: function, now?: number}} [options]
  */
@@ -300,6 +394,7 @@ async function run(argv, options) {
     return EXIT.BAD_USAGE;
   }
   if (args.answer) return runAnswer(args, opts, out, err);
+  if (args.serve) return runServe(args, opts, out, err);
   return runLibrary(args, opts, out, err);
 }
 
