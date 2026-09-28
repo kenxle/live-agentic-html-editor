@@ -46,7 +46,7 @@ The key design question, for the wireframe: **what is one row?** A document, a r
 ## User Stories
 
 - **As Ken**, I want to browse everything I've reviewed recently, so that I can find a document whose name I don't remember.
-- **As Ken**, I want to open a past document with one click and have the rail on it, so that I can read it right away and know whether an agent will see my comments.
+- **As Ken**, I want to open a past document easily and have the rail on it, so that I can read it right away and know whether an agent will see my comments.
 - **As Ken**, I want the Library to show me what still needs me (documents with waiting comments, starred ones) before the rest, so that the pile feels finite.
 - **As Ken**, I want to star the documents that matter, so that they stay easy to find as new ones pile up.
 - **As Ken**, I want to hand a document to the agent I'm already talking to, so that my comments on it get answered.
