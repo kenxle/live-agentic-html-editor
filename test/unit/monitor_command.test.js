@@ -124,10 +124,9 @@ test("the work the monitor prints carries no contract block", async () => {
   assert.match(printed, /fix the footer/, "the work still gets through");
   assert.equal(printed.includes("contract_in"), false, "and no pointer line: the item lines are the work");
   assert.equal(printed.includes("field_classes"), false, "and no field-class table");
-  assert.ok(
-    printed.includes(JSON.stringify(reviewFormat.DRAIN_FENCE_FIELD) + ":" + JSON.stringify(reviewFormat.DRAIN_FENCE)),
-    "the item line carries the D12 fence itself"
-  );
+  const itemLine = JSON.parse(printed.split("\n").find((line) => line.includes('"note":"fix the footer"')));
+  assert.ok(Object.prototype.hasOwnProperty.call(itemLine.page, "quote"), "page text sits under page (D12)");
+  assert.equal(Object.prototype.hasOwnProperty.call(itemLine, "quote"), false, "and not at the top level");
   reviewFormat.CONTRACT.forEach((clause) => {
     assert.equal(printed.includes(clause), false, "a contract clause reached the monitor: " + clause);
   });

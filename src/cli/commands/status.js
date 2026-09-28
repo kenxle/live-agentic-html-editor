@@ -357,38 +357,76 @@ function clip(text, limit) {
   return text.length <= limit ? text : text.slice(0, limit - 1) + "…";
 }
 
-// WHERE THE CONTRACT ACTUALLY IS, named so an agent can go and read it. The
-// file is review.json, one per review, and the field in it is `contract`.
-var CONTRACT_POINTER = {
-  contract_in: "review.json",
-  contract_field: "contract"
-};
-
 /**
- * The first `--json` line, in every mode this command has.
+ * One drain item line: where the item lives, then the item, with everything
+ * read off the page grouped under `page`.
  *
- * `lahe status` never prints the contract text. Not once, not for a cold
- * start, not behind a flag. The contract lives in exactly one place,
- * review.json, and that is the only file an agent is ever told to read it
- * from (D6: the agent contract is one JSON file). A second place it could
- * come from is a second thing to keep in sync, and a flag that decides which
- * one you get is a thing an agent has to remember to pass. `--quiet` used to
- * be that flag by accident: omit it and the drain silently cost 3,800 tokens
- * more. Nothing here reads `quiet` any more, on purpose, so there is no way
- * to call this command wrong.
+ * The drain used to open with a pointer to the contract and the whole
+ * field-class table, on every run. The drain repeats on every wake, and a
+ * review can hold hundreds of items, so the drain now repeats no rule text at
+ * all: repeated instruction-shaped words steer the agent reading them. The D12
+ * fence is kept as structure instead. The page-derived fields
+ * (review_format.DATA_FIELDS: quote, before, after_full, context, region,
+ * subject and the rest) move into the item's `page` object, beside the page's
+ * own path and title, which came off the page too. The contract says once what
+ * `page` means. The reviewer's words, `note` and `change`, stay at the top.
  *
- * The field classes still travel with every line. They are the fencing for
- * the item lines that follow: which fields hold text copied off the reviewed
- * page, so a consuming agent cannot read page text as intent (D12). Sending
- * the classification with the data costs a fraction of a line, every time.
+ * A data field is moved only when the item has it, and the move always wins, so
+ * an item can never carry page text at the top level of a drain line.
  */
-function firstJsonLine() {
-  return {
-    contract_in: CONTRACT_POINTER.contract_in,
-    contract_field: CONTRACT_POINTER.contract_field,
-    field_classes: Object.assign({}, reviewFormat.PROJECTED_FIELD_CLASS),
-    intent_fields: reviewFormat.INTENT_FIELDS.slice()
-  };
+var DRAIN_PAGE_KEY = "page";
+
+function drainLine(where, item) {
+  var line = Object.assign({}, where, item);
+  var page = Object.assign({}, line[DRAIN_PAGE_KEY] || {});
+  reviewFormat.DATA_FIELDS.forEach(function (field) {
+    if (!Object.prototype.hasOwnProperty.call(line, field)) return;
+    page[field] = line[field];
+    delete line[field];
+  });
+  line[DRAIN_PAGE_KEY] = page;
+  return line;
+}
+
+// ---------------------------------------------------------------------------
+// Telling an agent once that a review ended
+// ---------------------------------------------------------------------------
+//
+// "The reviewer ended this review" is a state, not an event: unlike an
+// unanswered item, which stops being listed the moment the agent answers it,
+// ended_at never clears. A reader with no memory of having said it lists the
+// review on every run, forever. One session carried seven ended reviews, the
+// oldest nine days old, on every wake.
+//
+// ONE LEDGER PER SESSION, SHARED by the monitor and the drain, with two marks:
+//
+//   <review>          the monitor woke on it. Written by `lahe monitor` only.
+//                     Bare, because that is what older monitors wrote.
+//   <review> drained  a drain printed it. The agent has been told.
+//
+// The monitor prints a review with neither mark and writes the first. A drain
+// prints a review without the second mark and writes it. So the monitor wakes
+// once, the agent it woke still finds the ending on its first drain (the
+// wake line and the monitor both tell it to drain, and that drain has to answer
+// "why was I woken"), and after that nobody prints it again. A hand drain that
+// sees it first is the delivery, and no monitor wakes on it afterwards.
+//
+// An audit (`--json` without `--quiet`) reads the whole picture and marks
+// nothing.
+
+var DRAINED_MARK = "drained";
+
+function readEndedLedger(ledgerPath) {
+  var marks = Object.create(null);
+  if (!fs.existsSync(ledgerPath)) return marks;
+  fs.readFileSync(ledgerPath, "utf8").split("\n").forEach(function (line) {
+    var parts = line.trim().split(/\s+/);
+    if (!parts[0]) return;
+    var entry = marks[parts[0]] || (marks[parts[0]] = { woke: false, drained: false });
+    if (parts[1] === DRAINED_MARK) entry.drained = true;
+    else entry.woke = true;
+  });
+  return marks;
 }
 
 // ---------------------------------------------------------------------------
@@ -490,6 +528,9 @@ function readFromDisk(dir, reviewId) {
  *   `suppressActivityTouch` is internal, for `lahe monitor`: its idle polls run
  *   this command without the agent being anywhere near, so they must not stamp
  *   the session as active. Nothing on the command line sets it.
+ *   `markEndedDelivered` is internal too, and also only `lahe monitor` sets it:
+ *   it makes this run read and write the ended-review ledger as the monitor
+ *   (see readEndedLedger) rather than as the agent's drain.
  * @returns {Promise<number>} the exit code, from protocol.CLI_EXIT
  */
 async function run(argv, options) {
@@ -596,9 +637,6 @@ async function run(argv, options) {
   if (ids.length === 0) {
     if (args.quiet) return EXIT.OK;
     if (args.json) {
-      // The pointer line goes out even with nothing to list, so a consumer can
-      // read line one the same way every time.
-      out(JSON.stringify(firstJsonLine()) + "\n");
       out(JSON.stringify({ reviews: 0, unanswered_ready: 0, state_dir: dir }) + "\n");
     } else {
       out("lahe status: no reviews in " + stateDirModule.reviewsRoot(dir) + ". Start one with `lahe review <page>`.\n");
@@ -696,7 +734,7 @@ async function run(argv, options) {
 
     if (args.json) {
       open.forEach(function (item) {
-        jsonItems.push(Object.assign({ review: id, agent_session_id: ownerSessionId, liveness: liveness }, item));
+        jsonItems.push(drainLine({ review: id, agent_session_id: ownerSessionId, liveness: liveness }, item));
       });
     }
 
@@ -839,8 +877,8 @@ async function run(argv, options) {
       });
     }
 
-    // An ended review is reported like an item: once per seen file, every time
-    // without one. Keyed with a literal "ended" where an item id and rev go, so
+    // An ended review is reported like an item: once per seen file. The
+    // session ledger below applies on top of that. Keyed with a literal "ended" where an item id and rev go, so
     // it shares the file's one-key-per-line shape and cannot collide with an
     // item (no item id is the word "ended").
     var endedToReport = endedReviews;
@@ -853,48 +891,45 @@ async function run(argv, options) {
       });
     }
 
-    // ONCE PER SESSION, FOR THE MONITOR ONLY. "The reviewer ended this review"
-    // is a state, not an event: unlike an unanswered item, which stops being
-    // reported the moment the agent answers it, ended_at never clears. A
-    // monitor that woke on it with no memory would wake on it again on every
-    // relaunch, forever, and every one of those relaunches costs a model turn
-    // for nothing.
-    //
-    // The mark is written only by `lahe monitor` (which sets this option), and
-    // never by an agent running the drain by hand: an agent that has just been
-    // woken has to be able to run the drain and find out why.
-    if (opts.markEndedDelivered && args.session && endedToReport.length > 0) {
-      var deliveredPath = stateDirModule.endedDeliveredPath(dir, args.session);
-      var delivered = Object.create(null);
+    // ONCE, TO WHICHEVER READER SEES IT FIRST. See readEndedLedger. Only a
+    // session's own drain or monitor reads and writes the ledger: a read with
+    // no --session spans sessions, and marking another agent's ending as told
+    // would take its news away.
+    var asMonitor = opts.markEndedDelivered === true;
+    var asDrain = !asMonitor && args.quiet;
+    if (args.session && (asMonitor || asDrain) && endedToReport.length > 0) {
+      var ledgerPath = stateDirModule.endedDeliveredPath(dir, args.session);
+      var marks;
       try {
-        if (fs.existsSync(deliveredPath)) {
-          fs.readFileSync(deliveredPath, "utf8").split("\n").forEach(function (line) {
-            var trimmed = line.trim();
-            if (trimmed) delivered[trimmed] = true;
-          });
-        }
+        marks = readEndedLedger(ledgerPath);
       } catch (readErr) {
-        err("lahe status: could not read " + deliveredPath + ": " + readErr.message + "\n");
+        err("lahe status: could not read " + ledgerPath + ": " + readErr.message + "\n");
         return EXIT.BAD_USAGE;
       }
-      var freshlyEnded = endedToReport.filter(function (entry) { return !delivered[entry.review]; });
-      if (freshlyEnded.length > 0) {
+      var news = endedToReport.filter(function (entry) {
+        var mark = marks[entry.review];
+        if (!mark) return true;
+        return asMonitor ? !(mark.woke || mark.drained) : !mark.drained;
+      });
+      if (news.length > 0) {
         try {
           stateDirModule.ensureAgentSessionDir(dir, args.session);
           fs.appendFileSync(
-            deliveredPath,
-            freshlyEnded.map(function (entry) { return entry.review; }).join("\n") + "\n",
+            ledgerPath,
+            news.map(function (entry) {
+              return asMonitor ? entry.review : entry.review + " " + DRAINED_MARK;
+            }).join("\n") + "\n",
             { mode: stateDirModule.FILE_MODE }
           );
         } catch (writeErr) {
-          // LOUD, like the seen file's own failures. A dedupe that silently
-          // broke here does not go quiet, it nags forever, and the agent pays
-          // a turn for each one.
-          err("lahe status: could not write " + deliveredPath + ": " + writeErr.message + "\n");
+          // LOUD, like the seen file's own failures. A ledger that silently
+          // broke here does not go quiet, it repeats forever, and the agent
+          // pays for every one.
+          err("lahe status: could not write " + ledgerPath + ": " + writeErr.message + "\n");
           return EXIT.BAD_USAGE;
         }
       }
-      endedToReport = freshlyEnded;
+      endedToReport = news;
     }
 
     // NOT SILENT WHEN A REVIEW ENDED. --quiet exists so a watcher that wakes on
@@ -902,9 +937,6 @@ async function run(argv, options) {
     // ended review is something, so it has to get past this.
     if (args.quiet && toPrint.length === 0 && endedToReport.length === 0) return EXIT.OK;
 
-    // Line one, before any page-derived text reaches the reader: the pointer
-    // and the field classes, every time, every mode.
-    out(JSON.stringify(firstJsonLine()) + "\n");
     toPrint.forEach(function (item) {
       out(JSON.stringify(item) + "\n");
     });
@@ -958,8 +990,8 @@ module.exports = {
   servedViaLine: servedViaLine,
   excerpt: excerpt,
   PAGE_TEXT_LABEL: PAGE_TEXT_LABEL,
-  CONTRACT_POINTER: CONTRACT_POINTER,
-  firstJsonLine: firstJsonLine,
+  drainLine: drainLine,
+  DRAIN_PAGE_KEY: DRAIN_PAGE_KEY,
   // `lahe session list` counts reviews and unanswered work per session. It asks
   // these two, rather than spelling the routing rule a second time: one answer
   // to "who owns this review" and one list of reviews with state on disk.
