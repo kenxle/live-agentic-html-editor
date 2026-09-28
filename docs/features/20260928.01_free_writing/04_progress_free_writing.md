@@ -1,6 +1,6 @@
 # Progress: Free writing
 
-**Phase 3, Wireframe.** You answered the brief's four questions and the brief is done. The wireframe is starting. Nothing is waiting on you. Last updated 2026-09-28 17:16.
+**Phase 3, Wireframe.** A builder is drawing three clickable wireframe directions. The architecture starts alongside it. Nothing is waiting on you. Last updated 2026-09-28 17:18.
 
 **Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html)
 
@@ -10,7 +10,9 @@ Nothing is waiting on you.
 
 ## Currently working on
 
-Nothing is running. Next: the wireframe, starting now.
+| Agent or task | Doing | Started | Branch |
+|---|---|---|---|
+| Wireframe builder | Three clickable directions for writing new text: a block menu on the bar, typing like Markdown, and a frame that grows as you write | 2026-09-28 17:18 | `main` (docs only) |
 
 ## Phases
 
@@ -60,6 +62,8 @@ Not shipped yet.
 ## Log
 
 Newest first.
+
+**2026-09-28 17:18.** Ken settled the last brief question: what the reviewer writes in one sitting is one edit, with no logic splitting new text out of it. He asked to finish the docs, so the architecture starts now alongside the wireframes.
 
 **2026-09-28 17:16.** Ken finished reading the brief on its page. He answered the four questions:
 - the agent writes the notes file
