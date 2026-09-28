@@ -1070,8 +1070,16 @@ The one read path, and the one keep-up loop. Before it, every agent hand-rolled 
     `PROJECTED_FIELD_CLASS` (`catalog_requests[].title` and so on) and fenced like every other data
     field. `title` is the Library's display name for the row, so it is never null for a real row.
     `candidate` is the main-repository copy of a worktree row, checked when the entry is built, or null.
-    `folder` is where a Launch starts the new agent: the repository holding the document (or the
-    candidate), else the document's own folder, or null.
+    `folder` is where a Launch starts the new agent: the repository holding the place below, else
+    that place's own folder, or null. The place comes only from records a page cannot write. For a
+    static row it is the covering server record's root. For a worktree row it is the candidate. For
+    a legacy row it is the document, and only when the document holds this review's own script
+    line. meta.json's `source_path` and `target_path` never name it: `review.write` records them
+    with the page's own token. The walk up to a `.git` stops below the home folder.
+    A row is `worktree` only when its covering server record's root is under
+    `<repo>/.claude/worktrees/<name>/` and the document is under that root, so a legacy row is never
+    one. `lahe library serve` serves a legacy row's document only when it holds this review's own
+    script line.
     `handoff` is the rail's hand-off message in its Library form,
     `AGENT_LIVENESS.handoffMessage(session, name, false, {library: true, stateDir: state_dir})`.
     It is the rail's text with one sentence changed: it asks the new agent to take the session over

@@ -298,6 +298,18 @@ test("a title holding the fence's closing marker and a newline stays one fenced 
   assert.equal(out.text.indexOf("cq_forged\""), -1, "the forged id never appears outside a JSON string");
 });
 
+/** A static server record the helper would have written, with no process behind it. */
+function serverRecord(dir, sessionId, id, root) {
+  const staticServers = require("../../src/service/static_servers.js");
+  const file = stateDir.staticServerPath(dir, sessionId, id);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({
+    schema: staticServers.SCHEMA, id, session_id: sessionId, instance: "inst_" + id, root, logical_root: root,
+    host: "127.0.0.1", port: 54998, pid: 999999, started_at: new Date(T0 - 60000).toISOString(),
+    stopped_at: new Date(T0 - 30000).toISOString(), mounts: {}
+  }, null, 2) + "\n");
+}
+
 test("a worktree candidate outside its repository, hidden, symlinked out, or not a page is null in the drain", async () => {
   const w = world();
   const repo = fs.realpathSync(tempDir());
@@ -321,6 +333,9 @@ test("a worktree candidate outside its repository, hidden, symlinked out, or not
   const log = logModule.createEventLog({ dir: w.dir });
   const reviews = reviewsModule.createReviews({ dir: w.dir, log });
   Object.keys(cases).forEach((label) => reviews.create({ id: "r_wt_" + label, agent_session_id: "s_doc", target_path: path.join(wt, cases[label]) }));
+  // The helper's record of the server that served the worktree: the one
+  // record a page cannot write, and what makes these rows worktree rows.
+  serverRecord(w.dir, "s_doc", "ss_wt", wt);
   for (const label of Object.keys(cases)) {
     w.queue.append({ action: "pickup", review: "r_wt_" + label, session: "s_doc", for: "s_attached" }, T0);
   }

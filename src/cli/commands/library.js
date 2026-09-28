@@ -309,8 +309,8 @@ function runAnswer(args, opts, out, err) {
 /**
  * The file or folder a pickup serves, checked now, or a reason it cannot be.
  *
- * legacy: the review's own document, which must still be there and be this
- * user's. worktree: the main-repo candidate, which describeReview re-checks on
+ * legacy: the review's own document, which must still be there, hold this
+ * review's own script line, and be this user's. worktree: the main-repo candidate, which describeReview re-checks on
  * this read (real path under the repository, not hidden, a page, this user's,
  * no quote or control character). Every other kind is not served.
  */
@@ -320,10 +320,16 @@ function serveTarget(described) {
     var stat = null;
     try { stat = described.path ? fs.statSync(described.path) : null; } catch (error) { stat = null; }
     if (!stat || !(stat.isFile() || stat.isDirectory())) return { error: "its document is gone; answer refused" };
+    // The recorded path is page text (review.write records it with the page's
+    // own token). Only a file that holds this review's script line is its
+    // document.
+    if (!described.verified_path || described.verified_path !== described.path) {
+      return { error: "its recorded file does not hold this review's script line; answer refused" };
+    }
     if (typeof process.getuid === "function" && stat.uid !== process.getuid()) {
       return { error: "its document belongs to another user; answer refused" };
     }
-    return { target: described.path };
+    return { target: described.verified_path };
   }
   if (described.kind === "worktree") {
     if (!described.candidate) return { error: "its worktree is gone and no main-repo copy passes the checks; answer refused" };

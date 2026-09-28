@@ -526,7 +526,7 @@ function readerDescriber(dir, nowMs) {
       title: described ? described.display_name : null,
       path: described ? described.path : null,
       candidate: described ? described.candidate : null,
-      folder: described ? projectFolder(described.candidate || described.path) : null,
+      folder: described ? projectFolder(launchRoot(described)) : null,
       // The rail's hand-off message in its Library form: take-over wording,
       // with the real --state-dir when it is not the default.
       handoff: protocol.AGENT_LIVENESS.handoffMessage(takeable ? sessionId : null, takeable ? name : null, false, {
@@ -535,6 +535,20 @@ function readerDescriber(dir, nowMs) {
       })
     };
   };
+}
+
+/**
+ * Where the launch folder is looked for, from records a page cannot write:
+ * a static row's covering server record root, a worktree row's candidate
+ * (itself derived from that root), a legacy row's document only when it holds
+ * the review's own script line. meta.json's source_path and target_path are
+ * page text (review.write records them), so they never name the folder.
+ */
+function launchRoot(described) {
+  if (described.kind === "static") return described.server_root || null;
+  if (described.kind === "worktree") return described.candidate || null;
+  if (described.kind === "legacy") return described.verified_path || null;
+  return null;
 }
 
 var DESCRIBED_FIELDS = ["kind", "origin", "title", "path", "candidate", "folder", "handoff"];

@@ -51,6 +51,7 @@ var agentSessions = require("./agent_sessions.js");
 var staticServers = require("./static_servers.js");
 var projection = require("./projection.js");
 var catalogStore = require("./catalog_store.js");
+var scriptLine = require("../shared/script_line.js");
 
 var CATALOG = protocol.CATALOG;
 var FOLD_CUTOFF_MS = Date.parse(CATALOG.FOLD_CUTOFF);
@@ -62,6 +63,9 @@ var HEARTBEAT = protocol.MONITOR.HEARTBEAT_FIELD;
 // `lahe review` renders.
 var PAGE_EXTENSIONS = [".html", ".htm", ".md", ".markdown"];
 var SINGLE_PAGE_EXTENSIONS = [".html", ".htm"];
+
+// A legacy document larger than this is not read for its script line.
+var SCRIPT_LINE_SCAN_MAX_BYTES = 8 * 1024 * 1024;
 
 // A quote, a backslash or a control character in a candidate path: never
 // offered. The path is page-derived, and an agent hands it on.
@@ -505,6 +509,29 @@ function createReader(options) {
     return realCandidate;
   }
 
+  /**
+   * Does `file` carry this review's own script line? The one proof a legacy
+   * review's recorded path is really its document: meta.json's paths are page
+   * text, but a page cannot write a file. Null when it does not.
+   */
+  function ownScriptLineFile(file, reviewId) {
+    if (typeof file !== "string" || !file) return null;
+    var stat = statOrNull(file);
+    if (!stat || !stat.isFile() || stat.size > SCRIPT_LINE_SCAN_MAX_BYTES) return null;
+    var text;
+    try {
+      text = String(readFile(file, "utf8"));
+    } catch (err) {
+      return null;
+    }
+    var tags = new RegExp(scriptLine.EXISTING_TAG.source, "gi");
+    var m;
+    while ((m = tags.exec(text)) !== null) {
+      if (m[1] === reviewId) return file;
+    }
+    return null;
+  }
+
   function pathHint(folderPath) {
     if (typeof folderPath !== "string" || !folderPath) return null;
     if (folderPath === home) return "~";
@@ -691,7 +718,13 @@ function createReader(options) {
     } else if (docOnDisk) {
       openable = covering ? "yes" : "via-agent";
     } else {
-      candidate = worktreeCandidate(info.docPath);
+      // A worktree row comes only from a record a page cannot write: the
+      // covering server record's root must itself be in a worktree, and the
+      // document must be under that root. meta.json's paths alone are page
+      // text (review.write records them with the page's own token).
+      var inWorktree = covering && typeof covering.meta.root === "string" && WORKTREE.test(covering.meta.root) &&
+        staticServers.coveragePath(covering.meta, info.docPath) !== null;
+      candidate = inWorktree ? worktreeCandidate(info.docPath) : null;
       if (candidate) {
         kind = "worktree";
         openable = "via-agent";
@@ -978,7 +1011,8 @@ function createReader(options) {
    *   `candidate` is the checked main-repository copy for a gone worktree.
    *   For Open (Library 2.1): `server` is the id of the recorded server that
    *   covers the review's served file, `server_root` that record's root, and
-   *   `url_path` that file's path on it (all null when none does); `served_path` is the file itself, `watching`
+   *   `url_path` that file's path on it (all null when none does); `served_path` is the file itself, `verified_path`
+   *   a legacy review's document when it holds this review's own script line, `watching`
    *   the session's watcher as the list shows it, and `last` the review's own
    *   newest event time. `fold` is every review on the same row, this one
    *   included (just this one for a row that is not a fold), so Star can act
@@ -1009,6 +1043,9 @@ function createReader(options) {
             server_root: part.covering && typeof part.covering.meta.root === "string" ? part.covering.meta.root : null,
             url_path: part.covering ? part.covering.urlPath : null,
             served_path: part.info.servedPath,
+            // A legacy review's document, only when it holds this review's
+            // own script line; null otherwise and for every other kind.
+            verified_path: part.kind === "legacy" ? ownScriptLineFile(part.info.docPath, reviewId) : null,
             watching: watchingOf(s.id, nowMs),
             last: iso(part.info.lastMs),
             fold: row.parts.map(function (p) { return p.info.id; }).sort()

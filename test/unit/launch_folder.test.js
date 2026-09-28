@@ -35,6 +35,16 @@ async function entryFor(doc) {
   store.create({ id: "s_doc" });
   reviewsModule.createReviews({ dir, log: logModule.createEventLog({ dir }) })
     .create({ id: "r_doc", agent_session_id: "s_doc", target_path: doc });
+  // The folder comes from the helper's server record, never from meta.json's
+  // paths, which a page can rewrite with its review token.
+  const staticServers = require("../../src/service/static_servers.js");
+  const record = stateDir.staticServerPath(dir, "s_doc", "ss_doc");
+  fs.mkdirSync(path.dirname(record), { recursive: true });
+  fs.writeFileSync(record, JSON.stringify({
+    schema: staticServers.SCHEMA, id: "ss_doc", session_id: "s_doc", instance: "inst_ss_doc",
+    root: path.dirname(doc), logical_root: path.dirname(doc), host: "127.0.0.1", port: 54997, pid: 999999,
+    started_at: new Date(T0 - 60000).toISOString(), stopped_at: new Date(T0 - 30000).toISOString(), mounts: {}
+  }) + "\n");
   const reviewJson = stateDir.reviewJsonPath(dir, "r_doc");
   fs.writeFileSync(reviewJson, JSON.stringify({ review: {}, pages: [{ title: "Doc", path: "/" + path.basename(doc), items: [] }] }));
   catalogRequests.writeAttach(dir, "s_attached", T0);
