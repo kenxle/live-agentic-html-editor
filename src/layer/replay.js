@@ -1204,17 +1204,23 @@
   //                    Per-record, like undo, and it touches nothing else
   //
   // Drawn as two labelled panes rather than five paragraphs of one size: an
-  // eyebrow per side names it ("Your version" / "On the page now"), and the
-  // reviewer's side is set in the accent ink while the page's stays the
-  // quieter default. No left rule per side: a single-side colored border is
-  // banned, and the label plus the ink colour already say which is which.
+  // eyebrow per side, a left rule (the reviewer's in the accent, the page's in
+  // the neutral line colour), and the two buttons under both.
+  //
+  // The rules stay. They are not decoration: they are what tells the two
+  // versions apart at a glance, in a rail where a conflict card sits among
+  // ordinary ones. The accent on 'yours' says which half is the reviewer's own
+  // new text; the label alone does that too slowly when several cards are
+  // stacked.
   var CONFLICT_STYLE = [
     "[data-lahe-conflict]{display:flex;flex-direction:column;gap:9px;",
     "border-top:1px solid var(--line-soft);padding-top:9px}",
     "[data-lahe-conflict][hidden]{display:none}",
     "[data-lahe-conflict-title]{font-size:12.5px;font-weight:600;line-height:1.45;color:var(--ink)}",
     "[data-lahe-conflict-sides]{display:flex;flex-direction:column;gap:8px}",
-    "[data-lahe-conflict-side]{display:flex;flex-direction:column;gap:3px}",
+    "[data-lahe-conflict-side]{padding-left:9px;border-left:2px solid var(--line);",
+    "display:flex;flex-direction:column;gap:3px}",
+    "[data-lahe-conflict-side='yours']{border-left-color:var(--accent)}",
     "[data-lahe-conflict-label]{font-size:10px;font-weight:600;letter-spacing:.08em;",
     "text-transform:uppercase;color:var(--ink-faint)}",
     "[data-lahe-conflict-side='yours'] [data-lahe-conflict-label]{color:var(--accent-ink)}",

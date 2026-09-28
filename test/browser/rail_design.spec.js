@@ -845,8 +845,26 @@ test.describe("the rail as a shipping surface", () => {
           title: node.querySelector("[data-lahe-conflict-title]").textContent,
           yoursLabel: side("yours").querySelector("[data-lahe-conflict-label]").textContent,
           theirsLabel: side("theirs").querySelector("[data-lahe-conflict-label]").textContent,
-          // No rule per side (a single-side colored border is banned here);
-          // the label ink colour is what tells the sides apart instead.
+          // A rule per side, and the reviewer's is the accent one, so the pair
+          // reads as a pair rather than as four undifferentiated paragraphs.
+          // This is a new-versus-old signal, so it is asserted twice over: the
+          // two rules differ from each other AND the reviewer's is really the
+          // accent at a real width. A rule deleted outright falls back to the
+          // element's own colour, which could still differ side to side; the
+          // width and accent checks close that.
+          yoursRule: cs(side("yours")).borderLeftColor,
+          theirsRule: cs(side("theirs")).borderLeftColor,
+          yoursRuleWidth: parseFloat(cs(side("yours")).borderLeftWidth),
+          theirsRuleWidth: parseFloat(cs(side("theirs")).borderLeftWidth),
+          accentColor: (function () {
+            var probe = document.createElement("div");
+            probe.style.borderLeft = "2px solid var(--accent)";
+            side("yours").appendChild(probe);
+            var value = cs(probe).borderLeftColor;
+            probe.remove();
+            return value;
+          })(),
+          // The label ink differs too, and always did.
           yoursLabelColor: cs(side("yours").querySelector("[data-lahe-conflict-label]")).color,
           theirsLabelColor: cs(side("theirs").querySelector("[data-lahe-conflict-label]")).color,
           labelTransform: cs(side("yours").querySelector("[data-lahe-conflict-label]")).textTransform,
@@ -862,6 +880,10 @@ test.describe("the rail as a shipping surface", () => {
       expect(block.yoursLabel).toBe("Your version");
       expect(block.theirsLabel).toBe("On the page now");
       expect(block.labelTransform, "the tab's own eyebrow type").toBe("uppercase");
+      expect(block.yoursRule, "the two rules differ, so the sides do").not.toBe(block.theirsRule);
+      expect(block.yoursRuleWidth, "the reviewer's rule is really drawn").toBeGreaterThanOrEqual(2);
+      expect(block.theirsRuleWidth, "and so is the page's").toBeGreaterThanOrEqual(2);
+      expect(block.yoursRule, "the reviewer's side wears the rail's accent").toBe(block.accentColor);
       expect(block.yoursLabelColor, "the two labels differ in ink, so the sides do").not.toBe(
         block.theirsLabelColor
       );

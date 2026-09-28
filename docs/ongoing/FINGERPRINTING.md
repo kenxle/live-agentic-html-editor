@@ -27,7 +27,7 @@ Runners come back too fast after a layoff, and <span style="background-color:rgb
 
 <div style="width:288px;display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:10px;border:1px solid rgba(17,17,17,0.12);background:#ffffff;box-shadow:0 8px 28px rgba(17,17,17,0.16),0 1px 2px rgba(17,17,17,0.08);font:13px/1.5 ui-sans-serif,system-ui,-apple-system,sans-serif;color:#111111;margin:-10px 0 0 34px;position:relative;z-index:1">
   <div style="height:10px;margin:-4px -4px 0 -4px;border-radius:6px;background-image:radial-gradient(rgba(17,17,17,0.28) 1px,transparent 1px);background-size:5px 5px;background-position:center;background-repeat:repeat-x"></div>
-  <p style="margin:0;color:rgba(17,17,17,0.62);font-size:12px;font-style:italic">the third week is where it shows</p>
+  <p style="margin:0;padding-left:8px;border-left:2px solid rgba(60,86,165,0.75);color:rgba(17,17,17,0.62);font-size:12px">the third week is where it shows</p>
   <div style="width:100%;box-sizing:border-box;min-height:66px;border:1px solid rgba(17,17,17,0.16);border-radius:6px;padding:7px 8px;font:inherit;color:inherit;background:#fff">Say which week plainly. And cut the second sentence down, it is doing two jobs.</div>
   <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;color:rgba(17,17,17,0.5);font-size:11px">
     <span>Cmd-Enter when done with this comment</span>
@@ -75,7 +75,7 @@ Runners come back too fast after a layoff, and <span style="background-color:rgb
       <span style="font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:999px;color:#2c6f52;background:transparent;border:1px solid currentColor">handled</span>
       <span style="font-size:11px;color:#868f9f">11:04</span>
     </div>
-    <div style="font-size:12px;color:#565e6d;font-style:italic">the third week is where it shows</div>
+    <div style="font-size:12px;color:#565e6d;border-left:2px solid #e2e5eb;padding-left:9px">the third week is where it shows</div>
     <div style="font-size:13.5px;line-height:1.5;color:#15171c">Say which week plainly. And cut the second sentence down, it is doing two jobs.</div>
     <div style="border-radius:8px;padding:8px 10px;background:#f6f7f9;font-size:12.5px">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:3px;color:#868f9f;font-size:11px"><span>claude</span><span>1 file</span></div>
@@ -188,7 +188,7 @@ highlight stays**, because the element's identity never depended on the words.
 ### 3. The agent deletes it
 
 <div style="border:1px solid #d8dbe0;border-radius:8px;padding:14px 18px;margin:8px 0;font-family:system-ui,sans-serif;font-size:14px;line-height:1.6;color:#1f2430">
-Runners come back too fast after a layoff. <span style="color:#7a8290;font-style:italic">your comment was here</span> The plan has to survive the week nobody plans for.
+Runners come back too fast after a layoff. <span style="border-left:3px solid rgba(60,86,165,0.45);padding-left:8px;color:#7a8290;font-style:italic">your comment was here</span> The plan has to survive the week nobody plans for.
 </div>
 
 Nothing claims to be the passage, including the sentence that closed the gap.

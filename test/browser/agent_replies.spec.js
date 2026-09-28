@@ -642,6 +642,7 @@ test.describe("3A: an agent answers by appending one line", () => {
           text: text.textContent,
           markupInside: text.querySelectorAll("*").length,
           fontSize: parseFloat(styles.fontSize),
+          ruleWidth: parseFloat(getComputedStyle(ask).borderLeftWidth),
           askBackground: getComputedStyle(ask).backgroundColor,
           cardBackground: getComputedStyle(cardNode).backgroundColor,
           // The wash the block is SUPPOSED to wear, read off the same custom
@@ -686,11 +687,14 @@ test.describe("3A: an agent answers by appending one line", () => {
       // Loud, as geometry rather than as intent: bigger than the reviewer's own
       // words, a rule of its own, and first in its pane.
       expect(drawn.fontSize).toBeGreaterThan(drawn.bodyFontSize);
-      // No accent rule down the side; the wash behind the block carries the
-      // emphasis instead. Pinned to the wash itself, not just "differs from
-      // the card": a deleted wash rule would leave the block transparent,
-      // which also differs from the card's paper and would pass a weaker
-      // check for the wrong reason.
+      // Two signals, both asserted. The accent rule down the side is the
+      // block's attention marker: it is the layer asking the reviewer for
+      // something and nothing happens until they answer. The wash behind it
+      // is the second. The wash check is pinned to the wash ITSELF, not just
+      // "differs from the card": a deleted wash rule would leave the block
+      // transparent, which also differs from the card's paper and would pass
+      // a weaker check for the wrong reason.
+      expect(drawn.ruleWidth).toBeGreaterThanOrEqual(3);
       expect(drawn.askBackground).toBe(drawn.accentWash);
       expect(drawn.askBackground).not.toBe(drawn.cardBackground);
       expect(drawn.askBackground).not.toBe("rgba(0, 0, 0, 0)");
@@ -1370,7 +1374,7 @@ test.describe("3A: an agent answers by appending one line", () => {
   // is loud without also being a question. A light-mode regression that makes
   // a loud reply blend into an ordinary one is a real defect even though no
   // current caller triggers it today.
-  test("a loud agent message wears a border an ordinary one does not, in light mode", async ({ page }) => {
+  test("a loud agent message wears an accent rule an ordinary one does not, in light mode", async ({ page }) => {
     const { app, helper, token } = await startBoth();
     try {
       await bootedPage(page, app, helper, token);
@@ -1381,26 +1385,37 @@ test.describe("3A: an agent answers by appending one line", () => {
         const rail = window.__lahe.rail;
         rail.setAgentMessage(id, { status: "handled", agent: "claude", text: "cut it down" });
         const node = rail.cardNode(id).querySelector(".agent");
-        const ordinary = getComputedStyle(node).borderColor;
+        const ordinaryWidth = getComputedStyle(node).borderLeftWidth;
 
         rail.setAgentMessage(id, { status: "question", agent: "claude", text: "cut which part?" });
-        const loud = getComputedStyle(node).borderColor;
-        const loudWidth = getComputedStyle(node).borderTopWidth;
+        const loud = getComputedStyle(node).borderLeftColor;
+        const loudWidth = getComputedStyle(node).borderLeftWidth;
 
         var probe = document.createElement("div");
-        probe.style.borderColor = "var(--accent)";
-        probe.style.borderStyle = "solid";
-        probe.style.borderWidth = "1px";
+        probe.style.borderLeft = "3px solid var(--accent)";
         node.appendChild(probe);
-        var accentColor = getComputedStyle(probe).borderColor;
+        var accentColor = getComputedStyle(probe).borderLeftColor;
         probe.remove();
 
-        return { ordinary: ordinary, loud: loud, loudWidth: loudWidth, accentColor: accentColor };
+        return {
+          ordinaryWidth: ordinaryWidth,
+          loud: loud,
+          loudWidth: loudWidth,
+          accentColor: accentColor,
+        };
       }, item.id);
 
-      expect(parseFloat(drawn.loudWidth), "the loud block carries a real border, not a zero-width one").toBeGreaterThanOrEqual(1);
-      expect(drawn.loud, "the loud border is the rail's own accent colour").toBe(drawn.accentColor);
-      expect(drawn.loud, "and it reads differently from an ordinary agent message").not.toBe(drawn.ordinary);
+      // The rule is the attention marker: a loud reply is one the reviewer has
+      // not dealt with yet. Width AND colour, so deleting either goes red.
+      expect(
+        parseFloat(drawn.loudWidth),
+        "the loud block carries a real rule, not a zero-width one"
+      ).toBeGreaterThanOrEqual(3);
+      expect(drawn.loud, "the loud rule is the rail's own accent colour").toBe(drawn.accentColor);
+      expect(
+        parseFloat(drawn.ordinaryWidth),
+        "and an ordinary agent message has no rule at all"
+      ).toBe(0);
     } finally {
       await helper.stop().catch(() => {});
       await app.close();

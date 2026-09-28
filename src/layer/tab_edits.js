@@ -138,14 +138,13 @@
   // and the tab cannot drift from the chrome around it.
   var STYLE = [
     "." + ROW_CLASS + "{display:flex;flex-direction:column;gap:6px}",
-    // A full border, not a left-only stripe: this repo bans a single-side
-    // colored border. An edit row gets the accent wash and border colour that
-    // the rest of the rail already uses for "this is the emphasized one"
-    // (see .card__state[data-state='ready']); other kinds stay the plain box.
+    // The rule per pair stays, and so does the accent on an edit row. This is
+    // the tab's new-versus-old signal: scanning a column of rows, the accent
+    // rule is what separates the reviewer's own edits from everything else.
+    // Drop it and the tab is one undifferentiated stack.
     "." + ROW_CLASS + "__pair{display:flex;flex-direction:column;gap:4px;",
-    "border:1px solid var(--line);border-radius:7px;padding:6px 9px}",
-    "." + ROW_CLASS + "[data-kind='edit'] ." + ROW_CLASS + "__pair{",
-    "border-color:var(--accent);background:var(--accent-wash)}",
+    "border-left:2px solid var(--line);padding-left:9px}",
+    "." + ROW_CLASS + "[data-kind='edit'] ." + ROW_CLASS + "__pair{border-left-color:var(--accent)}",
     // pre-wrap, because an edit's text can carry the breaks the reviewer typed.
     // Without it the rail draws their new paragraph as one more space and the
     // row says the change did not happen.
