@@ -84,7 +84,7 @@ Keep the placeholder-header workaround and terminal notes.
 
 ## Recommended approach
 
-B, chosen by Ken, with one constraint he added: **this is an upgrade of the existing edit mode, not a new mode.** It should feel the same to the user as editing does today. The gesture is the edit keystroke plus a click; the bar is the same edit bar with a block-type control added; the record is the same edit record family with an insert kind. Ship in two cuts: paragraphs, headers, the blank document command, and the formatting fix first; lists and the proofread suggestion second.
+B, chosen by Ken, with one constraint: it should feel like the edit mode the user already has, not a separate mode. Whether Tiptap is the engine inside it (Approach D on the questions page) is still open. Everything else, including the gesture, what the bar shows, how a sitting is bounded, and how the record is shaped, is for the brief and the architecture to work out. This document does not decide any of it.
 
 ## Challenges the session leader accepted
 
@@ -96,7 +96,7 @@ B, chosen by Ken, with one constraint he added: **this is an upgrade of the exis
 
 - **Splitting the formatting bug into its own row.** Rejected: the feature is largely about editing, so the bug is in scope. The brief writer treats lost or misread bold and italic as a requirement of this feature, not a separate fix.
 - **Splitting notes into a separate brief.** Rejected: notes are hand-written documentation, which is what this feature is. The brief includes starting a blank document.
-- **Treating this as a new mode.** Rejected before it was proposed: Ken wants it to feel like the edit mode he already has. The brief and the wireframe must not introduce a second entry point, a second bar, or a second visual state.
+- **Treating this as a new mode.** Rejected before it was proposed: Ken wants it to feel like the edit mode he already has. How that is achieved is open.
 
 ## What we skipped and why
 
