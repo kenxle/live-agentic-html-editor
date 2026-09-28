@@ -19,6 +19,10 @@
 
 4. **A read, not a decision:** the subagent pool proposal on the memory audit hub (item 13). It keeps a few helpers warm instead of starting a fresh one for every medium-size job.
 
+5. **A page visible next to the terminal.** The quiet-tab change is built. It cuts an unfocused tab from 3,960 requests an hour to 12. The catch: a review page you can see beside the terminal, but have not clicked into, counts as unfocused, so a reply only appears once you click into it. Two ways to go:
+   - **Keep it as built.** Click the page to see replies.
+   - **A middle speed for a visible page.** A page you can see but have not clicked checks every 15 seconds, and only a hidden page goes fully quiet. That costs about 240 requests an hour per visible page instead of 12.
+
 ## Needs a spec before code
 
 - **Send only what changed in a draft.** You approved it. It changes how the log is written, so I will bring you a spec first.
