@@ -791,7 +791,10 @@ function createReader(options) {
       state: r.state,
       by_name: typeof r.by_name === "string" && r.by_name ? r.by_name : null,
       text: typeof r.text === "string" ? r.text : null,
-      answered_at: answered
+      answered_at: answered,
+      // Why an expired request expired (attach_changed, monitor_dead,
+      // timeout), so the page can say which; null in every other state.
+      reason: r.state === "expired" && typeof r.reason === "string" ? r.reason : null
     };
   }
 

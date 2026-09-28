@@ -41,7 +41,7 @@ function fixtureRequests(nowMs) {
       id: "cq_refused1", action: "launch", at: at(60 * MINUTE), for: "s_index", state: "refused",
       by: "s_index", text: "I can't open a terminal here.", answered_at: at(58 * MINUTE)
     },
-    r_wt_gone: { id: "cq_expired1", action: "pickup", at: at(90 * MINUTE), for: "s_index", state: "expired" },
+    r_wt_gone: { id: "cq_expired1", action: "pickup", at: at(90 * MINUTE), for: "s_index", state: "expired", reason: "monitor_dead" },
     r_legacy: {
       id: "cq_old1", action: "pickup", at: at(2 * 24 * 60 * MINUTE), for: "s_index", state: "done",
       by: "s_index", text: "long ago", answered_at: at(2 * 24 * 60 * MINUTE - MINUTE)
@@ -552,7 +552,7 @@ test("wired to 1.4's real queue: attached comes from readAttached and each row's
   assert.deepEqual(list.attached, { session: "s_index", name: "document index", watching: true });
   assert.deepEqual(row(list, "r_brief").request, {
     id: waiting.request.id, action: "pickup", at: waiting.request.at, state: "waiting",
-    by_name: "document index", text: null, answered_at: null
+    by_name: "document index", text: null, answered_at: null, reason: null
   });
   const answered = row(list, "r_spec").request;
   assert.equal(answered.state, "done");
@@ -744,4 +744,21 @@ test("CR5: origin events an Open's swap appends do not move a review's last; the
   const list = await reader.list(installed.nowMs);
   assert.equal(row(list, "r_spec").last, newestTs);
   assert.equal(reader.describeReview("r_spec", installed.nowMs).last, newestTs, "the log line's age reads the same last");
+});
+
+test("an expired request's reason reaches the list, so the page can word attach_changed and a dead monitor apart", async () => {
+  const catalogRequests = require("../../src/service/catalog_requests.js");
+  const installed = fixture.install();
+  const now = installed.nowMs;
+  require("../../src/service/agent_sessions.js").createStore({ dir: installed.dir }).reopen("s_index");
+  catalogRequests.writeAttach(installed.dir, "s_index", now - 5 * MINUTE);
+  const queue = catalogRequests.createQueue({ dir: installed.dir, writeExpired: true, pidAlive: () => true, log: () => {} });
+  queue.append({ action: "launch", review: "r_brief", session: "s_coach", for: "s_index" }, now - 2 * MINUTE);
+  catalogRequests.writeAttach(installed.dir, "s_coach", now - MINUTE);
+  const reader = catalogReader.createReader(Object.assign({
+    dir: installed.dir, home: installed.home, pidAlive: () => true, probe: async () => false
+  }, catalogReader.queueInputs(queue)));
+  const list = await reader.list(now);
+  assert.equal(row(list, "r_brief").request.state, "expired");
+  assert.equal(row(list, "r_brief").request.reason, "attach_changed");
 });

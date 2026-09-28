@@ -44,7 +44,8 @@
             "state": "waiting",
             "by_name": "document index",
             "text": null,
-            "answered_at": null
+            "answered_at": null,
+            "reason": null
           },
           "pages": [
             {
@@ -79,7 +80,8 @@
             "state": "done",
             "by_name": "document index",
             "text": "watching Shared Title",
-            "answered_at": "2026-09-28T15:25:00.000Z"
+            "answered_at": "2026-09-28T15:25:00.000Z",
+            "reason": null
           },
           "pages": [
             {
@@ -114,7 +116,8 @@
             "state": "refused",
             "by_name": "document index",
             "text": "I can't open a terminal here.",
-            "answered_at": "2026-09-28T15:02:00.000Z"
+            "answered_at": "2026-09-28T15:02:00.000Z",
+            "reason": null
           },
           "pages": [
             {
@@ -356,7 +359,8 @@
             "state": "expired",
             "by_name": "document index",
             "text": null,
-            "answered_at": null
+            "answered_at": null,
+            "reason": "monitor_dead"
           },
           "pages": [
             {
