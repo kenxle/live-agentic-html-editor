@@ -290,7 +290,6 @@ var CATALOG_PAGE = [
   {
     path: "src/layer/catalog/view_model.js",
     owner: "Library 2.2",
-    planned: true,
     why: "a pure module, no DOM: a list response and the page's state into sections, rows and button states"
   },
   {
