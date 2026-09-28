@@ -1,6 +1,6 @@
 # Progress: LAHE Library
 
-**Phase 6, Implement.** You cleared the design, and the plan's three reviews are folded in. The shared names are in (commit 000c40b), and Phase 1 is merged (1449 unit tests pass). Two Phase 2 builders are working: one connects the pieces into the Library's actions, one builds the page. Nothing is waiting on you. Last updated 2026-09-28 17:16.
+**Phase 6, Implement.** You cleared the design, and the plan's three reviews are folded in. The shared names are in (commit 000c40b), and Phase 1 is merged (1449 unit tests pass). The Library's actions are wired and merged (1490 unit tests pass). The page builder is still working. Nothing is waiting on you. Last updated 2026-09-28 17:36.
 
 **Docs:** [Crucible](http://127.0.0.1:54705/00_crucible.html) · [Brief](http://127.0.0.1:54705/01_brief_lahe_library.html) · [Wireframes](http://127.0.0.1:54705/wireframes/index.html) · [Architecture](http://127.0.0.1:54705/02_architecture_lahe_library.html) · [Plan](http://127.0.0.1:54705/03_plan_lahe_library.html) · [Ideas page](http://127.0.0.1:55480/DOCUMENT_INDEX_IDEAS-b09cd11f2a84063f.html)
 
@@ -12,7 +12,6 @@ Nothing is waiting on you.
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Builder 2.1 | Connecting the pieces: the Library's list, Open, Star and hand-over actions, and keeping LAHE running while the Library is open | 2026-09-28 17:16 | `task/lib-wiring` |
 | Builder 2.2 | The Library page itself, with screenshots in light and dark | 2026-09-28 17:16 | `task/lib-page` |
 
 ## Phases
@@ -39,6 +38,7 @@ Nothing is waiting on you.
 | 0 | 1 | shared names | done | commit 000c40b | Routes, auth class, error codes, constants and manifest entries landed; unit gate green. |
 | 1 | 1 | list reader and star store | merged | `task/lib-reader`, progress/phase1_task1_reader.md | Builds the Library's list from records on disk, folds old per-page reviews, and never reads a large log. A corrupt stars file is refused, never overwritten. 1366 unit tests pass. One rule is copied from the server code for now; step 2.1 moves it to one place. |
 | 1 | 2 | auth and page serving | merged | `task/lib-auth`, progress/phase1_task2_auth.md | The Library's key lives only in the page; every Library request passes the same-site checks; the page and its files are served with no cross-site access. It also closed an old gap: a page on another local port could get preflight approval for any path. 1330 unit tests pass. |
+| 2 | 1 | wiring and lifetime | merged | `task/lib-wiring`, progress/phase2_task1_wiring.md | List, Open, Star and hand-over requests work end to end on the helper; LAHE stays up while the Library is open; quiet reopened sessions close again. The copied server rule now lives in one place. The helper's version number went up, so an older running helper gets replaced. |
 | 1 | 4 | request queue and CLI | merged | `task/lib-queue`, progress/phase1_task4_queue.md | The queue that hands a document to an agent, its place in the agent's drain, `lahe library`, and a monitor that watches several sessions. 1373 unit tests pass. |
 | 1 | 3 | restart and Host check | merged | `task/lib-restart`, progress/phase1_task3_restart.md | A restarted server tries its old port first and swaps its origin; every page server now refuses a foreign Host. 1331 unit tests pass. |
 
@@ -54,8 +54,7 @@ None.
 
 ### Follow-ups
 
-- Step 2.1: move the "which files does a server cover" rule into `static_servers.js` and delete the reader's copy.
-- Step 2.1: wire the reader's `attachment` and `requestFor` to the request queue, and the drain's `describe` to the reader's `describeReview`.
+- The reader re-reads the request file once per row on every poll; read it once per list.
 
 ### Cleanup queue
 
