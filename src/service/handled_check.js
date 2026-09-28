@@ -202,6 +202,30 @@ function passageStarts(blocks, passage) {
 }
 
 /**
+ * Every block index at which a several-paragraph after starts, with its breaks
+ * where the reviewer put them: the first paragraph ends a page block, the last
+ * one starts a page block, and every one between is a page block whole. The
+ * same containment the one-paragraph test has, at each end, and no more.
+ */
+function splitStarts(blocks, parts) {
+  var starts = [];
+  var last = parts.length - 1;
+  for (var i = 0; i + last < blocks.length; i += 1) {
+    var head = blocks[i];
+    if (head.length < parts[0].length || head.slice(head.length - parts[0].length) !== parts[0]) continue;
+    var whole = true;
+    for (var j = 1; j < last; j += 1) {
+      if (blocks[i + j] !== parts[j]) {
+        whole = false;
+        break;
+      }
+    }
+    if (whole && blocks[i + last].indexOf(parts[last]) === 0) starts.push(i);
+  }
+  return starts;
+}
+
+/**
  * The handled verdict for one item against the pages it could be on.
  *
  * Held open (false) only when the after is not on the page AND one of these
@@ -240,6 +264,22 @@ function verdictFor(pages, item, nothingWritten) {
 
   var untouched = found.length === 1 ? found[0] : null;
   if (!untouched && !nothingWritten) return null;
+
+  // AN AFTER OF SEVERAL PARAGRAPHS is looked for paragraph by paragraph. Flat
+  // text folds a paragraph break to a space, so a reviewer's split of one
+  // paragraph into two reads as the old paragraph, and a split nobody made
+  // would pass. Both witnesses above say the passage was left alone, so asking
+  // for the reviewer's breaks as well is fair.
+  var afterBlocks = blocksOf(item[record.FIELD.AFTER]);
+  if (afterBlocks && afterBlocks.length > 1) {
+    return read.some(function (blocks, page) {
+      return splitStarts(blocks, afterBlocks).some(function (start) {
+        if (!untouched || untouched.page !== page) return true;
+        var last = start + afterBlocks.length - 1;
+        return start < untouched.start || last > untouched.start + passage.length - 1;
+      });
+    });
+  }
 
   for (var p = 0; p < read.length; p += 1) {
     var blocks = read[p];

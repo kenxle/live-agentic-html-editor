@@ -220,7 +220,7 @@ none.
 | A before the reviewer's page recorded as not unique (`region.ref.text_unique: false`) | No: once the agent changes the right twin, the other still looks untouched |
 | A short before (a word or two) | Only as a whole block. A heading "Summary" left alone is held; one the agent expanded to "Summary of findings" is not. A short before that recurs as a block is the twice case |
 | An insertion (empty before) | No: there is no passage to find. Only the nothing-written gate can hold it |
-| An addition: the after holds the whole before (the reviewer only added words, split a paragraph, or changed typography) | No: an agent can do the work and leave the old block exactly as it was, putting the new words beside it in its own wording (`test/browser/reverted_edit.spec.js`). Only the nothing-written gate can hold it |
+| An addition: the after holds the whole before (the reviewer only added words, split a paragraph, or changed typography) | No: an agent can do the work and leave the old block exactly as it was, putting the new words beside it in its own wording (`test/browser/reverted_edit.spec.js`). Only the nothing-written gate can hold it, and that gate looks for an after of several paragraphs paragraph by paragraph, so a split nobody made is held |
 | Revert, tool round, delete, format-only, blank after | No, as in the table above: never checked at all |
 
 ## What this costs, and where it is weak
@@ -252,6 +252,19 @@ is held.** For an edit that replaced words, the reviewer's block still standing
 as it was is read as untouched, even if the agent put its version in a new
 paragraph beside it. The agent keeps the `not_handled` way out below. Additions
 are exempt from this for the reason in the table.
+
+**Any change to the same paragraph retires the item.** The before test only asks
+whether the reviewer's paragraph is still there as it was. A change made there
+for a different reason (a second edit in the same paragraph, a nearby typo fix)
+removes it just the same, and the reply stands. This fails in the safe
+direction: the item is let go, never held on a guess.
+
+**Pure additions fall back to the review-wide gate.** An addition cannot be
+judged on its own passage (see the table), so it has only the nothing-written
+gate. An agent that fixes one item and answers handled to five additions slips
+the other four through. Narrowing it would mean grading whether the agent's
+words beside the old paragraph are the reviewer's words, which is
+second-guessing the agent's wording.
 
 **The before test assumes the page's blocks are the reviewer's blocks.** It
 reads the built file, split on block tags. A page whose text is built by script
@@ -309,6 +322,7 @@ decides. Without that clause the agent would wake on the same item forever.
 | A20 | A short before is judged as a whole block | unit: "a short before is judged as a whole block" |
 | A21 | A trim is held when the passage is untouched; an applied split, a typography-only edit and an addition done the agent's way pass | unit: "a reviewer who trimmed words", "a reviewer who split a paragraph", "differ only in typography", "a reviewer who only added words" |
 | A22 | An insertion is held only by the nothing-written gate | unit: "an insertion has no passage to find" |
+| A23 | A paragraph split nobody made is held | unit: "a split nobody made is held" |
 
 ## Progress
 

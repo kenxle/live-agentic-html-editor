@@ -772,3 +772,15 @@ test("a reviewer who only added words is not held when the agent kept the old bl
 
   assertRetired(foldHandled(setup, item), "the addition the agent made its own way");
 });
+
+test("a split nobody made is held", () => {
+  // The after holds the before's words, so the per-edit witness stands aside
+  // and the nothing-written gate decides. Flat text would find the old words
+  // and miss that the reviewer's paragraph break is not on the page.
+  const item = anEdit({ before: "Alpha beta gamma.", after: "Alpha beta\n\ngamma." });
+  assert.equal(handledCheck.verdictFor(["<p>Alpha beta gamma.</p>"], item, true), false, "nothing written: held");
+  assert.equal(handledCheck.verdictFor(["<p>Alpha beta</p><p>gamma.</p>"], item, true), true, "the split made: shown");
+
+  const setup = markdownReview(fiveParagraphs(["Alpha beta gamma.", "The second point."]));
+  assertHeldOpen(foldHandled(setup, anEdit({ before: "Alpha beta gamma.", after: "Alpha beta\n\ngamma." })), "the unmade split");
+});

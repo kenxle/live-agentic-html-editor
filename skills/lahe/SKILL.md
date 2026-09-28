@@ -286,7 +286,7 @@ that page and the passage was left alone:
 - the item's `before` is still on the page, exactly once, or
 - nothing in the source or the page was written since the reviewer typed.
 
-Change the passage in any words and your reply stands. Fix one of five edits and
+An agent that changed the passage is not second-guessed on its wording. Fix one of five edits and
 answer `handled` to all five, and the four you did not touch are held.
 
 When the check holds an item:
