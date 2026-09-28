@@ -1009,11 +1009,11 @@ not:</p>
 </div>
 <h3 id="reaching-the-agent">Reaching the agent</h3>
 <div class="callout callout-req">
-<p><strong>R8:</strong> The agent can tell new text apart from a change
-to existing text. For new text it also knows:</p>
+<p><strong>R8:</strong> Within one edit, the agent can tell new blocks
+apart from changed existing text. For new blocks it also knows:</p>
 <ul>
-<li>where on the page it goes</li>
-<li>which lines are headers</li>
+<li>where on the page they go</li>
+<li>which lines are headers or list items</li>
 <li>any bold or italic inside them</li>
 </ul>
 </div>
@@ -1123,12 +1123,6 @@ The brief holds either way.</p>
 cases in R14 (bold and italic edits)? The header case now has steps; the
 architecture confirms whether the agent's rebuild plays a part.</p>
 </div>
-<div class="callout callout-question">
-<p><span id="open-questions-q7" class="finding-anchor"></span><strong>Q7 (wireframe):</strong> When a reviewer is editing an
-existing block and presses Enter at its end, is the new paragraph part
-of that edit or new text? One consistent rule, and the reviewer should
-be able to see which it is.</p>
-</div>
 <h2 id="decisions-resolved">Decisions (Resolved)</h2>
 <ul>
 <li><strong>Who writes the notes file:</strong> the agent, like any
@@ -1145,6 +1139,10 @@ way new writing does: new lines, headers, and basic formatting. So the
 same requirements cover them (R3, making paragraphs, headers, and lists;
 R4, matching the page's styling; R14, bold and italic surviving). No
 separate row.</li>
+<li><strong>Enter at the end of an existing block:</strong> what the
+reviewer writes in one sitting is one edit. New lines typed after an
+existing block are part of that block's edit. There is no logic that
+splits a sitting into separate items.</li>
 </ul>
 <h2 id="pm-review">PM Review</h2>
 <div class="table-scroll"><table>
@@ -1190,7 +1188,7 @@ Decisions</td>
 <td>RF5</td>
 <td>Enter at the end of an existing block: same edit or new text?</td>
 <td><span class="accepted">Accepted</span></td>
-<td>Q7 for the wireframe; metric reworded</td>
+<td>Put to Ken as Q7; one sitting is one edit. Metric reworded</td>
 </tr>
 <tr>
 <td>RF6</td>

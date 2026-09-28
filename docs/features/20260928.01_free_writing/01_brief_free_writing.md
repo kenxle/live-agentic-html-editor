@@ -123,9 +123,9 @@ The wireframe and the architecture decide:
 ### Reaching the agent
 
 ::: callout-req
-**R8:** The agent can tell new text apart from a change to existing text. For new text it also knows:
-- where on the page it goes
-- which lines are headers
+**R8:** Within one edit, the agent can tell new blocks apart from changed existing text. For new blocks it also knows:
+- where on the page they go
+- which lines are headers or list items
 - any bold or italic inside them
 :::
 
@@ -209,16 +209,13 @@ None. The contract text changes. Existing reviews keep working, since an old pag
 **Q2:** Are there formatting failures beyond the three cases in R14 (bold and italic edits)? The header case now has steps; the architecture confirms whether the agent's rebuild plays a part.
 :::
 
-::: callout-question
-**Q7 (wireframe):** When a reviewer is editing an existing block and presses Enter at its end, is the new paragraph part of that edit or new text? One consistent rule, and the reviewer should be able to see which it is.
-:::
-
 ## Decisions (Resolved)
 
 - **Who writes the notes file:** the agent, like any other new text. Lahe is an agentic editor, so notes with no agent attached are not a design case.
 - **Lists:** in the first cut, alongside paragraphs and headers.
 - **Pasting with its formatting:** not in this feature. If Tiptap brings it for free, keep it. Otherwise the architecture notes what it would cost, and it waits on board row `LAHE-rich-paste`.
 - **Larger edits to existing text:** they fail the same way new writing does: new lines, headers, and basic formatting. So the same requirements cover them (R3, making paragraphs, headers, and lists; R4, matching the page's styling; R14, bold and italic surviving). No separate row.
+- **Enter at the end of an existing block:** what the reviewer writes in one sitting is one edit. New lines typed after an existing block are part of that block's edit. There is no logic that splits a sitting into separate items.
 
 ## PM Review
 
@@ -228,7 +225,7 @@ None. The contract text changes. Existing reviews keep working, since an old pag
 | RF2 | Brief pre-decided one record per sitting, header by keyboard, and the item shape | Accepted | R2, R3, R7, R8 rewritten as outcomes; "in one sitting" and the record-kind line removed |
 | RF3 | Proofreading had no requirement; Q3 reopened a settled trigger | Accepted | Now R11; threshold left to the plan |
 | RF4 | Notes: who writes the file, and does it work with no agent | Accepted | Put to Ken; he chose the agent. R13 updated, recorded under Decisions |
-| RF5 | Enter at the end of an existing block: same edit or new text? | Accepted | Q7 for the wireframe; metric reworded |
+| RF5 | Enter at the end of an existing block: same edit or new text? | Accepted | Put to Ken as Q7; one sitting is one edit. Metric reworded |
 | RF6 | No requirement for a rebuild landing mid-writing | Accepted | Now R7 |
 | RF7 | Metrics were one-off demos | Accepted | Rewritten against the status-quo costs |
 | RF8 | Lists cut silently; paste and larger edits unsaid | Accepted | Put to Ken as Q4, Q5, Q6. Lists: in. Rich paste: out, to the board. Larger edits: same failures, folded into R3 and R4 |
