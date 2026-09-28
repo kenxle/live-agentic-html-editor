@@ -62,6 +62,7 @@
         tabActive: require("./tab_active.js"),
         tabEdits: require("./tab_edits.js"),
         tabDone: require("./tab_done.js"),
+        conflictToast: require("./conflict_toast.js"),
         sync: require("./sync.js"),
         editing: require("./editing.js"),
         protect: require("./protect.js"),
@@ -584,6 +585,9 @@
       // The condition ended, so its chip goes too (clear, not dismiss: dismiss
       // would suppress every future refusal's chip).
       rail.failures.clear("SECOND_WINDOW_REFUSED");
+      // A collision flagged while this window was refused was held, not spent.
+      // The reviewer has taken the review back, so tell it now.
+      if (conflictToasts) conflictToasts.sync();
     }
 
     var sync = opts.sync || ns.sync.createSync({
@@ -834,6 +838,8 @@
       //                   sweep could not report at the time
       if (typeof done.toastWaiting === "function") done.toastWaiting();
       if (typeof done.sweepNeglected === "function") done.sweepNeglected();
+      // And a collision flagged during the talk, held until now.
+      if (conflictToasts) conflictToasts.sync();
     });
 
     // -------------------------------------------------------------------------
@@ -1220,6 +1226,32 @@
       }
     });
 
+    // The conflict toast. A collision replay flags (branch four) writes nothing
+    // to the page, so the reviewer's words vanish from where they were typing
+    // and live only on the card. This tells them so, once per conflict. See
+    // conflict_toast.js for the rules; replay tells it after every pass and
+    // after every resolution.
+    var conflictToasts = ns.conflictToast.createConflictToasts({
+      rail: rail,
+      reviewId: reviewId,
+      storage: (function () {
+        try {
+          return win.sessionStorage || null;
+        } catch (err) {
+          return null;
+        }
+      })(),
+      conflictIds: function () {
+        return ns.replay.conflictIds();
+      },
+      itemById: function (id) {
+        return store.readItem(reviewId, id) || null;
+      },
+      isHidden: function () {
+        return rail.isPresenting() || readOnlyActive;
+      }
+    });
+
     // Finding 30: replay is configured with no fold/merge/retire/rail hooks on
     // purpose. Those four steps run on their own schedules (replies on the sync
     // poll, merge on remount, rail on onChange), so a replay pass may raise a
@@ -1236,6 +1268,12 @@
       // For one thing only: the conflict card's "take the page's" button, which
       // retires a record and writes nothing. See replay's `context`.
       editing: editing,
+      onPass: function () {
+        conflictToasts.sync();
+      },
+      onResolved: function (id) {
+        conflictToasts.resolved(id);
+      },
       // Is this record still in the review at all? Replay asks before it lets
       // go of anything it holds per record, and the answer comes from the
       // UNSCOPED store rather than from `items` above. `items` is a page-scoped

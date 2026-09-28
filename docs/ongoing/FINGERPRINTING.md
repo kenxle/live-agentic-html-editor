@@ -489,6 +489,7 @@ fix is what stops the next page from needing the same favor.
 | 1 | nothing changed | binds on text |
 | 1b | the passage was **reworded** | write refuses; point finds it by identity |
 | 8 | a framework wrapped it in a new div | non-event: the innermost element holding the text wins |
+| 8b | a framework or the source wrapped the block's words in an inline tag inside the block (`<p><em>A</em></p>`) | the innermost element (the `<em>`) still wins the text search, but the bind then climbs back to the saved tag (the `<p>`) as long as each ancestor along the way holds exactly the same words |
 | 9 | the passage moved to the top of the page | binds on text; position never got a vote |
 | 12 | two comments on the same element | both bind |
 

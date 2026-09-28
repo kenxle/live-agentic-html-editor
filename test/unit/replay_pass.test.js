@@ -1149,3 +1149,403 @@ test("a node the page rebuilt is let go, so no dead document tree hangs off the 
   replay.runPass(replay.REASON.MUTATION, { root: page.root, items: [anchoredItem], cards: fakeCards() });
   assert.equal(replay.boundIds().indexOf(item.id), -1, "the detached node is not kept");
 });
+
+// ---------------------------------------------------------------------------
+// A split is not a conflict (review r88dec64b8451, 2026-09-22)
+// ---------------------------------------------------------------------------
+//
+// The reviewer typed several paragraphs into one block. The agent wrote them
+// into the source as separate paragraphs, and the rebuilt page has one block
+// per paragraph. The record's after is on the page, spread over the anchored
+// block and the blocks right after it. That is branch one, not branch four.
+
+function splitEdit(before, after) {
+  return Object.assign(fixtures.edit(), { before: before, after: after, after_html: null });
+}
+
+test("split: blank-line paragraphs across the anchored block and its next sibling are already applied", () => {
+  const item = splitEdit("(open, your words go here)", "First paragraph.\n\nSecond paragraph.");
+  const verdict = replay.compare(item, "First paragraph.", null, ["Second paragraph."]);
+  assert.equal(verdict.branch, replay.BRANCH.ALREADY_APPLIED);
+});
+
+test("split: a single line break rendered as a new block is already applied", () => {
+  const item = splitEdit("Old line.", "First line.\nSecond line.");
+  assert.equal(replay.compare(item, "First line.", null, ["Second line."]).branch, replay.BRANCH.ALREADY_APPLIED);
+});
+
+test("split: a single line break the page reflowed into one line is already applied", () => {
+  const item = splitEdit("Old line.", "First line.\nSecond line.");
+  assert.equal(replay.compare(item, "First line. Second line.").branch, replay.BRANCH.ALREADY_APPLIED);
+  assert.equal(replay.compare(item, "First line.\n\nSecond line.").branch, replay.BRANCH.ALREADY_APPLIED);
+});
+
+test("split: three pieces over three blocks, or over two blocks with a line break in one, are already applied", () => {
+  const item = splitEdit("Old.", "One.\n\nTwo.\n\nThree.");
+  assert.equal(replay.compare(item, "One.", null, ["Two.", "Three."]).branch, replay.BRANCH.ALREADY_APPLIED);
+  assert.equal(replay.compare(item, "One.", null, ["Two.\nThree."]).branch, replay.BRANCH.ALREADY_APPLIED);
+  // Only as many blocks as the after has pieces: what follows is the page's own.
+  assert.equal(
+    replay.compare(item, "One.", null, ["Two.", "Three.", "The page's next paragraph."]).branch,
+    replay.BRANCH.ALREADY_APPLIED
+  );
+});
+
+test("split: a sibling that differs is a real conflict", () => {
+  const item = splitEdit("Old.", "One.\n\nTwo.\n\nThree.");
+  assert.equal(replay.compare(item, "One.", null, ["Two, as the agent wrote it.", "Three."]).branch, replay.BRANCH.CONTENT_CHANGED);
+  assert.equal(replay.compare(item, "One.", null, ["Two."]).branch, replay.BRANCH.CONTENT_CHANGED, "a piece is missing");
+  assert.equal(replay.compare(item, "One.", null, []).branch, replay.BRANCH.CONTENT_CHANGED);
+  assert.equal(replay.compare(item, "One.", null, ["", "Two.", "Three."]).branch, replay.BRANCH.CONTENT_CHANGED, "an empty block is not skipped");
+});
+
+test("split: the first piece has to be the anchored block", () => {
+  const item = splitEdit("Old.", "One.\n\nTwo.\n\nThree.");
+  assert.equal(replay.compare(item, "Two.", null, ["Three."]).branch, replay.BRANCH.CONTENT_CHANGED, "starting mid-way");
+  assert.equal(replay.compare(item, "Something else.", null, ["One.", "Two.", "Three."]).branch, replay.BRANCH.CONTENT_CHANGED);
+});
+
+test("split: a split on the page beats the before in the anchored block, so nothing is written twice", () => {
+  // The reviewer added paragraphs after an unchanged first one: the first block
+  // is the record's before AND the first piece of its after. The siblings say
+  // which: the rest of the after is right there.
+  const item = splitEdit("One.", "One.\n\nTwo.\n\nThree.");
+  assert.equal(replay.compare(item, "One.", null, ["Two.", "Three."]).branch, replay.BRANCH.ALREADY_APPLIED);
+  assert.equal(replay.compare(item, "One.", null, ["The page's next paragraph."]).branch, replay.BRANCH.REAPPLY);
+});
+
+test("merge: a before with breaks that the page ran into one block still reads as before", () => {
+  const item = splitEdit("One.\n\nTwo.", "One, rewritten.");
+  assert.equal(replay.compare(item, "One. Two.").branch, replay.BRANCH.REAPPLY);
+});
+
+test("reflow never decides between a before and an after that differ only in breaks", () => {
+  // The reviewer's edit WAS the break. A page without it is the before, exactly.
+  const item = splitEdit("One. Two.", "One.\nTwo.");
+  assert.equal(replay.compare(item, "One. Two.").branch, replay.BRANCH.REAPPLY);
+  const other = splitEdit("One.\n\nTwo.", "One.\nTwo.");
+  assert.equal(replay.compare(other, "One. Two.").branch, replay.BRANCH.CONTENT_CHANGED, "same words both ways: never guess");
+});
+
+test("split pass: the page rebuilt one block into three, so nothing is written and nothing conflicts", () => {
+  const item = splitEdit("(open, your words go here)", "First paragraph.\n\nSecond paragraph.\n\nThird paragraph.");
+  const before = pageOf(["A heading line.", item.before, "The page's next paragraph."]);
+  const anchoredItem = anchored(item, before.blocks[1], before.root);
+  const page = pageOf([
+    "A heading line.",
+    "First paragraph.",
+    "Second paragraph.",
+    "Third paragraph.",
+    "The page's next paragraph."
+  ]);
+
+  const ran = runOne(anchoredItem, page.root);
+
+  assert.equal(ran.result.branch, replay.BRANCH.ALREADY_APPLIED);
+  assert.equal(ran.result.element, page.blocks[1], "the region is the block that holds the first piece");
+  assert.equal(replay.counters.regionsWritten, 0);
+  assert.equal(replay.counters.regionsConflicted, 0);
+  assert.deepEqual(
+    page.blocks.map((b) => b.textContent),
+    ["A heading line.", "First paragraph.", "Second paragraph.", "Third paragraph.", "The page's next paragraph."]
+  );
+  assert.equal(replay.conflictFor(item.id), null);
+});
+
+test("split pass: the first block still reads as before and the rest is already there, so nothing is written", () => {
+  const item = splitEdit("First paragraph.", "First paragraph.\n\nSecond paragraph.");
+  const page = pageOf(["A heading line.", "First paragraph.", "Second paragraph.", "The page's next paragraph."]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+
+  const ran = runOne(anchoredItem, page.root);
+
+  assert.equal(ran.result.branch, replay.BRANCH.ALREADY_APPLIED);
+  assert.equal(replay.counters.regionsWritten, 0);
+  assert.equal(page.blocks[1].textContent, "First paragraph.");
+});
+
+test("split pass: a rebuilt sibling that differs from the reviewer's still conflicts and writes nothing", () => {
+  const item = splitEdit("(open, your words go here)", "First paragraph.\n\nSecond paragraph.\n\nThird paragraph.");
+  const before = pageOf(["A heading line.", item.before, "The page's next paragraph."]);
+  const anchoredItem = anchored(item, before.blocks[1], before.root);
+  const page = pageOf([
+    "A heading line.",
+    "First paragraph.",
+    "Second paragraph.",
+    "Third paragraph. And the agent's own ending.",
+    "The page's next paragraph."
+  ]);
+
+  const ran = runOne(anchoredItem, page.root);
+
+  assert.equal(ran.result.branch, replay.BRANCH.CONTENT_CHANGED);
+  assert.equal(replay.counters.regionsWritten, 0);
+});
+
+// Review fixes on the split rule (2026-09-22).
+
+test("split review 1: an edit that drops a trailing paragraph is branch two, not a split already applied", () => {
+  // A blockquote holding three paragraphs; the reviewer deleted the third. The
+  // search binds the blockquote uniquely and it holds the before, so the edit
+  // has not landed. A run of the first two inside it must not overrule that.
+  const quote = el("blockquote", {
+    children: [el("p", { text: "Alpha line." }), el("p", { text: "Beta line." }), el("p", { text: "Gamma line." })]
+  });
+  const root = el("body", { children: [el("p", { text: "Before it." }), quote, el("p", { text: "After it." })] });
+  const item = Object.assign(splitEdit("Alpha line.\n\nBeta line.\n\nGamma line.", "Alpha line.\n\nBeta line."), {
+    after_html: "<p>Alpha line.</p><p>Beta line.</p>"
+  });
+  const anchoredItem = anchored(item, quote, root);
+
+  const ran = runOne(anchoredItem, root);
+
+  assert.equal(ran.result.branch, replay.BRANCH.REAPPLY);
+  assert.equal(ran.result.element, quote, "the unique bind stands");
+  assert.equal(replay.counters.regionsWritten, 1);
+});
+
+test("split review 2: a container holding the before's words as two blocks is not the before", () => {
+  const item = splitEdit("One. Two.", "One, rewritten.");
+  assert.equal(replay.compare(item, "One.\n\nTwo.").branch, replay.BRANCH.CONTENT_CHANGED);
+
+  const div = el("div", { children: [el("p", { text: "One." }), el("p", { text: "Two." })] });
+  const root = el("body", { children: [el("p", { text: "Before it." }), div, el("p", { text: "After it." })] });
+  const anchoredItem = anchored(item, div, root);
+
+  const ran = runOne(anchoredItem, root);
+
+  assert.equal(ran.result.branch, replay.BRANCH.CONTENT_CHANGED);
+  assert.equal(replay.counters.regionsWritten, 0, "the page's two blocks are not flattened into one");
+  assert.equal(div.children.length, 2);
+});
+
+test("split review 3: the page rebuilt the block into paragraphs while the reviewer held it, and the seam raises nothing", () => {
+  const item = splitEdit("(open, your words go here)", "First paragraph.\n\nSecond paragraph.\n\nThird paragraph.");
+  const before = pageOf(["A heading line.", item.before, "The page's next paragraph."]);
+  const anchoredItem = anchored(item, before.blocks[1], before.root);
+  // The rebuild landed around the protected block: the block kept what
+  // protection put back, and the page tried to say only the first paragraph in
+  // it, with the rest arriving as new siblings.
+  const page = pageOf([
+    "A heading line.",
+    "First paragraph.",
+    "Second paragraph.",
+    "Third paragraph.",
+    "The page's next paragraph."
+  ]);
+
+  replay.resetCounters();
+  const outcome = replay.applyRecord(anchoredItem, {
+    root: page.root,
+    element: page.blocks[1],
+    cards: fakeCards(),
+    commit: { item: item.id, element: page.blocks[1], observed: "First paragraph." }
+  });
+
+  assert.notEqual(outcome.branch, replay.BRANCH.CONTENT_CHANGED);
+  assert.equal(replay.counters.regionsConflicted, 0);
+  assert.equal(replay.conflictFor(item.id), null);
+});
+
+test("split review 4: looking for a run inside a container reads each block once and skips blocks without the first piece", () => {
+  const normalize = require("../../src/shared/normalize.js");
+  const fillers = [];
+  for (let i = 0; i < 60; i += 1) fillers.push("Filler paragraph number " + i + ".");
+  const page = pageOf(fillers.concat(["First paragraph.", "Second paragraph.", "Third paragraph."]));
+  const item = splitEdit("(open)", "First paragraph.\n\nSecond paragraph.\n\nThird paragraph.");
+
+  const real = normalize.blockTextFromNode;
+  let reads = 0;
+  normalize.blockTextFromNode = function (node, options) {
+    if (node !== page.root) reads += 1;
+    return real.call(this, node, options);
+  };
+  let found;
+  try {
+    found = replay.splitRegion(item, page.root);
+  } finally {
+    normalize.blockTextFromNode = real;
+  }
+
+  assert.equal(found && found.element, page.blocks[60]);
+  assert.deepEqual(found.following, ["Second paragraph.", "Third paragraph."], "the sibling texts come back for the compare");
+  assert.ok(reads <= page.blocks.length + 2, "each block read about once, not once per run attempt: " + reads);
+});
+
+// ---------------------------------------------------------------------------
+// The reviewer's words land on the page once (2026-09-22)
+// ---------------------------------------------------------------------------
+//
+// The report: "multiple agents have now duplicated my written text... they
+// just write it again above or below." The page carried the reviewer's
+// paragraphs as blocks of its own, the split check just missed, and branch two
+// wrote every paragraph of the after into the one anchored block. The words
+// then stood twice: merged into that block, and still below it.
+
+test("duplicate: a rebuild that curled a quote and lengthened a dash is still applied", () => {
+  const item = splitEdit("First paragraph.", "First paragraph.\n\nThe builder's day is not over - it starts.");
+  const verdict = replay.compare(item, "First paragraph.", null, [
+    "The builder’s day is not over — it starts."
+  ]);
+  assert.equal(verdict.branch, replay.BRANCH.ALREADY_APPLIED, "typography alone is not a clash");
+});
+
+test("duplicate: typography is read past for a split only, never for one block", () => {
+  // A punctuation fix the reviewer made to a single paragraph still re-applies.
+  const item = splitEdit("The builder's day - old.", "The builder's day - new.");
+  const verdict = replay.compare(item, "The builder’s day — new.");
+  assert.equal(verdict.branch, replay.BRANCH.CONTENT_CHANGED, "one block is compared strictly, as before");
+});
+
+test("duplicate: an edit that only changes quotes and dashes is not swallowed as applied", () => {
+  // Typography IS this edit: the reviewer went through three paragraphs and
+  // curled the quotes. Reading past typography here would call the page's old
+  // quotes the reviewer's new ones and take the edit away with nothing said.
+  // So the folded compare is not offered to an edit whose before and after
+  // fold to the same string, and the reviewer is told instead.
+  const straight = "He said 'go'.";
+  const item = splitEdit(
+    [straight, "She said 'stay'.", "They said 'wait'."].join("\n\n"),
+    ["He said \u2018go\u2019.", "She said \u2018stay\u2019.", "They said \u2018wait\u2019."].join("\n\n")
+  );
+  const verdict = replay.compare(item, straight, null, ["She said 'stay'.", "They said 'wait'."]);
+  assert.notEqual(verdict.branch, replay.BRANCH.ALREADY_APPLIED, "the reviewer's punctuation is not on the page");
+  assert.equal(verdict.branch, replay.BRANCH.CONTENT_CHANGED, "which is a clash to tell, not an edit to drop");
+});
+
+test("duplicate: a first paragraph the page is missing is written, and only that", () => {
+  // The agent applied the second paragraph and not the first. The first is
+  // this record's own block, so it is written; the blocks below are the
+  // page's own and are left alone.
+  const item = splitEdit("Old first line.", "First paragraph.\n\nSecond paragraph.\n\nThird paragraph.");
+  const page = pageOf([
+    "A heading line.",
+    "Old first line.",
+    "Second paragraph.",
+    "Third paragraph.",
+    "The page's next paragraph."
+  ]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+
+  const ran = runOne(anchoredItem, page.root);
+
+  assert.equal(ran.result.branch, replay.BRANCH.REAPPLY);
+  assert.equal(replay.counters.regionsWroteMissingPiece, 1);
+  assert.equal(replay.counters.regionsRefusedDuplicate, 0);
+  assert.deepEqual(
+    page.blocks.map((b) => b.textContent),
+    [
+      "A heading line.",
+      "First paragraph.",
+      "Second paragraph.",
+      "Third paragraph.",
+      "The page's next paragraph."
+    ],
+    "the missing paragraph landed and nothing else moved"
+  );
+});
+
+test("duplicate: Keep mine writes only the piece the page is missing", () => {
+  // The page rewrote the reviewer's first paragraph and kept the second, so
+  // the press has one paragraph to put back. The block below is the page's
+  // own and is left alone.
+  const item = splitEdit("Before words.", "First paragraph.\n\nSecond paragraph.");
+  const page = pageOf(["A heading line.", "The agent's own line.", "Second paragraph.", "The page's own ending."]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+
+  const first = runOne(anchoredItem, page.root);
+  assert.equal(first.result.branch, replay.BRANCH.CONTENT_CHANGED, "the clash is raised");
+
+  replay.configure({ root: page.root, items: [anchoredItem], cards: first.cards, persist: function () {} });
+  const answered = replay.resolveConflict(item.id, "keep_mine");
+
+  assert.equal(answered.resolved, true, answered.reason || "");
+  assert.deepEqual(
+    page.blocks.map((b) => b.textContent),
+    ["A heading line.", "First paragraph.", "Second paragraph.", "The page's own ending."],
+    "the missing paragraph landed and the press says nothing twice"
+  );
+  assert.equal(record.acceptedPageTexts(anchoredItem).length > 0, true, "and the record remembers what it answered");
+});
+
+test("duplicate: Keep mine that cannot place every paragraph leaves the clash standing", () => {
+  // Three paragraphs, and the page carries the first two. Checking only the
+  // second would read this as placed, resolve the press, and leave the
+  // reviewer with a page that has no third paragraph and a card that says
+  // nothing.
+  const item = splitEdit("First paragraph.", "First paragraph.\n\nSecond paragraph.\n\nThird paragraph.");
+  const page = pageOf(["A heading line.", "First paragraph.", "Second paragraph.", "The page's own ending."]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+
+  const first = runOne(anchoredItem, page.root);
+  assert.equal(first.result.branch, replay.BRANCH.CONTENT_CHANGED, "the clash is raised");
+
+  replay.configure({ root: page.root, items: [anchoredItem], cards: first.cards, persist: function () {} });
+  const answered = replay.resolveConflict(item.id, "keep_mine");
+
+  assert.equal(answered.resolved, false, "the press could not place every paragraph");
+  assert.equal(first.cards.notices[item.id], replay.KEEP_MINE_PARTIAL_MESSAGE, "and the card says so, plainly");
+  assert.notEqual(replay.conflictFor(item.id), null, "the clash is still there to answer");
+  assert.deepEqual(
+    page.blocks.map((b) => b.textContent),
+    ["A heading line.", "First paragraph.", "Second paragraph.", "The page's own ending."],
+    "nothing doubled, and no paragraph of the page lost"
+  );
+});
+
+test("duplicate: Keep mine with four paragraphs and only the last missing still holds the clash", () => {
+  const item = splitEdit("One.", "One.\n\nTwo.\n\nThree.\n\nFour.");
+  const page = pageOf(["A heading line.", "One.", "Two.", "Three.", "The page's own ending."]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+
+  const first = runOne(anchoredItem, page.root);
+  assert.equal(first.result.branch, replay.BRANCH.CONTENT_CHANGED);
+
+  replay.configure({ root: page.root, items: [anchoredItem], cards: first.cards, persist: function () {} });
+  const answered = replay.resolveConflict(item.id, "keep_mine");
+
+  assert.equal(answered.resolved, false, "the fourth paragraph is not on the page");
+  assert.equal(first.cards.notices[item.id], replay.KEEP_MINE_PARTIAL_MESSAGE);
+  assert.deepEqual(
+    page.blocks.map((b) => b.textContent),
+    ["A heading line.", "One.", "Two.", "Three.", "The page's own ending."],
+    "and the three that are there are each there once"
+  );
+});
+
+test("duplicate: a write the page's own blocks would double does not happen", () => {
+  const item = splitEdit("First paragraph.", "First paragraph.\n\nSecond paragraph.\n\nThird paragraph.");
+  // The agent carried the split into the source and polished the last
+  // paragraph, so the run misses. The anchored block still reads as the
+  // before, which is branch two, and its write would put all three paragraphs
+  // here while the page still says the second one in the block below.
+  const page = pageOf([
+    "A heading line.",
+    "First paragraph.",
+    "Second paragraph.",
+    "Third paragraph, polished.",
+    "The page's next paragraph."
+  ]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+
+  const ran = runOne(anchoredItem, page.root);
+
+  assert.equal(ran.result.branch, replay.BRANCH.CONTENT_CHANGED, "the clash is told instead");
+  assert.equal(replay.counters.regionsWritten, 0);
+  assert.equal(replay.counters.regionsRefusedDuplicate, 1);
+  assert.deepEqual(
+    page.blocks.map((b) => b.textContent),
+    [
+      "A heading line.",
+      "First paragraph.",
+      "Second paragraph.",
+      "Third paragraph, polished.",
+      "The page's next paragraph."
+    ],
+    "no paragraph is written twice"
+  );
+});
+
+// The other half, that a live page which does NOT carry the split still takes
+// the reviewer's typed break, is a write, and the simulated DOM here cannot be
+// written breaks into. `test/browser/paragraph_break.spec.js` is where it runs.

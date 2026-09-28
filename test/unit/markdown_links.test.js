@@ -131,7 +131,8 @@ test("rendering translates local links, marks the read-only view, and stays dete
       "- [Sibling](../crucible/SKILL.md)",
       "- [Gone](../nowhere/GONE.md)",
       "- [Heading](#skill)",
-      "- [Away](https://example.com)"
+      "- [Away](https://example.com)",
+      "- [Email](mailto:someone@example.com)"
     ].join("\n"));
     write(path.join(source, "references", "document-templates.md"), "# Templates\n");
     const siblingDir = path.join(home, "skills", "crucible");
@@ -142,9 +143,16 @@ test("rendering translates local links, marks the read-only view, and stays dete
     assert.match(html, /Read-only rendered view of <code>[^<]*SKILL\.md<\/code>\. This document is not under review\./);
     assert.match(html, new RegExp('href="' + links.mountPrefix(siblingDir) + 'SKILL\\.md"'));
     assert.match(html, /href="\/\.lahe-source\/[a-f0-9]+\/references\/document-templates\.md"/);
+    assert.doesNotMatch(html,
+      new RegExp('href="' + links.mountPrefix(siblingDir) + 'SKILL\\.md"[^>]*target='),
+      "a translated local link stays in the same tab"
+    );
     assert.match(html, /<span class="lahe-local-link" title="local file, open it on disk: [^"]*nowhere[^"]*GONE\.md">Gone<\/span>/);
-    assert.match(html, /href="#skill"/);
-    assert.match(html, /href="https:\/\/example\.com"/);
+    assert.match(html, /<a href="#skill">Heading<\/a>/, "an in-page anchor stays in the same tab");
+    assert.match(html, /<a href="https:\/\/example\.com" target="_blank" rel="noopener noreferrer">Away<\/a>/,
+      "a link leaving the documentation opens in a new tab");
+    assert.match(html, /<a href="mailto:someone@example\.com">Email<\/a>/,
+      "a mailto link gets no target");
     assert.doesNotMatch(html, /lahe-layer\.js/, "a rendered linked document carries no library script line");
 
     const again = markdown.render(doc, { readOnlyNote: true, links: links.createRegistry({}) });

@@ -195,6 +195,19 @@ GitHub emails the pusher for every failed or cancelled workflow run, and on
 - Remove a temporary workflow before the branch merges, and delete the branch
   from the remote when the PR closes.
 
+## Never remove files while work is running
+
+No `rm`, no `git clean`, no deleting a scratch script, a screenshot helper or a
+stale worktree, not even your own temp files at the end of your own task. Every
+removal stops and waits for Ken's approval, which stalls whatever else is
+running.
+
+Write what you would like removed into your notes or progress page under a
+"To delete at cleanup" heading, one line each saying what it is, and leave the
+files where they are. Removals happen in one batch at the end, by the
+orchestrator, with the whole list in front of Ken. Files under `/tmp` are never
+removed at all; the operating system owns that folder.
+
 ## Commit conventions
 
 - No em dashes anywhere: not in commit messages, not in code comments, not

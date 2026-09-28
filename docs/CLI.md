@@ -102,7 +102,10 @@ picked this up, 7m` when nothing has the review open. The rail's head menu
 already carries Copy review and Export review to file, permanently available, so
 the reviewer's own copy of their feedback is never more than a menu click away.
 The line goes loud past ten minutes whatever the machine can see: a file tail
-can be armed all afternoon over an agent that stopped reading.
+can be armed all afternoon over an agent that stopped reading. When nothing on
+this computer has the review open, it goes loud sooner, after two minutes. Not
+at thirty seconds: an agent thinking through a hard comment leaves no footprint
+while it thinks, and that looks exactly like an empty chair.
 
 The reviewer is never told about monitors, heartbeats or wake feeds. That is our
 plumbing, and it is not something they can act on. `lahe session list` is where

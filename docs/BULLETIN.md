@@ -5,6 +5,8 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
+- [ ] @ken 2026-09-28 LAHE-pitchhut-listing -- **Keep the PitchHut listing for Lahe up to date.** Ken claimed the project on PitchHut after they reached out: https://www.pitchhut.com/my-projects. It could bring traffic. Update the listing when the npm package or the Product Hunt launch lands, and link it from launch posts.
+
 - [ ] @anyone 2026-09-21 LAHE-npm-package -- **Publish Lahe to npm so a new user can `npx` it instead of cloning.** Ken, reviewing the new stclair.ai Lahe page: "we should probably make an npm package for it finally". The zero-runtime-dependency rule still holds: the package ships with `dependencies` empty, so installing it pulls nothing else. Open questions: the package name, what `npx lahe` does on a machine with no agent skill installed yet, and how the skill install fits (today `npm run install-skills`). The site's "How to get it" section and the How to use modal change with it.
 
 - [ ] @ken 2026-09-21 LAHE-product-hunt-launch -- **Launch Lahe on Product Hunt.** Ken called the stclair.ai Lahe page ready for it. Likely waits on the npm package above, so the launch post can say one command. Assets exist: the hero illustration loop and the ai-etudes screen recording, both on the site branch `site-lahe-page` in the personal repo.
