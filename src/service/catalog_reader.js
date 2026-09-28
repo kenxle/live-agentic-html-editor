@@ -22,13 +22,12 @@
 //   catalog.json      stars, through catalog_store
 //
 // Two inputs come from the request queue (Library 1.4) and are passed in, so
-// this module never reads catalog-attach.json or catalog-requests.jsonl itself:
-// `attachment(now)` returns the attach record ({session, at}, or 1.4's
-// readAttached with its own `watching`) or null, and `requestFor(reviewId,
-// now)` returns the latest request on a review (1.4's shape, with `by_name`
-// already filled, or a bare record with `by` and `for`) or null. The helper
-// also passes `requestsAt(now)`, the same answers from one read of the queue,
-// so a list reads catalog-requests.jsonl once rather than once per row.
+// this module never reads catalog-attach.json or catalog-requests.jsonl itself.
+// They are always the queue's own (queueInputs below): `attachment(now)` is
+// readAttached, with its own `watching`, and `requestFor(reviewId, now)` the
+// latest request on a review, with `by_name` already filled. The helper also
+// passes `requestsAt(now)`, the same answers from one read of the queue, so a
+// list reads catalog-requests.jsonl once rather than once per row.
 //
 // ONE CORRUPT FILE DEGRADES ONE ROW. Every read is caught and turned into
 // `unreadable: true` on the row it belongs to; the rest of the list returns.
@@ -783,17 +782,14 @@ function createReader(options) {
     if ((r.state === "done" || r.state === "refused") && answered) {
       if (nowMs - Date.parse(answered) >= CATALOG.ANSWER_SHOWN_MS) return null;
     }
-    // Two shapes arrive here. The queue's own requestFor (Library 1.4) has
-    // already named the agent (`by_name`, its name or its id); a bare request
-    // record carries the session ids (`by`, `for`) and is named here.
-    var byName = typeof r.by_name === "string" && r.by_name ? r.by_name : null;
-    var who = typeof r.by === "string" && r.by ? r.by : typeof r.for === "string" ? r.for : null;
+    // The queue's requestsAt (Library 1.4) has already named the agent
+    // (`by_name`, its name or its id).
     return {
       id: r.id,
       action: r.action,
       at: r.at,
       state: r.state,
-      by_name: byName || (who ? nameOf(who) || who : null),
+      by_name: typeof r.by_name === "string" && r.by_name ? r.by_name : null,
       text: typeof r.text === "string" ? r.text : null,
       answered_at: answered
     };
@@ -802,13 +798,11 @@ function createReader(options) {
   function attachedOf(nowMs) {
     var a = attachment(nowMs);
     if (!a || typeof a.session !== "string" || !protocol.isSafeId(a.session) || a.session === LEGACY) return null;
-    if (readSession(a.session).state === "missing") return null;
-    // The queue's readAttached (Library 1.4) answers `watching` with the same
-    // liveness rule it uses to hand out and expire requests, which also counts
-    // a closed session as not listening. Taking its answer keeps the header
-    // and Open from disagreeing; a bare attach record is judged here.
-    var watching = typeof a.watching === "boolean" ? a.watching : monitorLive(a.session, nowMs).live;
-    return { session: a.session, name: nameOf(a.session), watching: watching };
+    // The queue's readAttached (Library 1.4) answers null for an attach with no
+    // session behind it, and `watching` with the same liveness rule it uses to
+    // hand out and expire requests. Taking its answer keeps the header and
+    // Open from disagreeing.
+    return { session: a.session, name: nameOf(a.session), watching: a.watching === true };
   }
 
   function rowOut(row, nowMs, servedUrl, lookup) {

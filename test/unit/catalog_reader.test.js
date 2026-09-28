@@ -22,11 +22,16 @@ const fixture = require("../fixtures/catalog_state.js");
 const LIST_FIXTURE = path.join(__dirname, "..", "fixtures", "catalog_list.json");
 const MINUTE = 60 * 1000;
 
-// What 1.4's request queue would hand the reader for the fixture: one request
-// in each state, plus an answer older than ANSWER_SHOWN_MS that must not show.
+// What 1.4's request queue hands the reader for the fixture, in its own shape
+// (by_name already filled): one request in each state, plus an answer older
+// than ANSWER_SHOWN_MS that must not show.
 function fixtureRequests(nowMs) {
   const at = (msAgo) => new Date(nowMs - msAgo).toISOString();
-  return {
+  const named = (requests) => {
+    Object.keys(requests).forEach((id) => { requests[id].by_name = "document index"; });
+    return requests;
+  };
+  return named({
     r_brief: { id: "cq_waiting1", action: "pickup", at: at(2 * MINUTE), for: "s_index", state: "waiting" },
     r_spec: {
       id: "cq_done1", action: "pickup", at: at(40 * MINUTE), for: "s_index", state: "done",
@@ -41,7 +46,7 @@ function fixtureRequests(nowMs) {
       id: "cq_old1", action: "pickup", at: at(2 * 24 * 60 * MINUTE), for: "s_index", state: "done",
       by: "s_index", text: "long ago", answered_at: at(2 * 24 * 60 * MINUTE - MINUTE)
     }
-  };
+  });
 }
 
 function setup(overrides) {
@@ -58,7 +63,7 @@ function setup(overrides) {
       },
       pidAlive: () => true,
       probe: async (meta) => meta.id === "ss_beta",
-      attachment: () => ({ session: "s_index", at: new Date(installed.nowMs - 5 * MINUTE).toISOString() }),
+      attachment: () => ({ session: "s_index", name: "document index", at: new Date(installed.nowMs - 5 * MINUTE).toISOString(), watching: true }),
       requestFor: (reviewId) => requests[reviewId] || null
     },
     overrides || {}
@@ -464,25 +469,40 @@ test("attached names the attached session and whether its monitor is live", asyn
   assert.deepEqual(list.attached, { session: "s_index", name: "document index", watching: true });
 });
 
+/** A reader wired to the real queue over the fixture, as the helper wires it. */
+function queueReader(installed) {
+  const catalogRequests = require("../../src/service/catalog_requests.js");
+  const queue = catalogRequests.createQueue({ dir: installed.dir, pidAlive: () => true, log: () => {} });
+  return catalogReader.createReader(Object.assign({
+    dir: installed.dir, home: installed.home, pidAlive: () => true, probe: async () => false
+  }, catalogReader.queueInputs(queue)));
+}
+
 test("attached: the later of two attaches wins", async () => {
-  let attach = { session: "s_coach", at: "2026-09-28T15:50:00.000Z" };
-  const { reader, installed } = setup({ attachment: () => attach });
+  const catalogRequests = require("../../src/service/catalog_requests.js");
+  const installed = fixture.install();
+  const reader = queueReader(installed);
+  catalogRequests.writeAttach(installed.dir, "s_coach", Date.parse("2026-09-28T15:50:00.000Z"));
   assert.equal((await reader.list(installed.nowMs)).attached.session, "s_coach");
-  attach = { session: "s_index", at: "2026-09-28T15:55:00.000Z" };
+  catalogRequests.writeAttach(installed.dir, "s_index", Date.parse("2026-09-28T15:55:00.000Z"));
   assert.equal((await reader.list(installed.nowMs)).attached.session, "s_index");
 });
 
 test("attached: a stale heartbeat gives watching false", async () => {
-  const { reader, installed } = setup({ attachment: () => ({ session: "s_old3", at: "2026-09-28T15:50:00.000Z" }) });
-  const list = await reader.list(installed.nowMs);
+  const catalogRequests = require("../../src/service/catalog_requests.js");
+  const installed = fixture.install();
+  catalogRequests.writeAttach(installed.dir, "s_old3", Date.parse("2026-09-28T15:50:00.000Z"));
+  const list = await queueReader(installed).list(installed.nowMs);
   assert.deepEqual(list.attached, { session: "s_old3", name: null, watching: false });
 });
 
 test("attached: an attach with nothing on disk behind it is no agent", async () => {
-  const { reader, installed } = setup({ attachment: () => ({ session: "s_ghost", at: "2026-09-28T15:50:00.000Z" }) });
+  const catalogRequests = require("../../src/service/catalog_requests.js");
+  const installed = fixture.install();
+  const reader = queueReader(installed);
+  assert.equal((await reader.list(installed.nowMs)).attached, null, "no attach at all");
+  catalogRequests.writeAttach(installed.dir, "s_ghost", Date.parse("2026-09-28T15:50:00.000Z"));
   assert.equal((await reader.list(installed.nowMs)).attached, null);
-  const none = setup({ attachment: () => null });
-  assert.equal((await none.reader.list(none.installed.nowMs)).attached, null);
 });
 
 // --- requests -----------------------------------------------------------------
@@ -501,7 +521,7 @@ test("request carries the latest request on the review with the agent's name", a
 
 test("an answer stays on its row until ANSWER_SHOWN_MS, and not at it", async () => {
   const answeredAt = "2026-09-28T15:00:00.000Z";
-  const request = { id: "cq_a", action: "pickup", at: "2026-09-28T14:59:00.000Z", for: "s_index", state: "done", by: "s_index", text: "ok", answered_at: answeredAt };
+  const request = { id: "cq_a", action: "pickup", at: "2026-09-28T14:59:00.000Z", state: "done", by_name: "document index", text: "ok", answered_at: answeredAt };
   const { reader } = setup({ requestFor: (id) => (id === "r_brief" ? request : null) });
   const limit = Date.parse(answeredAt) + protocol.CATALOG.ANSWER_SHOWN_MS;
   assert.notEqual(row(await reader.list(limit - 1), "r_brief").request, null);
