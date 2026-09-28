@@ -807,8 +807,11 @@ function fakeHighlights() {
     supported: function () {
       return true;
     },
-    paint: function (id, range, name) {
+    quotes: {},
+    paint: function (id, range, name, quote) {
+      this.quotes[id] = quote;
       painted[id] = { range: range, name: name };
+      return painted[id];
     },
     clear: function (id) {
       delete painted[id];
@@ -1003,6 +1006,137 @@ test("a comment whose element still carries the agent's stamp is found, not gues
   assert.equal(ladder.asked.length, 0, "and nothing is guessed");
   assert.equal(highlights.painted[item.id].name, "lahe-comment", "painted normally");
   assert.equal(cards.notices[item.id], undefined, "with nothing on the card");
+});
+
+test("a stamp on an element holding the whole page is not a certain place for a comment", () => {
+  // Oversized records, cause 3 (docs/features/20260928.03_oversized_records).
+  // A selection that climbed to the page's own wrapper put its stamp on
+  // <main>. Every word on the page is that region's words, so ANY change
+  // anywhere read as "the passage was reworded, and the stamp says where it
+  // is", and the whole page was painted as the comment's passage. A stamp over
+  // the whole page says nothing about which passage the comment is on: the
+  // record is honestly lost, and nothing is painted over the page.
+  const item = fixtures.comment();
+  const blocks = [el("p", { text: "Still open" }), el("p", { text: "The next paragraph." }), el("p", { text: "The last one." })];
+  const main = el("main", { attrs: { "data-lahe-id": "e-page" }, children: blocks });
+  const root = el("body", { children: [main] });
+  const anchoredItem = anchored(item, main, root);
+  assert.equal(anchoredItem.region.ref.stamp, "e-page");
+
+  const highlights = fakeHighlights();
+  const cards = fakeCards();
+  const context = {
+    root: root,
+    items: [anchoredItem],
+    cards: cards,
+    document: fakeDocument(),
+    highlights: highlights,
+    pointing: fakePointing(null)
+  };
+
+  replay.resetCounters();
+  replay.noteSettling(0);
+  // Something else on the page changed. Not the passage the reviewer meant.
+  blocks[2].textContent = "The last one, edited by the agent for another comment.";
+
+  const outcome = replay.runPass(replay.REASON.MUTATION, context).results[0];
+
+  assert.notEqual(outcome.element, main, "the whole page is not where this comment lives");
+  assert.ok(anchoredItem.region.lost, "so the record says it could not be placed");
+  assert.equal(highlights.painted[item.id], undefined, "and the page is not washed");
+});
+
+test("a heading that holds every word on the page is still found by its stamp after a rewrite", () => {
+  // Code review of oversized-records: a single block is a passage even when it
+  // is the only thing on the page with words (a page of image options).
+  const item = fixtures.comment();
+  const h1 = el("h1", { text: "Pick a logo", attrs: { "data-lahe-id": "e-heading" } });
+  const root = el("body", { children: [h1, el("img", { attrs: { src: "a.png" } }), el("img", { attrs: { src: "b.png" } })] });
+  const anchoredItem = anchored(item, h1, root);
+  const highlights = fakeHighlights();
+  const context = {
+    root: root,
+    items: [anchoredItem],
+    cards: fakeCards(),
+    document: fakeDocument(),
+    highlights: highlights,
+    pointing: fakePointing(null)
+  };
+
+  replay.resetCounters();
+  replay.noteSettling(0);
+  h1.textContent = "Choose one of these logos";
+
+  const outcome = replay.runPass(replay.REASON.MUTATION, context).results[0];
+  assert.equal(outcome.element, h1, "the stamp says which element, and it is certain");
+  assert.equal(anchoredItem.region.lost, null);
+  assert.equal(highlights.painted[item.id].range.node, h1, "and it is painted");
+});
+
+test("a whole-element paint hands the highlighter the reviewer's quote, and reports a refusal", () => {
+  // Code review of oversized-records: the highlighter refuses a whole-element
+  // paint that is far bigger than the words the reviewer chose, and it needs
+  // those words to tell. <main> here is not the whole page (the header has
+  // words), so the stamp on it is taken as certain, and only the size check
+  // stands between a one-line comment and a wash over every paragraph.
+  const item = fixtures.comment();
+  const blocks = [el("p", { text: "Still open" }), el("p", { text: "The next paragraph." }), el("p", { text: "The last one." })];
+  const main = el("main", { attrs: { "data-lahe-id": "e-main" }, children: blocks });
+  const root = el("body", { children: [el("header", { text: "Site header" }), main] });
+  const anchoredItem = anchored(item, main, root);
+  anchoredItem[record.FIELD.CONTEXT] = Object.assign({}, anchoredItem[record.FIELD.CONTEXT], { quote: "Still open" });
+  const highlights = fakeHighlights();
+  const context = {
+    root: root,
+    items: [anchoredItem],
+    cards: fakeCards(),
+    document: fakeDocument(),
+    highlights: highlights,
+    pointing: fakePointing(null)
+  };
+
+  replay.resetCounters();
+  replay.noteSettling(0);
+  blocks[2].textContent = "The last one, edited by the agent.";
+  replay.runPass(replay.REASON.MUTATION, context);
+  assert.equal(highlights.quotes[item.id], "Still open", "the quote reaches the highlighter");
+});
+
+test("a comment on a whole element is not weighed against its old text when the element grows", () => {
+  // Re-review of oversized-records: a comment on a whole card saves the card's
+  // whole text as its quote. The agent did what was asked ("add detail here")
+  // and kept the stamp, so the card is found for certain, and it is now three
+  // times the size of that quote. Its paint must not be weighed against it.
+  const item = fixtures.comment();
+  const card = el("div", {
+    attrs: { "data-lahe-id": "e-card", class: "card" },
+    children: [el("h3", { text: "Plan" }), el("p", { text: "Short text." })]
+  });
+  const root = el("body", { children: [el("p", { text: "Before the card." }), card, el("p", { text: "After it." })] });
+  const anchoredItem = anchored(item, card, root);
+  anchoredItem[record.FIELD.CONTEXT] = Object.assign({}, anchoredItem[record.FIELD.CONTEXT], {
+    quote: "Plan Short text.",
+    element: "DIV",
+    subject: { tag: "div", src: null, alt: null, html: '<div class="card">', near: "After it." }
+  });
+  const highlights = fakeHighlights();
+  const context = {
+    root: root,
+    items: [anchoredItem],
+    cards: fakeCards(),
+    document: fakeDocument(),
+    highlights: highlights,
+    pointing: fakePointing(null)
+  };
+
+  replay.resetCounters();
+  replay.noteSettling(0);
+  card.children[1].textContent = "Much longer text, with the detail the reviewer asked for, and then some more of it.";
+  const outcome = replay.runPass(replay.REASON.MUTATION, context).results[0];
+
+  assert.equal(outcome.element, card, "found for certain by its stamp");
+  assert.equal(highlights.painted[item.id].range.node, card, "painted");
+  assert.equal(highlights.quotes[item.id], null, "and no quote to weigh it against: the quote was the element");
 });
 
 test("an edit whose stamp points at different words is still refused", () => {

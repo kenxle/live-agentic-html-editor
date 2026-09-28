@@ -529,7 +529,7 @@
           // The opening tag only. Bounded on the longer limit because a data
           // URI is a legitimate src and truncating it to 400 characters would
           // hand the agent a tag that matches nothing in the source.
-          html: boundData(subject.html, BEFORE_MAX),
+          html: boundData(record.subjectHtmlOf(subject), BEFORE_MAX),
           near: boundData(subject.near, CONTEXT_MAX)
         }
       : null;
@@ -862,7 +862,7 @@
     // Export reach an agent with no review.json in front of them (R10), and
     // "the image" is not an answer when there are three of them.
     if (ctx.subject && ctx.subject.html) {
-      lines.push("  The element (page markup): " + boundData(ctx.subject.html, BEFORE_MAX));
+      lines.push("  The element (page markup): " + boundData(record.subjectHtmlOf(ctx.subject), BEFORE_MAX));
     }
     if (ctx.quote) lines.push("  Quoted from the page: " + wrapped(boundData(ctx.quote, BEFORE_MAX)));
     if (typeof it[F.BEFORE] === "string") lines.push("  Before (page text): " + wrapped(boundData(it[F.BEFORE], BEFORE_MAX)));
