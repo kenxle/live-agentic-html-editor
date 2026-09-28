@@ -23,4 +23,4 @@ Ken made no comment on the order of the steps. The core path stands as drawn:
 3. pick a block type, then type
 4. leave editing
 5. the card waits for the agent
-6. the agent places the text, then offers proofreading
+6. the agent places the text, then offers proofreading on a long block

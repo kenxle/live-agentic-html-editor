@@ -1,12 +1,22 @@
 # Feature Brief: Free writing
 
+## Summary
+
+Reviewers can write new text on a Lahe page, not only edit text that is already there. They can add paragraphs, headers, and lists:
+
+- after any block
+- at the end of the page
+- on a blank page started from the command line
+
+Everything written in one sitting reaches the agent as one edit. The new blocks are listed separately, so the agent places them word for word. Bold and italic edits survive the rebuild. After a long hand-written block lands, the agent offers proofreading on the card and changes nothing unless asked.
+
 ## Context
 
 Lahe is a co-authoring tool. A reviewer reads a page an agent produced, comments on it, and edits text in place. Editing an existing block works well for small changes. What is missing is the other half of co-authoring: the reviewer writing their own text, or even starting the doc from scratch.
 
 Today the only way to add text is to open an existing block for editing, press Enter at its end, and keep typing. The new paragraphs are recorded as a change to that neighbor block. There is no way to make a header, and no way to start on an empty page. To add an introduction, Ken asks the agent for a placeholder header and edits it when it arrives.
 
-Prior work: the crucible in this folder (`00_crucible.md`) and the questions page Ken answered (`00_crucible_questions.md`). The original Lahe brief's editing requirements assume the text already exists. One formatting bug is already on the board as `LAHE-lone-paragraph-loses-markup`: a paragraph written on its own loses its bold and italic when the page already carries the rest of the edit. It is recorded in `docs/features/20260922.08_no_duplicate_text/NOTES.md`. This feature absorbs that row.
+Prior work: the crucible in this folder (`00_crucible.md`) and the questions page Ken answered (`00_crucible_questions.md`). The original Lahe brief's editing requirements assume the text already exists. One formatting bug is already on the board as `LAHE-lone-paragraph-loses-markup`. When the agent places an edit but leaves out one of its paragraphs, Lahe puts that paragraph back as plain text, and its bold and italic are lost. This feature absorbs that row (details in `docs/features/20260922.08_no_duplicate_text/NOTES.md`).
 
 ```mermaid
 flowchart TD
@@ -35,7 +45,7 @@ Cover three jobs:
 ## Non-Goals
 
 ::: callout-nongoal
-- A new mode. While the existing edit mode can be updated, there should not be a difference between edit and write new, in terms of what the users sees in the editor.
+- A new mode. The edit mode can change, but writing new text and editing old text look the same in the editor.
 - An editor library added to `dependencies`. The zero-runtime-dependency rule holds. A vendored file is allowed.
 - Tables, images, or links in the first cut.
 - Keeping rich formatting from a paste, unless the editor engine gives it for free. Board row `LAHE-rich-paste`.
@@ -73,11 +83,7 @@ Bold and italic changes to existing text arrive at the agent as the reviewer mad
 
 After a long hand-written block lands, the agent proofreads it and offers suggestions on the card. It does not change the reviewer's words unless asked.
 
-The wireframe and the architecture decide:
-
-- how the reviewer gets into writing
-- what they see while writing
-- how the record is shaped
+The approved wireframe decides what the reviewer sees (`wireframes/DECISION.md`). The architecture decides the record shape.
 
 ## Requirements
 
@@ -161,8 +167,8 @@ The wireframe and the architecture decide:
 
 Known cases that must pass:
 - a paragraph written on its own loses its bold and italic (board row `LAHE-lone-paragraph-loses-markup`)
-- a new line typed after a header comes out doubled. Steps: open a header for editing, press Enter, type a line, leave the editor. Result: the new line appears twice, once still inside the header and once as a normal line below it. Not yet confirmed whether the agent's rebuild plays a part.
-- bold two words in a Markdown page, commit, rebuild (the crucible's assignment)
+- a new line typed after a header comes out doubled. Steps: open a header for editing, press Enter, type a line, leave the editor. The new line shows twice: once inside the header and once as a normal line below it.
+- bold two words on a Markdown page, commit, and rebuild
 :::
 
 ### Undo and delete
@@ -189,7 +195,7 @@ Known cases that must pass:
 
 ## UX Notes
 
-The wireframe phase decides what the reviewer sees, within R2 (feels like today's edit) and R4 (new blocks match the page). Screenshots ship with the build, light and dark.
+Direction A of the wireframe is approved: a "+ Write here" line for empty space and a block-type menu on the bar (`wireframes/DECISION.md`). Screenshots ship with the build, light and dark.
 
 ## Analytics / Logging
 
@@ -197,16 +203,12 @@ Every new-text item is an event in the review log like any other item. No new an
 
 ## Rollout / Flags
 
-None. The contract text changes. Existing reviews keep working, since an old page has no new-text items. An agent on an older copy of the skill either can still act on new text or is told to update. The architecture decides which.
+None. The contract text changes. Existing reviews keep working, since an old page has no new-text items. An agent on an older copy of the skill can still act on new text. It is not told to update.
 
 ## Open Questions
 
 ::: callout-question
-**Q1:** Tiptap (a vendored editor library) or Lahe's own editing code as the engine for new writing? Ken leans toward Tiptap: it should bring a lot of editing features for free, if it can be made to fit. The architecture tests that fit with a spike and makes the call. The brief holds either way.
-:::
-
-::: callout-question
-**Q2:** Are there formatting failures beyond the three cases in R14 (bold and italic edits)? The header case now has steps; the architecture confirms whether the agent's rebuild plays a part.
+**Q1:** Tiptap (a vendored editor library) or Lahe's own editing code as the engine for new writing? Ken leans toward Tiptap. The architecture's spike ran: Tiptap cannot share one sitting with an existing block, and Lahe's own code passed every check. The architecture recommends Lahe's own code. Ken decides (architecture AQ1, Lahe's code or Tiptap). The brief holds either way.
 :::
 
 ## Decisions (Resolved)
@@ -214,7 +216,13 @@ None. The contract text changes. Existing reviews keep working, since an old pag
 - **Who writes the notes file:** the agent, like any other new text. Lahe is an agentic editor, so notes with no agent attached are not a design case.
 - **Lists:** in the first cut, alongside paragraphs and headers.
 - **Pasting with its formatting:** not in this feature. If Tiptap brings it for free, keep it. Otherwise the architecture notes what it would cost, and it waits on board row `LAHE-rich-paste`.
-- **Larger edits to existing text:** they fail the same way new writing does: new lines, headers, and basic formatting. So the same requirements cover them (R3, making paragraphs, headers, and lists; R4, matching the page's styling; R14, bold and italic surviving). No separate row.
+- **Larger edits to existing text:** they break on the same things new writing does, such as new lines, headers, and basic formatting. The same requirements cover them:
+  - R3 lets the reviewer make paragraphs, headers, and lists.
+  - R4 matches the page's styling.
+  - R14 keeps bold and italic through the rebuild.
+
+  No separate row.
+- **Formatting failures beyond R14's three cases (bold and italic edits):** the architecture traced the header case to Lahe's own replay, not the agent's rebuild. It found one related case, a left-out bold paragraph, and covers it in the same fix.
 - **Enter at the end of an existing block:** what the reviewer writes in one sitting is one edit. New lines typed after an existing block are part of that block's edit. There is no logic that splits a sitting into separate items.
 
 ## PM Review

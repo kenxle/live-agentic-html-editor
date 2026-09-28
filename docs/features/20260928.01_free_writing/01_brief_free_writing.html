@@ -810,6 +810,7 @@
 <div class="doc-nav"><span class="doc-nav-label">Docs</span><a href="00_crucible.html">Crucible</a><a href="01_brief_free_writing.html" class="current">Brief</a><a href="02_architecture_free_writing.html">Architecture</a><a href="03_plan_free_writing.html">Plan</a><a href="wireframes/index.html">Index</a><a href="04_progress_free_writing.md">Progress</a></div>
 <nav id="TOC" role="doc-toc">
 <ul>
+<li><a href="#summary" id="toc-summary">Summary</a></li>
 <li><a href="#context" id="toc-context">Context</a></li>
 <li><a href="#goal--problem" id="toc-goal--problem">Goal /
 Problem</a></li>
@@ -841,6 +842,19 @@ id="toc-reviews-free-writing-brief">Reviews: Free writing brief</a>
 </ul></li>
 </ul>
 </nav>
+<h2 id="summary">Summary</h2>
+<p>Reviewers can write new text on a Lahe page, not only edit text that
+is already there. They can add paragraphs, headers, and lists:</p>
+<ul>
+<li>after any block</li>
+<li>at the end of the page</li>
+<li>on a blank page started from the command line</li>
+</ul>
+<p>Everything written in one sitting reaches the agent as one edit. The
+new blocks are listed separately, so the agent places them word for
+word. Bold and italic edits survive the rebuild. After a long
+hand-written block lands, the agent offers proofreading on the card and
+changes nothing unless asked.</p>
 <h2 id="context">Context</h2>
 <p>Lahe is a co-authoring tool. A reviewer reads a page an agent
 produced, comments on it, and edits text in place. Editing an existing
@@ -858,11 +872,11 @@ and the questions page Ken answered
 (<code>00_crucible_questions.md</code>). The original Lahe brief's
 editing requirements assume the text already exists. One formatting bug
 is already on the board as
-<code>LAHE-lone-paragraph-loses-markup</code>: a paragraph written on
-its own loses its bold and italic when the page already carries the rest
-of the edit. It is recorded in
-<code>docs/features/20260922.08_no_duplicate_text/NOTES.md</code>. This
-feature absorbs that row.</p>
+<code>LAHE-lone-paragraph-loses-markup</code>. When the agent places an
+edit but leaves out one of its paragraphs, Lahe puts that paragraph back
+as plain text, and its bold and italic are lost. This feature absorbs
+that row (details in
+<code>docs/features/20260922.08_no_duplicate_text/NOTES.md</code>).</p>
 <pre class="mermaid"><code>flowchart TD
   A[Want to add an intro] --&gt; B[Ask the agent for a placeholder header]
   B --&gt; C[Wait for the rebuild]
@@ -891,9 +905,8 @@ stay exactly as made.</li>
 <h2 id="non-goals">Non-Goals</h2>
 <div class="callout callout-nongoal">
 <ul>
-<li>A new mode. While the existing edit mode can be updated, there
-should not be a difference between edit and write new, in terms of what
-the users sees in the editor.</li>
+<li>A new mode. The edit mode can change, but writing new text and
+editing old text look the same in the editor.</li>
 <li>An editor library added to <code>dependencies</code>. The
 zero-runtime-dependency rule holds. A vendored file is allowed.</li>
 <li>Tables, images, or links in the first cut.</li>
@@ -951,12 +964,9 @@ reviewer made them and survive the rebuild.</p>
 <p>After a long hand-written block lands, the agent proofreads it and
 offers suggestions on the card. It does not change the reviewer's words
 unless asked.</p>
-<p>The wireframe and the architecture decide:</p>
-<ul>
-<li>how the reviewer gets into writing</li>
-<li>what they see while writing</li>
-<li>how the record is shaped</li>
-</ul>
+<p>The approved wireframe decides what the reviewer sees
+(<code>wireframes/DECISION.md</code>). The architecture decides the
+record shape.</p>
 <h2 id="requirements">Requirements</h2>
 <h3 id="writing-new-text">Writing new text</h3>
 <div class="callout callout-req">
@@ -1059,12 +1069,10 @@ page.</p>
 <li>a paragraph written on its own loses its bold and italic (board row
 <code>LAHE-lone-paragraph-loses-markup</code>)</li>
 <li>a new line typed after a header comes out doubled. Steps: open a
-header for editing, press Enter, type a line, leave the editor. Result:
-the new line appears twice, once still inside the header and once as a
-normal line below it. Not yet confirmed whether the agent's rebuild
-plays a part.</li>
-<li>bold two words in a Markdown page, commit, rebuild (the crucible's
-assignment)</li>
+header for editing, press Enter, type a line, leave the editor. The new
+line shows twice: once inside the header and once as a normal line below
+it.</li>
+<li>bold two words on a Markdown page, commit, and rebuild</li>
 </ul>
 </div>
 <h3 id="undo-and-delete">Undo and delete</h3>
@@ -1099,50 +1107,54 @@ block for block, header included.</li>
 </ul>
 </div>
 <h2 id="ux-notes">UX Notes</h2>
-<p>The wireframe phase decides what the reviewer sees, within R2 (feels
-like today's edit) and R4 (new blocks match the page). Screenshots ship
-with the build, light and dark.</p>
+<p>Direction A of the wireframe is approved: a "+ Write here" line for
+empty space and a block-type menu on the bar
+(<code>wireframes/DECISION.md</code>). Screenshots ship with the build,
+light and dark.</p>
 <h2 id="analytics--logging">Analytics / Logging</h2>
 <p>Every new-text item is an event in the review log like any other
 item. No new analytics.</p>
 <h2 id="rollout--flags">Rollout / Flags</h2>
 <p>None. The contract text changes. Existing reviews keep working, since
 an old page has no new-text items. An agent on an older copy of the
-skill either can still act on new text or is told to update. The
-architecture decides which.</p>
+skill can still act on new text. It is not told to update.</p>
 <h2 id="open-questions">Open Questions</h2>
 <div class="callout callout-question">
 <p><span id="open-questions-q1" class="finding-anchor"></span><strong>Q1:</strong> Tiptap (a vendored editor library) or Lahe's own
-editing code as the engine for new writing? Ken leans toward Tiptap: it
-should bring a lot of editing features for free, if it can be made to
-fit. The architecture tests that fit with a spike and makes the call.
-The brief holds either way.</p>
-</div>
-<div class="callout callout-question">
-<p><span id="open-questions-q2" class="finding-anchor"></span><strong>Q2:</strong> Are there formatting failures beyond the three
-cases in R14 (bold and italic edits)? The header case now has steps; the
-architecture confirms whether the agent's rebuild plays a part.</p>
+editing code as the engine for new writing? Ken leans toward Tiptap. The
+architecture's spike ran: Tiptap cannot share one sitting with an
+existing block, and Lahe's own code passed every check. The architecture
+recommends Lahe's own code. Ken decides (architecture AQ1, Lahe's code
+or Tiptap). The brief holds either way.</p>
 </div>
 <h2 id="decisions-resolved">Decisions (Resolved)</h2>
 <ul>
-<li><strong>Who writes the notes file:</strong> the agent, like any
+<li><p><strong>Who writes the notes file:</strong> the agent, like any
 other new text. Lahe is an agentic editor, so notes with no agent
-attached are not a design case.</li>
-<li><strong>Lists:</strong> in the first cut, alongside paragraphs and
-headers.</li>
-<li><strong>Pasting with its formatting:</strong> not in this feature.
-If Tiptap brings it for free, keep it. Otherwise the architecture notes
-what it would cost, and it waits on board row
-<code>LAHE-rich-paste</code>.</li>
-<li><strong>Larger edits to existing text:</strong> they fail the same
-way new writing does: new lines, headers, and basic formatting. So the
-same requirements cover them (R3, making paragraphs, headers, and lists;
-R4, matching the page's styling; R14, bold and italic surviving). No
-separate row.</li>
-<li><strong>Enter at the end of an existing block:</strong> what the
+attached are not a design case.</p></li>
+<li><p><strong>Lists:</strong> in the first cut, alongside paragraphs
+and headers.</p></li>
+<li><p><strong>Pasting with its formatting:</strong> not in this
+feature. If Tiptap brings it for free, keep it. Otherwise the
+architecture notes what it would cost, and it waits on board row
+<code>LAHE-rich-paste</code>.</p></li>
+<li><p><strong>Larger edits to existing text:</strong> they break on the
+same things new writing does, such as new lines, headers, and basic
+formatting. The same requirements cover them:</p>
+<ul>
+<li>R3 lets the reviewer make paragraphs, headers, and lists.</li>
+<li>R4 matches the page's styling.</li>
+<li>R14 keeps bold and italic through the rebuild.</li>
+</ul>
+<p>No separate row.</p></li>
+<li><p><strong>Formatting failures beyond R14's three cases (bold and
+italic edits):</strong> the architecture traced the header case to
+Lahe's own replay, not the agent's rebuild. It found one related case, a
+left-out bold paragraph, and covers it in the same fix.</p></li>
+<li><p><strong>Enter at the end of an existing block:</strong> what the
 reviewer writes in one sitting is one edit. New lines typed after an
 existing block are part of that block's edit. There is no logic that
-splits a sitting into separate items.</li>
+splits a sitting into separate items.</p></li>
 </ul>
 <h2 id="pm-review">PM Review</h2>
 <div class="table-scroll"><table>
