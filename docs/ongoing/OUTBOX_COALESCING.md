@@ -1,7 +1,7 @@
 # One outbox entry per item, not one per keystroke
 
 Written 2026-09-16, alongside the fix. This is the design note the
-`docs/ongoing/MEMORY_AUDIT_20260916.md` finding 1 asked for, and it covers three
+`docs/features/20260916.05_memory_audit/MEMORY_AUDIT_20260916.md` finding 1 asked for, and it covers three
 changes that all sit on the same hot path:
 
 1. the outbox stops growing one entry per keystroke
@@ -182,6 +182,15 @@ one stamp per review, so a keystroke writes one item instead of the whole list.
 The same stamp rule applies, per review. The old `lahe.items.v1` list is still
 read and merged per item, and never written or deleted; `store.js` ("The items:
 one key per item") has the rules. The outbox is unchanged and is still one list.
+
+That spec also put a floor under how often a draft leaves the browser. Queued
+draft events now wait in the outbox: an item whose queued events are all drafts
+is held back until 10 seconds after its last draft post (`FLUSH.DRAFT_FLOOR_MS`
+in `protocol.js`). Leaving the comment box, hiding the tab and leaving the page
+send everything at once, and committed work never waits: Cmd-Enter, a Hold
+release, ending a review, and the first keystroke that withdraws a ready item
+back to draft all post immediately. So coalescing answers how many events one
+wording costs, and the floor answers how often the queue is emptied.
 
 ### The one upgrade hazard
 

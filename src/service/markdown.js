@@ -193,6 +193,21 @@ function parseChunk(parser, tokens, referenceLinks) {
   return parser.parse(chunk);
 }
 
+// A scheme like "mailto:" or "tel:" hands off to another app rather than
+// opening a page, so a new tab would just sit there empty after the handoff.
+// Anything else with a scheme (or a protocol-relative "//host" link, which has
+// none) is a page leaving the documentation, and gets one.
+function linkScheme(href) {
+  var match = String(href || "").match(/^([A-Za-z][A-Za-z0-9+.-]*):/);
+  return match ? match[1].toLowerCase() : null;
+}
+
+function newTabTarget(href) {
+  var scheme = linkScheme(href);
+  if (scheme === "mailto" || scheme === "tel") return "";
+  return " target=\"_blank\" rel=\"noopener noreferrer\"";
+}
+
 function sourceNote(sourcePath) {
   return "<p class=\"lahe-readonly-note\">Read-only rendered view of <code>" + escapeHtml(sourcePath) +
     "</code>. This document is not under review.</p>";
@@ -221,7 +236,12 @@ function render(source, options) {
       return "<span class=\"lahe-local-link\" title=\"local file, open it on disk: " +
         escapeHtml(decision.target) + "\">" + text + "</span>";
     }
-    return "<a href=\"" + escapeHtml(token.href) + "\"" + title + ">" + text + "</a>";
+    // relative and anchor links stay in the same tab, same as translate above;
+    // external links (including protocol-relative //host ones) leave the
+    // documentation, so they open in a new tab unless they hand off to another
+    // app (mailto:, tel:) rather than opening a page.
+    var target = decision.kind === "external" ? newTabTarget(token.href) : "";
+    return "<a href=\"" + escapeHtml(token.href) + "\"" + title + target + ">" + text + "</a>";
   };
   renderer.code = function (token) {
       var language = String(token.lang || "").trim().split(/\s+/)[0].toLowerCase();

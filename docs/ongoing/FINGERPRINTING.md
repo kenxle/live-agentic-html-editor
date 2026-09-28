@@ -289,6 +289,14 @@ flowchart TD
   T -- "found nowhere" --> R
 ```
 
+**A bind climbs back to the saved tag.** After a rung places the bind, if the
+element it landed on carries a different tag from the one the record was minted
+on, it climbs through parents that hold exactly the same words and takes the
+first one with the saved tag. `<p><em>A</em></p>`: a record minted on the `<p>`
+binds the `<p>`, not the `<em>` that happens to hold all of its words. The climb
+stops the moment an ancestor holds any other words, and it never counts toward
+uniqueness. Fixed 2026-09-22; see `docs/features/20260922.03_italic_sticks/NOTES.md`.
+
 **Position is not on this ladder at all.** It corroborates and it never decides.
 The reason is one line: when two identical rows swap places, the row now standing
 where the original stood *is the other row*. Position there is not weak evidence,
@@ -432,7 +440,7 @@ rebuild because it lives upstream of the build, and it scores decisively.
 | --- | --- |
 | Telling truly identical elements apart, for a write | undecidable without the page's help |
 | Generated class names | a hashed CSS-module class gets the full 40 points; five other tools built a "does this look generated?" check and we have none |
-| A curly quote replacing a straight one | the normalizer folds whitespace and invisibles, deliberately not typography, because folding it would let a write discard your punctuation fix |
+| A curly quote replacing a straight one | the normalizer folds whitespace and invisibles, deliberately not typography, because folding it would let a write discard your punctuation fix. Two places outside the ladder do fold it, each named and each read-only about it: replay's split search, and the helper's handled check (`normalize.foldTypography`) |
 | Looped generated output | **deferred on purpose.** 73 cards, one card in the source: there is nothing there to fingerprint or stamp |
 | Any of the pointing ladder, in the product | wired 2026-09-11: a lost comment or note is painted at its probable place with "probable" on the card (Task 3) |
 | The agent is told WHERE the element sits | done 2026-09-11: review.json carries `region.where`, `region.ordinal`, `region.stamp`, `region.text_unique` (Task 1) |
@@ -489,6 +497,7 @@ fix is what stops the next page from needing the same favor.
 | 1 | nothing changed | binds on text |
 | 1b | the passage was **reworded** | write refuses; point finds it by identity |
 | 8 | a framework wrapped it in a new div | non-event: the innermost element holding the text wins |
+| 8b | a framework or the source wrapped the block's words in an inline tag inside the block (`<p><em>A</em></p>`) | the innermost element (the `<em>`) still wins the text search, but the bind then climbs back to the saved tag (the `<p>`) as long as each ancestor along the way holds exactly the same words |
 | 9 | the passage moved to the top of the page | binds on text; position never got a vote |
 | 12 | two comments on the same element | both bind |
 

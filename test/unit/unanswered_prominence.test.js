@@ -71,9 +71,14 @@ function railAt(clock) {
 // The rule
 // ---------------------------------------------------------------------------
 
-test("no agent listening: overdue after the quiet limit, and not before", () => {
+test("no agent listening: the line speaks at the quiet limit but is not loud yet", () => {
+  // The machine cannot see a listener, but a model thinking through a hard item
+  // leaves no footprint for minutes at a time. Half a minute of that is not
+  // evidence that nobody is there, so the line says the wait and stays calm.
   assert.equal(LIVENESS.overdue(STATE.NO_AGENT, LIVENESS.QUIET_MS - 1), false);
-  assert.equal(LIVENESS.overdue(STATE.NO_AGENT, LIVENESS.QUIET_MS), true, "there is nobody to wait for");
+  assert.equal(LIVENESS.overdue(STATE.NO_AGENT, LIVENESS.QUIET_MS), false, "27s of thinking is not an absence");
+  assert.equal(LIVENESS.overdue(STATE.NO_AGENT, LIVENESS.NO_AGENT_LOUD_MS - 1), false);
+  assert.equal(LIVENESS.overdue(STATE.NO_AGENT, LIVENESS.NO_AGENT_LOUD_MS), true, "two minutes of nothing is");
 });
 
 test("an agent listening with nothing back: overdue after the stale limit, and not before", () => {
@@ -96,6 +101,7 @@ test("nothing waiting, an unknown state, or no wait at all is never overdue", ()
 test("the footer's loud line is the same rule, not a second one", () => {
   const cases = [
     [STATE.NO_AGENT, LIVENESS.QUIET_MS + 1000],
+    [STATE.NO_AGENT, LIVENESS.NO_AGENT_LOUD_MS + 1000],
     [STATE.NO_AGENT, 5000],
     [STATE.WAITING, LIVENESS.STALE_MS + 1000],
     [STATE.WAITING, LIVENESS.STALE_MS - 1000],
@@ -137,17 +143,28 @@ test("a card waiting past the limit is overdue and says how long; a fresh one is
   rail.unmount();
 });
 
-test("no agent listening turns a card amber after thirty seconds", () => {
+test("no agent listening turns a card amber after two minutes, not after thirty seconds", () => {
   const rail = railAt(NOW);
-  const item = readyItem(45000);
-  rail.upsertCard(item);
+  const thinking = readyItem(45000);
+  rail.upsertCard(thinking);
   rail.setAgentLiveness({
     state: STATE.NO_AGENT,
     unanswered: 1,
     listening: false,
-    oldest_unanswered_at: item[record.FIELD.UPDATED_AT]
+    oldest_unanswered_at: thinking[record.FIELD.UPDATED_AT]
   });
-  assert.equal(rail.cardWait(item[record.FIELD.ID]).overdue, true);
+  assert.equal(rail.cardWait(thinking[record.FIELD.ID]).overdue, false, "the agent may just be thinking");
+  assert.equal(rail.waitBanner().shown, false);
+
+  const late = readyItem(LIVENESS.NO_AGENT_LOUD_MS + 1000);
+  rail.upsertCard(late);
+  rail.setAgentLiveness({
+    state: STATE.NO_AGENT,
+    unanswered: 2,
+    listening: false,
+    oldest_unanswered_at: late[record.FIELD.UPDATED_AT]
+  });
+  assert.equal(rail.cardWait(late[record.FIELD.ID]).overdue, true);
   assert.equal(rail.waitBanner().shown, true);
   rail.unmount();
 });

@@ -1,6 +1,6 @@
 # LAHE: the 2026-09-16 merge record
 
-This page is the record of what merged on 2026-09-16 and why. The one page to follow for progress on all of the performance and token work is `docs/ongoing/MEMORY_AUDIT_20260916.md` (LAHE: performance and token work). Nothing here is updated any more.
+This page is the record of what merged on 2026-09-16 and why. The one page to follow for progress on all of the performance and token work is `docs/features/20260916.05_memory_audit/MEMORY_AUDIT_20260916.md` (LAHE: performance and token work). Nothing here is updated any more.
 
 Three changes are built and tested. Ken said merge on 2026-09-16, and they are on main. The full test run passed on all three together: 1,091 small tests and the full browser suite.
 

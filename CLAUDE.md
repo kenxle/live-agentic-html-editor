@@ -195,6 +195,34 @@ GitHub emails the pusher for every failed or cancelled workflow run, and on
 - Remove a temporary workflow before the branch merges, and delete the branch
   from the remote when the PR closes.
 
+## Never remove files while work is running
+
+No `rm`, no `git clean`, no deleting a scratch script, a screenshot helper or a
+stale worktree, not even your own temp files at the end of your own task. Every
+removal stops and waits for Ken's approval, which stalls whatever else is
+running.
+
+Write what you would like removed into your notes or progress page under a
+"To delete at cleanup" heading, one line each saying what it is, and leave the
+files where they are. Removals happen in one batch at the end, by the
+orchestrator, with the whole list in front of Ken. Files under `/tmp` are never
+removed at all; the operating system owns that folder.
+
+## Read the result, then push
+
+Run the browser suite as its own command, read the pass and fail counts, and
+push as a separate step. A chained `suite; git push` pushes whatever the suite
+said: on 2026-09-23 two specs failed, the push went out anyway, and main
+carried a regression until it was reverted. The gate is a person reading
+"0 failed", not the shell's exit code.
+
+## Undoing a revert before re-merging
+
+Reverting a merge commit leaves git believing the branch is already merged, so
+a later merge of the fixed branch brings nothing or conflicts in every file the
+revert touched. Revert the revert first (`git revert <the revert>`), then merge
+the branch with its fixes on top.
+
 ## Commit conventions
 
 - No em dashes anywhere: not in commit messages, not in code comments, not

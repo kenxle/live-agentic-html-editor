@@ -135,17 +135,25 @@ flowchart LR
     RS -->|page + script line| B["Browser"]
     B <--> H["Helper :7817"]
     A["Agent"] -->|edits the .md| MD
-    A -->|"reruns the same<br/>lahe review command"| G
+    MD -.->|"the helper sees the source is newer<br/>and renders again by itself"| G
     H -.->|reload| B
 ```
 
 The loop for the agent:
 
 1. Edit the `.md`.
-2. Rerun the same `lahe review` command. It reuses the session and review
-   and rebuilds the page.
-3. Confirm the rendered page shows the change.
-4. Reply.
+2. Reply.
+
+There is no rebuild step. When the reviewer's page asks the helper whether
+anything moved, the helper checks whether the `.md` behind the artifact is
+newer and renders it again if it is (`src/service/rebuild.js`). The page then
+reloads onto the new render. An agent that forgets to rerun anything is not a
+failure mode any more; before this, a forgotten rerun left the reviewer's own
+edit disappearing on every refresh.
+
+Two limits on that, both deliberate: only a Markdown review, and only LAHE's
+own artifact. A review pointed at the reviewer's build output is never
+rewritten, because that file belongs to their build.
 
 Do not hand-convert Markdown to HTML or start a separate server; the
 renderer exists so that never happens.
@@ -153,7 +161,10 @@ renderer exists so that never happens.
 Relative images and local links work: they are served from the source folder,
 and a link to another local `.md` opens as another rendered page, marked
 read-only. Links stay source-true on disk; the renderer translates them for
-the browser at build time.
+the browser at build time. A link that leaves the documentation (an external
+URL, or a protocol-relative `//host` link) opens in a new tab, so following it
+never takes the reviewer off the page they were commenting on. Links we render
+ourselves, in-page anchors, and `mailto:`/`tel:` links stay in the same tab.
 
 ## Use case 3: a document built from several sources
 

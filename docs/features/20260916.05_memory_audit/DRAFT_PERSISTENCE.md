@@ -4,6 +4,8 @@ Written 2026-09-21. An analysis, not a change. No code was touched.
 
 Part of the [performance and token work](MEMORY_AUDIT_20260916.md), which links every document from it.
 
+**Status, 2026-09-28.** The fix shipped on 2026-09-22: [Stop writing unsent drafts so often](../20260922.01_draft_write_cost/01_spec_draft_write_cost.md), with measured before-and-after numbers on that page. So the costs measured below are the OLD costs, kept as the record of why the change was made. Three things this page describes are no longer true: the browser saves one comment per keystroke in that comment's own storage key rather than rewriting the whole list; a draft reaches the helper at most once every 10 seconds rather than about once a second; and a draft save no longer rewrites `review.json` at all. What still stands: the browser copy alone covers every failure R1 names, the helper copy is never read back into the page, and the three oversized-record bugs are still open.
+
 ## Summary
 
 1. A draft (a comment or edit the reviewer has not sent yet) is saved in the browser on every keystroke, and sent to the helper about once a second while the reviewer types.
@@ -96,7 +98,7 @@ Notes:
 | The page's own script clears browser storage (sign-out, `localStorage.clear()`) | RF4 | helper log **on disk only**; not shown on the rail | **lost** |
 | Reviewer clears site data, or a private window closes | not named in the docs | helper log on disk only | **lost** |
 | Same review opened on another origin (`localhost` vs `127.0.0.1`), another browser, or another profile | RF4, D5 lines 153-155 | helper log on disk only; the rail on the new origin does not show it | **lost from the new origin's view**; still in the first origin's storage |
-| Browser storage full | memory audit | the keystroke is refused and a chip says so; words stay in the box only (`comments.js:1705-1722`, `OUTBOX_COALESCING.md`) | same |
+| Browser storage full | memory audit | the keystroke is refused and a chip says so; words stay in the box only (`comments.js:1705-1722`, `../../ongoing/OUTBOX_COALESCING.md`) | same |
 | Disk full | not named in the docs | neither store can write | same |
 | Two tabs on one review | D5 lines 202-211 | second tab refused and read-only, writes nothing | same |
 | Agent working on the page | R2 | drafts are never in `review.json`, so no agent sees or discards them | same |
@@ -243,7 +245,7 @@ Store one key per item, or write the list only on commit and keep a small per-it
 
 - **Saves:** over 300 KB of serialization and storage writes per keystroke on a large review.
 - **Gives up:** nothing, if the write stays synchronous.
-- **Breaks:** the storage format. Old keys need a one-time migration. The two-tab stamp logic in `store.js` (`OUTBOX_COALESCING.md`) has to cover the new keys.
+- **Breaks:** the storage format. Old keys need a one-time migration. The two-tab stamp logic in `store.js` (`../../ongoing/OUTBOX_COALESCING.md`) has to cover the new keys.
 
 ### (d3) Send only what changed
 
@@ -252,7 +254,7 @@ For a draft `item.content`, send the typing fields only: note, after, after_html
 - **Saves:** the measured envelope plus typing fields come to 531,283 bytes, 15.8% of today's draft bytes (calc-mcp).
 - **Gives up:** nothing.
 - **Breaks:**
-  - The projection has no field-level events. It takes the newest whole record (`OUTBOX_COALESCING.md`, "Why D5 still holds"), so it would need a patch rule.
+  - The projection has no field-level events. It takes the newest whole record (`../../ongoing/OUTBOX_COALESCING.md`, "Why D5 still holds"), so it would need a patch rule.
   - A patch whose base the helper never saw has to be refused or rebuilt.
   - More moving parts than (c) for a smaller saving.
 
