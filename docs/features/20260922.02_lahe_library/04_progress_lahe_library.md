@@ -1,6 +1,6 @@
 # Progress: LAHE Library
 
-**Phase 6, Implement.** You cleared the design, and the plan's three reviews are folded in. The shared names are in (commit 000c40b), and four builders are working in parallel. Nothing is waiting on you. Last updated 2026-09-28 16:58.
+**Phase 6, Implement.** You cleared the design, and the plan's three reviews are folded in. The shared names are in (commit 000c40b), and one Phase 1 builder is back (server restart), three are still working. Nothing is waiting on you. Last updated 2026-09-28 17:07.
 
 **Docs:** [Crucible](http://127.0.0.1:54705/00_crucible.html) · [Brief](http://127.0.0.1:54705/01_brief_lahe_library.html) · [Wireframes](http://127.0.0.1:54705/wireframes/index.html) · [Architecture](http://127.0.0.1:54705/02_architecture_lahe_library.html) · [Plan](http://127.0.0.1:54705/03_plan_lahe_library.html) · [Ideas page](http://127.0.0.1:55480/DOCUMENT_INDEX_IDEAS-b09cd11f2a84063f.html)
 
@@ -14,7 +14,6 @@ Nothing is waiting on you.
 |---|---|---|---|
 | Builder 1.1 | The list reader and the star store | 2026-09-28 16:58 | `task/lib-reader` |
 | Builder 1.2 | The Library's key, its security checks, and serving the page | 2026-09-28 16:58 | `task/lib-auth` |
-| Builder 1.3 | Restarting a document's server, and the Host check on page servers | 2026-09-28 16:58 | `task/lib-restart` |
 | Builder 1.4 | The request queue, its place in the agent's drain, and the `lahe library` command | 2026-09-28 16:58 | `task/lib-queue` |
 
 ## Phases
@@ -39,6 +38,7 @@ Nothing is waiting on you.
 | Phase | Task | Short name | Status | Detail | Outcome |
 |---|---|---|---|---|---|
 | 0 | 1 | shared names | done | commit 000c40b | Routes, auth class, error codes, constants and manifest entries landed; unit gate green. |
+| 1 | 3 | restart and Host check | returned, not merged | `task/lib-restart`, progress/phase1_task3_restart.md | A restarted server tries its old port first and swaps its origin; every page server now refuses a foreign Host. 1331 unit tests pass. |
 
 ### Loop passes
 
