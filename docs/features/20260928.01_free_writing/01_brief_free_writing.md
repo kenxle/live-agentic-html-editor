@@ -90,7 +90,7 @@ The wireframe and the architecture decide:
 :::
 
 ::: callout-req
-**R2:** Starting to write feels like the edit the reviewer already knows. There is no new mode to learn.
+**R2:** Starting to write feels like the edit the reviewer already knows. There is no separate mode to learn.
 :::
 
 ::: callout-req
