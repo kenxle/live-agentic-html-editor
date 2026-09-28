@@ -37,7 +37,7 @@ Cover three jobs:
 ::: callout-nongoal
 - A new mode. While the existing edit mode can be updated, there should not be a difference between edit and write new, in terms of what the users sees in the editor.
 - An editor library added to `dependencies`. The zero-runtime-dependency rule holds. A vendored file is allowed.
-- Tables, images, or links in the first cut. Lists are open in Q4 (are lists in the first cut?).
+- Tables, images, or links in the first cut.
 - Agent-written text. The reviewer writes; the agent proofreads and suggests.
 - A change to how comments work.
 - Mobile. The job happens on a laptop.
@@ -64,7 +64,7 @@ The scene is a document on a laptop with the rest of Lahe running. The agent may
 
 ## Solution Outline
 
-The reviewer starts writing the way they start an edit today, and can do it where there is no text yet. They make paragraphs and headers themselves. The new blocks look like the rest of the page while they write. The agent can tell new text from a change to existing text, and knows where it belongs.
+The reviewer starts writing the way they start an edit today, and can do it where there is no text yet. They make paragraphs, headers, and lists themselves. The new blocks look like the rest of the page while they write. The agent can tell new text from a change to existing text, and knows where it belongs.
 
 A blank document can be started from the command line and served like any other review, so notes begin on an empty page with the rail already there.
 
@@ -94,7 +94,7 @@ The wireframe and the architecture decide:
 :::
 
 ::: callout-req
-**R3:** The reviewer can make paragraphs and headers themselves, without asking the agent.
+**R3:** The reviewer can make paragraphs, headers, and lists themselves, without asking the agent.
 :::
 
 ::: callout-req
@@ -209,10 +209,6 @@ None. The contract text changes. Existing reviews keep working, since an old pag
 :::
 
 ::: callout-question
-**Q4 (Ken):** Are lists in the first cut? Notes are mostly lists, and your chosen approach included them. Or are they a follow-up?
-:::
-
-::: callout-question
 **Q5 (Ken):** Pasting a draft written elsewhere: in scope, or a non-goal for now?
 :::
 
@@ -227,6 +223,7 @@ None. The contract text changes. Existing reviews keep working, since an old pag
 ## Decisions (Resolved)
 
 - **Who writes the notes file:** the agent, like any other new text. Lahe is an agentic editor, so notes with no agent attached are not a design case.
+- **Lists:** in the first cut, alongside paragraphs and headers.
 
 ## PM Review
 
@@ -239,7 +236,7 @@ None. The contract text changes. Existing reviews keep working, since an old pag
 | RF5 | Enter at the end of an existing block: same edit or new text? | Accepted | Q7 for the wireframe; metric reworded |
 | RF6 | No requirement for a rebuild landing mid-writing | Accepted | Now R7 |
 | RF7 | Metrics were one-off demos | Accepted | Rewritten against the status-quo costs |
-| RF8 | Lists cut silently; paste and larger edits unsaid | Accepted | Q4, Q5, Q6 for Ken |
+| RF8 | Lists cut silently; paste and larger edits unsaid | Accepted | Put to Ken as Q4, Q5, Q6. Lists: in the first cut |
 | RF9 | "Word for word" fails on renderer typography | Accepted | R6 carve-out |
 | RF10 | Tiptap said three times; old agents not covered in Rollout | Accepted | Goal paragraph cut; Rollout line added |
 | RF11 | R5 overstated draft saving | Accepted | R5 reworded to match today's saving and to say what a reload shows |

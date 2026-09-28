@@ -896,8 +896,7 @@ should not be a difference between edit and write new, in terms of what
 the users sees in the editor.</li>
 <li>An editor library added to <code>dependencies</code>. The
 zero-runtime-dependency rule holds. A vendored file is allowed.</li>
-<li>Tables, images, or links in the first cut. Lists are open in Q4 (are
-lists in the first cut?).</li>
+<li>Tables, images, or links in the first cut.</li>
 <li>Agent-written text. The reviewer writes; the agent proofreads and
 suggests.</li>
 <li>A change to how comments work.</li>
@@ -938,10 +937,10 @@ source.</li>
 </ul>
 <h2 id="solution-outline">Solution Outline</h2>
 <p>The reviewer starts writing the way they start an edit today, and can
-do it where there is no text yet. They make paragraphs and headers
-themselves. The new blocks look like the rest of the page while they
-write. The agent can tell new text from a change to existing text, and
-knows where it belongs.</p>
+do it where there is no text yet. They make paragraphs, headers, and
+lists themselves. The new blocks look like the rest of the page while
+they write. The agent can tell new text from a change to existing text,
+and knows where it belongs.</p>
 <p>A blank document can be started from the command line and served like
 any other review, so notes begin on an empty page with the rail already
 there.</p>
@@ -972,8 +971,8 @@ No existing block is needed to start. That covers:</p>
 reviewer already knows. There is no separate mode to learn.</p>
 </div>
 <div class="callout callout-req">
-<p><strong>R3:</strong> The reviewer can make paragraphs and headers
-themselves, without asking the agent.</p>
+<p><strong>R3:</strong> The reviewer can make paragraphs, headers, and
+lists themselves, without asking the agent.</p>
 </div>
 <div class="callout callout-req">
 <p><strong>R4:</strong> New blocks use the page's own styling, while
@@ -1121,11 +1120,6 @@ cases in R14 (bold and italic edits)? The header case now has steps; the
 architecture confirms whether the agent's rebuild plays a part.</p>
 </div>
 <div class="callout callout-question">
-<p><span id="open-questions-q4" class="finding-anchor"></span><strong>Q4 (Ken):</strong> Are lists in the first cut? Notes are
-mostly lists, and your chosen approach included them. Or are they a
-follow-up?</p>
-</div>
-<div class="callout callout-question">
 <p><span id="open-questions-q5" class="finding-anchor"></span><strong>Q5 (Ken):</strong> Pasting a draft written elsewhere: in
 scope, or a non-goal for now?</p>
 </div>
@@ -1145,6 +1139,8 @@ be able to see which it is.</p>
 <li><strong>Who writes the notes file:</strong> the agent, like any
 other new text. Lahe is an agentic editor, so notes with no agent
 attached are not a design case.</li>
+<li><strong>Lists:</strong> in the first cut, alongside paragraphs and
+headers.</li>
 </ul>
 <h2 id="pm-review">PM Review</h2>
 <div class="table-scroll"><table>
@@ -1208,7 +1204,7 @@ Decisions</td>
 <td>RF8</td>
 <td>Lists cut silently; paste and larger edits unsaid</td>
 <td><span class="accepted">Accepted</span></td>
-<td>Q4, Q5, Q6 for Ken</td>
+<td>Put to Ken as Q4, Q5, Q6. Lists: in the first cut</td>
 </tr>
 <tr>
 <td>RF9</td>
