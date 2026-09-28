@@ -176,6 +176,9 @@ No flag. The Library reads records that already exist, so it works on the full h
 
 1. What is one row: a document, a review, or an agent session? Settled in the wireframe, on real data.
 
+   - **A review** is one document (or one folder of pages) and the comments on it.
+   - **An agent session** is one agent's stream of work. It can hold many reviews: the session writing this brief holds seven, including the crucible, this brief, the progress page, and the wireframes. When one agent hands work to another, the whole session moves.
+
 2. How does the default view keep the volume manageable (a recent window, grouping by day, collapsing)? Settled in the wireframe.
 
 3. Which app does Launch a new agent open (Terminal, iTerm, the Claude desktop app), and for which hosts (Claude Code, Codex)? Settled in the architecture.
