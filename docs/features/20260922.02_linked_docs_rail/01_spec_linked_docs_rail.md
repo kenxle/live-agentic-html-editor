@@ -6,14 +6,12 @@ Clicking a link on a reviewed page to a document in another folder opens it read
 
 ## Your calls: where the security review narrows your rule
 
-Your rule is that anything our own server serves gets the editor. The security review keeps that for every page you reach by clicking a link, and narrows it in two places. Each needs a yes or no from you.
+Your rule is that anything our own server serves gets the editor. The security review keeps that for every page you reach by clicking a link, and narrows it in two places. Both are settled; the text below records what was decided.
 
 1. **YES, settled 2026-09-28. Pages you did not click to, sitting in a linked folder, stay without the editor.** When a page links to a file in another folder, the server opens that whole folder so the link works. The review puts the editor only on the files a link actually points to, not on their neighbours. Why: the editor's key would otherwise reach every page in any folder a document happens to link into. Say no, and every page in a linked folder gets the editor.
-2. **If the review you came from has been deleted, the linked page opens read-only.** It does not borrow some other review's key.
+2. **SETTLED 2026-09-28, and it turned out not to be a real case.** Nothing in LAHE deletes a review. Closing a session or a review keeps all of its history, and the 30-day limit named in the code is not wired to anything. The only way to lose one is to delete the state folder by hand.
 
-   **When this actually happens:** rarely, and never in the middle of normal clicking. The link works because the server opened that folder, and the folder stays open as long as the server runs. The review that opened it can go away underneath: you left a tab open and its review was deleted from the state folder, or you bookmarked a linked page's address and came back to it later, after that review was gone.
-
-   In that case LAHE has no honest way to know which document your comment belongs to. The alternative is to hand you the newest review on that server, which may be a different document, so your comment lands somewhere you did not expect. Say no and it does that instead.
+   So there is no borrowing, and no silent read-only page. If a linked page finds no review where it expected one, it says so on the page: this document has no review, which should not happen. It offers to open one, and opens it only when Ken asks. That is not the automatic per-click enrollment requirement 3 forbids.
 
 Separately, and not a narrowing: a linked document that already has its own review now takes you to that review's page, instead of opening a copy with its key. You get your earlier comments that way. It also found a leak that exists today, where hidden files like `.env` in a linked folder can be fetched from the page server. That is being fixed now on its own, without waiting for this spec.
 
