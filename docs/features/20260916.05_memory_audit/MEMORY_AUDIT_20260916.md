@@ -44,8 +44,8 @@ This is the one progress page for all of the memory, CPU, and token work. The me
 | 1. One message per pause instead of one per keystroke | ✅ Done. |
 | 2. Helper stops re-reading logs (startup rebuilds nothing; rebuilds read only what is new) | ✅ Done. Brief: `docs/features/20260916.03_helper_lazy_projection/01_spec_lazy_projection.md` |
 | 3. The page lets go of old memory | ✅ Done. |
-| 4. Compact or archive the 654 MB of old logs | ⬜ Not started. Easier once 1 has run a while |
-| 5. Close stale agent sessions and their little servers | ⬜ Not started. Cheap |
+| 4. Compact or archive the old logs (699.9 MB across 515 reviews, measured 2026-09-28) | 🔨 Building. Decided 2026-09-28: drop only draft snapshots a later copy of the same comment replaces (625.3 MB of it), proving each review's summary is identical first and keeping a gzipped original until cleanup |
+| 5. Close stale agent sessions and their little servers | 🔨 Decided 2026-09-28: when no browser window is open on any of a session's pages (heartbeat stale and goodbye received), the helper stops that session's page servers after a two minute grace. The session itself stays open so its agent keeps watching; reopening the page through the agent or the doc index restarts the server. Builds after the quiet-tab change, since it uses the same heartbeat |
 | 6. The drain stops repeating the agent instructions (3,800 tokens per wake) | ✅ Done. Spec: `docs/features/20260916.02_contract_once/01_spec_contract_once.md` |
 | 7. Trim the agent playbook (AGENTS.md, 14,000 tokens per session start) | ✅ Done 2026-09-21. The skill holds the instructions; AGENTS.md is about 400 tokens |
 | 8. The instructions tell agents to read the summary file once, not every wake | ✅ Done 2026-09-21, with 7 |
@@ -63,7 +63,7 @@ This is the one progress page for all of the memory, CPU, and token work. The me
 | 20. A linked folder's hidden files (like `.env`) can be fetched from the local page server | ✅ Fixed on main (e4346f1). Page servers already running keep the old code until they restart |
 | 21. The page server's own folder also serves hidden files, such as a `.env` inside the folder under review | ✅ Decided 2026-09-28: keep serving them. The only risk was a third-party script inside a reviewed page reading a secret file from the same local server, which is narrow on a personal machine |
 | 22. The rail drew single-side accent stripes in about ten places | ✅ Done 2026-09-28. The stripe stays where it means unseen or new (the asking block, a flagged reply, Edits rows, conflict sides). The toast lost its. Quote styling unchanged |
-| 23. Battery still drains on an idle machine with review tabs open: a visible tab polls the helper every second, and 58 page servers from finished sessions were still running (711 MB) | 🔨 [Issue 16](https://github.com/kenxle/live-agentic-html-editor/issues/16) filed with the measurements. Not started |
+| 23. Battery still drains on an idle machine with review tabs open | 🔨 Building. Decided 2026-09-28: the focused tab polls at full speed; an unfocused or hidden tab stops polling and sends a "still open" heartbeat every 5 minutes; refocus checks at once; close says goodbye. [Issue 16](https://github.com/kenxle/live-agentic-html-editor/issues/16) |
 | 24. A paragraph written on its own (because the page already carries the others) goes in as plain text, so bold or italic in it is dropped | ⬜ Not started. Recorded in the no-duplicate-text notes. Fix: derive that paragraph's markup when the edit's markup splits cleanly |
 | 25. An edit whose words span several blocks still merges them into one when the reviewer presses Keep mine | ⬜ Not started. Older than the duplicate fix. Nothing is doubled and a reload restores the structure |
 | 26. Send only what changed in a draft (option d3 on the draft persistence page), with the shared parts stored once | ⬜ Not started. Approved 2026-09-22. It changes the log format, so it gets its own spec first |
