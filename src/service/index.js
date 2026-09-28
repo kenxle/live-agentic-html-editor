@@ -45,6 +45,7 @@ var authModule = require("./auth.js");
 var routes = require("./routes.js");
 var projection = require("./projection.js");
 var agentSessionsModule = require("./agent_sessions.js");
+var idleServersModule = require("./idle_servers.js");
 
 // Read from package.json rather than restated here, so the version the helper
 // reports cannot drift from the version the repo ships.
@@ -124,6 +125,12 @@ function loadLibrary(bundlePath) {
     }
   });
   return library;
+}
+
+/** A positive number of milliseconds from the environment, or undefined. */
+function envMs(name) {
+  var value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
 function readBody(req, limit) {
@@ -214,9 +221,20 @@ async function serve(options) {
     });
   }
 
+  // Page servers nobody has had open for two minutes are stopped; the session
+  // stays open (idle_servers.js). The two env knobs are for tests only.
+  var idleServers = idleServersModule.createIdleServers({
+    dir: dir,
+    reviews: reviews,
+    agentSessions: agentSessions,
+    log: log,
+    graceMs: typeof opts.idleGraceMs === "number" ? opts.idleGraceMs : envMs("LAHE_IDLE_GRACE_MS")
+  });
+
   var deps = {
     log: log,
     reviews: reviews,
+    idleServers: idleServers,
     projection: projection,
     // The session store, so a route can answer two questions server-side: which
     // agent session owns this review, and is that session's monitor alive. Both
@@ -232,6 +250,7 @@ async function serve(options) {
   // here, because the agent loop has to run for the life of the helper rather
   // than only while a page happens to be asking something.
   projection.startWatching(deps);
+  idleServers.start(typeof opts.idleSweepMs === "number" ? opts.idleSweepMs : envMs("LAHE_IDLE_SWEEP_MS"));
 
   var server = http.createServer(function (req, res) {
     handle(req, res).catch(function (err) {
@@ -451,6 +470,7 @@ async function serve(options) {
     reviews: reviews,
     server: server,
     close: function () {
+      idleServers.stop();
       return new Promise(function (resolve) {
         server.close(function () {
           resolve();

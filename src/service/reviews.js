@@ -1137,6 +1137,25 @@ function createReviews(options) {
       });
   }
 
+  /**
+   * Every review a browser window has open right now, by the helper's own rule:
+   * a holder that is not stale by its OWN claim window. That is 30 seconds for
+   * a page someone can see and 390 for a hidden tab on the slow beat, so a
+   * hidden tab counts for as long as the helper still holds its review. A
+   * window that said goodbye has no holder and does not count.
+   *
+   * The idle sweep (idle_servers.js) asks this. Not liveHolders: that answers
+   * "is somebody reviewing right now" with one fixed window, which is shorter
+   * than a hidden tab's beat.
+   *
+   * @returns {string[]} review ids
+   */
+  function openWindowReviews() {
+    return Object.keys(sessions).filter(function (id) {
+      return !holderIsStale(sessions[id]);
+    });
+  }
+
   function heldForPhrase(holder) {
     var startedAt = typeof holder.since_ms === "number" ? holder.since_ms : holder.since;
     return elapsed.elapsedPhrase(startedAt, { now: clock() });
@@ -1382,6 +1401,7 @@ function createReviews(options) {
     loadSessions: loadSessions,
     saveSessions: saveSessions,
     liveHolders: liveHolders,
+    openWindowReviews: openWindowReviews,
     endReview: endReview
   };
 }

@@ -316,6 +316,59 @@ async function servedVia(dir, agentSessionId, targetPaths) {
   return fallback;
 }
 
+/**
+ * This review's page server, when the helper stopped it because no browser
+ * window was open on the session's pages (src/service/idle_servers.js), with
+ * the command that brings it back. Null when a server of this session is
+ * running at the review's folder, or none was stopped that way.
+ *
+ * An old link to a stopped server is refused, and an agent that ran `open` on
+ * one is owed the reason and the fix here.
+ *
+ * @returns {{server: string, port: number, stopped_at: string, restart: string}|null}
+ */
+function idleStoppedServer(dir, agentSessionId, reviewId) {
+  if (typeof agentSessionId !== "string" || !protocol.isSafeId(agentSessionId)) return null;
+  var meta;
+  try { meta = JSON.parse(fs.readFileSync(stateDirModule.metaPath(dir, reviewId), "utf8")); }
+  catch (err) { return null; }
+  var targets = targetPathsOfReview(dir, reviewId);
+  if (!targets.length) return null;
+  var roots = [];
+  targets.forEach(function (target) {
+    var isDir = false;
+    try { isDir = fs.statSync(target).isDirectory(); } catch (err) { isDir = false; }
+    var base = isDir ? target : path.dirname(target);
+    [base, realOr(base)].forEach(function (candidate) {
+      if (roots.indexOf(candidate) === -1) roots.push(candidate);
+    });
+  });
+  var servers;
+  try { servers = staticServersModule.list(dir, agentSessionId); } catch (err) { return null; }
+  var here = servers.filter(function (server) { return roots.indexOf(server.root) !== -1; });
+  if (here.some(function (server) { return !server.stopped_at; })) return null;
+  var idle = here.filter(function (server) { return server.stop_reason === staticServersModule.IDLE_REASON; })[0];
+  if (!idle) return null;
+  var document = typeof meta.source_path === "string" && meta.source_path ? meta.source_path : targets[0];
+  return {
+    server: idle.id,
+    port: idle.port,
+    stopped_at: idle.stopped_at,
+    restart: protocol.reviewCommand(document, agentSessionId, stateDirModule.flagFor(dir))
+  };
+}
+
+function realOr(target) {
+  try { return fs.realpathSync(target); } catch (err) { return target; }
+}
+
+/** The human line for `idleStoppedServer`'s answer. */
+function idleStoppedLine(stopped) {
+  return "server    stopped: no browser window was open on this session's pages, so the helper stopped it.\n" +
+    "            The session is still open. An old link to port " + stopped.port + " is refused until you run:\n" +
+    "            " + stopped.restart;
+}
+
 /** The human line for `servedVia`'s answer, or null when nothing applies. */
 function servedViaLine(servedViaValue) {
   if (servedViaValue === "injected") {
@@ -608,6 +661,7 @@ async function run(argv, options) {
 
   var lines = [];
   var jsonItems = [];
+  var stoppedServers = [];
   var endedReviews = [];
   var totalUnanswered = 0;
   var seenAny = false;
@@ -693,6 +747,11 @@ async function run(argv, options) {
       served_via: await servedVia(dir, ownerSessionId, targetPathsOfReview(dir, id)),
       only_recorded_pages: isolatedReview(dir, id)
     };
+    var stoppedServer = liveness.served_via === "injected" ? null : idleStoppedServer(dir, ownerSessionId, id);
+    if (stoppedServer) {
+      liveness.server_stopped = stoppedServer;
+      stoppedServers.push(Object.assign({ review: id }, stoppedServer));
+    }
 
     if (args.json) {
       open.forEach(function (item) {
@@ -754,6 +813,7 @@ async function run(argv, options) {
     if (healed) lines.push("            " + healed);
     var served = servedViaLine(liveness.served_via);
     if (served) lines.push("  " + served);
+    if (stoppedServer) lines.push("  " + idleStoppedLine(stoppedServer));
     // `--only`. Worth its own line, because the default is the opposite and an
     // agent that assumes the reviewer can wander onto any page in the folder
     // will be wrong about where a comment can come from.
@@ -913,6 +973,8 @@ async function run(argv, options) {
         reviews: ids.length,
         unanswered_ready: totalUnanswered,
         ended_reviews: endedToReport,
+        // Only when there are any, so a drain line is unchanged for everyone else.
+        stopped_servers: stoppedServers.length ? stoppedServers : undefined,
         new_since_seen_file: args.seenFile ? toPrint.length : undefined,
         helper: helperOrigin,
         agent_session_id: args.session,

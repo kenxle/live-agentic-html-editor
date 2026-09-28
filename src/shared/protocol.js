@@ -1066,6 +1066,18 @@
     return "lahe session takeover " + String(sessionId) + stateDirFlag(stateDirPath);
   }
 
+  /**
+   * The one spelling of the command that brings a document's page back: the
+   * session's page server, started again if the helper stopped it because no
+   * window was open (src/service/idle_servers.js). Same state-directory rule.
+   *
+   * @param {string} target the document as the agent named it (the Markdown
+   *   source for a rendered page)
+   */
+  function reviewCommand(target, sessionId, stateDirPath) {
+    return "lahe review " + shellWord(target) + " --session " + String(sessionId) + stateDirFlag(stateDirPath);
+  }
+
   // ---------------------------------------------------------------------------
   // Monitor liveness: what the rail is allowed to claim about an agent
   // ---------------------------------------------------------------------------
@@ -1437,6 +1449,7 @@
     drainCommand: drainCommand,
     monitorCommand: monitorCommand,
     takeoverCommand: takeoverCommand,
+    reviewCommand: reviewCommand,
 
     MONITOR: MONITOR,
     AGENT_LIVENESS: AGENT_LIVENESS

@@ -298,6 +298,11 @@ async function run(argv) {
   }
   if (code === 0) {
     if (staticServer) {
+      // The link below is about to be handed to the reviewer. The helper's idle
+      // sweep gives a server two minutes from this stamp before it stops it, so
+      // a reused server is not stopped before the page has had time to load.
+      try { staticServers.noteLinkGiven(dir, sessionId, staticServer.meta.id); }
+      catch (err) { /* the link still works now; only the grace is shorter */ }
       process.stdout.write(
         "\n  server    http://" + staticServer.meta.host + ":" + staticServer.meta.port +
           (staticServer.started ? "  (started for this agent session)" : "  (reused for this agent session)") +

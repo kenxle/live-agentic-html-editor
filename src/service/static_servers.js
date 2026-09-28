@@ -38,6 +38,14 @@ var MOUNT_ROOT = "/.lahe-source/";
 // The prefix follows HEALTH_PREFIX and the /.lahe-source/ mounts: a dotted,
 // tool-named path segment no ordinary document folder has.
 var LIBRARY_PREFIX = "/.lahe-library/";
+
+// Why a server was stopped, as its record says it. IDLE_REASON is the helper's
+// sweep (src/service/idle_servers.js): no browser window was open on any of
+// the session's pages for the grace. The session stays open, so the server
+// comes back when anyone asks for the page again. A session close is final
+// until the session is reopened.
+var IDLE_REASON = "no window open";
+var CLOSED_REASON = "session closed";
 var LIBRARY_PATH = LIBRARY_PREFIX + heal.BUNDLE_BASENAME;
 
 var MIME = {
@@ -240,9 +248,17 @@ async function start(options) {
 
   stateDir.ensureStaticServersRoot(dir, sessionId);
   var instance = crypto.randomBytes(16).toString("hex");
+  // THE OLD PORT FIRST. A server coming back on the port it had keeps every
+  // origin its reviews already registered, and an old tab's address works
+  // again. When the port is taken the server falls back to a random one (see
+  // runServer). The option and the argument position match feat/lahe_library,
+  // which does the same for the Library's Open.
+  var preferredPort = validPort(options.preferredPort)
+    ? options.preferredPort
+    : (existing && existing.root === root && validPort(existing.port) ? existing.port : 0);
   var child = childProcess.spawn(
     process.execPath,
-    [__filename, "--serve", file, sessionId, id, instance, root, dir, logicalRoot],
+    [__filename, "--serve", file, sessionId, id, instance, root, dir, logicalRoot, String(preferredPort)],
     { detached: true, stdio: "ignore" }
   );
   child.unref();
@@ -256,12 +272,32 @@ async function start(options) {
   return { meta: meta, started: true };
 }
 
-async function stopOne(dir, sessionId, meta) {
-  if (!meta || meta.stopped_at) return false;
+function validPort(value) {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 && value < 65536;
+}
+
+/**
+ * Stop one server and say why on its record.
+ *
+ * @param {string} [reason] CLOSED_REASON (the default) or IDLE_REASON
+ * @returns {Promise<boolean>} whether this call stopped a running server
+ */
+async function stopOne(dir, sessionId, meta, reason) {
+  var why = reason || CLOSED_REASON;
+  if (!meta) return false;
+  if (meta.stopped_at) {
+    // A session closed after the sweep stopped its servers. The record says
+    // so, or a window claiming later would read "idle" and start it again.
+    if (why === CLOSED_REASON && meta.stop_reason === IDLE_REASON) {
+      meta.stop_reason = CLOSED_REASON;
+      writeMeta(dir, sessionId, meta);
+    }
+    return false;
+  }
   var exact = await isExactServer(meta);
   if (!exact) {
     meta.stopped_at = new Date().toISOString();
-    meta.stop_reason = "already down";
+    meta.stop_reason = why === IDLE_REASON ? IDLE_REASON : "already down";
     writeMeta(dir, sessionId, meta);
     return false;
   }
@@ -270,8 +306,28 @@ async function stopOne(dir, sessionId, meta) {
   var stopped = await waitFor(async function () { return !(await isExactServer(meta)); }, 10000);
   if (!stopped) throw new Error("static review server " + meta.id + " did not stop within 10 seconds");
   meta.stopped_at = new Date().toISOString();
-  meta.stop_reason = "session closed";
+  meta.stop_reason = why;
   writeMeta(dir, sessionId, meta);
+  return true;
+}
+
+/**
+ * Record that a link to this server was just handed to someone.
+ *
+ * `lahe review` calls it every time it prints a link. The helper's idle sweep
+ * counts its grace from this too, so a server reused for a fresh link is not
+ * stopped before the reviewer has had time to open it. Read-merge-write, like
+ * recordLinks.
+ *
+ * @param {string} [at] ISO time, now by default
+ * @returns {boolean} whether the record was found and written
+ */
+function noteLinkGiven(dir, sessionId, serverId, at) {
+  var file = stateDir.staticServerPath(dir, sessionId, serverId);
+  var current = readJson(file);
+  if (!current || current.session_id !== sessionId) return false;
+  current.link_given_at = typeof at === "string" ? at : new Date().toISOString();
+  stateDir.writeAtomic(file, JSON.stringify(current, null, 2) + "\n");
   return true;
 }
 
@@ -581,9 +637,15 @@ function servesPath(dir, sessionId, filePath) {
   var realTarget = target;
   try { realTarget = fs.realpathSync(target); } catch (err) { /* the plain path still answers */ }
   return entries.some(function (meta) {
-    if (meta.stopped_at) return false;
-    if (typeof meta.pid !== "number") return false;
-    try { process.kill(meta.pid, 0); } catch (err) { return false; }
+    // A server the idle sweep stopped still counts. It comes back the moment
+    // anyone asks for the page, and the line on disk this answer would let the
+    // healer write is a review token in the reviewer's own working tree.
+    var idle = !!meta.stopped_at && meta.stop_reason === IDLE_REASON;
+    if (meta.stopped_at && !idle) return false;
+    if (!idle) {
+      if (typeof meta.pid !== "number") return false;
+      try { process.kill(meta.pid, 0); } catch (err) { return false; }
+    }
     var roots = [meta.root, meta.logical_root];
     if (meta.mounts && typeof meta.mounts === "object") {
       Object.keys(meta.mounts).forEach(function (prefix) { roots.push(meta.mounts[prefix]); });
@@ -796,7 +858,7 @@ function placeNote(html, note) {
 }
 
 
-function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInput) {
+function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInput, preferredPortInput) {
   var root = fs.realpathSync(rootInput);
   var logicalRoot = typeof logicalRootInput === "string" && logicalRootInput ? logicalRootInput : root;
   var prior = readJson(file);
@@ -1132,7 +1194,20 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
     if (req.method === "HEAD") return res.end();
     fs.createReadStream(candidate).on("error", function () { res.destroy(); }).pipe(res);
   });
-  server.listen(0, HOST, function () {
+  var preferredPort = Number(preferredPortInput);
+  if (!validPort(preferredPort)) preferredPort = 0;
+  server.once("error", function (err) {
+    // The old port is taken (or refused): fall back to any free one. Any other
+    // failure, or a failure on port 0, ends the process, and start() reports
+    // that the server did not come up.
+    if (preferredPort && (err.code === "EADDRINUSE" || err.code === "EACCES")) {
+      preferredPort = 0;
+      return server.listen(0, HOST, onListening);
+    }
+    throw err;
+  });
+  server.listen(preferredPort, HOST, onListening);
+  function onListening() {
     var meta = {
       schema: SCHEMA,
       id: id,
@@ -1151,7 +1226,7 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
       linked_files: mergeLinkedFiles(priorLinks, (readJson(file) || {}).linked_files)
     };
     stateDir.writeAtomic(file, JSON.stringify(meta, null, 2) + "\n");
-  });
+  }
   function stop() { server.close(function () { process.exit(0); }); }
   process.on("SIGHUP", reloadMounts);
   process.on("SIGTERM", stop);
@@ -1167,13 +1242,17 @@ if (require.main === module) {
     process.argv[6],
     process.argv[7],
     process.argv[8],
-    process.argv[9]
+    process.argv[9],
+    process.argv[10]
   );
 }
 
 module.exports = {
   SCHEMA: SCHEMA,
   LIBRARY_PATH: LIBRARY_PATH,
+  IDLE_REASON: IDLE_REASON,
+  CLOSED_REASON: CLOSED_REASON,
+  noteLinkGiven: noteLinkGiven,
   servesPath: servesPath,
   recordLinks: recordLinks,
   linkedFileForPage: linkedFileForPage,

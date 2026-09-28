@@ -39,6 +39,10 @@ flowchart TD
 - Ownership nests: a session owns reviews, a review owns pages, and a session
   separately owns the static servers that serve those pages. Closing session A
   stops only session A's static servers; session B's keep answering.
+- The helper also stops a session's static servers when no browser window has
+  been open on that session's pages for two minutes. The session stays open,
+  and `lahe review` brings a page back. Session B's open windows never keep
+  session A's servers running.
 - The immutable-owner rule is not about people, it is about the session
   record. A review remembers the session that created it, and no later
   command can move it to a different session by accident.
