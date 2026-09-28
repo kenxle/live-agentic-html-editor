@@ -807,8 +807,11 @@ function fakeHighlights() {
     supported: function () {
       return true;
     },
-    paint: function (id, range, name) {
+    quotes: {},
+    paint: function (id, range, name, quote) {
+      this.quotes[id] = quote;
       painted[id] = { range: range, name: name };
+      return painted[id];
     },
     clear: function (id) {
       delete painted[id];
@@ -1041,6 +1044,62 @@ test("a stamp on an element holding the whole page is not a certain place for a 
   assert.notEqual(outcome.element, main, "the whole page is not where this comment lives");
   assert.ok(anchoredItem.region.lost, "so the record says it could not be placed");
   assert.equal(highlights.painted[item.id], undefined, "and the page is not washed");
+});
+
+test("a heading that holds every word on the page is still found by its stamp after a rewrite", () => {
+  // Code review of oversized-records: a single block is a passage even when it
+  // is the only thing on the page with words (a page of image options).
+  const item = fixtures.comment();
+  const h1 = el("h1", { text: "Pick a logo", attrs: { "data-lahe-id": "e-heading" } });
+  const root = el("body", { children: [h1, el("img", { attrs: { src: "a.png" } }), el("img", { attrs: { src: "b.png" } })] });
+  const anchoredItem = anchored(item, h1, root);
+  const highlights = fakeHighlights();
+  const context = {
+    root: root,
+    items: [anchoredItem],
+    cards: fakeCards(),
+    document: fakeDocument(),
+    highlights: highlights,
+    pointing: fakePointing(null)
+  };
+
+  replay.resetCounters();
+  replay.noteSettling(0);
+  h1.textContent = "Choose one of these logos";
+
+  const outcome = replay.runPass(replay.REASON.MUTATION, context).results[0];
+  assert.equal(outcome.element, h1, "the stamp says which element, and it is certain");
+  assert.equal(anchoredItem.region.lost, null);
+  assert.equal(highlights.painted[item.id].range.node, h1, "and it is painted");
+});
+
+test("a whole-element paint hands the highlighter the reviewer's quote, and reports a refusal", () => {
+  // Code review of oversized-records: the highlighter refuses a whole-element
+  // paint that is far bigger than the words the reviewer chose, and it needs
+  // those words to tell. <main> here is not the whole page (the header has
+  // words), so the stamp on it is taken as certain, and only the size check
+  // stands between a one-line comment and a wash over every paragraph.
+  const item = fixtures.comment();
+  const blocks = [el("p", { text: "Still open" }), el("p", { text: "The next paragraph." }), el("p", { text: "The last one." })];
+  const main = el("main", { attrs: { "data-lahe-id": "e-main" }, children: blocks });
+  const root = el("body", { children: [el("header", { text: "Site header" }), main] });
+  const anchoredItem = anchored(item, main, root);
+  anchoredItem[record.FIELD.CONTEXT] = Object.assign({}, anchoredItem[record.FIELD.CONTEXT], { quote: "Still open" });
+  const highlights = fakeHighlights();
+  const context = {
+    root: root,
+    items: [anchoredItem],
+    cards: fakeCards(),
+    document: fakeDocument(),
+    highlights: highlights,
+    pointing: fakePointing(null)
+  };
+
+  replay.resetCounters();
+  replay.noteSettling(0);
+  blocks[2].textContent = "The last one, edited by the agent.";
+  replay.runPass(replay.REASON.MUTATION, context);
+  assert.equal(highlights.quotes[item.id], "Still open", "the quote reaches the highlighter");
 });
 
 test("an edit whose stamp points at different words is still refused", () => {

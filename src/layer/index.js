@@ -1337,9 +1337,18 @@
       if (comments.highlights && typeof doc.createRange === "function") {
         var over = doc.createRange();
         over.selectNodeContents(element);
-        comments.highlights.emphasize(over);
+        // Weighed against the reviewer's words like any whole-element paint,
+        // so a jump to a one-line comment bound to a container of every
+        // paragraph scrolls there without washing all of them.
+        comments.highlights.emphasize(over, undefined, quoteOfItem(id));
       }
       return true;
+    }
+
+    function quoteOfItem(id) {
+      var item = scopedStore.readItem(reviewId, id);
+      var context = item && item[record.FIELD.CONTEXT];
+      return context && typeof context.quote === "string" ? context.quote : null;
     }
 
     function rangeIsLive(range) {

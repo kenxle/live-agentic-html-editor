@@ -57,13 +57,12 @@ One comment came to 516 KB.
 
 Both need "something on the page moves", which matches Ken's report.
 
-**Fix, three parts:**
+**Fix, four parts** (the last three reworked after code review):
 
-- **The real region** (`src/layer/comments.js`, `selectionElementOf`). The region is the smallest element that holds every character the selection actually selects. Range ends that select nothing visible are ignored. A triple-clicked heading is now the heading.
-- **Honestly lost** (`src/layer/replay.js`, `stampedPlace`). A stamp on a page-sized element is no longer a certain place for a comment. The pass goes on to the point ladder, and the record is reported lost.
-- **Never painted end to end** (`src/layer/highlight.js`, `coversWholePage`). Every paint goes through this file. A range covering the whole contents of a page-sized element is refused, and `paint` returns null. "Page-sized" is `anchor.isPageSized`: `<body>`, `<html>`, or an element holding every word the page has. A range the reviewer drew over their own words, even "select all", starts and ends inside text, so it is never refused.
-
-**Still true after the fix:** a real multi-block selection (a heading plus its paragraph) still anchors on their shared parent. If that parent is the whole page, the comment is never washed end to end. Its paint is its own words when they appear once. Its record is lost once the page changes.
+- **The real region** (`src/layer/comments.js`, `selectionElementOf`). Range ends that select nothing visible are ignored, so a triple-clicked heading is the heading.
+- **A selection over several blocks is anchored on its first block.** Before, its region was the blocks' shared parent, which on a flat page is the whole page. The page's text became its signature, the largest remaining cause by bytes. The region is only how the tool finds the spot; the reviewer's quote is kept whole. The repaint covers the whole quote: when the quote runs past the region, `paintRangeFor` looks for it in an ancestor. It paints the quote only when it is there exactly once and starts inside the region.
+- **Honestly lost** (`src/layer/replay.js`, `stampedPlace`). A stamp on a page-sized element is not a certain place for a comment. The record is reported lost and the point ladder gets its turn. `anchor.isPageSized` is `<body>`, `<html>`, the scope, or an element holding every word on the page in **two or more blocks**. One block is always a passage. The heading on a page of image options is still found by its stamp after the agent rewords it.
+- **No wash far bigger than the reviewer's words** (`src/layer/highlight.js`, `refusesWholePaint`). Every paint goes through this file. Callers now pass the item's quote to it. A range over the whole contents of a container of two or more worded blocks is refused when its text is more than twice the quote. A single block is never refused, so a reworded paragraph is still painted whole. A pick is never refused, because its quote is the element's own text. A refusal clears that item's earlier paint and returns null. `comments.repaint` and replay's `paintAs` now return what `paint` returned.
 
 ## Tests
 
@@ -71,14 +70,16 @@ Both need "something on the page moves", which matches Ken's report.
 | --- | --- |
 | `test/unit/oversized_records.test.js` (10 tests) | Cause 1: run-out context is the nearest ring, for an unreachable label and for identical items, and D9 still refuses. Cause 2: one copy in the record, distinct and same-source images, an old full-value signature still resolves, `review.json` projects the same tag, and media `<source>` tags. Cause 3: `isPageSized`. |
 | `test/unit/replay_pass.test.js`, "a stamp on an element holding the whole page is not a certain place for a comment" | Cause 3: a stamp on `<main>` gives a lost record and no paint. |
-| `test/browser/oversized_records.spec.js` (4 tests, fixture `test/fixtures/oversized-records.html`) | The same three causes in Chromium. It uses a real 480x240 PNG as a `data:` URL (over 100 KB) and a real triple-click. |
+| `test/unit/oversized_records.test.js`, review round (2 tests) | One block holding every word is not page-sized. Alt text containing `|x=data:` does not make a new signature read as old. |
+| `test/unit/replay_pass.test.js`, review round (2 tests) | A heading that holds every word is found by its stamp after a rewrite. A whole-element paint hands the highlighter the quote. |
+| `test/browser/oversized_records.spec.js` (5 tests, fixture `test/fixtures/oversized-records.html`) | The three causes in Chromium, with a real 480x240 PNG as a `data:` URL and a real triple-click. The review round adds two tests. A two-paragraph selection anchors on the first paragraph, replay binds it, and the repaint covers both. With a header outside `<main>`, a one-line quote's paint over `<main>` is refused, clears the item's earlier paint, and `repaint` returns false. |
 
 All four browser tests failed on the pre-fix `src/`, each for the reported reason: the appendices in the suffix, the image in the record 3 times, the region `section:1` instead of `h2:1`, and a 564-character wash.
 
-**Runs** (Node 20.19, `--workers=1`):
+**Runs after the review round** (Node 20.19, `--workers=1`, after merging main):
 
-- `npm run gate:unit`: lint passed; 1,358 pass, 0 fail. One earlier run showed 1 failure that did not repeat in the next two full runs.
-- Browser specs, 55 passed, 0 failed:
+- `npm run gate:unit`: lint passed; 1,410 pass, 0 fail.
+- Browser specs, 56 passed, 0 failed:
   - anchor_engine
   - element_subject
   - comments_highlights
@@ -110,6 +111,17 @@ Run on 2026-09-28: 515 reviews, 175,278 log lines, 734,182,327 bytes, 3,900 reco
 - "Bytes across every log line" is the oversized field's size, summed over every line that carries it.
 - "On committed lines" is the part on lines that are not draft snapshots. The draft compaction keeps all of these, so they are what is left after compaction, at the least.
 
+**New records, measured in the browser spec** (the `[sizes]` lines, the record's JSON length):
+
+| Case | Bytes |
+| --- | --- |
+| Comment on a diagram label | 1,571 |
+| Embedded image, with a 156,786-byte image | 158,400 |
+| Triple-clicked heading | 1,429 |
+| Selection over two paragraphs | 1,539 |
+
+The measurement script reads the logs on disk, which hold old records only. Its rerun after the review round gives the same totals as the table above.
+
 ## Cleaning up the old records
 
 **The compaction tool first.** Branch `compact-draft-history` drops superseded draft snapshots. Across these causes it would remove most of the 157,363,892 repeated bytes on its own, with its existing projection proof. It does not touch record contents. Re-run this script on the compacted copy to get the exact remainder.
@@ -129,8 +141,12 @@ Run on 2026-09-28: 515 reviews, 175,278 log lines, 734,182,327 bytes, 3,900 reco
 ## Decisions for Ken
 
 1. **Clean the 5 embedded-image records** with the narrower proof above, after compaction runs. Or leave them: they total 1,179,748 bytes on committed lines.
-2. **A pick on the page itself** (clicking the margin in pick mode) still makes a comment whose region is the whole page. It is never washed now, and it is lost once the page changes. It could open a page note instead. That changes a gesture, so it is Ken's call.
+2. **A pick on the page itself** (clicking the margin in pick mode) still makes a comment whose region is the whole page. Its quote is the element's own text, so its paint covers what was picked. It is lost once the page changes. It could open a page note instead. That changes a gesture, so it is Ken's call.
 3. **A big nearest neighbour** (a 3 KB sibling next to a paragraph) is still stored whole as context. Bounding it to a fixed number of characters is possible without touching the reviewer's words. But it trades away some power to tell identical rows apart, so it is not done here.
+
+## Follow-ups
+
+Board row, not built here: **Media signatures for video, audio and picture.** The element signature for `<video>`, `<audio>` and `<picture>` uses the generic attributes (aria-label, id, href, value). It ignores the element's `src` and its child `<source>` tags, so two videos with different sources and no id read as the same element. A pick inside a `<picture>` lands on its `<img>`, whose signature ignores the picture's `<source>` tags. Give these tags a signature built from `src` plus the child `<source>` tags, stored once (embedded values named as for `<img>`), and keep old signatures readable.
 
 ## To delete at cleanup
 

@@ -95,6 +95,7 @@ test.describe("oversized records", () => {
     expect(ref.prefix).toContain("The paragraph before the diagram.");
     expect(ref.suffix).toBe("The paragraph after the diagram.");
     expect(item.context.suffix).toBe(ref.suffix);
+    console.log("[sizes] diagram label record: " + JSON.stringify(item).length + " bytes");
   });
 
   test("2: an embedded image is stored once, whole, and still found and projected", async ({ page }) => {
@@ -129,6 +130,7 @@ test.describe("oversized records", () => {
     expect(json.split(tail).length - 1).toBe(1);
     expect(item.context.subject.src).toBe(src);
     expect(json.length).toBeLessThan(src.length + 8000);
+    console.log("[sizes] embedded image record: " + json.length + " bytes, image " + src.length + " bytes");
 
     const found = await page.evaluate(function () {
       var stored = window.LAHE.store.shared.read(window.__lahe.reviewId)[0];
@@ -171,6 +173,7 @@ test.describe("oversized records", () => {
     const item = (await itemsIn(page))[0];
     expect(item.region.ref.path).toBe("body>main:1>section:1>h2:1");
     expect(item.region.ref.probe).toBe("Still open");
+    console.log("[sizes] triple-clicked heading record: " + JSON.stringify(item).length + " bytes");
 
     // After the box goes and the page is painted from the record alone.
     await page.evaluate(function (id) {
@@ -180,37 +183,116 @@ test.describe("oversized records", () => {
     expect(await paintedLength(page, item.id)).toBe("Still open".length);
   });
 
-  test("3: a region that holds the whole page is never painted end to end", async ({ page }) => {
+  test("3: a selection over several blocks is anchored on its first block, and painted over all of them", async ({ page }) => {
     await page.goto(server.urlFor(FIXTURE));
     await bootLayer(page);
 
-    // A pick on the page's own wrapper, which holds every word on the page.
     await page.evaluate(function () {
-      window.__lahe.comments.commentOnElement(document.querySelector("main"));
+      var first = document.getElementById("p1").firstChild;
+      var last = document.getElementById("p2").firstChild;
+      var range = document.createRange();
+      range.setStart(first, 0);
+      range.setEnd(last, last.data.length);
+      var selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      var handle = window.__lahe.comments.commentOnSelection({});
+      handle.input.value = "Merge these two.";
     });
     const item = (await itemsIn(page))[0];
-    expect(await paintedLength(page, item.id)).toBe(-1);
+    const p1 = "This paragraph says Still open again, so the heading's words are on the page twice.";
+    const p2 = "The paragraph before the diagram.";
 
-    const repainted = await page.evaluate(function (id) {
-      window.__lahe.comments.repaint(id);
-      return !!window.__lahe.comments.highlights.rangeFor(id);
+    // Identity is the first block. The reviewer's quote is theirs, whole.
+    expect(item.region.ref.path).toBe("body>main:1>section:1>p:1");
+    expect(item.region.ref.probe).toBe(p1);
+    expect(item.context.quote).toContain(p1);
+    expect(item.context.quote).toContain(p2);
+    expect(item.region.lost).toBe(null);
+
+    // Replay places it: the reference binds the first block.
+    const bound = await page.evaluate(function () {
+      var stored = window.LAHE.store.shared.read(window.__lahe.reviewId)[0];
+      var verdict = window.LAHE.anchor.resolve(stored.region.ref, document);
+      return verdict.bound ? verdict.element.id : null;
+    });
+    expect(bound).toBe("p1");
+
+    // And the paint from the record alone covers the whole quote, both blocks.
+    const painted = await page.evaluate(function (id) {
+      window.__lahe.comments.unpaint(id);
+      var ok = window.__lahe.comments.repaint(id);
+      var range = window.__lahe.comments.highlights.rangeFor(id);
+      return { ok: ok, text: range ? range.toString().replace(/\s+/g, " ").trim() : null };
     }, item.id);
-    expect(repainted).toBe(false);
+    expect(painted.ok).toBe(true);
+    expect(painted.text).toBe(p1 + " " + p2);
+    console.log("[sizes] multi-block selection record: " + JSON.stringify(item).length + " bytes");
+  });
 
-    // And the body itself, however it is reached.
-    const bodyPainted = await page.evaluate(function () {
-      var range = document.createRange();
-      range.selectNodeContents(document.body);
-      return window.__lahe.comments.highlights.paint("probe-body", range);
-    });
-    expect(bodyPainted).toBe(null);
+  test("3: a whole-element paint far bigger than the reviewer's words is refused, and clears the old paint", async ({ page }) => {
+    await page.goto(server.urlFor(FIXTURE));
+    await bootLayer(page);
 
-    // An ordinary block is still painted whole when it has to be.
-    const blockPainted = await page.evaluate(function () {
-      var range = document.createRange();
-      range.selectNodeContents(document.getElementById("p2"));
-      return !!window.__lahe.comments.highlights.paint("probe-block", range);
+    // The header has words, so <main> is not the whole page. A record stored
+    // before the fix, anchored on <main> with a one-line quote, must still
+    // never wash every paragraph.
+    await page.evaluate(function () {
+      var header = document.createElement("header");
+      header.textContent = "Site header";
+      document.body.insertBefore(header, document.body.firstChild);
     });
-    expect(blockPainted).toBe(true);
+
+    const result = await page.evaluate(function () {
+      var comments = window.__lahe.comments;
+      var main = document.querySelector("main");
+      var mainRange = document.createRange();
+      mainRange.selectNodeContents(main);
+      var blockRange = document.createRange();
+      blockRange.selectNodeContents(document.getElementById("p2"));
+
+      // Fix 4: an earlier paint for the item is cleared by a refusal.
+      var first = !!comments.highlights.paint("probe-item", blockRange, undefined, "The paragraph before the diagram.");
+      var refused = comments.highlights.paint("probe-item", mainRange, undefined, "Still open");
+      var left = comments.highlights.rangeFor("probe-item");
+
+      // The same element, painted for the words it holds, is not refused.
+      var whole = !!comments.highlights.paint("probe-whole", mainRange, undefined, main.textContent);
+      // A single block far bigger than a short quote is still one passage.
+      var block = !!comments.highlights.paint("probe-block", blockRange, undefined, "the");
+      return { first: first, refused: refused, left: !!left, whole: whole, block: block };
+    });
+    expect(result.first).toBe(true);
+    expect(result.refused).toBe(null);
+    expect(result.left).toBe(false);
+    expect(result.whole).toBe(true);
+    expect(result.block).toBe(true);
+
+    // Through the rail's own repaint: an old record on <main> with a short quote.
+    const repainted = await page.evaluate(function (reviewId) {
+      var LAHE = window.LAHE;
+      var main = document.querySelector("main");
+      var item = LAHE.record.newItem({
+        kind: LAHE.record.KIND.COMMENT,
+        state: LAHE.record.STATE.READY,
+        note: "Is this still open?",
+        page_origin: location.origin,
+        page_path: location.pathname
+      });
+      var region = LAHE.record.emptyRegion();
+      region.ref = LAHE.anchor.mint({ element: main, root: document });
+      item[LAHE.record.FIELD.REGION] = region;
+      var context = LAHE.record.emptyContext();
+      context.quote = "Still open";
+      item[LAHE.record.FIELD.CONTEXT] = context;
+      LAHE.store.shared.write(reviewId, item);
+      var ok = window.__lahe.comments.repaint(item.id);
+      var range = window.__lahe.comments.highlights.rangeFor(item.id);
+      return { ok: ok, length: range ? range.toString().length : -1 };
+    }, REVIEW);
+    // The quote is on the page twice, so it cannot be narrowed to; the whole
+    // of <main> is refused. Nothing is painted, and the caller is told so.
+    expect(repainted.ok).toBe(false);
+    expect(repainted.length).toBe(-1);
   });
 });

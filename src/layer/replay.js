@@ -2100,13 +2100,29 @@
     return range;
   }
 
+  // The reviewer's own words for an item this pass holds, or null. The
+  // highlighter weighs a whole-element paint against them, so a one-line
+  // comment bound to a container of every paragraph is not washed end to end.
+  function quoteFor(ctx, id) {
+    var list = ctx && Array.isArray(ctx.items) ? ctx.items : [];
+    for (var i = 0; i < list.length; i += 1) {
+      if (list[i] && list[i][record.FIELD.ID] === id) {
+        var context = list[i][record.FIELD.CONTEXT];
+        return context && typeof context.quote === "string" ? context.quote : null;
+      }
+    }
+    return null;
+  }
+
+  // True only when the highlighter painted it. A refused paint (the element is
+  // far bigger than the reviewer's words) answers false, and the highlighter
+  // has already cleared this item's earlier paint.
   function paintAs(ctx, id, element, name) {
     var highlights = highlightsIn(ctx);
     if (!highlights) return false;
     var range = rangeOver(ctx, element);
     if (!range) return false;
-    highlights.paint(id, range, name);
-    return true;
+    return !!highlights.paint(id, range, name, quoteFor(ctx, id));
   }
 
   /**

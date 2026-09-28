@@ -822,11 +822,17 @@
    * Was this signature written before embedded values were named? Such a probe
    * carries a data: URL in full after one of its `name=` fields. Records on
    * disk still hold them, and they must still find their image, so the
-   * candidates are asked for the same old spelling. A new signature never
-   * contains "=data:": every such value is written as "=embedded:".
+   * candidates are asked for the same old spelling.
+   *
+   * Old means "=data:" and no "=embedded:". A new signature names every data:
+   * value it holds, so it carries "=embedded:" whenever it had one to name;
+   * the "=data:" check alone would misread a new signature whose alt text
+   * happens to contain "|x=data:". A new signature with neither is spelled the
+   * same both ways, so which way it is read does not matter.
    */
   function isLegacyProbe(kind, probe) {
-    return kind === PROBE.ELEMENT && typeof probe === "string" && /(^|\|)[^|=]+=\s*data:/i.test(probe);
+    if (kind !== PROBE.ELEMENT || typeof probe !== "string") return false;
+    return /=\s*data:/i.test(probe) && !/=embedded:/.test(probe);
   }
 
   // What this candidate says about itself, in whichever content the reference
@@ -1550,11 +1556,47 @@
   }
 
   /**
+   * How many blocks with words this element is made of.
+   *
+   * Counts the child elements that are blocks (normalize.BLOCK_TAGS) and hold
+   * words. A wrapper whose words all sit in one block child is looked through,
+   * so <main><div><h2/><p/></div></main> is two blocks, not one. Inline
+   * children (an <em>, a <span>) are never counted: a paragraph with two bits
+   * of emphasis is still one block.
+   */
+  function blockCountOf(element) {
+    var node = element;
+    while (isElement(node)) {
+      var worded = elementChildren(node).filter(function (kid) {
+        return (
+          !isSkipped(kid) &&
+          Object.prototype.hasOwnProperty.call(normalize.BLOCK_TAGS, tagOf(kid)) &&
+          !!textOf(kid)
+        );
+      });
+      if (worded.length !== 1) return worded.length;
+      if (textOf(worded[0]) !== textOf(node)) return 1;
+      node = worded[0];
+    }
+    return 0;
+  }
+
+  /** Is this element a container of two or more blocks with words? */
+  function isContainerOfBlocks(element) {
+    return blockCountOf(element) >= 2;
+  }
+
+  /**
    * Does this element hold every word the page has?
    *
    * The page itself does, and so does a wrapper around all of it: a <main> or
-   * a <div id="app"> with nothing beside it that has words. Such an element is
-   * never a passage. A comment whose region is one is about the page, so its
+   * a <div id="app"> with nothing beside it that has words, and two or more
+   * blocks with words inside it. Such an element is never a passage.
+   *
+   * ONE BLOCK IS ALWAYS A PASSAGE, even when it is the only thing on the page
+   * with words: the heading on a page of image options, the paragraph on a
+   * one-paragraph page. Counting it as the page made a comment on it go lost
+   * the moment the agent reworded it (code review, 2026-09-28). A comment whose region is one is about the page, so its
    * stamp says nothing about where the comment is, and a paint over its whole
    * contents washes every character the reviewer can see (docs/features/
    * 20260928.03_oversized_records, cause 3).
@@ -1572,7 +1614,7 @@
     if (!isElement(scope)) return false;
     if (element === scope) return true;
     var words = textOf(element);
-    return !!words && words === textOf(scope);
+    return !!words && words === textOf(scope) && isContainerOfBlocks(element);
   }
 
   return {
@@ -1585,6 +1627,12 @@
     signatureOf: signatureOf,
     subjectFor: subjectFor,
     isPageSized: isPageSized,
+    isContainerOfBlocks: isContainerOfBlocks,
+    // The words the engine reads off a node. For size checks outside this file
+    // (highlight.js), so there is one reading of "the text under an element".
+    wordsOf: function (node) {
+      return textOf(node);
+    },
     descriptorFor: descriptorFor,
     openingTagOf: openingTagOf,
     ordinalInSection: ordinalInSection,

@@ -452,10 +452,30 @@
     return first ? { first: first, last: last } : null;
   }
 
+  /** The innermost block element (normalize.BLOCK_TAGS) holding a node. */
+  function innermostBlockOf(node) {
+    var el = node;
+    while (el && el.nodeType !== 1) el = el.parentNode;
+    while (el && el.nodeType === 1) {
+      var tag = String(el.tagName || "").toLowerCase();
+      if (Object.prototype.hasOwnProperty.call(normalize.BLOCK_TAGS, tag)) return el;
+      el = el.parentElement;
+    }
+    return null;
+  }
+
   /**
    * The element a selection is about: the smallest element holding every
    * character it selects. Falls back to the element around the range's ends
    * when it selects no visible character at all.
+   *
+   * A SELECTION OVER SEVERAL BLOCKS is anchored on its FIRST block. The
+   * smallest element holding a heading and the paragraph under it is their
+   * parent, which on a flat page is the whole page, and its text became the
+   * record's signature: the largest oversized cause left by bytes (code
+   * review, 2026-09-28). The region is only how the tool finds the spot again,
+   * so it is the block the selection starts in. The reviewer's quote is theirs
+   * and is kept whole, and the repaint covers all of it (see paintRangeFor).
    *
    * @param {Range} range
    * @returns {Element|null}
@@ -465,6 +485,11 @@
     var ends = selectedTextEnds(range);
     var node = range.commonAncestorContainer;
     if (ends) {
+      var firstBlock = innermostBlockOf(ends.first);
+      var lastBlock = innermostBlockOf(ends.last);
+      if (firstBlock && lastBlock && firstBlock !== lastBlock && firstBlock.contains && !firstBlock.contains(lastBlock)) {
+        return firstBlock;
+      }
       var doc = ends.first.ownerDocument;
       var tight = doc.createRange();
       tight.setStart(ends.first, 0);
@@ -1264,7 +1289,7 @@
       open[item[record.FIELD.ID]] = handle;
 
       if (src.range && highlights) {
-        highlights.paint(item[record.FIELD.ID], src.range, highlightModule.NAME.ACTIVE);
+        highlights.paint(item[record.FIELD.ID], src.range, highlightModule.NAME.ACTIVE, src.quote || null);
       }
       return handle;
     }
@@ -2828,8 +2853,10 @@
       if (!verdict || !verdict.element) return false;
       var range = paintRangeFor(verdict.element, ref, item);
       if (!range) return false;
-      highlights.paint(id, range, highlightModule.NAME.COMMENT);
-      return true;
+      var context = item[record.FIELD.CONTEXT];
+      var quote = context && typeof context.quote === "string" ? context.quote : null;
+      // What the highlighter did, not what was asked: a refused paint is false.
+      return !!highlights.paint(id, range, highlightModule.NAME.COMMENT, quote);
     }
 
     /** The element's contents, end to end: what every repaint used to paint. */
@@ -2921,12 +2948,41 @@
           var narrowed = rangeOver(scan, at, quote.length);
           if (narrowed) return narrowed;
         }
+        // 2b. Words that run on past the region: a selection over several
+        //     blocks is anchored on the block it starts in (selectionElementOf),
+        //     so its quote is found from an ancestor, and only when it is there
+        //     once and starts inside the region.
+        var spanning = quoteRunningOnFrom(element, quote);
+        if (spanning) return spanning;
       }
 
       // 3. The words are not findable, so the whole element, while it is close
       //    enough in size to the region the reference was minted from.
       if (!paintableSize(ref.probe, scan.text)) return null;
       return wholeContentsOf(element);
+    }
+
+    /**
+     * A range over the quote, found by climbing from the region's parent, when
+     * the quote is in that ancestor exactly once and starts inside the region.
+     * Stops at the first ancestor that holds the quote at all: two places is an
+     * unanswerable question, and a match that starts elsewhere is not this
+     * record's.
+     */
+    function quoteRunningOnFrom(element, quote) {
+      var node = element.parentElement;
+      while (node && node !== doc.documentElement) {
+        var scan = textScanOf(node);
+        var first = scan.text.indexOf(quote);
+        if (first !== -1) {
+          if (scan.text.indexOf(quote, first + 1) !== -1) return null;
+          var range = rangeOver(scan, first, quote.length);
+          if (!range || !element.contains(range.startContainer)) return null;
+          return range;
+        }
+        node = node.parentElement;
+      }
+      return null;
     }
 
     /** A live range over `length` characters of a scan, starting at `start`. */
