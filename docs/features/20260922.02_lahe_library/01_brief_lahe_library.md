@@ -164,7 +164,7 @@ The key design question, for the wireframe: **what is one row?** A document, a r
 :::
 
 ::: callout-req
-**R14.** When no agent is attached to the Library, Pick this up and Launch a new agent say so, and offer the same hand-off message the rail already copies for pasting into any agent.
+**R14.** When no agent is attached to the Library, Pick this up and Launch a new agent say so, and offer the rail's hand-off message for pasting into any agent. Only its opening sentence changes: it says the session is being handed over from the Library, not that the earlier agent stopped answering.
 :::
 
 ### Reaching the Library
