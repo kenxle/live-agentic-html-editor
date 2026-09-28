@@ -164,14 +164,15 @@ The page does search, the project filter, and the "unanswered comments, and star
 
 ```json
 { "request": "cq_...", "action": "pickup" | "launch", "review": "r_...", "session": "s_...", "kind": "static" | "dev-server" | "legacy" | "worktree",
-  "moves_with": ["r_...", "r_..."], "at": "...",
-  "title": "...", "path": "...", "candidate": "..." | null, "handoff": "..." }
+  "origin": "http://..." | null, "moves_with": ["r_...", "r_..."], "at": "...",
+  "title": "...", "path": "...", "candidate": "..." | null, "folder": "..." | null, "handoff": "..." }
 ```
 
-- `request`, `action`, `review`, `session`, `kind`, `moves_with` and `at` are ids and helper values.
-- `title`, `path`, `candidate` and `handoff` are page-derived text. They are declared as data fields in `PROJECTED_FIELD_CLASS` and fenced exactly like other page-derived text. A title containing the fence marker or a newline cannot break out of the entry.
+- `request`, `action`, `review`, `session`, `kind`, `origin`, `moves_with` and `at` are ids and helper values. `origin` is a dev-server row's registered origin, else null, so the refusal below can name it.
+- `kind` is `dev-server` only when the review has a registered origin no static server record serves, on a target LAHE would not serve itself. A review with no covering record and no such origin is `static` and unreadable: its server record was lost, and a takeover still works. (Fix round, CL minor.)
+- `title`, `path`, `candidate`, `folder` and `handoff` are page-derived text. `folder` is the document's project folder, where a Launch starts the new agent. They are declared as data fields in `PROJECTED_FIELD_CLASS` and fenced exactly like other page-derived text. A title containing the fence marker or a newline cannot break out of the entry.
 - `candidate` is the main-repository copy for a worktree row. The drain derives it from the recorded root at drain time and checks it: under the repository by real path, no hidden segment, owned by the current user, a page. A candidate that fails is `null`. The request itself never carries a path.
-- `handoff` is the rail's existing hand-off message for the document's session (`AGENT_LIVENESS.handoffMessage`).
+- `handoff` is the Library's hand-off message for the document's session (`AGENT_LIVENESS.libraryHandoffMessage`): take the session over, no blame, the real `--state-dir` when it is not the default. It never carries a session name read off a page's title. (Fix round; the rail keeps `handoffMessage`.)
 - **Wake:** a new pending request is work. It gets past `--quiet` and makes `lahe monitor` exit 0 once per request. A per-session `catalog-delivered.log`, like `ended-delivered.log`, records each delivered request id with the session's `handoff_rev`, so a takeover delivers it again.
 - **Listing:** the non-quiet drain keeps listing a request until it is answered or expires.
 
@@ -215,8 +216,8 @@ sequenceDiagram
 - **No agent attached (R14):** Open still opens and reads, with `not_asked: "no_agent"`. The document's rail shows its existing "no agent listening" state and its existing hand-off message. The rail never carries the Library token.
 - **Queue full:** Open still opens, with `not_asked: "queue_full"`, and the row says no agent was asked.
 - **What Open can restart itself:** a review whose session has an `ss_*.json` record that serves the review's page. That record was written by `lahe review` or the helper, never by a page, so Open serves nothing new. Everything else is `via-agent`: its Open queues a pick-up and the agent re-serves it. With no agent attached, a `via-agent` Open is disabled and offers the hand-off message; the helper refuses it with `PROTO_NO_AGENT`. By `kind`:
-  - **dev-server:** the agent answers `refused`: "Start the dev server at `<origin>`, then ask me again."
-  - **legacy** (`lahe add` script-line reviews, recovered as session "legacy"): there is no session to take over, so the agent runs `lahe review <path>` in its own session.
+  - **dev-server:** the agent answers `refused`: "Start the dev server at `<origin>`, then ask me again.", with the entry's `origin`.
+  - **legacy** (`lahe add` script-line reviews, recovered as session "legacy"): there is no session to take over, so the agent runs `lahe library serve <request> --session <its own>`, which reads the path itself and serves it in the agent's own session (fix round, SEC2: no page-derived path in a shell string).
   - **worktree:** see below.
 - **Worktree fallback (R9):** when the recorded root is gone and sits under `<repo>/.claude/worktrees/<name>/`, the row says "The worktree is gone. An agent will open the main repository's copy, which may differ from what you reviewed." The request carries only the review id. The drain derives and checks the candidate (see the drain section). The agent serves it with `lahe review`, so the path goes through the CLI's own checks.
 - **Missing:** Open is refused with `PROTO_NOT_OPENABLE`, reason `missing`.

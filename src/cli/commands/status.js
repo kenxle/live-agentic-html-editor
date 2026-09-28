@@ -522,6 +522,7 @@ function readerDescriber(dir, nowMs) {
     var takeable = protocol.isSafeId(sessionId) && sessionId !== agentSessionsModule.LEGACY_ID;
     return {
       kind: described ? described.kind : null,
+      origin: described && described.origin ? described.origin : null,
       title: described ? described.display_name : null,
       path: described ? described.path : null,
       candidate: described ? described.candidate : null,
@@ -537,7 +538,7 @@ function readerDescriber(dir, nowMs) {
   };
 }
 
-var DESCRIBED_FIELDS = ["kind", "title", "path", "candidate", "folder", "handoff"];
+var DESCRIBED_FIELDS = ["kind", "origin", "title", "path", "candidate", "folder", "handoff"];
 
 /**
  * The folder a launched agent starts in: the repository that holds the
@@ -598,6 +599,8 @@ function catalogEntries(dir, sessionId, nowMs, describe) {
       review: request.review,
       session: request.session,
       kind: fields.kind,
+      // A dev-server row's origin, so a refusal can say which server to start.
+      origin: fields.origin,
       moves_with: movesWith(dir, request),
       at: request.at,
       title: fields.title,

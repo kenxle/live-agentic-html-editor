@@ -84,7 +84,7 @@ test("a pending request for the drained session gets past --quiet with nothing e
   assert.equal(out.summary.catalog_requests.length, 1);
   const entry = out.summary.catalog_requests[0];
   assert.deepEqual(Object.keys(entry), [
-    "request", "action", "review", "session", "kind", "moves_with", "at", "title", "path", "candidate", "folder", "handoff"
+    "request", "action", "review", "session", "kind", "origin", "moves_with", "at", "title", "path", "candidate", "folder", "handoff"
   ]);
   assert.equal(entry.request, request.id);
   assert.equal(entry.action, "pickup");
@@ -93,8 +93,9 @@ test("a pending request for the drained session gets past --quiet with nothing e
   assert.equal(entry.at, request.at);
   assert.deepEqual(entry.moves_with, ["r_doc2", "r_doc3"], "the other reviews in the document's session");
   // Filled by default from the reader's describeReview (Library 2.1). r_doc
-  // names no file, so no recorded server covers it: an agent re-serves it.
-  assert.equal(entry.kind, "dev-server");
+  // names no file and no dev server origin, and no recorded server covers it:
+  // a static review whose record is gone, which an agent re-serves.
+  assert.equal(entry.kind, "static");
   assert.equal(entry.title, "r_doc", "no title and no file: the row's display name is the id");
   assert.equal(entry.path, null);
   assert.equal(entry.candidate, null);

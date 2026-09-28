@@ -131,7 +131,7 @@ test("serve refuses a static or dev-server row: those are taken over or refused,
   store.create({ id: "s_agent" });
   store.create({ id: "s_doc" });
   const log = logModule.createEventLog({ dir });
-  reviewsModule.createReviews({ dir, log }).create({ id: "r_dev", agent_session_id: "s_doc", target_path: docs });
+  reviewsModule.createReviews({ dir, log }).create({ id: "r_dev", agent_session_id: "s_doc", target_path: docs, origins: ["http://localhost:3000"] });
   const request = listen(dir, store, "r_dev", "s_doc");
   const out = await refused({ dir }, ["serve", request.id, "--session", "s_agent"]);
   assert.equal(out.code, protocol.CLI_EXIT.BAD_USAGE);

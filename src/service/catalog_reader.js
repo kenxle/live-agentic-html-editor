@@ -468,7 +468,35 @@ function createReader(options) {
     info.servedPath = meta && typeof meta.target_path === "string" && meta.target_path ? meta.target_path : null;
     var source = meta && typeof meta.source_path === "string" && meta.source_path ? meta.source_path : null;
     info.docPath = source || info.servedPath;
+    info.origins = meta && Array.isArray(meta.origins)
+      ? meta.origins.filter(function (o) { return typeof o === "string" && /^https?:\/\//.test(o); })
+      : [];
     return info;
+  }
+
+  /**
+   * The review's dev server origin, or null. A registered http origin no static
+   * server record of this session serves (by port), on a target LAHE would not
+   * serve itself: a folder or a non-page file, or no target at all. A page file
+   * with no covering record is a static review whose record was lost.
+   */
+  function devServerOrigin(info, servers) {
+    if (info.servedPath) {
+      var stat = statOrNull(info.servedPath);
+      if (stat && stat.isFile() && PAGE_EXTENSIONS.indexOf(path.extname(info.servedPath).toLowerCase()) !== -1) return null;
+    }
+    var staticPorts = (servers.records || []).map(function (meta) { return String(meta.port); });
+    for (var i = 0; i < info.origins.length; i += 1) {
+      var port;
+      try {
+        var url = new URL(info.origins[i]);
+        port = url.port || (url.protocol === "https:" ? "443" : "80");
+      } catch (err) {
+        continue;
+      }
+      if (staticPorts.indexOf(port) === -1) return info.origins[i];
+    }
+    return null;
   }
 
   // ---------------------------------------------------------------------------
@@ -495,18 +523,26 @@ function createReader(options) {
     var kind;
     var openable;
     var candidate = null;
-    // A review no recorded server covers is served by something else: the
-    // app's own dev server. `lahe add` script-line reviews have no session.
+    var devOrigin = null;
+    var recordLost = false;
+    // dev-server only on a registered origin no static record serves. A
+    // review with no covering record and no such origin is a static review
+    // whose record was lost: static, and unreadable. `lahe add` script-line
+    // reviews have no session.
     if (info.sessionId === LEGACY) kind = "legacy";
     else if (covering) kind = "static";
-    else kind = "dev-server";
+    else if ((devOrigin = devServerOrigin(info, servers))) kind = "dev-server";
+    else {
+      kind = "static";
+      recordLost = true;
+    }
 
     if (!info.docPath) {
       // No path on record: a dev server named only by its origin, or a review
       // whose meta.json cannot be read, which has nothing left to open.
       openable = info.unreadable ? "missing" : "via-agent";
     } else if (docOnDisk) {
-      openable = kind === "static" ? "yes" : "via-agent";
+      openable = covering ? "yes" : "via-agent";
     } else {
       candidate = worktreeCandidate(info.docPath);
       if (candidate) {
@@ -517,10 +553,11 @@ function createReader(options) {
       }
     }
 
-    var unreadable = info.unreadable || sessionState === "bad" || (servers.bad && !covering);
+    var unreadable = info.unreadable || sessionState === "bad" || (servers.bad && !covering) || recordLost;
     return {
       info: info,
       kind: kind,
+      origin: kind === "dev-server" ? devOrigin : null,
       openable: openable,
       candidate: candidate,
       covering: covering,
@@ -818,6 +855,7 @@ function createReader(options) {
             kind: part.kind,
             openable: part.openable,
             candidate: part.candidate,
+            origin: part.origin,
             server: part.covering ? part.covering.meta.id : null,
             server_root: part.covering && typeof part.covering.meta.root === "string" ? part.covering.meta.root : null,
             url_path: part.covering ? part.covering.urlPath : null,
