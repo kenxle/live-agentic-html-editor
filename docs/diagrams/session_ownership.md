@@ -47,3 +47,71 @@ flowchart TD
   its own next look, which is what makes an old monitor for the same session
   stop itself with exit code 6 instead of continuing to act on stale
   context.
+- Two credentials exist, and neither can do the other's job. Each review has
+  its own token, which only a page of that review holds. The Library page has
+  one Library token, minted in memory at each helper start, which can list,
+  open, star, and queue a request, but cannot post to any review.
+
+## Hand-over from the Library
+
+The Library page never takes a session over itself. Pick this up and Launch a
+new agent queue a request for the agent attached to the Library, and that
+agent does the takeover (or starts a new agent that does).
+
+```mermaid
+flowchart TD
+    Attach["agent runs<br/>lahe library --session its-own-id"] --> AttachFile[("catalog-attach.json<br/>the last agent attached")]
+    Click["reviewer clicks Pick this up<br/>or Launch a new agent"] --> Watched{"is another agent<br/>watching that session?"}
+    Watched -->|"yes"| Confirm["the page asks first, naming that agent<br/>and the other reviews that move"]
+    Watched -->|"no"| Queue
+    Confirm -->|"confirmed"| Queue[("catalog-requests.jsonl<br/>request: ids only")]
+    AttachFile -.->|"names who the request is for"| Queue
+    Queue -->|"catalog_requests in the drain,<br/>wakes the monitor once"| Agent["attached agent"]
+    Agent -->|"pickup"| Take["lahe session takeover doc-session"]
+    Take --> Both["lahe monitor --session own<br/>--session doc-session"]
+    Agent -->|"launch"| Name["lahe session name doc-session<br/>--from-review review"]
+    Name --> NewAgent["new agent in a new Terminal window,<br/>given the hand-off message"]
+    NewAgent --> Take2["it runs lahe session takeover doc-session"]
+    Both --> Answer["lahe library answer request<br/>done or refused"]
+    NewAgent --> Answer
+    Answer --> Row["the Library row shows the answer"]
+    Queue -.->|"monitor stops, another agent attaches,<br/>or 30 minutes pass"| Expired["request expires;<br/>the row says nobody answered"]
+```
+
+- A request holds ids only. The page cannot put words into it. The drain adds
+  the document's name, path and hand-off message, marked as data.
+- One monitor can watch several sessions. After a pick-up the agent owns its
+  own session and the document's, and watches both. The first `--session` is
+  the primary, which is the name the Library shows as watching.
+- A takeover moves `handoff_rev`, so the request is delivered again to the
+  agent that owns the session now.
+
+## When the helper stops
+
+The Library has to outlive every agent session, so the last close no longer
+always stops the helper. Sessions the Library reopened are closed again when
+they go quiet.
+
+```mermaid
+flowchart TD
+    Close["lahe session close id"] --> Last{"was that the last<br/>open session?"}
+    Last -->|"no"| Up["helper keeps running"]
+    Last -->|"yes"| Polled{"did the Library page poll<br/>in the last 2 minutes?<br/>(health: catalog_seen_at)"}
+    Polled -->|"yes"| Up
+    Polled -->|"no"| Held{"is a review page<br/>window still open?"}
+    Held -->|"yes"| Up
+    Held -->|"no"| Stop["helper stops"]
+
+    Timer["helper timer, every 15 seconds:<br/>sweepReopened"] --> Each["each session in catalog.json's<br/>reopened map"]
+    Each --> Moved{"taken over since,<br/>or its monitor live?"}
+    Moved -->|"taken over"| Drop["drop its entry, leave it open"]
+    Moved -->|"monitor live"| Leave["leave it open"]
+    Moved -->|"neither"| Quiet{"30 minutes since the reopen<br/>and since any window of its<br/>reviews was last held?"}
+    Quiet -->|"no"| Leave
+    Quiet -->|"yes"| CloseQuiet["closeQuiet: stop its servers,<br/>mark it closed, clear the entry.<br/>The helper stays up"]
+```
+
+- There is no self-stop timer. The helper stops at the next close that finds
+  everything quiet, or at a restart.
+- A session reopened with `lahe session reopen` is not in the `reopened` map,
+  so the sweep never closes it.

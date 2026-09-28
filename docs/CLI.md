@@ -27,13 +27,14 @@ lahe skill; after that a plain sentence works:
 | `lahe reply --review <id> --item <itm> --rev <n> --status handled\|not_handled\|question` | Write one reply. Add `--text` or `--reason` for what you want to say, `--file <path>` per file you changed, `--needs-see` when the reviewer should read it, `--agent <name>` for the card and the per-agent file. The command encodes the JSON, so a newline or a quote in your answer cannot split the line |
 | `lahe monitor --session <id>` | Poll locally without model wakeups, print unanswered session work, and exit |
 | `lahe monitor --session <id> --session <other>` | Watch several sessions with one monitor. The first is the primary. A session that closes or is taken over is dropped with a line and the rest are still watched |
-| `lahe library [--session <id>] [--json]` | Start the helper if needed and print the Library's address, the helper's own origin plus `/catalog`. It never opens a browser: run `open` on the URL. `--session` attaches your session, so the Library hands its requests to you |
-| `lahe library answer <request-id> --session <id> --status done\|refused --text "..."` | Answer one request from the drain's `catalog_requests` section. The text shows on the Library row |
+| `lahe library [--session <id>] [--json]` | Start the helper if needed and print the Library's address, the helper's own origin plus `/catalog`. It never opens a browser: run `open` on the URL. `--session` attaches your session, so the Library hands its Pick this up and Launch requests to you; the session must be open, and the last one attached wins. Without `--session` it leaves the attach alone and says who is attached. `--json` prints `{url, attached, helper_started}` |
+| `lahe library answer <request-id> --session <id> --status done\|refused --text "..."` | Answer one request from the drain's `catalog_requests` section. `--session` is your own session, the one the request is for. The text shows on the Library row, at most 500 characters. Refused: an unknown id, another session's request, an expired request, a second answer (it prints the first), and text that is too long |
 | `lahe session list [--json]` | Read-only: every agent session on this machine, open ones first, with its handoff revision, reviews owned, unanswered items, whether anything is listening to it, and when the agent last replied. This is how you find a session id |
-| `lahe session close <id>` | Close an agent workstream, stop its static servers, and keep all review history. The final close also stops the shared helper |
+| `lahe session close <id>` | Close an agent workstream, stop its static servers, and keep all review history. The final close also stops the shared helper, unless the Library page polled it in the last two minutes or a review page is still open |
 | `lahe session reopen <id>` | Reopen the workstream and restart its helper and static servers |
 | `lahe session takeover <id>` | Explicitly hand an existing workstream to a new agent, fence its older monitors, and print catch-up commands. Add `--name "<name>"` to record the new agent's name at the same time |
 | `lahe session name <id> "<name>"` | The human's name for this session, as the host shows it (Claude Code after `/rename`). The reviewer's rail uses it to say which agent to check, and `session list` prints it after the id. Trimmed, control characters removed, 80 characters at most; `""` clears it |
+| `lahe session name <id> --from-review <review>` | Name the session after that review's document, as the Library shows it. The command reads the name itself, so a page title never passes through a shell. The review must belong to the session. Used when launching an agent from the Library |
 | `lahe review ... --name "<name>"` | Start or add to a session and record its name in one step |
 | `lahe serve [--port N]` | Run the helper by hand (`add` starts it for you, so this is rarely needed) |
 | `lahe serve --restart` | Replace the helper that is already running, even when a reviewer has a page open on it. Every other command leaves such a helper alone and tells you to run this when they are done |
@@ -91,6 +92,17 @@ replies. Merely reporting that an item arrived is a workflow failure.
 Monitor exit codes tell a host what to do next: `0` work is printed, `4` bad
 usage or a live monitor already holds the session, `5` the session is closed, and
 `6` another agent took it over. On `5` or `6`, stop relaunching.
+
+**The Library** is one page, at the helper's `/catalog`, that lists every review
+on the machine. The reviewer opens and stars documents there directly. Its two
+agent buttons, Pick this up and Launch a new agent, queue a request for the
+agent that ran `lahe library --session`. The request reaches that agent in its
+drain, in `catalog_requests`, and wakes its monitor once. The agent acts on it
+and answers with `lahe library answer`, and the answer shows on the Library
+row. A request expires if the agent's monitor stops, another agent attaches, or
+30 minutes pass. After a pick-up the agent owns two sessions, so it watches both
+with one monitor: `lahe monitor --session <its own> --session <the document's>`.
+The skill has the steps for each kind of request.
 
 **The rail carries one line, and it does two jobs.** Most of the time it is a
 quiet indicator that the chain is intact: `Stored · agent listening`, or `Stored ·
