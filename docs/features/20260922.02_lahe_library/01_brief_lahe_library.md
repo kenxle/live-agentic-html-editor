@@ -50,7 +50,7 @@ The key design question, for the wireframe: **what is one row?** A document, a r
 - **As Ken**, I want the Library to show me what still needs me (documents with waiting comments, starred ones) before the rest, so that the pile feels finite.
 - **As Ken**, I want to star the documents that matter, so that they stay easy to find as new ones pile up.
 - **As Ken**, I want to hand a document to the agent I'm already talking to, so that my comments on it get answered.
-- **As Ken**, I want to launch a fresh agent on a document, so that one agent isn't juggling ten documents.
+- **As Ken**, I want to launch a fresh agent on a document, so that I can keep my agents' context focused and not poisoned by wildly different topics and tasks.
 - **As Ken**, I want to close a tab knowing I can get the document back, so that I can clear my desktop.
 - **As Ken, after a restart**, I want one thing to ask an agent for ("open the lahe library"), so that I don't have to reconstruct what I had open.
 
