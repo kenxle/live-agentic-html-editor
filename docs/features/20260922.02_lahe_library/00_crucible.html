@@ -171,334 +171,564 @@
     .display.math{display: block; text-align: center; margin: 0.5rem auto;}
   </style>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%94%A8</text></svg>">
-  <style>
-    :root {
-      --ink: #0f172a;
-      --accent: #2563eb;
-      --accent-soft: #eff6ff;
-      --muted: #64748b;
-      --rule: #e2e8f0;
-      --bg: #f8fafc;
-      --card: #ffffff;
-      --table-head: #f1f5f9;
+  <!--
+    St. Clair AI document style for forge docs.
 
-      /* Callout types */
-      --req-bg: #f0fdf4;      --req-bar: #16a34a;
-      --nongoal-bg: #f8fafc;  --nongoal-bar: #94a3b8;
-      --metric-bg: #f0f9ff;   --metric-bar: #0284c7;
-      --question-bg: #fffbeb; --question-bar: #d97706;
-      --flag-bg: #fef2f2;     --flag-bar: #dc2626;
-      --suggest-bg: #faf5ff;  --suggest-bar: #7c3aed;
+    The palette, type and spacing values below are copied from the St. Clair
+    system tokens (live-agentic-html-editor/vendor/stclair-doc-style/
+    system-tokens.css). This header does NOT link LAHE's ./.lahe-doc-style.css
+    bundle, on purpose: that bundle's document.css styles bare elements and a
+    generic .callout (an ink fill with white text) and puts padding on every body
+    child, and all three collide with the forge structure. So the page is
+    self-contained and reads the same whether or not LAHE is serving it.
+
+    The fonts are the one thing taken from LAHE: it serves the three vendored
+    faces at ./.lahe-fonts/<file>.woff2 from every folder. When that fails, each
+    stack falls back to system-ui and a platform monospace.
+
+    House rules this file keeps: no pills, no shadows, no gradients, no all caps
+    labels, no single-side coloured borders. Colour comes from tints and dots.
+  -->
+  <style>
+    @font-face {
+      font-family: "Schibsted Grotesk"; font-style: normal; font-weight: 500 700; font-display: swap;
+      src: url("./.lahe-fonts/schibsted-grotesk-variable.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "Hanken Grotesk"; font-style: normal; font-weight: 400 600; font-display: swap;
+      src: url("./.lahe-fonts/hanken-grotesk-variable.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "JetBrains Mono"; font-style: normal; font-weight: 400 500; font-display: swap;
+      src: url("./.lahe-fonts/jetbrains-mono-variable.woff2") format("woff2");
     }
 
-    html { scroll-behavior: smooth; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    :root {
+      color-scheme: light dark;
+
+      /* St. Clair palette (raw names and values from system-tokens.css) */
+      --white: #ffffff;
+      --paper: #f7f7f5;
+      --ink: #1f1e1a;
+      --ink-soft: #55534b;
+      --ink-faint: #6b6860;
+      --rule: #dcdad6;
+      --purple: #46188c;
+      --purple-tint: #f1ebfa;
+      --link: #6d28d9;
+      --cobalt: #0760c7;
+      --cobalt-tint: #e6effc;
+      --sage-fill: #8fb5a0;
+      --sage: #637a63;
+      --sage-tint: #e7f1ed;
+
+      --font-display: "Schibsted Grotesk", "Hanken Grotesk", system-ui, sans-serif;
+      --font-body: "Hanken Grotesk", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+      --r: 4px;
+
+      /* Forge roles. Prefixed --ff- so none of them can collide with a St. Clair
+         token of the same name if the two ever share a page. Dark mode repoints
+         these and nothing else. */
+      --ff-bg: var(--white);
+      --ff-fg: var(--ink);
+      --ff-soft: var(--ink-soft);
+      --ff-faint: var(--ink-faint);
+      --ff-rule: var(--rule);
+      --ff-divider: var(--ink);
+      --ff-link: var(--link);
+      --ff-accent: var(--cobalt);
+      --ff-panel: var(--paper);
+      --ff-code-bg: var(--cobalt-tint);
+      --ff-bullet: var(--sage);
+      --ff-hl-kw: var(--cobalt);
+      --ff-hl-str: var(--sage);
+      --ff-hl-num: var(--purple);
+
+      /* Callouts: a tint, a dot and a label colour each. */
+      --ff-req-bg: var(--cobalt-tint);      --ff-req-dot: var(--cobalt);    --ff-req-label: var(--cobalt);
+      --ff-nongoal-bg: var(--paper);        --ff-nongoal-dot: var(--ink-faint); --ff-nongoal-label: var(--ink-faint);
+      --ff-metric-bg: var(--sage-tint);     --ff-metric-dot: var(--sage);   --ff-metric-label: var(--ink-soft);
+      --ff-question-bg: var(--purple-tint); --ff-question-dot: var(--purple); --ff-question-label: var(--purple);
+      --ff-suggest-bg: var(--white);        --ff-suggest-dot: var(--sage);  --ff-suggest-label: var(--sage);
+      --ff-flag-bg: var(--ink);             --ff-flag-fg: var(--white);     --ff-flag-dot: var(--sage-fill);
+
+      /* Disposition verdicts */
+      --ff-accepted: var(--sage);
+      --ff-rejected: var(--purple);
+      --ff-deferred: var(--cobalt);
+    }
+
+    /* Dark: the St. Clair on-ink values. Body text is full white on ink, as the
+       system decides; tints are the accent mixed into the ink ground. */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ff-bg: var(--ink);
+        --ff-fg: var(--white);
+        --ff-soft: #d9d7d1;   /* --ink-soft-ondark */
+        --ff-faint: #b3b0a8;  /* --ink-faint-ondark */
+        --ff-rule: #4a4842;   /* --rule-ondark */
+        --ff-divider: var(--white);
+        --ff-link: var(--sage-fill);
+        --ff-accent: color-mix(in srgb, var(--cobalt) 45%, var(--white));
+        --ff-panel: color-mix(in srgb, var(--white) 6%, var(--ink));
+        --ff-code-bg: color-mix(in srgb, var(--cobalt) 22%, var(--ink));
+        --ff-bullet: var(--sage-fill);
+        --ff-hl-kw: color-mix(in srgb, var(--cobalt) 40%, var(--white));
+        --ff-hl-str: var(--sage-fill);
+        --ff-hl-num: color-mix(in srgb, var(--purple) 30%, var(--white));
+
+        --ff-req-bg: color-mix(in srgb, var(--cobalt) 22%, var(--ink));
+        --ff-req-dot: color-mix(in srgb, var(--cobalt) 45%, var(--white));
+        --ff-req-label: color-mix(in srgb, var(--cobalt) 35%, var(--white));
+        --ff-nongoal-bg: color-mix(in srgb, var(--white) 6%, var(--ink));
+        --ff-nongoal-dot: #b3b0a8; --ff-nongoal-label: #b3b0a8;
+        --ff-metric-bg: color-mix(in srgb, var(--sage) 30%, var(--ink));
+        --ff-metric-dot: var(--sage-fill); --ff-metric-label: var(--sage-fill);
+        --ff-question-bg: color-mix(in srgb, var(--purple) 45%, var(--ink));
+        --ff-question-dot: color-mix(in srgb, var(--purple) 30%, var(--white));
+        --ff-question-label: color-mix(in srgb, var(--purple) 25%, var(--white));
+        --ff-suggest-bg: var(--ink);
+        --ff-suggest-dot: var(--sage-fill); --ff-suggest-label: var(--sage-fill);
+        --ff-flag-bg: var(--paper); --ff-flag-fg: var(--ink); --ff-flag-dot: var(--sage);
+
+        --ff-accepted: var(--sage-fill);
+        --ff-rejected: color-mix(in srgb, var(--purple) 30%, var(--white));
+        --ff-deferred: color-mix(in srgb, var(--cobalt) 40%, var(--white));
+      }
+    }
+
+    /* Pandoc's own default styles load before this block. The rules marked
+       "pandoc" below undo the ones that fight this look: black table rules,
+       a block-level table, auto hyphens, italic h5/h6, and a:visited in
+       near-black, which outranks a plain a rule. */
+    html { scroll-behavior: smooth; -webkit-print-color-adjust: exact; print-color-adjust: exact; background: var(--ff-bg); }
+    * { box-sizing: border-box; }
 
     body {
-      font-family: "Inter", "Helvetica Neue", -apple-system, system-ui, sans-serif;
-      font-size: 16px;
-      line-height: 1.7;
-      color: var(--ink);
-      background: var(--bg);
-      max-width: 860px;
+      font-family: var(--font-body);
+      font-size: 17px;
+      line-height: 1.65;
+      color: var(--ff-fg);
+      background: var(--ff-bg);
+      max-width: 880px;
       margin: 0 auto;
-      padding: 48px 32px 100px;
+      padding: 56px 28px 104px;
       -webkit-font-smoothing: antialiased;
       text-rendering: optimizeLegibility;
+      hyphens: manual;   /* pandoc */
     }
 
     /* Title block (pandoc emits <header id="title-block-header">) */
-    header#title-block-header {
-      border-bottom: 3px solid var(--accent);
-      padding-bottom: 22px;
-      margin-bottom: 8px;
-    }
+    header#title-block-header { padding-bottom: 8px; margin-bottom: 0; text-align: left; }
     header#title-block-header h1.title {
-      font-size: 2rem;
-      font-weight: 800;
-      margin: 0 0 6px;
-      letter-spacing: -0.02em;
-      line-height: 1.2;
+      font-family: var(--font-display);
+      font-size: clamp(34px, 4.6vw, 52px);
+      font-weight: 600;
+      margin: 0 0 12px;
+      letter-spacing: -0.012em;
+      line-height: 1.1;
     }
-    header#title-block-header p.subtitle {
-      font-size: 0.9rem;
-      color: var(--muted);
+    header#title-block-header p.subtitle,
+    header#title-block-header p.author,
+    header#title-block-header p.date {
+      font-size: 20px;
+      line-height: 1.55;
+      color: var(--ff-soft);
       margin: 0;
     }
 
-    /* Cross-doc nav (injected by the build before the TOC) */
+    /* Cross-doc nav (injected by the build before the TOC). A plain line:
+       "Docs  Crucible · Brief · Architecture", the current doc in ink. */
     .doc-nav {
       display: flex;
-      gap: 8px;
       flex-wrap: wrap;
-      align-items: center;
-      margin: 24px 0 8px;
-      padding: 12px 16px;
-      background: var(--card);
-      border: 1px solid var(--rule);
-      border-radius: 10px;
-      font-size: 0.84rem;
+      align-items: baseline;
+      gap: 4px 0;
+      margin: 20px 0 8px;
+      padding: 12px 0;
+      border-top: 1px solid var(--ff-rule);
+      border-bottom: 1px solid var(--ff-rule);
+      font-size: 15px;
     }
-    .doc-nav .doc-nav-label { color: var(--muted); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
-    .doc-nav a {
+    .doc-nav .doc-nav-label {
+      font-family: var(--font-display);
       font-weight: 600;
-      color: var(--accent);
-      background: var(--accent-soft);
-      padding: 4px 12px;
-      border-radius: 16px;
-      text-decoration: none;
-      border: 1px solid rgba(37,99,235,0.18);
-      transition: background 0.15s;
+      font-size: 14px;
+      color: var(--ff-faint);
+      margin-right: 14px;
     }
-    .doc-nav a:hover { background: #dbeafe; }
-    .doc-nav a.current { background: var(--accent); color: #fff; border-color: transparent; cursor: default; }
+    .doc-nav a {
+      color: var(--ff-link);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+      border: 0;
+      background: none;
+      padding: 0;
+    }
+    .doc-nav a + a::before {
+      content: "\00B7";
+      display: inline-block;
+      color: var(--ff-faint);
+      margin: 0 10px;
+      text-decoration: none;
+    }
+    .doc-nav a:hover { background: none; text-decoration-thickness: 2px; }
+    .doc-nav a:visited { color: var(--ff-link); }
+    .doc-nav a.current, .doc-nav a.current:visited {
+      color: var(--ff-fg);
+      font-weight: 600;
+      text-decoration: none;
+      cursor: default;
+    }
 
     /* TOC (pandoc emits <nav id="TOC">) */
     nav#TOC {
-      background: var(--card);
-      border: 1px solid var(--rule);
-      border-radius: 12px;
-      padding: 18px 24px;
-      margin: 16px 0 36px;
-      font-size: 0.88rem;
+      margin: 28px 0 44px;
+      font-size: 15px;
+      line-height: 1.5;
     }
     nav#TOC::before {
       content: "Contents";
       display: block;
-      font-size: 0.72rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--muted);
-      margin-bottom: 10px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+      border-bottom: 2px solid var(--ff-divider);
     }
     nav#TOC ul { list-style: none; padding-left: 0; margin: 0; }
-    nav#TOC ul ul { padding-left: 16px; margin-top: 4px; }
+    nav#TOC ul ul { padding-left: 18px; margin-top: 4px; }
     nav#TOC li { margin-bottom: 4px; }
-    nav#TOC a { color: var(--ink); text-decoration: none; }
-    nav#TOC a:hover { color: var(--accent); }
+    nav#TOC li::marker { content: none; }
+    nav#TOC a, nav#TOC a:visited { color: var(--ff-fg); text-decoration: none; border: 0; }
+    nav#TOC a:hover { color: var(--ff-link); text-decoration: underline; background: none; }
 
-    /* Headings */
-    h1, h2, h3, h4 { font-weight: 700; line-height: 1.3; }
+    /* Headings: Schibsted at display weight, sentence case. An h2 hangs under a
+       full-width ink rule, the St. Clair section head. */
+    h1, h2, h3, h4, h5, h6 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      line-height: 1.15;
+      letter-spacing: -0.012em;
+      color: var(--ff-fg);
+    }
     h2 {
-      font-size: 1.35rem;
-      margin: 52px 0 16px;
-      padding-top: 24px;
-      border-top: 1px solid var(--rule);
-      letter-spacing: -0.01em;
+      font-size: clamp(25px, 3vw, 32px);
+      margin: 64px 0 18px;
+      padding-top: 12px;
+      border-top: 2px solid var(--ff-divider);
     }
-    h3 { font-size: 1.1rem; margin: 34px 0 12px; color: var(--accent); }
-    h4 {
-      font-size: 0.9rem; margin: 24px 0 8px; color: var(--muted);
-      text-transform: uppercase; letter-spacing: 0.05em;
+    h3 { font-size: clamp(19px, 2vw, 23px); margin: 40px 0 12px; }
+    h4 { font-size: 18px; margin: 28px 0 8px; }
+    h5, h6 { font-size: 17px; margin: 24px 0 8px; font-style: normal; font-weight: 600; }   /* pandoc */
+    h6 { color: var(--ff-soft); }
+
+    p { margin: 0 0 18px; }
+    p, li, td, dd { overflow-wrap: anywhere; }
+
+    a {
+      color: var(--ff-link);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
     }
-    table + h2, blockquote + h2, ul + h2, ol + h2, pre + h2, .callout + h2 { margin-top: 60px; }
+    a:visited { color: var(--ff-link); }   /* pandoc */
+    a:hover { text-decoration-thickness: 2px; }
+    :focus-visible { outline: 2px solid var(--ff-link); outline-offset: 3px; border-radius: var(--r); }
 
-    p { margin: 0 0 16px; }
+    strong { color: inherit; font-weight: 700; }
 
-    a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(37,99,235,0.3); word-break: break-word; }
-    a:hover { border-bottom-color: var(--accent); background: var(--accent-soft); }
+    ul, ol { margin: 0 0 18px; padding-left: 1.6em; }
+    li { margin: 0 0 8px; line-height: 1.55; }
+    li > p { margin-bottom: 8px; }
+    ul > li::marker { color: var(--ff-bullet); }
+    .callout ul > li::marker { color: var(--ff-dot); }
+    ol > li::marker { color: var(--ff-fg); font-weight: 600; }
+    li > ul, li > ol { margin-top: 8px; }
 
-    strong { color: var(--ink); font-weight: 700; }
-
-    ul, ol { margin: 0 0 16px; padding-left: 24px; }
-    li { margin: 0 0 6px; }
-    li::marker { color: var(--accent); }
-
-    /* Callout boxes (from ::: callout-* fenced divs) */
+    /* Callout boxes (from ::: callout-* fenced divs). A tint holding the text,
+       and a label row generated by CSS: a dot in the callout's colour, then the
+       label in the display face. */
     .callout {
-      border-radius: 0 10px 10px 0;
-      padding: 12px 18px;
+      border-radius: var(--r);
+      padding: 16px 22px 18px;
       margin: 18px 0;
-      font-size: 0.95rem;
+      background: var(--ff-panel);
+      color: var(--ff-fg);
       line-height: 1.6;
     }
     .callout > :first-child { margin-top: 0; }
     .callout > :last-child { margin-bottom: 0; }
     .callout::before {
-      display: block;
-      font-size: 0.66rem;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      line-height: 1.4;
       margin-bottom: 6px;
+      padding-left: 16px;   /* room for the dot, which ::after draws */
     }
-    .callout-req     { background: var(--req-bg);     border-left: 4px solid var(--req-bar); }
-    .callout-req::before     { content: "Requirement"; color: var(--req-bar); }
-    .callout-nongoal { background: var(--nongoal-bg); border-left: 4px solid var(--nongoal-bar); }
-    .callout-nongoal::before { content: "Non-Goals";   color: var(--nongoal-bar); }
-    .callout-metric  { background: var(--metric-bg);  border-left: 4px solid var(--metric-bar); }
-    .callout-metric::before  { content: "Metrics";     color: var(--metric-bar); }
-    .callout-question { background: var(--question-bg); border-left: 4px solid var(--question-bar); }
-    .callout-question::before { content: "Open Question"; color: var(--question-bar); }
-    .callout-flag    { background: var(--flag-bg);    border-left: 4px solid var(--flag-bar); }
-    .callout-flag::before    { content: "Red Flag";    color: var(--flag-bar); }
-    .callout-suggest { background: var(--suggest-bg); border-left: 4px solid var(--suggest-bar); }
-    .callout-suggest::before { content: "Suggestion";  color: var(--suggest-bar); }
+    .callout { position: relative; }
+    .callout::after {
+      content: "";
+      position: absolute;
+      left: 22px;
+      top: 23px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--ff-dot, var(--ff-faint));
+    }
+    .callout-req      { background: var(--ff-req-bg);      --ff-dot: var(--ff-req-dot); }
+    .callout-req::before      { content: "Requirement";   color: var(--ff-req-label); }
+    .callout-nongoal  { background: var(--ff-nongoal-bg);  --ff-dot: var(--ff-nongoal-dot); border: 1px solid var(--ff-rule); }
+    .callout-nongoal::before  { content: "Non-goals";     color: var(--ff-nongoal-label); }
+    .callout-metric   { background: var(--ff-metric-bg);   --ff-dot: var(--ff-metric-dot); }
+    .callout-metric::before   { content: "Metrics";       color: var(--ff-metric-label); }
+    .callout-question { background: var(--ff-question-bg); --ff-dot: var(--ff-question-dot); }
+    .callout-question::before { content: "Open question"; color: var(--ff-question-label); }
+    .callout-suggest  { background: var(--ff-suggest-bg);  --ff-dot: var(--ff-suggest-dot); border: 1px solid var(--ff-suggest-dot); }
+    .callout-suggest::before  { content: "Suggestion";    color: var(--ff-suggest-label); }
+    .callout-flag     { background: var(--ff-flag-bg);     --ff-dot: var(--ff-flag-dot); color: var(--ff-flag-fg); }
+    .callout-flag::before     { content: "Red flag";      color: var(--ff-flag-fg); }
+    .callout-flag a, .callout-flag strong, .callout-flag code { color: inherit; }
+    .callout-flag code { background: color-mix(in srgb, currentColor 14%, transparent); }
+    /* The nongoal and suggest boxes carry a 1px border, so their dot moves with it. */
+    .callout-nongoal::after, .callout-suggest::after { left: 21px; top: 22px; }
 
     /* Reviews section: the _reviews.md files are merged into the HTML below this
-       banner (they stay separate files on disk for agents). */
-    .reviews-banner {
-      background: #faf3f2;
-      border: 1px solid #e3b9b3;
-      border-radius: 10px;
-      padding: 12px 18px;
-      margin: 0 0 28px;
-      font-size: 0.9rem;
-      line-height: 1.55;
-      color: #7a3a32;
+       divider (they stay separate files on disk for agents). The build writes
+       the divider with an inline red rule; this repaints it in the house ink. */
+    hr.reviews-divider {
+      border: 0 !important;
+      border-top: 2px solid var(--ff-divider) !important;
+      margin: 88px 0 6px !important;
+      display: block !important;
     }
-    /* Jump target for spec → review-detail links; offset so the heading clears. */
-    .finding-anchor { display: inline-block; scroll-margin-top: 1.5rem; }
-    td a[href^="#"] { font-weight: 700; text-decoration: none; border-bottom: 1px dotted currentColor; }
-    td a[href^="#"]:hover { text-decoration: none; border-bottom-style: solid; }
+    hr.reviews-divider + * { margin-top: 0; }
+    .reviews-banner {
+      border-top: 1px solid var(--ff-divider);
+      padding: 14px 0 0;
+      margin: 0 0 32px;
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--ff-soft);
+    }
     .reviews-banner::before {
       display: block;
-      content: "Reviews (full prose)";
-      font-size: 0.66rem;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      margin-bottom: 6px;
-      color: #b0463b;
+      content: "Reviews, full prose";
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: clamp(25px, 3vw, 32px);
+      line-height: 1.15;
+      letter-spacing: -0.012em;
+      color: var(--ff-fg);
+      margin-bottom: 8px;
     }
+    /* Jump target for spec -> review-detail links; offset so the heading clears. */
+    .finding-anchor { display: inline-block; scroll-margin-top: 1.5rem; }
+    td a[href^="#"] { font-weight: 600; }
 
     /* Inline xref deep-dive (from ::: xref fenced div) */
     .xref {
-      font-size: 0.82rem;
-      background: var(--accent-soft);
-      border-left: 3px solid var(--accent);
-      border-radius: 0 7px 7px 0;
-      padding: 9px 14px;
+      font-size: 15px;
+      background: var(--ff-code-bg);
+      border-radius: var(--r);
+      padding: 10px 16px;
       margin: 0 0 18px;
-      color: var(--muted);
+      color: var(--ff-soft);
       line-height: 1.5;
     }
     .xref::before {
       content: "\21B3  See";
-      font-size: 0.66rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.07em;
-      color: var(--accent);
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-accent);
       margin-right: 8px;
     }
     .xref > * { display: inline; margin: 0; }
-    .xref a { border-bottom: none; font-weight: 700; color: var(--ink); }
-    .xref a:hover { color: var(--accent); background: none; }
+    .xref a, .xref a:visited { font-weight: 600; color: var(--ff-fg); }
 
-    /* Tables */
-    /* The build wraps every table in .table-scroll so a wide table scrolls
-       inside the reading column instead of spilling past it. The scrolling
-       behavior itself is in shared-assets/doc_fixes.css; this is the look. */
-    .table-scroll {
-      margin: 20px 0 28px;
-      border-radius: 10px;
-      box-shadow: 0 1px 3px rgba(15,23,42,0.06), 0 0 0 1px var(--rule);
-    }
-    .table-scroll table { margin: 0; box-shadow: none; }
+    /* Tables: the St. Clair naked ruled table. A 2px rule under the head,
+       hairlines between rows, no box, no tint, no shadow. The build wraps every
+       table in .table-scroll; the scrolling itself lives in
+       shared-assets/doc_fixes.css. */
+    .table-scroll { margin: 24px 0 32px; }
+    .table-scroll table { margin: 0; }
     table {
       border-collapse: collapse;
       width: 100%;
-      margin: 20px 0 28px;
-      font-size: 0.88rem;
-      background: var(--card);
-      border-radius: 10px;
-      overflow: hidden;
-      box-shadow: 0 1px 3px rgba(15,23,42,0.06), 0 0 0 1px var(--rule);
+      margin: 24px 0 32px;
+      font-size: 15px;
       line-height: 1.5;
+      background: none;
+      display: table;   /* pandoc sets block; .table-scroll does the scrolling */
     }
+    tbody { border: 0; }   /* pandoc */
+    th { border-top: 0; }  /* pandoc */
     thead th {
-      background: var(--table-head);
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
       text-align: left;
-      font-weight: 700;
-      padding: 10px 14px;
-      border-bottom: 2px solid var(--accent);
-      font-size: 0.8rem;
-      text-transform: uppercase;
-      letter-spacing: 0.03em;
-      color: var(--muted);
+      padding: 0 16px 10px 0;
+      border-bottom: 2px solid var(--ff-divider);
+      vertical-align: bottom;
     }
-    tbody td { padding: 9px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; }
-    tbody tr:last-child td { border-bottom: none; }
-    tbody tr:nth-child(even) { background: #f8fafc; }
+    tbody td {
+      padding: 12px 16px 12px 0;
+      border-bottom: 1px solid var(--ff-rule);
+      vertical-align: top;
+    }
+    td:last-child, th:last-child { padding-right: 0; }
+    /* A short id column ("RF 12", "T3") stays on one line beside wide prose. */
+    tbody td:first-child { min-width: 3.4em; }
+    tbody tr:nth-child(even) { background: none; }
+    td > :first-child { margin-top: 0; }
+    td > :last-child { margin-bottom: 0; }
 
-    /* Disposition status words rendered by the build (Accepted/Rejected/Deferred) */
-    td .accepted, span.accepted { color: #16a34a; font-weight: 700; }
-    td .rejected, span.rejected { color: #dc2626; font-weight: 700; }
-    td .deferred, span.deferred { color: #d97706; font-weight: 700; }
+    /* Disposition verdicts rendered by the build (Accepted/Rejected/Deferred).
+       A dot and the word, in the verdict's colour. */
+    td .accepted, span.accepted,
+    td .rejected, span.rejected,
+    td .deferred, span.deferred {
+      font-family: var(--font-display);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    td .accepted::before, span.accepted::before,
+    td .rejected::before, span.rejected::before,
+    td .deferred::before, span.deferred::before {
+      content: "";
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      margin-right: 7px;
+      vertical-align: 0.12em;
+    }
+    td .accepted, span.accepted { color: var(--ff-accepted); }
+    td .rejected, span.rejected { color: var(--ff-rejected); }
+    td .deferred, span.deferred { color: var(--ff-deferred); }
 
-    /* Inline + block code */
+    /* Inline + block code: JetBrains Mono on the cobalt tint, ink text.
+       Ligatures off, so an arrow in code reads as the two characters it is. */
+    code, pre {
+      font-family: var(--font-mono);
+      font-variant-ligatures: none;
+      font-feature-settings: "liga" 0, "calt" 0;
+    }
     code {
-      font-family: "SF Mono", "JetBrains Mono", Menlo, monospace;
-      font-size: 0.82em;
-      background: var(--accent-soft);
-      padding: 2px 6px;
-      border-radius: 5px;
-      color: var(--accent);
+      font-size: 0.86em;
+      background: var(--ff-code-bg);
+      color: var(--ff-fg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
     }
     pre {
-      background: #0f172a;
-      color: #e2e8f0;
-      padding: 16px 20px;
-      border-radius: 10px;
+      font-size: 14px;
+      background: var(--ff-code-bg);
+      color: var(--ff-fg);
+      padding: 18px 24px;
+      border-radius: var(--r);
       overflow-x: auto;
-      margin: 20px 0;
+      margin: 0 0 24px;
       line-height: 1.55;
       /* Wrap long lines instead of forcing a horizontal scroll (readability). */
       white-space: pre-wrap;
       word-break: break-word;
       overflow-wrap: anywhere;
     }
-    pre code { background: none; color: inherit; padding: 0; font-size: 0.8rem; }
-    /* Mermaid should NOT wrap its source before the script swaps it for SVG. */
-    pre.mermaid { white-space: pre; }
+    pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+    /* A code chip inside a tinted callout would vanish into the tint. */
+    .callout code { background: color-mix(in srgb, currentColor 9%, transparent); }
+
+    /* Highlighted blocks: pandoc wraps them in div.sourceCode and paints its
+       own transparent ground and a green-and-teal palette. Repaint both in the
+       St. Clair accents. */
+    div.sourceCode { margin: 0 0 24px; }
+    div.sourceCode > pre.sourceCode { background: var(--ff-code-bg); margin: 0; }
+    pre.sourceCode code span.kw, pre.sourceCode code span.cf, pre.sourceCode code span.im,
+    pre.sourceCode code span.op, pre.sourceCode code span.bu { color: var(--ff-hl-kw); font-weight: 500; }
+    pre.sourceCode code span.st, pre.sourceCode code span.ch, pre.sourceCode code span.ss,
+    pre.sourceCode code span.vs, pre.sourceCode code span.sc { color: var(--ff-hl-str); }
+    pre.sourceCode code span.dv, pre.sourceCode code span.fl, pre.sourceCode code span.bn,
+    pre.sourceCode code span.cn, pre.sourceCode code span.dt { color: var(--ff-hl-num); }
+    pre.sourceCode code span.co, pre.sourceCode code span.an, pre.sourceCode code span.cv,
+    pre.sourceCode code span.do, pre.sourceCode code span.in { color: var(--ff-soft); font-style: normal; font-weight: 400; }
+    pre.sourceCode code span.fu, pre.sourceCode code span.va, pre.sourceCode code span.at,
+    pre.sourceCode code span.ot { color: inherit; font-weight: 400; }
 
     /* Mermaid blocks: pandoc renders ```mermaid as <pre class="mermaid">; the
-       Mermaid script replaces the text with SVG. Reset the dark pre styling. */
+       Mermaid script replaces the text with SVG. It is a figure, not code: no
+       tint, a hairline frame, centred. Mermaid source must not wrap before the
+       script swaps it for SVG. */
     pre.mermaid {
-      background: var(--card);
-      border: 1px solid var(--rule);
-      border-radius: 10px;
-      padding: 20px;
+      white-space: pre;
+      background: none;
+      border: 1px solid var(--ff-rule);
+      border-radius: var(--r);
+      padding: 24px;
       text-align: center;
-      color: var(--ink);
+      color: var(--ff-fg);
+      font-family: var(--font-body);
     }
+    pre.mermaid svg { max-width: 100%; height: auto; }
 
     blockquote {
       margin: 18px 0;
-      padding: 10px 18px;
-      background: #f8fafc;
-      border-left: 4px solid var(--muted);
-      border-radius: 0 8px 8px 0;
-      color: var(--muted);
+      padding: 2px 0 2px 18px;
+      border-left: 3px solid var(--ff-rule);
+      color: var(--ff-soft);
     }
-    blockquote p { margin: 0; }
+    blockquote p:last-child { margin-bottom: 0; }
 
-    hr { border: none; border-top: 1px solid var(--rule); margin: 32px 0; }
+    hr { border: none; border-top: 1px solid var(--ff-rule); margin: 44px 0; }
     hr:has(+ h2) { display: none; }
+
+    img { max-width: 100%; height: auto; }
 
     /* Task-list checkboxes from "- [ ]" lists */
     ul.task-list { list-style: none; padding-left: 4px; }
-    ul.task-list li input[type="checkbox"] { margin-right: 8px; }
+    ul.task-list li input[type="checkbox"] { margin-right: 8px; accent-color: var(--cobalt); }
 
     @page { size: letter; margin: 0.7in 0.65in; }
     @media (max-width: 620px) {
-      body { padding: 28px 16px 60px; font-size: 15px; }
-      header#title-block-header h1.title { font-size: 1.6rem; }
-      table { font-size: 0.8rem; }
+      body { padding: 32px 16px 64px; font-size: 16px; }
+      .callout { padding: 14px 16px 16px; }
+      .callout::after { left: 16px; top: 22px; }
+      table { font-size: 14px; }
     }
     @media print {
+      :root { color-scheme: light; }
       * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-      body { background: #fff; max-width: 100%; font-size: 11pt; padding: 0; }
+      html, body { background: #fff; color: var(--ink); }
+      body { max-width: 100%; font-size: 11pt; padding: 0; }
       .doc-nav { display: none; }
-      a { color: var(--ink); border-bottom: none; }
+      a { color: var(--ink); }
       .callout, table, pre, blockquote { break-inside: avoid; }
       h2, h3 { break-after: avoid; }
     }
   </style>
   <script type="module">
     import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
-    mermaid.initialize({ startOnLoad: false, theme: "neutral", securityLevel: "loose" });
+    const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark ? "dark" : "neutral",
+      securityLevel: "loose",
+      themeVariables: { fontFamily: '"Hanken Grotesk", system-ui, sans-serif' },
+    });
     /* Pandoc emits ```mermaid blocks as <pre class="mermaid"><code>…</code></pre> with the
        diagram source HTML-entity-encoded. Mermaid 10 reads innerHTML, so it sees the literal
        <code> tag and &quot;/&gt; entities and throws syntax errors. Flatten each block to a

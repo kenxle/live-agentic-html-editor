@@ -59,6 +59,11 @@ Not shipped yet.
 
 ## Log
 
+- **2026-09-28 16:17.** The forge doc template now uses the St. Clair AI style; only its stylesheet changed, and new builds pick it up. The brief and crucible are rebuilt with it.
+
+  ![Brief requirements, light](style_requirements_light.png)
+
+  ![Brief requirements, dark](style_requirements_dark.png)
 - **2026-09-28 16:11.** Wireframe gate closed on your nested model: each agent session is a card, its reviews sit inside, and a review with several pages lists them (direction B). Open hands the document to an agent by default.
 - **2026-09-28 16:05.** Back on the forge template. The brief and crucible had been served as raw Markdown with hand-written links and no callouts; they now go through `build_feature_docs.py`, which adds the nav bar (Crucible, Brief, Architecture, Plan, Wireframes, Progress), the callout boxes, and the PM review under the brief. The crucible is renamed `00_crucible.md` so the build finds it, and the wireframes live in the feature folder's `wireframes/`, git-ignored because the repo is public. The whole folder is one review now, so the editor follows every nav link. Comments left on the old Markdown pages stay there.
 - **2026-09-28 16:03.** The first wireframes were lost: the wireframing skill writes to a temp folder, and the system cleared it on Sep 27. Rebuilt in `~/Documents/lahe-library-wireframes`, outside the repo because the repo is public and the pages show real document names. B is now your nested layout. Open now hands the document to an agent by default, per your brief edit.
