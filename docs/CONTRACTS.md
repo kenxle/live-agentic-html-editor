@@ -940,7 +940,7 @@ with no file bytes. An allowlisted file not on disk yet is a 404 too.
 | `PROTO_QUEUE_FULL` | 429 | `CATALOG.QUEUE_CAP` pending requests reached |
 | `PROTO_NO_AGENT` | 409 | No attached agent, or its monitor is dead |
 | `PROTO_CONFIRM_NEEDED` | 409 | A hand-over on a watched session without `confirmed` |
-| `PROTO_CATALOG_UNREADABLE` | 500 | `catalog.json` is corrupt |
+| `PROTO_CATALOG_UNREADABLE` | 500 | `catalog.json` is corrupt: a Star, or an Open that would reopen a closed session |
 
 **What the API routes answer** (`src/service/catalog_actions.js`). Nothing in a body names a file, a
 root or a URL, and fields a route does not list are never read.
@@ -955,7 +955,10 @@ root or a URL, and fields a route does not list are never read.
 - **Open restarts only the recorded server that covers the review's recorded file**
   (`static_servers.coveragePath`, the rule `servesPath` uses too) and answers with that server's own
   loopback origin plus the file's path on it. A served review starts nothing. A review whose session was
-  closed is reopened and recorded in `catalog.json`'s `reopened` map for the sweep.
+  closed is recorded in `catalog.json`'s `reopened` map for the sweep first, then its server is started,
+  then the session is reopened. So a server that cannot restart leaves the session closed, and a
+  `catalog.json` that cannot take the record refuses the Open with `PROTO_CATALOG_UNREADABLE` before
+  anything is reopened. Open on a session that is already open does not write `catalog.json`.
 - **`PROTO_NOT_OPENABLE` carries its reason in `error.detail`:** `missing`, `via-agent` (no recorded
   server covers it and no hand-over was asked), `unknown review`, `not owned by the current user`, or
   `the recorded server could not be restarted`.

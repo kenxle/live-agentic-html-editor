@@ -321,8 +321,8 @@ function createCatalogOps(options) {
   var sessions = opts.sessions || require("./agent_sessions.js").createStore({ dir: dir });
 
   /**
-   * Reopen `sessionId` if it is closed, bring back its one recorded server
-   * `serverId` (old port first), register that server's origins on every review
+   * Bring back `sessionId`'s one recorded server `serverId` (old port first),
+   * then reopen the session if it is closed, register that server's origins on every review
    * it serves, and remove the loopback origins of its EARLIER ports from those
    * same reviews. Nothing else is removed: not a dev server's origin, not a
    * non-loopback one, not a port another server of this session is on now.
@@ -340,8 +340,11 @@ function createCatalogOps(options) {
     if (!record) {
       throw new Error("agent session " + sessionId + " has no recorded static server " + JSON.stringify(String(serverId)));
     }
-    if (session.closed_at) sessions.reopen(sessionId);
+    // The server first, the session second. A restart that fails (a root that
+    // is gone, a server that never answers) then leaves a closed session
+    // closed, with nothing reopened for the sweep to have to find.
     var result = await start(restartSpec(dir, sessionId, record));
+    if (session.closed_at) sessions.reopen(sessionId);
     var server = result.meta;
 
     var current = loopbackOrigins(server.port);

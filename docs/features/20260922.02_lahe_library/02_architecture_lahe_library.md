@@ -82,7 +82,7 @@ All in `protocol.CATALOG`, each with its value:
   "reopened": { "<session-id>": { "at": "2026-09-28T16:21:00Z", "handoff_rev": 4 } } }
 ```
 
-A corrupt `catalog.json` is never overwritten: a star is refused with `PROTO_CATALOG_UNREADABLE`, and the list shows no stars with a notice.
+A corrupt `catalog.json` is never overwritten: a star is refused with `PROTO_CATALOG_UNREADABLE`, and the list shows no stars with a notice. An Open that would reopen a closed session is refused the same way, because a reopen the sweep cannot see would leave that session open for good (fix round CX2 and CR4).
 
 **`<state>/catalog-attach.json`**, written only by the CLI (`lahe library --session`):
 
@@ -199,7 +199,8 @@ sequenceDiagram
   K->>K: click Open: tab = open about:blank, tab.opener = null
   K->>H: POST catalog.open {review, handoff, confirmed}
   H->>H: route checks; review has a recorded server
-  H->>S: reopenForCatalog: reopen the session if closed, restart that server (old port if free)
+  H->>H: session closed? record it in the reopened map first
+  H->>S: reopenForCatalog: restart that server (old port if free), then reopen the session if closed
   H->>H: register the new origin, append origin.removed for this server's old ports
   H-->>K: {url, request_id, not_asked}
   K->>K: url is loopback http? tab.location = url, else close the tab and show why

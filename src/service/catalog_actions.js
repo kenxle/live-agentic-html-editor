@@ -199,21 +199,28 @@ function createCatalogActions(options) {
 
     var before = sessions.read(d.session);
     var wasClosed = !!(before && before.closed_at);
+    if (wasClosed) {
+      // The Library is about to reopen it, so the sweep may close it again
+      // once it goes quiet. A session that was already open is somebody
+      // else's. RECORDED FIRST: a reopen the sweep cannot see is a session
+      // left open for good, so a catalog.json that cannot take the record
+      // refuses the Open before anything is reopened or started.
+      var saved = store.setReopened(d.session, { at: iso(nowMs), handoff_rev: agentSessions.handoffRev(before) });
+      if (!saved.ok) {
+        log("Library Open of review " + d.review + " refused: session " + d.session +
+          " is closed and its reopen could not be recorded: " + saved.code, nowMs);
+        return fail(saved.code || "PROTO_CATALOG_UNREADABLE");
+      }
+    }
     var reopened;
     try {
+      // Starts the server before it reopens the session, so a failed start
+      // leaves the session closed.
       reopened = await ops.reopenForCatalog(d.session, d.server);
     } catch (err) {
+      if (wasClosed) store.clearReopened(d.session);
       log("Library Open of review " + d.review + " could not restart its server: " + err.message, nowMs);
       return fail("PROTO_NOT_OPENABLE", "the recorded server could not be restarted");
-    }
-    if (wasClosed) {
-      // The Library reopened it, so the sweep may close it again once it goes
-      // quiet. A session that was already open is somebody else's.
-      var rev = agentSessions.handoffRev(sessions.read(d.session));
-      var saved = store.setReopened(d.session, { at: iso(nowMs), handoff_rev: rev });
-      if (!saved.ok) {
-        log("Library Open reopened session " + d.session + " but could not record it: " + saved.code, nowMs);
-      }
     }
 
     var requestId = null;

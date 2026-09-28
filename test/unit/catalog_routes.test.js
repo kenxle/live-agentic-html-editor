@@ -580,3 +580,49 @@ test("a week of Library actions through the real routes writes the catalog lines
   assert.match(captured, /^2026-09-28T08:30:00\.000Z catalog open review=r_new age_days=7$/m, "r_new is 7 whole days old on the last Open");
   assert.match(captured, /^2026-09-26T12:00:00\.000Z catalog open review=r_page age_days=21$/m);
 });
+
+// ---------------------------------------------------------------------------
+// Fix round (phase 7), Builder B
+// ---------------------------------------------------------------------------
+
+/** Point s_doc's one server record at a root that is gone, keeping its coverage. */
+function breakServerRoot(w) {
+  const record = staticServers.list(w.dir, "s_doc")[0];
+  record.logical_root = w.site;
+  record.root = path.join(w.root, "no-such-root");
+  fs.writeFileSync(stateDir.staticServerPath(w.dir, "s_doc", record.id), JSON.stringify(record, null, 2) + "\n");
+}
+
+test("CX2: an Open whose server cannot restart leaves a closed session closed and records no reopen", async (t) => {
+  const w = await world(t);
+  await staticServers.stopAll(w.dir, "s_doc");
+  w.store.close("s_doc");
+  breakServerRoot(w);
+  const res = await api(w, "catalog.open", { review: "r_page" });
+  assert.equal(res.status, 409, res.text);
+  assert.equal(res.json.error.code, "PROTO_NOT_OPENABLE");
+  assert.ok(w.store.read("s_doc").closed_at, "still closed: nothing is left for the sweep to find");
+  const read = catalogJson(w.dir);
+  assert.equal(read.ok ? read.data.reopened.s_doc : undefined, undefined);
+});
+
+test("CR4: with catalog.json corrupt, an Open that would reopen a closed session is refused and reopens nothing", async (t) => {
+  const w = await world(t);
+  await staticServers.stopAll(w.dir, "s_doc");
+  w.store.close("s_doc");
+  const file = catalogStore.catalogPath(w.dir);
+  fs.writeFileSync(file, "{not json");
+  const res = await api(w, "catalog.open", { review: "r_page" });
+  assert.equal(res.status, 500, res.text);
+  assert.equal(res.json.error.code, "PROTO_CATALOG_UNREADABLE");
+  assert.ok(w.store.read("s_doc").closed_at, "still closed");
+  assert.ok(staticServers.list(w.dir, "s_doc").every((m) => m.stopped_at), "no server started");
+  assert.equal(fs.readFileSync(file, "utf8"), "{not json", "left as it was");
+});
+
+test("CR4: with catalog.json corrupt, Open on an already open session still opens", async (t) => {
+  const w = await world(t);
+  fs.writeFileSync(catalogStore.catalogPath(w.dir), "{not json");
+  const res = await api(w, "catalog.open", { review: "r_page" });
+  assert.equal(res.status, 200, res.text);
+});
