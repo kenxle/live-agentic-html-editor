@@ -1,6 +1,6 @@
 # Progress: Free writing
 
-**Phase 3 and 4, Wireframe and Architecture.** The wireframes are ready for you to click through. The architecture is drafted and with its reviewers. One thing needs you now. Last updated 2026-09-28 17:26.
+**Phase 3 and 4, Wireframe and Architecture.** The wireframes are ready for you to click through. The architecture is drafted and with its reviewers. One thing needs you now. Last updated 2026-09-28 17:38.
 
 **Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html)
 
@@ -16,8 +16,9 @@
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Architecture reviewer | Reviewing the architecture | 2026-09-28 17:26 | `main` (docs only) |
-| Security reviewer | Reviewing the architecture | 2026-09-28 17:26 | `main` (docs only) |
+| Editing-host test build | Can one editing area span an existing block and new blocks, in all three browsers, and what happens where Lahe's editor meets Tiptap | 2026-09-28 17:38 | scratch only |
+| Formatting reproduction | Running the three bold and italic cases on the real tool, end to end | 2026-09-28 17:38 | scratch only |
+| Architecture revision | Folding in the architect and security reviews, except the Tiptap question and the editing area, which wait on the test build | 2026-09-28 17:38 | `main` (docs only) |
 
 ## Phases
 
@@ -67,6 +68,15 @@ Not shipped yet.
 ## Log
 
 Newest first.
+
+**2026-09-28 17:38.** Both architecture reviews are back.
+
+The security review found three gaps:
+- the markup filter ran only in the browser
+- a symlink hole in the blank-document command
+- a notes file in the home folder could expose the whole folder
+
+The architect review found 21 issues, 8 of them serious. Its main point: the Tiptap question cannot be answered fairly until someone tests whether one editing area can span several blocks. That test and a reproduction of the formatting bugs are running now. The revision folds in everything else meanwhile.
 
 **2026-09-28 17:26.** The wireframes are built: three clickable directions, every link checked, all showing one sitting as one edit.
 
