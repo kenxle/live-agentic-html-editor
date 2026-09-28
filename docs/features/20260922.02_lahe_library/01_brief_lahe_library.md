@@ -103,7 +103,7 @@ The key design question, for the wireframe: **what is one row?** A document, a r
 
 **R9.** A document that lived in a worktree that is gone opens from the same path in the repository that worktree belonged to, when that file exists there. The page tells Ken he is seeing the main repository's copy, which may differ from the version he reviewed.
 
-**R10.** A document that is already being served opens at its current address instead of starting a second copy. The page says so, and warns that a second tab on the same document splits the comments.
+**R10.** A document that is already being served opens at its current address instead of starting a second copy. A second tab on the same document is handled the way LAHE already handles two tabs; the Library adds nothing of its own.
 
 **R10a.** While the Library, or a document opened from it, is open in the browser, LAHE keeps serving them, even after the last agent session closes.
 
