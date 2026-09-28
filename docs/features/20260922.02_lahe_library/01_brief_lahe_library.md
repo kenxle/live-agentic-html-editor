@@ -111,7 +111,7 @@ The key design question, for the wireframe: **what is one row?** A document, a r
 
 **R11. Star** and unstar act directly from the page. Stars survive a LAHE restart.
 
-**R12. Pick this up** sends a request to the agent attached to the Library, which handles it like any other task. That agent takes over the document's session, so Ken's comments on it reach that agent.
+**R12. Pick this up** uses LAHE's existing hand-over, not a new one: the agent attached to the Library takes the document's session over the way a takeover already works, so Ken's comments on it reach that agent.
 
 **R12a.** Before Ken clicks, the page names the agent that will receive Pick this up and Launch a new agent. When no agent is attached, the buttons say so ahead of time, not after the click.
 
@@ -121,7 +121,7 @@ The key design question, for the wireframe: **what is one row?** A document, a r
 
 **R13. Launch a new agent** asks the agent attached to the Library to start a fresh agent, already pointed at that document's session. The new agent's session is named after the document, so Ken can tell launched agents apart.
 
-**R14.** When no agent is attached to the Library, Pick this up and Launch a new agent say so. They offer a prompt Ken can paste into any agent instead.
+**R14.** When no agent is attached to the Library, Pick this up and Launch a new agent say so, and offer the same hand-off message the rail already copies for pasting into any agent.
 
 ### Reaching the Library
 
