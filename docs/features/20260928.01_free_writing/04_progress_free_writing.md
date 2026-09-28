@@ -1,16 +1,16 @@
 # Progress: Free writing
 
-**Phase 2, Brief.** The brief is reviewed and served for your read. Four questions need your answers on the brief page. Last updated 2026-09-28 17:00.
+**Phase 3, Wireframe.** You answered the brief's four questions and the brief is done. The wireframe is starting. Nothing is waiting on you. Last updated 2026-09-28 17:16.
 
 **Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html)
 
 ## Needs your attention
 
-- [ ] Read the brief and answer Q3 to Q6 on its page: who writes the notes file, lists in or out, paste in or out, and what fails on larger edits. The wireframe waits on these.
+Nothing is waiting on you.
 
 ## Currently working on
 
-Nothing is running. Next: wireframe, once you answer the brief's questions.
+Nothing is running. Next: the wireframe, starting now.
 
 ## Phases
 
@@ -18,8 +18,8 @@ Nothing is running. Next: wireframe, once you answer the brief's questions.
 |---|---|---|
 | 0 Setup | done | 2026-09-28 |
 | 1 Crucible | done | 2026-09-28 |
-| 2 Brief | in progress | 2026-09-28 |
-| 3 Wireframe | not started | |
+| 2 Brief | done | 2026-09-28 |
+| 3 Wireframe | in progress | 2026-09-28 |
 | 4 Architecture | not started | |
 | 5 Plan | not started | |
 | 6 Implement | not started | |
@@ -43,7 +43,7 @@ None.
 
 ### Follow-ups
 
-None.
+- `LAHE-rich-paste` on the board: keep formatting when pasting text written elsewhere. Out of this feature unless Tiptap brings it for free.
 
 ### Cleanup queue
 
@@ -60,6 +60,14 @@ Not shipped yet.
 ## Log
 
 Newest first.
+
+**2026-09-28 17:16.** Ken finished reading the brief on its page. He answered the four questions:
+- the agent writes the notes file
+- lists are in
+- rich paste is out, to the board
+- larger edits fail the same way, so they are covered by the same requirements
+
+He also leaned toward Tiptap as the engine. He gave steps for the doubled line after a header. He made three wording edits. Brief closed.
 
 **2026-09-28 17:00.** The brief and crucible are now built with the feature-forge document builder, so the callout boxes render. The Docs links above point at the built pages; the earlier Markdown renders are retired.
 
