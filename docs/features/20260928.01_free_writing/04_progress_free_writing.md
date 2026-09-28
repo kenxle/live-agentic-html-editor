@@ -1,18 +1,16 @@
 # Progress: Free writing
 
-**Phase 2, Brief.** The brief is written and the PM review is running. Nothing needs your attention yet. Last updated 2026-09-28 15:34.
+**Phase 2, Brief.** The brief is reviewed and served for your read. Four questions need your answers on the brief page. Last updated 2026-09-28 15:41.
 
 **Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](00_crucible.md) · [Brief](01_brief_free_writing.md)
 
 ## Needs your attention
 
-Nothing is waiting on you.
+- [ ] Read the brief and answer Q3 to Q6 on its page: who writes the notes file, lists in or out, paste in or out, and what fails on larger edits. The wireframe waits on these.
 
 ## Currently working on
 
-| Agent or task | Doing | Started | Branch |
-|---|---|---|---|
-| review-pm | Reviewing the brief | 2026-09-28 15:34 | `main` (docs only) |
+Nothing is running. Next: wireframe, once you answer the brief's questions.
 
 ## Phases
 
@@ -62,6 +60,8 @@ Not shipped yet.
 ## Log
 
 Newest first.
+
+**2026-09-28 15:41.** PM review returned eleven findings, all accepted: two blockers (the formatting bug had no reproduction and missed a board row; the brief pre-decided record shape and gesture), six important, three minor. Brief rewritten, clarity pass applied, served for Ken.
 
 **2026-09-28 15:34.** Brief written from the accepted crucible. PM review dispatched.
 
