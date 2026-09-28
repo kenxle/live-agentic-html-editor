@@ -1,6 +1,6 @@
 # Progress: Free writing
 
-**Phase 5, Plan.** You approved wireframe direction A. The architecture is reviewed and revised. The plan is being written. Two decisions are waiting on you. Last updated 2026-09-28 17:51.
+**Phase 5, Plan.** You approved wireframe direction A. The architecture is reviewed and revised. The plan is being written. Two decisions are waiting on you. Last updated 2026-09-28 17:59.
 
 **Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html) ([decision](wireframes/DECISION.md)) · [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html)
 
@@ -20,7 +20,10 @@ Both are on the [architecture page](http://127.0.0.1:65155/02_architecture_free_
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Plan | Breaking the architecture into build tasks, with a test list | 2026-09-28 17:51 | `main` (docs only) |
+| Manager reviewer | Checking the plan's parallel work and how it merges back together | 2026-09-28 17:59 | `main` (docs only) |
+| Code-lead reviewer | Checking what a builder would have to invent, across brief, architecture, and plan | 2026-09-28 17:59 | `main` (docs only) |
+| Testing reviewer | Checking whether the test list would catch real failures | 2026-09-28 17:59 | `main` (docs only) |
+| Design reviewer | Checking the plan's screens and words against direction A | 2026-09-28 17:59 | `main` (docs only) |
 
 ## Phases
 
@@ -75,6 +78,13 @@ Not shipped yet.
 ## Log
 
 Newest first.
+
+**2026-09-28 17:59.** The plan is drafted in three phases:
+- shared groundwork first
+- three parallel builds: the editor, the page reload, and the helper with `lahe write`
+- the rail and integration
+
+Four reviewers are on it now.
 
 **2026-09-28 17:51.** You approved wireframe direction A:
 - "B" lost on its insert style
