@@ -974,6 +974,12 @@
    *
    * The compare is strict: both sides come from the same capture, so there is
    * no rebuild typography to read past.
+   *
+   * The piece written must also be inline markup only. A first paragraph that
+   * sat in a wrapper (<ul><li>, <blockquote><h2>) cuts to its inner markup,
+   * which is still a block: written into the anchored <p>, it would put a
+   * bullet or a heading inside the paragraph. A piece holding any block tag or
+   * a <br> is refused, and the words go in as plain text.
    */
   function pieceMarkup(item, pieces, index) {
     var html = item ? item[record.FIELD.AFTER_HTML] : null;
@@ -984,7 +990,20 @@
       var own = piecesOf(decodeBasicEntities(blocks[i]));
       if (own.length !== 1 || own[0] !== pieces[i]) return null;
     }
-    return blocks[index];
+    return inlineOnly(blocks[index]) ? blocks[index] : null;
+  }
+
+  // Does this markup hold only inline elements: no block tag and no <br>?
+  // The markup has been through cleanMarkup, so every tag is lowercase.
+  function inlineOnly(markup) {
+    var tagName = /<\/?([a-z][a-z0-9-]*)/g;
+    var match = tagName.exec(markup);
+    while (match) {
+      var name = match[1];
+      if (name === "br" || Object.prototype.hasOwnProperty.call(normalize.BLOCK_TAGS, name)) return false;
+      match = tagName.exec(markup);
+    }
+    return true;
   }
 
   // The five entities markup must use for text that the record's plain after

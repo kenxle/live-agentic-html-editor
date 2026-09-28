@@ -110,7 +110,10 @@ this branch and it is a flatten rather than a duplicate.
 When the record's `after_html` does not cut cleanly into the same paragraphs as
 its text, the one paragraph is still written as plain text. Examples: a list or
 a block nested inside a bold, a paragraph that is an image with no words, or
-markup that is a wording behind the text. Picking which part of such markup is
+markup that is a wording behind the text. The same holds when the paragraph's
+share of the markup is itself a block or holds a `<br>` (a first paragraph that
+sat in `<ul><li>` or `<blockquote><h2>`): writing it into the anchored `<p>`
+would put a bullet or a heading inside the paragraph. Picking which part of such markup is
 this paragraph would be a guess, so the words land and the formatting does not.
 
 ## Tests

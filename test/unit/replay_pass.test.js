@@ -1615,7 +1615,11 @@ test("formatting: markup that does not split into the same paragraphs falls back
     // Markup whose words are not the record's words any more.
     FORMATTED_FIRST.replace("First", "Earlier") + "<p>Second paragraph.</p><p>Third paragraph.</p>",
     // A paragraph the text has and the markup does not.
-    FORMATTED_FIRST + "<p>Second paragraph.</p>"
+    FORMATTED_FIRST + "<p>Second paragraph.</p>",
+    // The first paragraph sits in a wrapper, so its share of the markup is a
+    // block of its own: a bullet or a heading written inside the paragraph.
+    "<ul><li>First bold italic link.</li></ul><p>Second paragraph.</p><p>Third paragraph.</p>",
+    "<blockquote><h2>First bold italic link.</h2></blockquote><p>Second paragraph.</p><p>Third paragraph.</p>"
   ];
   cases.forEach(function (html) {
     const item = formattedSplitEdit("Old first line.", html);
