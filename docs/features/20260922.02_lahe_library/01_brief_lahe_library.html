@@ -930,8 +930,8 @@ what I had open.</li>
 <h2 id="solution-outline">Solution Outline</h2>
 <ol type="1">
 <li>Ken asks any agent to "open the lahe library." The agent runs one
-command. It starts LAHE if needed and opens the Library in the
-browser.</li>
+command, which starts LAHE if needed and prints the Library's address.
+The agent then opens it in the browser.</li>
 <li>The Library lists every past document, newest first. The wireframe
 decides how the page handles that many rows.</li>
 <li>Each row shows:
@@ -985,17 +985,18 @@ reuse it</li>
 </div>
 <div class="callout callout-req">
 <p><strong>R4.</strong> The Library keeps a week's volume (100 or more
-documents at Ken's pace) findable without typing a search. The grouping
-and default view are settled in the wireframe.</p>
+documents at Ken's pace) findable without typing a search. The default
+view shows agent sessions active in the last 7 days open, and older ones
+collapsed.</p>
 </div>
 <div class="callout callout-req">
 <p><strong>R4a.</strong> The default view separates documents that need
 Ken (waiting comments, starred) from documents that don't.</p>
 </div>
 <div class="callout callout-req">
-<p><strong>R5.</strong> Before Sep 16, LAHE wrongly gave each page in a
-folder its own review. The Library shows those old reviews together, the
-way LAHE records a folder today.</p>
+<p><strong>R5.</strong> Before Sep 17, 2026, LAHE wrongly gave each page
+in a folder its own review. The Library shows those old reviews
+together, the way LAHE records a folder today.</p>
 </div>
 <div class="callout callout-req">
 <p><strong>R6.</strong> Search filters rows by everything a row shows
@@ -1135,9 +1136,9 @@ agent and one click.</li>
 <li>Given a description of any document from the past week, Ken finds it
 without typing a search.</li>
 <li>After two weeks, a script over LAHE's log reports Opens per working
-day, and how many of them were documents older than the default view. If
-Opens per working day stay near zero, the Library is not replacing
-tabs.</li>
+day, and how many of them were documents older than the default view (7
+days). If Opens per working day stay near zero, the Library is not
+replacing tabs.</li>
 </ul>
 </div>
 <h2 id="ux-notes">UX Notes</h2>
@@ -1173,8 +1174,11 @@ moves.</li>
 </div>
 <div class="callout callout-question">
 <ol start="2" type="1">
-<li>How does the default view keep the volume manageable (a recent
-window, grouping by day, collapsing)? Settled in the wireframe.</li>
+<li><p>How does the default view keep the volume manageable (a recent
+window, grouping by day, collapsing)? Settled in the wireframe.</p>
+<p><strong>Answer:</strong> sessions active in the last 7 days are open,
+older ones collapsed, with unanswered and starred documents on top (R4,
+a week findable without search).</p></li>
 </ol>
 </div>
 <div class="callout callout-question">
@@ -1261,7 +1265,8 @@ documents</td>
 <td>RF8</td>
 <td>"The page never starts a program" is missing</td>
 <td><span class="accepted">Accepted</span></td>
-<td>Added as a non-goal; R14 answers the no-agent case</td>
+<td>Ken removed that non-goal; Open Question 5 explores direct launch
+instead. R14 answers the no-agent case</td>
 </tr>
 <tr>
 <td>RF9</td>
@@ -1325,6 +1330,42 @@ review RF10)</td>
 <td><span class="accepted">Accepted</span></td>
 <td>R10b: the rail offers its existing hand-off message; Pick this up
 stays on the Library</td>
+</tr>
+<tr>
+<td>Plan CR RF7</td>
+<td><code>lahe library</code> printed or opened the URL, unclear (plan
+review back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Solution Outline 1: the command prints the address; the agent opens
+it</td>
+</tr>
+<tr>
+<td>Plan CR RF11</td>
+<td>Default view lived only in the wireframe (plan review
+back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R4 states the rule: last 7 days open, older collapsed</td>
+</tr>
+<tr>
+<td>Plan CR RF17</td>
+<td>R5's date disagreed with the architecture (plan review
+back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Both say before Sep 17, 2026</td>
+</tr>
+<tr>
+<td>Plan CR RF19</td>
+<td>"Older than the default view" was undefined (plan review
+back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Success metric says 7 days, matching R4 and the count script</td>
+</tr>
+<tr>
+<td>Plan CR RF25</td>
+<td>This table claimed a non-goal the brief does not have (plan review
+back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>RF8 row corrected</td>
 </tr>
 </tbody>
 </table></div>

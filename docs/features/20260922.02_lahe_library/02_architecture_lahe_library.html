@@ -951,13 +951,17 @@ go through it.</li>
 which is an amendment to D11.</li>
 <li><strong>Reopening and taking over already exist</strong>
 (<code>lahe session reopen</code>, <code>lahe session takeover</code>
-with its <code>handoff_rev</code> fence). A restarted static server gets
-a new random port, and nothing registers that port as an allowed
-origin.</li>
+with its <code>handoff_rev</code> fence). Both run in the CLI, not the
+helper. A restarted static server listens on port 0, so it gets a new
+random port, and nothing registers that port as an allowed origin.</li>
+<li><strong>Origins only ever grow.</strong> <code>reviews.js</code>
+appends <code>origin.registered</code> to the review's log, and recovery
+rebuilds the origin set from those events. Nothing removes one.</li>
 <li><strong>The helper stops when the last session closes.</strong> The
 Library is the first page that must outlive every session.</li>
 <li><strong>The drain already carries a helper-authored list besides
-items:</strong> <code>ended_reviews</code>. Catalog requests follow that
+items:</strong> <code>ended_reviews</code>, delivered once per session
+through <code>ended-delivered.log</code>. Catalog requests follow that
 precedent, so no item or <code>review.json</code> field changes.</li>
 <li><strong><code>lahe monitor</code> watches one session.</strong>
 After a pick-up the agent owns two.</li>
@@ -971,85 +975,298 @@ routes, files and the URL path use <code>catalog</code>.</li>
 <code>catalog.page</code>, <code>catalog.asset</code>,
 <code>catalog.list</code>, <code>catalog.open</code>,
 <code>catalog.star</code>, <code>catalog.request</code>, and a new auth
-class <code>CATALOG_TOKEN</code>. Header names come from
-<code>protocol.js</code>, like every other route.</li>
+class <code>CATALOG_TOKEN</code>. Also a client value
+<code>catalog</code>, a <code>CHECK.SEC_FETCH_SITE</code>, the error
+codes in <a href="#security-privacy-notes">Security</a>, the
+<code>origin.removed</code> event, the log line format, and the
+<code>CATALOG</code> constants below. Every one of these is spelled
+once, in <code>protocol.js</code>.</li>
 <li><strong>Service, catalog reader (new):</strong> builds the list from
-files, with an mtime cache. Owns folding old per-page reviews, the
-project label, and the missing and worktree rules.</li>
+files. Owns folding old per-page reviews, <code>display_name</code>, the
+project label, and the missing and worktree rules. It also exports the
+one function that describes a review (display name, path, worktree
+candidate), which the drain calls too.</li>
+<li><strong>Service, catalog store (new, small):</strong> reads and
+writes <code>catalog.json</code> (stars and the <code>reopened</code>
+map). The only code that touches that file.</li>
 <li><strong>Service, catalog routes and request queue (new):</strong>
 Open, Star, the request queue and its expiry.</li>
-<li><strong>Service, static servers:</strong> restart one recorded
-server by id, try its old port first, and register the resulting origin
-on the review, replacing that review's stale loopback origins. Also
-closes the open board row LAHE-static-server-host-check: every static
-server refuses a Host that is not its own loopback address and port,
-because the Library keeps more of them alive.</li>
+<li><strong>Service, static servers:</strong>
+<ul>
+<li>Restart one recorded server by id. The spawned server takes a
+preferred port and falls back to 0.</li>
+<li>Each <code>ss_</code> record keeps the list of ports it has
+used.</li>
+<li>Register the resulting origin on the review, and remove only that
+server's earlier loopback origins (see <a href="#stale-origins">Stale
+origins</a>).</li>
+<li>Two service-level functions the routes call:
+<code>reopenForCatalog(sessionId, serverId)</code> and
+<code>closeQuiet(sessionId)</code>. The CLI's own reopen and close keep
+working as before.</li>
+<li>Closes the open board row LAHE-static-server-host-check. Every
+static server accepts a Host of <code>127.0.0.1:&lt;its port&gt;</code>
+or <code>localhost:&lt;its port&gt;</code> and refuses anything else,
+including a missing Host. The check covers every path: pages, the
+reserved library route, and 404s.</li>
+</ul></li>
 <li><strong>Service, helper lifetime:</strong> remembers when the
-Library page last polled.</li>
+Library page last polled, reports it on <code>health</code>, and runs
+the reopened-session sweep.</li>
 <li><strong>Layer, catalog page (new, not part of the rail
-bundle):</strong> an HTML template plus one script file, served by the
-helper. It gets its own list in
-<code>src/shared/manifest.js</code>.</li>
-<li><strong>CLI:</strong> new
-<code>lahe library [--session &lt;id&gt;]</code> and
-<code>lahe library answer</code>. <code>lahe monitor</code> accepts
-<code>--session</code> more than once. <code>lahe status</code> prints
-<code>catalog_requests</code> for the sessions it drains.
-<code>session close</code> checks the Library before stopping the
+bundle):</strong> an HTML template
+(<code>src/service/catalog_page.js</code>), the page script
+(<code>src/layer/catalog/page.js</code>), and a pure view-model module
+(<code>src/layer/catalog/view_model.js</code>) that turns a list
+response into sections, rows and button states with no DOM. The page
+files get their own manifest list, <code>CATALOG_PAGE</code>. They are
+served raw from <code>src/</code> with no build step, so they never
+touch <code>dist/</code>.</li>
+<li><strong>CLI:</strong>
+<ul>
+<li><code>lahe library [--session &lt;id&gt;] [--json]</code> and
+<code>lahe library answer</code>.</li>
+<li><code>lahe monitor</code> accepts <code>--session</code> more than
+once.</li>
+<li><code>lahe status</code> prints <code>catalog_requests</code> for
+the sessions it drains.</li>
+<li><code>lahe session name &lt;id&gt; --from-review &lt;review&gt;</code>
+names a session after a review's display name, read by the CLI
+itself.</li>
+<li><code>session close</code> checks the Library before stopping the
 helper.</li>
+</ul></li>
 <li><strong>Docs and contract:</strong> a D11 amendment in
-<code>docs/CONTRACTS.md</code>. The skill, the contract text, the copy
-in <code>test/unit/review_format.test.js</code>, and the dist bundle
-change together for the new drain section.</li>
+<code>docs/CONTRACTS.md</code> with the per-route check table below, the
+new event, and the <code>health</code> field. The skill, the contract
+text, the copy in <code>test/unit/review_format.test.js</code>, and the
+dist bundle change together for the new drain section.</li>
 </ul>
 <h2 id="data--state-changes">Data / State Changes</h2>
+<h3 id="constants">Constants</h3>
+<p>All in <code>protocol.CATALOG</code>, each with its value:</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Name</th>
+<th>Value</th>
+<th>Used for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>REQUEST_EXPIRY_MS</code></td>
+<td>30 minutes</td>
+<td>an unanswered request expires</td>
+</tr>
+<tr>
+<td><code>LIBRARY_SEEN_MS</code></td>
+<td>2 minutes</td>
+<td>a Library poll this recent keeps the helper up</td>
+</tr>
+<tr>
+<td><code>REOPENED_AUTOCLOSE_MS</code></td>
+<td>30 minutes</td>
+<td>a quiet Library-reopened session closes</td>
+</tr>
+<tr>
+<td><code>QUEUE_CAP</code></td>
+<td>5</td>
+<td>pending requests across the Library</td>
+</tr>
+<tr>
+<td><code>REPROJECT_MAX_BYTES</code></td>
+<td>5 MB</td>
+<td>the largest log the reader will re-project</td>
+</tr>
+<tr>
+<td><code>POLL_MS</code></td>
+<td>15 seconds</td>
+<td>the page's poll</td>
+</tr>
+<tr>
+<td><code>ANSWER_SHOWN_MS</code></td>
+<td>24 hours</td>
+<td>how long an answer stays on its row</td>
+</tr>
+<tr>
+<td><code>ANSWER_TEXT_MAX</code></td>
+<td>500 characters</td>
+<td>the longest answer <code>lahe library answer</code> accepts</td>
+</tr>
+<tr>
+<td><code>DEFAULT_VIEW_DAYS</code></td>
+<td>7</td>
+<td>sessions active this recently are open in the default view</td>
+</tr>
+<tr>
+<td><code>FOLD_CUTOFF</code></td>
+<td><code>2026-09-17T04:00:00Z</code></td>
+<td>reviews created before this instant (midnight US Eastern) can
+fold</td>
+</tr>
+</tbody>
+</table></div>
+<p>"The monitor is dead" means its heartbeat is older than
+<code>MONITOR.HEARTBEAT_FRESH_MS</code>, read through the existing
+liveness function in <code>agent_sessions.js</code>. Every expiry and
+freshness check takes <code>now</code> as an argument.</p>
+<h3 id="files">Files</h3>
 <p><strong><code>&lt;state&gt;/catalog.json</code></strong>, written
-only by the helper, with the existing write-beside-and-rename:</p>
+only by the helper through the catalog store, with the existing
+write-beside-and-rename:</p>
 <div class="sourceCode" id="cb2"><pre
-class="sourceCode json"><code class="sourceCode json"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span> <span class="dt">&quot;schema&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span> <span class="dt">&quot;stars&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;&lt;review-id&gt;&quot;</span><span class="fu">:</span> <span class="st">&quot;2026-09-28T16:20:00Z&quot;</span> <span class="fu">},</span> <span class="dt">&quot;reopened&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;&lt;session-id&gt;&quot;</span><span class="fu">:</span> <span class="st">&quot;2026-09-28T16:21:00Z&quot;</span> <span class="fu">}</span> <span class="fu">}</span></span></code></pre></div>
+class="sourceCode json"><code class="sourceCode json"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span> <span class="dt">&quot;schema&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;stars&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;&lt;review-id&gt;&quot;</span><span class="fu">:</span> <span class="st">&quot;2026-09-28T16:20:00Z&quot;</span> <span class="fu">},</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;reopened&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;&lt;session-id&gt;&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;at&quot;</span><span class="fu">:</span> <span class="st">&quot;2026-09-28T16:21:00Z&quot;</span><span class="fu">,</span> <span class="dt">&quot;handoff_rev&quot;</span><span class="fu">:</span> <span class="dv">4</span> <span class="fu">}</span> <span class="fu">}</span> <span class="fu">}</span></span></code></pre></div>
+<p>A corrupt <code>catalog.json</code> is never overwritten: a star is
+refused with <code>PROTO_CATALOG_UNREADABLE</code>, and the list shows
+no stars with a notice.</p>
 <p><strong><code>&lt;state&gt;/catalog-attach.json</code></strong>,
 written only by the CLI (<code>lahe library --session</code>):</p>
 <div class="sourceCode" id="cb3"><pre
 class="sourceCode json"><code class="sourceCode json"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span> <span class="dt">&quot;schema&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span> <span class="dt">&quot;session&quot;</span><span class="fu">:</span> <span class="st">&quot;s_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;at&quot;</span><span class="fu">:</span> <span class="st">&quot;2026-09-28T16:02:00Z&quot;</span> <span class="fu">}</span></span></code></pre></div>
 <p>One writer per file, so a star and an attach cannot overwrite each
 other.</p>
+<p><strong><code>ss_*.json</code></strong> gains
+<code>ports: [51234, 55480]</code>, oldest first, so the helper knows
+which loopback origins came from this server.</p>
+<p><strong>The review log</strong> gains one event,
+<code>origin.removed {origin}</code>. Recovery applies it in order with
+<code>origin.registered</code>, so a removed origin stays removed after
+a helper restart.</p>
 <p><strong><code>&lt;state&gt;/catalog-requests.jsonl</code></strong>,
 append-only, written only by the helper and by
 <code>lahe library answer</code>:</p>
 <div class="sourceCode" id="cb4"><pre
 class="sourceCode json"><code class="sourceCode json"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span> <span class="dt">&quot;id&quot;</span><span class="fu">:</span> <span class="st">&quot;cq_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;at&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;action&quot;</span><span class="fu">:</span> <span class="st">&quot;pickup&quot;</span> <span class="er">|</span> <span class="st">&quot;launch&quot;</span><span class="fu">,</span> <span class="dt">&quot;review&quot;</span><span class="fu">:</span> <span class="st">&quot;r_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;session&quot;</span><span class="fu">:</span> <span class="st">&quot;s_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;for&quot;</span><span class="fu">:</span> <span class="st">&quot;s_&lt;attached&gt;&quot;</span> <span class="fu">}</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span> <span class="dt">&quot;id&quot;</span><span class="fu">:</span> <span class="st">&quot;cq_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;answered_at&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;by&quot;</span><span class="fu">:</span> <span class="st">&quot;s_&lt;attached&gt;&quot;</span><span class="fu">,</span> <span class="dt">&quot;status&quot;</span><span class="fu">:</span> <span class="st">&quot;done&quot;</span> <span class="er">|</span> <span class="st">&quot;refused&quot;</span><span class="fu">,</span> <span class="dt">&quot;text&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span> <span class="fu">}</span></span></code></pre></div>
-<p>A request holds ids only. No text from a page reaches it. The drain
-adds the title and path as data fields, fenced like any other
-page-derived text. A request expires when the attached session changes,
-when its monitor has been dead past the liveness threshold, or after 30
-minutes unanswered. The row then goes back to normal and says it was not
-picked up.</p>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span> <span class="dt">&quot;id&quot;</span><span class="fu">:</span> <span class="st">&quot;cq_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;answered_at&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;by&quot;</span><span class="fu">:</span> <span class="st">&quot;s_&lt;attached&gt;&quot;</span><span class="fu">,</span> <span class="dt">&quot;status&quot;</span><span class="fu">:</span> <span class="st">&quot;done&quot;</span> <span class="er">|</span> <span class="st">&quot;refused&quot;</span><span class="fu">,</span> <span class="dt">&quot;text&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span> <span class="fu">}</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span> <span class="dt">&quot;id&quot;</span><span class="fu">:</span> <span class="st">&quot;cq_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;expired_at&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;reason&quot;</span><span class="fu">:</span> <span class="st">&quot;attach_changed&quot;</span> <span class="er">|</span> <span class="st">&quot;monitor_dead&quot;</span> <span class="er">|</span> <span class="st">&quot;timeout&quot;</span> <span class="fu">}</span></span></code></pre></div>
+<ul>
+<li>A request holds ids only. No text from a page reaches it, and extra
+body fields are dropped.</li>
+<li>A request expires when the attached session id changes to a
+different one, when the <code>for</code> session's monitor is dead, or
+after <code>REQUEST_EXPIRY_MS</code> unanswered. Re-attaching the same
+session id is not a change.</li>
+<li>Expiry is worked out on each read from <code>now</code>. The helper
+appends the <code>expired</code> line the first time it sees one, so the
+file stays the single record.</li>
+<li>An answered or expired request no longer counts toward
+one-per-review or <code>QUEUE_CAP</code>.</li>
+<li>A torn last line is skipped with a helper log line. The list and the
+drain still work.</li>
+</ul>
 <p><strong>The Library token</strong> is minted in memory at each helper
 start and never written to disk. It exists only inside the served
 page.</p>
-<p><strong>The list response</strong> (<code>catalog.list</code>), one
-entry per session:</p>
+<p><strong><code>health</code></strong> gains
+<code>catalog_seen_at</code>, the time of the last authenticated
+<code>catalog.list</code>, or null.</p>
+<h3 id="the-list-response">The list response</h3>
+<p><code>catalog.list</code>, one entry per session:</p>
 <div class="sourceCode" id="cb5"><pre
 class="sourceCode json"><code class="sourceCode json"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
 <span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;attached&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;session&quot;</span><span class="fu">:</span> <span class="st">&quot;s_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;name&quot;</span><span class="fu">:</span> <span class="st">&quot;document index&quot;</span><span class="fu">,</span> <span class="dt">&quot;watching&quot;</span><span class="fu">:</span> <span class="kw">true</span> <span class="fu">},</span></span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;sessions&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="fu">{</span></span>
 <span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;id&quot;</span><span class="fu">:</span> <span class="st">&quot;s_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;name&quot;</span><span class="fu">:</span> <span class="st">&quot;coach activity&quot;</span><span class="fu">,</span> <span class="dt">&quot;projects&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="st">&quot;steady-thread&quot;</span><span class="ot">]</span><span class="fu">,</span></span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;watching&quot;</span><span class="fu">:</span> <span class="kw">false</span><span class="fu">,</span> <span class="dt">&quot;last&quot;</span><span class="fu">:</span> <span class="st">&quot;2026-09-28T15:40:00Z&quot;</span><span class="fu">,</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;watching&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;session&quot;</span><span class="fu">:</span> <span class="st">&quot;s_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;name&quot;</span><span class="fu">:</span> <span class="st">&quot;free writing lahe&quot;</span> <span class="fu">},</span> <span class="dt">&quot;last&quot;</span><span class="fu">:</span> <span class="st">&quot;2026-09-28T15:40:00Z&quot;</span><span class="fu">,</span></span>
 <span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;reviews&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="fu">{</span></span>
-<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;id&quot;</span><span class="fu">:</span> <span class="st">&quot;r_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;title&quot;</span><span class="fu">:</span> <span class="st">&quot;Feature Brief: Coach Activity&quot;</span><span class="fu">,</span> <span class="dt">&quot;file&quot;</span><span class="fu">:</span> <span class="st">&quot;01_brief.md&quot;</span><span class="fu">,</span> <span class="dt">&quot;folder&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span></span>
-<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;path_hint&quot;</span><span class="fu">:</span> <span class="st">&quot;~/Documents/workspace/steady-thread/...&quot;</span><span class="fu">,</span> <span class="dt">&quot;waiting&quot;</span><span class="fu">:</span> <span class="dv">3</span><span class="fu">,</span> <span class="dt">&quot;total&quot;</span><span class="fu">:</span> <span class="dv">9</span><span class="fu">,</span></span>
-<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;counts_as_of&quot;</span><span class="fu">:</span> <span class="st">&quot;2026-09-28T15:40:00Z&quot;</span><span class="fu">,</span> <span class="dt">&quot;ended&quot;</span><span class="fu">:</span> <span class="kw">false</span><span class="fu">,</span> <span class="dt">&quot;served_url&quot;</span><span class="fu">:</span> <span class="kw">null</span><span class="fu">,</span></span>
-<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;openable&quot;</span><span class="fu">:</span> <span class="st">&quot;yes&quot;</span> <span class="er">|</span> <span class="st">&quot;via-agent&quot;</span> <span class="er">|</span> <span class="st">&quot;missing&quot;</span><span class="fu">,</span> <span class="dt">&quot;starred&quot;</span><span class="fu">:</span> <span class="kw">false</span><span class="fu">,</span></span>
-<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;pending_request&quot;</span><span class="fu">:</span> <span class="kw">null</span><span class="fu">,</span> <span class="dt">&quot;pages&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="fu">{</span> <span class="dt">&quot;title&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;path&quot;</span><span class="fu">:</span> <span class="st">&quot;/...&quot;</span> <span class="fu">}</span><span class="ot">]</span><span class="fu">,</span></span>
-<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;folded_from&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="st">&quot;r_...&quot;</span><span class="ot">,</span> <span class="st">&quot;r_...&quot;</span><span class="ot">]</span></span>
-<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    <span class="fu">}</span><span class="ot">]</span></span>
-<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">}</span><span class="ot">]</span></span>
-<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
-<p><code>openable</code> is <code>via-agent</code> for reviews Open
-cannot restart itself (below). The page does search, the project filter,
-and the "unanswered comments, and starred" section on the client from
-this one response.</p>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;id&quot;</span><span class="fu">:</span> <span class="st">&quot;r_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;title&quot;</span><span class="fu">:</span> <span class="st">&quot;Feature Brief: Coach Activity&quot;</span><span class="fu">,</span> <span class="dt">&quot;display_name&quot;</span><span class="fu">:</span> <span class="st">&quot;Feature Brief: Coach Activity&quot;</span><span class="fu">,</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;file&quot;</span><span class="fu">:</span> <span class="st">&quot;01_brief.md&quot;</span><span class="fu">,</span> <span class="dt">&quot;folder&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;path_hint&quot;</span><span class="fu">:</span> <span class="st">&quot;~/Documents/workspace/steady-thread/...&quot;</span><span class="fu">,</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;last&quot;</span><span class="fu">:</span> <span class="st">&quot;2026-09-28T15:40:00Z&quot;</span><span class="fu">,</span> <span class="dt">&quot;waiting&quot;</span><span class="fu">:</span> <span class="dv">3</span><span class="fu">,</span> <span class="dt">&quot;total&quot;</span><span class="fu">:</span> <span class="dv">9</span><span class="fu">,</span> <span class="dt">&quot;counts_as_of&quot;</span><span class="fu">:</span> <span class="st">&quot;2026-09-28T15:40:00Z&quot;</span><span class="fu">,</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;ended&quot;</span><span class="fu">:</span> <span class="kw">false</span><span class="fu">,</span> <span class="dt">&quot;served_url&quot;</span><span class="fu">:</span> <span class="kw">null</span><span class="fu">,</span></span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;openable&quot;</span><span class="fu">:</span> <span class="st">&quot;yes&quot;</span> <span class="er">|</span> <span class="st">&quot;via-agent&quot;</span> <span class="er">|</span> <span class="st">&quot;missing&quot;</span><span class="fu">,</span> <span class="dt">&quot;kind&quot;</span><span class="fu">:</span> <span class="st">&quot;static&quot;</span> <span class="er">|</span> <span class="st">&quot;dev-server&quot;</span> <span class="er">|</span> <span class="st">&quot;legacy&quot;</span> <span class="er">|</span> <span class="st">&quot;worktree&quot;</span><span class="fu">,</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;starred&quot;</span><span class="fu">:</span> <span class="kw">false</span><span class="fu">,</span> <span class="dt">&quot;unreadable&quot;</span><span class="fu">:</span> <span class="kw">false</span><span class="fu">,</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;request&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;id&quot;</span><span class="fu">:</span> <span class="st">&quot;cq_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;action&quot;</span><span class="fu">:</span> <span class="st">&quot;pickup&quot;</span><span class="fu">,</span> <span class="dt">&quot;at&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;state&quot;</span><span class="fu">:</span> <span class="st">&quot;waiting&quot;</span> <span class="er">|</span> <span class="st">&quot;done&quot;</span> <span class="er">|</span> <span class="st">&quot;refused&quot;</span> <span class="er">|</span> <span class="st">&quot;expired&quot;</span><span class="fu">,</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>                   <span class="dt">&quot;by_name&quot;</span><span class="fu">:</span> <span class="st">&quot;document index&quot;</span><span class="fu">,</span> <span class="dt">&quot;text&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;answered_at&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span> <span class="fu">},</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;pages&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="fu">{</span> <span class="dt">&quot;title&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;path&quot;</span><span class="fu">:</span> <span class="st">&quot;/...&quot;</span> <span class="fu">}</span><span class="ot">]</span><span class="fu">,</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;folded_from&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="st">&quot;r_...&quot;</span><span class="ot">,</span> <span class="st">&quot;r_...&quot;</span><span class="ot">]</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    <span class="fu">}</span><span class="ot">]</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">}</span><span class="ot">]</span></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<p>Rules the reader owns:</p>
+<ul>
+<li><strong><code>display_name</code></strong> is the title. When the
+title is missing, or shared with another row, it is
+<code>folder / file</code>.</li>
+<li><strong><code>last</code></strong> on a review is its newest event
+time; on a session, its newest review's.</li>
+<li><strong><code>projects</code>:</strong> the base name of the git top
+level of each review's target. For a worktree, the owning repository's
+name. No git repository means no project.</li>
+<li><strong><code>openable: yes</code></strong> when
+<code>static_servers.servesPath(...)</code> is true for a recorded
+server of the session. That counts mounts.</li>
+<li><strong><code>kind</code></strong> tells the agent how to re-serve a
+<code>via-agent</code> row.</li>
+<li><strong><code>watching</code></strong> is null or
+<code>{session, name}</code>, taken from the <code>primary</code> field
+of the session's <code>monitor.json</code> heartbeat. So a session
+picked up by another agent names that agent.</li>
+<li><strong><code>attached.watching</code></strong> is false when the
+attached session's monitor is dead. An attach with no session on disk
+behind it reads as no agent.</li>
+<li><strong><code>request</code></strong> is the latest request on that
+review. An answer stays until the next request on the review, or
+<code>ANSWER_SHOWN_MS</code>.</li>
+<li><strong><code>pages[].path</code></strong> is a URL path on the
+review's server. Page rows are informational; they have no Open of their
+own.</li>
+<li><strong><code>unreadable: true</code></strong> marks a row whose
+<code>review.json</code>, <code>meta.json</code>,
+<code>session.json</code> or <code>ss_*.json</code> is corrupt. That row
+degrades; the rest of the list returns.</li>
+<li><strong>Probes:</strong> <code>served_url</code> and
+<code>watching</code> need HTTP probes. The reader runs them in
+parallel, caches each result for one <code>POLL_MS</code>, and skips
+<code>ss_</code> records with <code>stopped_at</code> set.</li>
+<li><strong>Cache:</strong> per file, keyed on modified time plus
+size.</li>
+<li><strong>Never in the list:</strong> comment text, and the
+token.</li>
+</ul>
+<p>The page does search, the project filter, and the "unanswered
+comments, and starred" section on the client from this one response.</p>
+<h3 id="the-drain-section">The drain section</h3>
+<p><code>lahe status</code> adds <code>catalog_requests</code> to its
+summary line, beside <code>ended_reviews</code>. One entry per pending
+request whose <code>for</code> is a drained session:</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span> <span class="dt">&quot;request&quot;</span><span class="fu">:</span> <span class="st">&quot;cq_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;action&quot;</span><span class="fu">:</span> <span class="st">&quot;pickup&quot;</span> <span class="er">|</span> <span class="st">&quot;launch&quot;</span><span class="fu">,</span> <span class="dt">&quot;review&quot;</span><span class="fu">:</span> <span class="st">&quot;r_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;session&quot;</span><span class="fu">:</span> <span class="st">&quot;s_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;kind&quot;</span><span class="fu">:</span> <span class="st">&quot;static&quot;</span> <span class="er">|</span> <span class="st">&quot;dev-server&quot;</span> <span class="er">|</span> <span class="st">&quot;legacy&quot;</span> <span class="er">|</span> <span class="st">&quot;worktree&quot;</span><span class="fu">,</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;moves_with&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="st">&quot;r_...&quot;</span><span class="ot">,</span> <span class="st">&quot;r_...&quot;</span><span class="ot">]</span><span class="fu">,</span> <span class="dt">&quot;at&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;title&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;path&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;candidate&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span> <span class="er">|</span> <span class="kw">null</span><span class="fu">,</span> <span class="dt">&quot;handoff&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span> <span class="fu">}</span></span></code></pre></div>
+<ul>
+<li><code>request</code>, <code>action</code>, <code>review</code>,
+<code>session</code>, <code>kind</code>, <code>moves_with</code> and
+<code>at</code> are ids and helper values.</li>
+<li><code>title</code>, <code>path</code>, <code>candidate</code> and
+<code>handoff</code> are page-derived text. They are declared as data
+fields in <code>PROJECTED_FIELD_CLASS</code> and fenced exactly like
+other page-derived text. A title containing the fence marker or a
+newline cannot break out of the entry.</li>
+<li><code>candidate</code> is the main-repository copy for a worktree
+row. The drain derives it from the recorded root at drain time and
+checks it: under the repository by real path, no hidden segment, owned
+by the current user, a page. A candidate that fails is
+<code>null</code>. The request itself never carries a path.</li>
+<li><code>handoff</code> is the rail's existing hand-off message for the
+document's session (<code>AGENT_LIVENESS.handoffMessage</code>).</li>
+<li><strong>Wake:</strong> a new pending request is work. It gets past
+<code>--quiet</code> and makes <code>lahe monitor</code> exit 0 once per
+request. A per-session <code>catalog-delivered.log</code>, like
+<code>ended-delivered.log</code>, records each delivered request id with
+the session's <code>handoff_rev</code>, so a takeover delivers it
+again.</li>
+<li><strong>Listing:</strong> the non-quiet drain keeps listing a
+request until it is answered or expires.</li>
+</ul>
+<h3 id="the-log-line">The log line</h3>
+<p>The helper writes one line to its log per action, in a format spelled
+once in <code>protocol.js</code>:</p>
+<pre><code>catalog &lt;open|star|unstar|pickup|launch&gt; review=&lt;id&gt; age_days=&lt;n&gt;</code></pre>
+<p><code>age_days</code> is whole days from the review's
+<code>last</code> to the action.</p>
 <h2 id="key-flows">Key Flows</h2>
 <h3 id="open">Open</h3>
 <pre class="mermaid"><code>sequenceDiagram
@@ -1058,14 +1275,14 @@ this one response.</p>
   participant S as Static server
   participant Q as Request queue
   participant A as Attached agent
-  K-&gt;&gt;K: click Open, open a blank tab now (noopener)
-  K-&gt;&gt;H: POST catalog.open {review}
-  H-&gt;&gt;H: token, same-origin, exact Origin; review has a recorded server
-  H-&gt;&gt;S: reopen the session if closed; restart that server (old port if free)
-  H-&gt;&gt;H: register the server&#39;s origin on the review, drop stale loopback ones
-  H--&gt;&gt;K: {url} (loopback http only)
-  K-&gt;&gt;K: point the tab at url
-  H-&gt;&gt;Q: pickup request, only if an agent is attached and none is watching
+  K-&gt;&gt;K: click Open: tab = open about:blank, tab.opener = null
+  K-&gt;&gt;H: POST catalog.open {review, handoff, confirmed}
+  H-&gt;&gt;H: route checks; review has a recorded server
+  H-&gt;&gt;S: reopenForCatalog: reopen the session if closed, restart that server (old port if free)
+  H-&gt;&gt;H: register the new origin, append origin.removed for this server&#39;s old ports
+  H--&gt;&gt;K: {url, request_id, not_asked}
+  K-&gt;&gt;K: url is loopback http? tab.location = url, else close the tab and show why
+  H-&gt;&gt;Q: pickup request, only if handoff and an agent is attached and none is watching
   Q-&gt;&gt;A: shows in the next drain
   A-&gt;&gt;A: lahe session takeover &lt;doc session&gt;, adds it to its monitor
   A-&gt;&gt;Q: lahe library answer: done, &quot;watching &lt;title&gt;&quot;
@@ -1074,41 +1291,87 @@ this one response.</p>
 <li><strong>Already served (R10):</strong> the helper returns the live
 URL and starts nothing.</li>
 <li><strong>Another agent is watching (R12b):</strong> the page asks
-first, naming that agent and the other reviews in its session. "Just
-open it to read" opens with no request.</li>
+first, naming that agent and the other reviews in its session. "Move the
+session" sends <code>handoff: true, confirmed: true</code>. "Just open
+it to read" sends <code>handoff: false</code> and queues nothing. The
+helper refuses an unconfirmed hand-over on a watched session with
+<code>PROTO_CONFIRM_NEEDED</code>.</li>
 <li><strong>No agent attached (R14):</strong> Open still opens and
-reads. No request is queued. The document's rail shows its existing "no
-agent listening" state and its existing hand-off message. The rail never
-carries the Library token.</li>
+reads, with <code>not_asked: "no_agent"</code>. The document's rail
+shows its existing "no agent listening" state and its existing hand-off
+message. The rail never carries the Library token.</li>
+<li><strong>Queue full:</strong> Open still opens, with
+<code>not_asked: "queue_full"</code>, and the row says no agent was
+asked.</li>
 <li><strong>What Open can restart itself:</strong> a review whose
-session has an <code>ss_*.json</code> record whose root contains the
-review's page. That record was written by <code>lahe review</code> or
-the helper, never by a page, so Open serves nothing new. Everything else
-is <code>via-agent</code>: its Open button queues a pick-up and the
-agent re-serves it with <code>lahe review</code>. That covers dev-server
-reviews, legacy <code>lahe add</code> script-line reviews, and the
-worktree fallback.</li>
+session has an <code>ss_*.json</code> record that serves the review's
+page. That record was written by <code>lahe review</code> or the helper,
+never by a page, so Open serves nothing new. Everything else is
+<code>via-agent</code>: its Open queues a pick-up and the agent
+re-serves it. With no agent attached, a <code>via-agent</code> Open is
+disabled and offers the hand-off message; the helper refuses it with
+<code>PROTO_NO_AGENT</code>. By <code>kind</code>:
+<ul>
+<li><strong>dev-server:</strong> the agent answers <code>refused</code>:
+"Start the dev server at <code>&lt;origin&gt;</code>, then ask me
+again."</li>
+<li><strong>legacy</strong> (<code>lahe add</code> script-line reviews,
+recovered as session "legacy"): there is no session to take over, so the
+agent runs <code>lahe review &lt;path&gt;</code> in its own
+session.</li>
+<li><strong>worktree:</strong> see below.</li>
+</ul></li>
 <li><strong>Worktree fallback (R9):</strong> when the recorded root is
 gone and sits under
 <code>&lt;repo&gt;/.claude/worktrees/&lt;name&gt;/</code>, the row says
-"the worktree is gone; an agent will open the main-repo copy". The
-pick-up request carries the candidate path, checked by the helper: under
-the repo by real path, no hidden segment, owned by Ken, a page. The
-agent serves it with <code>lahe review</code>, so the path goes through
-the CLI's own checks.</li>
+"The worktree is gone. An agent will open the main repository's copy,
+which may differ from what you reviewed." The request carries only the
+review id. The drain derives and checks the candidate (see the drain
+section). The agent serves it with <code>lahe review</code>, so the path
+goes through the CLI's own checks.</li>
+<li><strong>Missing:</strong> Open is refused with
+<code>PROTO_NOT_OPENABLE</code>, reason <code>missing</code>.</li>
 <li><strong>Folded rows:</strong> Open targets the newest review in the
 fold.</li>
 </ul>
+<h3 id="stale-origins">Stale origins</h3>
+<p>On a new port, the helper registers
+<code>http://127.0.0.1:&lt;new&gt;</code> and
+<code>http://localhost:&lt;new&gt;</code> on the review. It then appends
+<code>origin.removed</code> for the loopback origins of this same
+<code>ss_</code> server's earlier ports, and only those. It never
+removes a non-loopback origin, a dev-server origin, or an origin from
+another server.</p>
 <h3 id="star">Star</h3>
 <p><code>POST catalog.star {review, starred}</code>. The helper writes
-<code>catalog.json</code> and answers. No agent.</p>
+<code>catalog.json</code> and answers. The row changes when the answer
+comes back. A failed star puts the row back and says why. No agent.</p>
 <h3 id="launch-a-new-agent">Launch a new agent</h3>
-<p>Queues a <code>launch</code> request. The attached agent opens a new
-Terminal window running its own host's command line (<code>claude</code>
-for Claude Code, <code>codex</code> for Codex) with the takeover prompt,
-then answers with where it launched. A host with no command line answers
-<code>refused</code> with the paste-in hand-off message. The new session
-is named after the document (R13).</p>
+<p>Queues a <code>launch</code> request. The attached agent reads it in
+its drain, then:</p>
+<ol type="1">
+<li><strong>macOS, host with a command line</strong>
+(<code>claude</code> for Claude Code, <code>codex</code> for Codex):
+<ol type="1">
+<li>Names the document's session with
+<code>lahe session name &lt;session&gt; --from-review &lt;review&gt;</code>.
+The CLI reads the display name itself, so the title never passes through
+a shell.</li>
+<li>Runs <code>osascript</code> with the script from the skill. It
+passes the host command and the drain's <code>handoff</code> message as
+separate arguments. The script opens a new Terminal window and builds
+the command with <code>quoted form of</code>, so the message reaches the
+host as one argument.</li>
+<li>Answers <code>done</code>: "Launched <host> in a new Terminal
+window."</li>
+</ol></li>
+<li><strong>Linux, Windows, or a host with no command line:</strong>
+answers <code>refused</code>: "I can't open a terminal here. Copy the
+hand-off message and paste it into a new agent." The page shows the
+hand-off copy button on that row.</li>
+</ol>
+<p>The new agent follows the hand-off message: it takes the session over
+and starts watching.</p>
 <h3 id="reaching-the-library">Reaching the Library</h3>
 <pre class="mermaid"><code>flowchart TD
   C[&quot;Ken: open the lahe library&quot;] --&gt; L[&quot;agent: lahe library --session its-id&quot;]
@@ -1116,19 +1379,70 @@ is named after the document (R13).</p>
   H1 --&gt;|&quot;no&quot;| St[&quot;start it&quot;]
   H1 --&gt;|&quot;yes&quot;| At[&quot;write catalog-attach.json&quot;]
   St --&gt; At
-  At --&gt; P[&quot;print http://127.0.0.1:7817/catalog&quot;]
-  P --&gt; M[&quot;agent arms its monitor as usual&quot;]</code></pre>
+  At --&gt; P[&quot;print the helper&#39;s own origin + /catalog&quot;]
+  P --&gt; O[&quot;agent runs open on the URL&quot;]
+  O --&gt; M[&quot;agent arms its monitor as usual&quot;]</code></pre>
+<ul>
+<li><code>lahe library</code> prints the URL; it never opens a browser.
+The skill tells the agent to run <code>open</code>.</li>
+<li>The URL uses the helper's actual origin, read from
+<code>service.json</code>, so <code>--port</code> is honored.</li>
+<li>With no <code>--session</code>, it leaves the attach as it is and
+prints who is attached.</li>
+<li><code>--json</code> prints
+<code>{url, attached, helper_started}</code>.</li>
+<li><code>lahe library answer &lt;request-id&gt; --session &lt;id&gt; --status done|refused --text "..."</code>
+refuses:
+<ul>
+<li>an unknown id (<code>BAD_USAGE</code>)</li>
+<li>a request whose <code>for</code> is not <code>--session</code></li>
+<li>an expired request</li>
+<li>a second answer, printing the first one</li>
+<li>text over <code>ANSWER_TEXT_MAX</code></li>
+</ul></li>
+</ul>
+<h3 id="watching-several-sessions">Watching several sessions</h3>
+<p><code>lahe monitor --session a --session b</code>:</p>
+<ul>
+<li>writes a heartbeat into every watched session's
+<code>monitor.json</code>, with <code>primary</code> naming the first
+<code>--session</code></li>
+<li>exits 0 on work in any of them</li>
+<li>on a closed or taken-over session, prints a line and drops it from
+the watch set</li>
+<li>exits with that session's code only when no session is left</li>
+</ul>
 <h3 id="helper-lifetime-r10a">Helper lifetime (R10a)</h3>
-<p>The page polls <code>catalog.list</code> every 15 seconds whether or
-not its tab is visible, and the helper keeps the last poll time in
-memory. <code>lahe session close</code> on the last open session asks
-the helper for that time (through <code>health</code>) and leaves the
-helper running if the Library polled in the last two minutes or any
-document window is still held. There is no self-stop timer: the helper
-then stops at the next close that finds everything quiet, or at a
-restart. A session the Library reopened with no agent is closed again by
-the helper once none of its windows has been held for 30 minutes and no
-agent took it over, so reopened sessions do not pile up.</p>
+<ul>
+<li><p>The page polls <code>catalog.list</code> every
+<code>POLL_MS</code>, whether or not its tab is visible. Only an
+authenticated <code>catalog.list</code> updates the last poll time; a
+refused one does not.</p></li>
+<li><p><code>lahe session close</code> on the last open session reads
+<code>catalog_seen_at</code> from <code>health</code>. It leaves the
+helper running if the Library polled within
+<code>LIBRARY_SEEN_MS</code>, or if any document window is still held.
+There is no self-stop timer: the helper stops at the next close that
+finds everything quiet, or at a restart.</p></li>
+<li><p><strong>Reopened-session sweep:</strong>
+<code>sweepReopened(now)</code> runs on a helper timer every
+<code>POLL_MS</code>. It closes (with <code>closeQuiet</code>) a session
+in the <code>reopened</code> map once none of its windows has been held
+for <code>REOPENED_AUTOCLOSE_MS</code>. It leaves alone:</p>
+<ul>
+<li>a session reopened with <code>lahe session reopen</code> (it is not
+in the map)</li>
+<li>a session taken over since (its <code>handoff_rev</code> moved past
+the recorded one)</li>
+<li>a session whose monitor is live</li>
+</ul>
+<p>After a close, it clears the session's <code>reopened</code>
+entry.</p></li>
+<li><p><strong>After a helper restart,</strong> the old token is
+refused. On <code>PROTO_UNAUTHORIZED</code> the page stops polling and
+shows "LAHE restarted, reload this page." Reloading fetches a fresh
+token.</p></li>
+</ul>
 <h2 id="alternatives-considered">Alternatives Considered</h2>
 <ul>
 <li><strong>The Library as an ordinary LAHE review (crucible Approach
@@ -1156,94 +1470,215 @@ Only an agent that will watch should take a session over.</li>
 helper would serve a path it never served, from a record any page can
 edit. Handing it to an agent sends the path through the CLI's checks
 instead.</li>
+<li><strong>Counting a Library poll as a live holder when the CLI
+replaces a stale helper.</strong> The Library polls for as long as its
+tab is open, so it would block every helper upgrade. The page's reload
+message covers the restart instead.</li>
 <li><strong>Launch from the page directly (brief Open Question
 5).</strong> Deferred, see Open Questions.</li>
 </ul>
 <h2 id="failure-modes--edge-cases">Failure Modes / Edge Cases</h2>
 <ul>
 <li><strong>Old per-page reviews (R5).</strong> Within one session,
-reviews created before 2026-09-17 whose targets are single HTML files in
-the same folder fold into one row titled from the folder. Nothing on
-disk changes.</li>
+reviews created before <code>FOLD_CUTOFF</code> whose targets are single
+HTML files in the same folder fold into one row titled from the folder.
+The fold sums <code>waiting</code> and <code>total</code>, and shows a
+star if any folded review is starred. Nothing on disk changes.</li>
 <li><strong>No <code>review.json</code>, or a stale one.</strong> A
 review that never recorded a title shows its file name (R2). When a
 review's <code>events.jsonl</code> is newer than its
-<code>review.json</code> and small enough, the reader re-projects that
-one review; otherwise it shows the counts with their
-<code>counts_as_of</code> time. It never folds a large log to fill a
-row.</li>
+<code>review.json</code> and under <code>REPROJECT_MAX_BYTES</code>, the
+reader re-projects that one review. Otherwise it shows the counts with
+their <code>counts_as_of</code> time. It never reads a log over the
+limit.</li>
 <li><strong>Double click (R12c).</strong> One pending request per
-review. The page disables the button and shows "waiting for
-<agent>".</li>
-<li><strong>Pending requests are capped</strong> at five across the
-Library, so a leaked token cannot queue a launch for every review.</li>
+review. The page disables the button and shows "Waiting for <agent>". A
+second request is refused with <code>PROTO_REQUEST_PENDING</code>.</li>
+<li><strong>Pending requests are capped</strong> at
+<code>QUEUE_CAP</code> across the Library
+(<code>PROTO_QUEUE_FULL</code>), so a leaked token cannot queue a launch
+for every review.</li>
 <li><strong>Attached agent goes away.</strong> The page shows the
-no-agent state on its next poll. Pending requests for that agent
-expire.</li>
+no-agent state on its next poll. Pending requests for that agent expire.
+Open and request return the no-agent result.</li>
 <li><strong>Two agents ran <code>lahe library</code>.</strong> The last
 one is attached, and the page names it before any click.</li>
+<li><strong>Corrupt files.</strong> One corrupt file degrades only its
+own row. A corrupt <code>catalog.json</code> is left as it is and
+refuses stars.</li>
 </ul>
 <h2 id="security--privacy-notes">Security &amp; Privacy Notes</h2>
 <p>This amends D11: one new credential, the Library token, that can
 list, open (restart recorded servers only), star, and queue a request.
 It cannot post to a review, read comment text, or name a file to
 serve.</p>
+<p><strong>Checks by route.</strong> The page is loaded by navigation
+and its assets by <code>&lt;script&gt;</code> and
+<code>&lt;link&gt;</code>, so neither can carry a header. The page
+carries the token; its script sends it on every API call.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Route</th>
+<th>Method</th>
+<th>Host</th>
+<th><code>Sec-Fetch-Site</code></th>
+<th>Client header <code>catalog</code> + token</th>
+<th>JSON body</th>
+<th>Origin</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>catalog.page</code></td>
+<td>GET</td>
+<td>helper's own</td>
+<td><code>none</code> or <code>same-origin</code></td>
+<td>not required</td>
+<td>no</td>
+<td>not read</td>
+</tr>
+<tr>
+<td><code>catalog.asset</code></td>
+<td>GET</td>
+<td>helper's own</td>
+<td><code>none</code> or <code>same-origin</code></td>
+<td>not required</td>
+<td>no</td>
+<td>not read</td>
+</tr>
+<tr>
+<td><code>catalog.list</code></td>
+<td>GET</td>
+<td>helper's own</td>
+<td>exactly <code>same-origin</code></td>
+<td>required</td>
+<td>no</td>
+<td>not read</td>
+</tr>
+<tr>
+<td><code>catalog.open</code>, <code>catalog.star</code>,
+<code>catalog.request</code></td>
+<td>POST</td>
+<td>helper's own</td>
+<td>exactly <code>same-origin</code></td>
+<td>required</td>
+<td>required</td>
+<td>exactly <code>http://</code> + the request's Host</td>
+</tr>
+</tbody>
+</table></div>
 <ul>
-<li><strong>Serving the page:</strong> no CORS headers on any catalog
-route, <code>Content-Security-Policy</code> with
+<li><p><strong>Host</strong> is <code>127.0.0.1:&lt;port&gt;</code> or
+<code>localhost:&lt;port&gt;</code> at the helper's actual port. A wrong
+Host is refused on every row, because the page carries the token and a
+DNS-rebinding page must not read it.</p></li>
+<li><p><strong><code>Sec-Fetch-Site: same-site</code> is refused on the
+API routes.</strong> A document under review on another loopback port
+sends <code>same-site</code>, and it is the page most likely to run a
+script Ken did not write. A missing <code>Sec-Fetch-Site</code> is
+refused too.</p></li>
+<li><p><strong>Error codes:</strong></p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Code</th>
+<th>Status</th>
+<th>When</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PROTO_CROSS_SITE</code></td>
+<td>403</td>
+<td><code>Sec-Fetch-Site</code> check fails</td>
+</tr>
+<tr>
+<td><code>PROTO_NOT_OPENABLE</code></td>
+<td>409</td>
+<td>Open on a missing row or one with no recorded server; carries a
+<code>reason</code></td>
+</tr>
+<tr>
+<td><code>PROTO_REQUEST_PENDING</code></td>
+<td>409</td>
+<td>the review already has a pending request</td>
+</tr>
+<tr>
+<td><code>PROTO_QUEUE_FULL</code></td>
+<td>429</td>
+<td><code>QUEUE_CAP</code> reached</td>
+</tr>
+<tr>
+<td><code>PROTO_NO_AGENT</code></td>
+<td>409</td>
+<td>no attached agent, or its monitor is dead</td>
+</tr>
+<tr>
+<td><code>PROTO_CONFIRM_NEEDED</code></td>
+<td>409</td>
+<td>a hand-over on a watched session without <code>confirmed</code></td>
+</tr>
+<tr>
+<td><code>PROTO_CATALOG_UNREADABLE</code></td>
+<td>500</td>
+<td><code>catalog.json</code> is corrupt</td>
+</tr>
+</tbody>
+</table></div>
+<p>Each code has a remedy line in <code>protocol.js</code>, and the page
+shows that remedy.</p></li>
+<li><p><strong>Serving the page:</strong> no CORS headers on any catalog
+route. <code>Content-Security-Policy</code> with
 <code>script-src 'self'</code> and <code>frame-ancestors 'none'</code>,
 <code>X-Frame-Options: DENY</code>,
-<code>Referrer-Policy: no-referrer</code>. The script is a separate
-file, never inline.</li>
-<li><strong>Every catalog request</strong> needs the Host check,
-<code>Sec-Fetch-Site: same-origin</code>, the custom header, and the
-token. POSTs also need JSON and an Origin exactly equal to the helper's
-own. The preflight handler never approves a catalog route.</li>
-<li><strong>The page renders page-derived text</strong> (titles, file
-names) with <code>textContent</code> only.</li>
-<li><strong>Open</strong> only accepts a loopback <code>http:</code> URL
-back from the helper, and opens it with no opener.</li>
-<li><strong>Files Open or a fallback serve</strong> must be owned by the
-current user.</li>
-<li><strong>Static servers get the Host check</strong> (board row
+<code>Referrer-Policy: no-referrer</code>,
+<code>Cache-Control: no-store</code>.</p></li>
+<li><p><strong>The token</strong> sits in a
+<code>&lt;meta name="lahe-catalog-token"&gt;</code> tag, since
+<code>script-src 'self'</code> forbids an inline script. Header names,
+route paths and constants come from <code>protocol.js</code>, which
+<code>catalog.asset</code> serves beside the page script.</p></li>
+<li><p><strong><code>catalog.asset</code></strong> serves a fixed
+allowlist and nothing else: <code>protocol.js</code>,
+<code>catalog/page.js</code>, <code>catalog/view_model.js</code>, the
+style bundle, and the fonts. Any other name, including <code>../</code>,
+an encoded <code>%2e%2e%2f</code>, or an absolute path, gets a 404 with
+no file bytes.</p></li>
+<li><p>The preflight handler never approves a catalog route.</p></li>
+<li><p><strong>The page renders page-derived text</strong> (titles, file
+names, answers) with <code>textContent</code> only.</p></li>
+<li><p><strong>Open</strong> opens <code>about:blank</code>, sets
+<code>opener</code> to null before any await, and then navigates only to
+a loopback <code>http:</code> URL from the helper.</p></li>
+<li><p><strong>Files Open or a fallback serve</strong> must be owned by
+the current user.</p></li>
+<li><p><strong>Static servers get the Host check</strong> (board row
 LAHE-static-server-host-check), since the Library keeps more of them
-running.</li>
-<li><strong>Launching is only through an agent in v1,</strong> which
-runs in its normal permission mode.</li>
+running.</p></li>
+<li><p><strong>Launching is only through an agent in v1,</strong> which
+runs in its normal permission mode. Page-derived text never goes into a
+shell string.</p></li>
 </ul>
 <h2 id="test-strategy">Test Strategy</h2>
+<p>The plan's Test List is the full list. The shape:</p>
 <ul>
-<li><strong>Unit:</strong>
-<ul>
-<li>the reader: grouping, folding, fallback titles, missing and worktree
-rows, <code>openable</code>, counts freshness</li>
-<li>each catalog route refuses a wrong Host, missing header, wrong
-content type, foreign Origin, cross-site <code>Sec-Fetch-Site</code>,
-and a wrong token</li>
-<li>a review token cannot call a catalog route, and the Library token
-cannot call a review route</li>
-<li>the page response carries no CORS header and does carry the frame
-and script policies</li>
-<li>Open refuses a review with no recorded server and never serves a
-path outside a recorded root</li>
-<li>a restarted server's origin is registered and stale loopback origins
-are dropped</li>
-<li>request queue: ids only, one pending per review, the cap, expiry on
-detach and on dead monitor</li>
-<li>the drain prints <code>catalog_requests</code> with the title fenced
-as data</li>
-<li><code>lahe monitor</code> with two <code>--session</code> flags
-wakes on either</li>
-<li>helper lifetime: the last close with a recent Library poll leaves
-the helper up</li>
-<li>static servers refuse a foreign Host</li>
-</ul></li>
-<li><strong>Browser, one named spec:</strong> open the Library, Open a
-closed review, land on the document with its rail, post a comment, then
-see a stub agent's answer on the row. Screenshots in light and
-dark.</li>
+<li><strong>Unit, <code>node:test</code>:</strong> the reader against a
+committed fixture state dir, with every modified time set explicitly;
+the route checks as a matrix; the queue and drain with an injected
+<code>now</code>; the monitor with several sessions; helper lifetime and
+the sweep with an injected <code>now</code>; the view model for every
+page state; the log line and the count script.</li>
+<li><strong>Browser:</strong> the page's DOM (text rendering, the new
+tab, the confirm step, restart recovery); one end-to-end spec with a
+stub agent that uses the real CLI; and a cross-site spec on all three
+lanes that sends each action from another origin and from another
+loopback port.</li>
 <li><strong>Contract copies</strong> stay identical, checked by the
 existing review-format test.</li>
+<li><strong>Manual, recorded on the progress page:</strong> a real agent
+walk of Pick this up and Launch, and a background-tab check in Chrome
+and Safari.</li>
 </ul>
 <h2 id="open-questions">Open Questions</h2>
 <ol type="1">
@@ -1405,6 +1840,128 @@ with the message</td>
 <td><span class="accepted">Accepted</span></td>
 <td>In <code>docs/CONTRACTS.md</code></td>
 </tr>
+<tr>
+<td>Plan CR RF3</td>
+<td>Stale origins had no mechanism or rule (plan review back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>origin.removed</code> event; <code>ss_</code> port history;
+only that server's old loopback origins</td>
+</tr>
+<tr>
+<td>Plan CR RF4</td>
+<td>Drain section had no contract (plan review back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>New "The drain section" subsection: entry shape, field classes, wake
+once, listed until answered</td>
+</tr>
+<tr>
+<td>Plan CR RF5</td>
+<td>Request lifecycle had no data (plan review back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>request</code> field with states; <code>expired</code> line;
+answers shown 24 hours; request body with <code>confirmed</code>;
+queue-full Open</td>
+</tr>
+<tr>
+<td>Plan CR RF6, RF7</td>
+<td><code>lahe library</code> and <code>lahe library answer</code>
+under-specified (plan review back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Prints the URL, agent runs <code>open</code>; <code>--session</code>
+on answer; refusals listed</td>
+</tr>
+<tr>
+<td>Plan CR RF8</td>
+<td>Multi-session monitor and "who is watching" (plan review
+back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>New "Watching several sessions"; <code>watching</code> is
+<code>{session, name}</code> from <code>primary</code></td>
+</tr>
+<tr>
+<td>Plan CR RF9</td>
+<td>Helper restart kills an open Library (plan review back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Page shows a reload message; counting the Library as a holder
+rejected, listed under Alternatives</td>
+</tr>
+<tr>
+<td>Plan CR RF12</td>
+<td>List lacked <code>last</code>, <code>display_name</code>, project
+rule (plan review back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Rules the reader owns, listed under the response</td>
+</tr>
+<tr>
+<td>Plan CR RF13</td>
+<td>Open on via-agent, legacy, dev-server rows (plan review
+back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Per-<code>kind</code> handling in the Open flow</td>
+</tr>
+<tr>
+<td>Plan CR RF14</td>
+<td>Launch contract was prose (plan review back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Numbered Launch steps; <code>session name --from-review</code>; argv
+only</td>
+</tr>
+<tr>
+<td>Plan CR RF15</td>
+<td>Helper-side reopen and close unassigned (plan review
+back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>reopenForCatalog</code>, <code>closeQuiet</code>, preferred
+port, <code>reopened</code> stores <code>handoff_rev</code></td>
+</tr>
+<tr>
+<td>Plan CR RF17</td>
+<td>Unnamed constants and two cutoff dates (plan review back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Constants table in <code>protocol.CATALOG</code>; cutoff pinned as a
+UTC instant</td>
+</tr>
+<tr>
+<td>Plan CR RF22</td>
+<td>What <code>catalog.asset</code> serves (plan review back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Fixed allowlist, raw from <code>src/</code>, manifest list
+<code>CATALOG_PAGE</code></td>
+</tr>
+<tr>
+<td>Plan CR RF24</td>
+<td>Every poll probes every server (plan review back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Parallel probes cached for one poll; stopped records skipped</td>
+</tr>
+<tr>
+<td>Plan Testing RF1</td>
+<td>Time checks had no controlled clock (plan review back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Every expiry and freshness check takes <code>now</code></td>
+</tr>
+<tr>
+<td>Plan Testing RF6</td>
+<td>Auto-close exemptions and trigger (plan review back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>sweepReopened(now)</code> on a timer; three exemptions; only
+authenticated list updates the poll time</td>
+</tr>
+<tr>
+<td>Plan Testing RF9</td>
+<td>One corrupt file takes down the list (plan review back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Row-level <code>unreadable</code>; corrupt <code>catalog.json</code>
+refuses stars</td>
+</tr>
+<tr>
+<td>Plan EM RF6</td>
+<td>Worktree candidate contradicted "ids only" (plan review
+back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Request holds the review id; the drain derives and checks the
+candidate</td>
+</tr>
 </tbody>
 </table></div>
 <h2 id="security-review">Security Review</h2>
@@ -1511,6 +2068,50 @@ preflight approval</td>
 <td>Direct launch needs its own design</td>
 <td><span class="deferred">Deferred</span></td>
 <td>Open Question 1</td>
+</tr>
+<tr>
+<td>Plan CR RF1, Testing RF2</td>
+<td>The page could not pass its own route checks; <code>same-site</code>
+was allowed (plan review back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Per-route check table; page and asset need no header; API routes
+need exactly <code>same-origin</code></td>
+</tr>
+<tr>
+<td>Plan CR RF2, Testing RF16</td>
+<td>A <code>noopener</code> tab cannot be navigated later (plan review
+back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>about:blank</code>, <code>opener = null</code>, then navigate
+to a checked loopback URL</td>
+</tr>
+<tr>
+<td>Plan CR RF10</td>
+<td>Error codes, client value and exact Origin unnamed (plan review
+back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Codes table; client <code>catalog</code>; Origin equals
+<code>http://</code> + Host</td>
+</tr>
+<tr>
+<td>Plan EM RF14, Testing RF13</td>
+<td>Static server Host set unstated (plan review back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>127.0.0.1</code> and <code>localhost</code> at its own port;
+every path checked</td>
+</tr>
+<tr>
+<td>Plan Testing RF17</td>
+<td><code>catalog.asset</code> path escape (plan review back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Fixed allowlist; everything else 404 with no bytes</td>
+</tr>
+<tr>
+<td>Plan Testing RF20</td>
+<td>List must not carry comment text or the token (plan review
+back-patch)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Stated as a reader rule</td>
 </tr>
 </tbody>
 </table></div>

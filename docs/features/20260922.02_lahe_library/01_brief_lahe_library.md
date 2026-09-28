@@ -58,7 +58,7 @@ The key design question, for the wireframe: **what is one row?** A document, a r
 
 ## Solution Outline
 
-1. Ken asks any agent to "open the lahe library." The agent runs one command. It starts LAHE if needed and opens the Library in the browser.
+1. Ken asks any agent to "open the lahe library." The agent runs one command, which starts LAHE if needed and prints the Library's address. The agent then opens it in the browser.
 2. The Library lists every past document, newest first. The wireframe decides how the page handles that many rows.
 3. Each row shows:
    - a name Ken would recognize
@@ -98,7 +98,7 @@ The key design question, for the wireframe: **what is one row?** A document, a r
 :::
 
 ::: callout-req
-**R4.** The Library keeps a week's volume (100 or more documents at Ken's pace) findable without typing a search. The grouping and default view are settled in the wireframe.
+**R4.** The Library keeps a week's volume (100 or more documents at Ken's pace) findable without typing a search. The default view shows agent sessions active in the last 7 days open, and older ones collapsed.
 :::
 
 ::: callout-req
@@ -106,7 +106,7 @@ The key design question, for the wireframe: **what is one row?** A document, a r
 :::
 
 ::: callout-req
-**R5.** Before Sep 16, LAHE wrongly gave each page in a folder its own review. The Library shows those old reviews together, the way LAHE records a folder today.
+**R5.** Before Sep 17, 2026, LAHE wrongly gave each page in a folder its own review. The Library shows those old reviews together, the way LAHE records a folder today.
 :::
 
 ::: callout-req
@@ -209,7 +209,7 @@ Agents act on two of the Library's buttons.
 - Ken closes LAHE tabs freely. After two weeks of use, he reports no longer keeping tabs open to hold documents.
 - After a restart, Ken gets any document back with one request to an agent and one click.
 - Given a description of any document from the past week, Ken finds it without typing a search.
-- After two weeks, a script over LAHE's log reports Opens per working day, and how many of them were documents older than the default view. If Opens per working day stay near zero, the Library is not replacing tabs.
+- After two weeks, a script over LAHE's log reports Opens per working day, and how many of them were documents older than the default view (7 days). If Opens per working day stay near zero, the Library is not replacing tabs.
 :::
 
 ## UX Notes
@@ -237,6 +237,8 @@ No flag. The Library reads records that already exist, so it works on the full h
 
 ::: callout-question
 2. How does the default view keep the volume manageable (a recent window, grouping by day, collapsing)? Settled in the wireframe.
+
+   **Answer:** sessions active in the last 7 days are open, older ones collapsed, with unanswered and starred documents on top (R4, a week findable without search).
 :::
 
 ::: callout-question
@@ -262,7 +264,7 @@ No flag. The Library reads records that already exist, so it works on the full h
 | RF5 | Comments on an unwatched document reach nobody silently | Accepted | R10b; story reworded |
 | RF6 | "Open right now" is ambiguous | Accepted | R3 now has two signals: served, and agent watching |
 | RF7 | No click feedback; double click launches twice | Accepted | R12c |
-| RF8 | "The page never starts a program" is missing | Accepted | Added as a non-goal; R14 answers the no-agent case |
+| RF8 | "The page never starts a program" is missing | Accepted | Ken removed that non-goal; Open Question 5 explores direct launch instead. R14 answers the no-agent case |
 | RF9 | AI Behavior presumes the Library has a rail | Accepted | Reworded at product level |
 | RF10 | Metrics disagree with R4; one is a test | Accepted | R4 now covers a week; cross-origin test moved to R18; log-counted metric added |
 | RF11 | No story for "stop feeling buried" | Accepted | New story and R4a |
@@ -273,3 +275,8 @@ No flag. The Library reads records that already exist, so it works on the full h
 | RF16 | Rollout compatibility note is build detail | Accepted | Cut |
 | RF17 | Search leaves out session name | Accepted | R6 covers everything a row shows |
 | Arch | Rail must never carry the Library's key (architecture security review RF10) | Accepted | R10b: the rail offers its existing hand-off message; Pick this up stays on the Library |
+| Plan CR RF7 | `lahe library` printed or opened the URL, unclear (plan review back-patch) | Accepted | Solution Outline 1: the command prints the address; the agent opens it |
+| Plan CR RF11 | Default view lived only in the wireframe (plan review back-patch) | Accepted | R4 states the rule: last 7 days open, older collapsed |
+| Plan CR RF17 | R5's date disagreed with the architecture (plan review back-patch) | Accepted | Both say before Sep 17, 2026 |
+| Plan CR RF19 | "Older than the default view" was undefined (plan review back-patch) | Accepted | Success metric says 7 days, matching R4 and the count script |
+| Plan CR RF25 | This table claimed a non-goal the brief does not have (plan review back-patch) | Accepted | RF8 row corrected |
