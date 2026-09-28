@@ -10,11 +10,11 @@ when behavior changes, change both.
 
 | File | What it shows | Lives with |
 | --- | --- | --- |
-| `system_overview.md` | The four things that exist and what talks to what: the browser running the library, the session-owned static server, the helper, the store on disk, and the agent | `README.md`, `skills/lahe/SKILL.md` |
-| `module_map.md` | The four folders under `src/`, which way dependencies point, and why `layer/` is an ordered list rather than a cloud | `CLAUDE.md`, Directory layout |
+| `system_overview.md` | What exists and what talks to what: the browser running the library, the session-owned static server, the helper, the store on disk, the Library page with its request queue, and the agent | `README.md`, `skills/lahe/SKILL.md` |
+| `module_map.md` | The four folders under `src/`, which way dependencies point, why `layer/` is an ordered list rather than a cloud, and the Library page's own `CATALOG_PAGE` list | `CLAUDE.md`, Directory layout |
 | `item_lifecycle.md` | The four states an item can be in, with the actor on every transition | `docs/CONTRACTS.md` |
 | `review_round_trip.md` | One comment end to end: a shared spine, then a labeled fan for the agent's half | `skills/lahe/SKILL.md`, How to use it |
-| `session_ownership.md` | What an agent session owns, the immutable-owner rule, and what takeover does | `skills/lahe/SKILL.md`, Sessions; `docs/ongoing/SESSION_OWNERSHIP.md` |
+| `session_ownership.md` | What an agent session owns, the immutable-owner rule, what takeover does, the hand-over from the Library through its request queue, and when the helper stops (plus the reopened-session sweep) | `skills/lahe/SKILL.md`, Sessions; `docs/ongoing/SESSION_OWNERSHIP.md` |
 | `agent_workflow.md` | The agent's loop with commands on the arrows, plus the wake channel and its exit codes | `skills/lahe/SKILL.md`, `docs/CLI.md` |
 | `finding_the_region.md` | How a saved comment finds its spot on the page again, as a ladder ending in an honest refusal | architecture D9 |
 | `replay_branches.md` | The four-way compare after a repaint, and what each outcome does | architecture D7 |
