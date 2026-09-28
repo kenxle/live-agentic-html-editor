@@ -45,6 +45,7 @@ var authModule = require("./auth.js");
 var routes = require("./routes.js");
 var projection = require("./projection.js");
 var agentSessionsModule = require("./agent_sessions.js");
+var catalogPage = require("./catalog_page.js");
 
 // Read from package.json rather than restated here, so the version the helper
 // reports cannot drift from the version the repo ships.
@@ -181,7 +182,11 @@ async function serve(options) {
   // this every replacement threw the reviewer's open page out of its own review
   // (see the session table note in reviews.js).
   reviews.loadSessions();
-  var auth = authModule.createAuth({ log: log, reviews: reviews });
+  // The Library token (the D11 amendment), minted in memory for this helper's
+  // life only. Its port is filled in once the listener is bound, and until then
+  // every catalog request fails the Host check.
+  var catalog = authModule.createCatalogState();
+  var auth = authModule.createAuth({ log: log, reviews: reviews, catalog: catalog });
   // Created here rather than down with the rest of `deps` (below) because the
   // review-creation loop right after this needs it too: a review named on the
   // command line can also name the agent session that owns it (opts.reviewSessions,
@@ -223,6 +228,7 @@ async function serve(options) {
     // used to be things the reviewer could only get by asking the agent.
     agentSessions: agentSessions,
     library: loadLibrary(),
+    catalog: catalog,
     version: VERSION,
     startedAt: startedAt
   };
@@ -275,6 +281,26 @@ async function serve(options) {
     res.end(raw.text);
   }
 
+  // Every catalog response, refusals included: the page's policies, and no CORS
+  // header of any kind. The Library is same-origin only.
+  function respondCatalog(res, status, contentType, bytes, requestId) {
+    var headers = catalogPage.securityHeaders();
+    headers["Content-Type"] = contentType;
+    if (requestId) headers[protocol.HEADER.REQUEST_ID] = requestId;
+    res.writeHead(status, headers);
+    res.end(bytes);
+  }
+
+  function respondCatalogJson(res, status, body, requestId) {
+    respondCatalog(
+      res,
+      status,
+      protocol.JSON_CONTENT_TYPE,
+      body === null || body === undefined ? "" : JSON.stringify(body),
+      requestId
+    );
+  }
+
   /** Every origin any review has registered, for the preflight answer. */
   function anyReviewRegistered(origin) {
     if (!origin) return false;
@@ -295,6 +321,22 @@ async function serve(options) {
     // origin. It grants the browser permission to SEND the real request; the
     // real request is then checked in full, which is where a refusal happens.
     if (req.method === "OPTIONS") {
+      // The preflight never approves a catalog route, whatever origin asks. The
+      // Library's own page is same-origin and never preflights; anything that
+      // does is another page, including a document on another loopback port
+      // whose origin a review registered.
+      if (routes.isCatalogPath(req.url)) {
+        log.helperLog(
+          "refused preflight: catalog path, origin " + JSON.stringify(effectiveOrigin.slice(0, 200)) + " [request " + requestId + "]"
+        );
+        respondCatalogJson(
+          res,
+          protocol.statusFor("PROTO_CROSS_SITE"),
+          protocol.errorBody("PROTO_CROSS_SITE", null, requestId, protocol.CHECK.SEC_FETCH_SITE),
+          requestId
+        );
+        return;
+      }
       if (!anyReviewRegistered(effectiveOrigin)) {
         log.helperLog(
           "refused preflight: origin " + effectiveOrigin + " is registered on no review [request " + requestId + "]"
@@ -314,6 +356,14 @@ async function serve(options) {
         Vary: "Origin"
       });
       res.end();
+      return;
+    }
+
+    // The Library's routes match on the RAW path, before URL normalization, so a
+    // `../` in an asset name stays inside the asset name (see matchCatalogRoute).
+    var catalogMatch = routes.matchCatalogRoute(req.method, req.url);
+    if (catalogMatch) {
+      await handleCatalog(req, res, catalogMatch, url, requestId);
       return;
     }
 
@@ -422,6 +472,70 @@ async function serve(options) {
     respond(res, (outcome && outcome.status) || 200, outcome ? outcome.body : null, checked.origin, requestId);
   }
 
+  // One catalog request: body, the one auth.check call site's catalog branch,
+  // then the handler. Every response goes out through respondCatalog, so no
+  // path here can send a CORS header or leave off the page's policies.
+  async function handleCatalog(req, res, match, url, requestId) {
+    var route = match.route;
+    var body = null;
+    if (req.method === "POST") {
+      var rawBody;
+      try {
+        rawBody = await readBody(req, MAX_BODY_BYTES);
+      } catch (err) {
+        auth.refuse({ routeName: route.name, requestId: requestId }, "PROTO_BAD_REQUEST", err.message);
+        respondCatalogJson(res, 400, protocol.errorBody("PROTO_BAD_REQUEST", err.message, requestId, null), requestId);
+        return;
+      }
+      try {
+        body = rawBody ? JSON.parse(rawBody) : null;
+      } catch (err) {
+        body = null;
+      }
+    }
+
+    var checked = auth.check({
+      routeName: route.name,
+      headers: req.headers,
+      review: null,
+      method: req.method,
+      path: url.pathname,
+      requestId: requestId
+    });
+    if (!checked.ok) {
+      respondCatalogJson(res, checked.status, protocol.errorBody(checked.code, null, requestId, checked.check), requestId);
+      return;
+    }
+
+    var outcome;
+    try {
+      outcome = await routes.handlerFor(route.name)(
+        { routeName: route.name, assetName: match.assetName, body: body, requestId: requestId },
+        deps
+      );
+    } catch (err) {
+      var status = err.code === "NOT_IMPLEMENTED" ? 501 : 500;
+      log.helperLog("route " + route.name + " failed: " + err.message + " [request " + requestId + "]");
+      respondCatalogJson(res, status, protocol.errorBody("PROTO_BAD_REQUEST", err.message, requestId, null), requestId);
+      return;
+    }
+
+    if (outcome && outcome.catalogRaw) {
+      respondCatalog(res, outcome.status || 200, outcome.catalogRaw.contentType, outcome.catalogRaw.bytes, requestId);
+      return;
+    }
+    if (outcome && outcome.error) {
+      respondCatalogJson(
+        res,
+        outcome.status || protocol.statusFor(outcome.error.code),
+        protocol.errorBody(outcome.error.code, outcome.error.detail, requestId, null),
+        requestId
+      );
+      return;
+    }
+    respondCatalogJson(res, (outcome && outcome.status) || 200, outcome ? outcome.body : null, requestId);
+  }
+
   await new Promise(function (resolve, reject) {
     server.once("error", reject);
     server.listen(port, host, function () {
@@ -431,6 +545,7 @@ async function serve(options) {
   });
 
   var boundPort = server.address().port;
+  catalog.port = boundPort;
 
   // The readiness file goes out AFTER the listener is bound. A readiness file
   // that arrives before the socket is a lie, and the durability tests race it.
@@ -449,6 +564,9 @@ async function serve(options) {
     dir: dir,
     log: log,
     reviews: reviews,
+    // The Library state (token, port, last list). Tests and Task 2.1 reach it
+    // here; it is never written anywhere.
+    catalog: catalog,
     server: server,
     close: function () {
       return new Promise(function (resolve) {

@@ -349,6 +349,7 @@ work.
 | --- | --- |
 | `review.created` | The add step minted this review |
 | `origin.registered` | An origin was allowed for this review (D11's allowlist, built by the add step) |
+| `origin.removed` | `{origin}`. A restarted static server's earlier loopback origins, and only those, were taken off this review's allowlist. Recovery applies it in order with `origin.registered`, so a removed origin stays removed after a helper restart |
 | `page.visited` | First visit to an origin plus pathname. Carries the page title and `page_seq` |
 | `item.created` | The reviewer started a comment or an edit |
 | `item.content` | A content change, **including every draft keystroke batch** |
@@ -748,6 +749,11 @@ truncated: the archived review keeps every item it had.
 There is no `wait` route. It existed only for the retired `lahe wait` command and was removed with it;
 nothing in the library ever called it.
 
+`health` answers `{ok, version, api, service_contract, started_at, catalog_seen_at}`. `catalog_seen_at`
+is the time of the last authenticated `catalog.list` (the Library page's poll), or null. It is in memory
+only, and `lahe session close` reads it to decide whether the Library keeps the helper up. It is a time,
+never the Library token.
+
 `library.get` is the built library, served as `application/javascript`, read from `dist/` once at serve
 start (a missing build is a loud startup failure, never a 404 a reviewer meets). It needs no credential
 because it carries no review data and no token: it is the same public bytes as the file in the repo.
@@ -843,6 +849,101 @@ no status. So after a network-level failure the library asks `health`, which is 
 therefore unpreflighted: if health answers, the helper is up and the ORIGIN is what is being refused,
 and the chip says so and names this page's origin (`sync.decideFailureCode`). `add` also warns before
 it happens, whenever a static file registers `"null"` alone.
+
+### The Library routes and the Library token (D11 amendment)
+
+The Library page lists every review and acts across all of them, so it cannot use a per-review token:
+holding every review's token is the "one page holds all the keys" risk D11 exists to avoid. It gets its
+own credential instead, the **Library token** (`AUTH.CATALOG_TOKEN`). The amendment:
+
+- The Library token is minted in memory at each helper start and never written to disk: not a state
+  file, not the helper log, not `health`, not `catalog.list`. The served page is the only place it
+  exists. A helper restart mints a new one, so an open Library page is refused with
+  `PROTO_UNAUTHORIZED` and asks for a reload.
+- It can list reviews, open one (restart a server the review already recorded, never a new path), star
+  one, and queue a request for the attached agent. It cannot post to a review, read comment text, or
+  name a file to serve.
+- The per-review routes do not accept it, and it does not accept a review token. The Library's client
+  value, `catalog` (`protocol.CLIENT_CATALOG`), is deliberately not in `protocol.CLIENTS`, so a request
+  carrying it fails a review route's `custom_header` check; and a review token fails the Library's
+  `token` check.
+
+| Route | Method | Path | Auth |
+| --- | --- | --- | --- |
+| `catalog.page` | GET | `/catalog` | Library token (carried, not sent) |
+| `catalog.asset` | GET | `/catalog/assets/<name>` | Library token (carried, not sent) |
+| `catalog.list` | GET | `/lahe/v1/catalog/list` | Library token |
+| `catalog.open` | POST | `/lahe/v1/catalog/open` | Library token |
+| `catalog.star` | POST | `/lahe/v1/catalog/star` | Library token |
+| `catalog.request` | POST | `/lahe/v1/catalog/request` | Library token |
+
+**Checks by route** (`protocol.CATALOG_ROUTES[].checks`, run by `auth.checkCatalogRequest` through the
+helper's one `auth.check` call site). The page is loaded by navigation and its assets by `<script>` and
+`<link>`, so neither can carry a header. The page carries the token; its script sends it on every API call.
+
+| Route | Method | Host | `Sec-Fetch-Site` | Client header `catalog` + token | JSON body | Origin |
+|---|---|---|---|---|---|---|
+| `catalog.page` | GET | helper's own | `none` or `same-origin` | not required | no | not read |
+| `catalog.asset` | GET | helper's own | `none` or `same-origin` | not required | no | not read |
+| `catalog.list` | GET | helper's own | exactly `same-origin` | required | no | not read |
+| `catalog.open`, `catalog.star`, `catalog.request` | POST | helper's own | exactly `same-origin` | required | required | exactly `http://` + the request's Host |
+
+The checks run in this order, each refusing with the same code its per-review namesake uses, and each
+refusal logs the name of the check that failed:
+
+| Check | Refuses with | On the Library routes |
+| --- | --- | --- |
+| `host` | `PROTO_BAD_HOST` | Exactly `127.0.0.1:<port>` or `localhost:<port>` at the helper's actual port, on every catalog route. Stricter than the review routes' Host check, because the page carries the token and a DNS-rebinding page must not read it |
+| `sec_fetch_site` | `PROTO_CROSS_SITE` | Set by the browser, never by a script. A missing value is refused. `same-site` is refused on the API routes: a document under review on another loopback port sends `same-site`, and it is the page most likely to run a script the reviewer did not write |
+| `custom_header` | `PROTO_MISSING_CUSTOM_HEADER` | `x-lahe-client: catalog`, API routes only |
+| `content_type` | `PROTO_UNSUPPORTED_MEDIA_TYPE` | `application/json`, POSTs only |
+| `token` | `PROTO_UNAUTHORIZED` | The Library token in `x-lahe-token`, compared in constant time, API routes only |
+| `origin` | `PROTO_FORBIDDEN_ORIGIN` | POSTs only: exactly `http://` + the request's own Host. So `localhost` against a `127.0.0.1` Host, another port, `null` and a missing Origin are all refused |
+
+**Serving.** Every catalog response, refusals and 404s included, sends no CORS header of any kind, and
+carries `Content-Security-Policy: script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+`X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store` and
+`X-Content-Type-Options: nosniff` (`src/service/catalog_page.js`). The preflight handler never approves a
+catalog path, whatever origin asks, including one a review registered: it answers `PROTO_CROSS_SITE`
+with no `Access-Control-*` header. The Library page is same-origin and never preflights.
+
+**The token on the page** sits in `<meta name="lahe-catalog-token" content="...">`
+(`protocol.CATALOG_TOKEN_META`), since `script-src 'self'` forbids an inline script. Header names,
+route paths and constants reach the page script through `protocol.js`, which `catalog.asset` serves.
+
+**`catalog.asset` serves a fixed allowlist and nothing else**, raw from `src/` with no build step, so
+the Library's files never touch `dist/`:
+
+| Name | File |
+| --- | --- |
+| `protocol.js` | `src/shared/protocol.js` |
+| `page.js` | `src/layer/catalog/page.js` |
+| `view_model.js` | `src/layer/catalog/view_model.js` |
+| `.lahe-doc-style.css` | the St. Clair document style bundle (`markdown.styleSheet()`) |
+| `.lahe-fonts/<file>.woff2` | the three vendored fonts, so the style's own relative font URLs resolve |
+
+The name is the rest of the path exactly as it arrived, matched before any URL normalization. Nothing
+is decoded, joined or resolved, so `../`, `%2e%2e%2f`, an absolute path, or any other name is a 404
+with no file bytes. An allowlisted file not on disk yet is a 404 too.
+
+**New error codes.** Messages and remedies are in `src/shared/failures.js`; the page shows the remedy.
+
+| Code | Status | When |
+|---|---|---|
+| `PROTO_CROSS_SITE` | 403 | The `Sec-Fetch-Site` check fails, or a preflight names a catalog path |
+| `PROTO_NOT_OPENABLE` | 409 | Open on a missing row or one with no recorded server; carries a `reason` |
+| `PROTO_REQUEST_PENDING` | 409 | The review already has a pending request |
+| `PROTO_QUEUE_FULL` | 429 | `CATALOG.QUEUE_CAP` pending requests reached |
+| `PROTO_NO_AGENT` | 409 | No attached agent, or its monitor is dead |
+| `PROTO_CONFIRM_NEEDED` | 409 | A hand-over on a watched session without `confirmed` |
+| `PROTO_CATALOG_UNREADABLE` | 500 | `catalog.json` is corrupt |
+
+**Residual risk, stated.** The Library token is readable by any script running on the Library page
+itself. That page runs only the helper's own scripts under `script-src 'self'` and renders page-derived
+text with `textContent`, and it is framed by nothing. A local process that is not a browser can still
+read the token by asking for the page with the headers a navigation sends (`Sec-Fetch-Site` is only a
+browser's promise). That is the same local-process boundary D11 already names: the checks stop other
+web pages, not other programs on the machine.
 
 ### `lahe status`
 

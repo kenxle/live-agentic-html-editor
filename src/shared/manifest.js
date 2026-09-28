@@ -268,7 +268,6 @@ var NON_BUNDLE_FILES = [
   {
     path: "src/service/catalog_page.js",
     owner: "Library 1.2 (2.2 writes the template body)",
-    planned: true,
     why: "the Library page's HTML template, with the token in its meta tag"
   },
 
@@ -301,7 +300,6 @@ var CATALOG_PAGE = [
   {
     path: "src/layer/catalog/page.js",
     owner: "Library 2.2 (1.2 lands a placeholder)",
-    planned: true,
     why: "the Library page script: token from the meta tag, the poll, rendering with textContent, Open's tab sequence"
   }
 ];

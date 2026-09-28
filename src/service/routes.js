@@ -21,6 +21,7 @@ var crypto = require("node:crypto");
 
 var protocol = require("../shared/protocol.js");
 var record = require("../shared/record.js");
+var catalogPage = require("./catalog_page.js");
 
 function notImplemented(routeName, owner) {
   var err = new Error("route " + routeName + " is not implemented yet: Task " + owner + " owns it");
@@ -49,7 +50,11 @@ var HANDLERS = {
         version: deps.version,
         api: protocol.API_VERSION,
         service_contract: protocol.SERVICE_CONTRACT,
-        started_at: deps.startedAt
+        started_at: deps.startedAt,
+        // The last authenticated catalog.list, or null. `lahe session close`
+        // reads it to decide whether the Library keeps the helper up. A time,
+        // never the token.
+        catalog_seen_at: deps.catalog && typeof deps.catalog.seenAt === "function" ? deps.catalog.seenAt() : null
       }
     };
   },
@@ -691,11 +696,62 @@ function livenessNone(work) {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// The Library's routes (LAHE Library, D11 amendment)
+// ---------------------------------------------------------------------------
+//
+// Every request here has passed auth.checkCatalogRequest: the Host, the
+// Sec-Fetch-Site value, and for the API routes the Library token, the JSON
+// body and the exact Origin. Nothing here reads a review token, and nothing
+// here returns an origin to echo, so no catalog response carries CORS.
+//
+// The page and its assets are real (Task 1.2). list, open, star and request
+// fail loud with 501 until Task 2.1 replaces them; they never answer an empty
+// 200.
+var CATALOG_HANDLERS = {
+  "catalog.page": function (request, deps) {
+    return {
+      status: 200,
+      catalogRaw: { contentType: "text/html; charset=utf-8", bytes: Buffer.from(catalogPage.renderPage(deps.catalog.token), "utf8") }
+    };
+  },
+
+  // The asset name is the rest of the path, taken as it arrived: nothing is
+  // decoded or resolved. catalogPage.readAsset matches it against a fixed
+  // allowlist or returns null, and null is a 404 with no file bytes.
+  "catalog.asset": function (request) {
+    var name = request.assetName;
+    var asset = catalogPage.readAsset(name);
+    if (!asset) {
+      return { status: 404, error: { code: "PROTO_BAD_REQUEST", detail: "no such Library asset" } };
+    }
+    return { status: 200, catalogRaw: { contentType: asset.contentType, bytes: asset.bytes } };
+  },
+
+  "catalog.list": function () {
+    throw notImplemented("catalog.list", "Library 2.1");
+  },
+  "catalog.open": function () {
+    throw notImplemented("catalog.open", "Library 2.1");
+  },
+  "catalog.star": function () {
+    throw notImplemented("catalog.star", "Library 2.1");
+  },
+  "catalog.request": function () {
+    throw notImplemented("catalog.request", "Library 2.1");
+  }
+};
+
 // Every route on the wire has a handler, checked at LOAD rather than at request
 // time. A route with no handler is a 500 in front of a reviewer otherwise.
 protocol.ROUTES.forEach(function (r) {
   if (typeof HANDLERS[r.name] !== "function") {
     throw new Error("src/service/routes.js has no handler for protocol route " + r.name);
+  }
+});
+protocol.CATALOG_ROUTES.forEach(function (r) {
+  if (typeof CATALOG_HANDLERS[r.name] !== "function") {
+    throw new Error("src/service/routes.js has no handler for catalog route " + r.name);
   }
 });
 
@@ -708,16 +764,52 @@ function matchRoute(method, pathname) {
   return null;
 }
 
-function handlerFor(name) {
-  if (!Object.prototype.hasOwnProperty.call(HANDLERS, name)) {
-    throw new Error("unknown route: " + String(name));
+/**
+ * Match a method and a RAW request path (before any URL normalization) to a
+ * catalog route, or null. The raw path is used so that `../` and its encoded
+ * forms reach catalog.asset as a name it does not know, rather than being
+ * resolved by a URL parser into some other route's path.
+ *
+ * @returns {{route: object, assetName: string|null}|null}
+ */
+function matchCatalogRoute(method, rawPath) {
+  var pathOnly = String(rawPath || "").split("?")[0];
+  var upper = String(method).toUpperCase();
+  for (var i = 0; i < protocol.CATALOG_ROUTES.length; i += 1) {
+    var r = protocol.CATALOG_ROUTES[i];
+    if (r.method !== upper) continue;
+    if (r.prefix) {
+      if (pathOnly.indexOf(r.path) === 0) return { route: r, assetName: pathOnly.slice(r.path.length) };
+    } else if (pathOnly === r.path) {
+      return { route: r, assetName: null };
+    }
   }
-  return HANDLERS[name];
+  return null;
+}
+
+/**
+ * Is this raw path one of the Library's, for any method? The preflight uses it
+ * to refuse every catalog path whatever origin asks.
+ */
+function isCatalogPath(rawPath) {
+  var pathOnly = String(rawPath || "").split("?")[0];
+  return protocol.CATALOG_ROUTES.some(function (r) {
+    return r.prefix ? pathOnly.indexOf(r.path) === 0 : pathOnly === r.path;
+  });
+}
+
+function handlerFor(name) {
+  if (Object.prototype.hasOwnProperty.call(HANDLERS, name)) return HANDLERS[name];
+  if (Object.prototype.hasOwnProperty.call(CATALOG_HANDLERS, name)) return CATALOG_HANDLERS[name];
+  throw new Error("unknown route: " + String(name));
 }
 
 module.exports = {
   HANDLERS: HANDLERS,
+  CATALOG_HANDLERS: CATALOG_HANDLERS,
   handlerFor: handlerFor,
   matchRoute: matchRoute,
+  matchCatalogRoute: matchCatalogRoute,
+  isCatalogPath: isCatalogPath,
   notImplemented: notImplemented
 };
