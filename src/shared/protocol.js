@@ -266,10 +266,12 @@
       auth: AUTH.REVIEW_TOKEN,
       mutating: true,
       why: "D5's second-window refusal for windows that cannot see each other's storage, plus the takeover",
-      request: "{review, window_id, session_secret?, takeover?}",
+      request: "{review, window_id, session_secret?, takeover?, quiet?}",
       response:
-        "grant {granted:true, since, heartbeat_seconds, took_over, session_secret}; refusal {granted:false, since, " +
-        "heartbeat_seconds, reason, deposed} (no holder id, no secret). deposed is true only when the refused " +
+        "grant {granted:true, since, heartbeat_seconds, quiet_heartbeat_seconds, took_over, session_secret}; " +
+        "refusal {granted:false, since, heartbeat_seconds, quiet_heartbeat_seconds, reason, deposed} (no holder id, " +
+        "no secret). quiet:true on a claim says nobody is looking at that window, so it beats every " +
+        "quiet_heartbeat_seconds and the helper holds it for a longer window. deposed is true only when the refused " +
         "window is the one an explicit Review-here-instead threw out, which is the one refusal the page acts on " +
         "immediately; every other refusal it waits out, because a helper being replaced looks the same from there"
     },

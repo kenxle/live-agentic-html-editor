@@ -454,7 +454,7 @@ reviewer's session with it, which is a worse failure than the one it reports.
 **How the helper notices appends:** it polls each `replies*.jsonl` in the review folder every
 **5 seconds as an inactive-review safety scan**, tracking a **byte offset per file**. Active page
 polls, status reads, and browser event appends trigger the same fold immediately, so ordinary
-review latency stays at the page's one-second poll or better without scanning every accumulated
+review latency stays at the page's poll (one second focused, 15 seconds visible) or better without scanning every accumulated
 review folder four times per second. A file shorter than its recorded offset was truncated
 or rewritten rather than appended to, so the offset **resets to zero and the file is re-folded**,
 which is safe because folding is idempotent (`protocol.nextReadOffset`). A final line with no
@@ -798,15 +798,43 @@ into the reviewer's working tree for nothing), and the post-write mtime becomes 
 helper never re-examines its own write. That single mtime bump is what the page reloads on, so the rail
 comes back with no command run by anyone.
 
-`window.claim` body is `{review, window_id, session_secret?, takeover?}` (D5's one-session-per-review).
-A grant returns `{granted:true, since, heartbeat_seconds, took_over, session_secret}`; the
+`window.claim` body is `{review, window_id, session_secret?, takeover?, quiet?}` (D5's one-session-per-review).
+A grant returns `{granted:true, since, heartbeat_seconds, quiet_heartbeat_seconds, took_over, session_secret}`; the
 `session_secret` is minted server-side and handed to the holder only. A refusal returns
-`{granted:false, since, heartbeat_seconds, reason}` and discloses **neither the holder's window id nor
+`{granted:false, since, heartbeat_seconds, quiet_heartbeat_seconds, reason}` and discloses **neither the holder's window id nor
 its secret**: being the current holder is proven only by re-sending the secret on the heartbeat, so
 knowing a window id is not being that window. `takeover:true` is a same-token-trusted action (any
 window bearing the review token may depose the current holder, automatically once it goes stale or on
 the reviewer's explicit "Review here instead"); a fresh secret is minted on every takeover, so a
 deposed holder cannot re-assert with its old one.
+
+**How long a holder keeps the review when it goes quiet** (spec 20260928.01, quiet tab polling). A
+holder beats every `heartbeat_seconds` (10) and is stale after `STALE_AFTER_MS` (30s) of silence, and
+that includes a page that is visible but not focused. A HIDDEN page (a background tab, a minimized
+window, a window on another desktop) stops polling entirely and sends `quiet: true` on its next claim; from then on it beats every `quiet_heartbeat_seconds` (300) and the helper holds it for
+`QUIET_STALE_AFTER_MS` (390s: the five minute beat, a minute for Chrome waking long-hidden tabs only once a
+minute, and the same 30 seconds of slack a focused holder gets). `quiet` is a boolean; the numbers are the
+helper's. The page slows only after the helper has GRANTED a claim that said quiet (sent is not told:
+a helper replaced during that beat never heard it), and only when the helper offered
+`quiet_heartbeat_seconds`, so an older helper never sees a slow page it would call gone. Becoming
+visible again beats at once with `quiet: false`. Staleness is still checked only when another window asks. The cost:
+a tab that crashes or is force-quit while hidden holds its review for up to 390 seconds before another
+window takes it on its own. The goodbye on close and "Review here instead" still free it at once.
+After a laptop sleep longer than that window, a quiet page counts as gone until its next beat, so a
+read-only second window may take the review over in the meantime. There is still one holder at a time,
+and nothing typed is lost: the old page's next beat is refused and it goes read-only. After a helper
+restart, `page_last_seen_at` falls back to the holder's `last_seen` from `windows.json` until the page
+next speaks, so `lahe status` does not report an open, unfocused page as never connected.
+
+**The page's own polling.** Three paces, by attention. Focused: `replies.poll` once a second. Visible
+but not focused (a page beside the terminal): the reply poll and the read-only re-ask every 15 seconds,
+with the ordinary 10 second heartbeat. Hidden: no reply poll and no read-only re-ask at all; the only
+request is the quiet heartbeat. Every page polls once at load whatever its attention, because that
+answer records which version of the file the page shows. Gaining focus, or becoming visible from
+hidden, polls at once, so a reply that arrived meanwhile, and a reload a rebuild owes, happen then.
+Focus is re-checked on a key, click or pointer move while the page lacks focus, for a return that fires
+no focus event on the top page (clicking straight into a frame). None of this runs per keystroke while
+focused.
 
 The session table is written to `windows.json` in the state directory (owner-only, atomic) on every
 grant, heartbeat, release and takeover, and read back at startup. The helper is replaced whenever the
@@ -814,7 +842,7 @@ code on disk is newer than the running process, which on a working day is severa
 memory-only table handed each new helper an empty holder slot: the open page's heartbeat carried a
 secret nobody held, so it was refused as a second window, dropped to read-only under the reviewer's open
 comment boxes, and thirty seconds later took the review over from itself. A holder whose `last_seen` is
-older than `STALE_AFTER_MS` at load time is dropped rather than restored, which is the same answer the
+older than its staleness window (`STALE_AFTER_MS`, or `QUIET_STALE_AFTER_MS` for a quiet holder) at load time is dropped rather than restored, which is the same answer the
 ordinary rule would have given. A refusal also carries `deposed: true` when the refused window is the
 one an explicit "Review here instead" threw out; the page acts on that one immediately and waits every
 other refusal out, because a helper being replaced looks the same from the page.
@@ -1070,7 +1098,7 @@ as the machine counts somebody as being on the review.
 `<state-dir>/agent-sessions/<id>/wake.log` is our file, created for exactly one purpose, and nothing
 else on the computer has any reason to hold it open. So a process holding it open IS an agent
 watching this session. `src/service/watchers.js` asks with `lsof -t -- <path>`, cached for 15 seconds
-and refreshed off the poll path, so the reply poll (about one per second per open page) never waits
+and refreshed off the poll path, so the reply poll (one per second from a focused page) never waits
 on a subprocess. A machine with no `lsof` answers `null`, which means CANNOT TELL and is asked only
 once; null never becomes "nobody". Two other facts also count as listening: a monitor heartbeat for
 the CURRENT `handoff_rev`, younger than 45s, **whose pid still exists**; and a `lahe` command within
