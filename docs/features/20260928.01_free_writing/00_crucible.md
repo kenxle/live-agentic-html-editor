@@ -1,7 +1,7 @@
 # Crucible: free writing in Lahe
 
 Date: 2026-09-28
-Status: DRAFT, pending the Tiptap decision (Approach D on the questions page)
+Status: ACCEPTED
 Questions and answers: `00_crucible_questions.md` in this folder, reviewed on a Lahe page.
 
 ## The idea, as stated
@@ -104,11 +104,7 @@ Q6 (does this matter more as models improve) went unanswered. My reading stands 
 
 ## Open questions
 
-- What the block-type control looks like on the edit bar, and whether a Markdown-style prefix (`#`, `-`) is also accepted.
-- How one sitting is bounded: commit on click-away as today, or an explicit finish.
-- What "proofread and offer suggestions" looks like on the card: a question reply, a suggested rewording, or a diff.
-- Whether `lahe write` is a new command or a flag on `lahe review` for a file that does not exist yet.
-- What the formatting bug actually is. Nobody has reproduced it; the brief needs a repro before it can be a requirement.
+Whether Tiptap is the engine (Approach D on the questions page). That is an architecture question and does not hold up the brief. Everything else about how it works is for the brief and architecture.
 
 ## The assignment
 
