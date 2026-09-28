@@ -147,7 +147,7 @@ The wireframe and the architecture decide:
 :::
 
 ::: callout-req
-**R13:** Notes end up in a source file on disk that the reviewer named, so the reviewer owns the file. Who writes that file, and whether notes work with no agent attached, is Q3 (who writes the notes file).
+**R13:** Notes end up in a source file on disk that the reviewer named, so the reviewer owns the file. The agent writes it, placing each piece of new text the same way it does on any other page.
 :::
 
 ### Formatting edits
@@ -209,12 +209,6 @@ None. The contract text changes. Existing reviews keep working, since an old pag
 :::
 
 ::: callout-question
-**Q3 (Ken):** On a blank notes document, who writes the file? Two options:
-- The agent places each paragraph, as it does for any new text. Notes then depend on an agent being attached and awake.
-- The tool writes the file itself as you type, and an agent organizes only when asked. Notes then work with no agent. The agent's placement rules and the handled check (R10) would not apply to them.
-:::
-
-::: callout-question
 **Q4 (Ken):** Are lists in the first cut? Notes are mostly lists, and your chosen approach included them. Or are they a follow-up?
 :::
 
@@ -230,6 +224,10 @@ None. The contract text changes. Existing reviews keep working, since an old pag
 **Q7 (wireframe):** When a reviewer is editing an existing block and presses Enter at its end, is the new paragraph part of that edit or new text? One consistent rule, and the reviewer should be able to see which it is.
 :::
 
+## Decisions (Resolved)
+
+- **Who writes the notes file:** the agent, like any other new text. Lahe is an agentic editor, so notes with no agent attached are not a design case.
+
 ## PM Review
 
 | # | Finding | Disposition | Rationale |
@@ -237,7 +235,7 @@ None. The contract text changes. Existing reviews keep working, since an old pag
 | RF1 | R13 stated before its reproduction; missed the board row and the under-a-header case | Accepted | Now R14 with three named cases; board row absorbed; Q2 narrowed to unknown causes |
 | RF2 | Brief pre-decided one record per sitting, header by keyboard, and the item shape | Accepted | R2, R3, R7, R8 rewritten as outcomes; "in one sitting" and the record-kind line removed |
 | RF3 | Proofreading had no requirement; Q3 reopened a settled trigger | Accepted | Now R11; threshold left to the plan |
-| RF4 | Notes: who writes the file, and does it work with no agent | Accepted | Q3 for Ken, with both options and their cost; R13 depends on it |
+| RF4 | Notes: who writes the file, and does it work with no agent | Accepted | Put to Ken; he chose the agent. R13 updated, recorded under Decisions |
 | RF5 | Enter at the end of an existing block: same edit or new text? | Accepted | Q7 for the wireframe; metric reworded |
 | RF6 | No requirement for a rebuild landing mid-writing | Accepted | Now R7 |
 | RF7 | Metrics were one-off demos | Accepted | Rewritten against the status-quo costs |

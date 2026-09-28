@@ -830,6 +830,8 @@ Metrics</a></li>
 Flags</a></li>
 <li><a href="#open-questions" id="toc-open-questions">Open
 Questions</a></li>
+<li><a href="#decisions-resolved" id="toc-decisions-resolved">Decisions
+(Resolved)</a></li>
 <li><a href="#pm-review" id="toc-pm-review">PM Review</a></li>
 <li><a href="#reviews-free-writing-brief"
 id="toc-reviews-free-writing-brief">Reviews: Free writing brief</a>
@@ -1037,9 +1039,9 @@ empty page.</p>
 </div>
 <div class="callout callout-req">
 <p><strong>R13:</strong> Notes end up in a source file on disk that the
-reviewer named, so the reviewer owns the file. Who writes that file, and
-whether notes work with no agent attached, is Q3 (who writes the notes
-file).</p>
+reviewer named, so the reviewer owns the file. The agent writes it,
+placing each piece of new text the same way it does on any other
+page.</p>
 </div>
 <h3 id="formatting-edits">Formatting edits</h3>
 <div class="callout callout-req">
@@ -1119,17 +1121,6 @@ cases in R14 (bold and italic edits)? The header case now has steps; the
 architecture confirms whether the agent's rebuild plays a part.</p>
 </div>
 <div class="callout callout-question">
-<p><span id="open-questions-q3" class="finding-anchor"></span><strong>Q3 (Ken):</strong> On a blank notes document, who writes the
-file? Two options:</p>
-<ul>
-<li>The agent places each paragraph, as it does for any new text. Notes
-then depend on an agent being attached and awake.</li>
-<li>The tool writes the file itself as you type, and an agent organizes
-only when asked. Notes then work with no agent. The agent's placement
-rules and the handled check (R10) would not apply to them.</li>
-</ul>
-</div>
-<div class="callout callout-question">
 <p><span id="open-questions-q4" class="finding-anchor"></span><strong>Q4 (Ken):</strong> Are lists in the first cut? Notes are
 mostly lists, and your chosen approach included them. Or are they a
 follow-up?</p>
@@ -1149,6 +1140,12 @@ existing block and presses Enter at its end, is the new paragraph part
 of that edit or new text? One consistent rule, and the reviewer should
 be able to see which it is.</p>
 </div>
+<h2 id="decisions-resolved">Decisions (Resolved)</h2>
+<ul>
+<li><strong>Who writes the notes file:</strong> the agent, like any
+other new text. Lahe is an agentic editor, so notes with no agent
+attached are not a design case.</li>
+</ul>
 <h2 id="pm-review">PM Review</h2>
 <div class="table-scroll"><table>
 <thead>
@@ -1186,7 +1183,8 @@ record-kind line removed</td>
 <td>RF4</td>
 <td>Notes: who writes the file, and does it work with no agent</td>
 <td><span class="accepted">Accepted</span></td>
-<td>Q3 for Ken, with both options and their cost; R13 depends on it</td>
+<td>Put to Ken; he chose the agent. R13 updated, recorded under
+Decisions</td>
 </tr>
 <tr>
 <td>RF5</td>
