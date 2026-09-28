@@ -1053,8 +1053,11 @@ file).</p>
 <ul>
 <li>a paragraph written on its own loses its bold and italic (board row
 <code>LAHE-lone-paragraph-loses-markup</code>)</li>
-<li>text put under a header breaks the formatting (Ken, questions page
-Q5; not yet reproduced)</li>
+<li>a new line typed after a header comes out doubled. Steps: open a
+header for editing, press Enter, type a line, leave the editor. Result:
+the new line appears twice, once still inside the header and once as a
+normal line below it. Not yet confirmed whether the agent's rebuild
+plays a part.</li>
 <li>bold two words in a Markdown page, commit, rebuild (the crucible's
 assignment)</li>
 </ul>
@@ -1112,8 +1115,8 @@ The brief holds either way.</p>
 </div>
 <div class="callout callout-question">
 <p><span id="open-questions-q2" class="finding-anchor"></span><strong>Q2:</strong> Are there formatting failures beyond the three
-cases in R14 (bold and italic edits)? The under-a-header case still
-needs a reproduction.</p>
+cases in R14 (bold and italic edits)? The header case now has steps; the
+architecture confirms whether the agent's rebuild plays a part.</p>
 </div>
 <div class="callout callout-question">
 <p><span id="open-questions-q3" class="finding-anchor"></span><strong>Q3 (Ken):</strong> On a blank notes document, who writes the

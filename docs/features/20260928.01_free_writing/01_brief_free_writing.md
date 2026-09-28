@@ -160,7 +160,7 @@ The wireframe and the architecture decide:
 
 Known cases that must pass:
 - a paragraph written on its own loses its bold and italic (board row `LAHE-lone-paragraph-loses-markup`)
-- text put under a header breaks the formatting (Ken, questions page Q5; not yet reproduced)
+- a new line typed after a header comes out doubled. Steps: open a header for editing, press Enter, type a line, leave the editor. Result: the new line appears twice, once still inside the header and once as a normal line below it. Not yet confirmed whether the agent's rebuild plays a part.
 - bold two words in a Markdown page, commit, rebuild (the crucible's assignment)
 :::
 
@@ -205,7 +205,7 @@ None. The contract text changes. Existing reviews keep working, since an old pag
 :::
 
 ::: callout-question
-**Q2:** Are there formatting failures beyond the three cases in R14 (bold and italic edits)? The under-a-header case still needs a reproduction.
+**Q2:** Are there formatting failures beyond the three cases in R14 (bold and italic edits)? The header case now has steps; the architecture confirms whether the agent's rebuild plays a part.
 :::
 
 ::: callout-question
