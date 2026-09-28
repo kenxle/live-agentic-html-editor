@@ -9,7 +9,11 @@ Clicking a link on a reviewed page to a document in another folder opens it read
 Your rule is that anything our own server serves gets the editor. The security review keeps that for every page you reach by clicking a link, and narrows it in two places. Each needs a yes or no from you.
 
 1. **YES, settled 2026-09-28. Pages you did not click to, sitting in a linked folder, stay without the editor.** When a page links to a file in another folder, the server opens that whole folder so the link works. The review puts the editor only on the files a link actually points to, not on their neighbours. Why: the editor's key would otherwise reach every page in any folder a document happens to link into. Say no, and every page in a linked folder gets the editor.
-2. **If the review you came from has been deleted, the linked page opens read-only.** It does not borrow some other review's key. Why: that other review may belong to a different document, so your comment would land somewhere you did not expect. Say no, and it falls back to the newest review on that server.
+2. **If the review you came from has been deleted, the linked page opens read-only.** It does not borrow some other review's key.
+
+   **When this actually happens:** rarely, and never in the middle of normal clicking. The link works because the server opened that folder, and the folder stays open as long as the server runs. The review that opened it can go away underneath: you left a tab open and its review was deleted from the state folder, or you bookmarked a linked page's address and came back to it later, after that review was gone.
+
+   In that case LAHE has no honest way to know which document your comment belongs to. The alternative is to hand you the newest review on that server, which may be a different document, so your comment lands somewhere you did not expect. Say no and it does that instead.
 
 Separately, and not a narrowing: a linked document that already has its own review now takes you to that review's page, instead of opening a copy with its key. You get your earlier comments that way. It also found a leak that exists today, where hidden files like `.env` in a linked folder can be fetched from the page server. That is being fixed now on its own, without waiting for this spec.
 
