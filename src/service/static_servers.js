@@ -50,7 +50,7 @@ var CLOSED_REASON = "session closed";
 // Test seams, empty in the product. afterStopWait runs between a stopped
 // server's process dying and stopOne writing its record, which is the gap a
 // second starter can land in.
-var hooks = { afterStopWait: null };
+var hooks = { afterStopWait: null, beforeStaleTakeover: null, startWaitMs: null, onSpawn: null };
 
 // ONE STARTER PER SERVER, ACROSS PROCESSES. The helper (a window coming back)
 // and `lahe review` can both find the same server stopped and start it at the
@@ -63,18 +63,44 @@ var hooks = { afterStopWait: null };
 // second wait for a server to come up, so a live starter never loses its lock.
 var START_LOCK_STALE_MS = 20 * 1000;
 var START_LOCK_WAIT_MS = 25 * 1000;
+// How long start() waits for a spawned server to answer.
+var START_WAIT_MS = 10 * 1000;
 
 function lockPath(file) {
   return file + ".lock";
 }
 
+/**
+ * Remove a lock this waiter judged stale, but only if it still is.
+ *
+ * Two waiters can both judge one lock stale. The first removes it and writes
+ * its own; a plain delete by the second would then remove that fresh lock, and
+ * both would hold it. So the lock is renamed aside first, which only one waiter
+ * can do to any one file, and what was renamed is checked: still stale, it is
+ * deleted; fresh, it is another waiter's live lock, and it is linked back
+ * (never over a newer lock) before the aside name goes.
+ */
+function takeOverStaleLock(lock) {
+  var aside = lock + ".stale-" + process.pid + "-" + crypto.randomBytes(6).toString("hex");
+  try { fs.renameSync(lock, aside); } catch (err) { return; }
+  var stale = true;
+  try { stale = Date.now() - fs.statSync(aside).mtimeMs > START_LOCK_STALE_MS; } catch (err) { return; }
+  if (!stale) {
+    try { fs.linkSync(aside, lock); } catch (err) { /* a newer lock is already there */ }
+  }
+  try { fs.unlinkSync(aside); } catch (err) { /* gone already */ }
+}
+
 async function withServerLock(file, task) {
   var lock = lockPath(file);
   var deadline = Date.now() + START_LOCK_WAIT_MS;
+  // What this holder wrote, so its release never removes a lock that is not
+  // its own (one taken over after this holder ran past the stale limit).
+  var token = process.pid + " " + crypto.randomBytes(8).toString("hex") + " " + new Date().toISOString() + "\n";
   for (;;) {
     try {
       var fd = fs.openSync(lock, "wx", 0o600);
-      try { fs.writeSync(fd, process.pid + " " + new Date().toISOString() + "\n"); } finally { fs.closeSync(fd); }
+      try { fs.writeSync(fd, token); } finally { fs.closeSync(fd); }
       break;
     } catch (err) {
       if (err.code !== "EEXIST") throw err;
@@ -82,7 +108,8 @@ async function withServerLock(file, task) {
     var age = null;
     try { age = Date.now() - fs.statSync(lock).mtimeMs; } catch (err) { continue; }
     if (age > START_LOCK_STALE_MS) {
-      try { fs.unlinkSync(lock); } catch (err) { /* another waiter took it over first */ }
+      if (typeof hooks.beforeStaleTakeover === "function") hooks.beforeStaleTakeover();
+      takeOverStaleLock(lock);
       continue;
     }
     if (Date.now() > deadline) {
@@ -93,7 +120,11 @@ async function withServerLock(file, task) {
   try {
     return await task();
   } finally {
-    try { fs.unlinkSync(lock); } catch (err) { /* already gone: a stale takeover */ }
+    var held = null;
+    try { held = fs.readFileSync(lock, "utf8"); } catch (err) { held = null; }
+    if (held === token) {
+      try { fs.unlinkSync(lock); } catch (err) { /* already gone */ }
+    }
   }
 }
 var LIBRARY_PATH = LIBRARY_PREFIX + heal.BUNDLE_BASENAME;
@@ -319,13 +350,19 @@ async function startLocked(options, dir, sessionId, root, logicalRoot, id, file)
     { detached: true, stdio: "ignore" }
   );
   child.unref();
+  if (typeof hooks.onSpawn === "function") hooks.onSpawn(child);
 
   var meta = await waitFor(async function () {
     var candidate = readJson(file);
     if (!candidate || candidate.instance !== instance) return null;
     return await isExactServer(candidate) ? candidate : null;
-  }, 10000);
-  if (!meta) throw new Error("the static review server did not start within 10 seconds");
+  }, typeof hooks.startWaitMs === "number" ? hooks.startWaitMs : START_WAIT_MS);
+  if (!meta) {
+    // A child that answers late would write the record after this start has
+    // already failed, or run with no record naming it. It is ours, so it goes.
+    try { process.kill(child.pid, "SIGKILL"); } catch (err) { /* already gone */ }
+    throw new Error("the static review server did not start within 10 seconds");
+  }
   return { meta: meta, started: true };
 }
 
@@ -358,7 +395,7 @@ async function stopOne(dir, sessionId, meta, reason) {
   var stopped = await waitFor(async function () { return !(await isExactServer(meta)); }, 10000);
   if (!stopped) throw new Error("static review server " + meta.id + " did not stop within 10 seconds");
   if (typeof hooks.afterStopWait === "function") await hooks.afterStopWait();
-  markStopped(dir, sessionId, meta, why);
+  await markStopped(dir, sessionId, meta, why);
   return true;
 }
 
@@ -1284,6 +1321,7 @@ module.exports = {
   LIBRARY_PATH: LIBRARY_PATH,
   IDLE_REASON: IDLE_REASON,
   _hooks: hooks,
+  _withServerLock: withServerLock,
   START_LOCK_STALE_MS: START_LOCK_STALE_MS,
   CLOSED_REASON: CLOSED_REASON,
   noteLinkGiven: noteLinkGiven,

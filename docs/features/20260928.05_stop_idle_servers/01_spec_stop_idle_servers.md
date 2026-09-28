@@ -127,11 +127,17 @@ Then `npm run gate:unit`, and the browser specs covering sessions, takeover, win
   5. `noteWindow` moved below `ownerSessionOf` in `routes.js`, so each doc comment sits over its own function.
   - `npm run gate:unit`: 1,478 tests, 1,476 pass, 0 fail, 2 todo. The 13 browser specs: 35 passed, 0 failed.
 
+- 2026-09-28: second review round. Three fixes, each with a test that failed first:
+  1. `stopOne` awaits its guarded write. Before, a lock wait that timed out or a failed write was an unhandled rejection, which ends the helper, and `stopOne` could return before the record said stopped.
+  2. A stale lock is renamed aside before it is deleted, and deleted only if what was renamed is still stale. A fresh lock another waiter just wrote is linked back. A holder releases only a lock that still carries its own token.
+  3. A start whose wait for the new server times out kills that child, so a late child neither runs unnamed nor writes the record.
+  - `npm run gate:unit`: 1,481 tests, 1,479 pass, 0 fail, 2 todo. The 13 browser specs: 35 passed, 0 failed.
+
 ## Known limits
 
 - If the old port is taken when a server comes back, it gets a new port. `lahe review` registers the new origin and prints the new link. A restart from a returning window only logs it, and that window's old address stays dead.
 - A server that `lahe review` reuses at the exact moment the sweep stops it can hand out a link that is already dead. The window is the few milliseconds of the stop itself, because the stop re-checks `link_given_at` just before it acts.
-- Two waiters that both find the same stale lock can race to take it over. It needs a starter to have died holding the lock and two more to arrive together more than 20 seconds later.
+- In the moment between a waiter renaming a fresh lock aside and linking it back, a third starter can create a new lock, and the link back then fails. The first holder and the third would both hold. It needs a dead starter's stale lock and three more starters inside a few microseconds.
 
 ## To delete at cleanup
 

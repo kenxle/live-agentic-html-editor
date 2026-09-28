@@ -26,6 +26,7 @@ const logModule = require("../../src/service/log.js");
 const agentSessionsModule = require("../../src/service/agent_sessions.js");
 const status = require("../../src/cli/commands/status.js");
 const stateDirModule = require("../../src/service/state_dir.js");
+const { pollUntil } = require("../helpers/poll.js");
 
 const REPO_ROOT = path.join(__dirname, "..", "..");
 const BIN = path.join(REPO_ROOT, "bin", "lahe.js");
@@ -491,4 +492,91 @@ test("the sweep forgets servers and sessions it no longer sees", async (t) => {
   tracked = w.sweeper._tracked();
   assert.equal(tracked.instances, 0);
   assert.equal(tracked.sessions, 0);
+});
+
+// ---------------------------------------------------------------------------
+// Second review round: the stop's own write, the stale takeover, a slow child.
+// ---------------------------------------------------------------------------
+
+/** A lock file that turns stale `inMs` from now. */
+function lockGoingStale(lock, content, inMs) {
+  fs.writeFileSync(lock, content);
+  const at = new Date(Date.now() - staticServers.START_LOCK_STALE_MS + inMs);
+  fs.utimesSync(lock, at, at);
+  return at.getTime();
+}
+
+test("stopOne returns only after its record says stopped, even when it waits for the lock", async (t) => {
+  const w = world(t);
+  const a = await w.session("s_await_mark");
+  const old = staticServers.list(w.dir, a.id)[0];
+  const lock = stateDirModule.staticServerPath(w.dir, a.id, old.id) + ".lock";
+  // Another starter holds the lock when the stop comes to write. It goes stale
+  // in half a second, and the stop takes it over then.
+  staticServers._hooks.afterStopWait = async function () {
+    staticServers._hooks.afterStopWait = null;
+    lockGoingStale(lock, "someone else", 500);
+  };
+  t.after(() => { staticServers._hooks.afterStopWait = null; });
+
+  assert.equal(await staticServers.stopOne(w.dir, a.id, old, staticServers.IDLE_REASON), true);
+  const record = staticServers.list(w.dir, a.id)[0];
+  assert.ok(record.stopped_at, "the record says stopped by the time stopOne returns");
+  assert.equal(record.stop_reason, staticServers.IDLE_REASON);
+});
+
+test("a waiter never takes over a lock that another waiter just made fresh", async (t) => {
+  const dir = tempDir("lahe-lock-race-");
+  const file = path.join(dir, "ss_race.json");
+  const lock = file + ".lock";
+  fs.writeFileSync(lock, "a dead starter");
+  const past = new Date(Date.now() - staticServers.START_LOCK_STALE_MS - 1000);
+  fs.utimesSync(lock, past, past);
+
+  // This waiter has already judged the lock stale. Before it acts, another
+  // waiter takes the stale lock over and writes its own, fresh one.
+  let freshMtime = null;
+  staticServers._hooks.beforeStaleTakeover = function () {
+    staticServers._hooks.beforeStaleTakeover = null;
+    fs.unlinkSync(lock);
+    freshMtime = lockGoingStale(lock, "the other waiter", 600);
+  };
+  t.after(() => { staticServers._hooks.beforeStaleTakeover = null; });
+
+  let heldAt = null;
+  let other = null;
+  await staticServers._withServerLock(file, async function () {
+    heldAt = Date.now();
+    other = fs.readFileSync(lock, "utf8");
+  });
+  assert.ok(freshMtime !== null, "the other waiter did take the lock");
+  assert.ok(
+    heldAt - freshMtime > staticServers.START_LOCK_STALE_MS,
+    "this waiter held the lock only once the other waiter's lock was itself stale"
+  );
+  assert.notEqual(other, "the other waiter", "and the lock it held was its own");
+  assert.equal(fs.existsSync(lock), false, "released");
+});
+
+test("a start that times out kills its child, so a late child neither runs nor writes the record", async (t) => {
+  const w = world(t);
+  const a = await w.session("s_slow_child");
+  const old = staticServers.list(w.dir, a.id)[0];
+  await staticServers.stopOne(w.dir, a.id, old, staticServers.CLOSED_REASON);
+  let pid = null;
+  staticServers._hooks.startWaitMs = 1;
+  staticServers._hooks.onSpawn = function (child) { pid = child.pid; };
+  t.after(() => {
+    staticServers._hooks.startWaitMs = null;
+    staticServers._hooks.onSpawn = null;
+  });
+
+  await assert.rejects(staticServers.start({ dir: w.dir, sessionId: a.id, root: a.root }), /did not start/);
+  assert.ok(pid, "a child was spawned");
+  await pollUntil(() => {
+    try { process.kill(pid, 0); return false; } catch (err) { return err.code === "ESRCH"; }
+  }, { timeoutMs: 5000, message: "the timed-out child to be gone" });
+  const record = staticServers.list(w.dir, a.id)[0];
+  assert.equal(await staticServers.isExactServer(record), false, "nothing answers for the record");
+  assert.ok(record.instance === old.instance || record.pid === pid, "the record is the old one, or names the dead child");
 });
