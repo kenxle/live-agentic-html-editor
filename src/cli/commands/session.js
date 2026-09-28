@@ -14,6 +14,7 @@ var service = require("../../service/index.js");
 var sourceStamp = require("../../service/source_stamp.js");
 var reviewsModule = require("../../service/reviews.js");
 var staticServers = require("../../service/static_servers.js");
+var catalogReader = require("../../service/catalog_reader.js");
 
 var statusCommand = require("./status.js");
 var projection = require("../../service/projection.js");
@@ -33,7 +34,9 @@ var USAGE = [
   "  takeover  explicitly continue another agent's session, only when the human asks for it.",
   "            --name \"<name>\" records the human's name for your session at the same time",
   "  name      lahe session name <id> \"<name>\": the human's name for this session, shown on",
-  "            the reviewer's rail so they know which agent to check. \"\" clears it",
+  "            the reviewer's rail so they know which agent to check. \"\" clears it.",
+  "            lahe session name <id> --from-review <review> names it after that review's",
+  "            document, as the Library shows it",
   "",
   "  --json    with list: one JSON object per session, then one summary line"
 ].join("\n");
@@ -62,7 +65,13 @@ function parse(argv) {
   var naming = action === "name";
   var out = { action: action, id: listing ? null : list[1] || null, port: null, stateDir: null, json: false };
   var start = listing ? 1 : 2;
-  if (naming) {
+  if (naming && list[2] === "--from-review") {
+    // The Library's Launch: name the session after a review's display name,
+    // read here from the state dir, so the title never passes through a shell.
+    if (!protocol.isSafeId(list[3])) return { error: "--from-review takes a review id: lahe session name <id> --from-review <review>" };
+    out.fromReview = String(list[3]);
+    start = 4;
+  } else if (naming) {
     if (list.length < 3 || /^--/.test(String(list[2]))) return { error: "name takes a session id and a name: lahe session name <id> \"<name>\"" };
     out.name = String(list[2]);
     start = 3;
@@ -390,7 +399,18 @@ async function run(argv, options) {
   var store = sessions.createStore({ dir: dir });
   try {
     if (args.action === "name") {
-      var renamed = store.setName(args.id, args.name);
+      var newName = args.name;
+      if (args.fromReview) {
+        var described = catalogReader.createReader({ dir: dir }).describeReview(args.fromReview, opts.now);
+        if (!described) throw new Error("no review " + JSON.stringify(args.fromReview) + " in " + dir);
+        if (described.session !== args.id) {
+          throw new Error(
+            "review " + args.fromReview + " belongs to agent session " + described.session + ", not " + args.id
+          );
+        }
+        newName = described.display_name;
+      }
+      var renamed = store.setName(args.id, newName);
       out(
         "agent session " + args.id +
           (renamed.name ? " is named " + JSON.stringify(renamed.name) : " has no name now") + "\n"
