@@ -964,3 +964,93 @@ test("Open on a servable row that no server could restart waits for the agent in
   assert.equal(row(view, "r_stale").note.text, "Waiting for document index.");
   assert.equal(row(view, "r_stale").note.busy, true);
 });
+
+// ---------------------------------------------------------------------------
+// Expiry wording by reason (phase 7 fix round). `reason` comes from
+// src/service/catalog_requests.js EXPIRY_REASON.
+// ---------------------------------------------------------------------------
+
+function expiredRow(action, reason) {
+  const list = freshList();
+  const q = reviewIn(list, "r_wt_gone").request;
+  q.action = action;
+  if (reason === undefined) delete q.reason;
+  else q.reason = reason;
+  return row(build(list, okState()), "r_wt_gone");
+}
+
+test("a pick-up that expired on a timeout says the agent did not answer", () => {
+  const r = expiredRow("pickup", "timeout");
+  assert.equal(r.note.text, "Not picked up. document index didn't answer.");
+  assert.equal(r.note.copyHandoff, false);
+});
+
+test("a pick-up that expired because the agent stopped watching says so", () => {
+  const r = expiredRow("pickup", "monitor_dead");
+  assert.equal(r.note.text, "Not picked up. document index stopped watching before it answered.");
+});
+
+test("a pick-up that expired because another agent was attached says so", () => {
+  const r = expiredRow("pickup", "attach_changed");
+  assert.equal(r.note.text, "Not picked up. A different agent was attached before document index answered.");
+  assert.equal(r.note.copyHandoff, false);
+});
+
+test("an expired request with no reason keeps the did-not-answer wording", () => {
+  assert.equal(expiredRow("pickup", undefined).note.text, "Not picked up. document index didn't answer.");
+});
+
+test("an expired launch says no agent was launched and offers the hand-off message", () => {
+  const r = expiredRow("launch", "timeout");
+  assert.equal(r.note.text, "No new agent was launched. document index didn't answer.");
+  assert.equal(r.note.copyHandoff, true);
+});
+
+test("an expired launch after an attach change names both facts", () => {
+  const r = expiredRow("launch", "attach_changed");
+  assert.equal(r.note.text, "No new agent was launched. A different agent was attached before document index answered.");
+  assert.equal(r.note.copyHandoff, true);
+});
+
+// ---------------------------------------------------------------------------
+// Open in flight (CR1, page side)
+// ---------------------------------------------------------------------------
+
+test("Open shows busy while its request is in flight", () => {
+  const list = freshList();
+  const state = vm.beginOpen(okState(), list, "r_mounted", { handoff: true });
+  const r = row(build(list, state), "r_mounted");
+  assert.equal(r.buttons.open.busy, true);
+});
+
+test("a second click on Open while the first is in flight sends nothing", () => {
+  const list = freshList();
+  const state = vm.beginOpen(okState(), list, "r_mounted", { handoff: true });
+  assert.equal(vm.decide(list, state, "r_mounted", "open", {}).kind, "none");
+  assert.equal(vm.decide(list, state, "r_mounted", "open", { read: true }).kind, "none");
+  assert.equal(vm.decide(list, state, "r_mounted", "open", { confirmed: true }).kind, "none");
+});
+
+test("an Open with no tab (via an agent) is also busy until it answers", () => {
+  const list = freshList();
+  const state = vm.beginOpen(okState(), list, "r_dev", { handoff: true, tab: false });
+  assert.equal(row(build(list, state), "r_dev").buttons.open.busy, true);
+  assert.equal(vm.decide(list, state, "r_dev", "open", {}).kind, "none");
+});
+
+test("Open on another row is not blocked by one in flight", () => {
+  const list = freshList();
+  const state = vm.beginOpen(okState(), list, "r_mounted", { handoff: true });
+  assert.notEqual(vm.decide(list, state, "r_old4", "open", {}).kind, "none");
+});
+
+test("Open is clickable again once its answer arrives, success or failure", () => {
+  const list = freshList();
+  let state = vm.beginOpen(okState(), list, "r_mounted", { handoff: true });
+  state = vm.afterOpen(state, list, "r_mounted", { ok: true, body: { url: "http://127.0.0.1:5000/f.html", request_id: null, not_asked: null } }, NOW);
+  assert.equal(row(build(list, state), "r_mounted").buttons.open.busy, false);
+  assert.notEqual(vm.decide(list, state, "r_mounted", "open", {}).kind, "none");
+  state = vm.beginOpen(state, list, "r_mounted", { handoff: true });
+  state = vm.afterOpen(state, list, "r_mounted", { ok: false, unreachable: true }, NOW);
+  assert.equal(row(build(list, state), "r_mounted").buttons.open.busy, false);
+});

@@ -50,6 +50,14 @@
     DONE: "{agent}: {text}",
     REFUSED: "{agent} couldn't take it: {text}.",
     EXPIRED: "Not picked up. {agent} didn't answer.",
+    // Not in the Page Spec's table: the expired line carries a reason
+    // (catalog_requests.js EXPIRY_REASON), and a launch that expired is not a
+    // pick-up. The row names both, so the reader knows what to do next.
+    EXPIRED_PICKUP: "Not picked up.",
+    EXPIRED_LAUNCH: "No new agent was launched.",
+    EXPIRED_TIMEOUT: "{agent} didn't answer.",
+    EXPIRED_MONITOR_DEAD: "{agent} stopped watching before it answered.",
+    EXPIRED_ATTACH_CHANGED: "A different agent was attached before {agent} answered.",
     PANEL_NO_AGENT: "No agent is attached. This is the same hand-off message the rail already copies. Paste it into any agent:",
     PANEL_REFUSED: "This is the same hand-off message the rail already copies. Paste it into a new agent:",
     COPY: "Copy",
@@ -160,6 +168,8 @@
   //              watched session (R12b)
   //   banner     {kind: "opening"|"opened", review, name, agent, requestId,
   //              watched} | null: what Open is doing
+  //   opening    {reviewId: true}: an Open sent and not yet answered. A
+  //              second click on that row sends nothing until it answers.
   //   notes      {reviewId: {kind, text, tone, at, busy, action, requestId}}:
   //              what the page's own last action on a row came to
   //   starPending  {reviewId: desired}: a star sent and not yet answered
@@ -176,6 +186,7 @@
       panel: null,
       dialog: null,
       banner: null,
+      opening: {},
       notes: {},
       starPending: {},
       starOverride: {}
@@ -386,7 +397,17 @@
       };
     }
     if (q.state === "expired") {
-      return { text: fill(TEXT.EXPIRED, { agent: agent }), tone: "warn", busy: false, copyHandoff: false };
+      var launch = q.action === "launch";
+      var why = q.reason === "attach_changed"
+        ? TEXT.EXPIRED_ATTACH_CHANGED
+        : q.reason === "monitor_dead" ? TEXT.EXPIRED_MONITOR_DEAD : TEXT.EXPIRED_TIMEOUT;
+      return {
+        text: (launch ? TEXT.EXPIRED_LAUNCH : TEXT.EXPIRED_PICKUP) + " " + fill(why, { agent: agent }),
+        tone: "warn",
+        busy: false,
+        // A launch nobody ran can still be done by hand, from the message.
+        copyHandoff: launch
+      };
     }
     return null;
   }
@@ -436,7 +457,7 @@
     if (viaAgent && !agent) notices.push({ text: TEXT.NEEDS_AGENT, tone: "warn" });
 
     var buttons = {
-      open: { label: TEXT.OPEN, enabled: !missing && !(viaAgent && !agent), busy: false },
+      open: { label: TEXT.OPEN, enabled: !missing && !(viaAgent && !agent), busy: isOpening(state, review.id) },
       pickup: { label: TEXT.PICKUP, enabled: !missing, busy: busyAction === "pickup" },
       launch: { label: TEXT.LAUNCH, enabled: !missing, busy: busyAction === "launch" }
     };
@@ -740,6 +761,10 @@
     return null;
   }
 
+  function isOpening(state, reviewId) {
+    return !!(state && state.opening && state.opening[reviewId]);
+  }
+
   function watchedByOther(session, agent) {
     return !!(session.watching && agent && session.watching.session !== agent.session);
   }
@@ -758,6 +783,8 @@
     options = options || {};
     var found = findReview(list, reviewId);
     if (!found || found.review.openable === "missing") return { kind: "none" };
+    // An Open on this row is still in flight: a second click sends nothing.
+    if (isOpening(state, reviewId)) return { kind: "none" };
     var review = found.review;
     var agent = liveAgent(list);
     var viaAgent = review.openable === "via-agent";
@@ -842,6 +869,7 @@
   function beginOpen(state, list, reviewId, options) {
     options = options || {};
     var out = clearRow(state, reviewId);
+    out.opening = withKey(state.opening, reviewId, true);
     var found = findReview(list, reviewId);
     var agent = liveAgent(list);
     if (!found || options.tab === false) return assign(out, { banner: null });
@@ -857,7 +885,7 @@
 
   function afterOpen(state, list, reviewId, result, now) {
     var opening = state.banner && state.banner.review === reviewId ? state.banner : null;
-    var out = assign({}, state, { banner: null });
+    var out = assign({}, state, { banner: null, opening: withKey(state.opening, reviewId, undefined) });
     if (!result || !result.ok) {
       if (result && result.urlRefused) return withNote(out, reviewId, { kind: "error", text: TEXT.URL_REFUSED, tone: "warn" }, now);
       return refused(out, list, reviewId, "open", result || { unreachable: true }, now);
