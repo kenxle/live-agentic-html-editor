@@ -164,19 +164,28 @@ sequenceDiagram
 
 ### The editing host
 
-**Pending the editing-host spike, running now.**
+The session makes the anchor's **parent** `contenteditable`. A guard on `beforeinput` refuses every edit that falls outside the session's blocks, which are the anchor and its run. The layer removes the attribute at commit. It hides the parent's focus ring with its own shadow-root style, never a page style. Nothing the layer adds reaches a record.
 
-Today `contenteditable` sits on one block. A run is several siblings, and the caret has to move across them freely with arrows, selection, and Backspace at the start of a block. The layer opens one editing host that spans the anchor and the run, and removes it at commit. Which kind of host works in all three browsers is the one real unknown. The editing-host spike settles it (see Open Questions). The candidates, in order of preference:
+A spike tested five hosts in Chromium, Firefox, and WebKit, on a styled blog page and on a real Lahe Markdown render. Only this one passed every check in all three:
 
-1. A layer-owned wrapper with `display: contents` holding the anchor and the run. It adds no box of its own, so page layout is unchanged.
-2. A plain wrapper with no styling, if a wrapper with `display: contents` cannot take focus in one of the engines.
-3. `contenteditable` on each block, with the layer carrying arrow keys and Backspace across block edges.
+| Host | Caret, arrows, selection, Backspace merge | Page styling holds | Result |
+|---|---|---|---|
+| Wrapper with `display: contents` | Cannot even take focus in Chromium and Firefox | No | Fail |
+| Plain wrapper div | Pass | No: child and sibling selectors stop matching. Spacing between blocks changed from 53px to 31px, and the anchor's font from 21px to 16px | Fail |
+| `contenteditable` on each block | Selection cannot span blocks | Yes | Fail |
+| Lahe anchor, then a Tiptap run | Caret cannot cross, no merge, undo runs out of order | No | Fail |
+| **Editable parent plus guard** | **Pass** | **Pass** | **Chosen** |
 
-Whichever wins, it is removed at commit, and nothing the layer adds reaches a record. Today's rule that nothing the library draws is written to the page still holds.
+What the layer owns with this host:
+
+- **Edits across a block edge.** Backspace at a block start, Delete at a block end, and typing over a selection that spans blocks are cancelled and written by the layer. Native merges add inline style spans in Chromium and WebKit, which the spike measured.
+- **The caret leaving the session.** If the caret moves into a page block outside the session, the guard already refuses every edit there, in all three browsers. The layer also ends the session, the same as a click outside does today.
+- **A repaint that replaces the parent.** The attribute is lost with the old node. Protection re-finds the anchor, puts the held run back, and sets the attribute again. Restoring the held nodes let typing continue in the spike.
+- **IME composition.** It cannot be cancelled through `beforeinput`. Composition inside a session block is allowed; the guard only refuses a composition that starts outside the session.
 
 ### Where "after the anchor" is
 
-A new block goes after the anchor as a DOM sibling, with one rule for page chrome. Starting at the anchor, climb while the parent holds only the anchor plus inline chrome, then insert after that parent. On Lahe's Markdown render, an `h2` sits in `div.sheet-head` beside its "Section N" label. So a block written after a header goes after the `sheet-head`, not inside its flex row. The same rule serves Enter while writing, replay's inserts, and the insert point for a missing block. The editing-host spike confirms it on a real `lahe review post.md` page (pending).
+A new block goes after the anchor as a DOM sibling, with one rule for page chrome. Starting at the anchor, climb while the parent holds only the anchor plus inline chrome, then insert after that parent. On Lahe's Markdown render, an `h2` sits in `div.sheet-head` beside its "Section N" label. So a block written after a header goes after the `sheet-head`, not inside its flex row. The same rule serves Enter while writing, replay's inserts, and the insert point for a missing block. The editing-host spike confirmed it on a real Lahe Markdown render. Inside `sheet-head` a new paragraph became a flex item on the header's row, 256px wide. After `sheet-head` it matched a normal paragraph exactly in all three browsers.
 
 A new `h2` typed mid-section shows with the page's `h2` styling but without the section rule and number until the rebuild. The wireframe shows Ken that look, since brief R4 (new blocks use the page's styling) is his wording.
 
@@ -410,19 +419,19 @@ New lines, in the contract and every copy of it:
 ## Open Questions
 
 ::: callout-question
-**AQ1 (Ken):** Lahe's own code or Tiptap?
+**AQ1 (Ken):** Lahe's own code or Tiptap? **Recommendation: Lahe's own code.**
 
-**Pending the editing-host spike, running now.**
-
-- **The case for Lahe's own code:** one sitting crosses old and new blocks. Tiptap cannot safely edit old blocks, so a sitting would switch editors partway through.
-- **What Tiptap would give for free:** shortcuts, undo, and rich paste. Undo that puts the caret back, groups typing, handles redo, and works with IME input is real work to write here.
-- **What Tiptap would cost:** 104 to 121 KB gzipped, which could load only when a sitting opens. Its lists space differently from the page's own. It adds its own classes to the page.
-- **Protection:** when its parent is replaced it stops, but reattaching its own node recovered editing in the spike.
-- **Not yet measured:** whether Lahe's own host can span blocks, and what the seam looks like between Lahe's anchor and a Tiptap run. The spike measures both.
-:::
-
-::: callout-question
-**AQ2 (spike):** Which editing host works in Chromium, Firefox, and WebKit? The three candidates are under Key Flows. The spike measures three things: can the caret cross blocks, does Backspace merge, and does page styling hold. It picks the first candidate that passes all three.
+- **The deciding test:** one sitting starts in an existing block and flows into new ones. The spike built exactly that seam, a Lahe-edited block with a Tiptap run after it. In all three browsers:
+  - the caret cannot cross between them with the arrow keys
+  - a selection cannot span both
+  - Backspace at the start of the Tiptap run does not merge into the block above
+  - undo runs out of order, because each side keeps its own history
+  - the Tiptap paragraphs lose the page's own spacing
+- **Tiptap on every block avoids the seam but changes the page.** It dropped markup on 5 of 5 existing blocks in the first spike.
+- **Lahe's own host passes everything** (see The editing host).
+- **What Tiptap would have given for free:** shortcuts, undo, and rich paste. Undo is real work to write here, and the plan budgets it. Rich paste stays on board row `LAHE-rich-paste`.
+- **What Tiptap would cost:** 104 to 121 KB gzipped, loadable only when a sitting opens.
+- **Protection:** reattaching Tiptap's node recovered editing after a repaint, so protection alone would not have ruled it out.
 :::
 
 ::: callout-question
@@ -443,10 +452,10 @@ New lines, in the contract and every copy of it:
 | AR3 | The insert path's "already there" rule is undefined | Accepted | Presence table added: joined and split blocks, short blocks, where a missing block goes, conflict, earlier revisions; stated no-duplicate guarantee |
 | AR4 | A header's next sibling is inside the `sheet-head` flex row | Accepted | "After the anchor" climbs out of chrome wrappers; new-h2 look goes to the wireframe; spike confirms on a real page |
 | AR5 | Merge on load drops the new fields | Accepted | `merge.js` in Components; the new fields join `CONTENT_FIELDS`; unit test added |
-| AR6 | The editing host is deferred to the plan | Deferred | Marked pending the editing-host spike, running now |
+| AR6 | The editing host is deferred to the plan | Accepted | Settled before the plan by the editing-host spike: editable parent plus guard, the only host passing in all three browsers |
 | AR7 | The helper's tag test cannot fire behind its gate | Accepted | Gate stated plainly; tag test moved to the page check; "always run it" is AQ3 for Ken |
 | AR8 | The reload row describes mechanisms that do not exist | Accepted | Rows rewritten around the rebuild-reload wait (`isBusy`), commit on unload, and `itemFor` reopening a run |
-| AR9 | The Tiptap comparison is uneven | Deferred | AQ1 and Alternatives rewritten fairly (lazy loading, reattach recovered, rich paste, list spacing, undo is real work); not decided |
+| AR9 | The Tiptap comparison is uneven | Accepted | AQ1 rewritten fairly, then decided on the editing-host spike, which measured the Lahe-to-Tiptap seam |
 | AR10 | Old agents and old records have no home | Accepted | Rollout section: `SERVICE_CONTRACT` 14, old agents still act through `after_html`, old records keep today's path |
 | AR11 | Turning the anchor into a header is under-specified | Accepted | Record kind, `kindFor` tag compare, replay tag leg, one element swap, ladder accepts both tags |
 | AR12 | Adding an item to an existing list has no shape | Accepted | The anchor is the whole list; a new item is anchor markup; browser test added |
