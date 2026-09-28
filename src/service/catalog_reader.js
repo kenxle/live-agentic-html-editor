@@ -61,6 +61,11 @@ var HEARTBEAT = protocol.MONITOR.HEARTBEAT_FIELD;
 var PAGE_EXTENSIONS = [".html", ".htm", ".md", ".markdown"];
 var SINGLE_PAGE_EXTENSIONS = [".html", ".htm"];
 
+// A quote, a backslash or a control character in a candidate path: never
+// offered. The path is page-derived, and an agent hands it on.
+// eslint-disable-next-line no-control-regex
+var UNSAFE_PATH_CHARS = /['"`\\\u0000-\u001f\u007f-\u009f]/;
+
 // <repo>/.claude/worktrees/<name>/<rest>
 var WORKTREE = /^(.*)\/\.claude\/worktrees\/[^/]+(?:\/(.*))?$/;
 
@@ -326,7 +331,10 @@ function createReader(options) {
   /**
    * The main repository's copy of a document whose worktree copy is gone, or
    * null. Every check must pass: under the repository by real path, no hidden
-   * segment, owned by the current user, and a page.
+   * segment, owned by the current user, a page by its REAL path's extension (a
+   * symlink `x.md` to a `.json` is not a page), and no quote or control
+   * character anywhere in it (the path is page-derived and an agent serves it).
+   * The real path is what is returned.
    */
   function worktreeCandidate(docPath) {
     if (typeof docPath !== "string" || !docPath || exists(docPath)) return null;
@@ -335,8 +343,8 @@ function createReader(options) {
     var repo = wt[1];
     var rest = wt[2];
     if (hasHiddenSegment(rest)) return null;
-    if (PAGE_EXTENSIONS.indexOf(path.extname(rest).toLowerCase()) === -1) return null;
     var candidate = path.join(repo, rest);
+    if (UNSAFE_PATH_CHARS.test(candidate)) return null;
     var realRepo;
     var realCandidate;
     try {
@@ -347,10 +355,12 @@ function createReader(options) {
     }
     if (realCandidate.indexOf(realRepo + path.sep) !== 0) return null;
     if (hasHiddenSegment(path.relative(realRepo, realCandidate))) return null;
+    if (UNSAFE_PATH_CHARS.test(realCandidate)) return null;
+    if (PAGE_EXTENSIONS.indexOf(path.extname(realCandidate).toLowerCase()) === -1) return null;
     var stat = statOrNull(realCandidate);
     if (!stat || !stat.isFile()) return null;
     if (typeof process.getuid === "function" && stat.uid !== process.getuid()) return null;
-    return candidate;
+    return realCandidate;
   }
 
   function pathHint(folderPath) {
