@@ -903,6 +903,8 @@ Review</a></li>
 Review</a></li>
 <li><a href="#plan-review-back-patches"
 id="toc-plan-review-back-patches">Plan Review Back-patches</a></li>
+<li><a href="#main-drift-2026-09-28" id="toc-main-drift-2026-09-28">Main
+Drift, 2026-09-28</a></li>
 <li><a href="#reviews-free-writing-architecture"
 id="toc-reviews-free-writing-architecture">Reviews: Free writing
 architecture</a>
@@ -946,11 +948,12 @@ Tiptap).</strong></p>
 <p>Replay, which re-applies the reviewer's edits after each reload,
 learns to insert new blocks after the anchor. It also checks each
 block's words, tag, and bold on its own. That fixes the doubled header
-line and the lone paragraph that loses its bold. One shared list of safe
-tags checks every new block three times: when the layer captures it,
-when the helper stores it, and before any write to the page. The agent's
-instructions gain rules for placing new blocks. A new
-<code>lahe write</code> command starts a blank notes page.</p>
+line, and the left-out bold paragraph that main still loses when it is
+not the edit's first. One shared list of safe tags checks every new
+block three times: when the layer captures it, when the helper stores
+it, and before any write to the page. The agent's instructions gain
+rules for placing new blocks. A new <code>lahe write</code> command
+starts a blank notes page.</p>
 <div class="xref">
 <p><a href="01_brief_free_writing.html#requirements">Brief:
 Requirements</a></p>
@@ -983,20 +986,30 @@ block</li>
 <li><strong>Changes:</strong> Enter makes a sibling, not a nested block.
 Replay gains an insert path. The page check and the handled check learn
 block structure.</li>
-<li><strong>Root cause of two open bugs</strong>, both found by tracing
-the code:
+<li><strong>Root cause of the open bugs</strong>, found by tracing the
+code and re-checked on main after piece-keeps-formatting:
 <ul>
 <li><strong>The doubled line under a header.</strong> Enter nests the
 new <code>&lt;p&gt;</code> inside the <code>&lt;h2&gt;</code>. Replay's
 "already there" check looks only at the next sibling, which on a Lahe
 Markdown render is the "Section 1" label. So replay rewrites the header
-with the nested paragraph, and the text shows twice.</li>
-<li><strong>The lone paragraph that loses its bold</strong> (board row
-<code>LAHE-lone-paragraph-loses-markup</code>). Replay writes a missing
-split piece as plain text, and stops checking formatting once the split
-is found.</li>
-<li>Both go away when new blocks are separate siblings with their own
-markup, read in document order.</li>
+with the nested paragraph, and the text shows twice. Still open on
+main.</li>
+<li><strong>The lone paragraph that lost its bold</strong> (board row
+<code>LAHE-lone-paragraph-loses-markup</code>). Fixed on main. Replay
+now writes a missing first paragraph with its own markup:
+<code>normalize.topLevelBlocks</code> cuts <code>after_html</code> at
+the top level, and <code>pieceMarkup</code> in <code>replay.js</code>
+uses the cut when it lines up with the text. When it does not line up,
+the paragraph still goes in as plain text. This feature keeps a
+regression test under the new record shape and no longer owns the
+fix.</li>
+<li><strong>What is still open from that case.</strong> Replay still
+skips the formatting check once it finds the split on the page. And when
+the left-out bold paragraph is a later one, the anchor cannot be found,
+the record goes lost, and nothing is flagged (see Failure Modes).</li>
+<li>Both open cases go away when new blocks are separate siblings with
+their own markup, read in document order.</li>
 </ul></li>
 <li><strong>The third brief R14 case</strong> (bold two words on a
 Markdown page, commit, rebuild) was reproduced. It works when the agent
@@ -1012,7 +1025,9 @@ for new blocks).</li>
 <code>WRITABLE_BLOCK_TAGS</code>, the six tags a record may carry (p,
 h2, h3, h4, ul, ol); <code>BLOCK_TAGS</code> stays the text reader's
 list. A per-block reader and a run matcher shared by replay, the page
-check, and the handled check.</li>
+check, and the handled check. <code>topLevelBlocks</code> (from the
+first-paragraph fix) stays as it is for old records; the per-block
+reader is a different cut, down to leaf blocks and with tags.</li>
 <li><strong><code>src/layer/blocks.js</code></strong> (new): the DOM
 block rules in one copy. The leaf-block walk, the insert point after an
 anchor or at a container's start, the editing host, the element swap,
@@ -1099,7 +1114,7 @@ class="sourceCode json"><code class="sourceCode json"><span id="cb2-1"><a href="
 <span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span> <span class="dt">&quot;tag&quot;</span><span class="fu">:</span> <span class="st">&quot;ul&quot;</span><span class="fu">,</span> <span class="dt">&quot;html&quot;</span><span class="fu">:</span> <span class="st">&quot;&lt;li&gt;scrolling&lt;/li&gt;&lt;li&gt;re-asking&lt;/li&gt;&quot;</span> <span class="fu">}</span></span>
 <span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>  <span class="ot">]</span><span class="fu">,</span></span>
 <span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;placement&quot;</span><span class="fu">:</span> <span class="st">&quot;after_anchor&quot;</span><span class="fu">,</span></span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;change&quot;</span><span class="fu">:</span> <span class="st">&quot;Added 3 blocks after this paragraph: h2, p, ul. Their words are in new_blocks; place them as written.&quot;</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;change&quot;</span><span class="fu">:</span> <span class="st">&quot;Added 3 blocks after this paragraph: h2, p, ul. Their words are in new_blocks.&quot;</span></span>
 <span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
 <ul>
 <li><p><strong>A run record</strong> has a non-empty
@@ -1148,7 +1163,8 @@ block with its tag.</p></li>
 <td><code>replay.js</code> anchor compare (<code>compare</code>,
 <code>reflowMatch</code>, <code>splitPieces</code>,
 <code>wouldDuplicate</code>, <code>splitWritePlan</code>,
-<code>mayFold</code>, <code>formattingLost</code>)</td>
+<code>pieceMarkup</code>, <code>mayFold</code>,
+<code>formattingLost</code>)</td>
 <td>Reads an anchor view, with <code>anchor_after_html</code> in place
 of <code>after_html</code> and its text in place of <code>after</code>.
 <code>writeRegion</code> never sees the whole sitting, so it cannot
@@ -1166,7 +1182,14 @@ new fields.</td>
 </tr>
 <tr>
 <td><code>handled_check.js</code></td>
-<td>Each block's words, in order, each on its own.</td>
+<td>Each block's words, in order, each on its own. A run never takes the
+several-paragraph path main added (<code>splitStarts</code>), because a
+section label between blocks would fail it.</td>
+</tr>
+<tr>
+<td><code>status.js</code> drain line</td>
+<td>The three text fields sit under <code>page</code>, like
+<code>after_html</code> (see Projection).</td>
 </tr>
 <tr>
 <td><code>merge.js</code></td>
@@ -1184,13 +1207,14 @@ new fields.</td>
 </tbody>
 </table></div></li>
 <li><p><strong>Change text</strong> for a run describes structure only
-and never quotes a block's words. The anchor is named paragraph,
-heading, list, or block.</p>
+and never quotes a block's words. It restates no rule: "place them as
+written" lives in the contract, read once, not on every item. The anchor
+is named paragraph, heading, list, or block.</p>
 <ul>
 <li>A run: "Added 3 blocks after this paragraph: h2, p, ul. Their words
-are in new_blocks; place them as written."</li>
+are in new_blocks."</li>
 <li>At the start of a page: "Added 2 blocks at the start of the page:
-h2, p. Their words are in new_blocks; place them as written."</li>
+h2, p. Their words are in new_blocks."</li>
 <li>The anchor reworded: "Reworded this paragraph; its new markup is in
 anchor_after_html."</li>
 <li>The anchor retagged: "Changed this paragraph to h2."</li>
@@ -1214,6 +1238,25 @@ R6, the words stay as typed). The helper's ceiling bounds them.</li>
 The agent never counts.</li>
 <li>A <code>lahe write</code> review carries
 <code>notes: true</code>.</li>
+<li>The 2000-character bound is still <code>BEFORE_MAX</code> on main.
+Projected <code>after_history</code> entries stay bounded as today and
+carry no <code>new_blocks</code>.</li>
+</ul></li>
+<li><p><strong>On a drain line</strong>
+(<code>lahe status --session ... --json --quiet</code>), main now groups
+every page-text field under the item's <code>page</code> key, driven by
+<code>review_format.DATA_FIELDS</code>, and repeats no rule text.</p>
+<ul>
+<li><code>new_blocks</code>, <code>anchor_after_html</code>, and
+<code>remove_blocks</code> join <code>DATA_FIELDS</code>, so they sit
+under <code>page</code> beside <code>after_html</code>. The drain code
+needs no change.</li>
+<li><code>anchor_tag_after</code>, <code>placement</code>,
+<code>run_words</code>, and <code>proofread</code> stay at the top level
+as markers, and each gets a class in the field-class table.</li>
+<li><code>notes</code> is review-level and is not repeated on item
+lines. The one behavior it changes reaches each item as
+<code>proofread</code>.</li>
 </ul></li>
 <li><p><strong>Size ceiling:</strong> the helper refuses an event whose
 <code>new_blocks</code> is over a per-record ceiling in blocks and in
@@ -1227,7 +1270,18 @@ seen it, and the words stay in the browser.</li>
 <li><p><strong>History size:</strong> <code>after_history</code> keeps
 <code>new_blocks</code> only for the last few revisions (the plan sets
 how many). Replay's check for an earlier revision that already landed
-(branch three of the anchor compare) needs only recent ones.</p></li>
+(branch three of the anchor compare) needs only recent ones.</p>
+<ul>
+<li>Every older entry still keeps the whole sitting's <code>after</code>
+and <code>after_html</code>, because <code>bumpRev</code> never trims
+history. So a run at the byte ceiling crosses the helper's 8 MiB body
+limit at its 18th history entry. That is a lower bound from a script,
+ignoring JSON escaping.</li>
+<li>The record also stores the run's markup twice
+(<code>after_html</code> and <code>new_blocks</code>). Main's rule since
+oversized-records is to store what identifies a thing once.</li>
+<li>How to bound it is Ken's call (see Open Questions, AQ4).</li>
+</ul></li>
 <li><p><strong>Draft growth:</strong> each draft carries the whole run,
 so a run record gets a longer draft floor than today's 10 seconds (the
 plan sets it). Capture rebuilds only the caret's block.</p></li>
@@ -1480,7 +1534,14 @@ extended to run blocks.</p>
 <ul>
 <li>Before the agent places a run, a sitting that starts on or below its
 anchor or run blocks continues the same record at a new revision. The
-caret goes where the reviewer clicked.</li>
+caret goes where the reviewer clicked.
+<ul>
+<li>The first keystroke that changes it takes the record off the agent's
+drain until the sitting commits, and later drafts wait for the draft
+floor. Main does this for a <code>ready</code> record and, since
+refused-reword-floor, for a <code>not_handled</code> one too. So the
+agent never places a half-written run.</li>
+</ul></li>
 <li>Once the record is handled, its blocks are the page's own, and a new
 sitting anchors on the block above the click.</li>
 <li>This rule means:
@@ -1654,20 +1715,48 @@ which says the tag is wrong.</li>
 <p>This is where the tag test lives, because it runs after the agent's
 write.</p>
 <h3 id="the-handled-check">The handled check</h3>
-<p>The helper's handled check keeps its gate. It judges an item only
-when no source file behind the page changed after the reviewer
-committed. So it only catches an agent that replied handled and wrote
-nothing. It does not test tags. The page check covers placement after a
+<p><strong>How it works on main now.</strong> Main judges each edit on
+its own passage (handled-check-per-edit, <code>verdictFor</code> in
+<code>handled_check.js</code>). An item is held only when its
+<code>after</code> is not on the built page and one of two things says
+the agent left its passage alone:</p>
+<ul>
+<li><strong>Nothing was written.</strong> No file behind the review
+changed since the reviewer committed (<code>touchedSince</code>,
+review-wide).</li>
+<li><strong>The passage is still there.</strong> The item's
+<code>before</code> is on the page as whole blocks, exactly once.</li>
+</ul>
+<p>An agent that changed the passage, in any words, is not
+second-guessed. A several-paragraph <code>after</code> is looked for
+paragraph by paragraph, so a split nobody made is held.</p>
+<p><strong>What that means for new text.</strong> The per-item rule
+needs a <code>before</code> the agent would have to change. New text has
+none:</p>
+<ul>
+<li>A run whose anchor is unchanged has an <code>after</code> that holds
+the whole <code>before</code>. Main treats that as "only added words"
+and skips the passage test (<code>passageOf</code>). So the run is
+judged only when nothing in the whole review was written.</li>
+<li>A <code>format_only</code> record's <code>before</code> and
+<code>after</code> have the same words, so the same skip applies.</li>
+<li>So an agent that places one run and answers handled on two is not
+caught: it wrote something, so the run it skipped is never judged. AQ3
+(should the handled check always run for new blocks) asks whether to
+close that.</li>
+</ul>
+<p>The check does not test tags. The page check covers placement after a
 real write.</p>
 <p>The helper cannot find a region in a built page, so it matches by
 words:</p>
 <ul>
-<li><strong>A run.</strong> The anchor's own words are checked, as
-today, unless the anchor is a container or has fewer than
+<li><strong>A run.</strong> The anchor's own words follow main's
+per-item rule, unless the anchor is a container or has fewer than
 <code>SHORT_BLOCK_WORDS</code> (five) words. The run is found by
 locating the first run block's leaf, page-wide, then matching the rest
 in order with the shared matcher. A section label between blocks does
-not fail it.</li>
+not fail it. A run never takes main's several-paragraph path, which
+would fail on that label.</li>
 <li><strong>Bold or italic on a <code>format_only</code>
 record.</strong> Take each span whose bold or italic changed, using the
 reader inside <code>record.formattingChangeText</code>. Require its
@@ -1676,8 +1765,6 @@ or <code>i</code>) in the built page's leaf blocks. Bold words elsewhere
 on the page give a false pass, which is accepted because the page check
 runs on the next load.</li>
 </ul>
-<p>Whether this check should always run for new blocks is Ken's call
-(AQ3, should the handled check always run for new blocks).</p>
 <h3 id="the-proofreading-reply">The proofreading reply</h3>
 <p>Brief R11 (proofreading after a long hand-written block) lives in the
 contract.</p>
@@ -1757,10 +1844,22 @@ in the reply.</li>
 <code>question</code> reply.</li>
 </ul></li>
 <li><strong>Data fields:</strong> the data-fields line adds new_blocks,
-anchor_after_html, and remove_blocks.</li>
+anchor_after_html, and remove_blocks. The drain clause needs no new
+sentence: it already says every page-text field sits under page with its
+review.json name.</li>
 <li><strong>The after_html line</strong> stays true. A new sentence says
 that for a run record, anchor_after_html is the anchor's own change and
 new_blocks is the run.</li>
+<li><strong>The handled-check line</strong> on main says an agent that
+changed the passage is not second-guessed. If Ken says yes to AQ3, a new
+sentence says new_blocks has no old passage, so each block's words are
+checked on every handled reply. The skill's "A handled reply is checked"
+section says the same.</li>
+<li><strong>Said once.</strong> Each rule above is a contract line, read
+once. No rule text rides on an item: the change text points at
+new_blocks and stops, and the per-item signals are fields
+(<code>proofread</code>, <code>placement</code>,
+<code>from_anchor</code>).</li>
 </ul>
 <h2 id="alternatives-considered">Alternatives Considered</h2>
 <ul>
@@ -1848,11 +1947,13 @@ today.</td>
 <td>The empty item is dropped at capture.</td>
 </tr>
 <tr>
-<td>An edit whose bold paragraph is the one the agent left out</td>
-<td>Found while reproducing the lone-paragraph case. The bold paragraph
-never appears, replay counts the record as lost, and no flag is raised.
-The insert path's per-block matching covers it: a missing block is
-inserted with its own markup.</td>
+<td>An edit whose bold paragraph is the one the agent left out, and it
+is not the first paragraph</td>
+<td>Found while reproducing the lone-paragraph case, and still true on
+main after the first-paragraph fix (re-run 2026-09-28). The bold
+paragraph never appears, replay counts the record as lost, and no flag
+is raised. The insert path's per-block matching covers it: a missing
+block is inserted with its own markup.</td>
 </tr>
 </tbody>
 </table></div>
@@ -1917,7 +2018,10 @@ page names. Any other request gets a 404.</li>
 which pages get the rail. A single page's server still serves its whole
 folder, and servers are shared by root folder. Notes files often sit in
 a home, Desktop, or Documents folder, and serving that folder would
-serve all of it. A notes page has no images, so it loses nothing.</li>
+serve all of it. Since hidden-files-plain, that includes dotfiles such
+as <code>.env</code> or <code>.ssh</code>, which a folder server now
+serves like any other file. A notes page has no images, so it loses
+nothing.</li>
 </ul></li>
 <li><strong>Follow-ups for the board, older than this feature:</strong>
 <ul>
@@ -1947,7 +2051,9 @@ with no 2000-character cut</li>
 <li>merge on load in both directions (the browser's run wins whether
 longer or shorter)</li>
 <li>the reader, the leaf walk, and one test per presence-table row</li>
-<li>the handled check across a section label</li>
+<li>the handled check across a section label, and a run the agent
+skipped while it placed another item</li>
+<li>a drain line puts the three text fields under <code>page</code></li>
 <li>every <code>lahe write</code> path: create, no overwrite, missing
 parent, and the three symlink cases</li>
 </ul></li>
@@ -2004,23 +2110,65 @@ loadable only when a sitting opens.</li>
 new blocks? (AQ2, which editing host to use, was resolved by the
 editing-host spike.)</p>
 <ul>
-<li><strong>Today:</strong> it runs only when no source file changed
-after the reviewer committed, so it only catches an agent that wrote
-nothing.</li>
+<li><strong>Today, on main:</strong> the check judges each edit on its
+own passage. It holds an item only when the agent left that passage
+alone: its <code>before</code> is still on the page, or nothing in the
+review was written. New text has no <code>before</code> to change, so a
+run is judged only when nothing at all was written. An agent that places
+one run and answers handled on two gets the skipped one through.</li>
 <li><strong>The proposal:</strong> for <code>new_blocks</code>, run it
 every time and compare each block's visible words on the built page.
 Brief R6 (the words stay as typed) allows no rewording of new text, so
 the reason for skipping does not apply.</li>
-<li><strong>What it would catch:</strong> words that turned into markup
-or template code vanish from the visible page, and this is the one check
-that sees that. It would also catch a header placed as a paragraph at
-reply time.</li>
-<li><strong>Why it is your call:</strong> it changes a standing rule,
-that an agent that did real work is never second-guessed on its
-wording.</li>
+<li><strong>What it would catch:</strong> a run the agent skipped while
+it worked on something else. Words that turned into markup or template
+code, which vanish from the visible page; this is the one check that
+sees that. A header placed as a paragraph at reply time.</li>
+<li><strong>Why it is your call:</strong> it goes past the standing rule
+that an agent that changed the passage is not second-guessed on its
+wording. The step is smaller than it was: main already judges each edit
+on its own, and new text has no old wording for the agent to have
+changed.</li>
 <li><strong>Related:</strong> formatting-only records get checked in
 this feature either way, because brief R14 (bold and italic survive the
-rebuild) requires it.</li>
+rebuild) requires it. Like a run, a bold edit has no changed words for
+the per-edit rule to find, so it is judged only when nothing was
+written. The same answer can cover it.</li>
+</ul>
+<p><strong>Recommendation: yes</strong>, still. The per-edit check makes
+the case stronger: it closed "fix one, answer five" for reworded text,
+and new text is now the main shape it misses.</p>
+</div>
+<div class="callout callout-question">
+<p><strong>AQ4 (Ken):</strong> How should a run record's size be
+bounded?</p>
+<ul>
+<li><strong>The problem.</strong> Every revision adds a history entry
+that keeps the whole sitting's words and markup, and history is never
+trimmed. A run at the byte ceiling (200,000 bytes of markup) crosses the
+helper's 8 MiB request limit at its 18th entry. A notes page the agent
+has not placed yet gains a revision with every sitting. Past the limit
+the helper refuses the whole post as a bad request, and the plan's
+refused-event path knows only its own run codes.</li>
+<li><strong>Store once.</strong> Main's rule since oversized-records is
+to store what identifies a thing once. A run record stores its markup
+twice (<code>after_html</code> and <code>new_blocks</code>), and every
+draft line in the log repeats the whole record.</li>
+<li><strong>Options, each measured by the same script:</strong>
+<ul>
+<li>Older history entries keep the words and drop the markup. The limit
+moves to the 33rd entry. The agent still reads the chain of wordings.
+Replay needs markup only for recent entries.</li>
+<li>Also store the run once, rebuilding <code>after_html</code> and
+<code>after</code> when read, the way main rebuilds an image tag. The
+limit moves to the 41st entry. Every reader of those two fields goes
+through one function, which touches many files.</li>
+<li>Count the whole record against the ceiling the bar already warns on,
+so the reviewer is told to send before the limit. Bounded, and no words
+are cut.</li>
+</ul></li>
+<li><strong>Recommendation:</strong> the first and the third together.
+The second is the fuller fix and can follow on its own.</li>
 </ul>
 </div>
 <h2 id="architect-review">Architect Review</h2>
@@ -2430,6 +2578,110 @@ characters</td>
 <td>A screen reader heard nothing useful</td>
 <td><span class="accepted">Accepted</span></td>
 <td>Live region added</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="main-drift-2026-09-28">Main Drift, 2026-09-28</h2>
+<p>Checked against main after the architecture was written:
+piece-keeps-formatting, handled-check-per-edit, oversized-records,
+trim-the-drain, refused-reword-floor, hidden-files-plain, and
+quiet-tab-polling, up to the 2b6eb96 bundle rebuild.
+compact-draft-history was already in the base. The R14 reproduction was
+re-run on main, and the size figures come from a script. Both paths are
+in the plan's spike evidence list.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MD1</td>
+<td>The lone-paragraph bug is fixed on main
+(<code>topLevelBlocks</code>, <code>pieceMarkup</code>)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Root cause rewritten; the feature keeps a regression test and no
+longer owns the fix</td>
+</tr>
+<tr>
+<td>MD2</td>
+<td>A left-out bold paragraph that is not the first still loses the edit
+with no flag, and the split branch still skips the formatting check</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Kept as this feature's; Failure Modes row says it was
+re-checked</td>
+</tr>
+<tr>
+<td>MD3</td>
+<td><code>pieceMarkup</code> reads the whole <code>after_html</code> and
+would cut a run record's sitting</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Added to the anchor-view list in the reader table</td>
+</tr>
+<tr>
+<td>MD4</td>
+<td>The handled check now judges each edit on its own passage, not only
+when nothing was written</td>
+<td><span class="accepted">Accepted</span></td>
+<td>The handled check section describes <code>verdictFor</code>; a run
+skips main's several-paragraph path</td>
+</tr>
+<tr>
+<td>MD5</td>
+<td>Under the per-edit rule a run, and a bold-only edit, is judged only
+when nothing in the review was written</td>
+<td><span class="accepted">Accepted</span></td>
+<td>AQ3 restated; recommendation stands and is stronger. Bold-only edits
+named under Related</td>
+</tr>
+<tr>
+<td>MD6</td>
+<td>The drain now groups page text under <code>page</code> by
+<code>DATA_FIELDS</code> and repeats no rule text</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Projection says which new fields join <code>DATA_FIELDS</code> and
+which stay top-level; <code>notes</code> not repeated per item</td>
+</tr>
+<tr>
+<td>MD7</td>
+<td>The run change text repeated a rule ("place them as written") on
+every item</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Dropped from the change text; the contract line carries it once</td>
+</tr>
+<tr>
+<td>MD8</td>
+<td>History is never trimmed, so a ceiling-size run crosses the 8 MiB
+body limit at its 18th entry; the run's markup is stored twice</td>
+<td>Open, to Ken</td>
+<td>AQ4 added with measured options</td>
+</tr>
+<tr>
+<td>MD9</td>
+<td>Rewording a ready or <code>not_handled</code> record now takes it
+off the drain at the first changing keystroke</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Two sittings section says a half-written run never reaches the
+agent</td>
+</tr>
+<tr>
+<td>MD10</td>
+<td>Folder servers now serve dotfiles</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Added to the <code>lahe write</code> reason for its own one-page
+server</td>
+</tr>
+<tr>
+<td>MD11</td>
+<td>The 2000-character bound, <code>MAX_BODY_BYTES</code>, and the draft
+floor are unchanged; oversized-records' paint guard and stamp rule apply
+to comments only</td>
+<td>No change</td>
+<td>Checked; nothing in the design depends on them changing</td>
 </tr>
 </tbody>
 </table></div>

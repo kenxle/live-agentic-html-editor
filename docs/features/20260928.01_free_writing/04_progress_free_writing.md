@@ -1,26 +1,40 @@
 # Progress: Free writing
 
-**Phase 5, Plan.** You approved wireframe direction A. The architecture is reviewed and revised. The plan is being written. Two decisions are waiting on you. Last updated 2026-09-28 18:10.
+**Phase 5, Plan. The review gate is open.** Brief, wireframes, architecture, and plan are reviewed, revised, and checked against today's main. Nine decisions wait on you; each has a recommended default. Last updated 2026-09-28 19:07.
 
-**Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html) ([decision](wireframes/DECISION.md)) · [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html)
+**Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html) ([decision](wireframes/DECISION.md)) · [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html) · [Plan](http://127.0.0.1:65155/03_plan_free_writing.html)
 
 ## Needs your attention
 
-Both are on the [architecture page](http://127.0.0.1:65155/02_architecture_free_writing.html) under Open Questions. The plan is written with the recommended answer for each, and changes if you say otherwise.
+- [ ] **Review gate: read the dossier and say go, or what to change.** Building starts only after your go. Leave comments on any page; I answer them there.
+  - [Brief](http://127.0.0.1:65155/01_brief_free_writing.html): what we are building and why. Unchanged since you read it, apart from today's main being credited with part of one bug.
+  - [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html): how. The edit gains a "run" of new blocks after the block you start from. Replay learns to put that run back after a rebuild, block by block, which also fixes the doubled header line.
+  - [Plan](http://127.0.0.1:65155/03_plan_free_writing.html): who and when. One builder lays the shared pieces. Three build in parallel: typing, replay, and the helper plus `lahe write`. Then the rail, one review round, one fix round, and the full gates.
 
-- [ ] **AQ1, Tiptap or Lahe's own editing code.** The recommendation is Lahe's own code, against your lean. A test put an existing block next to a Tiptap editor, which is exactly what one sitting does. In all three browsers:
+Decisions. Each has a default the plan already builds, so answer only where you disagree.
+
+- [ ] **AQ1, Lahe's own code or Tiptap.** Recommend: Lahe's own code. A test put an existing block next to a Tiptap editor, which is exactly what one sitting does. In all three browsers:
   - the caret could not cross between them
   - a selection could not span both
   - Backspace did not merge
   - undo ran out of order
-  Lahe's own approach passed everything.
-- [ ] **AQ3, should the "is it really on the page" check always run for new text?** Today it only runs when the agent wrote nothing at all. Running it every time for new text would catch words that turned into markup in the source, and a header placed as a paragraph. It changes a standing rule, so it is your call. The recommendation is yes.
+  Lahe's own approach passed every check.
+- [ ] **AQ3, always check that new text really landed.** Recommend: yes. Today the check lets an agent answer "handled" on new text it never placed, as long as it wrote something else in the same review.
+- [ ] **AQ4, how big one writing record may get.** Recommend two things together:
+  - older revisions keep only their words
+  - the bar warns you before a sitting gets too big to send
+  Without a limit, a long notes page could eventually be refused by the helper.
+- [ ] **PQ1, a blank notes page opens ready to type.** Recommend: yes. The wireframe had you click "+ Write here" first, which a keyboard user cannot do.
+- [ ] **PQ2, the bar says "Editing" for every edit.** Recommend: yes. "Editing this block" reads wrong over five new blocks.
+- [ ] **PQ3, no proofreading on notes.** Recommend: no proofreading. It would put a question card on every long notes sitting.
+- [ ] **PQ4, what a reload does mid-writing.** Recommend:
+  - the caret stays through Lahe's own rebuild and a page repaint
+  - any other reload saves the sitting as sent, and you reopen it with Cmd-Shift-E
+- [ ] **PQ5, the proofreading buttons read "Use the fixes" and "Keep my words".** Recommend: yes. "Keep mine" already means something else on conflict cards.
 
 ## Currently working on
 
-| Agent or task | Doing | Started | Branch |
-|---|---|---|---|
-| Plan revision | Folding in the four plan reviews, with the blocker fixes already decided | 2026-09-28 18:10 | `main` (docs only) |
+Nothing is running. Next: building starts after your go at the review gate.
 
 ## Phases
 
@@ -75,6 +89,15 @@ Not shipped yet.
 ## Log
 
 Newest first.
+
+**2026-09-28 19:07.** Review gate opened. Before it, three things happened:
+- The dossier got a clarity pass, and the architecture was trimmed by about a quarter.
+- Two contradictions between docs were fixed.
+- The docs were re-checked against main, where four related merges had landed today. Main already fixed half of the lone-paragraph bug; this feature keeps the other half.
+
+Two new items came out of the re-check:
+- a size limit for long writing records (AQ4)
+- a stronger case for always checking new text (AQ3)
 
 **2026-09-28 18:10.** All four plan reviews are back, with about 105 findings. The blockers, and how each is being fixed:
 - **Undoing new text:** it had no way to stay undone after a reload. The take-back now names the blocks to remove.

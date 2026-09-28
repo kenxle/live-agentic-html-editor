@@ -14,7 +14,7 @@ Free writing extends today's edit. It does not add a second one.
 
 Lahe's own editing code stays the engine and learns block types. The editing-host spike ran, and Lahe's own host passed every check. Tiptap works for new blocks, but it cannot share one sitting with an existing block. So this architecture recommends Lahe's own code. **Ken leans toward Tiptap, so the engine is his call (AQ1, Lahe's code or Tiptap).**
 
-Replay, which re-applies the reviewer's edits after each reload, learns to insert new blocks after the anchor. It also checks each block's words, tag, and bold on its own. That fixes the doubled header line and the lone paragraph that loses its bold. One shared list of safe tags checks every new block three times: when the layer captures it, when the helper stores it, and before any write to the page. The agent's instructions gain rules for placing new blocks. A new `lahe write` command starts a blank notes page.
+Replay, which re-applies the reviewer's edits after each reload, learns to insert new blocks after the anchor. It also checks each block's words, tag, and bold on its own. That fixes the doubled header line, and the left-out bold paragraph that main still loses when it is not the edit's first. One shared list of safe tags checks every new block three times: when the layer captures it, when the helper stores it, and before any write to the page. The agent's instructions gain rules for placing new blocks. A new `lahe write` command starts a blank notes page.
 
 ::: xref
 [Brief: Requirements](01_brief_free_writing.html#requirements)
@@ -43,15 +43,16 @@ flowchart LR
   - the bold and italic markup rules
   - today's replay path for every record without `new_blocks`
 - **Changes:** Enter makes a sibling, not a nested block. Replay gains an insert path. The page check and the handled check learn block structure.
-- **Root cause of two open bugs**, both found by tracing the code:
-  - **The doubled line under a header.** Enter nests the new `<p>` inside the `<h2>`. Replay's "already there" check looks only at the next sibling, which on a Lahe Markdown render is the "Section 1" label. So replay rewrites the header with the nested paragraph, and the text shows twice.
-  - **The lone paragraph that loses its bold** (board row `LAHE-lone-paragraph-loses-markup`). Replay writes a missing split piece as plain text, and stops checking formatting once the split is found.
-  - Both go away when new blocks are separate siblings with their own markup, read in document order.
+- **Root cause of the open bugs**, found by tracing the code and re-checked on main after piece-keeps-formatting:
+  - **The doubled line under a header.** Enter nests the new `<p>` inside the `<h2>`. Replay's "already there" check looks only at the next sibling, which on a Lahe Markdown render is the "Section 1" label. So replay rewrites the header with the nested paragraph, and the text shows twice. Still open on main.
+  - **The lone paragraph that lost its bold** (board row `LAHE-lone-paragraph-loses-markup`). Fixed on main. Replay now writes a missing first paragraph with its own markup: `normalize.topLevelBlocks` cuts `after_html` at the top level, and `pieceMarkup` in `replay.js` uses the cut when it lines up with the text. When it does not line up, the paragraph still goes in as plain text. This feature keeps a regression test under the new record shape and no longer owns the fix.
+  - **What is still open from that case.** Replay still skips the formatting check once it finds the split on the page. And when the left-out bold paragraph is a later one, the anchor cannot be found, the record goes lost, and nothing is flagged (see Failure Modes).
+  - Both open cases go away when new blocks are separate siblings with their own markup, read in document order.
 - **The third brief R14 case** (bold two words on a Markdown page, commit, rebuild) was reproduced. It works when the agent does the work. When the agent changes nothing and replies handled, the bold is lost, because the handled check only accepts `edit` records. See Failure Modes, and AQ3 (should the handled check always run for new blocks).
 
 ## Components / Modules Touched
 
-- **`src/shared/normalize.js`**: `cleanBlock(tag, html)`, a new allowlist (see Security). `WRITABLE_BLOCK_TAGS`, the six tags a record may carry (p, h2, h3, h4, ul, ol); `BLOCK_TAGS` stays the text reader's list. A per-block reader and a run matcher shared by replay, the page check, and the handled check.
+- **`src/shared/normalize.js`**: `cleanBlock(tag, html)`, a new allowlist (see Security). `WRITABLE_BLOCK_TAGS`, the six tags a record may carry (p, h2, h3, h4, ul, ol); `BLOCK_TAGS` stays the text reader's list. A per-block reader and a run matcher shared by replay, the page check, and the handled check. `topLevelBlocks` (from the first-paragraph fix) stays as it is for old records; the per-block reader is a different cut, down to leaf blocks and with tags.
 - **`src/layer/blocks.js`** (new): the DOM block rules in one copy. The leaf-block walk, the insert point after an anchor or at a container's start, the editing host, the element swap, and `runElementsFor`, the one way to find a record's run on the page.
 - **`src/layer/editing.js`**:
   - the host spanning anchor and run, and its guard
@@ -98,7 +99,7 @@ No new record kind. An edit record gains four optional fields:
     { "tag": "ul", "html": "<li>scrolling</li><li>re-asking</li>" }
   ],
   "placement": "after_anchor",
-  "change": "Added 3 blocks after this paragraph: h2, p, ul. Their words are in new_blocks; place them as written."
+  "change": "Added 3 blocks after this paragraph: h2, p, ul. Their words are in new_blocks."
 }
 ```
 
@@ -114,17 +115,18 @@ No new record kind. An edit record gains four optional fields:
 
   | Reader | Run record |
   |---|---|
-  | `replay.js` anchor compare (`compare`, `reflowMatch`, `splitPieces`, `wouldDuplicate`, `splitWritePlan`, `mayFold`, `formattingLost`) | Reads an anchor view, with `anchor_after_html` in place of `after_html` and its text in place of `after`. `writeRegion` never sees the whole sitting, so it cannot write the run into the anchor. |
+  | `replay.js` anchor compare (`compare`, `reflowMatch`, `splitPieces`, `wouldDuplicate`, `splitWritePlan`, `pieceMarkup`, `mayFold`, `formattingLost`) | Reads an anchor view, with `anchor_after_html` in place of `after_html` and its text in place of `after`. `writeRegion` never sees the whole sitting, so it cannot write the run into the anchor. |
   | `replay.js` page check | Checks the anchor and each block on its own. |
   | `record.js` change text, take-back, history | Change text gives structure only. A take-back names the run in `remove_blocks`. `after_history` entries carry the new fields. |
-  | `handled_check.js` | Each block's words, in order, each on its own. |
+  | `handled_check.js` | Each block's words, in order, each on its own. A run never takes the several-paragraph path main added (`splitStarts`), because a section label between blocks would fail it. |
+  | `status.js` drain line | The three text fields sit under `page`, like `after_html` (see Projection). |
   | `merge.js` | Browser wins on the new fields, as on `after`. |
   | `tab_edits.js`, `tab_done.js`, `review_format.js` text formatter | Show the anchor change, then the new blocks by type. |
   | `export.js` | Goes through the `review_format.js` text formatter. |
 
-- **Change text** for a run describes structure only and never quotes a block's words. The anchor is named paragraph, heading, list, or block.
-  - A run: "Added 3 blocks after this paragraph: h2, p, ul. Their words are in new_blocks; place them as written."
-  - At the start of a page: "Added 2 blocks at the start of the page: h2, p. Their words are in new_blocks; place them as written."
+- **Change text** for a run describes structure only and never quotes a block's words. It restates no rule: "place them as written" lives in the contract, read once, not on every item. The anchor is named paragraph, heading, list, or block.
+  - A run: "Added 3 blocks after this paragraph: h2, p, ul. Their words are in new_blocks."
+  - At the start of a page: "Added 2 blocks at the start of the page: h2, p. Their words are in new_blocks."
   - The anchor reworded: "Reworded this paragraph; its new markup is in anchor_after_html."
   - The anchor retagged: "Changed this paragraph to h2."
   - A split tail: "Split this paragraph in two after the anchor's new end. The second part is new_blocks[0], marked from_anchor." A split with no typing adds no "Added" sentence.
@@ -134,10 +136,18 @@ No new record kind. An edit record gains four optional fields:
   - `run_words` is the run's word count without `from_anchor` blocks, from one function in `normalize.js`.
   - `proofread: true` when `run_words` is over `PROOFREAD_MIN_WORDS` and the review is not a notes review. The agent never counts.
   - A `lahe write` review carries `notes: true`.
+  - The 2000-character bound is still `BEFORE_MAX` on main. Projected `after_history` entries stay bounded as today and carry no `new_blocks`.
+- **On a drain line** (`lahe status --session ... --json --quiet`), main now groups every page-text field under the item's `page` key, driven by `review_format.DATA_FIELDS`, and repeats no rule text.
+  - `new_blocks`, `anchor_after_html`, and `remove_blocks` join `DATA_FIELDS`, so they sit under `page` beside `after_html`. The drain code needs no change.
+  - `anchor_tag_after`, `placement`, `run_words`, and `proofread` stay at the top level as markers, and each gets a class in the field-class table.
+  - `notes` is review-level and is not repeated on item lines. The one behavior it changes reaches each item as `proofread`.
 - **Size ceiling:** the helper refuses an event whose `new_blocks` is over a per-record ceiling in blocks and in UTF-8 bytes. The plan sets both, far above any real post.
   - The bar warns before the reviewer reaches it, and at the ceiling refuses input that would grow the run.
   - A refused event is not re-posted. The card says the agent has not seen it, and the words stay in the browser.
 - **History size:** `after_history` keeps `new_blocks` only for the last few revisions (the plan sets how many). Replay's check for an earlier revision that already landed (branch three of the anchor compare) needs only recent ones.
+  - Every older entry still keeps the whole sitting's `after` and `after_html`, because `bumpRev` never trims history. So a run at the byte ceiling crosses the helper's 8 MiB body limit at its 18th history entry. That is a lower bound from a script, ignoring JSON escaping.
+  - The record also stores the run's markup twice (`after_html` and `new_blocks`). Main's rule since oversized-records is to store what identifies a thing once.
+  - How to bound it is Ken's call (see Open Questions, AQ4).
 - **Draft growth:** each draft carries the whole run, so a run record gets a longer draft floor than today's 10 seconds (the plan sets it). Capture rebuilds only the caret's block.
 - **Lifecycle:** unchanged. An unchanged anchor with a non-empty run is a real change; `kindFor` counts the run and the tag.
 - **Undo of a committed record:** the anchor gets its `before_html` and old tag back, and the run's elements are removed.
@@ -262,6 +272,7 @@ The layer writes block changes itself, so the browser's undo stack no longer ref
 One rule: **a block that belongs to an outstanding record reopens that record.** This is today's `itemFor` rule, extended to run blocks.
 
 - Before the agent places a run, a sitting that starts on or below its anchor or run blocks continues the same record at a new revision. The caret goes where the reviewer clicked.
+  - The first keystroke that changes it takes the record off the agent's drain until the sitting commits, and later drafts wait for the draft floor. Main does this for a `ready` record and, since refused-reword-floor, for a `not_handled` one too. So the agent never places a half-written run.
 - Once the record is handled, its blocks are the page's own, and a new sitting anchors on the block above the click.
 - This rule means:
   - replay never has to order records
@@ -347,14 +358,25 @@ This is where the tag test lives, because it runs after the agent's write.
 
 ### The handled check
 
-The helper's handled check keeps its gate. It judges an item only when no source file behind the page changed after the reviewer committed. So it only catches an agent that replied handled and wrote nothing. It does not test tags. The page check covers placement after a real write.
+**How it works on main now.** Main judges each edit on its own passage (handled-check-per-edit, `verdictFor` in `handled_check.js`). An item is held only when its `after` is not on the built page and one of two things says the agent left its passage alone:
+
+- **Nothing was written.** No file behind the review changed since the reviewer committed (`touchedSince`, review-wide).
+- **The passage is still there.** The item's `before` is on the page as whole blocks, exactly once.
+
+An agent that changed the passage, in any words, is not second-guessed. A several-paragraph `after` is looked for paragraph by paragraph, so a split nobody made is held.
+
+**What that means for new text.** The per-item rule needs a `before` the agent would have to change. New text has none:
+
+- A run whose anchor is unchanged has an `after` that holds the whole `before`. Main treats that as "only added words" and skips the passage test (`passageOf`). So the run is judged only when nothing in the whole review was written.
+- A `format_only` record's `before` and `after` have the same words, so the same skip applies.
+- So an agent that places one run and answers handled on two is not caught: it wrote something, so the run it skipped is never judged. AQ3 (should the handled check always run for new blocks) asks whether to close that.
+
+The check does not test tags. The page check covers placement after a real write.
 
 The helper cannot find a region in a built page, so it matches by words:
 
-- **A run.** The anchor's own words are checked, as today, unless the anchor is a container or has fewer than `SHORT_BLOCK_WORDS` (five) words. The run is found by locating the first run block's leaf, page-wide, then matching the rest in order with the shared matcher. A section label between blocks does not fail it.
+- **A run.** The anchor's own words follow main's per-item rule, unless the anchor is a container or has fewer than `SHORT_BLOCK_WORDS` (five) words. The run is found by locating the first run block's leaf, page-wide, then matching the rest in order with the shared matcher. A section label between blocks does not fail it. A run never takes main's several-paragraph path, which would fail on that label.
 - **Bold or italic on a `format_only` record.** Take each span whose bold or italic changed, using the reader inside `record.formattingChangeText`. Require its words inside a `strong` or `b` (or `em` or `i`) in the built page's leaf blocks. Bold words elsewhere on the page give a false pass, which is accepted because the page check runs on the next load.
-
-Whether this check should always run for new blocks is Ken's call (AQ3, should the handled check always run for new blocks).
 
 ### The proofreading reply
 
@@ -390,8 +412,10 @@ New lines, in the contract and every copy of it:
   - On a notes review, place the text and stop. Organize only when the reviewer asks.
   - Never write prose into a region the reviewer wrote. Suggestions go in the reply.
   - When you cannot tell where new text belongs, ask with a `question` reply.
-- **Data fields:** the data-fields line adds new_blocks, anchor_after_html, and remove_blocks.
+- **Data fields:** the data-fields line adds new_blocks, anchor_after_html, and remove_blocks. The drain clause needs no new sentence: it already says every page-text field sits under page with its review.json name.
 - **The after_html line** stays true. A new sentence says that for a run record, anchor_after_html is the anchor's own change and new_blocks is the run.
+- **The handled-check line** on main says an agent that changed the passage is not second-guessed. If Ken says yes to AQ3, a new sentence says new_blocks has no old passage, so each block's words are checked on every handled reply. The skill's "A handled reply is checked" section says the same.
+- **Said once.** Each rule above is a contract line, read once. No rule text rides on an item: the change text points at new_blocks and stops, and the per-item signals are fields (`proofread`, `placement`, `from_anchor`).
 
 ## Alternatives Considered
 
@@ -420,7 +444,7 @@ Cases the sections above already handle are not repeated here.
 | The browser crashes mid-sitting | The draft is in browser storage. The next page load commits it, as today. |
 | Backspace at the start of the first run block | Merges into the anchor, inside the same sitting. |
 | A list ended with an empty item | The empty item is dropped at capture. |
-| An edit whose bold paragraph is the one the agent left out | Found while reproducing the lone-paragraph case. The bold paragraph never appears, replay counts the record as lost, and no flag is raised. The insert path's per-block matching covers it: a missing block is inserted with its own markup. |
+| An edit whose bold paragraph is the one the agent left out, and it is not the first paragraph | Found while reproducing the lone-paragraph case, and still true on main after the first-paragraph fix (re-run 2026-09-28). The bold paragraph never appears, replay counts the record as lost, and no flag is raised. The insert path's per-block matching covers it: a missing block is inserted with its own markup. |
 
 ## Security & Privacy Notes
 
@@ -445,7 +469,7 @@ Cases the sections above already handle are not repeated here.
     - It serves the rendered page and the Lahe style and font files that page names. Any other request gets a 404.
     - It never joins an existing folder server, even with `--session`.
     - It registers no folder mount and no linked-document mounts.
-  - Why not `--only`: today `--only` only limits which pages get the rail. A single page's server still serves its whole folder, and servers are shared by root folder. Notes files often sit in a home, Desktop, or Documents folder, and serving that folder would serve all of it. A notes page has no images, so it loses nothing.
+  - Why not `--only`: today `--only` only limits which pages get the rail. A single page's server still serves its whole folder, and servers are shared by root folder. Notes files often sit in a home, Desktop, or Documents folder, and serving that folder would serve all of it. Since hidden-files-plain, that includes dotfiles such as `.env` or `.ssh`, which a folder server now serves like any other file. A notes page has no images, so it loses nothing.
 - **Follow-ups for the board, older than this feature:**
   - The static server has no Host header check. The helper has one.
   - The Markdown renderer lets through link schemes other than http, https, mailto, and tel. It should reuse `normalize.isSafeUrlValue`.
@@ -461,7 +485,8 @@ The plan's Test List holds every test. At this level:
   - `after` agrees with `after_html`; projection with no 2000-character cut
   - merge on load in both directions (the browser's run wins whether longer or shorter)
   - the reader, the leaf walk, and one test per presence-table row
-  - the handled check across a section label
+  - the handled check across a section label, and a run the agent skipped while it placed another item
+  - a drain line puts the three text fields under `page`
   - every `lahe write` path: create, no overwrite, missing parent, and the three symlink cases
 - **Browser (named specs, three lanes at the checkpoint):**
   - typing a header, paragraph, and list; the record's shape; a rebuild with no doubling; a repaint that leaves the anchor clean
@@ -494,11 +519,25 @@ The plan's Test List holds every test. At this level:
 ::: callout-question
 **AQ3 (Ken):** Should the handled check always run for new blocks? (AQ2, which editing host to use, was resolved by the editing-host spike.)
 
-- **Today:** it runs only when no source file changed after the reviewer committed, so it only catches an agent that wrote nothing.
+- **Today, on main:** the check judges each edit on its own passage. It holds an item only when the agent left that passage alone: its `before` is still on the page, or nothing in the review was written. New text has no `before` to change, so a run is judged only when nothing at all was written. An agent that places one run and answers handled on two gets the skipped one through.
 - **The proposal:** for `new_blocks`, run it every time and compare each block's visible words on the built page. Brief R6 (the words stay as typed) allows no rewording of new text, so the reason for skipping does not apply.
-- **What it would catch:** words that turned into markup or template code vanish from the visible page, and this is the one check that sees that. It would also catch a header placed as a paragraph at reply time.
-- **Why it is your call:** it changes a standing rule, that an agent that did real work is never second-guessed on its wording.
-- **Related:** formatting-only records get checked in this feature either way, because brief R14 (bold and italic survive the rebuild) requires it.
+- **What it would catch:** a run the agent skipped while it worked on something else. Words that turned into markup or template code, which vanish from the visible page; this is the one check that sees that. A header placed as a paragraph at reply time.
+- **Why it is your call:** it goes past the standing rule that an agent that changed the passage is not second-guessed on its wording. The step is smaller than it was: main already judges each edit on its own, and new text has no old wording for the agent to have changed.
+- **Related:** formatting-only records get checked in this feature either way, because brief R14 (bold and italic survive the rebuild) requires it. Like a run, a bold edit has no changed words for the per-edit rule to find, so it is judged only when nothing was written. The same answer can cover it.
+
+**Recommendation: yes**, still. The per-edit check makes the case stronger: it closed "fix one, answer five" for reworded text, and new text is now the main shape it misses.
+:::
+
+::: callout-question
+**AQ4 (Ken):** How should a run record's size be bounded?
+
+- **The problem.** Every revision adds a history entry that keeps the whole sitting's words and markup, and history is never trimmed. A run at the byte ceiling (200,000 bytes of markup) crosses the helper's 8 MiB request limit at its 18th entry. A notes page the agent has not placed yet gains a revision with every sitting. Past the limit the helper refuses the whole post as a bad request, and the plan's refused-event path knows only its own run codes.
+- **Store once.** Main's rule since oversized-records is to store what identifies a thing once. A run record stores its markup twice (`after_html` and `new_blocks`), and every draft line in the log repeats the whole record.
+- **Options, each measured by the same script:**
+  - Older history entries keep the words and drop the markup. The limit moves to the 33rd entry. The agent still reads the chain of wordings. Replay needs markup only for recent entries.
+  - Also store the run once, rebuilding `after_html` and `after` when read, the way main rebuilds an image tag. The limit moves to the 41st entry. Every reader of those two fields goes through one function, which touches many files.
+  - Count the whole record against the ceiling the bar already warns on, so the reviewer is told to send before the limit. Bounded, and no words are cut.
+- **Recommendation:** the first and the third together. The second is the fuller fix and can follow on its own.
 :::
 
 
@@ -575,3 +614,21 @@ Changes made here while folding in the four plan reviews (`03_plan_free_writing_
 | EM11 | Three of the brief's agent rules had no contract line | Accepted | Added |
 | T10 | The merge test would pass a "longer wins" rule | Accepted | Both directions tested |
 | DR7 | A screen reader heard nothing useful | Accepted | Live region added |
+
+## Main Drift, 2026-09-28
+
+Checked against main after the architecture was written: piece-keeps-formatting, handled-check-per-edit, oversized-records, trim-the-drain, refused-reword-floor, hidden-files-plain, and quiet-tab-polling, up to the 2b6eb96 bundle rebuild. compact-draft-history was already in the base. The R14 reproduction was re-run on main, and the size figures come from a script. Both paths are in the plan's spike evidence list.
+
+| # | Finding | Disposition | Rationale |
+|---|---------|-------------|-----------|
+| MD1 | The lone-paragraph bug is fixed on main (`topLevelBlocks`, `pieceMarkup`) | Accepted | Root cause rewritten; the feature keeps a regression test and no longer owns the fix |
+| MD2 | A left-out bold paragraph that is not the first still loses the edit with no flag, and the split branch still skips the formatting check | Accepted | Kept as this feature's; Failure Modes row says it was re-checked |
+| MD3 | `pieceMarkup` reads the whole `after_html` and would cut a run record's sitting | Accepted | Added to the anchor-view list in the reader table |
+| MD4 | The handled check now judges each edit on its own passage, not only when nothing was written | Accepted | The handled check section describes `verdictFor`; a run skips main's several-paragraph path |
+| MD5 | Under the per-edit rule a run, and a bold-only edit, is judged only when nothing in the review was written | Accepted | AQ3 restated; recommendation stands and is stronger. Bold-only edits named under Related |
+| MD6 | The drain now groups page text under `page` by `DATA_FIELDS` and repeats no rule text | Accepted | Projection says which new fields join `DATA_FIELDS` and which stay top-level; `notes` not repeated per item |
+| MD7 | The run change text repeated a rule ("place them as written") on every item | Accepted | Dropped from the change text; the contract line carries it once |
+| MD8 | History is never trimmed, so a ceiling-size run crosses the 8 MiB body limit at its 18th entry; the run's markup is stored twice | Open, to Ken | AQ4 added with measured options |
+| MD9 | Rewording a ready or `not_handled` record now takes it off the drain at the first changing keystroke | Accepted | Two sittings section says a half-written run never reaches the agent |
+| MD10 | Folder servers now serve dotfiles | Accepted | Added to the `lahe write` reason for its own one-page server |
+| MD11 | The 2000-character bound, `MAX_BODY_BYTES`, and the draft floor are unchanged; oversized-records' paint guard and stamp rule apply to comments only | No change | Checked; nothing in the design depends on them changing |

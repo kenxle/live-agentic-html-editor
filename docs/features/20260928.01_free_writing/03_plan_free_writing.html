@@ -841,6 +841,8 @@ id="toc-code-review-lead-review">Code Review Lead Review</a></li>
 Review</a></li>
 <li><a href="#design-review" id="toc-design-review">Design
 Review</a></li>
+<li><a href="#main-drift-2026-09-28" id="toc-main-drift-2026-09-28">Main
+Drift, 2026-09-28</a></li>
 <li><a href="#reviews-free-writing-plan"
 id="toc-reviews-free-writing-plan">Reviews: Free writing plan</a>
 <ul>
@@ -869,9 +871,10 @@ cards built, runs one review with one fix round, and runs the full
 gates. Five design questions wait on Ken (PQ1 to PQ5 under Open
 Questions). Until he answers, the plan builds their defaults.</p>
 <p>The plan builds the architecture's recommended answers: Lahe's own
-editing code (AQ1, Lahe's code or Tiptap), and always checking new
-blocks on a handled reply (AQ3). <a href="#if-ken-decides-otherwise">If
-Ken decides otherwise</a> names the tasks that change.</p>
+editing code (AQ1, Lahe's code or Tiptap), always checking new blocks on
+a handled reply (AQ3), and bounding a run record's size (AQ4). <a
+href="#if-ken-decides-otherwise">If Ken decides otherwise</a> names the
+tasks that change.</p>
 <h2 id="how-the-work-is-dispatched">How the work is dispatched</h2>
 <pre class="mermaid"><code>flowchart TD
   P0[&quot;Phase 0: orchestrator&lt;br/&gt;base commit, other branches settled with Ken&quot;] --&gt; P1[&quot;Phase 1: shared kernel&lt;br/&gt;one builder, feat/free-writing&quot;]
@@ -994,6 +997,14 @@ three R14 bugs (the lone paragraph, the doubled header line, and bold
 two words) on a real <code>lahe review post.md</code>.</li>
 <li><code>r14_repro/out/results-all.json</code>: what each case did
 before the fix.</li>
+<li>The same script re-run on main at 2b6eb96, under
+<code>/private/tmp/claude-501/-Users-kennethstclair-Documents-workspace-live-agentic-html-editor/234088e7-1201-4ed5-93c2-cee1b5ec5b8c/scratchpad/r14_main/out/</code>
+(<code>results-1.json</code>, <code>results-2.json</code>,
+<code>results-3.json</code>). The lone paragraph with bold in the first
+paragraph now keeps its bold. Bold in the second paragraph, the doubled
+header line, and bold two words behave as before.
+<code>body_math.py</code> beside that folder computes the size figures
+in architecture AQ4.</li>
 <li><code>tiptap_spike/fixtures/blog.html</code>: only needed if AQ1
 (Lahe's code or Tiptap) goes the other way.</li>
 </ul>
@@ -1026,15 +1037,22 @@ this.</td>
 <td><code>src/shared/record.js</code></td>
 </tr>
 <tr>
-<td><code>RUN_HISTORY_KEEP</code> (history entries that keep their
-run)</td>
+<td><code>RUN_HISTORY_KEEP</code> (history entries that keep their run
+and markup)</td>
 <td>3</td>
 <td><code>src/shared/record.js</code></td>
 </tr>
 <tr>
+<td><code>RUN_RECORD_MAX_BYTES</code> (whole run record as JSON, AQ4
+default)</td>
+<td>4194304, half the helper's <code>MAX_BODY_BYTES</code>, leaving room
+for the event around the record</td>
+<td><code>src/shared/record.js</code></td>
+</tr>
+<tr>
 <td>Ceiling warning on the bar</td>
-<td>at 90 percent of either ceiling; at 100 percent the layer refuses
-input that grows the run</td>
+<td>at 90 percent of any of the three ceilings; at 100 percent the layer
+refuses input that grows the run</td>
 <td><code>src/layer/editing.js</code></td>
 </tr>
 <tr>
@@ -1278,23 +1296,37 @@ starts</h2>
 <p>The orchestrator alone.</p>
 <ol type="1">
 <li><p>Record the base commit of <code>main</code> on the progress page,
-and create <code>feat/free-writing</code> from it.</p></li>
-<li><p>Settle the branches that edit this feature's files right now:</p>
+and create <code>feat/free-writing</code> from it. The base is 2b6eb96
+or later.</p></li>
+<li><p>The branches that edited this feature's files have landed on
+<code>main</code>, and the docs were checked against them (each doc's
+Main Drift table):</p>
 <ul>
 <li><code>piece-keeps-formatting</code>: <code>replay.js</code>,
-<code>normalize.js</code>, and <code>no_duplicate_text.spec.js</code>.
-It looks like the fix for board row
-<code>LAHE-lone-paragraph-loses-markup</code>, which this feature
-absorbs. That row is unclaimed.</li>
+<code>normalize.js</code>. It fixed board row
+<code>LAHE-lone-paragraph-loses-markup</code> for today's record shape.
+The row is still open on the board; close it, naming the merge
+(e46c1ec). This feature keeps a regression test and owns the
+later-paragraph case.</li>
 <li><code>refused-reword-floor</code>: <code>editing.js</code>,
 <code>projection.js</code>, <code>lifecycle.js</code>.</li>
-<li><code>quiet-tab-polling</code>: <code>sync.js</code> and
-<code>protocol.js</code>.</li>
-<li>any other open branch whose diff touches a file this plan owns.</li>
+<li><code>quiet-tab-polling</code>: <code>sync.js</code>,
+<code>protocol.js</code>, <code>reviews.js</code>,
+<code>routes.js</code>.</li>
+<li><code>handled-check-per-edit</code>: <code>handled_check.js</code>,
+the contract, the skill.</li>
+<li><code>oversized-records</code>: <code>anchor.js</code>,
+<code>highlight.js</code>, <code>replay.js</code>,
+<code>normalize.js</code>, <code>record.js</code>,
+<code>review_format.js</code>.</li>
+<li><code>trim-the-drain</code>: <code>status.js</code>, the contract,
+the skill.</li>
+<li><code>hidden-files-plain</code>:
+<code>static_servers.js</code>.</li>
 </ul>
-<p>For each, land it on <code>main</code> or agree with Ken how it folds
-in. Claim <code>LAHE-lone-paragraph-loses-markup</code> either way. No
-builder touches another branch's work.</p></li>
+<p>Check for any other open branch whose diff touches a file this plan
+owns, and land it or agree with Ken how it folds in. No builder touches
+another branch's work.</p></li>
 <li><p>Check the spike seeds are still under <code>/private/tmp</code>.
 Task 1.1 (markers and test seeds) is dispatched first, so they move into
 the repo before anything else.</p></li>
@@ -1345,10 +1377,18 @@ own helper. Port the script's steps onto <code>test/helpers</code>
 trailing <code>br</code>, nested <code>strong</code> and
 <code>em</code>, entities, uppercase tags</li>
 </ul>
-<p>Write the three R14 cases as <code>free_writing_r14.spec.js</code>,
-each marked as an expected failure (<code>test.fail</code>), asserting
-what <code>results-all.json</code> recorded. Task 3.4 (tests that need
-all three branches) removes the marks.</p>
+<p>Write the R14 cases as <code>free_writing_r14.spec.js</code>,
+asserting what the re-run on main recorded:</p>
+<ul>
+<li>bold in the first paragraph, left out by the agent: passes on main.
+Write it as an ordinary test, so it guards the fix.</li>
+<li>bold in the second paragraph, left out by the agent: the edit goes
+lost with no flag. Expected failure (<code>test.fail</code>).</li>
+<li>the doubled header line, by click and by Esc: expected failure.</li>
+<li>bold two words with an agent that changes nothing: expected
+failure.</li>
+</ul>
+<p>Task 3.4 (tests that need all three branches) removes the marks.</p>
 <p><strong>Files:</strong> <code>src/shared/markers.js</code>,
 <code>test/fixtures/free_writing/</code> (new folder, with a
 <code>README.md</code> naming where each file came from),
@@ -1356,9 +1396,9 @@ all three branches) removes the marks.</p>
 <strong>Acceptance:</strong></p>
 <ul>
 <li>The fixtures open in Playwright with the layer injected.</li>
-<li><code>free_writing_r14.spec.js</code>, run by name, reproduces all
-three cases on the Phase 1 base: green with three expected
-failures.</li>
+<li><code>free_writing_r14.spec.js</code>, run by name, on the Phase 1
+base: green, with the first-paragraph case passing and the other three
+as expected failures.</li>
 <li>The orchestrator's search finds no home path and no sleep under
 <code>test/fixtures/free_writing/</code>.</li>
 <li>Lint's tracked-file <code>node --check</code> passes.</li>
@@ -1384,6 +1424,10 @@ the architecture's "Where the walk stops", with
 <li><code>runWords(blocks) -&gt; number</code>, the run's words,
 skipping <code>from_anchor</code> blocks.</li>
 </ul>
+<p><code>normalize.topLevelBlocks</code>, which main added for the
+first-paragraph fix, stays unchanged: replay uses it for old records.
+<code>leafBlocks</code> is a different cut, down to leaf blocks and with
+tags, and may share its tag parser.</p>
 <p>Architecture sections: Security &amp; Privacy Notes ("One allowlist,
 three places"), Replay after a rebuild ("The walk", "Where the walk
 stops", and the presence table's first row). <strong>Files:</strong>
@@ -1504,8 +1548,15 @@ as <code>after</code>.</li>
 <li>The run change text, with the sentences in the architecture's Change
 text.</li>
 <li><code>bumpRev</code>: <code>after_history</code> entries carry the
-new fields. Entries older than the last <code>RUN_HISTORY_KEEP</code>
-drop <code>new_blocks</code>.</li>
+new fields. For a run record, entries older than the last
+<code>RUN_HISTORY_KEEP</code> drop <code>new_blocks</code> and
+<code>after_html</code> and keep <code>after</code> (AQ4 default). Other
+records keep today's history.</li>
+<li><code>RUN_RECORD_MAX_BYTES</code>, and
+<code>recordBytes(item)</code>: the UTF-8 bytes of the record as JSON.
+<code>validateRun</code> refuses a run record over it with
+<code>RUN_OVER_CEILING</code>, the same code as the block ceilings (AQ4
+default).</li>
 <li><code>revertOf</code> for a run record: the take-back names the
 placed blocks in <code>remove_blocks</code> and never carries
 <code>new_blocks</code>. Its change text adds "Remove the blocks in
@@ -1574,7 +1625,11 @@ characters under the block count and over the byte count</li>
 <li>the anchor view of a run record carries
 <code>anchor_after_html</code> as its <code>after_html</code></li>
 <li>history entries older than <code>RUN_HISTORY_KEEP</code> have no
-<code>new_blocks</code></li>
+<code>new_blocks</code> and no <code>after_html</code>, and keep
+<code>after</code></li>
+<li>a run record over <code>RUN_RECORD_MAX_BYTES</code> is refused with
+<code>RUN_OVER_CEILING</code>, even when its run is under both block
+ceilings</li>
 <li><code>applySuggestions</code> changes the words, keeps a block's
 bold, and bumps the revision; it refuses a <code>from</code> found twice
 or not at all</li>
@@ -1658,33 +1713,50 @@ block's derived words. For a run record, <code>new_blocks</code>,
 <code>normalize.runWords</code>), <code>proofread</code> (per the
 architecture's Projection), and the review-level
 <code>notes</code>.</li>
-<li>Class <code>new_blocks</code>, <code>anchor_after_html</code>, and
-<code>remove_blocks</code> as data. Add
-<code>PROOFREAD_MIN_WORDS</code>.</li>
+<li>Add <code>new_blocks</code>, <code>anchor_after_html</code>, and
+<code>remove_blocks</code> to <code>DATA_FIELDS</code> and class them as
+data. On main, <code>DATA_FIELDS</code> also decides what the drain
+groups under <code>page</code> (<code>status.drainLine</code>), so this
+one change moves them there with no change to
+<code>status.js</code>.</li>
+<li>Class <code>anchor_tag_after</code>, <code>placement</code>,
+<code>run_words</code>, and <code>proofread</code> in
+<code>PROJECTED_FIELD_CLASS</code> as data. They stay at the top level
+of a drain line as markers. <code>notes</code> is review-level and is
+not added to item lines.</li>
+<li>Add <code>PROOFREAD_MIN_WORDS</code>.</li>
 <li>Projected <code>after_history</code> entries do not carry
 <code>new_blocks</code>. The agent needs only the current run, and
 replay reads history from the browser store.</li>
 <li>The text formatter (<code>renderText</code>, which copy and export
 both use) shows the anchor change and then the new blocks by type.</li>
-<li>Write every line under the architecture's Contract changes, plus one
-line for AQ3 (always check new blocks on a handled reply): a handled
-reply on new blocks is always checked against the built page. The
-proofreading line names the two pinned button texts and what each
-posts.</li>
+<li>Write every line under the architecture's Contract changes. Each
+rule is said once, in the contract; no rule text goes on an item (main's
+drain rule since trim-the-drain).</li>
+<li>Add one sentence for AQ3 (always check new blocks on a handled
+reply) after main's handled-check line, which says an agent that changed
+the passage is not second-guessed: new_blocks has no old passage, so
+each block's words are checked against the built page on every handled
+reply.</li>
+<li>The proofreading line names the two pinned button texts and what
+each posts.</li>
 </ul>
 <p>Then update every copy in this one task:</p>
 <ul>
 <li><code>skills/lahe/SKILL.md</code> (edit only; the orchestrator
-installs it in Task 3.6, checkpoint)</li>
+installs it in Task 3.6, checkpoint), including its "A handled reply is
+checked" section for AQ3</li>
 <li>the restated copy in
 <code>test/unit/review_format.test.js</code></li>
 <li>the restated copy in <code>docs/CONTRACTS.md</code>, plus its record
-and <code>review.json</code> sections</li>
+and <code>review.json</code> sections, and the list of page-text fields
+in its <code>lahe status</code> section</li>
 </ul>
 <p><strong>Files:</strong> <code>src/shared/review_format.js</code>,
 <code>skills/lahe/SKILL.md</code>,
 <code>test/unit/review_format.test.js</code>,
 <code>test/unit/projection_review_json.test.js</code>,
+<code>test/unit/status_command.test.js</code>,
 <code>docs/CONTRACTS.md</code>. <strong>Acceptance:</strong></p>
 <ul>
 <li><code>review_format.test.js</code>:
@@ -1707,6 +1779,11 @@ and 151 gives true</li>
 gives false</li>
 <li>a notes review gives false</li>
 </ul></li>
+<li><code>status_command.test.js</code>: on a drain line, a run item's
+<code>new_blocks</code>, <code>anchor_after_html</code>, and
+<code>remove_blocks</code> sit under <code>page</code>;
+<code>placement</code> and <code>proofread</code> stay at the top level;
+no item line carries <code>notes</code>.</li>
 <li><code>docs/CONTRACTS.md</code> and the skill hold the same contract
 text as <code>review_format.js</code>.</li>
 </ul>
@@ -1929,8 +2006,12 @@ ladder's tag tie-breaker accepts either tag.</li>
 <li><strong>An existing list</strong> follows the architecture's Adding
 to an existing list.</li>
 <li><strong>The ceiling:</strong> the pinned warning at 90 percent of
-either ceiling. At the ceiling, input that would grow the run is
-refused, with the pinned at-the-ceiling line.</li>
+any of the three ceilings. At the ceiling, input that would grow the run
+is refused, with the pinned at-the-ceiling line. For
+<code>RUN_RECORD_MAX_BYTES</code>, the record's size apart from the run
+is measured once when the session opens, since history does not change
+during a sitting, and the run's bytes are added as they are already
+counted. Nothing extra runs per keystroke.</li>
 </ul>
 <p>Architecture sections: Block types while writing, Adding to an
 existing list, Changing an existing block's type, Data / State Changes
@@ -2100,7 +2181,9 @@ in Firefox and WebKit, by name.</p>
 <h3 id="task-25-2b-anchor-view-the-tag-leg-and-old-records">Task 2.5
 (2B): Anchor view, the tag leg, and old records</h3>
 <p><strong>Spec:</strong> For a run record, every anchor-compare
-function reads <code>record.anchorView</code>. Add the tag leg per the
+function reads <code>record.anchorView</code>, including
+<code>pieceMarkup</code>, which main added and which otherwise cuts the
+whole sitting's <code>after_html</code>. Add the tag leg per the
 architecture, swapping through <code>blocks.swapTag</code>. Records
 without <code>new_blocks</code> keep today's path unchanged.</p>
 <p>After 2A merges, <code>no_duplicate_text.spec.js</code> and
@@ -2109,7 +2192,9 @@ Enter, so today's path loses its browser coverage. So add
 <code>replay_old_records.spec.js</code>: each scenario in those two
 specs and in <code>replay_branches.spec.js</code>, injected as an
 old-shape fixture record with nested blocks and no
-<code>new_blocks</code>.</p>
+<code>new_blocks</code>. That includes the formatting cases main added
+to <code>no_duplicate_text.spec.js</code>: the missing paragraph keeps
+its bold, italic, and link, on the ordinary pass and on "Keep mine".</p>
 <p>Architecture sections: Data / State Changes (the reader table's
 replay rows), Changing an existing block's type ("Replay").
 <strong>Files:</strong> <code>src/layer/replay.js</code>,
@@ -2192,7 +2277,9 @@ page check on a run, with the same walk and matcher, and
 <code>PAGE_CHECK_TAG_NOTE</code> for a wrong tag.</p>
 <p>Then prove the header case and the lone-paragraph case (the first two
 R14 bugs) under the new record shape, with Task 1.1's seeds and fixture
-records.</p>
+records. Main already fixed the lone paragraph when the left-out one is
+the first; here it is a regression test. The left-out later paragraph,
+which main still loses, is this task's fix.</p>
 <p>Architecture sections: The page check on a run, Analysis of Existing
 Structure ("Root cause of two open bugs"), Failure Modes (last row).
 <strong>Files:</strong> <code>src/layer/replay.js</code>,
@@ -2221,10 +2308,14 @@ id="task-28-2c-helper-enforcement-the-draft-floor-and-refused-events">Task
 <p><strong>Spec:</strong> On append, <code>log.js</code> runs
 <code>record.validateRun</code> and refuses a failing event with its
 code. <code>sync.js</code> holds drafts of run records to
-<code>FLUSH.RUN_DRAFT_FLOOR_MS</code>. It also reads
-<code>rejected</code> for the run codes, stops re-posting that event,
-and raises <code>RUN_EVENT_REFUSED</code> on the item; Task 3.2 (edits
-tab and card) draws it.</p>
+<code>FLUSH.RUN_DRAFT_FLOOR_MS</code>. The keystroke that withdraws a
+reopened <code>ready</code> or <code>not_handled</code> record still
+posts at once, as main does since refused-reword-floor.
+<code>sync.js</code> also reads <code>rejected</code> for the run codes,
+stops re-posting that event, and raises <code>RUN_EVENT_REFUSED</code>
+on the item; Task 3.2 (edits tab and card) draws it.
+<code>sync.js</code> was reworked on main by quiet-tab-polling; build on
+that version.</p>
 <p>Architecture sections: Security &amp; Privacy Notes ("One allowlist,
 three places", "Size"), Data / State Changes ("Size ceiling", "Draft
 growth"). <strong>Files:</strong> <code>src/service/log.js</code>,
@@ -2238,30 +2329,47 @@ growth"). <strong>Files:</strong> <code>src/service/log.js</code>,
 code, and nothing reaches <code>events.jsonl</code> or
 <code>review.json</code></li>
 <li>a valid run is stored and projected whole</li>
-<li>a record at both ceilings, with <code>RUN_HISTORY_KEEP</code> full
-history entries, fits under the helper's <code>MAX_BODY_BYTES</code>;
-the test computes the size and does not assume it</li>
+<li>a record at both block ceilings, with <code>RUN_HISTORY_KEEP</code>
+full history entries, fits under the helper's
+<code>MAX_BODY_BYTES</code>; the test computes the size and does not
+assume it</li>
+<li>the same record, with older history entries added until it passes
+<code>RUN_RECORD_MAX_BYTES</code>, is refused with
+<code>RUN_OVER_CEILING</code>, and every record under it fits under
+<code>MAX_BODY_BYTES</code> as a posted event</li>
 </ul></li>
 <li><code>draft_flush_cadence.test.js</code>:
 <ul>
 <li>a run record's drafts wait for the longer floor, a record without
 <code>new_blocks</code> keeps the 10-second floor, and a commit is never
 held</li>
+<li>reopening a <code>ready</code> run record and typing posts the
+withdrawal at once; later drafts wait for the run floor</li>
 <li>a refused run event is posted once, not again on each reconnect, and
 the item carries <code>RUN_EVENT_REFUSED</code></li>
 </ul></li>
 </ul>
 <h3 id="task-29-2c-the-handled-check">Task 2.9 (2C): The handled
 check</h3>
-<p><strong>Spec:</strong></p>
+<p><strong>Spec:</strong> Build on main's per-edit check
+(<code>verdictFor</code>, <code>passageOf</code>,
+<code>splitStarts</code> in <code>handled_check.js</code>).</p>
 <ul>
 <li><code>checkable</code> accepts <code>format_only</code> records and
 run records.</li>
 <li>Both are matched by the rules in the architecture's The handled
 check.</li>
+<li>A run record never goes through <code>splitStarts</code>: its
+<code>after</code> spans anchor and run, and a section label between
+blocks would fail it.</li>
 <li>Per AQ3 (always check new blocks on a handled reply), a run record's
-block words are checked even when the source was written since commit.
-The anchor's words stay behind today's gate.</li>
+block words are checked on every handled reply, whatever else was
+written. The anchor's words follow main's per-edit rule: held only when
+its <code>before</code> is still on the page exactly once, or nothing
+was written.</li>
+<li>A <code>format_only</code> record follows main's rule too. Its words
+do not change, so in practice it is judged only when nothing was written
+(see AQ3, Related).</li>
 </ul>
 <p>Architecture sections: The handled check, Failure Modes, AQ3 (always
 check new blocks). <strong>Files:</strong>
@@ -2274,8 +2382,14 @@ against built pages rendered from Markdown sources:</p>
 between blocks</li>
 <li>a run whose second block is missing is held open, with the source
 written and not written</li>
+<li>two run items: the agent places one, answers handled on both, and
+the skipped one is held open (red on main's rule, which judges a run
+only when nothing was written)</li>
 <li>a run whose words became raw HTML in the source is held open even
 though the source was written</li>
+<li>a run whose anchor was reworded: when the agent changed the anchor
+and placed the run, it passes; when it left the old anchor words on the
+page, it is held open</li>
 <li>a run holding "a &lt; b &amp; c", correctly escaped, passes</li>
 <li>straight quotes rendered curly, and <code>--</code> rendered as a
 dash, pass</li>
@@ -2338,8 +2452,9 @@ to a non-Markdown file</li>
 <li>the printed folder is the real path when the parent is reached
 through a symlinked folder</li>
 <li>a request for a sibling file in the same folder gets a 404, and so
-does a request for another review's rendered page in the same
-session</li>
+does a dotfile sibling such as <code>.env</code> (main's folder servers
+now serve dotfiles), and a request for another review's rendered page in
+the same session</li>
 <li>with <code>--session</code>, on a session whose Markdown review
 already has a server, <code>write</code> starts its own server, and the
 sibling file is still a 404</li>
@@ -2506,6 +2621,9 @@ pastes <code>after</code> as paragraphs (Markdown).</li>
 <li>Every item is read back from <code>review.json</code> at its
 committed revision, never from <code>window.__lahe.items()</code>, which
 proves the helper accepted real capture.</li>
+<li>The scripted agent also reads the same item from a drain line, where
+the new text fields sit under <code>page</code>, and places it the same
+way.</li>
 <li>The ported helpers have no "reloaded by hand" fallback. A missing
 self-reload fails the test.</li>
 </ul>
@@ -2554,7 +2672,9 @@ open, the caret and text stay, and after commit a main-frame navigation
 brings the rebuilt content.</li>
 <li><strong>Handled check:</strong> a real captured run where the agent
 replies handled and writes nothing is held open. A real run whose words
-the agent wrote as raw HTML is held open.</li>
+the agent wrote as raw HTML is held open. Two real runs where the agent
+places one and answers handled on both: the skipped one is held
+open.</li>
 <li><strong>Notes page:</strong> three sittings on an empty
 <code>lahe write</code> page before any placement become one record,
 placed at the top of the file, every block shown once. A sitting added
@@ -2662,17 +2782,34 @@ between anchor and run are expected to fail. Ken accepts that join, and
 those lines leave the Acceptance Criteria.</li>
 </ul>
 <p><strong>AQ3 (always check new blocks on a handled reply), if Ken
-keeps today's gate for new blocks.</strong></p>
+keeps main's per-edit rule for new blocks.</strong></p>
 <ul>
-<li>Task 1.6 (projection and contract) drops the AQ3 line from the
+<li>Task 1.6 (projection and contract) drops the AQ3 sentence from the
 contract and every copy.</li>
-<li>Task 2.9 (handled check) keeps today's gate for run records.
+<li>Task 2.9 (handled check) applies main's per-edit rule to run
+records, which judges a run only when nothing in the review was written.
 Coverage of <code>format_only</code> records stays, because brief R14
 (bold and italic survive the rebuild) needs it.</li>
+<li>The "one run skipped, both answered handled" cases in Tasks 2.9 and
+3.4 expect the item to close at reply and the page check to reopen it on
+the next load.</li>
 <li>Task 3.4 (tests that need all three branches): the "words written as
 raw HTML" spec expects the page check to reopen the item on the next
 load, not the handled check to hold it open at reply.</li>
-<li>The Test List line for that case changes to match.</li>
+<li>The Test List lines for those cases change to match.</li>
+</ul>
+<p><strong>AQ4 (bounding a run record's size), if Ken picks another
+option.</strong></p>
+<ul>
+<li>Leave it as it is: Task 1.4 drops the history trim and
+<code>RUN_RECORD_MAX_BYTES</code>, Task 2.2 drops the third ceiling, and
+Task 2.8's size test instead reports the entry count at which the body
+limit is crossed.</li>
+<li>Store the run once: a new Phase 1 task makes <code>after_html</code>
+and <code>after</code> of a run record derived on read through one
+function in <code>record.js</code>, and every reader of those two fields
+uses it. It needs its own review, because it touches most of the files
+this plan names.</li>
 </ul>
 <h2 id="open-questions">Open Questions</h2>
 <div class="callout callout-question">
@@ -2728,15 +2865,18 @@ mine" to "Use the fixes" and "Keep my words"? <strong>Default:
 yes.</strong> "Keep mine" already means something else on the conflict
 card.</p>
 </div>
-<p>AQ1 (Lahe's code or Tiptap) and AQ3 (always check new blocks on a
-handled reply) stay open in the <a
+<p>AQ1 (Lahe's code or Tiptap), AQ3 (always check new blocks on a
+handled reply), and AQ4 (bounding a run record's size) stay open in the
+<a
 href="02_architecture_free_writing.html#open-questions">architecture</a>.</p>
 <h2 id="test-list">Test List</h2>
 <div class="callout callout-req">
 <p><strong>Kernel (Phase 1)</strong></p>
 <ul class="task-list">
-<li><label><input type="checkbox" />The three R14 cases (bold and italic
-edits) reproduce on the Phase 1 base as expected failures.</label></li>
+<li><label><input type="checkbox" />On the Phase 1 base, the
+first-paragraph lone-paragraph case passes, and the other three R14
+cases (bold and italic edits) reproduce as expected
+failures.</label></li>
 <li><label><input type="checkbox" /><code>cleanBlock</code> refuses
 <code>script</code> and <code>iframe</code>, the SVG animate href case,
 a remote <code>img</code>, an <code>a href</code>, and <code>li</code>
@@ -2768,8 +2908,9 @@ forged fixture is refused with its code.</label></li>
 <code>change</code> equal each fixture's literal strings;
 <code>change</code> never carries run words.</label></li>
 <li><label><input type="checkbox" />The ceiling is refused by block
-count and by UTF-8 bytes. Old history entries drop
-<code>new_blocks</code>.</label></li>
+count, by UTF-8 bytes, and by the whole record's size. Old history
+entries of a run record drop <code>new_blocks</code> and
+<code>after_html</code> and keep <code>after</code>.</label></li>
 <li><label><input type="checkbox" />A take-back carries
 <code>remove_blocks</code> and never
 <code>new_blocks</code>.</label></li>
@@ -2785,6 +2926,9 @@ browser run wins at the same revision, longer or shorter.</label></li>
 <li><label><input type="checkbox" />Contract copies in the skill,
 <code>review_format.test.js</code>, and <code>docs/CONTRACTS.md</code>
 match the source.</label></li>
+<li><label><input type="checkbox" />On a drain line, the new text fields
+sit under <code>page</code>, the markers stay at the top level, and no
+item line carries <code>notes</code> or rule text.</label></li>
 <li><label><input type="checkbox" />Hotkeys match on
 <code>event.code</code>, never on AltGr, and collide with no existing or
 system chord.</label></li>
@@ -2885,17 +3029,22 @@ and the three old-record specs pass unchanged.</label></li>
 <li><label><input type="checkbox" />The helper refuses every forged
 record and anything over either ceiling, and stores
 nothing.</label></li>
-<li><label><input type="checkbox" />A record at both ceilings with full
-history fits under the body limit, measured in the test.</label></li>
+<li><label><input type="checkbox" />A record at both block ceilings with
+full history fits under the body limit, measured in the test. A record
+past <code>RUN_RECORD_MAX_BYTES</code> is refused, and every record
+under it fits.</label></li>
 <li><label><input type="checkbox" />Run drafts wait for the longer
-floor; other drafts keep 10 seconds; a commit is never
-held.</label></li>
+floor; other drafts keep 10 seconds; a commit is never held. The
+withdrawal keystroke of a reopened run posts at once.</label></li>
 <li><label><input type="checkbox" />A refused run event is posted once
 and shown on the item.</label></li>
 <li><label><input type="checkbox" />The handled check passes a correct
 run across a section label, and escaped special characters.</label></li>
 <li><label><input type="checkbox" />The handled check holds open a
 missing block, whether or not the source was written.</label></li>
+<li><label><input type="checkbox" />The handled check holds open a run
+the agent skipped while it placed another (AQ3, always check new blocks
+on a handled reply).</label></li>
 <li><label><input type="checkbox" />The handled check holds open words
 written as raw HTML (AQ3, always check new blocks on a handled
 reply).</label></li>
@@ -2907,8 +3056,8 @@ new file, and reopens an existing one unchanged.</label></li>
 missing parent, a non-Markdown name, a directory, and every symlink
 shape the architecture lists.</label></li>
 <li><label><input type="checkbox" /><code>lahe write</code> serves one
-page on its own server. Siblings and other rendered pages are 404, with
-or without <code>--session</code>.</label></li>
+page on its own server. Siblings, dotfile siblings, and other rendered
+pages are 404, with or without <code>--session</code>.</label></li>
 <li><label><input type="checkbox" />The file-name title carries the
 chrome marker; a file with a <code>#</code> heading does
 not.</label></li>
@@ -3100,7 +3249,10 @@ selection and Backspace merge work across the edge, in all three
 browsers.</label></li>
 <li><label><input type="checkbox" />AQ3 as recommended (always check new
 blocks): a handled reply on a run is checked even when the source was
-written.</label></li>
+written, so a run the agent skipped is held open.</label></li>
+<li><label><input type="checkbox" />AQ4 as recommended (bounding a run
+record's size): old history entries keep words only, and no run record
+reaches the helper's body limit.</label></li>
 <li><label><input type="checkbox" />Human has reviewed and approved
 (single consolidated gate after Plan)</label></li>
 </ul>
@@ -3813,6 +3965,96 @@ to change. It can go to the board</td>
 <td>Narrow windows and the rail</td>
 <td><span class="accepted">Accepted</span></td>
 <td>Menu opens upward; bar drops its hint first</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="main-drift-2026-09-28">Main Drift, 2026-09-28</h2>
+<p>Checked against main after the plan was written, up to the 2b6eb96
+bundle rebuild. The architecture's Main Drift table holds the design
+side.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MD1</td>
+<td>The three branches Phase 0 was to settle, and four more touching
+this plan's files, have merged</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Phase 0 lists them and sets the base at 2b6eb96 or later</td>
+</tr>
+<tr>
+<td>MD2</td>
+<td>The lone-paragraph board row is fixed on main but still open on the
+board</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Phase 0 closes it, naming e46c1ec</td>
+</tr>
+<tr>
+<td>MD3</td>
+<td>The first-paragraph R14 case now passes on main, so it cannot be an
+expected failure</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Task 1.1 writes it as an ordinary test; Task 2.7 and the Test List
+call it a regression test. Re-run results added to the spike
+evidence</td>
+</tr>
+<tr>
+<td>MD4</td>
+<td><code>pieceMarkup</code> and the new formatting cases in
+<code>no_duplicate_text.spec.js</code> are on main</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Task 2.5 puts <code>pieceMarkup</code> on the anchor view and ports
+those cases into <code>replay_old_records.spec.js</code>; Task 1.2
+leaves <code>topLevelBlocks</code> alone</td>
+</tr>
+<tr>
+<td>MD5</td>
+<td>The handled check is per edit now, and judges a run only when
+nothing was written</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Task 2.9 builds on <code>verdictFor</code>, keeps runs off
+<code>splitStarts</code>, and adds the skipped-run case; the AQ3
+sentence is worded against main's line</td>
+</tr>
+<tr>
+<td>MD6</td>
+<td>The drain groups page text under <code>page</code> by
+<code>DATA_FIELDS</code> and repeats no rule text</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Task 1.6 adds the three text fields to <code>DATA_FIELDS</code>,
+classes the markers, updates the <code>lahe status</code> copy in
+<code>docs/CONTRACTS.md</code>, and tests the drain line; Task 3.4's
+agent reads a drain line</td>
+</tr>
+<tr>
+<td>MD7</td>
+<td>Rewording a ready or <code>not_handled</code> record withdraws it at
+the first keystroke</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Task 2.8 tests that the withdrawal still posts at once under the run
+floor</td>
+</tr>
+<tr>
+<td>MD8</td>
+<td>A ceiling-size run crosses the 8 MiB body limit at its 18th history
+entry</td>
+<td>Accepted as the AQ4 default, pending Ken</td>
+<td>Task 1.4 trims old run history to words and adds
+<code>RUN_RECORD_MAX_BYTES</code>; Task 2.2 adds the third ceiling
+without per-keystroke cost; Task 2.8 tests it</td>
+</tr>
+<tr>
+<td>MD9</td>
+<td>Main's folder servers serve dotfiles</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Task 2.10 tests a dotfile sibling is a 404</td>
 </tr>
 </tbody>
 </table></div>

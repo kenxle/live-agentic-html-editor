@@ -834,6 +834,8 @@ Questions</a></li>
 <li><a href="#decisions-resolved" id="toc-decisions-resolved">Decisions
 (Resolved)</a></li>
 <li><a href="#pm-review" id="toc-pm-review">PM Review</a></li>
+<li><a href="#main-drift-2026-09-28" id="toc-main-drift-2026-09-28">Main
+Drift, 2026-09-28</a></li>
 <li><a href="#reviews-free-writing-brief"
 id="toc-reviews-free-writing-brief">Reviews: Free writing brief</a>
 <ul>
@@ -870,13 +872,17 @@ arrives.</p>
 <p>Prior work: the crucible in this folder (<code>00_crucible.md</code>)
 and the questions page Ken answered
 (<code>00_crucible_questions.md</code>). The original Lahe brief's
-editing requirements assume the text already exists. One formatting bug
-is already on the board as
-<code>LAHE-lone-paragraph-loses-markup</code>. When the agent places an
-edit but leaves out one of its paragraphs, Lahe puts that paragraph back
-as plain text, and its bold and italic are lost. This feature absorbs
-that row (details in
-<code>docs/features/20260922.08_no_duplicate_text/NOTES.md</code>).</p>
+editing requirements assume the text already exists.</p>
+<p>One formatting bug was on the board as
+<code>LAHE-lone-paragraph-loses-markup</code>. When the agent placed an
+edit but left out one of its paragraphs, Lahe put that paragraph back as
+plain text, and its bold and italic were lost. Main fixed that on
+2026-09-28 (piece-keeps-formatting, details in
+<code>docs/features/20260922.08_no_duplicate_text/NOTES.md</code>). A
+related case is still open. When the paragraph the agent left out is not
+the edit's first one, the edit goes missing from the page and nothing is
+flagged. This feature fixes that case and keeps a regression test for
+the fixed one.</p>
 <pre class="mermaid"><code>flowchart TD
   A[Want to add an intro] --&gt; B[Ask the agent for a placeholder header]
   B --&gt; C[Wait for the rebuild]
@@ -1066,8 +1072,11 @@ page.</p>
 </ul>
 <p>Known cases that must pass:</p>
 <ul>
-<li>a paragraph written on its own loses its bold and italic (board row
-<code>LAHE-lone-paragraph-loses-markup</code>)</li>
+<li>a bold paragraph the agent left out comes back without its bold.
+Main already passes this when it is the edit's first paragraph (board
+row <code>LAHE-lone-paragraph-loses-markup</code>); it must keep passing
+under the new record shape. When it is a later paragraph, the edit is
+lost and nothing is flagged; that must pass too.</li>
 <li>a new line typed after a header comes out doubled. Steps: open a
 header for editing, press Enter, type a line, leave the editor. The new
 line shows twice: once inside the header and once as a normal line below
@@ -1150,7 +1159,8 @@ formatting. The same requirements cover them:</p>
 <li><p><strong>Formatting failures beyond R14's three cases (bold and
 italic edits):</strong> the architecture traced the header case to
 Lahe's own replay, not the agent's rebuild. It found one related case, a
-left-out bold paragraph, and covers it in the same fix.</p></li>
+left-out bold paragraph that is not the edit's first, and covers it in
+the same fix. Main fixed the first-paragraph case on its own.</p></li>
 <li><p><strong>Enter at the end of an existing block:</strong> what the
 reviewer writes in one sitting is one edit. New lines typed after an
 existing block are part of that block's edit. There is no logic that
@@ -1239,6 +1249,38 @@ Larger edits: same failures, folded into R3 and R4</td>
 <td><span class="accepted">Accepted</span></td>
 <td>R5 reworded to match today's saving and to say what a reload
 shows</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="main-drift-2026-09-28">Main Drift, 2026-09-28</h2>
+<p>Checked against main after the brief was written (merges from
+piece-keeps-formatting through the 2b6eb96 bundle rebuild).</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MD1</td>
+<td>The lone-paragraph bug is fixed on main (piece-keeps-formatting): a
+left-out first paragraph now comes back with its bold</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Context and R14's first case say so. The feature keeps a regression
+test and no longer owns that fix. Re-running the reproduction on main
+confirmed it</td>
+</tr>
+<tr>
+<td>MD2</td>
+<td>The same reproduction's second variant, where the left-out bold
+paragraph is a later one, still loses the edit with no flag on main</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Named in R14's first case and in Decisions; this feature still owns
+it</td>
 </tr>
 </tbody>
 </table></div>

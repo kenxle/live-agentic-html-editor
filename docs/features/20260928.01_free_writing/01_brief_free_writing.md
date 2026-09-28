@@ -16,7 +16,9 @@ Lahe is a co-authoring tool. A reviewer reads a page an agent produced, comments
 
 Today the only way to add text is to open an existing block for editing, press Enter at its end, and keep typing. The new paragraphs are recorded as a change to that neighbor block. There is no way to make a header, and no way to start on an empty page. To add an introduction, Ken asks the agent for a placeholder header and edits it when it arrives.
 
-Prior work: the crucible in this folder (`00_crucible.md`) and the questions page Ken answered (`00_crucible_questions.md`). The original Lahe brief's editing requirements assume the text already exists. One formatting bug is already on the board as `LAHE-lone-paragraph-loses-markup`. When the agent places an edit but leaves out one of its paragraphs, Lahe puts that paragraph back as plain text, and its bold and italic are lost. This feature absorbs that row (details in `docs/features/20260922.08_no_duplicate_text/NOTES.md`).
+Prior work: the crucible in this folder (`00_crucible.md`) and the questions page Ken answered (`00_crucible_questions.md`). The original Lahe brief's editing requirements assume the text already exists.
+
+One formatting bug was on the board as `LAHE-lone-paragraph-loses-markup`. When the agent placed an edit but left out one of its paragraphs, Lahe put that paragraph back as plain text, and its bold and italic were lost. Main fixed that on 2026-09-28 (piece-keeps-formatting, details in `docs/features/20260922.08_no_duplicate_text/NOTES.md`). A related case is still open. When the paragraph the agent left out is not the edit's first one, the edit goes missing from the page and nothing is flagged. This feature fixes that case and keeps a regression test for the fixed one.
 
 ```mermaid
 flowchart TD
@@ -166,7 +168,7 @@ The approved wireframe decides what the reviewer sees (`wireframes/DECISION.md`)
 - is still on the page after the rebuild
 
 Known cases that must pass:
-- a paragraph written on its own loses its bold and italic (board row `LAHE-lone-paragraph-loses-markup`)
+- a bold paragraph the agent left out comes back without its bold. Main already passes this when it is the edit's first paragraph (board row `LAHE-lone-paragraph-loses-markup`); it must keep passing under the new record shape. When it is a later paragraph, the edit is lost and nothing is flagged; that must pass too.
 - a new line typed after a header comes out doubled. Steps: open a header for editing, press Enter, type a line, leave the editor. The new line shows twice: once inside the header and once as a normal line below it.
 - bold two words on a Markdown page, commit, and rebuild
 :::
@@ -222,7 +224,7 @@ None. The contract text changes. Existing reviews keep working, since an old pag
   - R14 keeps bold and italic through the rebuild.
 
   No separate row.
-- **Formatting failures beyond R14's three cases (bold and italic edits):** the architecture traced the header case to Lahe's own replay, not the agent's rebuild. It found one related case, a left-out bold paragraph, and covers it in the same fix.
+- **Formatting failures beyond R14's three cases (bold and italic edits):** the architecture traced the header case to Lahe's own replay, not the agent's rebuild. It found one related case, a left-out bold paragraph that is not the edit's first, and covers it in the same fix. Main fixed the first-paragraph case on its own.
 - **Enter at the end of an existing block:** what the reviewer writes in one sitting is one edit. New lines typed after an existing block are part of that block's edit. There is no logic that splits a sitting into separate items.
 
 ## PM Review
@@ -240,3 +242,12 @@ None. The contract text changes. Existing reviews keep working, since an old pag
 | RF9 | "Word for word" fails on renderer typography | Accepted | R6 carve-out |
 | RF10 | Tiptap said three times; old agents not covered in Rollout | Accepted | Goal paragraph cut; Rollout line added |
 | RF11 | R5 overstated draft saving | Accepted | R5 reworded to match today's saving and to say what a reload shows |
+
+## Main Drift, 2026-09-28
+
+Checked against main after the brief was written (merges from piece-keeps-formatting through the 2b6eb96 bundle rebuild).
+
+| # | Finding | Disposition | Rationale |
+|---|---------|-------------|-----------|
+| MD1 | The lone-paragraph bug is fixed on main (piece-keeps-formatting): a left-out first paragraph now comes back with its bold | Accepted | Context and R14's first case say so. The feature keeps a regression test and no longer owns that fix. Re-running the reproduction on main confirmed it |
+| MD2 | The same reproduction's second variant, where the left-out bold paragraph is a later one, still loses the edit with no flag on main | Accepted | Named in R14's first case and in Decisions; this feature still owns it |
