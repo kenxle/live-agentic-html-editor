@@ -172,7 +172,43 @@ function createEventLog(options) {
     };
     loaded[reviewId] = state;
     scanAll(reviewId, state, { report: true });
+    rememberCompactedIds(reviewId, state);
     return state;
+  }
+
+  /**
+   * Count the event_ids a compaction took out of the log as already seen.
+   *
+   * scripts/compact_draft_history.js drops superseded draft events and lists
+   * their ids in events.jsonl.compacted-ids beside the log. Without this, the
+   * seen set is built from the lines on disk only, so a browser re-posting a
+   * dropped draft from its outbox (it re-posts anything it never saw
+   * acknowledged) would get it appended again as new, after the commit that
+   * replaced it. Read on every load, so it holds across helper restarts, and
+   * again after a rewrite is noticed. Never written here.
+   */
+  function rememberCompactedIds(reviewId, state) {
+    var file;
+    var text;
+    try {
+      file = stateDir.compactedIdsPath(dir, reviewId);
+      text = fs.readFileSync(file, "utf8");
+    } catch (err) {
+      if (err && err.code === "ENOENT") return 0;
+      helperLog("review " + reviewId + ": could not read its compacted-ids file: " + (err && err.message));
+      return 0;
+    }
+    var count = 0;
+    text.split("\n").forEach(function (line) {
+      if (!line) return;
+      var id;
+      try { id = JSON.parse(line); } catch (err) { return; }
+      if (typeof id === "string" && id) {
+        state.seen[id] = true;
+        count += 1;
+      }
+    });
+    return count;
   }
 
   /** Forget the cursor, and say so, so folded state downstream is thrown away. */
@@ -504,7 +540,9 @@ function createEventLog(options) {
     var tail = readTailInto(state);
     if (tail === null) {
       resetScan(state);
-      return scanAll(reviewId, state).filter(after(from));
+      var rescanned = scanAll(reviewId, state).filter(after(from));
+      rememberCompactedIds(reviewId, state);
+      return rescanned;
     }
 
     // The buffer holds a contiguous run ending at the newest event, so it holds

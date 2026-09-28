@@ -21,6 +21,13 @@
 //                            (D5). 0600
 //     reviews/<review-id>/                                             (0700)
 //       events.jsonl         append-only, one JSON line per event. 0600
+//       events.jsonl.compacted-ids
+//                            event_ids scripts/compact_draft_history.js took
+//                            out of the log, one JSON string per line. The log
+//                            reader counts them as already seen, so a browser
+//                            re-posting one is answered as a duplicate
+//       events.jsonl.pre-compact.gz
+//                            that script's copy of the log before it ran
 //       review.json          the projection the agent reads (3A writes it)
 //       meta.json            the review's token and its registered origins. 0600
 //       replies*.jsonl       what agents append (3A reads them)
@@ -50,6 +57,7 @@ var FILES = {
   ready: "service.json",
   helperLog: "helper.log",
   events: "events.jsonl",
+  compactedIds: "events.jsonl.compacted-ids",
   review: "review.json",
   meta: "meta.json",
   windows: "windows.json"
@@ -346,6 +354,14 @@ function eventsPath(dir, reviewId) {
   return resolveWithin(dir, [REVIEWS_DIR, assertSafeReviewId(reviewId), FILES.events]);
 }
 
+/**
+ * The event_ids a compaction took out of this review's log (see FILES above).
+ * The log reader loads them into its "already seen" set.
+ */
+function compactedIdsPath(dir, reviewId) {
+  return resolveWithin(dir, [REVIEWS_DIR, assertSafeReviewId(reviewId), FILES.compactedIds]);
+}
+
 function reviewJsonPath(dir, reviewId) {
   return resolveWithin(dir, [REVIEWS_DIR, assertSafeReviewId(reviewId), FILES.review]);
 }
@@ -436,6 +452,7 @@ module.exports = {
   ensureReviewArtifactsRoot: ensureReviewArtifactsRoot,
   reviewDir: reviewDir,
   eventsPath: eventsPath,
+  compactedIdsPath: compactedIdsPath,
   reviewJsonPath: reviewJsonPath,
   metaPath: metaPath,
   replyFilePath: replyFilePath,
