@@ -260,7 +260,6 @@ var NON_BUNDLE_FILES = [
   {
     path: "src/service/catalog_requests.js",
     owner: "Library 1.4",
-    planned: true,
     why: "the helper-written request queue, catalog-requests.jsonl: append, answer, expire, pending"
   },
   {
@@ -281,7 +280,6 @@ var NON_BUNDLE_FILES = [
   {
     path: "src/cli/commands/library.js",
     owner: "Library 1.4",
-    planned: true,
     why: "lahe library (print the Library URL, attach a session) and lahe library answer"
   }
 ];
