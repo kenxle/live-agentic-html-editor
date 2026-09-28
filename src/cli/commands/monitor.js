@@ -312,8 +312,9 @@ async function run(argv, options) {
       suppressActivityTouch: true,
       // ONCE, NOT ON EVERY RELAUNCH. An ended review is permanent state, so
       // without this the monitor would surface it, exit, be relaunched, surface
-      // it again, and spend a model turn every time round. Only the monitor
-      // marks it: the agent's own drain always answers "why was I woken".
+      // it again, and spend a model turn every time round. This marks it as
+      // "the monitor woke on it", which is not "the agent read it": the agent's
+      // first drain after this wake still lists it, and then marks it drained.
       markEndedDelivered: true
     });
     var printed = stdout.join("");
