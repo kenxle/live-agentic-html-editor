@@ -1193,6 +1193,29 @@ history remains on disk. `session reopen` restores the helper and remembered
 static servers. A caller-supplied `--origin` and every application dev server
 are externally owned, so LAHE never terminates them.
 
+**A page server nobody is looking at stops, and the session stays open.** The
+helper stops every static server of a session once no browser window has been
+open on any of that session's reviews for two minutes. "Open" is the helper's
+own claim rule: a holder that is not stale by its own claim window (30 seconds,
+or 390 for a hidden tab on the slow beat), with no goodbye since. The grace
+also counts from the first sweep that saw the server and from the server's
+`link_given_at`, which `lahe review` stamps each time it prints a link. The
+stop is written as `stop_reason: "no window open"` on the server's record. The
+session is not closed, its monitor keeps running, and nothing is written to its
+wake feed. `lahe review <document> --session <id>` starts the server again, on
+its old port when that port is free, and a window of the session that claims
+or beats while its servers are stopped this way starts them again too. A
+session close relabels an idle stop `session closed`, and nothing restarts
+those until the session is reopened. Starting and marking a server stopped both
+hold a lock file beside its record (`ss_<id>.json.lock`, stale after 20
+seconds), so the helper and `lahe review` never start one server twice, and a
+stop never writes over the record of a server started again in the meantime. An idle-stopped server still counts as
+serving its page for the healer, so no script line is written into the
+reviewer's file while it is down. `lahe status` prints a `server    stopped`
+line with the restart command, and `--json` adds `stopped_servers` (review,
+server, port, stopped_at, restart) to the summary line, only when there are
+any, and `server_stopped` inside that review's entry in the summary line's `liveness`.
+
 `lahe session list` is the read-only discovery command that precedes all three.
 It starts nothing, stops nothing, and marks nothing seen. It prints one line per
 agent session on disk, open sessions first and newest activity first, carrying

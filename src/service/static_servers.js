@@ -38,6 +38,95 @@ var MOUNT_ROOT = "/.lahe-source/";
 // The prefix follows HEALTH_PREFIX and the /.lahe-source/ mounts: a dotted,
 // tool-named path segment no ordinary document folder has.
 var LIBRARY_PREFIX = "/.lahe-library/";
+
+// Why a server was stopped, as its record says it. IDLE_REASON is the helper's
+// sweep (src/service/idle_servers.js): no browser window was open on any of
+// the session's pages for the grace. The session stays open, so the server
+// comes back when anyone asks for the page again. A session close is final
+// until the session is reopened.
+var IDLE_REASON = "no window open";
+var CLOSED_REASON = "session closed";
+
+// Test seams, empty in the product. afterStopWait runs between a stopped
+// server's process dying and stopOne writing its record, which is the gap a
+// second starter can land in.
+var hooks = { afterStopWait: null, beforeStaleTakeover: null, startWaitMs: null, onSpawn: null };
+
+// ONE STARTER PER SERVER, ACROSS PROCESSES. The helper (a window coming back)
+// and `lahe review` can both find the same server stopped and start it at the
+// same moment. Two spawns race for one record: one lands on the old port, the
+// other falls back to a random one, and whichever record loses is an orphan
+// nothing will ever stop. So start() holds an exclusive lock file beside the
+// record (`ss_<id>.json.lock`, which list() never reads) for as long as it
+// decides and spawns. A lock older than START_LOCK_STALE_MS belongs to a
+// starter that died, and is taken over: it is longer than start()'s own ten
+// second wait for a server to come up, so a live starter never loses its lock.
+var START_LOCK_STALE_MS = 20 * 1000;
+var START_LOCK_WAIT_MS = 25 * 1000;
+// How long start() waits for a spawned server to answer.
+var START_WAIT_MS = 10 * 1000;
+
+function lockPath(file) {
+  return file + ".lock";
+}
+
+/**
+ * Remove a lock this waiter judged stale, but only if it still is.
+ *
+ * Two waiters can both judge one lock stale. The first removes it and writes
+ * its own; a plain delete by the second would then remove that fresh lock, and
+ * both would hold it. So the lock is renamed aside first, which only one waiter
+ * can do to any one file, and what was renamed is checked: still stale, it is
+ * deleted; fresh, it is another waiter's live lock, and it is linked back
+ * (never over a newer lock) before the aside name goes.
+ */
+function takeOverStaleLock(lock) {
+  var aside = lock + ".stale-" + process.pid + "-" + crypto.randomBytes(6).toString("hex");
+  try { fs.renameSync(lock, aside); } catch (err) { return; }
+  var stale = true;
+  try { stale = Date.now() - fs.statSync(aside).mtimeMs > START_LOCK_STALE_MS; } catch (err) { return; }
+  if (!stale) {
+    try { fs.linkSync(aside, lock); } catch (err) { /* a newer lock is already there */ }
+  }
+  try { fs.unlinkSync(aside); } catch (err) { /* gone already */ }
+}
+
+async function withServerLock(file, task) {
+  var lock = lockPath(file);
+  var deadline = Date.now() + START_LOCK_WAIT_MS;
+  // What this holder wrote, so its release never removes a lock that is not
+  // its own (one taken over after this holder ran past the stale limit).
+  var token = process.pid + " " + crypto.randomBytes(8).toString("hex") + " " + new Date().toISOString() + "\n";
+  for (;;) {
+    try {
+      var fd = fs.openSync(lock, "wx", 0o600);
+      try { fs.writeSync(fd, token); } finally { fs.closeSync(fd); }
+      break;
+    } catch (err) {
+      if (err.code !== "EEXIST") throw err;
+    }
+    var age = null;
+    try { age = Date.now() - fs.statSync(lock).mtimeMs; } catch (err) { continue; }
+    if (age > START_LOCK_STALE_MS) {
+      if (typeof hooks.beforeStaleTakeover === "function") hooks.beforeStaleTakeover();
+      takeOverStaleLock(lock);
+      continue;
+    }
+    if (Date.now() > deadline) {
+      throw new Error("another process is still starting or stopping the static server " + path.basename(file) + "; try again");
+    }
+    await delay(50);
+  }
+  try {
+    return await task();
+  } finally {
+    var held = null;
+    try { held = fs.readFileSync(lock, "utf8"); } catch (err) { held = null; }
+    if (held === token) {
+      try { fs.unlinkSync(lock); } catch (err) { /* already gone */ }
+    }
+  }
+}
 var LIBRARY_PATH = LIBRARY_PREFIX + heal.BUNDLE_BASENAME;
 
 var MIME = {
@@ -232,6 +321,13 @@ async function start(options) {
   var root = fs.realpathSync(path.resolve(options.root));
   var id = serverId(root);
   var file = stateDir.staticServerPath(dir, sessionId, id);
+  stateDir.ensureStaticServersRoot(dir, sessionId);
+  return withServerLock(file, function () {
+    return startLocked(options, dir, sessionId, root, logicalRoot, id, file);
+  });
+}
+
+async function startLocked(options, dir, sessionId, root, logicalRoot, id, file) {
   var existing = readJson(file);
   if (fs.existsSync(file) && !existing) throw new Error("static server metadata is corrupt: " + file);
   if (existing && existing.root === root && await isExactServer(existing)) {
@@ -240,38 +336,108 @@ async function start(options) {
 
   stateDir.ensureStaticServersRoot(dir, sessionId);
   var instance = crypto.randomBytes(16).toString("hex");
+  // THE OLD PORT FIRST. A server coming back on the port it had keeps every
+  // origin its reviews already registered, and an old tab's address works
+  // again. When the port is taken the server falls back to a random one (see
+  // runServer). The option and the argument position match feat/lahe_library,
+  // which does the same for the Library's Open.
+  var preferredPort = validPort(options.preferredPort)
+    ? options.preferredPort
+    : (existing && existing.root === root && validPort(existing.port) ? existing.port : 0);
   var child = childProcess.spawn(
     process.execPath,
-    [__filename, "--serve", file, sessionId, id, instance, root, dir, logicalRoot],
+    [__filename, "--serve", file, sessionId, id, instance, root, dir, logicalRoot, String(preferredPort)],
     { detached: true, stdio: "ignore" }
   );
   child.unref();
+  if (typeof hooks.onSpawn === "function") hooks.onSpawn(child);
 
   var meta = await waitFor(async function () {
     var candidate = readJson(file);
     if (!candidate || candidate.instance !== instance) return null;
     return await isExactServer(candidate) ? candidate : null;
-  }, 10000);
-  if (!meta) throw new Error("the static review server did not start within 10 seconds");
+  }, typeof hooks.startWaitMs === "number" ? hooks.startWaitMs : START_WAIT_MS);
+  if (!meta) {
+    // A child that answers late would write the record after this start has
+    // already failed, or run with no record naming it. It is ours, so it goes.
+    try { process.kill(child.pid, "SIGKILL"); } catch (err) { /* already gone */ }
+    throw new Error("the static review server did not start within 10 seconds");
+  }
   return { meta: meta, started: true };
 }
 
-async function stopOne(dir, sessionId, meta) {
-  if (!meta || meta.stopped_at) return false;
+function validPort(value) {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 && value < 65536;
+}
+
+/**
+ * Stop one server and say why on its record.
+ *
+ * @param {string} [reason] CLOSED_REASON (the default) or IDLE_REASON
+ * @returns {Promise<boolean>} whether this call stopped a running server
+ */
+async function stopOne(dir, sessionId, meta, reason) {
+  var why = reason || CLOSED_REASON;
+  if (!meta) return false;
+  if (meta.stopped_at) {
+    // A session closed after the sweep stopped its servers. The record says
+    // so, or a window claiming later would read "idle" and start it again.
+    if (why === CLOSED_REASON && meta.stop_reason === IDLE_REASON) await markStopped(dir, sessionId, meta, CLOSED_REASON);
+    return false;
+  }
   var exact = await isExactServer(meta);
   if (!exact) {
-    meta.stopped_at = new Date().toISOString();
-    meta.stop_reason = "already down";
-    writeMeta(dir, sessionId, meta);
+    await markStopped(dir, sessionId, meta, why === IDLE_REASON ? IDLE_REASON : "already down");
     return false;
   }
   try { process.kill(meta.pid, "SIGTERM"); }
   catch (err) { if (err.code !== "ESRCH") throw err; }
   var stopped = await waitFor(async function () { return !(await isExactServer(meta)); }, 10000);
   if (!stopped) throw new Error("static review server " + meta.id + " did not stop within 10 seconds");
-  meta.stopped_at = new Date().toISOString();
-  meta.stop_reason = "session closed";
-  writeMeta(dir, sessionId, meta);
+  if (typeof hooks.afterStopWait === "function") await hooks.afterStopWait();
+  await markStopped(dir, sessionId, meta, why);
+  return true;
+}
+
+/**
+ * Write `meta` back as stopped, but only while the record on disk still names
+ * that same process. Stopping takes a moment, and a starter (a window coming
+ * back, `lahe review`) can start the server again in it. Writing the old record
+ * over the new one would call the new process stopped, so a session close
+ * would never stop it and the next start would take a random port. Under the
+ * start lock, so a start cannot land between the read and the write.
+ *
+ * @returns {Promise<boolean>} whether the record was written
+ */
+function markStopped(dir, sessionId, meta, reason) {
+  var file = stateDir.staticServerPath(dir, sessionId, meta.id);
+  return withServerLock(file, async function () {
+    var onDisk = readJson(file);
+    if (onDisk && onDisk.instance !== meta.instance) return false;
+    meta.stopped_at = new Date().toISOString();
+    meta.stop_reason = reason;
+    writeMeta(dir, sessionId, meta);
+    return true;
+  });
+}
+
+/**
+ * Record that a link to this server was just handed to someone.
+ *
+ * `lahe review` calls it every time it prints a link. The helper's idle sweep
+ * counts its grace from this too, so a server reused for a fresh link is not
+ * stopped before the reviewer has had time to open it. Read-merge-write, like
+ * recordLinks.
+ *
+ * @param {string} [at] ISO time, now by default
+ * @returns {boolean} whether the record was found and written
+ */
+function noteLinkGiven(dir, sessionId, serverId, at) {
+  var file = stateDir.staticServerPath(dir, sessionId, serverId);
+  var current = readJson(file);
+  if (!current || current.session_id !== sessionId) return false;
+  current.link_given_at = typeof at === "string" ? at : new Date().toISOString();
+  stateDir.writeAtomic(file, JSON.stringify(current, null, 2) + "\n");
   return true;
 }
 
@@ -558,9 +724,15 @@ function servesPath(dir, sessionId, filePath) {
   var realTarget = target;
   try { realTarget = fs.realpathSync(target); } catch (err) { /* the plain path still answers */ }
   return entries.some(function (meta) {
-    if (meta.stopped_at) return false;
-    if (typeof meta.pid !== "number") return false;
-    try { process.kill(meta.pid, 0); } catch (err) { return false; }
+    // A server the idle sweep stopped still counts. It comes back the moment
+    // anyone asks for the page, and the line on disk this answer would let the
+    // healer write is a review token in the reviewer's own working tree.
+    var idle = !!meta.stopped_at && meta.stop_reason === IDLE_REASON;
+    if (meta.stopped_at && !idle) return false;
+    if (!idle) {
+      if (typeof meta.pid !== "number") return false;
+      try { process.kill(meta.pid, 0); } catch (err) { return false; }
+    }
     var roots = [meta.root, meta.logical_root];
     if (meta.mounts && typeof meta.mounts === "object") {
       Object.keys(meta.mounts).forEach(function (prefix) { roots.push(meta.mounts[prefix]); });
@@ -772,7 +944,7 @@ function placeNote(html, note) {
 }
 
 
-function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInput) {
+function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInput, preferredPortInput) {
   var root = fs.realpathSync(rootInput);
   var logicalRoot = typeof logicalRootInput === "string" && logicalRootInput ? logicalRootInput : root;
   var prior = readJson(file);
@@ -1091,7 +1263,20 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
     if (req.method === "HEAD") return res.end();
     fs.createReadStream(candidate).on("error", function () { res.destroy(); }).pipe(res);
   });
-  server.listen(0, HOST, function () {
+  var preferredPort = Number(preferredPortInput);
+  if (!validPort(preferredPort)) preferredPort = 0;
+  server.once("error", function (err) {
+    // The old port is taken (or refused): fall back to any free one. Any other
+    // failure, or a failure on port 0, ends the process, and start() reports
+    // that the server did not come up.
+    if (preferredPort && (err.code === "EADDRINUSE" || err.code === "EACCES")) {
+      preferredPort = 0;
+      return server.listen(0, HOST, onListening);
+    }
+    throw err;
+  });
+  server.listen(preferredPort, HOST, onListening);
+  function onListening() {
     var meta = {
       schema: SCHEMA,
       id: id,
@@ -1110,7 +1295,7 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
       linked_files: mergeLinkedFiles(priorLinks, (readJson(file) || {}).linked_files)
     };
     stateDir.writeAtomic(file, JSON.stringify(meta, null, 2) + "\n");
-  });
+  }
   function stop() { server.close(function () { process.exit(0); }); }
   process.on("SIGHUP", reloadMounts);
   process.on("SIGTERM", stop);
@@ -1126,13 +1311,20 @@ if (require.main === module) {
     process.argv[6],
     process.argv[7],
     process.argv[8],
-    process.argv[9]
+    process.argv[9],
+    process.argv[10]
   );
 }
 
 module.exports = {
   SCHEMA: SCHEMA,
   LIBRARY_PATH: LIBRARY_PATH,
+  IDLE_REASON: IDLE_REASON,
+  _hooks: hooks,
+  _withServerLock: withServerLock,
+  START_LOCK_STALE_MS: START_LOCK_STALE_MS,
+  CLOSED_REASON: CLOSED_REASON,
+  noteLinkGiven: noteLinkGiven,
   servesPath: servesPath,
   recordLinks: recordLinks,
   linkedFileForPage: linkedFileForPage,

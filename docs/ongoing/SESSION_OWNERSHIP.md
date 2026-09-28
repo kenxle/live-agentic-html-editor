@@ -29,6 +29,11 @@ The shape of ownership and takeover is drawn in
 - **Feedback arrives during the handoff.** Catch-up reads what is on disk right
   now, and reading an item does not mark it seen, so nothing that lands at the
   boundary is skipped.
+- **Nobody has had a page open for two minutes.** The helper stops the
+  session's page servers and leaves the session open. The monitor keeps
+  running and the wake feed gets nothing. `lahe review <document> --session
+  <id>` brings a page back, on its old port when it is free, and `lahe status`
+  names that command. A takeover restarts the servers as before.
 - **Nobody asked for a handoff.** The tool refuses to attach a page or a review
   to a session that does not own it. Takeover is the one way across, and the
   skill tells agents to run it only when a human asks.
