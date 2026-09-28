@@ -1,19 +1,17 @@
 # Progress: LAHE Library
 
-**Phase 6, Implement.** You cleared the design, and the plan's three reviews are folded in. The shared names are in (commit 000c40b), and Phase 1 is merged (1449 unit tests pass). Phases 1 and 2 are merged: the helper side and the page both work (1585 unit tests pass). Two close-out builders are still working (agent docs, browser tests); the count script and the page fixes are merged. Nothing is waiting on you. Last updated 2026-09-28 17:46.
+**Phase 7, Review.** Everything is built and merged, and 1597 unit tests pass. Five reviews are back and one fix round is starting; the story walk is still running. One thing is waiting on you: the attach change below. Last updated 2026-09-28 18:15.
 
 **Docs:** [Crucible](http://127.0.0.1:54705/00_crucible.html) · [Brief](http://127.0.0.1:54705/01_brief_lahe_library.html) · [Wireframes](http://127.0.0.1:54705/wireframes/index.html) · [Architecture](http://127.0.0.1:54705/02_architecture_lahe_library.html) · [Plan](http://127.0.0.1:54705/03_plan_lahe_library.html) · [Ideas page](http://127.0.0.1:55480/DOCUMENT_INDEX_IDEAS-b09cd11f2a84063f.html)
 
 ## Needs your attention
 
-Nothing is waiting on you.
+- [ ] **One change from the approved design, for your yes or no.** The design said an agent attaches to the Library by running `lahe library --session <its id>`. But an agent you just asked to "open the lahe library" usually has no LAHE session yet, so it could not attach and Pick this up had nobody to go to. So now a bare `lahe library` starts a fresh session for that agent and attaches it; after that, the agent passes the session id it was given. The cost: every bare run attaches a new agent, which takes the hand-overs away from whichever agent had them before. You don't need to run it yourself: the Library stays at http://127.0.0.1:7817/catalog. Keep this?
 
 ## Currently working on
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Builder 3.1 + 3.4 | Agent instructions, the contract, the CLI docs, and the diagrams | 2026-09-28 17:39 | `task/lib-docs` |
-| Builder 3.2 | End-to-end and cross-site browser tests, and screenshots of an opened document | 2026-09-28 17:39 | `task/lib-e2e` |
 
 ## Phases
 
@@ -25,8 +23,8 @@ Nothing is waiting on you.
 | 3 Wireframe | done | 2026-09-28 |
 | 4 Architecture | done | 2026-09-28 |
 | 5 Plan | done | 2026-09-28 |
-| 6 Implement | in progress | 2026-09-28 |
-| 7 Review | not started | |
+| 6 Implement | done | 2026-09-28 |
+| 7 Review | in progress | 2026-09-28 |
 | 8 Ship and land | not started | |
 | 9 Cleanup | not started | |
 
