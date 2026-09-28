@@ -490,6 +490,54 @@ test("an answer stays on its row until ANSWER_SHOWN_MS, and not at it", async ()
   assert.equal(row(await reader.list(limit), "r_brief").request, null);
 });
 
+test("wired to 1.4's real queue: attached comes from readAttached and each row's request from requestFor", async () => {
+  const catalogRequests = require("../../src/service/catalog_requests.js");
+  const installed = fixture.install();
+  const now = installed.nowMs;
+  // The fixture's s_index is closed; the queue counts a closed session as not
+  // listening, so the attached agent is reopened first, as a live one would be.
+  require("../../src/service/agent_sessions.js").createStore({ dir: installed.dir }).reopen("s_index");
+  catalogRequests.writeAttach(installed.dir, "s_index", now - 5 * MINUTE);
+  const queue = catalogRequests.createQueue({ dir: installed.dir, writeExpired: true, pidAlive: () => true, log: () => {} });
+  const waiting = queue.append({ action: "pickup", review: "r_brief", session: "s_coach", for: "s_index" }, now - 2 * MINUTE);
+  const done = queue.append({ action: "launch", review: "r_spec", session: "s_coach", for: "s_index" }, now - 4 * MINUTE);
+  assert.equal(queue.answer({ id: done.request.id, by: "s_index", status: "done", text: "Launched claude" }, now - 3 * MINUTE).ok, true);
+  const reader = catalogReader.createReader({
+    dir: installed.dir,
+    home: installed.home,
+    pidAlive: () => true,
+    probe: async () => false,
+    attachment: queue.readAttached,
+    requestFor: queue.requestFor
+  });
+  const list = await reader.list(now);
+  assert.deepEqual(list.attached, { session: "s_index", name: "document index", watching: true });
+  assert.deepEqual(row(list, "r_brief").request, {
+    id: waiting.request.id, action: "pickup", at: waiting.request.at, state: "waiting",
+    by_name: "document index", text: null, answered_at: null
+  });
+  const answered = row(list, "r_spec").request;
+  assert.equal(answered.state, "done");
+  assert.equal(answered.by_name, "document index");
+  assert.equal(answered.text, "Launched claude");
+  assert.equal(row(list, "r_notes").request, null);
+});
+
+test("attached.watching is the queue's own answer when the attach carries one, so the header and Open agree", async () => {
+  const catalogRequests = require("../../src/service/catalog_requests.js");
+  const installed = fixture.install();
+  // s_index has a fresh heartbeat but is closed: the queue will not hand it a
+  // request, so the Library must not say it is watching.
+  catalogRequests.writeAttach(installed.dir, "s_index", installed.nowMs - 5 * MINUTE);
+  const queue = catalogRequests.createQueue({ dir: installed.dir, pidAlive: () => true, log: () => {} });
+  assert.equal(queue.readAttached(installed.nowMs).watching, false);
+  const reader = catalogReader.createReader({
+    dir: installed.dir, home: installed.home, pidAlive: () => true, probe: async () => false,
+    attachment: queue.readAttached, requestFor: queue.requestFor
+  });
+  assert.deepEqual((await reader.list(installed.nowMs)).attached, { session: "s_index", name: "document index", watching: false });
+});
+
 // --- corrupt files ---------------------------------------------------------------
 
 test("a corrupt review.json, meta.json, session.json or ss_*.json marks only its own row unreadable", async () => {
