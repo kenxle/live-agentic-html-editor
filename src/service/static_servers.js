@@ -179,9 +179,14 @@ async function start(options) {
 
   stateDir.ensureStaticServersRoot(dir, sessionId);
   var instance = crypto.randomBytes(16).toString("hex");
+  // THE OLD PORT FIRST. A restart that comes back on the port it had keeps
+  // every origin a review already registered for it, and an old tab's URL works
+  // again. When the port is taken the server falls back to a random one (see
+  // runServer), and the caller that cares registers the new origin.
+  var preferredPort = validPort(options.preferredPort) ? options.preferredPort : 0;
   var child = childProcess.spawn(
     process.execPath,
-    [__filename, "--serve", file, sessionId, id, instance, root, dir, logicalRoot],
+    [__filename, "--serve", file, sessionId, id, instance, root, dir, logicalRoot, String(preferredPort)],
     { detached: true, stdio: "ignore" }
   );
   child.unref();
@@ -223,16 +228,174 @@ async function stopAll(dir, sessionId) {
   return stopped;
 }
 
+function validPort(value) {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 && value < 65536;
+}
+
+/** The start() options that bring a recorded server back as it was. */
+function restartSpec(dir, sessionId, meta) {
+  return {
+    dir: dir,
+    sessionId: sessionId,
+    root: meta.root,
+    logicalRoot: typeof meta.logical_root === "string" ? meta.logical_root : null,
+    preferredPort: meta.port
+  };
+}
+
 async function restartAll(dir, sessionId) {
-  var entries = list(dir, sessionId).map(function (meta) {
-    return { root: meta.root, logicalRoot: typeof meta.logical_root === "string" ? meta.logical_root : null };
-  });
+  var entries = list(dir, sessionId);
   var started = 0;
   for (var i = 0; i < entries.length; i += 1) {
-    var result = await start({ dir: dir, sessionId: sessionId, root: entries[i].root, logicalRoot: entries[i].logicalRoot });
+    var result = await start(restartSpec(dir, sessionId, entries[i]));
     if (result.started) started += 1;
   }
   return started;
+}
+
+/**
+ * The two loopback origins a static server on `port` is reached by.
+ * `lahe review` registers exactly these (127.0.0.1, plus the localhost twin
+ * add.js adds), so they are the only ones a restart swaps.
+ */
+function loopbackOrigins(port) {
+  return ["http://" + HOST + ":" + port, "http://localhost:" + port];
+}
+
+/**
+ * Is `target` this server's own root or under it? Mounts are left out on
+ * purpose: a mounted folder is read-only linked documents, never a review.
+ */
+function underServerRoot(meta, target) {
+  if (typeof target !== "string" || !target) return false;
+  var resolved = path.resolve(target);
+  var real = resolved;
+  try { real = fs.realpathSync(resolved); } catch (err) { /* the plain path still answers */ }
+  return [meta.root, meta.logical_root].some(function (base) {
+    if (typeof base !== "string" || !base) return false;
+    return [resolved, real].some(function (candidate) {
+      return candidate === base || candidate.indexOf(base + path.sep) === 0;
+    });
+  });
+}
+
+/**
+ * The reviews of `sessionId` that `meta`'s server serves, read off disk: a
+ * review whose recorded target (a page or a folder) is under the server's root.
+ */
+function reviewsServedBy(dir, sessionId, meta) {
+  var root;
+  try { root = stateDir.reviewsRoot(dir); } catch (err) { return []; }
+  if (!fs.existsSync(root)) return [];
+  return fs.readdirSync(root, { withFileTypes: true })
+    .filter(function (entry) { return entry.isDirectory() && protocol.isSafeId(entry.name); })
+    .map(function (entry) { return entry.name; })
+    .filter(function (reviewId) {
+      var recorded = readJson(stateDir.metaPath(dir, reviewId));
+      if (!recorded || recorded.agent_session_id !== sessionId) return false;
+      var targets = Array.isArray(recorded.target_paths) ? recorded.target_paths.slice() : [];
+      if (typeof recorded.target_path === "string") targets.push(recorded.target_path);
+      return targets.some(function (target) { return underServerRoot(meta, target); });
+    })
+    .sort();
+}
+
+/**
+ * The helper's side of the Library's Open and of its reopened-session sweep.
+ *
+ * The CLI's own `lahe session reopen` and `close` keep working as they did;
+ * these are the same acts run from inside the helper, which holds the review
+ * registry in memory and so is the one process that can swap a review's
+ * origins without a restart.
+ *
+ * @param {{dir: string, reviews: object, sessions?: object}} options
+ *   `reviews` is the helper's registry (reviews.js), `sessions` an
+ *   agent_sessions store (one over `dir` when left out).
+ */
+function createCatalogOps(options) {
+  var opts = options || {};
+  if (!opts.dir) throw new Error("createCatalogOps: dir is required");
+  if (!opts.reviews) throw new Error("createCatalogOps: reviews is required");
+  var dir = opts.dir;
+  var reviews = opts.reviews;
+  var sessions = opts.sessions || require("./agent_sessions.js").createStore({ dir: dir });
+
+  /**
+   * Reopen `sessionId` if it is closed, bring back its one recorded server
+   * `serverId` (old port first), register that server's origins on every review
+   * it serves, and remove the loopback origins of its EARLIER ports from those
+   * same reviews. Nothing else is removed: not a dev server's origin, not a
+   * non-loopback one, not a port another server of this session is on now.
+   *
+   * A server that is already up is not restarted; the origin pass still runs
+   * and is a no-op when everything is already in place.
+   *
+   * @returns {Promise<{server: object, started: boolean, origin: string,
+   *   reviews: string[], registered: string[], removed: string[]}>}
+   */
+  async function reopenForCatalog(sessionId, serverId) {
+    var session = sessions.read(sessionId);
+    if (!session || session.synthetic) throw new Error("unknown agent session " + JSON.stringify(sessionId));
+    var record = list(dir, sessionId).filter(function (meta) { return meta.id === serverId; })[0];
+    if (!record) {
+      throw new Error("agent session " + sessionId + " has no recorded static server " + JSON.stringify(String(serverId)));
+    }
+    if (session.closed_at) sessions.reopen(sessionId);
+    var result = await start(restartSpec(dir, sessionId, record));
+    var server = result.meta;
+
+    var current = loopbackOrigins(server.port);
+    // A port another server of this session is on right now keeps its origins,
+    // even if this server once had it.
+    var othersNow = list(dir, sessionId)
+      .filter(function (meta) { return meta.id !== server.id && !meta.stopped_at; })
+      .map(function (meta) { return meta.port; });
+    var stale = [];
+    (Array.isArray(server.ports) ? server.ports : []).forEach(function (port) {
+      if (port === server.port || othersNow.indexOf(port) !== -1) return;
+      loopbackOrigins(port).forEach(function (origin) { stale.push(origin); });
+    });
+
+    var served = reviewsServedBy(dir, sessionId, server);
+    var registered = [];
+    var removed = [];
+    served.forEach(function (reviewId) {
+      var review = reviews.get(reviewId) || (typeof reviews.ensureKnown === "function" ? reviews.ensureKnown(reviewId) : null);
+      if (!review) return;
+      current.forEach(function (origin) {
+        if (review.origins.indexOf(origin) === -1) registered.push(origin);
+        reviews.registerOrigin(reviewId, origin);
+      });
+      stale.forEach(function (origin) {
+        if (review.origins.indexOf(origin) === -1) return;
+        reviews.removeOrigin(reviewId, origin);
+        removed.push(origin);
+      });
+    });
+    return {
+      server: server,
+      started: result.started,
+      origin: current[0],
+      reviews: served,
+      registered: registered,
+      removed: removed
+    };
+  }
+
+  /**
+   * Close a session from inside the helper: stop its static servers and mark
+   * it closed. Unlike `lahe session close`, it prints nothing and never stops
+   * the helper, which is the process running it.
+   *
+   * @returns {Promise<{stopped: number}>}
+   */
+  async function closeQuiet(sessionId) {
+    var stopped = await stopAll(dir, sessionId);
+    sessions.close(sessionId);
+    return { stopped: stopped };
+  }
+
+  return { reopenForCatalog: reopenForCatalog, closeQuiet: closeQuiet };
 }
 
 /**
@@ -536,7 +699,24 @@ function servesPath(dir, sessionId, filePath) {
   });
 }
 
-function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInput) {
+/**
+ * Does this Host header name this server, at its own port?
+ *
+ * THE DNS-REBINDING GUARD. A page on a name the attacker controls can be
+ * re-pointed at 127.0.0.1 and then read whatever this server answers, and a
+ * served page carries its review's token. The browser still sends the
+ * attacker's name as the Host, so only `127.0.0.1:<port>` and
+ * `localhost:<port>` are answered. A missing Host is refused too: a browser
+ * always sends one. The helper has the same rule (D11, protocol.hostAllowed);
+ * this one is narrower because it pins the port as well.
+ */
+function hostIsOwn(hostHeader, port) {
+  if (typeof hostHeader !== "string" || !hostHeader || !port) return false;
+  var value = hostHeader.toLowerCase();
+  return value === HOST + ":" + port || value === "localhost:" + port;
+}
+
+function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInput, preferredPortInput) {
   var root = fs.realpathSync(rootInput);
   var logicalRoot = typeof logicalRootInput === "string" && logicalRootInput ? logicalRootInput : root;
   var prior = readJson(file);
@@ -664,6 +844,10 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
 
   var startedAt = new Date().toISOString();
   var server = http.createServer(function (req, res) {
+    // Before anything else, on every path: pages, the reserved library route,
+    // the health probe, and a 404 alike.
+    var address = server.address();
+    if (!hostIsOwn(req.headers.host, address && address.port)) return send(res, 400, "bad host\n");
     var pathname;
     try { pathname = decodeURIComponent(new URL(req.url, "http://localhost").pathname); }
     catch (err) { return send(res, 400, "bad request\n"); }
@@ -792,7 +976,34 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
     if (req.method === "HEAD") return res.end();
     fs.createReadStream(candidate).on("error", function () { res.destroy(); }).pipe(res);
   });
-  server.listen(0, HOST, function () {
+  // THE PORT HISTORY. Every port this record has listened on, oldest first,
+  // so a restart knows which loopback origins came from this server and may be
+  // removed (createCatalogOps). A record written before the history existed
+  // seeds it with the one port it names.
+  var ports = [];
+  if (prior && prior.root === root) {
+    if (Array.isArray(prior.ports)) ports = prior.ports.filter(validPort);
+    else if (validPort(prior.port)) ports = [prior.port];
+  }
+  var preferredPort = Number(preferredPortInput);
+  if (!validPort(preferredPort)) preferredPort = 0;
+  function listen(port) {
+    server.listen(port, HOST, onListening);
+  }
+  server.once("error", function (err) {
+    // The old port is taken (or refused): fall back to any free one. Any other
+    // failure, or a failure on port 0, ends the process, and start() reports
+    // that the server did not come up.
+    if (preferredPort && (err.code === "EADDRINUSE" || err.code === "EACCES")) {
+      preferredPort = 0;
+      return listen(0);
+    }
+    throw err;
+  });
+  listen(preferredPort);
+  function onListening() {
+    var port = server.address().port;
+    if (ports.indexOf(port) === -1) ports.push(port);
     var meta = {
       schema: SCHEMA,
       id: id,
@@ -801,14 +1012,15 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
       root: root,
       logical_root: logicalRoot,
       host: HOST,
-      port: server.address().port,
+      port: port,
+      ports: ports.slice(),
       pid: process.pid,
       started_at: startedAt,
       stopped_at: null,
       mounts: mounts
     };
     stateDir.writeAtomic(file, JSON.stringify(meta, null, 2) + "\n");
-  });
+  }
   function stop() { server.close(function () { process.exit(0); }); }
   process.on("SIGHUP", reloadMounts);
   process.on("SIGTERM", stop);
@@ -824,7 +1036,8 @@ if (require.main === module) {
     process.argv[6],
     process.argv[7],
     process.argv[8],
-    process.argv[9]
+    process.argv[9],
+    process.argv[10]
   );
 }
 
@@ -840,5 +1053,7 @@ module.exports = {
   stopOne: stopOne,
   stopAll: stopAll,
   restartAll: restartAll,
+  createCatalogOps: createCatalogOps,
+  hostIsOwn: hostIsOwn,
   runServer: runServer
 };

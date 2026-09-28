@@ -299,6 +299,13 @@ function createReviews(options) {
       } else if (type === protocol.EVENT.ORIGIN_REGISTERED) {
         var origin = event.origin || (event.payload && event.payload.origin);
         if (typeof origin === "string" && origins.indexOf(origin) === -1) origins.push(origin);
+      } else if (type === protocol.EVENT.ORIGIN_REMOVED) {
+        // Applied in order with origin.registered, so a restarted static
+        // server's old port stays refused after a rebuild from the log, and an
+        // origin registered again later is held again.
+        var removed = event.origin || (event.payload && event.payload.origin);
+        var at = origins.indexOf(removed);
+        if (at !== -1) origins.splice(at, 1);
       }
     });
     if (!token) {
@@ -542,6 +549,43 @@ function createReviews(options) {
     // (`add` and `status`) know what this helper holds. An
     // origin registered while the helper is running has to reach it, or `add`
     // would keep believing the origin is missing and writing it again.
+    if (lastReadyDetails) writeReadyFile(lastReadyDetails);
+    return review;
+  }
+
+  /**
+   * Take one origin off a review's set.
+   *
+   * ONLY A PLAIN LOOPBACK HTTP ORIGIN. The one caller is a restarted static
+   * server dropping its own earlier ports (static_servers.createCatalogOps),
+   * and the architecture's rule is that nothing else is ever removed: not a
+   * dev server's https origin, not a named host, not the file origin "null".
+   * The guard is here too, so a caller that computes the wrong list cannot
+   * widen that rule.
+   *
+   * Removing an origin the review does not hold is a no-op, like registering
+   * one it already holds.
+   */
+  function removeOrigin(reviewId, origin) {
+    var review = get(reviewId);
+    if (!review) throw new Error("removeOrigin: no review named " + JSON.stringify(reviewId));
+    var value = String(origin);
+    if (!/^http:\/\/(127\.0\.0\.1|localhost):\d{1,5}$/.test(value)) {
+      throw new Error("removeOrigin: only a loopback http origin is ever removed, not " + JSON.stringify(value));
+    }
+    var at = review.origins.indexOf(value);
+    if (at === -1) return review;
+    review.origins.splice(at, 1);
+    persist(review);
+    log.append(reviewId, [
+      protocol.newEvent({
+        event: protocol.EVENT.ORIGIN_REMOVED,
+        event_id: "ev_" + crypto.randomBytes(8).toString("hex"),
+        review: reviewId,
+        payload: { origin: value }
+      })
+    ]);
+    log.helperLog("review " + reviewId + " removed stale origin " + value);
     if (lastReadyDetails) writeReadyFile(lastReadyDetails);
     return review;
   }
@@ -1306,6 +1350,7 @@ function createReviews(options) {
     ensureKnown: ensureKnown,
     list: list,
     registerOrigin: registerOrigin,
+    removeOrigin: removeOrigin,
     recordPaths: recordPaths,
     isolate: isolate,
     touch: touch,
