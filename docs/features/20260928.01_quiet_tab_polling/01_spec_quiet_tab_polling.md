@@ -1,10 +1,10 @@
-# Quiet tabs: poll less when nobody is looking
+# Quiet tabs: a tab nobody is looking at stops asking
 
 Whetstone-size. Part 1 of [GitHub issue 16](https://github.com/kenxle/live-agentic-html-editor/issues/16) (idle reviews cost too much). Part 2 of that issue, page servers that are never cleaned up, is not in this change. Progress is at the bottom.
 
 ## Summary
 
-An open review tab asks the helper for news once a second, forever, even when nothing is happening. This change makes a quiet tab ask less often. A focused tab starts at once a second and slows down each time it hears nothing, to once every 15 seconds. A tab you are not looking at asks once every two minutes. Anything you do on the page, or anything arriving from the agent, snaps it back to fast, and coming back to the tab checks at once. Nothing you do is ever delayed by this.
+Every open review tab used to ask the helper for news once a second, forever. Now focus is the switch. The tab you are looking at still asks once a second, so it feels exactly as responsive as before. A tab whose window is not focused, or that is hidden, asks nothing at all: it only tells the helper "still open" once every five minutes. Coming back to it checks at once, so anything that arrived while you were away shows up straight away. Measured over an hour, an unfocused tab went from 3,960 requests to 12.
 
 ## The problem
 
@@ -18,91 +18,107 @@ The battery drains on an idle machine with review tabs open. Measured in issue 1
 
 The issue names the page's own polling as the first place to look:
 
-- A visible tab polls the helper once per second (`POLL_INTERVAL_MS` 1000 in `src/layer/sync.js`).
-- A hidden tab polls every 10 seconds (`HIDDEN_POLL_INTERVAL_MS` 10000).
-- On top of that every page posts a heartbeat every 10 seconds, and a read-only window re-asks for the review every 10 seconds.
+- A visible tab polled the helper once per second (`POLL_INTERVAL_MS` 1000 in `src/layer/sync.js`).
+- A hidden tab polled every 10 seconds (`HIDDEN_POLL_INTERVAL_MS` 10000).
+- On top of that every holding page posted a heartbeat every 10 seconds, and a read-only window re-asked for the review every 10 seconds.
 
 Each request wakes the helper, which reads from disk, and each heartbeat makes the helper rewrite `windows.json`.
 
-The owner's design, in his words: "an exponential slowdown of polling for every empty poll, but when the page receives focus or action is taken, the poll interval gets reset... if the window is not focused, then we can drop the poll to a low number because nothing is coming from an empty page. like a couple minutes would be fine."
+The owner's first description: "an exponential slowdown of polling for every empty poll, but when the page receives focus or action is taken, the poll interval gets reset... if the window is not focused, then we can drop the poll to a low number because nothing is coming from an empty page. like a couple minutes would be fine."
+
+He then simplified it twice. On focus: "we can use [focus] as the primary thing and we can drop the out of focus down to this like really slow heartbeat that just lets it know if that tab is still open... Five minutes... if we just do a check when I bring focus back then it should be sufficient for most cases." And on the slowdown: "don't worry about the slowdown i don't think. with this design we'll only have one tab that is ever running at top speed. and i want it to feel responsive. waiting 30sec for it to pick up, just because you've been reading the doc for awhile, isn't a great experience."
 
 ## Requirements
 
-1. **Focused and active: back off on empty polls.** The reply poll starts at 1 second. Each poll that brings nothing new doubles the next wait, up to a cap of 15 seconds (1, 2, 4, 8, 15, 15...). "Nothing new" means no reply or other log event and no change to the page's file on disk. A change in the agent-listening line alone does not count, because the agent's monitor updates its timestamp every 15 seconds and would keep the tab fast forever.
-2. **Reset to fast** on any of:
-   - the window gaining focus
-   - the tab becoming visible
-   - the reviewer pressing a key, clicking, or changing the selection anywhere on the page, the rail included
-   - the reviewer committing or saving anything (any write the page queues for the helper)
-   - a poll that brings a reply or any new event
-   - a flush of the reviewer's own work reaching the helper
-
-   Gaining focus or becoming visible also polls once right away, so a returning reviewer sees what arrived while they were gone. The other triggers only bring the next poll forward to 1 second; a keystroke never causes a request of its own.
-3. **Unfocused or hidden: poll every two minutes.** "Unfocused" means `document.hasFocus()` is false (focus inside a frame on the page still counts as focused). Hidden means `document.hidden`.
-4. **The heartbeat slows down when the tab is unfocused or hidden, and the helper is told.** Details and cost under Approach.
-5. **The agent-listening line and the read-only window's re-ask follow the same rules.** The agent line rides on the reply poll, so it inherits requirements 1 to 3. The read-only window's re-ask (the one that takes the review over once the holder goes away) stays at the heartbeat cadence while focused and drops to every two minutes while unfocused or hidden, and re-asks at once on return.
-6. **Nothing the reviewer does is delayed.** A commit still sends at once, Hold still holds, drafts keep their 10 second floor, and hiding the tab still sends drafts at once. None of the flush code paths wait on the poll.
-7. **A page rebuilt while the tab is unfocused still reloads when the reviewer returns.** The reload is driven by the poll seeing the file's new modified time. An unfocused tab sees it within two minutes, and returning to the tab polls at once, so the reload happens within the existing 1.5 second debounce of coming back.
+1. **Focus is the switch.** A tab is away when `document.hasFocus()` is false (the reviewer switched to another app or another tab) or the tab is hidden, which is unfocused by definition. Focus inside a frame on the page still counts as focused.
+2. **Focused: poll once a second, steadily.** No slowdown. Only one tab can have focus, so only one tab ever runs at this pace.
+3. **Away: no reply poll and no read-only re-ask at all.** The only request is a "still open" heartbeat every 5 minutes. The helper holds a quiet tab's review for 390 seconds (see Approach for why that number and what it costs).
+4. **Coming back: poll at once, once.** That one poll shows any reply that arrived while the tab was away and triggers any reload a rebuild owes. Then the once-a-second schedule resumes. A return that fires both a visibility and a focus event polls once.
+5. **Closing the tab says goodbye, focused or not.** The existing goodbye on `pagehide` frees the review at once. It must still go out from an unfocused tab.
+6. **Drafts unchanged.** Hiding the tab or leaving a comment box still sends drafts at once. A window blur with nothing queued sends nothing.
+7. **A keystroke costs nothing.** The owner, when he approved the design: "be careful about anything that is firing on every keystroke, as i think that was part of what slowed us down before. we were writing multiple places every keystroke." A key press, click or selection change starts no request, writes nothing to browser storage and schedules no timer. The one listener on keys and clicks returns at once while the tab is focused; it only does work while the page believes it is away, to catch a missed focus event (a reviewer typing into the page is plainly here).
 
 ## Approach
 
-### The reply poll (`src/layer/sync.js`)
+### The page (`src/layer/sync.js`)
 
-- The poll loop becomes a chain: wait, poll, then decide the next wait from what the poll brought back. Today it schedules the next poll before the current one has answered, so it cannot know whether the poll was empty.
-- `pollIntervalFor(doc, emptyPolls)` returns 120000 when the tab is away (hidden or unfocused), and otherwise `min(1000 * 2^emptyPolls, 15000)`.
-- A reset sets `emptyPolls` to 0 and, if the next poll is further out than 1 second, moves it to 1 second from now.
-- Listeners on the document for `keydown`, `pointerdown` and `selectionchange` (capture, passive), and on the window for `focus` and `blur`. `recordItem` and a successful flush call the reset directly.
-- Focus and visibility both call one "attention changed" handler, so a return that fires both events polls once, not twice. A poll already in flight is never doubled.
-- A failed poll (helper down) counts as empty. The flush retry keeps its own backoff, so this only slows how fast an idle page notices the helper came back, to at most 15 seconds focused.
+- **The poll is a chain.** Each poll schedules the next one when it has answered, so going away simply does not schedule one. One poll in flight at most, one timer armed at most.
+- **One handler for focus, blur and visibility** (`onAttention`). It compares `isAway(doc)` with the last reading. Going away clears the poll timer and the read-only re-ask. Coming back polls at once, resumes the chain, and re-asks at once in a read-only window.
+- **The missed-focus guard.** `keydown` and `pointerdown` listeners (capture, passive) that return immediately unless the page believes it is away. Then they re-check `isAway`, and a return is handled as a return.
+- **The heartbeat is a chain too**, because its pace changes with focus. Every claim the page sends carries `quiet`: true while away, if the helper has offered a slow beat. The beat only slows after the helper has been told, so the blur itself sends nothing: the beat already due, at most 10 seconds out, carries `quiet: true`, and the next one is 5 minutes later. Coming back beats at once with `quiet: false` if the helper had been told quiet, which is also the check that this tab still holds the review. A quick look away shorter than one beat costs nothing extra.
+- **An away tab with the helper down no longer retries every 1.2 seconds.** Before this, an unreachable helper made the holder re-post its claim every 1.2 seconds forever. While away it now waits for its next beat.
+- Against an older helper that does not offer `quiet_heartbeat_seconds`, the page keeps the 10 second beat while away, because that helper would call a slower holder gone after 30 seconds. It still stops polling.
 
-**Why the cap is 15 seconds.** It is the longest a reviewer who is sitting on the page, but not touching it, waits to see an agent's reply. Fifteen seconds is short enough that a reply still feels like it arrived while you were watching. Most of the saving is already made by then (the Measurements section has the counts), so the next doubling to 30 seconds would buy little and would start to feel broken. The owner was offered 15 seconds and did not object.
+### The helper (`src/service/reviews.js`, `routes.js`, `protocol.js`)
 
-### The heartbeat and the review claim
+- `window.claim` takes an optional boolean `quiet`. The route passes `body.quiet === true` and nothing else.
+- The helper stores `quiet` on the holder at every grant and every heartbeat, writes it to `windows.json`, and reads it back after a restart.
+- Grants and refusals carry `quiet_heartbeat_seconds: 300`.
+- A quiet holder is stale after `QUIET_STALE_AFTER_MS`, 390 seconds. Any other holder keeps `STALE_AFTER_MS`, 30 seconds. Staleness is still checked only when another window asks, so a quiet holder loses nothing unless someone else wants the review.
+- The refusal names the holder's own wait ("wait 7 minutes after it stops responding" for a quiet holder, rounded up from 390 seconds).
 
-How the claim works today (`src/service/reviews.js`): the page holding a review re-posts its claim every `HEARTBEAT_SECONDS` (10). The helper calls the holder gone after `STALE_AFTER_MS` (30 seconds) of silence, but only when another window asks: staleness is checked lazily, so a quiet holder loses nothing until someone else wants the review. Closing the tab sends a goodbye that frees the review at once.
+**Why 390 seconds.** The 5 minute beat, plus 60 seconds because Chrome wakes a long-hidden tab's timers only once a minute (so a 5 minute timer can fire up to a minute late), plus the same 30 seconds of slack a focused holder already gets over its 10 second beat.
 
-The change:
+**What it costs.** A tab that crashes, or a browser that is force-quit, while the tab is unfocused now holds its review for up to 390 seconds (6.5 minutes) before another window can take it on its own. Before, that was 30 seconds. A tab that crashes while focused is unchanged at 30 seconds. Closing the tab normally still frees the review at once, and "Review here instead" in the next window still takes it at once (unit test "Review here instead takes a quiet holder's review at once").
 
-- **The page says when it is going quiet.** Every claim the page sends carries `quiet: true` when the tab is away. The helper stores that on the holder.
-- **The helper gives a quiet holder a longer window.** A quiet holder is stale after `QUIET_STALE_AFTER_MS`, 180 seconds. A holder that is not quiet keeps 30 seconds. The value is the helper's, not the page's: the page can only say yes or no.
-- **The grant tells the page how slow it may go.** Grants and refusals carry `quiet_heartbeat_seconds: 60`. A page talking to an older helper that does not send it never slows down, so an old helper never sees a quiet page it would wrongly call gone.
-- **The page beats every 60 seconds while away**, and every 10 seconds while focused. On every change between the two it beats at once, so the helper learns the new mode before the page goes silent, and a returning tab learns straight away if another window took the review while it was away.
-- The read-only window's re-ask uses 10 seconds while focused and 120 seconds while away.
-
-Why 60 and 180: Chrome throttles timers in a tab that has been hidden for five minutes to one wake-up a minute, aligned to the minute, so a 60 second timer can fire up to about 120 seconds late in the worst case. 180 seconds is three beats, the same "two missed beats before anyone can take it" rule as today's 10 and 30, and still leaves a minute of slack over the worst throttled beat. A 60 second beat also stays inside the CLI's 120 second "somebody is using this helper" window (`LIVE_WINDOW_MS`), which is left unchanged.
-
-**What it costs.** A tab that crashes (or a machine that loses power) while unfocused or hidden now holds its review for up to 3 minutes before another window can take it over on its own. Before, that was 30 seconds. A tab that crashes while focused is unchanged at 30 seconds. Closing the tab normally still frees the review at once, and "Review here instead" still takes it at once from any window.
+**Left unchanged on purpose.** The CLI's "somebody is using this helper" window (`LIVE_WINDOW_MS`, 120 seconds) is shorter than the quiet beat, so a command may replace the helper while only unfocused tabs are open. That is safe: the session table is saved with the quiet flag and restored by the new helper, and the away page makes no request until its next beat or its return. `lahe status` "page last seen" will show an older time for an unfocused tab, which is true.
 
 ### Page reload after a rebuild
 
-No change needed. The reload trigger is the poll seeing a new modified time on the page's file (`noteTargetMtime`), then a 1.5 second debounce, then a reload unless the reviewer is mid-work. An unfocused tab notices within two minutes and reloads then; returning to the tab polls at once, so it never waits longer than the debounce once the reviewer is back.
+No code change. The reload is triggered by the poll seeing a new modified time on the page's file. An away tab does not poll, so it does not reload while away; the poll on return sees the new time and reloads after the existing 1.5 second debounce.
 
 ## Tasks
 
 1. Spec (this page).
-2. Unit tests, red first: backoff doubling and cap; each reset trigger; unfocused and hidden interval; immediate poll on focus and on visibility; no double poll when both fire; an empty-but-liveness-changed poll still counts as empty; a rebuilt page reloads when the tab comes back. Uses `node:test` mock timers, as `test/unit/draft_flush_cadence.test.js` does.
-3. Unit tests, red first, for the heartbeat: the page beats at 10 seconds focused and 60 away, beats at once on each change, sends `quiet`, and stays at 10 seconds against a helper that does not send `quiet_heartbeat_seconds`. For the helper: a quiet holder survives 179 seconds of silence and is taken at 181; a holder that is not quiet is still taken after 30; a quiet holder that beats again unquiet goes back to 30; the quiet flag survives a helper restart.
-4. Build the poll chain, the attention handler and the reset triggers in `src/layer/sync.js`.
-5. Build `quiet` in `src/service/reviews.js` and `src/service/routes.js`, and the page side of the heartbeat.
-6. Browser spec `test/browser/quiet_tab_polling.spec.js`: an idle focused tab's request rate drops; a hidden tab polls every two minutes; focusing it polls at once and shows a reply that arrived while hidden. Uses Playwright's page clock to move time.
-7. `scripts/measure_idle_requests.js`: count requests over a fixed window in three states, run before and after.
-8. Update `docs/CONTRACTS.md` (the `window.claim` body and answer, the staleness rule, the reply poll cadence) and the route description in `src/shared/protocol.js`.
+2. Unit tests, red first (`test/unit/quiet_tab_polling.test.js`, on `node:test` mock timers): steady 1 second polling focused; 200 keystrokes cost no request, write or timer; no poll while unfocused or hidden; heartbeat every 5 minutes away, only after the helper was told; coming back polls once and beats once; a reply and a reload that were owed arrive on return; goodbye while unfocused; read-only re-ask stops away; no fast retry away with the helper down; old helper keeps the fast beat. Helper side: 390 second quiet window, 30 seconds otherwise, quiet survives a restart, Review here instead is immediate, the route passes only a boolean.
+3. Build the page side in `src/layer/sync.js`.
+4. Build the helper side in `src/service/reviews.js`, `src/service/routes.js`, `src/shared/protocol.js`.
+5. Browser spec `test/browser/quiet_tab_polling.spec.js` on Playwright's page clock: an unfocused tab sends two heartbeats and no poll in 10 minutes, and focusing it polls once and shows a reply written while it was away; a hidden tab likewise; closing an unfocused tab frees the review for the next window at once.
+6. `scripts/measure_idle_requests.js`: request counts over a fixed window in five states, before and after.
+7. `docs/CONTRACTS.md`: the `window.claim` body and answers, the quiet staleness rule, and the page's polling.
 
 ## Acceptance criteria
 
-- [ ] An idle focused tab backs off 1, 2, 4, 8, 15 seconds and stays at 15.
-- [ ] Every reset trigger in requirement 2 brings the next poll back to 1 second.
-- [ ] An unfocused or hidden tab polls every 2 minutes, and polls at once on return.
-- [ ] The heartbeat is 10 seconds focused and 60 seconds away; the helper holds a quiet holder for 180 seconds and a focused one for 30.
-- [ ] Commit, Hold, the draft floor and hide-flush behave exactly as before (existing tests pass unchanged).
-- [ ] A page rebuilt while the tab was away reloads when the reviewer returns.
-- [ ] Before and after request counts on this page, from the script.
-- [ ] `npm run gate:unit` green; the named browser specs green.
+- [x] A focused tab polls once a second, as before.
+- [x] An unfocused or hidden tab sends no reply poll; its only request is one heartbeat per 5 minutes.
+- [x] Coming back polls at once, once, and shows what arrived; an owed reload happens.
+- [x] Closing an unfocused tab frees the review at once.
+- [x] The helper holds a quiet holder for 390 seconds and a focused one for 30; Review here instead is immediate.
+- [x] Keystrokes cause no request, storage write or timer.
+- [x] Commit, Hold, the draft floor and hide-flush behave as before (existing tests pass unchanged).
+- [x] Before and after request counts on this page, from the script.
+- [x] `npm run gate:unit` green; the named browser specs green.
 
 ## Measurements
 
-Filled in from `scripts/measure_idle_requests.js` output.
+From `node scripts/measure_idle_requests.js <tree> --minutes N`. "Before" is `git archive 7c86bed` (main when this branch was cut) run through the same script. The script runs each tree's own `sync.js` and `store.js` on a virtual clock, with window claims answered by that tree's own `reviews.js`, and counts every request the page makes. Each state is a fresh page that already holds its review. "Active" is a key press every 2 seconds and a click every 10. "Closed" counts only what the close itself sends. The percentages were computed with Python from these counts.
+
+Ten minutes:
+
+| State | Before: total (polls, claims) | After: total (polls, claims) | Change |
+| --- | --- | --- | --- |
+| Focused, idle | 660 (600, 60) | 660 (600, 60) | 0% |
+| Focused, active | 660 (600, 60) | 660 (600, 60) | 0% |
+| Unfocused, visible | 660 (600, 60) | 2 (0, 2) | -99.7% |
+| Hidden | 120 (60, 60) | 2 (0, 2) | -98.3% |
+| Closed while unfocused | 1 (the goodbye) | 1 (the goodbye) | 0% |
+
+One hour:
+
+| State | Before | After | Change |
+| --- | --- | --- | --- |
+| Focused, idle | 3,960 | 3,960 | 0% |
+| Unfocused, visible | 3,960 | 12 | -99.7% |
+| Hidden | 720 | 12 | -98.3% |
+
+In every state except "closed", the page still held its review at the end of the window, as the helper saw it (the script's `helper_still_holds` column). The focused tab is unchanged on purpose: it is the one the reviewer is looking at. The saving comes from every other open tab. What the script does not model is a real browser's own timer throttling for hidden tabs, which only ever lowers the hidden counts further.
 
 ## Progress
 
-- 2026-09-28: spec written.
+- 2026-09-28: first spec written with the exponential slowdown. The owner then made focus the switch (no polling at all while unfocused, a 5 minute "still open" beat), then dropped the slowdown so the focused tab stays at once a second. This page is the final shape; the backoff code was removed, not left switched off.
+- 2026-09-28: built. Unit tests in `test/unit/quiet_tab_polling.test.js` (29 tests; 18 fail on the old code, the other 11 pin behavior that must not change). One old test in `test/unit/sync_client.test.js` asserted the old hidden cadence and now asserts no poll while hidden. `npm run gate:unit`: 1,378 tests, 1,376 pass, 0 fail, 2 todo.
+- 2026-09-28: browser. `test/browser/quiet_tab_polling.spec.js` (3 tests) passes on the rebuilt bundle, and its first two fail on main's committed bundle. Existing specs run on the rebuilt bundle (not staged), all green, 61 passed and 1 skipped (the file's own): `window_goodbye`, `duplicate_tab`, `takeover_walk`, `rail_second_window`, `reload_claim`, `helper_restart_holds`, `auto_reload`, `rail_agent_liveness`, `agent_replies`, `graceful_failure`, `end_review`, `ac4_probe`, `bfcache_restore`, `status_truth`, `rebuild_not_the_agents_job`.
+
+## To delete at cleanup
+
+- `.claude/worktrees/quiet-tab-polling/node_modules`: a symlink to the main checkout's `node_modules`, made so Playwright runs in this worktree. Untracked, never staged.
