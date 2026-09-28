@@ -65,9 +65,9 @@ The key design question, for the wireframe: **what is one row?** A document, a r
    - how many comments are waiting
    - whether it is being served now
    - whether an agent is watching it
-4. **Open** brings the document back with the rail on it, and opens it in a new tab. No agent is needed to read it.
+4. **Open** brings the document back with the rail on it, opens it in a new tab, and has an agent watching it by default, so Ken does not have to come back and ask. With no agent available, the document still opens and is readable, and the rail says no agent is watching.
 5. **Star** marks it. Starred documents stay easy to find however old they get.
-6. **Pick this up** tells the agent attached to the Library to take the document over, so comments on it get answered.
+6. **Pick this up** is the same hand-over without opening a tab: it tells the agent attached to the Library to take the document over, so comments on it get answered.
 7. **Launch a new agent** asks that agent to start a fresh one on the document.
 8. Ken can bookmark the Library. The bookmark works whenever LAHE is running, and LAHE keeps running while the Library or a document opened from it is open.
 
@@ -99,7 +99,7 @@ The key design question, for the wireframe: **what is one row?** A document, a r
 
 ### Acting on a row
 
-**R8. Open** brings the document back with its rail and its existing comments, and opens it in a new tab. It works directly from the page, without an agent, and whether or not any agent is running.
+**R8. Open** brings the document back with its rail and its existing comments, and opens it in a new tab. By default an agent is watching it when it opens: Open includes the hand-over that Pick this up does (R12). When no agent is available, the document still opens and is readable, and the rail says no agent is watching (R10b).
 
 **R9.** A document that lived in a worktree that is gone opens from the same path in the repository that worktree belonged to, when that file exists there. The page tells Ken he is seeing the main repository's copy, which may differ from the version he reviewed.
 
