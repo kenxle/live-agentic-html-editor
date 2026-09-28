@@ -441,3 +441,90 @@ test("Open, Star, Pick up and Launch through the real routes each write one cata
     at + " " + protocol.catalogLogLine("launch", "r_dev", ageOf("r_dev"))
   ]);
 });
+
+// ---------------------------------------------------------------------------
+// The reopened-session sweep
+// ---------------------------------------------------------------------------
+
+/** Open r_page from a closed session at T0, so the Library owns the reopen. */
+async function libraryReopened(t) {
+  const w = await world(t);
+  await staticServers.stopAll(w.dir, "s_doc");
+  w.store.close("s_doc");
+  const res = await api(w, "catalog.open", { review: "r_page" });
+  assert.equal(res.status, 200, res.text);
+  assert.ok(catalogJson(w.dir).data.reopened.s_doc, "the reopen is recorded");
+  return w;
+}
+
+function holdWindow(dir, reviewId, lastSeenMs) {
+  fs.writeFileSync(stateDir.windowsPath(dir), JSON.stringify({
+    version: 1,
+    saved_at: new Date(lastSeenMs).toISOString(),
+    sessions: { [reviewId]: { window_id: "w_test", session_secret: "secret", since: new Date(lastSeenMs).toISOString(), since_ms: lastSeenMs, last_seen: lastSeenMs } }
+  }));
+}
+
+test("sweepReopened closes a Library-reopened session at 30:00 and not at 29:59, then clears its entry", async (t) => {
+  const w = await libraryReopened(t);
+  const early = await w.helper.sweepReopened(T0 + C.REOPENED_AUTOCLOSE_MS - 1000);
+  assert.deepEqual(early.closed, []);
+  assert.equal(w.store.read("s_doc").closed_at, null);
+  const due = await w.helper.sweepReopened(T0 + C.REOPENED_AUTOCLOSE_MS);
+  assert.deepEqual(due.closed, ["s_doc"]);
+  assert.ok(w.store.read("s_doc").closed_at, "closed");
+  assert.ok(staticServers.list(w.dir, "s_doc").every((m) => m.stopped_at), "its servers stopped");
+  assert.equal(catalogJson(w.dir).data.reopened.s_doc, undefined, "the entry is cleared");
+});
+
+test("sweepReopened leaves alone a session reopened with lahe session reopen", async (t) => {
+  const w = await world(t);
+  w.store.close("s_doc");
+  w.store.reopen("s_doc");
+  const out = await w.helper.sweepReopened(T0 + 10 * C.REOPENED_AUTOCLOSE_MS);
+  assert.deepEqual(out.closed, []);
+  assert.equal(w.store.read("s_doc").closed_at, null);
+});
+
+test("sweepReopened leaves alone a session taken over since the Library reopened it", async (t) => {
+  const w = await libraryReopened(t);
+  w.store.takeover("s_doc");
+  const out = await w.helper.sweepReopened(T0 + C.REOPENED_AUTOCLOSE_MS);
+  assert.deepEqual(out.closed, []);
+  assert.equal(w.store.read("s_doc").closed_at, null);
+  assert.equal(catalogJson(w.dir).data.reopened.s_doc, undefined, "an agent's session now, so the entry goes");
+});
+
+test("sweepReopened leaves alone a session whose monitor is live", async (t) => {
+  const w = await libraryReopened(t);
+  const at = T0 + C.REOPENED_AUTOCLOSE_MS;
+  beat(w.store, "s_doc", at);
+  const out = await w.helper.sweepReopened(at);
+  assert.deepEqual(out.closed, []);
+  assert.deepEqual(out.kept, ["s_doc"]);
+  assert.equal(w.store.read("s_doc").closed_at, null);
+  assert.ok(catalogJson(w.dir).data.reopened.s_doc, "kept for a later sweep");
+});
+
+test("sweepReopened counts a held window of the session's reviews as not quiet", async (t) => {
+  const w = await libraryReopened(t);
+  holdWindow(w.dir, "r_page", T0 + 10 * MINUTE);
+  const held = await w.helper.sweepReopened(T0 + C.REOPENED_AUTOCLOSE_MS);
+  assert.deepEqual(held.closed, [], "a window held 20 minutes ago keeps it");
+  const quiet = await w.helper.sweepReopened(T0 + 10 * MINUTE + C.REOPENED_AUTOCLOSE_MS);
+  assert.deepEqual(quiet.closed, ["s_doc"]);
+});
+
+test("the helper runs the sweep on its own timer every POLL_MS, at its own clock", async (t) => {
+  const ticks = [];
+  const schedule = (fn, ms) => { ticks.push({ fn, ms }); return { unref() {}, cleared: false }; };
+  const w = await world(t, { serve: { schedule } });
+  await staticServers.stopAll(w.dir, "s_doc");
+  w.store.close("s_doc");
+  assert.equal((await api(w, "catalog.open", { review: "r_page" })).status, 200);
+  assert.equal(ticks.length, 1, "one timer");
+  assert.equal(ticks[0].ms, C.POLL_MS);
+  w.clock.now = T0 + C.REOPENED_AUTOCLOSE_MS;
+  await ticks[0].fn();
+  assert.ok(w.store.read("s_doc").closed_at, "the timer's run closed the quiet session");
+});

@@ -162,10 +162,11 @@ function readBody(req, limit) {
  *
  * @param {{port?: number, host?: string, stateDir?: string, reviews?: string[],
  *          origins?: string[], quiet?: boolean, now?: function(): number,
- *          pidAlive?: function, uid?: number}} [options]
- *   `now`, `pidAlive` and `uid` are for tests of the Library: the clock every
- *   Library action and the reopened-session sweep read, the liveness seam for
- *   monitor pids, and the user a file Open restarts must belong to.
+ *          pidAlive?: function, uid?: number, schedule?: function}} [options]
+ *   `now`, `pidAlive`, `uid` and `schedule` are for tests of the Library: the
+ *   clock every Library action and the reopened-session sweep read, the
+ *   liveness seam for monitor pids, the user a file Open restarts must belong
+ *   to, and a stand-in for setInterval that runs the sweep's timer.
  * @returns {Promise<object>} a handle with port, url, close, and the pieces the
  *   tests and `add` reach for: log, reviews, dir.
  */
@@ -600,10 +601,13 @@ async function serve(options) {
   function sweepReopened(atMs) {
     return catalogActionsInstance.sweepReopened(typeof atMs === "number" ? atMs : now());
   }
-  var sweepTimer = setInterval(function () {
-    if (sweeping) return;
+  // `opts.schedule` stands in for setInterval in a test, which then runs the
+  // tick itself instead of waiting POLL_MS.
+  var schedule = typeof opts.schedule === "function" ? opts.schedule : setInterval;
+  var sweepTimer = schedule(function () {
+    if (sweeping) return Promise.resolve();
     sweeping = true;
-    sweepReopened()
+    return sweepReopened()
       .catch(function (err) {
         log.helperLog("Library sweep failed: " + err.message);
       })
@@ -611,7 +615,7 @@ async function serve(options) {
         sweeping = false;
       });
   }, protocol.CATALOG.POLL_MS);
-  if (typeof sweepTimer.unref === "function") sweepTimer.unref();
+  if (sweepTimer && typeof sweepTimer.unref === "function") sweepTimer.unref();
 
   // The readiness file goes out AFTER the listener is bound. A readiness file
   // that arrives before the socket is a lie, and the durability tests race it.
@@ -638,7 +642,7 @@ async function serve(options) {
     sweepReopened: sweepReopened,
     server: server,
     close: function () {
-      clearInterval(sweepTimer);
+      if (!opts.schedule) clearInterval(sweepTimer);
       return new Promise(function (resolve) {
         server.close(function () {
           resolve();
