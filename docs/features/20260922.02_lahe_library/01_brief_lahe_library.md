@@ -180,6 +180,8 @@ No flag. The Library reads records that already exist, so it works on the full h
 
 4. How does an agent attach to the Library, so the page can name it before Ken clicks (R12a)? Two cases make this hard. A Library opened from a bookmark was opened by no agent. Over a day, several agents may have opened it. Settled in the architecture.
 
+5. Can the Library launch an agent straight from the page, with no running agent in between, and what does that look like? This is in scope to explore. The architecture weighs it, and the security review looks at it, since it means a click on a web page starts a program on the laptop.
+
 ## PM Review
 
 | # | Finding | Disposition | Rationale |
