@@ -1346,9 +1346,7 @@
     }
 
     function quoteOfItem(id) {
-      var item = scopedStore.readItem(reviewId, id);
-      var context = item && item[record.FIELD.CONTEXT];
-      return context && typeof context.quote === "string" ? context.quote : null;
+      return record.paintQuoteOf(scopedStore.readItem(reviewId, id));
     }
 
     function rangeIsLive(range) {

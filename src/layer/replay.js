@@ -2100,16 +2100,13 @@
     return range;
   }
 
-  // The reviewer's own words for an item this pass holds, or null. The
-  // highlighter weighs a whole-element paint against them, so a one-line
-  // comment bound to a container of every paragraph is not washed end to end.
+  // The words the highlighter weighs a whole-element paint of this item
+  // against (record.paintQuoteOf), so a one-line comment bound to a container
+  // of every paragraph is not washed end to end.
   function quoteFor(ctx, id) {
     var list = ctx && Array.isArray(ctx.items) ? ctx.items : [];
     for (var i = 0; i < list.length; i += 1) {
-      if (list[i] && list[i][record.FIELD.ID] === id) {
-        var context = list[i][record.FIELD.CONTEXT];
-        return context && typeof context.quote === "string" ? context.quote : null;
-      }
+      if (list[i] && list[i][record.FIELD.ID] === id) return record.paintQuoteOf(list[i]);
     }
     return null;
   }

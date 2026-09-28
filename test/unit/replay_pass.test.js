@@ -1102,6 +1102,43 @@ test("a whole-element paint hands the highlighter the reviewer's quote, and repo
   assert.equal(highlights.quotes[item.id], "Still open", "the quote reaches the highlighter");
 });
 
+test("a comment on a whole element is not weighed against its old text when the element grows", () => {
+  // Re-review of oversized-records: a comment on a whole card saves the card's
+  // whole text as its quote. The agent did what was asked ("add detail here")
+  // and kept the stamp, so the card is found for certain, and it is now three
+  // times the size of that quote. Its paint must not be weighed against it.
+  const item = fixtures.comment();
+  const card = el("div", {
+    attrs: { "data-lahe-id": "e-card", class: "card" },
+    children: [el("h3", { text: "Plan" }), el("p", { text: "Short text." })]
+  });
+  const root = el("body", { children: [el("p", { text: "Before the card." }), card, el("p", { text: "After it." })] });
+  const anchoredItem = anchored(item, card, root);
+  anchoredItem[record.FIELD.CONTEXT] = Object.assign({}, anchoredItem[record.FIELD.CONTEXT], {
+    quote: "Plan Short text.",
+    element: "DIV",
+    subject: { tag: "div", src: null, alt: null, html: '<div class="card">', near: "After it." }
+  });
+  const highlights = fakeHighlights();
+  const context = {
+    root: root,
+    items: [anchoredItem],
+    cards: fakeCards(),
+    document: fakeDocument(),
+    highlights: highlights,
+    pointing: fakePointing(null)
+  };
+
+  replay.resetCounters();
+  replay.noteSettling(0);
+  card.children[1].textContent = "Much longer text, with the detail the reviewer asked for, and then some more of it.";
+  const outcome = replay.runPass(replay.REASON.MUTATION, context).results[0];
+
+  assert.equal(outcome.element, card, "found for certain by its stamp");
+  assert.equal(highlights.painted[item.id].range.node, card, "painted");
+  assert.equal(highlights.quotes[item.id], null, "and no quote to weigh it against: the quote was the element");
+});
+
 test("an edit whose stamp points at different words is still refused", () => {
   const item = fixtures.edit();
   const page = pageOf([

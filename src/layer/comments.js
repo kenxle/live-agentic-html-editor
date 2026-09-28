@@ -1289,7 +1289,7 @@
       open[item[record.FIELD.ID]] = handle;
 
       if (src.range && highlights) {
-        highlights.paint(item[record.FIELD.ID], src.range, highlightModule.NAME.ACTIVE, src.quote || null);
+        highlights.paint(item[record.FIELD.ID], src.range, highlightModule.NAME.ACTIVE, record.paintQuoteOf(item));
       }
       return handle;
     }
@@ -2853,10 +2853,8 @@
       if (!verdict || !verdict.element) return false;
       var range = paintRangeFor(verdict.element, ref, item);
       if (!range) return false;
-      var context = item[record.FIELD.CONTEXT];
-      var quote = context && typeof context.quote === "string" ? context.quote : null;
       // What the highlighter did, not what was asked: a refused paint is false.
-      return !!highlights.paint(id, range, highlightModule.NAME.COMMENT, quote);
+      return !!highlights.paint(id, range, highlightModule.NAME.COMMENT, record.paintQuoteOf(item));
     }
 
     /** The element's contents, end to end: what every repaint used to paint. */
@@ -2967,11 +2965,13 @@
      * the quote is in that ancestor exactly once and starts inside the region.
      * Stops at the first ancestor that holds the quote at all: two places is an
      * unanswerable question, and a match that starts elsewhere is not this
-     * record's.
+     * record's. Never climbs past the review scope (the anchor engine's
+     * scopeOf), which is the page the record was made on.
      */
     function quoteRunningOnFrom(element, quote) {
+      var scope = anchor.scopeOf(doc, element);
       var node = element.parentElement;
-      while (node && node !== doc.documentElement) {
+      while (node) {
         var scan = textScanOf(node);
         var first = scan.text.indexOf(quote);
         if (first !== -1) {
@@ -2980,6 +2980,7 @@
           if (!range || !element.contains(range.startContainer)) return null;
           return range;
         }
+        if (node === scope) break;
         node = node.parentElement;
       }
       return null;

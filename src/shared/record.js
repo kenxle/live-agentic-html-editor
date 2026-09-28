@@ -878,6 +878,27 @@
   var SUBJECT_SRC_REF = "lahe:subject.src";
 
   /**
+   * The words a whole-element paint of this item is weighed against, or null
+   * for "do not weigh it".
+   *
+   * A comment on a whole element (context.subject is set) saved the element's
+   * whole text at click time as its quote. The element is the region, however
+   * much it grows: an agent asked to "add detail here" more than doubles it and
+   * keeps the stamp, and the card is found for certain. Weighing that paint
+   * against the old text refused a correct find (re-review of
+   * docs/features/20260928.03_oversized_records). So only a comment on a
+   * passage of text, whose quote is the reviewer's selection, is weighed.
+   *
+   * @param {Object} item
+   * @returns {string|null}
+   */
+  function paintQuoteOf(item) {
+    var context = item && item[FIELD.CONTEXT];
+    if (!context || context.subject) return null;
+    return typeof context.quote === "string" ? context.quote : null;
+  }
+
+  /**
    * The subject's opening tag with an embedded source put back in place.
    *
    * @param {Object|null} subject a context.subject
@@ -1645,6 +1666,7 @@
     emptyRegion: emptyRegion,
     emptyContext: emptyContext,
     SUBJECT_SRC_REF: SUBJECT_SRC_REF,
+    paintQuoteOf: paintQuoteOf,
     subjectHtmlOf: subjectHtmlOf,
     emptyPage: emptyPage,
     pageFrom: pageFrom,

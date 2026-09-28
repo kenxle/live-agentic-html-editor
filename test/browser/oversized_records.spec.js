@@ -295,4 +295,47 @@ test.describe("oversized records", () => {
     expect(repainted.ok).toBe(false);
     expect(repainted.length).toBe(-1);
   });
+
+  test("3: a comment on a whole card is still painted after the agent triples the card's text", async ({ page }) => {
+    await page.goto(server.urlFor(FIXTURE));
+    await bootLayer(page);
+
+    const outcome = await page.evaluate(function () {
+      var LAHE = window.LAHE;
+      var comments = window.__lahe.comments;
+      var card = document.getElementById("card");
+      comments.commentOnElement(card);
+      var item = LAHE.store.shared.read(window.__lahe.reviewId)[0];
+      // Sent: replay leaves a draft alone.
+      item[LAHE.record.FIELD.STATE] = LAHE.record.STATE.READY;
+      item.note = "Add detail here.";
+      LAHE.store.shared.write(window.__lahe.reviewId, item);
+      var before = card.textContent.length;
+
+      // The agent adds the detail asked for and keeps the stamp on the card.
+      document.getElementById("card-body").textContent =
+        "Short text, now with the detail the reviewer asked for, spelled out at length.";
+      var after = card.textContent.length;
+      comments.unpaint(item.id);
+
+      LAHE.replay.noteSettling(0);
+      var result = LAHE.replay.runPass(LAHE.replay.REASON.MUTATION, {
+        root: document,
+        items: LAHE.store.shared.read(window.__lahe.reviewId),
+        document: document,
+        highlights: comments.highlights,
+        cards: { setCardNotice: function () {}, setCardBadge: function () {}, clearCardBadge: function () {} },
+        pointing: { bestGuess: function () { return { element: null }; } }
+      }).results[0];
+      var range = comments.highlights.rangeFor(item.id);
+      return {
+        grew: after / before,
+        found: result.element === card,
+        painted: !!range && range.startContainer === card
+      };
+    });
+    expect(outcome.grew).toBeGreaterThan(3);
+    expect(outcome.found).toBe(true);
+    expect(outcome.painted).toBe(true);
+  });
 });
