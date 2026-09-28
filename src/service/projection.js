@@ -312,7 +312,7 @@ function linkedFilesOf(items, linkedFileFor) {
   var out = {};
   items.forEach(function (item) {
     var pagePath = item[F.PAGE_PATH];
-    if (typeof pagePath !== "string" || pagePath.indexOf("/.lahe-source/") !== 0) return;
+    if (!reviewFormat.isLinkedPage(pagePath)) return;
     if (Object.prototype.hasOwnProperty.call(out, pagePath)) return;
     var file = null;
     if (typeof linkedFileFor === "function") {

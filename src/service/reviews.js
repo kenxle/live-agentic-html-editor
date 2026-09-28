@@ -55,6 +55,7 @@ var stateDir = require("./state_dir.js");
 var healModule = require("./heal.js");
 var rebuildModule = require("./rebuild.js");
 var staticServersModule = require("./static_servers.js");
+var reviewFormatModule = require("../shared/review_format.js");
 
 var TOKEN_BYTES = 32;
 
@@ -791,7 +792,7 @@ function createReviews(options) {
     // file in review.json, and that file is stat'ed. STAT ONLY, NEVER HEAL: the
     // script line goes into the response, and a linked file is somebody's own
     // document. A path the lookup cannot vouch for reloads nothing.
-    if (typeof pagePath === "string" && pagePath.indexOf("/.lahe-source/") === 0) {
+    if (reviewFormatModule.isLinkedPage(pagePath)) {
       var linkedFile = null;
       try {
         linkedFile = staticServersModule.linkedFileForPage(dir, review.agent_session_id, review.id, pagePath);

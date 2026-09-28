@@ -69,6 +69,7 @@ var rebuildModule = require("./rebuild.js");
 var markdown = require("./markdown.js");
 var markdownLinks = require("./markdown_links.js");
 var staticServers = require("./static_servers.js");
+var reviewFormat = require("../shared/review_format.js");
 
 // THE RENDERER ESCAPES THE REVIEWER'S PUNCTUATION. marked writes an apostrophe
 // as `&#39;`, so a page holding the reviewer's exact sentence does not hold
@@ -299,7 +300,7 @@ function createHandledCheck(options) {
     // same mount lookup that names it in review.json; one it cannot vouch for
     // is "cannot tell".
     var pagePath = item[record.FIELD.PAGE_PATH];
-    if (typeof pagePath === "string" && pagePath.indexOf("/.lahe-source/") === 0) {
+    if (reviewFormat.isLinkedPage(pagePath)) {
       return linkedPageShows(meta, reviewId, item, pagePath);
     }
 

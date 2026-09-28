@@ -19,6 +19,21 @@ var fs = require("node:fs");
 var os = require("node:os");
 var path = require("node:path");
 
+var heal = require("./heal.js");
+
+// The Markdown extensions, spelled once. markdown.js reads them from here,
+// since it requires this module and not the other way round.
+var MARKDOWN_EXTENSIONS = [".md", ".markdown"];
+
+/**
+ * Is `file` a page: something the server renders or serves as HTML, and so
+ * something the rail can sit on? A linked script or data file is served as
+ * bytes and is never a file an agent is told to edit for a comment.
+ */
+function isPage(file) {
+  return MARKDOWN_EXTENSIONS.indexOf(path.extname(file).toLowerCase()) !== -1 || heal.isStaticPage(file);
+}
+
 // The bound on distinct directories one render may mount. A document that links
 // out to more than this many folders is linking to a tree, not to siblings, and
 // mounting the tree is not something a review should do silently.
@@ -72,7 +87,8 @@ function createRegistry(options) {
     linked: linked,
     get skipped() { return skipped; },
     note: function (target) {
-      if (typeof target === "string" && target && linked.indexOf(target) === -1) linked.push(target);
+      if (typeof target !== "string" || !target || !isPage(target)) return;
+      if (linked.indexOf(target) === -1) linked.push(target);
     },
     add: function (dir) {
       var prefix = mountPrefix(dir);
@@ -168,6 +184,8 @@ function classify(href, sourceDir, registry) {
 
 module.exports = {
   MOUNT_CAP: MOUNT_CAP,
+  MARKDOWN_EXTENSIONS: MARKDOWN_EXTENSIONS,
+  isPage: isPage,
   homeRoot: homeRoot,
   mountPrefix: mountPrefix,
   createRegistry: createRegistry,

@@ -20,6 +20,9 @@ var logModule = require("./log.js");
 var SCHEMA = 1;
 var HOST = protocol.DEFAULT_HOST;
 var HEALTH_PREFIX = "/.lahe-static-health/";
+// Every link mount lives under this. See the request handler for why only its
+// literal spelling is served.
+var MOUNT_ROOT = "/.lahe-source/";
 
 // The library, served by this server rather than copied into the reviewed
 // page's own folder.
@@ -749,6 +752,10 @@ function linkingReview(dir, sessionId, serverFile, realFile) {
 function linkedFileForPage(dir, sessionId, reviewId, pagePath) {
   if (typeof dir !== "string" || typeof sessionId !== "string" || typeof pagePath !== "string") return null;
   if (!protocol.isSafeId(reviewId)) return null;
+  // ONE SPELLING. The server refuses a mount prefix that arrives encoded
+  // (/%2Elahe-source/...), so a page path that is not literally under the
+  // prefix is not a linked page this server handed out.
+  if (pagePath.indexOf(MOUNT_ROOT) !== 0) return null;
   var decoded;
   try { decoded = decodeURIComponent(pagePath); } catch (err) { return null; }
   var match = decoded.match(/^(\/\.lahe-source\/[a-f0-9]+\/)(.+)$/);
@@ -768,6 +775,9 @@ function linkedFileForPage(dir, sessionId, reviewId, pagePath) {
     if (!real || !withinDir(real, base)) return false;
     if (hasHiddenSegment(base, candidate) || hasHiddenSegment(base, real)) return false;
     try { if (!fs.statSync(real).isFile()) return false; } catch (err) { return false; }
+    // Only a page. A linked script or data file is served as bytes, carries
+    // no rail, and is never named as the file to edit.
+    if (!markdownLinks.isPage(real)) return false;
     var table = meta.linked_files && typeof meta.linked_files === "object" ? meta.linked_files : {};
     if (!Array.isArray(table[real]) || table[real].indexOf(reviewId) === -1) return false;
     found = real;
@@ -785,9 +795,6 @@ function placeNote(html, note) {
   return text.slice(0, at) + note + text.slice(at);
 }
 
-function openReviewCommand(realFile, sessionId) {
-  return "lahe review " + realFile + " --session " + sessionId;
-}
 
 function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInput) {
   var root = fs.realpathSync(rootInput);
@@ -841,7 +848,7 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
     var registry = markdownLinks.createRegistry({ mounts: mounts, consumed: autoMounts });
     var renderOptions = { readOnlyNote: true, links: registry };
     if (opts.match) renderOptions.note = "";
-    else if (opts.missing) renderOptions.note = markdown.missingReviewNote(candidate, openReviewCommand(opts.realFile || candidate, sessionId));
+    else if (opts.missing) renderOptions.note = markdown.missingReviewNote(opts.realFile || candidate, sessionId);
     var html;
     try { html = markdown.render(candidate, renderOptions); }
     catch (err) { return send(res, 500, "could not render " + path.basename(candidate) + "\n"); }
@@ -902,7 +909,7 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
     var html;
     try { html = fs.readFileSync(candidate, "utf8"); } catch (err) { return false; }
     if (linking.missing) {
-      sendHtml(req, res, placeNote(html, markdown.missingReviewNote(candidate, openReviewCommand(realFile, sessionId))));
+      sendHtml(req, res, placeNote(html, markdown.missingReviewNote(realFile, sessionId)));
       return true;
     }
     var injected = injectForMatch(dir, linking, candidate, html);
@@ -984,8 +991,20 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
   var startedAt = new Date().toISOString();
   var server = http.createServer(function (req, res) {
     var pathname;
-    try { pathname = decodeURIComponent(new URL(req.url, "http://localhost").pathname); }
+    var rawPathname;
+    try {
+      rawPathname = new URL(req.url, "http://localhost").pathname;
+      pathname = decodeURIComponent(rawPathname);
+    }
     catch (err) { return send(res, 400, "bad request\n"); }
+    // ONE SPELLING FOR A MOUNT. A request whose decoded path lands under a
+    // mount but whose raw path does not literally start with it
+    // (/%2Elahe-source/...) is refused. The browser reports that raw spelling
+    // as the page's path, and every helper-side check looks for the literal
+    // prefix, so serving it would put a rail on a page the helper cannot map.
+    if (pathname.indexOf(MOUNT_ROOT) === 0 && rawPathname.indexOf(MOUNT_ROOT) !== 0) {
+      return send(res, 404, "not found\n");
+    }
     if (pathname === HEALTH_PREFIX + id + "/" + instance) {
       return send(res, 200, JSON.stringify({
         id: id,

@@ -284,7 +284,7 @@ test("a linked document whose linking review is missing says so and creates noth
   assert.equal(md.status, 200);
   assert.equal(md.body.indexOf("data-lahe-review"), -1);
   assert.match(md.body, /has no review, which should not happen/);
-  assert.ok(md.body.indexOf("lahe review " + path.join(f.linked, "doc.md")) !== -1, "it names the command that opens one");
+  assert.ok(md.body.indexOf("lahe review '" + path.join(f.linked, "doc.md") + "'") !== -1, "it names the command that opens one");
   const html = await request(f.server.meta, f.prefix + "doc.html");
   assert.equal(html.body.indexOf("data-lahe-review"), -1);
   assert.match(html.body, /has no review, which should not happen/);
@@ -327,8 +327,15 @@ test("a page path the mount table cannot vouch for names no file", async (t) => 
     f.prefix + "..%2Fx.md",
     f.prefix + "sibling.html",
     f.prefix + ".env",
+    f.prefix + "escape.md",
     "/hub.html"
   ];
+  // A symlink inside the mount pointing outside it: even with its real path
+  // recorded, the file is not inside the mount, so it names nothing.
+  const outside = path.join(tempDir("lahe-linked-rail-outside-"), "escape.md");
+  fs.writeFileSync(outside, "# Outside\n");
+  fs.symlinkSync(outside, path.join(f.linked, "escape.md"));
+  staticServers.recordLinks(f.state, f.sessionId, f.server.meta.id, "r_hub", [outside, path.join(f.linked, "escape.md")]);
   cases.forEach((pagePath) => {
     assert.equal(staticServers.linkedFileForPage(f.state, f.sessionId, "r_hub", pagePath), null, pagePath);
   });
@@ -457,4 +464,97 @@ test("the drain names the linked file for an item made on a linked page", () => 
   });
   assert.equal(items[0].page.linked_file, "/home/me/doc.md");
   assert.equal(Object.prototype.hasOwnProperty.call(items[1].page, "linked_file"), false, "an ordinary page's line is unchanged");
+});
+
+// ---------------------------------------------------------------------------
+// Fix round.
+
+test("a linked file that is not a page is never named as the file to edit", async (t) => {
+  const f = await fixture(t);
+  const script = path.join(f.linked, "run.sh");
+  fs.writeFileSync(script, "#!/bin/sh\necho hi\n");
+  staticServers.recordLinks(f.state, f.sessionId, f.server.meta.id, "r_hub", [script]);
+  assert.equal(staticServers.linkedFileForPage(f.state, f.sessionId, "r_hub", f.prefix + "run.sh"), null);
+
+  const origin = "http://" + f.server.meta.host + ":" + f.server.meta.port;
+  postItem(f.log, "r_hub", record.newItem({
+    kind: record.KIND.COMMENT,
+    state: record.STATE.READY,
+    note: "about the script",
+    page_origin: origin,
+    page_path: f.prefix + "run.sh",
+    page_title: "run.sh",
+    page_seq: 1
+  }));
+  const projected = projection.createProjector({ dir: f.state, log: f.log }).currentProjection("r_hub").projection;
+  const group = projected.pages.find((p) => p.path === f.prefix + "run.sh");
+  assert.equal(group.linked_file, null);
+  assert.equal(group.source_hint.known, false);
+});
+
+test("a render records only pages among the files it links to", () => {
+  const home = tempDir("lahe-linked-rail-home2-");
+  const previousHome = process.env.LAHE_HOME_DIR;
+  process.env.LAHE_HOME_DIR = home;
+  try {
+    fs.mkdirSync(path.join(home, "a"));
+    fs.mkdirSync(path.join(home, "b"));
+    const source = path.join(home, "a", "hub.md");
+    fs.writeFileSync(source, "# Hub\n\n- [x](../b/run.sh)\n- [y](../b/page.html)\n- [z](data.json)\n");
+    fs.writeFileSync(path.join(home, "b", "run.sh"), "echo\n");
+    fs.writeFileSync(path.join(home, "b", "page.html"), "<p>p</p>\n");
+    fs.writeFileSync(path.join(home, "a", "data.json"), "{}\n");
+    const registry = markdownLinks.createRegistry({});
+    markdown.render(source, { links: registry });
+    assert.deepEqual(registry.linked, [path.join(home, "b", "page.html")]);
+  } finally {
+    if (previousHome === undefined) delete process.env.LAHE_HOME_DIR;
+    else process.env.LAHE_HOME_DIR = previousHome;
+  }
+});
+
+test("an encoded spelling of a mount prefix is refused, and gets no linked source", async (t) => {
+  const f = await fixture(t);
+  const encoded = f.prefix.replace("/.lahe-source/", "/%2Elahe-source/");
+  const res = await request(f.server.meta, encoded + "doc.md");
+  assert.equal(res.status, 404);
+  assert.equal(res.body.indexOf("data-lahe-review"), -1);
+  assert.equal(staticServers.linkedFileForPage(f.state, f.sessionId, "r_hub", encoded + "doc.md"), null);
+
+  // The review has a source of its own, which a mount page must never inherit.
+  const hubSource = path.join(f.root, "hub.md");
+  f.reviews.recordPaths("r_hub", { source_path: hubSource });
+  postItem(f.log, "r_hub", record.newItem({
+    kind: record.KIND.COMMENT,
+    state: record.STATE.READY,
+    note: "encoded",
+    page_origin: "http://" + f.server.meta.host + ":" + f.server.meta.port,
+    page_path: encoded + "doc.md",
+    page_title: "doc",
+    page_seq: 1
+  }));
+  f.log.append("r_hub", [protocol.newEvent({
+    event: protocol.EVENT.PAGE_VISITED,
+    event_id: "evt_linked_hint",
+    review: "r_hub",
+    page_path: "/hub.html",
+    page_seq: 1,
+    source_hint: hubSource
+  })]);
+  const projected = projection.createProjector({ dir: f.state, log: f.log }).currentProjection("r_hub").projection;
+  const group = projected.pages.find((p) => p.path === encoded + "doc.md");
+  assert.equal(group.linked_file, null);
+  assert.notEqual(group.source_hint.path, hubSource, "not the hub's source");
+  assert.equal(group.source_hint.known, false);
+  assert.equal(f.reviews.targetMtime("r_hub", encoded + "doc.md"), null, "and it reloads nothing");
+});
+
+test("the copy-the-command button quotes the path for a POSIX shell", () => {
+  const { execFileSync } = require("node:child_process");
+  const source = "/home/u/a b;touch x'q.md";
+  const note = markdown.missingReviewNote(source, "s_abc123");
+  const attr = note.match(/data-command="([^"]*)"/)[1]
+    .replace(/&quot;/g, "\"").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  const words = execFileSync("/bin/sh", ["-c", "printf '%s\\n' " + attr], { encoding: "utf8" }).split("\n").slice(0, -1);
+  assert.deepEqual(words, ["lahe", "review", source, "--session", "s_abc123"]);
 });

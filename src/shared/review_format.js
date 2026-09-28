@@ -649,8 +649,18 @@
   // than falling back to the linking page's source, which is the wrong file.
   var LINKED_PAGE_PREFIX = "/.lahe-source/";
 
+  // Any spelling that DECODES under the prefix counts as a linked page, so an
+  // encoded one (/%2Elahe-source/...) never falls back to the review-wide
+  // source. The helper maps only the literal spelling, which is the only one
+  // the static server serves, so an encoded one reads as unknown.
   function isLinkedPage(pagePath) {
-    return typeof pagePath === "string" && pagePath.indexOf(LINKED_PAGE_PREFIX) === 0;
+    if (typeof pagePath !== "string") return false;
+    if (pagePath.indexOf(LINKED_PAGE_PREFIX) === 0) return true;
+    try {
+      return decodeURIComponent(pagePath).indexOf(LINKED_PAGE_PREFIX) === 0;
+    } catch (err) {
+      return false;
+    }
   }
 
   function linkedHintOf(review, pagePath) {
@@ -894,6 +904,7 @@
     sourceHint: sourceHint,
     pageGroups: pageGroups,
     projectItem: projectItem,
+    isLinkedPage: isLinkedPage,
     projectReview: projectReview,
     stringifyReview: stringifyReview,
     countItems: countItems,

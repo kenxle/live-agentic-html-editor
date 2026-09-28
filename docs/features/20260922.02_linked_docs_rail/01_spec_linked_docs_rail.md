@@ -131,6 +131,17 @@ The screenshot is from the browser spec's own run: the hub's rail on the draft s
 - The `review.write` source-hint gap stays open, as the spec says. It needs its own board row.
 - The Markdown served at a server's own root (not under a mount) still renders read-only, as before.
 
+### Fix round, 2026-09-28
+
+Each fix has a test in `test/unit/linked_docs_rail.test.js`, written red first. `gate:unit` green, the browser spec green.
+
+- **Only pages are named as the file to edit.** A linked `.sh` or `.json` is served as bytes and is never in `linked_files` or returned by `linkedFileForPage`. `markdown_links.isPage` is the one check, and the Markdown extensions are now spelled only in `markdown_links.js`.
+- **One spelling for a mount.** A request whose raw path does not literally start with `/.lahe-source/` but decodes to it gets a 404. The helper maps only the literal spelling. `review_format.isLinkedPage` treats any spelling that decodes under the prefix as a linked page, so an encoded one reads as unknown and never takes the hub's source. The projection, the reload and the handled check all use that one predicate.
+- **The copy-the-command button quotes for a POSIX shell.** `markdown.missingReviewNote(path, session)` builds the command itself and single-quotes both values, turning each `'` into `'\''`.
+- **Test gap closed:** a symlink inside a mount that points outside it names no file. The test passed on the existing code.
+
+Left for the board, not this round: `linked_files` never shrinks when a link is removed; the read-modify-write race on the server metadata file; caching the lookup done on every poll.
+
 ### To delete at cleanup
 
 - Nothing.

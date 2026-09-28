@@ -18,7 +18,7 @@ var links = require("./markdown_links.js");
 var tabIcon = require("./tab_icon.js");
 var stateDir = require("./state_dir.js");
 
-var MARKDOWN_EXTENSIONS = [".md", ".markdown"];
+var MARKDOWN_EXTENSIONS = links.MARKDOWN_EXTENSIONS;
 var MERMAID_ASSET = ".lahe-mermaid-11.16.1.js";
 var MERMAID_SOURCE = path.join(__dirname, "..", "..", "vendor", "mermaid", "mermaid.tiny.js");
 
@@ -220,7 +220,13 @@ function sourceNote(sourcePath) {
  * command that opens a review rather than opening one itself. Nothing is ever
  * created by a click (spec 20260922.02, requirement 3).
  */
-function missingReviewNote(sourcePath, command) {
+/** `value` as one word for a POSIX shell: single-quoted, each ' as '\''. */
+function shellQuote(value) {
+  return "'" + String(value).replace(/'/g, "'\\''") + "'";
+}
+
+function missingReviewNote(sourcePath, sessionId) {
+  var command = "lahe review " + shellQuote(sourcePath) + " --session " + shellQuote(sessionId);
   return "<p class=\"lahe-readonly-note lahe-missing-review\">This document has no review, which should not happen: " +
     "the reviewed page that linked here is not in this session any more. Nothing was created. " +
     "To open a review of <code>" + escapeHtml(sourcePath) + "</code>, run <code>" + escapeHtml(command) + "</code> " +
