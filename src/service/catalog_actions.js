@@ -70,7 +70,8 @@ function badRequest(detail) {
  *   static_servers.createCatalogOps. `log(line, nowMs)` writes one helper log
  *   line stamped at `nowMs`. `uid` is the user a recorded file must belong to
  *   (the current one by default; tests pass another to prove the refusal,
- *   since chown needs root).
+ *   since chown needs root). `statFile` is fs.statSync unless a test passes
+ *   one that reports a chosen owner per path.
  */
 function createCatalogActions(options) {
   var opts = options || {};
@@ -86,6 +87,7 @@ function createCatalogActions(options) {
   var log = opts.log;
   var pidAlive = typeof opts.pidAlive === "function" ? opts.pidAlive : agentSessions.pidAlive;
   var uid = typeof opts.uid === "number" ? opts.uid : typeof process.getuid === "function" ? process.getuid() : null;
+  var statFile = typeof opts.statFile === "function" ? opts.statFile : fs.statSync;
 
   // -------------------------------------------------------------------------
   // Shared steps
@@ -134,22 +136,25 @@ function createCatalogActions(options) {
   }
 
   /**
-   * Is every recorded file of this review owned by the current user? A file
-   * that is not on disk has nothing to check.
+   * Is every recorded file of this review, and the root of the server record
+   * Open would restart, on disk and owned by the current user? The restarted
+   * server serves everything under that root, so the root is checked too. A
+   * record with no root, or a file that is not on disk, is not openable: there
+   * is nothing to check it against.
    */
   function ownedByUser(described) {
-    if (uid === null) return true;
-    var files = [described.served_path, described.path].filter(function (file, i, all) {
+    if (typeof described.server_root !== "string" || !described.server_root) return false;
+    var files = [described.served_path, described.path, described.server_root].filter(function (file, i, all) {
       return typeof file === "string" && file && all.indexOf(file) === i;
     });
     return files.every(function (file) {
       var stat;
       try {
-        stat = fs.statSync(file);
+        stat = statFile(file);
       } catch (err) {
-        return true;
+        return false;
       }
-      return stat.uid === uid;
+      return uid === null || stat.uid === uid;
     });
   }
 
@@ -190,7 +195,7 @@ function createCatalogActions(options) {
       return { status: 200, body: { url: null, request_id: queuedVia.request.id, not_asked: null } };
     }
 
-    if (!ownedByUser(d)) return fail("PROTO_NOT_OPENABLE", "not owned by the current user");
+    if (!ownedByUser(d)) return fail("PROTO_NOT_OPENABLE", "not owned by the current user, or not on disk");
 
     // The confirm step comes before anything starts: a refused hand-over must
     // not have restarted a server behind the reviewer's back.

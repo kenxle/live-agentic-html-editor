@@ -343,7 +343,7 @@ This amends D11: one new credential, the Library token, that can list, open (res
 - The preflight handler never approves a catalog route.
 - **The page renders page-derived text** (titles, file names, answers) with `textContent` only.
 - **Open** opens `about:blank`, sets `opener` to null before any await, and then navigates only to a loopback `http:` URL from the helper.
-- **Files Open or a fallback serve** must be owned by the current user.
+- **Files Open or a fallback serve** must be owned by the current user. For Open that includes the root of the server record it restarts, and a recorded file that is not on disk is not openable.
 - **Static servers get the Host check** (board row LAHE-static-server-host-check), since the Library keeps more of them running.
 - **Launching is only through an agent in v1,** which runs in its normal permission mode. Page-derived text never goes into a shell string.
 

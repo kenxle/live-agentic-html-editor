@@ -957,8 +957,11 @@ root or a URL, and fields a route does not list are never read.
   loopback origin plus the file's path on it. A served review starts nothing. A review whose session was
   closed is reopened and recorded in `catalog.json`'s `reopened` map for the sweep.
 - **`PROTO_NOT_OPENABLE` carries its reason in `error.detail`:** `missing`, `via-agent` (no recorded
-  server covers it and no hand-over was asked), `unknown review`, `not owned by the current user`, or
-  `the recorded server could not be restarted`.
+  server covers it and no hand-over was asked), `unknown review`, `not owned by the current user, or
+  not on disk`, or `the recorded server could not be restarted`.
+- **The owner check** covers the reviewed file, the served file, and the root of the server record
+  Open would restart, since that server serves everything under its root. Each must be on disk and
+  owned by the current user; a record with no root is refused.
 - **A `via-agent` row's Open is its pick-up.** With `handoff` and a live attached agent it queues one and
   answers `url: null`; with no live agent it is `PROTO_NO_AGENT`.
 - **`not_asked`** says why an Open that opened asked no agent: `no_agent`, `queue_full`, or

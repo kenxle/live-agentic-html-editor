@@ -793,8 +793,8 @@ function createReader(options) {
    *   review's is its folder's). `path` is the document's own path on disk.
    *   `candidate` is the checked main-repository copy for a gone worktree.
    *   For Open (Library 2.1): `server` is the id of the recorded server that
-   *   covers the review's served file and `url_path` that file's path on it
-   *   (both null when none does); `served_path` is the file itself, `watching`
+   *   covers the review's served file, `server_root` that record's root, and
+   *   `url_path` that file's path on it (all null when none does); `served_path` is the file itself, `watching`
    *   the session's watcher as the list shows it, and `last` the review's own
    *   newest event time.
    */
@@ -819,6 +819,7 @@ function createReader(options) {
             openable: part.openable,
             candidate: part.candidate,
             server: part.covering ? part.covering.meta.id : null,
+            server_root: part.covering && typeof part.covering.meta.root === "string" ? part.covering.meta.root : null,
             url_path: part.covering ? part.covering.urlPath : null,
             served_path: part.info.servedPath,
             watching: watchingOf(s.id, nowMs),
