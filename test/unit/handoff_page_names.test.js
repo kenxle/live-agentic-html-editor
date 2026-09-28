@@ -83,7 +83,7 @@ test("a page-derived session name never appears in the drain's handoff", async (
   const entry = lines[lines.length - 1].catalog_requests[0];
   assert.equal(entry.title, HOSTILE, "the title field is fenced page text and stays");
   assert.equal(entry.handoff.includes(HOSTILE), false, "the hand-off prompt carries no page text");
-  assert.equal(entry.handoff, protocol.AGENT_LIVENESS.handoffMessage("s_doc", null, true));
+  assert.equal(entry.handoff, protocol.AGENT_LIVENESS.libraryHandoffMessage("s_doc", null, stateDir.flagFor(w.dir)));
 });
 
 test("the Library's list marks a page-sourced name, and VM.handoffFor leaves it out", async () => {
@@ -100,7 +100,7 @@ test("the Library's list marks a page-sourced name, and VM.handoffFor leaves it 
   view.sections.forEach((s) => s.cards.forEach((c) => c.rows.forEach((r) => { if (r.id === "r_doc") panel = r.panel; })));
   assert.ok(panel && panel.message, "the hand-off panel is drawn");
   assert.equal(panel.message.includes(HOSTILE), false);
-  assert.equal(panel.message, protocol.AGENT_LIVENESS.handoffMessage("s_doc", null, false));
+  assert.equal(panel.message, protocol.AGENT_LIVENESS.libraryHandoffMessage("s_doc", null, null));
 });
 
 test("the rail's liveness says the name came from a page, so its hand-off leaves it out", async () => {

@@ -525,10 +525,12 @@ function readerDescriber(dir, nowMs) {
       title: described ? described.display_name : null,
       path: described ? described.path : null,
       candidate: described ? described.candidate : null,
-      handoff: protocol.AGENT_LIVENESS.handoffMessage(
+      // The Library's own wording, with the real --state-dir when it is not
+      // the default. The rail's message is for an agent that stopped answering.
+      handoff: protocol.AGENT_LIVENESS.libraryHandoffMessage(
         takeable ? sessionId : null,
         takeable ? name : null,
-        !!stateDirModule.flagFor(dir)
+        stateDirModule.flagFor(dir)
       )
     };
   };

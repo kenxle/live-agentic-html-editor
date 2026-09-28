@@ -159,9 +159,9 @@ test("with no agent, Pick this up and Launch show the hand-off panel instead of 
     const r = row(view, "r_mounted");
     assert.equal(
       r.panel.intro,
-      "No agent is attached. This is the same hand-off message the rail already copies. Paste it into any agent:"
+      "No agent is attached. Paste this hand-off message into any agent:"
     );
-    assert.equal(r.panel.message, protocol.AGENT_LIVENESS.handoffMessage("s_coach", "coach activity", false));
+    assert.equal(r.panel.message, protocol.AGENT_LIVENESS.libraryHandoffMessage("s_coach", "coach activity", null));
     assert.equal(r.panel.copyLabel, "Copy");
   });
 });
@@ -170,7 +170,7 @@ test("the hand-off panel for a legacy review points at the session list", () => 
   const list = freshList();
   list.attached = null;
   const view = build(list, vm.withPanel(okState(), "r_legacy", "no_agent"));
-  assert.equal(row(view, "r_legacy").panel.message, protocol.AGENT_LIVENESS.handoffMessage(null, null, false));
+  assert.equal(row(view, "r_legacy").panel.message, protocol.AGENT_LIVENESS.libraryHandoffMessage(null, null, null));
 });
 
 // ---------------------------------------------------------------------------

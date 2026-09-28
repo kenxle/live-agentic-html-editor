@@ -50,8 +50,8 @@
     DONE: "{agent}: {text}",
     REFUSED: "{agent} couldn't take it: {text}.",
     EXPIRED: "Not picked up. {agent} didn't answer.",
-    PANEL_NO_AGENT: "No agent is attached. This is the same hand-off message the rail already copies. Paste it into any agent:",
-    PANEL_REFUSED: "This is the same hand-off message the rail already copies. Paste it into a new agent:",
+    PANEL_NO_AGENT: "No agent is attached. Paste this hand-off message into any agent:",
+    PANEL_REFUSED: "Paste this hand-off message into a new agent:",
     COPY: "Copy",
     COPIED: "Copied.",
     COPY_FAILED: "Couldn't copy. Select the message and copy it yourself.",
@@ -317,11 +317,14 @@
     return { attached: false, text: TEXT.AGENT_NONE };
   }
 
-  function handoffFor(session) {
+  function handoffFor(session, list) {
     var isLegacy = !session || session.id === LEGACY_SESSION;
     // A name read off a page's title stays out: the message is a new agent's prompt.
     var name = isLegacy || session.name_from_page === true ? null : session.name || null;
-    return protocol.AGENT_LIVENESS.handoffMessage(isLegacy ? null : session.id, name, false);
+    // The Library's own wording, with the state dir the list names (null for
+    // the default one).
+    var dirPath = list && typeof list.state_dir === "string" && list.state_dir ? list.state_dir : null;
+    return protocol.AGENT_LIVENESS.libraryHandoffMessage(isLegacy ? null : session.id, name, dirPath);
   }
 
   function sameWatcher(a, b) {
@@ -448,7 +451,7 @@
       panel = {
         reason: state.panel.reason,
         intro: state.panel.reason === "refused" ? TEXT.PANEL_REFUSED : TEXT.PANEL_NO_AGENT,
-        message: handoffFor(session),
+        message: handoffFor(session, list),
         copyLabel: TEXT.COPY,
         closeLabel: TEXT.CLOSE,
         copyStatus: state.panel.copied === true ? TEXT.COPIED : state.panel.copied === false ? TEXT.COPY_FAILED : null

@@ -948,7 +948,7 @@ root or a URL, and fields a route does not list are never read.
 
 | Route | Body | Answer |
 |---|---|---|
-| `catalog.list` | none | the list response (architecture, "The list response"), plus `notice`. Marks `catalog_seen_at` |
+| `catalog.list` | none | the list response (architecture, "The list response"), plus `notice` and `state_dir` (the state directory when it is not the default, else null, for the hand-off message's takeover command). Marks `catalog_seen_at` |
 | `catalog.open` | `{review, handoff, confirmed}` | `{url, request_id, not_asked}` |
 | `catalog.star` | `{review, starred}`, `starred` a boolean | `{review, starred}` |
 | `catalog.request` | `{review, action, confirmed}`, `action` `pickup` or `launch` | `{request_id}` |
@@ -1051,7 +1051,12 @@ The one read path, and the one keep-up loop. Before it, every agent hand-rolled 
     `PROJECTED_FIELD_CLASS` (`catalog_requests[].title` and so on) and fenced like every other data
     field. `title` is the Library's display name for the row, so it is never null for a real row.
     `candidate` is the main-repository copy of a worktree row, checked when the entry is built, or null.
-    `handoff` is the rail's own hand-off message for the document's session. It never carries a
+    `handoff` is the Library's hand-off message for the document's session,
+    `AGENT_LIVENESS.libraryHandoffMessage(session, name, state_dir)`: it asks the new agent to take the
+    session over, blames nobody (the session may be closed, or the reviewer wants a new agent), and
+    writes the real `--state-dir` into the command when it is not the default. The Library's copy
+    panel shows the same message. The rail keeps `handoffMessage` for its own case, an agent that
+    stopped answering. It never carries a
     session name read off a page's title (`name_source: "page"`).
   - These fields come from the catalog reader's `describeReview`, the same description the Library's
     list uses.

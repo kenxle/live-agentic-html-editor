@@ -164,7 +164,11 @@ function createCatalogActions(options) {
 
   /** catalog.list: the reader's list, already joined with the queue. */
   async function list(nowMs) {
-    return { status: 200, body: await reader.list(nowMs) };
+    var body = await reader.list(nowMs);
+    // The state directory when it is not the default one, else null, so the
+    // Library's hand-off message can name it in the takeover command.
+    body.state_dir = stateDir.flagFor(dir);
+    return { status: 200, body: body };
   }
 
   /**

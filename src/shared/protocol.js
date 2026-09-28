@@ -1578,6 +1578,49 @@
   }
   AGENT_LIVENESS.handoffMessage = handoffMessage;
 
+  /**
+   * The Library's hand-off message: the text a new agent gets when the
+   * reviewer hands a document's session over from the Library (the Launch
+   * prompt, and the copy panel when no agent is attached).
+   *
+   * Not the rail's message. The rail's case is an agent that stopped
+   * answering; a Library hand-over may be a closed session, or a reviewer who
+   * simply wants a new agent on it, so this one blames nobody. And the Library
+   * knows the state directory, so a non-default one is written into the
+   * command rather than asked about.
+   *
+   * @param {string|null} sessionId the session to take over, or null for a
+   *   review with no session, which gets pointed at the list instead
+   * @param {string|null} [name] the human's name for the session, quoted when
+   *   present. Never a name read off a page's title.
+   * @param {string|null} [stateDirPath] the state directory when it is not the
+   *   default one, else null
+   * @returns {string} plain text
+   */
+  function libraryHandoffMessage(sessionId, name, stateDirPath) {
+    var flag = stateDirFlag(stateDirPath);
+    var hasId = typeof sessionId === "string" && isSafeId(sessionId);
+    var named = typeof name === "string" && name ? ", the session named " + JSON.stringify(name) : "";
+    var run = hasId
+      ? ["Run this command:", "", "    " + takeoverCommand(sessionId, stateDirPath), ""]
+      : [
+          "Run `lahe session list" + flag + "` to find the session for this document, then take it over with:",
+          "",
+          "    lahe session takeover <session-id>" + flag,
+          ""
+        ];
+    return [
+      "Please take over my live LAHE review" + named + ". I am handing it to you from the LAHE Library so you can continue it.",
+      ""
+    ]
+      .concat(run)
+      .concat([
+        "It prints the commands to catch up. Then work every comment that is waiting and reply to each one, and keep watching for new ones."
+      ])
+      .join("\n");
+  }
+  AGENT_LIVENESS.libraryHandoffMessage = libraryHandoffMessage;
+
   return {
     API_VERSION: API_VERSION,
     SERVICE_CONTRACT: SERVICE_CONTRACT,
