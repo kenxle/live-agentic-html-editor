@@ -84,7 +84,7 @@ test("a pending request for the drained session gets past --quiet with nothing e
   assert.equal(out.summary.catalog_requests.length, 1);
   const entry = out.summary.catalog_requests[0];
   assert.deepEqual(Object.keys(entry), [
-    "request", "action", "review", "session", "kind", "moves_with", "at", "title", "path", "candidate", "handoff"
+    "request", "action", "review", "session", "kind", "moves_with", "at", "title", "path", "candidate", "folder", "handoff"
   ]);
   assert.equal(entry.request, request.id);
   assert.equal(entry.action, "pickup");

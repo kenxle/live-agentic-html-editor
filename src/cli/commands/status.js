@@ -525,6 +525,7 @@ function readerDescriber(dir, nowMs) {
       title: described ? described.display_name : null,
       path: described ? described.path : null,
       candidate: described ? described.candidate : null,
+      folder: described ? projectFolder(described.candidate || described.path) : null,
       // The Library's own wording, with the real --state-dir when it is not
       // the default. The rail's message is for an agent that stopped answering.
       handoff: protocol.AGENT_LIVENESS.libraryHandoffMessage(
@@ -536,7 +537,38 @@ function readerDescriber(dir, nowMs) {
   };
 }
 
-var DESCRIBED_FIELDS = ["kind", "title", "path", "candidate", "handoff"];
+var DESCRIBED_FIELDS = ["kind", "title", "path", "candidate", "folder", "handoff"];
+
+/**
+ * The folder a launched agent starts in: the repository that holds the
+ * document (the nearest folder with a .git), else the document's own folder.
+ * Null for no path, or for a folder with a control character in it, which the
+ * Launch steps could not read back as one line.
+ */
+function projectFolder(docPath) {
+  if (typeof docPath !== "string" || !docPath) return null;
+  var start = docPath;
+  while (!fs.existsSync(start)) {
+    var up = path.dirname(start);
+    if (up === start) return null;
+    start = up;
+  }
+  try {
+    if (!fs.statSync(start).isDirectory()) start = path.dirname(start);
+  } catch (err) {
+    return null;
+  }
+  var found = start;
+  for (var current = start; ; current = path.dirname(current)) {
+    if (fs.existsSync(path.join(current, ".git"))) {
+      found = current;
+      break;
+    }
+    if (path.dirname(current) === current) break;
+  }
+  // eslint-disable-next-line no-control-regex
+  return /[\u0000-\u001f\u007f]/.test(found) ? null : found;
+}
 
 /** The other reviews in the document's session: they move with a takeover. */
 function movesWith(dir, request) {
@@ -571,6 +603,7 @@ function catalogEntries(dir, sessionId, nowMs, describe) {
       title: fields.title,
       path: fields.path,
       candidate: fields.candidate,
+      folder: fields.folder,
       handoff: fields.handoff,
       // Not printed: which agent answers it. The human output names it in the
       // answer command.
