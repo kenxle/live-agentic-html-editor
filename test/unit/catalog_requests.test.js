@@ -340,3 +340,25 @@ test("pendingFor: only the requests whose `for` is the given session", () => {
   assert.equal(w.queue.pendingFor("s_attached", T0 + 1).length, 1);
   assert.equal(w.queue.pendingFor("s_other", T0 + 1).length, 0);
 });
+
+test("a bad line is logged once per queue, not on every poll", () => {
+  const w = world();
+  ask(w.queue, "r_one", T0);
+  fs.appendFileSync(stateDir.catalogRequestsPath(w.dir), '{"id":"cq_torn","at":"2026-09-28T16:0');
+  w.queue.pending(T0 + 1);
+  w.queue.pending(T0 + 2);
+  w.queue.requestFor("r_one", T0 + 3);
+  assert.equal(w.logged.length, 1, w.logged.join("\n"));
+});
+
+test("a bad line that ends in a newline is a complete unreadable line, not a torn one; a tail with no newline is torn", () => {
+  const w = world();
+  ask(w.queue, "r_one", T0);
+  fs.appendFileSync(stateDir.catalogRequestsPath(w.dir), "not json\n");
+  w.queue.pending(T0 + 1);
+  assert.match(w.logged.join("\n"), /an unreadable line 2 /);
+  assert.doesNotMatch(w.logged.join("\n"), /torn/);
+  fs.appendFileSync(stateDir.catalogRequestsPath(w.dir), "{\"id\":");
+  w.queue.pending(T0 + 2);
+  assert.match(w.logged[w.logged.length - 1], /a torn last line/);
+});

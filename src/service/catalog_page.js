@@ -87,7 +87,7 @@ function readAsset(name) {
   try {
     return { contentType: entry.contentType, bytes: fs.readFileSync(entry.file) };
   } catch (err) {
-    // An allowlisted file not written yet (view_model.js before Task 2.2).
+    // An allowlisted file missing from this clone answers 404, never a crash.
     return null;
   }
 }

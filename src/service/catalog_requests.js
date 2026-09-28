@@ -125,7 +125,12 @@ function createQueue(options) {
   // Reading the file
   // -------------------------------------------------------------------------
 
-  /** Every whole line, parsed. A line that is not JSON is skipped and logged. */
+  // Each bad line is logged once per queue, not on every read: the page polls
+  // every POLL_MS and the monitor every few seconds, and the same torn line
+  // would otherwise fill the helper log.
+  var loggedBad = Object.create(null);
+
+  /** Every whole line, parsed. A line that is not JSON is skipped and logged once. */
   function readLines() {
     var file = stateDir.catalogRequestsPath(dir);
     var text;
@@ -144,7 +149,13 @@ function createQueue(options) {
         if (parsed && typeof parsed === "object" && typeof parsed.id === "string") out.push(parsed);
         else throw new Error("not a queue line");
       } catch (err) {
+        // The last piece of the split is a whole line only when the file ends
+        // in a newline, and then it is empty and skipped above. So a bad last
+        // piece is a torn tail, and any other bad line is a complete one.
         var torn = index === all.length - 1;
+        var key = (torn ? "torn " : index + " ") + line;
+        if (loggedBad[key]) return;
+        loggedBad[key] = true;
         log(
           "catalog-requests.jsonl: skipped " + (torn ? "a torn last line" : "an unreadable line " + (index + 1)) +
             " (" + line.length + " characters); the rest of the queue still reads"

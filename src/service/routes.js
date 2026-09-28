@@ -23,9 +23,10 @@ var protocol = require("../shared/protocol.js");
 var record = require("../shared/record.js");
 var catalogPage = require("./catalog_page.js");
 
-function notImplemented(routeName, owner) {
-  var err = new Error("route " + routeName + " is not implemented yet: Task " + owner + " owns it");
-  err.code = "NOT_IMPLEMENTED";
+/** A route called without a dependency the helper always passes: a wiring bug. */
+function missingDependency(routeName, dependency) {
+  var err = new Error("route " + routeName + " needs deps." + dependency + ", which the helper did not pass");
+  err.code = "MISSING_DEPENDENCY";
   return err;
 }
 
@@ -116,7 +117,7 @@ var HANDLERS = {
   // 404 a reviewer meets as a page that does nothing.
   "library.get": function (request, deps) {
     if (!deps.library || typeof deps.library.source !== "string") {
-      throw notImplemented("library.get", "1A");
+      throw missingDependency("library.get", "library");
     }
     return {
       status: 200,
@@ -260,7 +261,7 @@ var HANDLERS = {
   // on load and on every reconnect.
   "review.read": function (request, deps) {
     if (!deps.projection || typeof deps.projection.project !== "function") {
-      throw notImplemented("review.read", "3A");
+      throw missingDependency("review.read", "projection");
     }
     if (typeof deps.projection.startWatching === "function") {
       deps.projection.startWatching(deps, [request.review]);
@@ -408,7 +409,7 @@ var HANDLERS = {
   // truncated: outstanding work stays in the log where it can still be read.
   "review.end": function (request, deps) {
     if (!deps.projection || typeof deps.projection.itemsFrom !== "function") {
-      throw notImplemented("review.end", "3A");
+      throw missingDependency("review.end", "projection");
     }
     // BEFORE the archive, not after. endReview drops the review's holder record,
     // and that record is where the owning agent session is named, so asking
@@ -818,6 +819,5 @@ module.exports = {
   handlerFor: handlerFor,
   matchRoute: matchRoute,
   matchCatalogRoute: matchCatalogRoute,
-  isCatalogPath: isCatalogPath,
-  notImplemented: notImplemented
+  isCatalogPath: isCatalogPath
 };

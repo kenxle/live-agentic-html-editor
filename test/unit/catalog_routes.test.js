@@ -81,6 +81,7 @@ async function world(t, options) {
   t.after(async () => {
     await staticServers.stopAll(dir, "s_doc").catch(() => {});
   });
+  if (typeof opts.setup === "function") await opts.setup({ root, dir, store, reviews, log });
   if (opts.attach !== false) {
     catalogRequests.writeAttach(dir, "s_agent", T0 - MINUTE);
     beat(store, "s_agent", T0);
@@ -543,10 +544,16 @@ const LOG_FIXTURE = path.join(__dirname, "..", "fixtures", "catalog_log.txt");
 test("a week of Library actions through the real routes writes the catalog lines committed as test/fixtures/catalog_log.txt", async (t) => {
   // Rerun with LAHE_WRITE_CATALOG_LOG=1 to rewrite the fixture after a format change.
   const w = await world(t, { attach: false });
-  // Each review's `last` is its log's modified time, pinned so every age is fixed.
+  // Each review's `last` is pinned so every age is fixed: its log's modified
+  // time, and (since a log that ends in origin events takes `last` from the
+  // newest other event) every event's own time. The rewrite keeps the file's
+  // length, since an ISO time is always the same width.
   const pin = (reviewId, isoTime) => {
     const at = new Date(isoTime);
-    fs.utimesSync(stateDir.eventsPath(w.dir, reviewId), at, at);
+    const file = stateDir.eventsPath(w.dir, reviewId);
+    const text = fs.readFileSync(file, "utf8").replace(/"ts":"[^"]*"/g, '"ts":"' + at.toISOString() + '"');
+    fs.writeFileSync(file, text);
+    fs.utimesSync(file, at, at);
   };
   pin("r_page", "2026-09-05T12:00:00.000Z");
   pin("r_new", "2026-09-20T12:00:00.000Z");
@@ -579,4 +586,286 @@ test("a week of Library actions through the real routes writes the catalog lines
   assert.equal(opens.length, 6);
   assert.match(captured, /^2026-09-28T08:30:00\.000Z catalog open review=r_new age_days=7$/m, "r_new is 7 whole days old on the last Open");
   assert.match(captured, /^2026-09-26T12:00:00\.000Z catalog open review=r_page age_days=21$/m);
+});
+
+// ---------------------------------------------------------------------------
+// Fix round (phase 7), Builder B
+// ---------------------------------------------------------------------------
+
+/** Point s_doc's one server record at a root that is gone, keeping its coverage. */
+function breakServerRoot(w) {
+  const record = staticServers.list(w.dir, "s_doc")[0];
+  record.logical_root = w.site;
+  record.root = path.join(w.root, "no-such-root");
+  fs.writeFileSync(stateDir.staticServerPath(w.dir, "s_doc", record.id), JSON.stringify(record, null, 2) + "\n");
+}
+
+test("CX2: an Open whose server cannot restart leaves a closed session closed and records no reopen", async (t) => {
+  const w = await world(t);
+  await staticServers.stopAll(w.dir, "s_doc");
+  w.store.close("s_doc");
+  breakServerRoot(w);
+  const res = await api(w, "catalog.open", { review: "r_page" });
+  assert.equal(res.status, 409, res.text);
+  assert.equal(res.json.error.code, "PROTO_NOT_OPENABLE");
+  assert.ok(w.store.read("s_doc").closed_at, "still closed: nothing is left for the sweep to find");
+  const read = catalogJson(w.dir);
+  assert.equal(read.ok ? read.data.reopened.s_doc : undefined, undefined);
+});
+
+test("CR4: with catalog.json corrupt, an Open that would reopen a closed session is refused and reopens nothing", async (t) => {
+  const w = await world(t);
+  await staticServers.stopAll(w.dir, "s_doc");
+  w.store.close("s_doc");
+  const file = catalogStore.catalogPath(w.dir);
+  fs.writeFileSync(file, "{not json");
+  const res = await api(w, "catalog.open", { review: "r_page" });
+  assert.equal(res.status, 500, res.text);
+  assert.equal(res.json.error.code, "PROTO_CATALOG_UNREADABLE");
+  assert.ok(w.store.read("s_doc").closed_at, "still closed");
+  assert.ok(staticServers.list(w.dir, "s_doc").every((m) => m.stopped_at), "no server started");
+  assert.equal(fs.readFileSync(file, "utf8"), "{not json", "left as it was");
+});
+
+test("CR4: with catalog.json corrupt, Open on an already open session still opens", async (t) => {
+  const w = await world(t);
+  fs.writeFileSync(catalogStore.catalogPath(w.dir), "{not json");
+  const res = await api(w, "catalog.open", { review: "r_page" });
+  assert.equal(res.status, 200, res.text);
+});
+
+/** Pids of static server processes serving this record file, from the process table. */
+function serverPids(file) {
+  const out = require("node:child_process").spawnSync("pgrep", ["-f", file], { encoding: "utf8" });
+  return (out.stdout || "").split("\n").filter(Boolean).map(Number);
+}
+
+test("CR1: two concurrent Opens on a closed session start one server, answer on its recorded port, and keep its origin", async (t) => {
+  if (process.platform === "win32") return t.skip("pgrep is not on this platform");
+  const w = await world(t);
+  await staticServers.stopAll(w.dir, "s_doc");
+  w.store.close("s_doc");
+  const recordFile = stateDir.staticServerPath(w.dir, "s_doc", w.first.meta.id);
+  t.after(() => serverPids(recordFile).forEach((pid) => { try { process.kill(pid, "SIGTERM"); } catch (err) { /* gone */ } }));
+  const [a, b] = await Promise.all([
+    api(w, "catalog.open", { review: "r_page" }),
+    api(w, "catalog.open", { review: "r_new" })
+  ]);
+  assert.equal(a.status, 200, a.text);
+  assert.equal(b.status, 200, b.text);
+  const records = staticServers.list(w.dir, "s_doc");
+  assert.equal(records.length, 1, "one ss_ record");
+  const port = records[0].port;
+  assert.equal(new URL(a.json.url).port, String(port));
+  assert.equal(new URL(b.json.url).port, String(port));
+  assert.deepEqual(serverPids(recordFile), [records[0].pid], "one server process, no orphan");
+  for (const id of ["r_page", "r_new"]) {
+    assert.ok(w.helper.reviews.get(id).origins.includes("http://127.0.0.1:" + port), id + " keeps the live origin");
+  }
+});
+
+test("CR1: the sweep leaves alone a session an Open is part way through bringing back", async () => {
+  const catalogActions = require("../../src/service/catalog_actions.js");
+  const dir = path.join(tempDir(), "state");
+  const store = agentSessions.createStore({ dir });
+  store.create({ id: "s_doc", name: "doc session" });
+  store.close("s_doc");
+  let release;
+  const closed = [];
+  const actions = catalogActions.createCatalogActions({
+    dir,
+    reader: {
+      describeReview: (id) => ({
+        review: id, session: "s_doc", openable: "yes", server: "ss_one", url_path: "/page.html",
+        served_path: null, path: null, watching: null, last: new Date(T0).toISOString()
+      })
+    },
+    queue: { readAttached: () => null },
+    store: catalogStore.createCatalogStore({ dir }),
+    ops: {
+      reopenForCatalog: (sessionId) => new Promise((resolve) => {
+        release = () => { store.reopen(sessionId); resolve({ origin: "http://127.0.0.1:1" }); };
+      }),
+      closeQuiet: async (sessionId) => { closed.push(sessionId); store.close(sessionId); }
+    },
+    sessions: store,
+    log: () => {}
+  });
+  const opening = actions.open({ review: "r_page" }, T0 - 2 * C.REOPENED_AUTOCLOSE_MS);
+  await new Promise((resolve) => setImmediate(resolve));
+  store.reopen("s_doc");
+  const during = await actions.sweepReopened(T0);
+  assert.deepEqual(during.closed, [], "not closed while its Open is in flight");
+  release();
+  assert.equal((await opening).status, 200);
+  const after = await actions.sweepReopened(T0);
+  assert.deepEqual(after.closed, ["s_doc"], "closed once the Open is done and it is quiet");
+});
+
+test("CR2: star and unstar act on every review in a fold, so a star never sticks when the fold's lead changes", async () => {
+  const catalogActions = require("../../src/service/catalog_actions.js");
+  const catalogReader = require("../../src/service/catalog_reader.js");
+  const fixture = require("../fixtures/catalog_state.js");
+  const installed = fixture.install();
+  const reader = catalogReader.createReader({ dir: installed.dir, home: installed.home, pidAlive: () => true, probe: async () => false });
+  const actions = catalogActions.createCatalogActions({
+    dir: installed.dir,
+    reader,
+    queue: { readAttached: () => null },
+    store: catalogStore.createCatalogStore({ dir: installed.dir }),
+    ops: {},
+    sessions: agentSessions.createStore({ dir: installed.dir }),
+    log: () => {}
+  });
+  const foldRow = async () => {
+    const list = await reader.list(installed.nowMs);
+    for (const s of list.sessions) {
+      const found = s.reviews.find((r) => ["r_old1", "r_old2", "r_old3"].includes(r.id));
+      if (found) return found;
+    }
+    return null;
+  };
+  const lead = (await foldRow()).id;
+  assert.equal((await actions.star({ review: lead, starred: false }, installed.nowMs)).status, 200);
+  assert.equal((await foldRow()).starred, false, "unstarring the lead unstars the whole fold");
+  assert.equal((await actions.star({ review: lead, starred: true }, installed.nowMs)).status, 200);
+  // Another review in the fold becomes the newest, so the lead changes.
+  const other = ["r_old1", "r_old2", "r_old3"].find((id) => id !== lead);
+  const later = new Date(installed.nowMs);
+  fs.utimesSync(stateDir.eventsPath(installed.dir, other), later, later);
+  assert.equal((await foldRow()).id, other, "the lead changed");
+  assert.equal((await actions.star({ review: other, starred: false }, installed.nowMs)).status, 200);
+  assert.equal((await foldRow()).starred, false, "unstarred through the new lead");
+});
+
+test("CL2: an agent whose monitor exited to work a batch still counts as watching, so a hand-over asks first", async (t) => {
+  const w = await world(t);
+  // The monitor beat long ago and exited on work; the agent ran a lahe
+  // command just now, which is what the queue counts as listening too.
+  beat(w.store, "s_doc", T0 - 10 * protocol.MONITOR.HEARTBEAT_FRESH_MS, "s_doc");
+  stateDir.writeAtomic(stateDir.activityPath(w.dir, "s_doc"), JSON.stringify({ [protocol.MONITOR.ACTIVITY_FIELD.AT]: new Date(T0).toISOString() }) + "\n");
+  const res = await api(w, "catalog.open", { review: "r_page", handoff: true });
+  assert.equal(res.status, 409, res.text);
+  assert.equal(res.json.error.code, "PROTO_CONFIRM_NEEDED");
+  const listed = await api(w, "catalog.list");
+  assert.deepEqual(listed.json.sessions.find((s) => s.id === "s_doc").watching, { session: "s_doc", name: "doc session" });
+});
+
+test("catalog.request refuses a missing review with PROTO_NOT_OPENABLE, as Open does, and queues nothing", async (t) => {
+  const w = await world(t);
+  for (const action of ["pickup", "launch"]) {
+    const res = await api(w, "catalog.request", { review: "r_gone", action });
+    assert.equal(res.status, 409, action + ": " + res.text);
+    assert.equal(res.json.error.code, "PROTO_NOT_OPENABLE");
+    assert.match(res.json.error.detail, /missing/);
+  }
+  assert.equal(queueLines(w.dir).length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// Story walk (phase 7), Builder B
+// ---------------------------------------------------------------------------
+
+/** An item.ready event on `pagePath`, in the shape the rail writes. */
+function itemOn(reviewId, pagePath, n) {
+  return JSON.stringify({
+    event: "item.ready", event_id: "ev_walk_" + n, ts: new Date(T0 - 60 * MINUTE).toISOString(), seq: 100 + n,
+    review: reviewId, item: "itm_walk_" + n, rev: 1, page_path: pagePath, page_title: "Page " + n, page_seq: 1,
+    source_hint: null, draft: false,
+    record: {
+      id: "itm_walk_" + n, rev: 1, kind: "comment", state: "ready", note: "a comment", change: null, before: null, after: null,
+      before_html: null, after_html: null, after_history: [],
+      region: { ref: null, label: null, lost: null, accepted_page_texts: [], check_reopen: null },
+      context: { quote: null, prefix: null, suffix: null, heading: null, element: null, subject: null },
+      page_origin: "http://127.0.0.1:4321", page_path: pagePath, page_title: "Page " + n, page_seq: 1, source_hint: null,
+      reverts: null, reply: null, handled_not_on_page: false, thread: [],
+      created_at: new Date(T0 - 60 * MINUTE).toISOString(), updated_at: new Date(T0 - 60 * MINUTE).toISOString()
+    }
+  });
+}
+
+/** A folder review of s_doc: a folder of pages with no index.html, served by its own server. */
+function folderReview(withComments) {
+  return async ({ root, dir, reviews }) => {
+    const folder = path.join(root, "forge-docs");
+    fs.mkdirSync(folder);
+    fs.writeFileSync(path.join(folder, "01_brief.html"), "<!doctype html><title>Brief</title><p>the brief</p>");
+    fs.writeFileSync(path.join(folder, "02_arch.html"), "<!doctype html><title>Arch</title><p>the architecture</p>");
+    reviews.create({ id: "r_folder", agent_session_id: "s_doc", target_path: folder });
+    const server = await staticServers.start({ dir, sessionId: "s_doc", root: folder });
+    reviews.registerOrigin("r_folder", "http://127.0.0.1:" + server.meta.port);
+    if (withComments) fs.appendFileSync(stateDir.eventsPath(dir, "r_folder"), itemOn("r_folder", "/02_arch.html", 1) + "\n");
+  };
+}
+
+test("walk: Open on a closed folder review with no index.html opens the entry page lahe review opens, not a not-found root", async (t) => {
+  const w = await world(t, { setup: folderReview(false) });
+  await staticServers.stopAll(w.dir, "s_doc");
+  w.store.close("s_doc");
+  const res = await api(w, "catalog.open", { review: "r_folder" });
+  assert.equal(res.status, 200, res.text);
+  assert.match(res.json.url, /\/01_brief\.html$/);
+  const served = await fetchText(res.json.url);
+  assert.equal(served.status, 200);
+  assert.match(served.text, /the brief/);
+});
+
+test("walk: Open on a closed folder review opens the page its comments are on", async (t) => {
+  const w = await world(t, { setup: folderReview(true) });
+  await staticServers.stopAll(w.dir, "s_doc");
+  w.store.close("s_doc");
+  const res = await api(w, "catalog.open", { review: "r_folder" });
+  assert.equal(res.status, 200, res.text);
+  assert.match(res.json.url, /\/02_arch\.html$/);
+  assert.match((await fetchText(res.json.url)).text, /the architecture/);
+  const listed = await api(w, "catalog.list");
+  const row = listed.json.sessions.find((x) => x.id === "s_doc").reviews.find((r) => r.id === "r_folder");
+  assert.match(row.served_url, /\/02_arch\.html$/, "the list's served link lands on the same page");
+});
+
+test("walk: when the attached agent already owns the document's session, Open and Pick this up queue nothing", async (t) => {
+  const w = await world(t);
+  catalogRequests.writeAttach(w.dir, "s_doc", T0 - MINUTE);
+  beat(w.store, "s_doc", T0 - 10 * protocol.MONITOR.HEARTBEAT_FRESH_MS, "s_doc");
+  stateDir.writeAtomic(stateDir.activityPath(w.dir, "s_doc"), JSON.stringify({ [protocol.MONITOR.ACTIVITY_FIELD.AT]: new Date(T0).toISOString() }) + "\n");
+  const open = await api(w, "catalog.open", { review: "r_page", handoff: true, confirmed: true });
+  assert.equal(open.status, 200, open.text);
+  assert.equal(open.json.request_id, null);
+  assert.equal(open.json.not_asked, null);
+  const pick = await api(w, "catalog.request", { review: "r_page", action: "pickup", confirmed: true });
+  assert.equal(pick.status, 200, pick.text);
+  assert.equal(pick.json.request_id, null);
+  assert.equal(queueLines(w.dir).length, 0, "nothing queued");
+});
+
+test("walk: right after the agent answers a pick-up, its session card still names it as watching", async (t) => {
+  const w = await world(t);
+  // The agent took s_doc over and added it to its monitor, which then exited
+  // to work the request: every heartbeat is stale. Answering stamped the
+  // agent's own session active.
+  const later = T0 + 10 * protocol.MONITOR.HEARTBEAT_FRESH_MS;
+  w.clock.now = later;
+  beat(w.store, "s_doc", T0, "s_agent");
+  stateDir.writeAtomic(stateDir.activityPath(w.dir, "s_agent"), JSON.stringify({ [protocol.MONITOR.ACTIVITY_FIELD.AT]: new Date(later).toISOString() }) + "\n");
+  const listed = await api(w, "catalog.list");
+  assert.deepEqual(listed.json.sessions.find((x) => x.id === "s_doc").watching, { session: "s_agent", name: "library agent" });
+});
+
+test("walk: a folder review's recorded page that climbs out, is hidden, or is not a page falls back to the entry page", async (t) => {
+  const hostile = ["/../outside.html", "/%2e%2e/outside.html", "/.hidden/x.html", "//evil.test/x.html", "/notes.txt"];
+  const w = await world(t, {
+    setup: async (ctx) => {
+      await folderReview(false)(ctx);
+      fs.writeFileSync(path.join(ctx.root, "outside.html"), SECRET);
+      const folder = path.join(ctx.root, "forge-docs");
+      fs.mkdirSync(path.join(folder, ".hidden"));
+      fs.writeFileSync(path.join(folder, ".hidden", "x.html"), "hidden");
+      fs.writeFileSync(path.join(folder, "notes.txt"), "notes");
+      const lines = hostile.map((p, i) => itemOn("r_folder", p, 10 + i)).join("\n") + "\n";
+      fs.appendFileSync(stateDir.eventsPath(ctx.dir, "r_folder"), lines);
+    }
+  });
+  const res = await api(w, "catalog.open", { review: "r_folder" });
+  assert.equal(res.status, 200, res.text);
+  assert.match(res.json.url, /\/01_brief\.html$/);
 });

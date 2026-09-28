@@ -101,10 +101,12 @@ test("a refused pick-up does not offer the hand-off message", () => {
   assert.equal(r.note.copyHandoff, false);
 });
 
-test("an expired request says the agent did not answer", () => {
+test("an expired request from the list words its reason", () => {
   const list = freshList();
+  // The reader's own fixture: this request expired on a dead monitor.
+  assert.equal(reviewIn(list, "r_wt_gone").request.reason, "monitor_dead");
   const r = row(build(list, okState()), "r_wt_gone");
-  assert.equal(r.note.text, "Not picked up. document index didn't answer.");
+  assert.equal(r.note.text, "Not picked up. document index stopped watching before it answered.");
   assert.equal(r.buttons.pickup.busy, false);
 });
 
