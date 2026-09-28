@@ -283,24 +283,12 @@ test("cache: a change with the same modified time and a new size is seen", async
 
 // --- openable and kind -------------------------------------------------------------
 
-test("openable is yes exactly when servesPath is true for a recorded server, mounts included", async () => {
+test("openable is yes exactly when static_servers.coveragePath covers the file for a recorded server, mounts included", async () => {
+  // The coverage rule lives once, in static_servers.js; servesPath is that rule
+  // plus "running right now" (tested there). Open restarts stopped servers, so
+  // the reader asks the rule alone, and every row whose document is on disk
+  // must agree with it.
   const { reader, installed } = setup();
-  // servesPath also asks whether the server is running right now; Open restarts
-  // stopped servers, so here every record is made to look live first and the
-  // two answers must agree on every row whose document is on disk.
-  const sessionsDir = path.join(installed.dir, "agent-sessions");
-  fs.readdirSync(sessionsDir).forEach((sid) => {
-    const serversDir = path.join(sessionsDir, sid, "static-servers");
-    if (!fs.existsSync(serversDir)) return;
-    fs.readdirSync(serversDir).forEach((name) => {
-      const file = path.join(serversDir, name);
-      let meta;
-      try { meta = JSON.parse(fs.readFileSync(file, "utf8")); } catch (err) { return; }
-      meta.pid = process.pid;
-      meta.stopped_at = null;
-      fs.writeFileSync(file, JSON.stringify(meta, null, 2) + "\n");
-    });
-  });
   const list = await reader.list(installed.nowMs);
   let compared = 0;
   rows(list).forEach((r) => {
@@ -308,8 +296,10 @@ test("openable is yes exactly when servesPath is true for a recorded server, mou
     const d = reader.describeReview(r.id, installed.nowMs);
     if (!d.path || !fs.existsSync(d.path)) return;
     const meta = JSON.parse(fs.readFileSync(path.join(installed.dir, "reviews", r.id, "meta.json"), "utf8"));
-    const served = staticServers.servesPath(installed.dir, r.session_id, meta.target_path);
-    assert.equal(r.openable === "yes", served, r.id + ": openable " + r.openable + ", servesPath " + served);
+    const covered = staticServers
+      .list(installed.dir, r.session_id)
+      .some((record) => staticServers.coveragePath(record, meta.target_path) !== null);
+    assert.equal(r.openable === "yes", covered, r.id + ": openable " + r.openable + ", covered " + covered);
     compared += 1;
   });
   assert.ok(compared >= 8, "compared " + compared + " rows");

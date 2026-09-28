@@ -88,18 +88,6 @@ function hasHiddenSegment(rel) {
   });
 }
 
-function isUnder(base, candidate) {
-  return candidate === base || candidate.indexOf(base + path.sep) === 0;
-}
-
-function encodePath(rel) {
-  return rel
-    .split(path.sep)
-    .filter(function (s) { return s.length > 0; })
-    .map(encodeURIComponent)
-    .join("/");
-}
-
 /**
  * @param {{dir: string, home?: string, readFile?: function, pidAlive?: function,
  *          probe?: function, attachment?: function, requestFor?: function}} options
@@ -251,48 +239,11 @@ function createReader(options) {
     return out;
   }
 
-  /**
-   * Does a recorded server cover this file? The containment half of
-   * static_servers.servesPath (root, logical root, and every mount), without
-   * its "running right now" half: Open restarts a stopped server, so a stopped
-   * record still makes a review openable.
-   *
-   * @returns {string|null} the URL path the file has on that server
-   */
-  function coverage(meta, file) {
-    var target = path.resolve(file);
-    var candidates = [target];
-    try {
-      var real = fs.realpathSync(target);
-      if (real !== target) candidates.push(real);
-    } catch (err) {
-      // the plain path still answers
-    }
-    var bases = [];
-    if (typeof meta.root === "string" && meta.root) bases.push({ base: meta.root, prefix: "/" });
-    if (typeof meta.logical_root === "string" && meta.logical_root) bases.push({ base: meta.logical_root, prefix: "/" });
-    if (meta.mounts && typeof meta.mounts === "object") {
-      Object.keys(meta.mounts).forEach(function (prefix) {
-        if (typeof meta.mounts[prefix] === "string" && meta.mounts[prefix]) {
-          bases.push({ base: meta.mounts[prefix], prefix: prefix });
-        }
-      });
-    }
-    for (var i = 0; i < bases.length; i += 1) {
-      for (var j = 0; j < candidates.length; j += 1) {
-        if (isUnder(bases[i].base, candidates[j])) {
-          return bases[i].prefix + encodePath(path.relative(bases[i].base, candidates[j]));
-        }
-      }
-    }
-    return null;
-  }
-
   /** The record that would serve this file: a running one first, then the newest. */
   function coveringRecord(records, file) {
     var best = null;
     records.forEach(function (meta) {
-      var urlPath = coverage(meta, file);
+      var urlPath = staticServers.coveragePath(meta, file);
       if (urlPath === null) return;
       var candidate = { meta: meta, urlPath: urlPath };
       if (!best) best = candidate;
