@@ -679,24 +679,64 @@ function servesPath(dir, sessionId, filePath) {
   if (typeof dir !== "string" || typeof sessionId !== "string" || typeof filePath !== "string") return false;
   var entries;
   try { entries = list(dir, sessionId); } catch (err) { return false; }
-  var target = path.resolve(filePath);
-  var realTarget = target;
-  try { realTarget = fs.realpathSync(target); } catch (err) { /* the plain path still answers */ }
   return entries.some(function (meta) {
     if (meta.stopped_at) return false;
     if (typeof meta.pid !== "number") return false;
     try { process.kill(meta.pid, 0); } catch (err) { return false; }
-    var roots = [meta.root, meta.logical_root];
-    if (meta.mounts && typeof meta.mounts === "object") {
-      Object.keys(meta.mounts).forEach(function (prefix) { roots.push(meta.mounts[prefix]); });
-    }
-    return roots.some(function (base) {
-      if (typeof base !== "string" || !base) return false;
-      return [target, realTarget].some(function (candidate) {
-        return candidate === base || candidate.indexOf(base + path.sep) === 0;
-      });
-    });
+    return coveragePath(meta, filePath) !== null;
   });
+}
+
+/**
+ * Which files a server's root and mounts cover, and the URL path each has there.
+ *
+ * ONE RULE, ONE PLACE. servesPath asks this plus "is that server running right
+ * now". The Library's reader asks this alone: Open restarts a stopped server,
+ * so a stopped record still makes its review openable, and a second copy of
+ * the containment half is how the two would drift apart.
+ *
+ * A file is covered when it (or its real path) is the server's root, its
+ * logical root (the pre-realpath spelling `lahe review` recorded), or a mount,
+ * or sits under one. Roots come first, then mounts in their recorded order.
+ *
+ * @param {object} meta an ss_*.json record
+ * @param {string} filePath an absolute path
+ * @returns {string|null} the URL path the file has on that server, or null
+ */
+function coveragePath(meta, filePath) {
+  if (!meta || typeof meta !== "object" || typeof filePath !== "string" || !filePath) return null;
+  var target = path.resolve(filePath);
+  var candidates = [target];
+  try {
+    var real = fs.realpathSync(target);
+    if (real !== target) candidates.push(real);
+  } catch (err) {
+    // the plain path still answers
+  }
+  var bases = [];
+  if (typeof meta.root === "string" && meta.root) bases.push({ base: meta.root, prefix: "/" });
+  if (typeof meta.logical_root === "string" && meta.logical_root) bases.push({ base: meta.logical_root, prefix: "/" });
+  if (meta.mounts && typeof meta.mounts === "object") {
+    Object.keys(meta.mounts).forEach(function (prefix) {
+      if (typeof meta.mounts[prefix] === "string" && meta.mounts[prefix]) {
+        bases.push({ base: meta.mounts[prefix], prefix: prefix });
+      }
+    });
+  }
+  for (var i = 0; i < bases.length; i += 1) {
+    for (var j = 0; j < candidates.length; j += 1) {
+      var base = bases[i].base;
+      var candidate = candidates[j];
+      if (candidate === base || candidate.indexOf(base + path.sep) === 0) {
+        return bases[i].prefix + path.relative(base, candidate)
+          .split(path.sep)
+          .filter(function (segment) { return segment.length > 0; })
+          .map(encodeURIComponent)
+          .join("/");
+      }
+    }
+  }
+  return null;
 }
 
 /**
@@ -1045,6 +1085,7 @@ module.exports = {
   SCHEMA: SCHEMA,
   LIBRARY_PATH: LIBRARY_PATH,
   servesPath: servesPath,
+  coveragePath: coveragePath,
   serverId: serverId,
   isExactServer: isExactServer,
   list: list,

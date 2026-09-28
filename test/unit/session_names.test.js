@@ -230,3 +230,51 @@ test("`lahe review --name` names a session this call created or was handed, and 
   assert.match(inferred.note, /lahe session name s_other/);
   assert.equal(inferred.note.split("\n").filter(Boolean).length, 1, "one line");
 });
+
+// ---------------------------------------------------------------------------
+// `lahe session name <id> --from-review <review>` (LAHE Library 2.1, Launch)
+// ---------------------------------------------------------------------------
+//
+// A launched agent's session is named after the document. The CLI reads the
+// review's display name itself, so a page-set title never passes through a
+// shell string.
+
+function reviewWithTitle(dir, id, sessionId, title) {
+  const doc = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "lahe-from-review-doc-")), "doc.html");
+  fs.writeFileSync(doc, "<p>doc</p>");
+  const log = logModule.createEventLog({ dir });
+  reviewsModule.createReviews({ dir, log }).create({ id, agent_session_id: sessionId, target_path: doc });
+  const file = require("../../src/service/state_dir.js").reviewJsonPath(dir, id);
+  fs.writeFileSync(file, JSON.stringify({ review: {}, pages: [{ title, path: "/doc.html", items: [] }] }));
+  const later = new Date(Date.now() + 60 * 1000);
+  fs.utimesSync(file, later, later);
+}
+
+test("`lahe session name <id> --from-review <review>` names the session after the review's display name", async () => {
+  const dir = tempState();
+  agentSessions.createStore({ dir }).create({ id: "s_doc" });
+  reviewWithTitle(dir, "r_doc", "s_doc", "Feature Brief: \"Quoted\" $(touch /tmp/nope)");
+  const result = await runSession(["name", "s_doc", "--from-review", "r_doc", "--state-dir", dir]);
+  assert.equal(result.code, protocol.CLI_EXIT.OK, result.stderr);
+  assert.equal(agentSessions.createStore({ dir }).read("s_doc").name, "Feature Brief: \"Quoted\" $(touch /tmp/nope)");
+  assert.match(result.stdout, /agent session s_doc is named "Feature Brief/);
+});
+
+test("`--from-review` refuses an unknown review, a review of another session, and a missing review id", async () => {
+  const dir = tempState();
+  const store = agentSessions.createStore({ dir });
+  store.create({ id: "s_doc" });
+  store.create({ id: "s_other" });
+  reviewWithTitle(dir, "r_doc", "s_doc", "Doc");
+  const unknown = await runSession(["name", "s_doc", "--from-review", "r_ghost", "--state-dir", dir]);
+  assert.equal(unknown.code, 1);
+  assert.match(unknown.stderr, /no review "r_ghost"/);
+  const other = await runSession(["name", "s_other", "--from-review", "r_doc", "--state-dir", dir]);
+  assert.equal(other.code, 1);
+  assert.match(other.stderr, /review r_doc belongs to agent session s_doc, not s_other/);
+  assert.equal(store.read("s_other").name, undefined);
+  const bare = await runSession(["name", "s_doc", "--from-review"]);
+  assert.equal(bare.code, protocol.CLI_EXIT.BAD_USAGE);
+  const unsafe = await runSession(["name", "s_doc", "--from-review", "../x"]);
+  assert.equal(unsafe.code, protocol.CLI_EXIT.BAD_USAGE);
+});

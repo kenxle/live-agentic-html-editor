@@ -14,6 +14,7 @@ var service = require("../../service/index.js");
 var sourceStamp = require("../../service/source_stamp.js");
 var reviewsModule = require("../../service/reviews.js");
 var staticServers = require("../../service/static_servers.js");
+var catalogReader = require("../../service/catalog_reader.js");
 
 var statusCommand = require("./status.js");
 var projection = require("../../service/projection.js");
@@ -33,7 +34,9 @@ var USAGE = [
   "  takeover  explicitly continue another agent's session, only when the human asks for it.",
   "            --name \"<name>\" records the human's name for your session at the same time",
   "  name      lahe session name <id> \"<name>\": the human's name for this session, shown on",
-  "            the reviewer's rail so they know which agent to check. \"\" clears it",
+  "            the reviewer's rail so they know which agent to check. \"\" clears it.",
+  "            lahe session name <id> --from-review <review> names it after that review's",
+  "            document, as the Library shows it",
   "",
   "  --json    with list: one JSON object per session, then one summary line"
 ].join("\n");
@@ -62,7 +65,13 @@ function parse(argv) {
   var naming = action === "name";
   var out = { action: action, id: listing ? null : list[1] || null, port: null, stateDir: null, json: false };
   var start = listing ? 1 : 2;
-  if (naming) {
+  if (naming && list[2] === "--from-review") {
+    // The Library's Launch: name the session after a review's display name,
+    // read here from the state dir, so the title never passes through a shell.
+    if (!protocol.isSafeId(list[3])) return { error: "--from-review takes a review id: lahe session name <id> --from-review <review>" };
+    out.fromReview = String(list[3]);
+    start = 4;
+  } else if (naming) {
     if (list.length < 3 || /^--/.test(String(list[2]))) return { error: "name takes a session id and a name: lahe session name <id> \"<name>\"" };
     out.name = String(list[2]);
     start = 3;
@@ -105,6 +114,44 @@ async function stopVerifiedHelper(dir) {
   }, 10000);
   if (!stopped) throw new Error("the helper did not stop within 10 seconds");
   return true;
+}
+
+/**
+ * Should the last `session close` leave the helper running? (LAHE Library,
+ * architecture "Helper lifetime (R10a)".)
+ *
+ * The Library is the first page that must outlive every session: a reviewer
+ * browsing it, or reading a document it opened, would otherwise lose both the
+ * moment the last agent closed its session. So the helper stays up when:
+ *
+ *   - the Library page polled it within LIBRARY_SEEN_MS (health's
+ *     catalog_seen_at, which only an authenticated list moves), or
+ *   - any document window is still held (the same windows.json read the CLI
+ *     already makes before replacing a helper).
+ *
+ * There is no self-stop timer: the helper stops at the next close that finds
+ * everything quiet, or at a restart.
+ *
+ * @param {string} dir
+ * @param {number} nowMs
+ * @returns {Promise<{keep: boolean, why: string|null}>}
+ */
+async function helperStillWanted(dir, nowMs) {
+  var ready = readReady(dir);
+  if (ready && typeof ready.port === "number") {
+    var live = await service.probeHealth(protocol.DEFAULT_HOST, ready.port);
+    var seen = live ? Date.parse(live[protocol.HEALTH_FIELD.CATALOG_SEEN_AT]) : NaN;
+    if (!Number.isNaN(seen) && nowMs - seen < protocol.CATALOG.LIBRARY_SEEN_MS) {
+      return {
+        keep: true,
+        why: "the Library page polled it " + Math.max(0, Math.round((nowMs - seen) / 1000)) + "s ago"
+      };
+    }
+  }
+  if (reviewsModule.readLiveHolders(dir, reviewsModule.LIVE_WINDOW_MS, nowMs).length > 0) {
+    return { keep: true, why: "for an open review page" };
+  }
+  return { keep: false, why: null };
 }
 
 /**
@@ -390,7 +437,18 @@ async function run(argv, options) {
   var store = sessions.createStore({ dir: dir });
   try {
     if (args.action === "name") {
-      var renamed = store.setName(args.id, args.name);
+      var newName = args.name;
+      if (args.fromReview) {
+        var described = catalogReader.createReader({ dir: dir }).describeReview(args.fromReview, opts.now);
+        if (!described) throw new Error("no review " + JSON.stringify(args.fromReview) + " in " + dir);
+        if (described.session !== args.id) {
+          throw new Error(
+            "review " + args.fromReview + " belongs to agent session " + described.session + ", not " + args.id
+          );
+        }
+        newName = described.display_name;
+      }
+      var renamed = store.setName(args.id, newName);
       out(
         "agent session " + args.id +
           (renamed.name ? " is named " + JSON.stringify(renamed.name) : " has no name now") + "\n"
@@ -399,11 +457,17 @@ async function run(argv, options) {
       var staticStopped = await staticServers.stopAll(dir, args.id);
       store.close(args.id);
       var stopped = false;
-      if (store.openSessions().length === 0) stopped = await stopVerifiedHelper(dir);
+      var kept = null;
+      if (store.openSessions().length === 0) {
+        var wanted = await helperStillWanted(dir, typeof opts.now === "number" ? opts.now : Date.now());
+        if (wanted.keep) kept = wanted.why;
+        else stopped = await stopVerifiedHelper(dir);
+      }
       out(
         "agent session " + args.id + " closed; review history kept" +
           (staticStopped ? "; static review server" + (staticStopped === 1 ? "" : "s") + " stopped" : "") +
-          (stopped ? "; shared helper stopped" : "") + "\n"
+          (stopped ? "; shared helper stopped" : "") +
+          (kept ? "; shared helper left running" + (/^for /.test(kept) ? " " : ": ") + kept : "") + "\n"
       );
     } else {
       var handedOff = args.action === "takeover";
@@ -457,6 +521,7 @@ module.exports = {
   listLine: listLine,
   watcherText: watcherText,
   stopVerifiedHelper: stopVerifiedHelper,
+  helperStillWanted: helperStillWanted,
   startHelper: startHelper,
   run: run
 };

@@ -197,13 +197,22 @@ test("catalog.page and catalog.asset refuse same-site, cross-site, a missing Sec
 // The API routes
 // ---------------------------------------------------------------------------
 
-test("catalog.list, open, star and request pass the checks with the Library token (stubbed to 501 until Task 2.1)", async () => {
+/**
+ * Did this answer come from the route's handler rather than the check block?
+ * A check refusal always names its check; a handler's own answer never does.
+ * (The handlers themselves are tested in catalog_routes.test.js.)
+ */
+function reachedHandler(res) {
+  return res.status !== 501 && !(res.json && res.json.error && res.json.error.check);
+}
+
+test("catalog.list, open, star and request pass the checks with the Library token and reach their handlers", async () => {
   const helper = await startHelper();
   try {
     const token = await libraryToken(helper.port);
     for (const r of API_ROUTES) {
       const res = await callApi(helper.port, token, r);
-      assert.equal(res.status, 501, r.name + " reaches its handler");
+      assert.ok(reachedHandler(res), r.name + " reaches its handler: " + res.status + " " + res.text);
       assert.equal(hasCorsHeader(res.headers), false, r.name + " sends no CORS header");
     }
   } finally {
@@ -266,7 +275,7 @@ test("the POSTs refuse text/plain, a missing Origin, Origin null, another port, 
         host: "localhost:" + port,
         origin: "http://localhost:" + port
       });
-      assert.equal(viaLocalhost.status, 501, r.name + " from localhost to localhost");
+      assert.ok(reachedHandler(viaLocalhost), r.name + " from localhost to localhost: " + viaLocalhost.text);
     }
   } finally {
     await helper.close();

@@ -938,6 +938,39 @@ with no file bytes. An allowlisted file not on disk yet is a 404 too.
 | `PROTO_CONFIRM_NEEDED` | 409 | A hand-over on a watched session without `confirmed` |
 | `PROTO_CATALOG_UNREADABLE` | 500 | `catalog.json` is corrupt |
 
+**What the API routes answer** (`src/service/catalog_actions.js`). Nothing in a body names a file, a
+root or a URL, and fields a route does not list are never read.
+
+| Route | Body | Answer |
+|---|---|---|
+| `catalog.list` | none | the list response (architecture, "The list response"), plus `notice`. Marks `catalog_seen_at` |
+| `catalog.open` | `{review, handoff, confirmed}` | `{url, request_id, not_asked}` |
+| `catalog.star` | `{review, starred}`, `starred` a boolean | `{review, starred}` |
+| `catalog.request` | `{review, action, confirmed}`, `action` `pickup` or `launch` | `{request_id}` |
+
+- **Open restarts only the recorded server that covers the review's recorded file**
+  (`static_servers.coveragePath`, the rule `servesPath` uses too) and answers with that server's own
+  loopback origin plus the file's path on it. A served review starts nothing. A review whose session was
+  closed is reopened and recorded in `catalog.json`'s `reopened` map for the sweep.
+- **`PROTO_NOT_OPENABLE` carries its reason in `error.detail`:** `missing`, `via-agent` (no recorded
+  server covers it and no hand-over was asked), `unknown review`, `not owned by the current user`, or
+  `the recorded server could not be restarted`.
+- **A `via-agent` row's Open is its pick-up.** With `handoff` and a live attached agent it queues one and
+  answers `url: null`; with no live agent it is `PROTO_NO_AGENT`.
+- **`not_asked`** says why an Open that opened asked no agent: `no_agent`, `queue_full`, or
+  `request_pending`. It is null when a request was queued, when none was asked for, and when the
+  attached agent is already the one watching.
+- **The confirm step comes first.** A hand-over (Open with `handoff`, or a request) on a session another
+  agent is watching, without `confirmed`, is `PROTO_CONFIRM_NEEDED`, and nothing is restarted or queued.
+- **One `catalog` line per Open, Star, unstar, Pick up and Launch** in the helper log, in the format
+  `protocol.catalogLogLine` spells, stamped with the helper's clock. A refused action writes none.
+
+**The reopened-session sweep.** Every `CATALOG.POLL_MS` the helper closes (quietly: its servers stop,
+the helper stays) each session the Library reopened once nothing has happened in it for
+`CATALOG.REOPENED_AUTOCLOSE_MS`: not the reopen itself, and no held window of any of its reviews. It
+leaves alone a session reopened with `lahe session reopen` (not in the map), one taken over since (its
+`handoff_rev` moved; the entry is dropped), and one whose monitor is live.
+
 **Residual risk, stated.** The Library token is readable by any script running on the Library page
 itself. That page runs only the helper's own scripts under `script-src 'self'` and renders page-derived
 text with `textContent`, and it is framed by nothing. A local process that is not a browser can still

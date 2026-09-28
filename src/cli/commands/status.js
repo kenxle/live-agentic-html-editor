@@ -52,6 +52,7 @@ var reviewFormat = require("../../shared/review_format.js");
 var healModule = require("../../service/heal.js");
 var staticServersModule = require("../../service/static_servers.js");
 var catalogRequestsModule = require("../../service/catalog_requests.js");
+var catalogReaderModule = require("../../service/catalog_reader.js");
 
 // Shared CLI codes. OK means status completed, whether or not it found an item.
 var EXIT = protocol.CLI_EXIT;
@@ -486,13 +487,50 @@ function readFromDisk(dir, reviewId) {
 //
 // The entry's id and helper-value fields are filled here. `kind` and the four
 // page-text fields (title, path, candidate, handoff) come from the describe
-// step, which is 1.1's describeReview once Task 2.1 wires it in. The page-text
-// fields are data, classed so in PROJECTED_FIELD_CLASS, and line one of every
-// --json drain carries those classes.
+// step, which by default is the catalog reader's describeReview (Library 2.1):
+// one description of a review, shared with the Library's own list, so the
+// drain and the page can never name a document two ways. The page-text fields
+// are data, classed so in PROJECTED_FIELD_CLASS, and line one of every --json
+// drain carries those classes.
 
-/** The describe step before 2.1 wires it: nothing known, every field null. */
-function describeNothing() {
-  return { kind: null, title: null, path: null, candidate: null, handoff: null };
+/**
+ * The default describe step: the reader's describeReview, plus the rail's own
+ * hand-off message for the document's session.
+ *
+ * One reader per drain, made only when there is a request to describe, so an
+ * idle monitor poll never scans the state dir. `candidate` is the reader's,
+ * already checked (under the repository by real path, no hidden segment, owned
+ * by this user, a page) or null. The request itself never carries a path.
+ */
+function readerDescriber(dir, nowMs) {
+  var reader = null;
+  var sessions = agentSessionsModule.createStore({ dir: dir });
+  return function (request) {
+    if (!reader) reader = catalogReaderModule.createReader({ dir: dir });
+    var described = reader.describeReview(request.review, nowMs);
+    var sessionId = request.session;
+    var name = null;
+    try {
+      var session = sessions.read(sessionId);
+      name = session ? agentSessionsModule.cleanName(session.name) : null;
+    } catch (err) {
+      name = null;
+    }
+    // "legacy" is not a session anybody can take over; the message then points
+    // the new agent at `lahe session list` instead.
+    var takeable = protocol.isSafeId(sessionId) && sessionId !== agentSessionsModule.LEGACY_ID;
+    return {
+      kind: described ? described.kind : null,
+      title: described ? described.display_name : null,
+      path: described ? described.path : null,
+      candidate: described ? described.candidate : null,
+      handoff: protocol.AGENT_LIVENESS.handoffMessage(
+        takeable ? sessionId : null,
+        takeable ? name : null,
+        !!stateDirModule.flagFor(dir)
+      )
+    };
+  };
 }
 
 var DESCRIBED_FIELDS = ["kind", "title", "path", "candidate", "handoff"];
@@ -512,7 +550,7 @@ function movesWith(dir, request) {
 function catalogEntries(dir, sessionId, nowMs, describe) {
   var queue = catalogRequestsModule.createQueue({ dir: dir });
   var pending = sessionId ? queue.pendingFor(sessionId, nowMs) : queue.pending(nowMs);
-  var describer = typeof describe === "function" ? describe : describeNothing;
+  var describer = typeof describe === "function" ? describe : readerDescriber(dir, nowMs);
   return pending.map(function (request) {
     var described = describer(request, { dir: dir }) || {};
     var fields = {};

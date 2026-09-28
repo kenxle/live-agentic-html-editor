@@ -283,24 +283,12 @@ test("cache: a change with the same modified time and a new size is seen", async
 
 // --- openable and kind -------------------------------------------------------------
 
-test("openable is yes exactly when servesPath is true for a recorded server, mounts included", async () => {
+test("openable is yes exactly when static_servers.coveragePath covers the file for a recorded server, mounts included", async () => {
+  // The coverage rule lives once, in static_servers.js; servesPath is that rule
+  // plus "running right now" (tested there). Open restarts stopped servers, so
+  // the reader asks the rule alone, and every row whose document is on disk
+  // must agree with it.
   const { reader, installed } = setup();
-  // servesPath also asks whether the server is running right now; Open restarts
-  // stopped servers, so here every record is made to look live first and the
-  // two answers must agree on every row whose document is on disk.
-  const sessionsDir = path.join(installed.dir, "agent-sessions");
-  fs.readdirSync(sessionsDir).forEach((sid) => {
-    const serversDir = path.join(sessionsDir, sid, "static-servers");
-    if (!fs.existsSync(serversDir)) return;
-    fs.readdirSync(serversDir).forEach((name) => {
-      const file = path.join(serversDir, name);
-      let meta;
-      try { meta = JSON.parse(fs.readFileSync(file, "utf8")); } catch (err) { return; }
-      meta.pid = process.pid;
-      meta.stopped_at = null;
-      fs.writeFileSync(file, JSON.stringify(meta, null, 2) + "\n");
-    });
-  });
   const list = await reader.list(installed.nowMs);
   let compared = 0;
   rows(list).forEach((r) => {
@@ -308,8 +296,10 @@ test("openable is yes exactly when servesPath is true for a recorded server, mou
     const d = reader.describeReview(r.id, installed.nowMs);
     if (!d.path || !fs.existsSync(d.path)) return;
     const meta = JSON.parse(fs.readFileSync(path.join(installed.dir, "reviews", r.id, "meta.json"), "utf8"));
-    const served = staticServers.servesPath(installed.dir, r.session_id, meta.target_path);
-    assert.equal(r.openable === "yes", served, r.id + ": openable " + r.openable + ", servesPath " + served);
+    const covered = staticServers
+      .list(installed.dir, r.session_id)
+      .some((record) => staticServers.coveragePath(record, meta.target_path) !== null);
+    assert.equal(r.openable === "yes", covered, r.id + ": openable " + r.openable + ", covered " + covered);
     compared += 1;
   });
   assert.ok(compared >= 8, "compared " + compared + " rows");
@@ -352,6 +342,24 @@ test("describeReview gives the display name, the document's path, and a checked 
   assert.equal(gone.candidate, path.join(installed.home, "projects/alpha/docs/brief.html"));
   assert.equal(reader.describeReview("r_spec", installed.nowMs).display_name, "specs / spec.html");
   assert.equal(reader.describeReview("r_nope", installed.nowMs), null);
+});
+
+test("describeReview also names what Open needs: the covering server, the URL path on it, the served file, who is watching, and last", async () => {
+  const { reader, installed } = setup();
+  const brief = reader.describeReview("r_brief", installed.nowMs);
+  assert.equal(brief.session, "s_coach");
+  assert.equal(brief.openable, "yes");
+  assert.equal(brief.server, "ss_alphadocs");
+  assert.equal(brief.url_path, "/brief.html");
+  assert.equal(brief.served_path, path.join(installed.home, "projects/alpha/docs/brief.html"));
+  assert.deepEqual(brief.watching, { session: "s_coach", name: "coach activity" });
+  assert.equal(brief.last, "2026-09-28T15:40:00.000Z");
+  const mounted = reader.describeReview("r_mounted", installed.nowMs);
+  assert.match(mounted.url_path, /^\/\.lahe-source\/[a-f0-9]+\/figure\.html$/);
+  const dev = reader.describeReview("r_dev", installed.nowMs);
+  assert.equal(dev.server, null);
+  assert.equal(dev.url_path, null);
+  assert.equal(dev.watching, null);
 });
 
 test("a worktree candidate that is hidden, symlinked out of its repository, or not a page is null", async () => {
@@ -498,6 +506,54 @@ test("an answer stays on its row until ANSWER_SHOWN_MS, and not at it", async ()
   const limit = Date.parse(answeredAt) + protocol.CATALOG.ANSWER_SHOWN_MS;
   assert.notEqual(row(await reader.list(limit - 1), "r_brief").request, null);
   assert.equal(row(await reader.list(limit), "r_brief").request, null);
+});
+
+test("wired to 1.4's real queue: attached comes from readAttached and each row's request from requestFor", async () => {
+  const catalogRequests = require("../../src/service/catalog_requests.js");
+  const installed = fixture.install();
+  const now = installed.nowMs;
+  // The fixture's s_index is closed; the queue counts a closed session as not
+  // listening, so the attached agent is reopened first, as a live one would be.
+  require("../../src/service/agent_sessions.js").createStore({ dir: installed.dir }).reopen("s_index");
+  catalogRequests.writeAttach(installed.dir, "s_index", now - 5 * MINUTE);
+  const queue = catalogRequests.createQueue({ dir: installed.dir, writeExpired: true, pidAlive: () => true, log: () => {} });
+  const waiting = queue.append({ action: "pickup", review: "r_brief", session: "s_coach", for: "s_index" }, now - 2 * MINUTE);
+  const done = queue.append({ action: "launch", review: "r_spec", session: "s_coach", for: "s_index" }, now - 4 * MINUTE);
+  assert.equal(queue.answer({ id: done.request.id, by: "s_index", status: "done", text: "Launched claude" }, now - 3 * MINUTE).ok, true);
+  const reader = catalogReader.createReader({
+    dir: installed.dir,
+    home: installed.home,
+    pidAlive: () => true,
+    probe: async () => false,
+    attachment: queue.readAttached,
+    requestFor: queue.requestFor
+  });
+  const list = await reader.list(now);
+  assert.deepEqual(list.attached, { session: "s_index", name: "document index", watching: true });
+  assert.deepEqual(row(list, "r_brief").request, {
+    id: waiting.request.id, action: "pickup", at: waiting.request.at, state: "waiting",
+    by_name: "document index", text: null, answered_at: null
+  });
+  const answered = row(list, "r_spec").request;
+  assert.equal(answered.state, "done");
+  assert.equal(answered.by_name, "document index");
+  assert.equal(answered.text, "Launched claude");
+  assert.equal(row(list, "r_notes").request, null);
+});
+
+test("attached.watching is the queue's own answer when the attach carries one, so the header and Open agree", async () => {
+  const catalogRequests = require("../../src/service/catalog_requests.js");
+  const installed = fixture.install();
+  // s_index has a fresh heartbeat but is closed: the queue will not hand it a
+  // request, so the Library must not say it is watching.
+  catalogRequests.writeAttach(installed.dir, "s_index", installed.nowMs - 5 * MINUTE);
+  const queue = catalogRequests.createQueue({ dir: installed.dir, pidAlive: () => true, log: () => {} });
+  assert.equal(queue.readAttached(installed.nowMs).watching, false);
+  const reader = catalogReader.createReader({
+    dir: installed.dir, home: installed.home, pidAlive: () => true, probe: async () => false,
+    attachment: queue.readAttached, requestFor: queue.requestFor
+  });
+  assert.deepEqual((await reader.list(installed.nowMs)).attached, { session: "s_index", name: "document index", watching: false });
 });
 
 // --- corrupt files ---------------------------------------------------------------

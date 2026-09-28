@@ -263,6 +263,11 @@ var NON_BUNDLE_FILES = [
     why: "the helper-written request queue, catalog-requests.jsonl: append, answer, expire, pending"
   },
   {
+    path: "src/service/catalog_actions.js",
+    owner: "Library 2.1",
+    why: "what list, open, star and request do after the checks, and the reopened-session sweep: joins the reader, store, queue and static-server restart"
+  },
+  {
     path: "src/service/catalog_page.js",
     owner: "Library 1.2 (2.2 writes the template body)",
     why: "the Library page's HTML template, with the token in its meta tag"

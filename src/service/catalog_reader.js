@@ -20,8 +20,10 @@
 //
 // Two inputs come from the request queue (Library 1.4) and are passed in, so
 // this module never reads catalog-attach.json or catalog-requests.jsonl itself:
-// `attachment(now)` returns the attach record ({session, at}) or null, and
-// `requestFor(reviewId, now)` returns the latest request on a review or null.
+// `attachment(now)` returns the attach record ({session, at}, or 1.4's
+// readAttached with its own `watching`) or null, and `requestFor(reviewId,
+// now)` returns the latest request on a review (1.4's shape, with `by_name`
+// already filled, or a bare record with `by` and `for`) or null.
 //
 // ONE CORRUPT FILE DEGRADES ONE ROW. Every read is caught and turned into
 // `unreadable: true` on the row it belongs to; the rest of the list returns.
@@ -86,18 +88,6 @@ function hasHiddenSegment(rel) {
   return rel.split(/[\\/]/).some(function (segment) {
     return segment.length > 0 && segment.charAt(0) === ".";
   });
-}
-
-function isUnder(base, candidate) {
-  return candidate === base || candidate.indexOf(base + path.sep) === 0;
-}
-
-function encodePath(rel) {
-  return rel
-    .split(path.sep)
-    .filter(function (s) { return s.length > 0; })
-    .map(encodeURIComponent)
-    .join("/");
 }
 
 /**
@@ -251,48 +241,11 @@ function createReader(options) {
     return out;
   }
 
-  /**
-   * Does a recorded server cover this file? The containment half of
-   * static_servers.servesPath (root, logical root, and every mount), without
-   * its "running right now" half: Open restarts a stopped server, so a stopped
-   * record still makes a review openable.
-   *
-   * @returns {string|null} the URL path the file has on that server
-   */
-  function coverage(meta, file) {
-    var target = path.resolve(file);
-    var candidates = [target];
-    try {
-      var real = fs.realpathSync(target);
-      if (real !== target) candidates.push(real);
-    } catch (err) {
-      // the plain path still answers
-    }
-    var bases = [];
-    if (typeof meta.root === "string" && meta.root) bases.push({ base: meta.root, prefix: "/" });
-    if (typeof meta.logical_root === "string" && meta.logical_root) bases.push({ base: meta.logical_root, prefix: "/" });
-    if (meta.mounts && typeof meta.mounts === "object") {
-      Object.keys(meta.mounts).forEach(function (prefix) {
-        if (typeof meta.mounts[prefix] === "string" && meta.mounts[prefix]) {
-          bases.push({ base: meta.mounts[prefix], prefix: prefix });
-        }
-      });
-    }
-    for (var i = 0; i < bases.length; i += 1) {
-      for (var j = 0; j < candidates.length; j += 1) {
-        if (isUnder(bases[i].base, candidates[j])) {
-          return bases[i].prefix + encodePath(path.relative(bases[i].base, candidates[j]));
-        }
-      }
-    }
-    return null;
-  }
-
   /** The record that would serve this file: a running one first, then the newest. */
   function coveringRecord(records, file) {
     var best = null;
     records.forEach(function (meta) {
-      var urlPath = coverage(meta, file);
+      var urlPath = staticServers.coveragePath(meta, file);
       if (urlPath === null) return;
       var candidate = { meta: meta, urlPath: urlPath };
       if (!best) best = candidate;
@@ -675,13 +628,17 @@ function createReader(options) {
     if ((r.state === "done" || r.state === "refused") && answered) {
       if (nowMs - Date.parse(answered) >= CATALOG.ANSWER_SHOWN_MS) return null;
     }
+    // Two shapes arrive here. The queue's own requestFor (Library 1.4) has
+    // already named the agent (`by_name`, its name or its id); a bare request
+    // record carries the session ids (`by`, `for`) and is named here.
+    var byName = typeof r.by_name === "string" && r.by_name ? r.by_name : null;
     var who = typeof r.by === "string" && r.by ? r.by : typeof r.for === "string" ? r.for : null;
     return {
       id: r.id,
       action: r.action,
       at: r.at,
       state: r.state,
-      by_name: who ? nameOf(who) || who : null,
+      by_name: byName || (who ? nameOf(who) || who : null),
       text: typeof r.text === "string" ? r.text : null,
       answered_at: answered
     };
@@ -691,7 +648,12 @@ function createReader(options) {
     var a = attachment(nowMs);
     if (!a || typeof a.session !== "string" || !protocol.isSafeId(a.session) || a.session === LEGACY) return null;
     if (readSession(a.session).state === "missing") return null;
-    return { session: a.session, name: nameOf(a.session), watching: monitorLive(a.session, nowMs).live };
+    // The queue's readAttached (Library 1.4) answers `watching` with the same
+    // liveness rule it uses to hand out and expire requests, which also counts
+    // a closed session as not listening. Taking its answer keeps the header
+    // and Open from disagreeing; a bare attach record is judged here.
+    var watching = typeof a.watching === "boolean" ? a.watching : monitorLive(a.session, nowMs).live;
+    return { session: a.session, name: nameOf(a.session), watching: watching };
   }
 
   function rowOut(row, nowMs, servedUrl) {
@@ -796,14 +758,22 @@ function createReader(options) {
    * @param {string} reviewId
    * @param {number|string} [now]
    * @returns {{review: string, session: string, display_name: string, title: string|null,
-   *            path: string|null, kind: string, openable: string, candidate: string|null}|null}
+   *            path: string|null, kind: string, openable: string, candidate: string|null,
+   *            server: string|null, url_path: string|null, served_path: string|null,
+   *            watching: object|null, last: string}|null}
    *   `display_name` is the name of the row the review shows on (a folded
    *   review's is its folder's). `path` is the document's own path on disk.
    *   `candidate` is the checked main-repository copy for a gone worktree.
+   *   For Open (Library 2.1): `server` is the id of the recorded server that
+   *   covers the review's served file and `url_path` that file's path on it
+   *   (both null when none does); `served_path` is the file itself, `watching`
+   *   the session's watcher as the list shows it, and `last` the review's own
+   *   newest event time.
    */
   function describeReview(reviewId, now) {
     if (!protocol.isSafeId(reviewId)) return null;
-    var scanned = scan(toMs(now));
+    var nowMs = toMs(now);
+    var scanned = scan(nowMs);
     for (var i = 0; i < scanned.sessions.length; i += 1) {
       var s = scanned.sessions[i];
       for (var j = 0; j < s.rows.length; j += 1) {
@@ -819,7 +789,12 @@ function createReader(options) {
             path: part.info.docPath,
             kind: part.kind,
             openable: part.openable,
-            candidate: part.candidate
+            candidate: part.candidate,
+            server: part.covering ? part.covering.meta.id : null,
+            url_path: part.covering ? part.covering.urlPath : null,
+            served_path: part.info.servedPath,
+            watching: watchingOf(s.id, nowMs),
+            last: iso(part.info.lastMs)
           };
         }
       }

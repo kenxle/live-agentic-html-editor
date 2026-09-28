@@ -715,3 +715,58 @@ test("a mount still serves the document stylesheet and its fonts", async (t) => 
   const font = await request(server.meta, prefix + markdown.FONT_ASSET_DIR + "/" + markdown.FONT_ASSETS[0]);
   assert.equal(font.status, 200);
 });
+
+// ---------------------------------------------------------------------------
+// The coverage rule: which files a server's root and mounts cover (Library 2.1)
+// ---------------------------------------------------------------------------
+//
+// One rule, one place. servesPath asks it (plus "is the server running right
+// now"), and the Library's reader asks it alone, because Open restarts a
+// stopped server.
+
+test("coveragePath gives the URL path a file has under a server's root, logical root, or a mount, and null outside", () => {
+  const root = fs.realpathSync(tempDir("lahe-coverage-root-"));
+  const mounted = fs.realpathSync(tempDir("lahe-coverage-mount-"));
+  const outside = fs.realpathSync(tempDir("lahe-coverage-out-"));
+  fs.mkdirSync(path.join(root, "sub dir"));
+  fs.writeFileSync(path.join(root, "sub dir", "a page.html"), "<p>a</p>");
+  fs.writeFileSync(path.join(mounted, "fig.html"), "<p>m</p>");
+  fs.writeFileSync(path.join(outside, "x.html"), "<p>x</p>");
+  const logical = path.join(tempDir("lahe-coverage-logical-"), "alias");
+  fs.symlinkSync(root, logical);
+  const meta = { root, logical_root: logical, mounts: { "/.lahe-source/abc123/": mounted } };
+
+  assert.equal(staticServers.coveragePath(meta, path.join(root, "sub dir", "a page.html")), "/sub%20dir/a%20page.html");
+  assert.equal(staticServers.coveragePath(meta, path.join(logical, "sub dir", "a page.html")), "/sub%20dir/a%20page.html");
+  assert.equal(staticServers.coveragePath(meta, path.join(mounted, "fig.html")), "/.lahe-source/abc123/fig.html");
+  assert.equal(staticServers.coveragePath(meta, path.join(outside, "x.html")), null);
+  assert.equal(staticServers.coveragePath(meta, root + "-sibling/x.html"), null, "a sibling folder sharing a prefix is not under the root");
+  assert.equal(staticServers.coveragePath({ root }, path.join(mounted, "fig.html")), null, "no mounts, no mount coverage");
+  assert.equal(staticServers.coveragePath(null, path.join(root, "x.html")), null);
+  assert.equal(staticServers.coveragePath(meta, null), null);
+});
+
+test("servesPath is exactly: a running recorded server whose coverage holds the file", () => {
+  const state = path.join(tempDir("lahe-coverage-state-"), "state");
+  const root = fs.realpathSync(tempDir("lahe-coverage-served-"));
+  const mounted = fs.realpathSync(tempDir("lahe-coverage-served-mount-"));
+  fs.writeFileSync(path.join(root, "p.html"), "<p>p</p>");
+  fs.writeFileSync(path.join(mounted, "m.html"), "<p>m</p>");
+  const meta = {
+    schema: staticServers.SCHEMA, id: "ss_cov", session_id: "s_cov", root, logical_root: root,
+    mounts: { "/.lahe-source/def456/": mounted }, pid: process.pid, port: 1, stopped_at: null
+  };
+  stateDirModule.ensureStaticServersRoot(state, "s_cov");
+  const file = stateDirModule.staticServerPath(state, "s_cov", "ss_cov");
+  fs.writeFileSync(file, JSON.stringify(meta));
+  for (const target of [path.join(root, "p.html"), path.join(mounted, "m.html"), path.join(os.tmpdir(), "elsewhere.html")]) {
+    assert.equal(
+      staticServers.servesPath(state, "s_cov", target),
+      staticServers.coveragePath(meta, target) !== null,
+      target
+    );
+  }
+  fs.writeFileSync(file, JSON.stringify(Object.assign({}, meta, { stopped_at: "2026-09-28T16:00:00.000Z" })));
+  assert.equal(staticServers.servesPath(state, "s_cov", path.join(root, "p.html")), false, "a stopped server serves nothing");
+  assert.notEqual(staticServers.coveragePath(meta, path.join(root, "p.html")), null, "but still covers the file");
+});
