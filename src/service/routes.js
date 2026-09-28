@@ -705,9 +705,9 @@ function livenessNone(work) {
 // body and the exact Origin. Nothing here reads a review token, and nothing
 // here returns an origin to echo, so no catalog response carries CORS.
 //
-// The page and its assets are real (Task 1.2). list, open, star and request
-// fail loud with 501 until Task 2.1 replaces them; they never answer an empty
-// 200.
+// The page and its assets are Task 1.2's. list, open, star and request are
+// Task 2.1's and hand straight to catalog_actions.js, which joins the reader,
+// the store, the request queue and the static servers' restart.
 var CATALOG_HANDLERS = {
   "catalog.page": function (request, deps) {
     return {
@@ -728,17 +728,25 @@ var CATALOG_HANDLERS = {
     return { status: 200, catalogRaw: { contentType: asset.contentType, bytes: asset.bytes } };
   },
 
-  "catalog.list": function () {
-    throw notImplemented("catalog.list", "Library 2.1");
+  // Every clock is the helper's (deps.now), so a test drives expiry, the
+  // sweep and the log line's age by choosing the time.
+  "catalog.list": async function (request, deps) {
+    var nowMs = deps.now();
+    var outcome = await deps.catalogActions.list(nowMs);
+    // Only an authenticated list reaches this line (auth.check ran first), and
+    // only it counts as the Library being open: `lahe session close` reads the
+    // time from health before it stops the helper.
+    deps.catalog.markSeen(nowMs);
+    return outcome;
   },
-  "catalog.open": function () {
-    throw notImplemented("catalog.open", "Library 2.1");
+  "catalog.open": function (request, deps) {
+    return deps.catalogActions.open(request.body || {}, deps.now());
   },
-  "catalog.star": function () {
-    throw notImplemented("catalog.star", "Library 2.1");
+  "catalog.star": function (request, deps) {
+    return deps.catalogActions.star(request.body || {}, deps.now());
   },
-  "catalog.request": function () {
-    throw notImplemented("catalog.request", "Library 2.1");
+  "catalog.request": function (request, deps) {
+    return deps.catalogActions.request(request.body || {}, deps.now());
   }
 };
 

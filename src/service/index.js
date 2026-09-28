@@ -46,6 +46,11 @@ var routes = require("./routes.js");
 var projection = require("./projection.js");
 var agentSessionsModule = require("./agent_sessions.js");
 var catalogPage = require("./catalog_page.js");
+var catalogReader = require("./catalog_reader.js");
+var catalogStore = require("./catalog_store.js");
+var catalogRequests = require("./catalog_requests.js");
+var catalogActions = require("./catalog_actions.js");
+var staticServers = require("./static_servers.js");
 
 // Read from package.json rather than restated here, so the version the helper
 // reports cannot drift from the version the repo ships.
@@ -156,7 +161,11 @@ function readBody(req, limit) {
  * Start the helper.
  *
  * @param {{port?: number, host?: string, stateDir?: string, reviews?: string[],
- *          origins?: string[], quiet?: boolean}} [options]
+ *          origins?: string[], quiet?: boolean, now?: function(): number,
+ *          pidAlive?: function, uid?: number}} [options]
+ *   `now`, `pidAlive` and `uid` are for tests of the Library: the clock every
+ *   Library action and the reopened-session sweep read, the liveness seam for
+ *   monitor pids, and the user a file Open restarts must belong to.
  * @returns {Promise<object>} a handle with port, url, close, and the pieces the
  *   tests and `add` reach for: log, reviews, dir.
  */
@@ -219,6 +228,41 @@ async function serve(options) {
     });
   }
 
+  // THE LIBRARY (LAHE Library 2.1). One of each piece, built here and nowhere
+  // else, so the list, Open and the sweep all read the same queue, the same
+  // store and the same registry:
+  //
+  //   the queue       the helper's own, the one that records an expired line
+  //   the reader      joined with the queue's attach and per-review requests
+  //   the ops         reopenForCatalog and closeQuiet over this helper's
+  //                   in-memory review registry, which is why only the helper
+  //                   can swap a restarted server's origins
+  var now = typeof opts.now === "function" ? opts.now : function () { return Date.now(); };
+  var catalogQueue = catalogRequests.createQueue({
+    dir: dir,
+    writeExpired: true,
+    pidAlive: opts.pidAlive,
+    log: function (line) { log.helperLog(line); }
+  });
+  var catalogReaderInstance = catalogReader.createReader({
+    dir: dir,
+    pidAlive: opts.pidAlive,
+    attachment: catalogQueue.readAttached,
+    requestFor: catalogQueue.requestFor
+  });
+  var catalogOps = staticServers.createCatalogOps({ dir: dir, reviews: reviews, sessions: agentSessions });
+  var catalogActionsInstance = catalogActions.createCatalogActions({
+    dir: dir,
+    reader: catalogReaderInstance,
+    queue: catalogQueue,
+    store: catalogStore.createCatalogStore({ dir: dir }),
+    ops: catalogOps,
+    sessions: agentSessions,
+    pidAlive: opts.pidAlive,
+    uid: opts.uid,
+    log: function (line, atMs) { log.helperLog(line, atMs); }
+  });
+
   var deps = {
     log: log,
     reviews: reviews,
@@ -229,6 +273,8 @@ async function serve(options) {
     agentSessions: agentSessions,
     library: loadLibrary(),
     catalog: catalog,
+    catalogActions: catalogActionsInstance,
+    now: now,
     version: VERSION,
     startedAt: startedAt
   };
@@ -547,6 +593,26 @@ async function serve(options) {
   var boundPort = server.address().port;
   catalog.port = boundPort;
 
+  // The reopened-session sweep (architecture, Helper lifetime). One run at a
+  // time: a slow close must not overlap the next tick. unref'd, so it never
+  // holds a process open on its own.
+  var sweeping = false;
+  function sweepReopened(atMs) {
+    return catalogActionsInstance.sweepReopened(typeof atMs === "number" ? atMs : now());
+  }
+  var sweepTimer = setInterval(function () {
+    if (sweeping) return;
+    sweeping = true;
+    sweepReopened()
+      .catch(function (err) {
+        log.helperLog("Library sweep failed: " + err.message);
+      })
+      .then(function () {
+        sweeping = false;
+      });
+  }, protocol.CATALOG.POLL_MS);
+  if (typeof sweepTimer.unref === "function") sweepTimer.unref();
+
   // The readiness file goes out AFTER the listener is bound. A readiness file
   // that arrives before the socket is a lie, and the durability tests race it.
   reviews.writeReadyFile({ port: boundPort, started_at: startedAt });
@@ -567,8 +633,12 @@ async function serve(options) {
     // The Library state (token, port, last list). Tests and Task 2.1 reach it
     // here; it is never written anywhere.
     catalog: catalog,
+    // The sweep, run by hand: the helper runs it every POLL_MS on its own, and
+    // tests drive it with the time they choose.
+    sweepReopened: sweepReopened,
     server: server,
     close: function () {
+      clearInterval(sweepTimer);
       return new Promise(function (resolve) {
         server.close(function () {
           resolve();
