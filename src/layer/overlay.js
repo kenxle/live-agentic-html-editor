@@ -3028,7 +3028,12 @@
         throw new Error("setCardState: unknown state " + String(state));
       }
       if (!cards[id]) return null;
-      cards[id].state = state;
+      // HELD IS A DRAWING OF READY, so it survives a caller naming "ready". The
+      // Active tab's refresh calls this right after upsertCard for every row,
+      // and stamping the raw lifecycle state here undid the held reading
+      // upsertCard had just drawn. Nothing repainted it until the agent line
+      // next changed, which on a slow machine was not soon.
+      cards[id].state = state === record.STATE.READY && isItemHeld(id) ? "held" : state;
       cards[id].item = Object.assign({}, cards[id].item);
       cards[id].item[record.FIELD.STATE] = state;
       cards[id].pane = paneForItem(cards[id].item);

@@ -120,6 +120,27 @@ function inferSession(dir, target) {
   return owners.length === 1 ? owners[0] : null;
 }
 
+/**
+ * The newest review of this agent session that recorded `target`, or null.
+ * Read off disk, the way `add` just wrote it.
+ */
+function recordedReviewFor(dir, sessionId, target) {
+  var resolved = path.resolve(target);
+  var best = null;
+  metaFiles(dir).forEach(function (file) {
+    var meta;
+    try { meta = JSON.parse(fs.readFileSync(file, "utf8")); } catch (err) { return; }
+    if (!meta || meta.agent_session_id !== sessionId) return;
+    var targets = Array.isArray(meta.target_paths) ? meta.target_paths.slice() : [];
+    if (meta.target_path && targets.indexOf(meta.target_path) === -1) targets.push(meta.target_path);
+    if (targets.indexOf(resolved) === -1) return;
+    var at = typeof meta.created_at === "string" ? meta.created_at : "";
+    if (best && at <= best.at) return;
+    best = { id: path.basename(path.dirname(file)), at: at };
+  });
+  return best ? best.id : null;
+}
+
 async function run(argv) {
   var list = (argv || []).slice();
   if (list.indexOf("--help") !== -1 || list.indexOf("-h") !== -1) {
@@ -260,6 +281,19 @@ async function run(argv) {
       if (store.openSessions().length === 0) {
         try { await require("./session.js").stopVerifiedHelper(dir); } catch (err) { /* the original add failure remains primary */ }
       }
+    }
+  }
+  if (code === 0 && rendered && staticServer) {
+    // WHICH REVIEW LINKED TO WHICH FILE, recorded once the review exists. The
+    // mounts above had to be registered before `add` ran, when this review may
+    // not have had an id yet. A linked document rides this review's rail only
+    // because of this record (spec 20260922.02). Best effort: a failure here
+    // leaves the links read-only, which is what they were before.
+    try {
+      var owner = recordedReviewFor(dir, sessionId, rendered.target);
+      if (owner) staticServers.recordLinks(dir, sessionId, staticServer.meta.id, owner, rendered.linked || []);
+    } catch (err) {
+      process.stderr.write("lahe review: linked documents stay read-only: " + err.message + "\n");
     }
   }
   if (code === 0) {

@@ -220,9 +220,23 @@ test.describe("Hold: queue several comments, release them to the agent at once",
         { message: "the two comments sent before Hold to reach review.json" }
       );
       await foldHandled(page, handledBefore);
-      await pollPage(page, () => !!window.__lahe.handle.sync.status().agentLiveness, undefined, {
-        message: "the real wire to carry an agent_liveness object at least once"
-      });
+      // THE BASELINE IS THE HELPER'S SETTLED COUNT, not the first copy the page
+      // happens to hold. agent_liveness rides on the reply poll, so the page's
+      // copy can come from a poll the helper answered before it had folded both
+      // comments. On a slow runner that stale copy read 0 or 1, the check below
+      // then saw the true 2, and the test called that a leak. Two is the right
+      // number: foldHandled is a page-side reply the helper never sees, so the
+      // helper still counts handledBefore as waiting. A held item that leaked
+      // would make the later reading 3.
+      await pollPage(
+        page,
+        () => {
+          const live = window.__lahe.handle.sync.status().agentLiveness;
+          return !!live && live.unanswered === 2;
+        },
+        undefined,
+        { message: "the helper's liveness to count both comments sent before Hold" }
+      );
       const baseline = await page.evaluate(() => window.__lahe.handle.sync.status().agentLiveness);
 
       // TURN HOLD ON, through the real control, the way a reviewer does.

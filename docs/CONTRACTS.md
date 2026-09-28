@@ -140,6 +140,15 @@ front of them is the worse of the two failures. `review.json`'s merged group dis
 origin once one joins (the reachable address), and carries `file_origin_seen: true` on that page so
 `lahe status` can still say a file:// visit happened even after the display moves on from it.
 
+**A linked page names its own file.** A page whose path starts with `/.lahe-source/` is a document a
+reviewed Markdown page links to (spec `docs/features/20260922.02_linked_docs_rail/`). Its page group
+in `review.json` carries `linked_file`: the real path of that document on disk, which the helper works
+out from the session's static server mount table and never takes from the page. The group's
+`source_hint` is the same path. When the helper cannot vouch for the page path, `linked_file` is null
+and `source_hint` reads as unknown; it never falls back to the linking page's source. Every other page
+carries `linked_file: null`. The drain (`lahe status --json`) adds `page.linked_file` to an item only
+when it is set.
+
 **The applied-`after` history.** `record.priorAfters(item)` returns every `after` this record has had
 that is not its current one. That is exactly what replay's branch three compares against. A record
 built with an `after` starts its history with it, and `record.bumpRev` appends on every rewording
@@ -610,6 +619,7 @@ copy in `test/unit/review_format.test.js`:
   "A break the reviewer typed is part of the edit: a blank line in the after text is a paragraph break, and a single newline is a line break. Markdown does not read a single newline as a new paragraph, so write a blank line between the two paragraphs in the source, or the format's own hard-break form for a line break, then rebuild and check the page really shows the break.",
   "An edit's after is the words; after_html is the same words carrying the reviewer's bold and italic, and that formatting is part of the edit. Apply after_html, not after alone. Bold reaches you as <strong> and italic as <em>; in a Markdown source those are ** and _ (or *). When the reviewer took bold or italic OFF words that a page stylesheet makes bold or italic, HTML has no tag that says so, so the record marks that run <not-bold> or <not-italic>: make that true in the source the way the source says it, and never copy either tag into the source. A handled reply for an edit whose formatting you did not carry is a wrong handled.",
   "Links in a Markdown source are source-true: never rewrite an on-disk link to make the browser page work. The renderer translates local links when it builds the page, so fix a broken link only if it is wrong on disk too.",
+  "A page whose path starts with /.lahe-source/ is a document the reviewed page links to, opened by following that link. Its items belong to this review, and that page's linked_file and source_hint name the linked document's own file on disk, worked out by this tool. Edit that file, not the page that linked to it. If linked_file is null, ask the reviewer which file they mean before editing anything.",
   "The only way to say you handled an item is to append a reply line."
 ]
 ```

@@ -180,6 +180,40 @@ function mergeMounts(dir, session, target, added, log) {
 }
 
 /**
+ * Record, on the server serving this artifact, that this review's page links to
+ * each file the new render linked (spec 20260922.02). A document that gained a
+ * link gets the rail on the linked page the moment the reviewer follows it.
+ * Best effort, like mergeMounts: a record that does not land leaves that link
+ * read-only, which is what it was before.
+ */
+function recordLinked(dir, session, target, reviewId, linked, log) {
+  if (!reviewId || !linked || !linked.length) return;
+  var servers;
+  try {
+    servers = staticServers.list(dir, session);
+  } catch (error) {
+    return;
+  }
+  var folder = path.resolve(path.dirname(target));
+  servers.forEach(function (meta) {
+    var root;
+    try {
+      root = fs.realpathSync(meta.root);
+    } catch (error) {
+      return;
+    }
+    if (folder !== root && folder.indexOf(root + path.sep) !== 0) return;
+    try {
+      staticServers.recordLinks(dir, session, meta.id, reviewId, linked);
+    } catch (error) {
+      if (log && typeof log.helperLog === "function") {
+        log.helperLog("could not record a linked document for review " + reviewId + ": " + error.message);
+      }
+    }
+  });
+}
+
+/**
  * The re-render trigger for one state directory.
  *
  * @param {{dir: string, log?: object, clock?: function, ttlMs?: number}} options
@@ -262,6 +296,7 @@ function createRebuilder(options) {
       return { rendered: false, reason: "render-failed" };
     }
     mergeMounts(dir, pair.session, pair.target, result.linkMounts, log);
+    recordLinked(dir, pair.session, pair.target, id, result.linked, log);
     if (id) {
       lastRenderAt[id] = new Date(clock()).toISOString();
       delete toldAbout[String(id) + "\u001fsource-missing"];
