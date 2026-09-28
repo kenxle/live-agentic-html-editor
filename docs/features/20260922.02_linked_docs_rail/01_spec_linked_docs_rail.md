@@ -1,5 +1,13 @@
 # Keep the editor when you follow a link
 
+## Built, waiting on review
+
+The fix is built and its tests pass. A code review and a security review are running on it now. One thing the builder did differently from your call, which needs a yes or no:
+
+- **The "open a review" button copies a command instead of opening a review.** This is the rare case where a linked page finds no review. A button that opened one directly would need a new way for a browser click to create a review, and the security review never looked at that. So the page offers a Copy button for the command instead, and you paste it to any agent. Is that fine, or do you want the real button (it would go through a security review first)?
+
+The screenshot of the editor on a linked page is at the end of the Progress section.
+
 ## Summary
 
 Clicking a link on a reviewed page to a document in another folder opens it read-only, with no editor. That breaks the rule set on 2026-09-16: anything our own static server serves gets the editor. This spec closes the gap for linked documents. No new review is created by a click. The linked page uses the review the document already has in this session, or else the review of the page you came from.
