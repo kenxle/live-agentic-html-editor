@@ -32,12 +32,15 @@ var MAX_INTERVAL_SECONDS = 3600;
 var ACTION_REQUIRED = "LAHE ACTION REQUIRED: do not end this turn or report that work is ready. Handle every item below now, rebuild and verify visible output, append replies, drain status until empty, then relaunch lahe monitor.\n";
 
 var USAGE = [
-  "usage: lahe monitor --session <id> [--interval <seconds>] [--state-dir <path>]",
+  "usage: lahe monitor --session <id> [--session <id> ...] [--interval <seconds>] [--state-dir <path>]",
   "",
   "Polls session-scoped status locally, prints only unanswered work, then exits.",
   "Idle polls invoke no model and print nothing.",
   "",
-  "  --session <id>       required agent-session owner",
+  "  --session <id>       required agent-session owner. Give it more than once to watch several",
+  "                       sessions with one monitor; the first is the primary. A session that",
+  "                       closes or is taken over is dropped with a line, and the rest are watched",
+  "                       on; its exit code is used only when no session is left.",
   "  --interval <seconds> local polling interval; default " + DEFAULT_INTERVAL_SECONDS,
   "  --state-dir <path>   same state root used by review and status",
   "",
@@ -50,7 +53,10 @@ var USAGE = [
 
 function parseArgs(argv) {
   var out = {
+    // The first --session: the primary. `session` is kept for every caller that
+    // reads one; `sessions` is the whole watch set, in the order given.
     session: null,
+    sessions: [],
     // Accepted and ignored. The redelivery doctrine replaced it: work stays
     // listed until a reply lands, so there is no ledger to carry and a monitor
     // relaunched after a crash re-delivers rather than skipping. Older docs and
@@ -73,7 +79,10 @@ function parseArgs(argv) {
         break;
       }
       var value = list[(i += 1)];
-      if (arg === "--session") out.session = value;
+      // More than once is how one monitor watches several sessions (after a
+      // Library pick-up the agent owns its own and the document's). A repeated
+      // id is watched once.
+      if (arg === "--session" && out.sessions.indexOf(value) === -1) out.sessions.push(value);
       if (arg === "--seen-file") out.seenFile = value;
       if (arg === "--state-dir") out.stateDir = value;
       if (arg === "--interval") {
@@ -90,8 +99,16 @@ function parseArgs(argv) {
     }
   }
   if (out.help || out.error) return out;
+  out.session = out.sessions.length ? out.sessions[0] : null;
   if (!out.session) out.error = "--session is required";
-  else if (!protocol.isSafeId(out.session)) out.error = "--session must be a safe id: " + String(protocol.SAFE_ID);
+  else {
+    for (var j = 0; j < out.sessions.length; j += 1) {
+      if (!protocol.isSafeId(out.sessions[j])) {
+        out.error = "--session must be a safe id: " + String(protocol.SAFE_ID);
+        break;
+      }
+    }
+  }
   return out;
 }
 
@@ -162,36 +179,60 @@ async function run(argv, options) {
     return protocol.CLI_EXIT.BAD_USAGE;
   }
 
+  // THE WATCH SET. One entry per --session, the primary first. Each carries the
+  // handoff rev it started under, because a takeover fences each session on its
+  // own: a takeover of one drops that one and leaves the rest watched.
   var store;
-  var startingSession;
+  var watched = [];
   try {
     store = storeFor(args.stateDir);
-    startingSession = store.read(args.session);
+    for (var s = 0; s < args.sessions.length; s += 1) {
+      var startingSession = store.read(args.sessions[s]);
+      if (!startingSession) {
+        err("lahe monitor: unknown agent session " + JSON.stringify(args.sessions[s]) + "\n");
+        return protocol.CLI_EXIT.BAD_USAGE;
+      }
+      watched.push({
+        id: args.sessions[s],
+        handoffRev: agentSessions.handoffRev(startingSession),
+        closedAtStart: !!startingSession.closed_at
+      });
+    }
   } catch (readError) {
     err("lahe monitor: " + readError.message + "\n");
     return protocol.CLI_EXIT.BAD_USAGE;
   }
-  if (!startingSession) {
-    err("lahe monitor: unknown agent session " + JSON.stringify(args.session) + "\n");
-    return protocol.CLI_EXIT.BAD_USAGE;
-  }
-  var handoffRev = agentSessions.handoffRev(startingSession);
 
   // Closed BEFORE the first poll, not only between them. A monitor relaunched
   // against a session that closed while the agent was working used to start a
-  // loop that could never end.
-  if (startingSession.closed_at) return closedExit();
+  // loop that could never end. With several sessions a closed one is dropped
+  // and the rest are watched; with none left, this is the closed exit.
+  var lastExit = null;
+  watched = watched.filter(function (entry) {
+    if (!entry.closedAtStart) return true;
+    lastExit = { entry: entry, state: "closed" };
+    return false;
+  });
+  if (watched.length === 0) return exitFor(lastExit.entry, lastExit.state);
+  if (lastExit) {
+    args.sessions.forEach(function (id) {
+      if (!watched.some(function (entry) { return entry.id === id; })) droppedLine(id, "closed");
+    });
+  }
 
   // The duplicate guard runs once, at startup, against whatever heartbeat is on
-  // disk. A stale one, or one whose pid is gone, is simply overwritten below.
+  // disk for each session. A stale one, or one whose pid is gone, is simply
+  // overwritten below.
   if (typeof store.readMonitor === "function") {
-    var other = liveDuplicate(store.readMonitor(args.session), handoffRev, nowMs(), pid);
-    if (other !== null) {
-      err(
-        "lahe monitor: agent session " + args.session + " already has a live monitor (pid " + other +
-          "). Two monitors deliver the same work twice. Use that one, or stop it first.\n"
-      );
-      return protocol.CLI_EXIT.BAD_USAGE;
+    for (var d = 0; d < watched.length; d += 1) {
+      var other = liveDuplicate(store.readMonitor(watched[d].id), watched[d].handoffRev, nowMs(), pid);
+      if (other !== null) {
+        err(
+          "lahe monitor: agent session " + watched[d].id + " already has a live monitor (pid " + other +
+            "). Two monitors deliver the same work twice. Use that one, or stop it first.\n"
+        );
+        return protocol.CLI_EXIT.BAD_USAGE;
+      }
     }
   }
 
@@ -200,12 +241,17 @@ async function run(argv, options) {
   // on disk for a second monitor to find: writing it before the first poll (and
   // a poll can take a while) shrinks that window from an interval to
   // milliseconds.
-  beat();
+  beatAll();
 
-  function beat() {
+  /** The primary: the first session still watched. */
+  function primary() {
+    return watched.length ? watched[0].id : null;
+  }
+
+  function beat(entry) {
     if (typeof store.writeMonitor !== "function") return false;
     try {
-      store.writeMonitor(args.session, { pid: pid, handoff_rev: handoffRev });
+      store.writeMonitor(entry.id, { pid: pid, handoff_rev: entry.handoffRev, primary: primary() });
       return true;
     } catch (writeError) {
       // A heartbeat that cannot be written costs the rail a chip, not the agent
@@ -214,39 +260,56 @@ async function run(argv, options) {
     }
   }
 
+  function beatAll() {
+    watched.forEach(beat);
+  }
+
   /**
-   * Take the heartbeat down on the way out.
+   * Take a heartbeat down on the way out.
    *
    * Every deliberate exit runs it, because every deliberate exit is followed by
    * a relaunch or by nothing at all, and a heartbeat left behind refuses that
    * relaunch for the next 45 seconds. The store only removes a heartbeat still
    * carrying this pid, so a monitor that started in the meantime keeps its own.
    */
-  function stopBeating() {
+  function stopBeating(entry) {
     if (typeof store.clearMonitor !== "function") return false;
     try {
-      return store.clearMonitor(args.session, { pid: pid });
+      return store.clearMonitor(entry.id, { pid: pid });
     } catch (clearError) {
       return false;
     }
   }
 
-  function closedExit() {
-    stopBeating();
-    err(
-      "lahe monitor: agent session " + args.session +
-        " is closed; monitoring has ended; do not relaunch this monitor\n"
-    );
-    return protocol.CLI_EXIT.SESSION_CLOSED;
+  function stopBeatingAll() {
+    watched.forEach(stopBeating);
   }
 
-  function handoffExit() {
-    stopBeating();
-    err(
-      "lahe monitor: agent session " + args.session +
-        " was taken over; this older monitor has ended; do not relaunch it\n"
-    );
-    return protocol.CLI_EXIT.SESSION_TAKEN_OVER;
+  function droppedLine(id, state) {
+    var remaining = watched.map(function (entry) { return entry.id; }).join(", ");
+    var why = state === "closed" ? "is closed" : state === "taken_over" ? "was taken over" : "is gone from the state directory";
+    err("lahe monitor: agent session " + id + " " + why + "; no longer watching it; still watching " + remaining + "\n");
+  }
+
+  // Declared as function statements so the startup checks above can use them.
+  function exitFor(entry, state) {
+    if (typeof store.clearMonitor === "function") stopBeating(entry);
+    if (state === "closed") {
+      err(
+        "lahe monitor: agent session " + entry.id +
+          " is closed; monitoring has ended; do not relaunch this monitor\n"
+      );
+      return protocol.CLI_EXIT.SESSION_CLOSED;
+    }
+    if (state === "taken_over") {
+      err(
+        "lahe monitor: agent session " + entry.id +
+          " was taken over; this older monitor has ended; do not relaunch it\n"
+      );
+      return protocol.CLI_EXIT.SESSION_TAKEN_OVER;
+    }
+    err("lahe monitor: agent session " + entry.id + " is gone from the state directory\n");
+    return protocol.CLI_EXIT.SESSION_CLOSED;
   }
 
   /**
@@ -255,20 +318,37 @@ async function run(argv, options) {
    * TWO questions, not one. A takeover bumps handoff_rev; a close does not
    * touch it. Checking only the rev is what let a closed session poll forever.
    */
-  function ownership() {
-    var current = store.read(args.session);
+  function ownership(entry) {
+    var current = store.read(entry.id);
     if (!current) return "gone";
     if (current.closed_at) return "closed";
-    if (agentSessions.handoffRev(current) !== handoffRev) return "taken_over";
+    if (agentSessions.handoffRev(current) !== entry.handoffRev) return "taken_over";
     return "owned";
   }
 
-  function exitFor(state) {
-    if (state === "closed") return closedExit();
-    if (state === "taken_over") return handoffExit();
-    stopBeating();
-    err("lahe monitor: agent session " + args.session + " is gone from the state directory\n");
-    return protocol.CLI_EXIT.SESSION_CLOSED;
+  /**
+   * Drop every session this monitor no longer owns. Returns an exit code when
+   * none is left (the code of the last one dropped), or null to keep going.
+   */
+  function prune() {
+    var dropped = [];
+    watched = watched.filter(function (entry) {
+      var state = ownership(entry);
+      if (state === "owned") return true;
+      dropped.push({ entry: entry, state: state });
+      return false;
+    });
+    if (dropped.length === 0) return null;
+    if (watched.length === 0) {
+      for (var i = 0; i < dropped.length - 1; i += 1) stopBeating(dropped[i].entry);
+      var last = dropped[dropped.length - 1];
+      return exitFor(last.entry, last.state);
+    }
+    dropped.forEach(function (gone) {
+      stopBeating(gone.entry);
+      droppedLine(gone.entry.id, gone.state);
+    });
+    return null;
   }
 
   // The drain command, in exactly the spelling every doc and every wake line
@@ -276,87 +356,101 @@ async function run(argv, options) {
   // is not on the default directory, because the agent copies these two lines
   // into a different shell and a resolved-by-default drain would report no work.
   var flagDir = stateDir.flagFor(args.stateDir);
-  var drain = protocol.drainCommand(args.session, flagDir);
-  var relaunch = protocol.monitorCommand(args.session, flagDir);
 
-  var statusArgs = ["--session", args.session, "--json", "--quiet"];
-  if (args.stateDir) statusArgs.push("--state-dir", args.stateDir);
+  function statusArgsFor(entry) {
+    var list = ["--session", entry.id, "--json", "--quiet"];
+    if (args.stateDir) list.push("--state-dir", args.stateDir);
+    return list;
+  }
 
   while (true) {
-    var before;
+    var early;
     try {
-      before = ownership();
+      early = prune();
     } catch (readError) {
-      stopBeating();
+      stopBeatingAll();
       err("lahe monitor: " + readError.message + "\n");
       return protocol.CLI_EXIT.BAD_USAGE;
     }
-    if (before !== "owned") return exitFor(before);
+    if (early !== null) return early;
 
     // Once per loop after the first, which was written before the loop. It is
     // what the rail reads to say "an agent is watching" without taking the
     // agent's word for it.
-    beat();
+    beatAll();
 
-    var stdout = [];
-    var stderr = [];
-    var code = await statusRun(statusArgs, {
-      stdout: function (text) { stdout.push(String(text)); },
-      stderr: function (text) { stderr.push(String(text)); },
-      // THIS POLL IS NOT THE AGENT WORKING. It is this Node process looking at
-      // a file every few seconds while the agent may be asleep or gone. Letting
-      // it stamp activity.json made the rail say "agent working" for as long as
-      // the monitor ran and pushed the unattended alarm out of reach, which is
-      // exactly the false comfort the liveness line exists to remove. The
-      // heartbeat above is the honest signal for "a monitor is up".
-      suppressActivityTouch: true,
-      // ONCE, NOT ON EVERY RELAUNCH. An ended review is permanent state, so
-      // without this the monitor would surface it, exit, be relaunched, surface
-      // it again, and spend a model turn every time round. Only the monitor
-      // marks it: the agent's own drain always answers "why was I woken".
-      markEndedDelivered: true
-    });
-    var printed = stdout.join("");
-    var errors = stderr.join("");
+    var results = [];
+    for (var w = 0; w < watched.length; w += 1) {
+      var stdout = [];
+      var stderr = [];
+      var code = await statusRun(statusArgsFor(watched[w]), {
+        stdout: function (text) { stdout.push(String(text)); },
+        stderr: function (text) { stderr.push(String(text)); },
+        // THIS POLL IS NOT THE AGENT WORKING. It is this Node process looking at
+        // a file every few seconds while the agent may be asleep or gone. Letting
+        // it stamp activity.json made the rail say "agent working" for as long as
+        // the monitor ran and pushed the unattended alarm out of reach, which is
+        // exactly the false comfort the liveness line exists to remove. The
+        // heartbeat above is the honest signal for "a monitor is up".
+        suppressActivityTouch: true,
+        // ONCE, NOT ON EVERY RELAUNCH. An ended review is permanent state, so
+        // without this the monitor would surface it, exit, be relaunched, surface
+        // it again, and spend a model turn every time round. Only the monitor
+        // marks it: the agent's own drain always answers "why was I woken". The
+        // same flag marks Library requests delivered, once per request.
+        markEndedDelivered: true
+      });
+      results.push({ entry: watched[w], printed: stdout.join(""), errors: stderr.join(""), code: code });
+    }
 
-    var after;
+    // Checked AFTER the poll too, so work captured a moment before a takeover is
+    // never handed to the agent that no longer owns it.
+    var late;
     try {
-      after = ownership();
+      late = prune();
     } catch (readError) {
-      stopBeating();
+      stopBeatingAll();
       err("lahe monitor: " + readError.message + "\n");
       return protocol.CLI_EXIT.BAD_USAGE;
     }
-    // Checked AFTER the poll too, so work captured a moment before a takeover is
-    // never handed to the agent that no longer owns it.
-    if (after !== "owned") return exitFor(after);
+    if (late !== null) return late;
+    results = results.filter(function (result) { return watched.indexOf(result.entry) !== -1; });
 
-    if (printed) {
+    var withWork = results.filter(function (result) { return !!result.printed; });
+    if (withWork.length > 0) {
       // ON STDOUT, ahead of the items, and on stderr as well. A host that
       // captures one stream used to get the instruction without the work, or the
       // work without the instruction.
       out(ACTION_REQUIRED);
       err(ACTION_REQUIRED);
-      out(printed);
+      withWork.forEach(function (result) { out(result.printed); });
       // The next step, printed where the agent is already looking, rather than
-      // left in a doc it may never open.
+      // left in a doc it may never open. One drain per session that had work;
+      // the relaunch names every session still watched.
+      var drains = withWork.map(function (result, index) {
+        return (index === 0 ? "  drain     " : "            ") + protocol.drainCommand(result.entry.id, flagDir);
+      });
       out(
         "\nNEXT: handle every item above, rebuild and verify, append your replies.\n" +
-          "  drain     " + drain + "\n" +
+          drains.join("\n") + "\n" +
           "            repeat until it prints no items\n" +
-          "  relaunch  " + relaunch + "\n"
+          "  relaunch  " + protocol.monitorCommand(watched.map(function (entry) { return entry.id; }), flagDir) + "\n"
       );
     }
-    if (errors) err(errors);
-    // Both of these are the end of this monitor. The heartbeat comes down with
+    var failed = null;
+    results.forEach(function (result) {
+      if (result.errors) err(result.errors);
+      if (failed === null && result.code !== protocol.CLI_EXIT.OK) failed = result.code;
+    });
+    // Both of these are the end of this monitor. The heartbeats come down with
     // it so the relaunch the agent is being told to run is not refused by the
     // corpse of the process telling it to.
-    if (code !== protocol.CLI_EXIT.OK) {
-      stopBeating();
-      return code;
+    if (failed !== null) {
+      stopBeatingAll();
+      return failed;
     }
-    if (printed) {
-      stopBeating();
+    if (withWork.length > 0) {
+      stopBeatingAll();
       return protocol.CLI_EXIT.OK;
     }
 

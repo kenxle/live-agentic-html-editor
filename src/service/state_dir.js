@@ -52,7 +52,15 @@ var FILES = {
   events: "events.jsonl",
   review: "review.json",
   meta: "meta.json",
-  windows: "windows.json"
+  windows: "windows.json",
+  // The Library's request queue (LAHE Library). Append-only JSONL, written only
+  // by the helper and by `lahe library answer`.
+  catalogRequests: "catalog-requests.jsonl",
+  // Which agent session the Library hands requests to. Written only by the CLI
+  // (`lahe library --session`), so it never shares a writer with catalog.json.
+  catalogAttach: "catalog-attach.json",
+  // Per session: which Library requests its monitor has already woken it for.
+  catalogDelivered: "catalog-delivered.log"
 };
 
 var REVIEWS_DIR = "reviews";
@@ -279,6 +287,27 @@ function endedDeliveredPath(dir, sessionId) {
 }
 
 /**
+ * Which Library requests this session's monitor has already woken it for.
+ *
+ * One line per delivery, "<request-id> <handoff_rev>", append-only. Keyed by
+ * the rev so a takeover delivers a pending request again to the agent that
+ * now owns the session. Like ended-delivered.log, only `lahe monitor` writes it.
+ */
+function catalogDeliveredPath(dir, sessionId) {
+  return resolveWithin(dir, [AGENT_SESSIONS_DIR, assertSafeReviewId(sessionId), FILES.catalogDelivered]);
+}
+
+/** The Library's request queue, beside service.json. */
+function catalogRequestsPath(dir) {
+  return resolveWithin(dir, [FILES.catalogRequests]);
+}
+
+/** The Library's attach record, beside service.json. */
+function catalogAttachPath(dir) {
+  return resolveWithin(dir, [FILES.catalogAttach]);
+}
+
+/**
  * The session's wake feed: append-only JSONL a host may `tail -f`.
  *
  * Not written through writeAtomic, and that is the point. An atomic replace
@@ -425,6 +454,9 @@ module.exports = {
   agentSessionDir: agentSessionDir,
   agentSessionPath: agentSessionPath,
   endedDeliveredPath: endedDeliveredPath,
+  catalogDeliveredPath: catalogDeliveredPath,
+  catalogRequestsPath: catalogRequestsPath,
+  catalogAttachPath: catalogAttachPath,
   wakeLogPath: wakeLogPath,
   monitorPath: monitorPath,
   activityPath: activityPath,

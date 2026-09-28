@@ -1246,9 +1246,15 @@
     return "lahe status --session " + String(sessionId) + " --json --quiet" + stateDirFlag(stateDirPath);
   }
 
-  /** The one spelling of the monitor command. Same state-directory rule. */
+  /**
+   * The one spelling of the monitor command. Same state-directory rule.
+   * `sessionId` may be a list: a monitor watching several sessions is relaunched
+   * with one --session per session, the primary first.
+   */
   function monitorCommand(sessionId, stateDirPath) {
-    return "lahe monitor --session " + String(sessionId) + stateDirFlag(stateDirPath);
+    var ids = Array.isArray(sessionId) ? sessionId : [sessionId];
+    return "lahe monitor" + ids.map(function (id) { return " --session " + String(id); }).join("") +
+      stateDirFlag(stateDirPath);
   }
 
   /**
@@ -1280,7 +1286,11 @@
     INTERVAL_SECONDS: 15,
     // How many intervals a heartbeat may be behind and still count as watching.
     FRESH_INTERVALS: 3,
-    HEARTBEAT_FIELD: { PID: "pid", HANDOFF_REV: "handoff_rev", AT: "at" },
+    // PRIMARY (LAHE Library): the first --session of the monitor writing this
+    // heartbeat. A monitor watching several sessions writes one heartbeat into
+    // each, all naming the same primary, so the Library can say which agent is
+    // watching a session it picked up.
+    HEARTBEAT_FIELD: { PID: "pid", HANDOFF_REV: "handoff_rev", AT: "at", PRIMARY: "primary" },
     ACTIVITY_FIELD: { AT: "at" }
   };
 

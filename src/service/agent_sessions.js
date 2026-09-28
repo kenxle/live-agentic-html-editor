@@ -406,6 +406,10 @@ function createStore(options) {
     record[protocol.MONITOR.HEARTBEAT_FIELD.PID] = Number.isInteger(s.pid) ? s.pid : process.pid;
     record[protocol.MONITOR.HEARTBEAT_FIELD.HANDOFF_REV] = Number.isInteger(s.handoff_rev) ? s.handoff_rev : 0;
     record[protocol.MONITOR.HEARTBEAT_FIELD.AT] = s.at || now();
+    // Only when given: a single-session monitor's heartbeat is unchanged.
+    if (typeof s.primary === "string" && protocol.isSafeId(s.primary)) {
+      record[protocol.MONITOR.HEARTBEAT_FIELD.PRIMARY] = s.primary;
+    }
     stateDir.writeAtomic(stateDir.monitorPath(dir, id), JSON.stringify(record, null, 2) + "\n");
     return record;
   }
