@@ -40,6 +40,7 @@
 "use strict";
 
 var fs = require("node:fs");
+var os = require("node:os");
 var path = require("node:path");
 
 var protocol = require("../../shared/protocol.js");
@@ -557,9 +558,24 @@ function launchRoot(described) {
 
 var DESCRIBED_FIELDS = ["kind", "origin", "title", "path", "candidate", "folder", "handoff"];
 
+/** The home folder as given and by real path, so either spelling stops the walk. */
+function homeFolders() {
+  var home = os.homedir();
+  if (!home) return [];
+  var out = [path.resolve(home)];
+  try {
+    var real = fs.realpathSync(home);
+    if (out.indexOf(real) === -1) out.push(real);
+  } catch (err) {
+    // a home folder that is not there stops nothing extra
+  }
+  return out;
+}
+
 /**
  * The folder a launched agent starts in: the repository that holds the
- * document (the nearest folder with a .git), else the document's own folder.
+ * document (the nearest folder with a .git, below the home folder), else the
+ * document's own folder.
  * Null for no path, or for a folder with a control character in it, which the
  * Launch steps could not read back as one line.
  */
@@ -577,7 +593,11 @@ function projectFolder(docPath) {
     return null;
   }
   var found = start;
+  // The walk stops at the home folder: a dotfiles repository in ~ is never a
+  // document's project, and a new agent must not start there.
+  var homes = homeFolders();
   for (var current = start; ; current = path.dirname(current)) {
+    if (homes.indexOf(current) !== -1) break;
     if (fs.existsSync(path.join(current, ".git"))) {
       found = current;
       break;

@@ -92,3 +92,35 @@ test("every copy of the Launch steps cds into the folder, read from a file, quot
   }
   assert.equal(protocol.isSafeId("s_doc"), true);
 });
+
+// Adversary fixes, finding 5: the walk up to a .git stops at the home folder,
+// so a dotfiles repository in ~ never becomes the folder a new agent starts in.
+test("a dotfiles repository in the home folder is never the launch folder", async (t) => {
+  const home = tempDir();
+  fs.mkdirSync(path.join(home, ".git"));
+  const notes = path.join(home, "notes");
+  fs.mkdirSync(notes);
+  const doc = path.join(notes, "plan.html");
+  fs.writeFileSync(doc, "<p>plan</p>");
+  const saved = process.env.HOME;
+  process.env.HOME = home;
+  t.after(() => { process.env.HOME = saved; });
+  assert.equal(os.homedir(), home, "the test controls the home folder");
+  const { entry } = await entryFor(doc);
+  assert.equal(entry.folder, notes);
+});
+
+test("a repository below the home folder is still found", async (t) => {
+  const home = tempDir();
+  fs.mkdirSync(path.join(home, ".git"));
+  const repo = path.join(home, "code", "proj");
+  fs.mkdirSync(path.join(repo, ".git"), { recursive: true });
+  fs.mkdirSync(path.join(repo, "docs"));
+  const doc = path.join(repo, "docs", "brief.html");
+  fs.writeFileSync(doc, "<p>brief</p>");
+  const saved = process.env.HOME;
+  process.env.HOME = home;
+  t.after(() => { process.env.HOME = saved; });
+  const { entry } = await entryFor(doc);
+  assert.equal(entry.folder, repo);
+});
