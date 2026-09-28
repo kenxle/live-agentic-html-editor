@@ -1460,6 +1460,7 @@
     var attention = ATTENTION.FOCUSED;
     var pollInFlight = false;
     var lastPollAt = 0;
+    var firstPollTimer = null;
     var flushing = false;
     // The post that is in flight right now, so a caller who has to know the
     // outbox is EMPTY (End review) can wait on it instead of being told `busy`
@@ -2623,6 +2624,8 @@
         return Promise.resolve(null);
       }
       return probeHealth().then(function (healthAnswered) {
+        // A CSP refusal that landed while the probe was out is the answer.
+        if (cspRefused) return null;
         if (healthAnswered !== true) {
           if (!originDiagnosed) return null;
           // Health stopped answering. The origin diagnosis is over, and this is
@@ -2646,6 +2649,15 @@
       if (blocked && helperOrigin && blocked.indexOf(helperOrigin) !== 0) return;
       cspRefused = true;
       state = STATE.REFUSED;
+      // THE REFUSAL CAN ARRIVE AFTER THE FAILURE IT EXPLAINS. The browser
+      // rejects the blocked fetch first and dispatches this event after, so a
+      // request sent at load (the poll every page makes at once, spec
+      // 20260928.01) was already classified as the helper being down. With
+      // connect-src closed the helper's state is unknowable, so that reading is
+      // withdrawn here and this one stands alone.
+      if (helperReachable === false) helperReachable = null;
+      if (lastFailure && failures.canonical(lastFailure.code) === "HELPER_UNREACHABLE") lastFailure = null;
+      onRecovered("HELPER_UNREACHABLE");
       raise(failures.failure("CSP_REFUSED", "connect-src blocked " + (blocked || helperOrigin)));
       recomputeStatus();
     }
@@ -2719,7 +2731,22 @@
       // reloaded the page, the agent rebuilt again, and they came back to the
       // older page for good (review, spec 20260928.01). The chain carries on
       // from this poll at the page's pace; hidden, it stops here.
-      runPoll();
+      //
+      // ONE SECOND IN, NOT AT ONCE, which is when the first poll always went.
+      // Sent the instant the page boots, it raced two things that settle within
+      // that second: the browser's CSP violation event, which arrives after the
+      // blocked fetch has already failed, and the helper's 500ms mtime cache,
+      // which can still hold the file's previous time and made the next poll
+      // read as a rebuild. Its own timer, so going hidden in that second does
+      // not cancel it.
+      // harness-allow-timer: the load-time poll, POLL_INTERVAL_MS after boot.
+      firstPollTimer = setTimeout(function () {
+        firstPollTimer = null;
+        if (lastPollAt || pollInFlight) return;
+        if (pollTimer) clearTimeout(pollTimer);
+        pollTimer = null;
+        runPoll();
+      }, POLL_INTERVAL_MS);
       // Anything a previous session left unacknowledged goes out now. This is
       // the whole of "re-posts on the next load".
       flush();
@@ -3265,6 +3292,8 @@
       if (debounceTimer) clearTimeout(debounceTimer);
       if (retryTimer) clearTimeout(retryTimer);
       if (pollTimer) clearTimeout(pollTimer);
+      if (firstPollTimer) clearTimeout(firstPollTimer);
+      firstPollTimer = null;
       if (reloadTimer) clearTimeout(reloadTimer);
       reloadTimer = null;
       stopHeartbeat();

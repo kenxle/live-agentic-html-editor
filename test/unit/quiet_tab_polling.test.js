@@ -571,7 +571,7 @@ test("a page that loads hidden still records the version it shows, so a rebuild 
   // is showing the older file.
   const r = rig(t, { startHidden: true });
   await started(r);
-  await r.drain();
+  await r.advance(FAST);
   assert.equal(r.polls().length, 1, "one poll at load, even hidden, to learn the version on screen");
   r.helper.mtime = "2026-09-28T11:20:00.000Z";
   await r.advance(LONG, 1000);
