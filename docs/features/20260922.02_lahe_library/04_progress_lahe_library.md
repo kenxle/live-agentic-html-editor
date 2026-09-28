@@ -1,12 +1,12 @@
 # Progress: LAHE Library
 
-**Phase 3, Wireframe.** Three wireframes are up, built from your real records. One thing needs you: pick a direction. Last updated 2026-09-22 08:45.
+**Phase 3, Wireframe.** The wireframes are rebuilt, with your nested layout (session, then reviews, then documents) as direction B. One thing needs you: react to them. Last updated 2026-09-28 16:03.
 
-**Docs:** [Ideas page](http://127.0.0.1:55480/DOCUMENT_INDEX_IDEAS-b09cd11f2a84063f.html) · [Crucible](http://127.0.0.1:55480/00_crucible_lahe_library-56928901ee317935.html) · [Brief](http://127.0.0.1:55480/01_brief_lahe_library-2c46b3ef7fe0f166.html) · [Wireframes](http://127.0.0.1:57056/index.html)
+**Docs:** [Ideas page](http://127.0.0.1:55480/DOCUMENT_INDEX_IDEAS-b09cd11f2a84063f.html) · [Crucible](http://127.0.0.1:55480/00_crucible_lahe_library-56928901ee317935.html) · [Brief](http://127.0.0.1:55480/01_brief_lahe_library-2c46b3ef7fe0f166.html) · [Wireframes](http://127.0.0.1:54222/index.html)
 
 ## Needs your attention
 
-- [ ] **Pick a wireframe direction** at http://127.0.0.1:57056/index.html: A (documents by day), B (agent sessions), or C (projects). Comment on the pages. The architecture waits on this.
+- [ ] **React to the wireframes** at http://127.0.0.1:54222/index.html. B is your nested layout; A (flat by day) and C (by project) are there to compare. The architecture waits on this.
 
 ## Currently working on
 
@@ -59,6 +59,9 @@ Not shipped yet.
 
 ## Log
 
+- **2026-09-28 16:03.** The first wireframes were lost: the wireframing skill writes to a temp folder, and the system cleared it on Sep 27. Rebuilt in `~/Documents/lahe-library-wireframes`, outside the repo because the repo is public and the pages show real document names. B is now your nested layout. Open now hands the document to an agent by default, per your brief edit.
+- **2026-09-28 16:03.** Your brief edits folded in: Open includes an agent watching; rows show total comments and whether a review ended; old per-page reviews show together; the pick-up and no-agent paths reuse the existing hand-over; launching an agent straight from the page is Open Question 5.
+- **2026-09-28 16:03.** Side fix shipped for review: links between documents keep the editor. [PR #17](https://github.com/kenxle/live-agentic-html-editor/pull/17).
 - **2026-09-22 08:45.** Wireframes built from real records: 483 reviews fold into 242 documents; 105 worked on this week, 13 need you, 29 missing. 202 reviews never recorded a page title, so many rows fall back to the file name. "One row per review" looked the same as "one row per document" after folding, so direction C groups by project instead.
 - **2026-09-22 08:43.** Clarity pass applied to the brief: 16 passages rewritten for plain reading. No requirement changed.
 - **2026-09-22 08:41.** PM review returned 17 findings, 3 of them blockers: the Library dying when the last session closes, the worktree fallback contradicting the serve-only-reviewed-files rule, and Pick this up cutting off a working agent. All accepted. Full review: [PM review](http://127.0.0.1:55480/01_brief_lahe_library_reviews-9a16a4ec86995c20.html).

@@ -2,6 +2,8 @@
 
 **Summary:** A page that lists every document ever reviewed in LAHE, so Ken can browse them, bring one back with its comments and rail, and close tabs without worrying. Open and Star act directly from the page. Picking a document up, or launching a fresh agent on it, goes through an agent.
 
+**Docs:** [Progress](http://127.0.0.1:55480/04_progress_lahe_library-fdf092f7193a770f.html) · [Ideas page](http://127.0.0.1:55480/DOCUMENT_INDEX_IDEAS-b09cd11f2a84063f.html) · [Crucible](http://127.0.0.1:55480/00_crucible_lahe_library-56928901ee317935.html) · [PM review](http://127.0.0.1:55480/01_brief_lahe_library_reviews-9a16a4ec86995c20.html) · [Wireframes](http://127.0.0.1:54222/index.html)
+
 ## Context
 
 LAHE is now how Ken reads almost everything his agents produce: 20 or more documents a working day. Every review is kept on disk with its file path, page title, dates, owning agent session, and full comment history. Nothing lists them.
