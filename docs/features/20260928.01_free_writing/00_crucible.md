@@ -1,7 +1,7 @@
 # Crucible: free writing in Lahe
 
 Date: 2026-09-28
-Status: ACCEPTED
+Status: DRAFT, pending the Tiptap decision (Approach D on the questions page)
 Questions and answers: `00_crucible_questions.md` in this folder, reviewed on a Lahe page.
 
 ## The idea, as stated

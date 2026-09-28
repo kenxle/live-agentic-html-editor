@@ -1,9 +1,9 @@
 # Free writing in LAHE: the crucible
 
 Date: 2026-09-28
-Status: ROUND 3, approach pick waiting on Ken
+Status: ROUND 4, Tiptap question waiting on Ken
 
-Round 1 answers are folded in under each question. Premises are settled below. One thing still needs you: **pick an approach** at the bottom, or tell me what is wrong with the recommendation.
+Round 1 answers are folded in under each question. Premises are settled below. You picked B. One more decision at the bottom: **Approach D, Tiptap**, which I had wrongly ruled out.
 
 ## What you asked for
 
@@ -19,7 +19,7 @@ Round 1 answers are folded in under each question. Premises are settled below. O
 ## What I looked for first
 
 - No brief, board row, or ongoing doc covers inserting new text. The original brief's editing rules (R24 through R31) all assume the text already exists.
-- Prior art: Notion and Google Docs treat a new block as its own thing, created by Enter at the end of a block or a click in empty space. Medium shows a "+" between blocks. Editor libraries (ProseMirror, Tiptap) make the whole document editable, which the zero-dependency rule rules out. Nothing to adopt; the pattern to borrow is "a new block is its own record."
+- Prior art: Notion and Google Docs treat a new block as its own thing, created by Enter at the end of a block or a click in empty space. Medium shows a "+" between blocks. Editor libraries (ProseMirror, Tiptap) make a region editable with headers, lists, bold, undo, and paste handling built in. I first ruled them out on the zero-dependency rule, which was wrong: the rule forbids npm installs, not vendored files, and marked and mermaid are already vendored. See Approach D.
 
 ## The questions and your answers
 
@@ -116,12 +116,30 @@ For a page rendered from Markdown, open a source pane beside the page. You write
 - Cons: only works for Markdown-sourced pages, not built HTML or an app in dev; a different editing model from the rest of Lahe; you write in a text box, not on the document.
 - Reuses: the Markdown re-render path, the file watcher.
 
+### Approach D: Tiptap as the writing engine (vendored)
+
+Tiptap (built on ProseMirror, both MIT) is bundled once at dev time and vendored under `vendor/`, the same way mermaid is. When you open a writing region (the B gesture: edit key, then click), Tiptap mounts on that region and gives you headers, lists, bold, italic, undo, paste cleanup, and keyboard shortcuts out of the box. On commit, Lahe reads the HTML out of the editor, cleans it, and records it exactly as B would. The edit bar and gesture stay the same, so it does not feel like a new mode.
+
+Two ways to cut it:
+
+- **D1: Tiptap for new writing only.** Blank documents and new regions use Tiptap. Existing blocks keep today's editor.
+- **D2: Tiptap for everything.** Existing blocks also open in Tiptap.
+
+- Effort: D1 is M plus a spike; D2 is XL
+- Risk: D1 medium; D2 high
+- Pros: headers, lists, and undo arrive working instead of being built one at a time; the paste and keyboard behavior is the one users already know from Notion-style editors; a blank document is Tiptap's home turf.
+- Cons (both): a vendored bundle to keep current; ProseMirror rewrites what it edits through its own schema, so any markup it does not know (a class, a data attribute, an inline SVG, the `data-lahe-id` stamp) is dropped unless whitelisted, and that has to be checked against the normalizer and the anchor rules.
+- Cons (D2 only): protection and replay guard the page's own DOM one block at a time; with Tiptap mounted, a repaint mid-edit tears down the editor, not just a text node. That is a rewrite of the protection layers and the replay compare, and the edit record's before-and-after would come from Tiptap's view of the block, not the page's.
+- Reuses: the B gesture and bar, cleanMarkup, the record shape; adds a vendored build script like the one mermaid came from.
+
 ### Do nothing
 
 Keep asking the agent for placeholder headers, and keep notes in the terminal. Cost: every blog post starts with a round trip to the agent before you can type, and notes stay where you cannot see them.
 
 ## Recommendation
 
-**B.** It is the only approach that covers all three jobs: publish, notes, and edit. A fails the notes job on a blank page. C only works for Markdown and moves writing off the document, which is the opposite of what Lahe is for. Ship B in two cuts: paragraphs, headers, the blank document command, and the formatting fix first; lists and the proofread suggestion second.
+**B as the shape, with a spike to decide whether Tiptap (D1) is the engine inside it.** You chose B and asked that it feel like today's edit mode. D1 keeps that: same gesture, same bar, Tiptap only under the hood of a new region. The spike is small and answers the two things I cannot answer from reading: how big the vendored bundle is, and whether the schema drops markup the anchor rules need. If both come back clean, D1 is the cheaper way to get headers, lists, and undo. If not, B is hand-built as described.
 
-Comment here with yes, or the approach you want instead.
+D2 (Tiptap for existing blocks too) I recommend against for now: it rewrites protection and replay, which are the parts of Lahe that took longest to get right.
+
+Comment here: spike D1, go straight to hand-built B, or D2 anyway.
