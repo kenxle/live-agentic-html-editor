@@ -18,7 +18,8 @@
 //                    summary line): paid once per drain whatever the item count
 //   repeated_rules   bytes of rule text or rule tables the tool itself adds,
 //                    per drain: the pointer line with its field-class table, and
-//                    any "trust" fence field on an item line. Reviewer words and
+//                    any "trust" fence field on an item line, and the lost.hint
+//                    sentence on each lost item. Reviewer words and
 //                    page text are never counted here.
 //   liveness_per_item the liveness block each item line repeats, for reference
 //
@@ -51,7 +52,7 @@ function freshSession(sessionId) {
 
 // A typical comment: the reviewer's note plus the quoted passage and context the
 // layer records, so the item line is the size real ones are.
-function addItem(world, reviewId, n, state) {
+function addItem(world, reviewId, n, state, lost) {
   const item = record.newItem({
     kind: record.KIND.COMMENT,
     state: record.STATE.READY,
@@ -65,7 +66,8 @@ function addItem(world, reviewId, n, state) {
       suffix: " Next, the outlook.",
       heading: "Summary",
       element: "p"
-    }
+    },
+    region: lost ? { ref: { id: "ref_" + n }, label: "Summary, p 1", lost: { code: "ANCHOR_NO_TEXT_MATCH", reason: null, at: null } } : undefined
   });
   world.log.append(reviewId, [protocol.newEvent({
     event: protocol.EVENT.ITEM_READY,
@@ -118,6 +120,7 @@ async function drain(dir, sessionId) {
       split.items += 1;
       split.item_lines += size;
       if (typeof line.trust === "string") split.repeated_rules += bytes(JSON.stringify({ trust: line.trust })) - 1;
+      if (line.lost && typeof line.lost.hint === "string") split.repeated_rules += bytes(JSON.stringify({ hint: line.lost.hint })) - 1;
       if (line.liveness) split.liveness += bytes(JSON.stringify({ liveness: line.liveness })) - 1;
     } else {
       split.per_drain += size;
@@ -145,10 +148,10 @@ async function measure(name, build) {
   };
 }
 
-function waiting(count) {
+function waiting(count, lost) {
   return (world, sessionId) => {
     world.reviews.create({ id: "r_items", agent_session_id: sessionId });
-    for (let n = 1; n <= count; n += 1) addItem(world, "r_items", n, "ready");
+    for (let n = 1; n <= count; n += 1) addItem(world, "r_items", n, "ready", lost);
   };
 }
 
@@ -162,6 +165,7 @@ function waiting(count) {
   results.push(await measure("10 items waiting", waiting(10)));
   results.push(await measure("100 items waiting", waiting(100)));
   results.push(await measure("1000 items waiting", waiting(1000)));
+  results.push(await measure("100 lost items waiting (a page restructure)", waiting(100, true)));
   results.push(await measure("7 ended reviews, nothing waiting", (world, sessionId) => {
     for (let i = 1; i <= 7; i += 1) {
       const id = "r_ended_" + i;

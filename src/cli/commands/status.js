@@ -388,6 +388,22 @@ function drainLine(where, item) {
   return line;
 }
 
+/**
+ * Liveness for each review that has an item on this drain, keyed by review.
+ * Undefined, so the key is left off the line, when no item is printed.
+ */
+function livenessOfPrinted(printed, byReview) {
+  var out = {};
+  var any = false;
+  printed.forEach(function (line) {
+    if (byReview[line.review] && !out[line.review]) {
+      out[line.review] = byReview[line.review];
+      any = true;
+    }
+  });
+  return any ? out : undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Telling an agent once that a review ended
 // ---------------------------------------------------------------------------
@@ -398,32 +414,51 @@ function drainLine(where, item) {
 // review on every run, forever. One session carried seven ended reviews, the
 // oldest nine days old, on every wake.
 //
-// ONE LEDGER PER SESSION, SHARED by the monitor and the drain, with two marks:
+// ONE LEDGER PER SESSION, SHARED by the monitor and the drain, with two marks,
+// each stamped with the session's handoff_rev:
 //
-//   <review>          the monitor woke on it. Written by `lahe monitor` only.
-//                     Bare, because that is what older monitors wrote.
-//   <review> drained  a drain printed it. The agent has been told.
+//   <review> woke <rev>     the monitor woke on it. Written by `lahe monitor`.
+//   <review> drained <rev>  a drain showed it with no unanswered items left.
 //
-// The monitor prints a review with neither mark and writes the first. A drain
-// prints a review without the second mark and writes it. So the monitor wakes
-// once, the agent it woke still finds the ending on its first drain (the
-// wake line and the monitor both tell it to drain, and that drain has to answer
-// "why was I woken"), and after that nobody prints it again. A hand drain that
-// sees it first is the delivery, and no monitor wakes on it afterwards.
+// A bare `<review>` line is what monitors wrote before the marks carried a
+// rev; it reads as "woke" at rev 0.
+//
+// THE REV, because takeover keeps the session id. Without it, the old agent's
+// marks would hide the ending from the agent that took over, and that agent
+// would never run the end-of-review routine. A mark from an earlier handoff is
+// read as missing.
+//
+// The monitor prints a review with neither mark and writes "woke". A drain
+// prints a review without "drained". So the monitor wakes once, and the agent
+// it woke still finds the ending on its first drain (the wake line and the
+// monitor both tell it to drain, and that drain has to answer "why was I
+// woken"). A hand drain that sees it first is the delivery, and no monitor
+// wakes on it afterwards.
+//
+// WHILE WORK IS LEFT IN IT, EVERY DRAIN SAYS IT ENDED. An ended review that
+// still holds unanswered items is something the agent acts on across many
+// drains: its context can be compacted, a large drain can be cut off before
+// its last line, and it can crash mid-batch. So "drained" is written only by
+// a drain that shows the ending with zero unanswered items in it, and only
+// after that drain has printed.
 //
 // An audit (`--json` without `--quiet`) reads the whole picture and marks
 // nothing.
 
+var WOKE_MARK = "woke";
 var DRAINED_MARK = "drained";
 
-function readEndedLedger(ledgerPath) {
+function readEndedLedger(ledgerPath, currentRev) {
   var marks = Object.create(null);
   if (!fs.existsSync(ledgerPath)) return marks;
   fs.readFileSync(ledgerPath, "utf8").split("\n").forEach(function (line) {
     var parts = line.trim().split(/\s+/);
     if (!parts[0]) return;
+    var kind = parts[1] === DRAINED_MARK ? DRAINED_MARK : WOKE_MARK;
+    var rev = parts[2] !== undefined && /^\d+$/.test(parts[2]) ? Number(parts[2]) : 0;
+    if (rev !== currentRev) return;
     var entry = marks[parts[0]] || (marks[parts[0]] = { woke: false, drained: false });
-    if (parts[1] === DRAINED_MARK) entry.drained = true;
+    if (kind === DRAINED_MARK) entry.drained = true;
     else entry.woke = true;
   });
   return marks;
@@ -575,11 +610,13 @@ async function run(argv, options) {
   }
   var helperOrigin = ready && ready.port ? "http://" + protocol.DEFAULT_HOST + ":" + ready.port : null;
 
+  var sessionHandoffRev = 0;
   if (args.session) {
     try {
       var sessionStore = agentSessionsModule.createStore({ dir: dir });
       var routed = sessionStore.read(args.session);
       if (!routed) throw new Error("unknown agent session " + JSON.stringify(args.session));
+      sessionHandoffRev = agentSessionsModule.handoffRev(routed);
       // A plain read of a closed session is AUDIT and still works: the history
       // is the point of keeping it. What is refused is a MONITORING read, and
       // the tell is --quiet or --seen-file ("wake me only if there is work").
@@ -646,6 +683,7 @@ async function run(argv, options) {
 
   var lines = [];
   var jsonItems = [];
+  var livenessByReview = Object.create(null);
   var endedReviews = [];
   var totalUnanswered = 0;
   var seenAny = false;
@@ -733,8 +771,11 @@ async function run(argv, options) {
     };
 
     if (args.json) {
+      // Once per review, on the summary line: the same block on every item was
+      // 175 bytes each, for one fact per review.
+      livenessByReview[id] = liveness;
       open.forEach(function (item) {
-        jsonItems.push(drainLine({ review: id, agent_session_id: ownerSessionId, liveness: liveness }, item));
+        jsonItems.push(drainLine({ review: id, agent_session_id: ownerSessionId }, item));
       });
     }
 
@@ -891,45 +932,34 @@ async function run(argv, options) {
       });
     }
 
-    // ONCE, TO WHICHEVER READER SEES IT FIRST. See readEndedLedger. Only a
-    // session's own drain or monitor reads and writes the ledger: a read with
-    // no --session spans sessions, and marking another agent's ending as told
-    // would take its news away.
+    // ONCE, TO WHICHEVER READER SEES IT FIRST, and every time while work is
+    // left in it. See readEndedLedger. Only a session's own drain or monitor
+    // reads and writes the ledger: a read with no --session spans sessions, and
+    // marking another agent's ending as told would take its news away.
     var asMonitor = opts.markEndedDelivered === true;
     var asDrain = !asMonitor && args.quiet;
+    var ledgerPath = null;
+    var ledgerLines = [];
     if (args.session && (asMonitor || asDrain) && endedToReport.length > 0) {
-      var ledgerPath = stateDirModule.endedDeliveredPath(dir, args.session);
+      ledgerPath = stateDirModule.endedDeliveredPath(dir, args.session);
       var marks;
       try {
-        marks = readEndedLedger(ledgerPath);
+        marks = readEndedLedger(ledgerPath, sessionHandoffRev);
       } catch (readErr) {
         err("lahe status: could not read " + ledgerPath + ": " + readErr.message + "\n");
         return EXIT.BAD_USAGE;
       }
-      var news = endedToReport.filter(function (entry) {
-        var mark = marks[entry.review];
-        if (!mark) return true;
-        return asMonitor ? !(mark.woke || mark.drained) : !mark.drained;
-      });
-      if (news.length > 0) {
-        try {
-          stateDirModule.ensureAgentSessionDir(dir, args.session);
-          fs.appendFileSync(
-            ledgerPath,
-            news.map(function (entry) {
-              return asMonitor ? entry.review : entry.review + " " + DRAINED_MARK;
-            }).join("\n") + "\n",
-            { mode: stateDirModule.FILE_MODE }
-          );
-        } catch (writeErr) {
-          // LOUD, like the seen file's own failures. A ledger that silently
-          // broke here does not go quiet, it repeats forever, and the agent
-          // pays for every one.
-          err("lahe status: could not write " + ledgerPath + ": " + writeErr.message + "\n");
-          return EXIT.BAD_USAGE;
+      endedToReport = endedToReport.filter(function (entry) {
+        var mark = marks[entry.review] || { woke: false, drained: false };
+        if (asMonitor) {
+          if (mark.woke || mark.drained) return false;
+          ledgerLines.push(entry.review + " " + WOKE_MARK + " " + sessionHandoffRev);
+          return true;
         }
-      }
-      endedToReport = news;
+        if (mark.drained) return false;
+        if (entry.unanswered_kept === 0) ledgerLines.push(entry.review + " " + DRAINED_MARK + " " + sessionHandoffRev);
+        return true;
+      });
     }
 
     // NOT SILENT WHEN A REVIEW ENDED. --quiet exists so a watcher that wakes on
@@ -945,12 +975,28 @@ async function run(argv, options) {
         reviews: ids.length,
         unanswered_ready: totalUnanswered,
         ended_reviews: endedToReport,
+        liveness: livenessOfPrinted(toPrint, livenessByReview),
         new_since_seen_file: args.seenFile ? toPrint.length : undefined,
         helper: helperOrigin,
         agent_session_id: args.session,
         state_dir: dir
       }) + "\n"
     );
+
+    // AFTER THE PRINT, so a drain whose output never reached the agent has
+    // marked nothing, and the next drain says it again.
+    if (ledgerLines.length > 0) {
+      try {
+        stateDirModule.ensureAgentSessionDir(dir, args.session);
+        fs.appendFileSync(ledgerPath, ledgerLines.join("\n") + "\n", { mode: stateDirModule.FILE_MODE });
+      } catch (writeErr) {
+        // LOUD, like the seen file's own failures. A ledger that silently
+        // broke here does not go quiet, it repeats forever, and the agent
+        // pays for every one.
+        err("lahe status: could not write " + ledgerPath + ": " + writeErr.message + "\n");
+        return EXIT.BAD_USAGE;
+      }
+    }
 
     if (args.seenFile && newlySeen.length > 0) {
       try {

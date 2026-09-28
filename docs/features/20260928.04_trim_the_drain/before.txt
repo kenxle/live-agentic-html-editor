@@ -4,6 +4,7 @@ measured: base commit 271372e (git archive)
 {"state":"10 items waiting","total_per_run":[11445,11445,11445],"items":10,"per_item":1043,"per_drain":1014,"repeated_rules":831,"liveness_per_item":175}
 {"state":"100 items waiting","total_per_run":[105407,105407,105407],"items":100,"per_item":1044,"per_drain":1015,"repeated_rules":831,"liveness_per_item":175}
 {"state":"1000 items waiting","total_per_run":[1045909,1045909,1045909],"items":1000,"per_item":1045,"per_drain":1016,"repeated_rules":831,"liveness_per_item":175}
+{"state":"100 lost items waiting (a page restructure)","total_per_run":[130507,130507,130507],"items":100,"per_item":1295,"per_drain":1015,"repeated_rules":19831,"liveness_per_item":175}
 {"state":"7 ended reviews, nothing waiting","total_per_run":[1796,1796,1796],"items":0,"per_item":0,"per_drain":1796,"repeated_rules":831,"liveness_per_item":0}
 
 | state | bytes, runs 1 / 2 / 3 | per item | per drain | repeated rule bytes per drain | liveness per item |
@@ -13,4 +14,5 @@ measured: base commit 271372e (git archive)
 | 10 items waiting | 11445 / 11445 / 11445 | 1043 | 1014 | 831 | 175 |
 | 100 items waiting | 105407 / 105407 / 105407 | 1044 | 1015 | 831 | 175 |
 | 1000 items waiting | 1045909 / 1045909 / 1045909 | 1045 | 1016 | 831 | 175 |
+| 100 lost items waiting (a page restructure) | 130507 / 130507 / 130507 | 1295 | 1015 | 19831 | 175 |
 | 7 ended reviews, nothing waiting | 1796 / 1796 / 1796 | 0 | 1796 | 831 | 0 |

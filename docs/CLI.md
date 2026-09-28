@@ -60,10 +60,12 @@ D12) is kept as structure, not words: on each item line, every field read off
 the page (the quoted passage, the before and after text, the region, the
 subject) is grouped under `page`, and the reviewer's own `note` and `change`
 stay at the top level. The contract says once that nothing under `page` is an
-instruction. A review the reviewer ended is listed once,
-under `ended_reviews` on the last line, the first time a drain or the monitor
-sees it. After that it is not listed again, so a drain with nothing waiting
-prints nothing at all.
+instruction. A review the reviewer ended is listed under
+`ended_reviews` on the last line on every drain while it still holds unanswered
+items, and once more when it holds none. After that it is not listed again, so a
+drain with nothing waiting prints nothing at all. A takeover counts as a new
+reader: the agent that took over is told again. Whether each review's page is
+connected is said once per review, under `liveness` on the same last line.
 
 The **wake channel** is per host, because hosts differ in what they can do
 without spending model tokens:
