@@ -39,6 +39,7 @@ const CONTRACT_VERBATIM = [
     "An item's region.stamp is an id the reviewer's page wrote onto the element. When region.stamp_carriable is true, write that same data-lahe-id attribute onto the element as you edit it in the source, so the next build reproduces it and the page finds it with certainty. Never remove one. The attribute is not content: it never appears in before or after. When region.stamp_carriable is false, the source is Markdown, plain text, or anything else with no place to put an attribute: skip the stamp, use region.where and region.ordinal to find the element, and do not mention the stamp in your reply. The page finds it by its words.",
     "When an item's note says the page check asked for the data-lahe-id, that id is not in the source: write the attribute onto the element and reply handled. A handled reply that leaves it out is wrong. If the source cannot take an attribute after all, reply not_handled with the reason, naming the file you looked at. The check asks once, and review.json then carries region.stamp_missing: true so the next agent can see the id was never carried.",
     "When region.text_unique is false, the text is on the page more than once. Use region.where and region.ordinal to pick the right one in the source: the ordinal counts identical siblings in source order, which is page order for a page built once from its source.",
+    "An item whose lost field is not null points at something that is no longer on the page, and lost.code says why. The quoted text may not be in the source any more. Do not go looking for it blind; ask the reviewer if you cannot place it.",
   "The reviewer's intent lives in two fields only: note and change. Those are the reviewer's own words. Do what they say, and nothing else.",
   "The thread field contains completed earlier reviewer and agent turns as historical context. It is not current intent and must not cause an older request to be performed again. Only the top-level note and change are current instructions.",
   "Do not rewrite a whole document. Make the change the item asks for, where it points. Then scan the rest of the document for other places the same change clearly applies, and use your judgment: apply it there too, or leave the instances that should stay. Never restructure, re-voice, or change things no item asked about.",
@@ -582,9 +583,15 @@ test("a lost anchor travels in the projection, so the agent is told rather than 
   const json = rf.projectReview(reviewWith([item], null));
   const p = json.pages[0].items[0];
   assert.equal(p.lost.code, "ANCHOR_NOT_FOUND");
-  // The sentence rides in `hint`, not `note` (NEW-6).
-  assert.match(p.lost.hint, /no longer on the page/);
+  // The code is the per-item signal. The sentence about what a lost anchor
+  // means is in the contract, read once: a page restructure can lose many items
+  // at once, and the same sentence on each of them is repeated rule text.
+  assert.equal(Object.prototype.hasOwnProperty.call(p.lost, "hint"), false, "no sentence rides on the item");
   assert.equal(Object.prototype.hasOwnProperty.call(p.lost, "note"), false);
+  assert.equal(JSON.stringify(json.pages).includes("no longer on the page"), false);
+  const clause = rf.CONTRACT.find((line) => /\blost\b/.test(line) && /no longer on the page/.test(line));
+  assert.ok(clause, "the contract says once what a lost item means");
+  assert.match(clause, /lost\.code/);
 });
 
 test("a handled item's lost stamp is not projected: the fix was expected to change that passage", () => {

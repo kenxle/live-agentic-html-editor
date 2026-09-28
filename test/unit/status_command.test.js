@@ -314,6 +314,28 @@ test("an item line still carries everything that locates it", async () => {
   assert.equal(line.page.context.heading, "Intro");
 });
 
+test("liveness is said once per review, on the summary line, not on every item", async () => {
+  // The same block for every item in a review, 175 bytes each: 175,000 at a
+  // thousand items, for one fact per review.
+  const dir = tempState();
+  seed(dir, "rlive1", [anItem("one", record.STATE.READY), anItem("two", record.STATE.READY)]);
+  seed(dir, "rlive2", [anItem("three", record.STATE.READY)]);
+  seed(dir, "rlive3", [anItem("done", record.STATE.HANDLED)]);
+
+  const run = await runStatus(["--session", "legacy", "--json", "--quiet"], dir);
+  const lines = run.stdout.trim().split("\n").map((line) => JSON.parse(line));
+  const summary = lines.pop();
+  assert.equal(lines.length, 3);
+  lines.forEach((line) => {
+    assert.equal(Object.prototype.hasOwnProperty.call(line, "liveness"), false, "no item line carries it");
+  });
+  assert.deepEqual(Object.keys(summary.liveness).sort(), ["rlive1", "rlive2"], "one entry per review with work listed");
+  assert.equal(summary.liveness.rlive1.helper_up, false);
+  assert.equal(summary.liveness.rlive1.page_last_seen_at, null);
+  assert.equal(typeof summary.liveness.rlive1.last_item_at, "string");
+  assert.equal(run.stdout.split('"helper_up"').length - 1, 2, "said once per review, and only here");
+});
+
 test("the human list labels page-derived text and never prints it as the reviewer's words", async () => {
   const dir = tempState();
   const quoted = record.newItem({
@@ -481,6 +503,37 @@ test("takeover recovers seen-but-unfinished work without repeating completed wor
   ], dir);
   assert.match(replacement.stdout, /work seen before the token limit/);
   assert.equal(replacement.stdout.includes("work the first agent finished"), false);
+});
+
+test("after a takeover, the new agent's first drain lists an ending the old agent already drained", async () => {
+  // Takeover keeps the session id, so the ended-review ledger is shared across
+  // the handoff. A mark from an earlier handoff is not news the new agent has
+  // had: without this, it would never learn the reviewer ended the review and
+  // would skip the end-of-review routine.
+  const dir = tempState();
+  const sessions = agentSessionsModule.createStore({ dir });
+  sessions.create({ id: "s_handoff" });
+  const log = logModule.createEventLog({ dir });
+  const reviews = reviewsModule.createReviews({ dir, log });
+  reviews.create({ id: "r_handoff", agent_session_id: "s_handoff" });
+  log.append("r_handoff", [
+    protocol.newEvent({ event: protocol.EVENT.REVIEW_ARCHIVED, event_id: "ev_end_handoff", review: "r_handoff" })
+  ]);
+  const drain = ["--session", "s_handoff", "--json", "--quiet"];
+  const ended = (run) => (run.stdout.trim() ? JSON.parse(run.stdout.trim().split("\n").pop()).ended_reviews.map((e) => e.review) : []);
+
+  assert.deepEqual(ended(await runStatus(drain, dir, { markEndedDelivered: true })), ["r_handoff"], "the old monitor woke");
+  assert.deepEqual(ended(await runStatus(drain, dir)), ["r_handoff"], "the old agent was told");
+  assert.equal((await runStatus(drain, dir)).stdout, "", "once");
+
+  sessions.takeover("s_handoff");
+
+  assert.deepEqual(
+    ended(await runStatus(drain, dir, { markEndedDelivered: true })), ["r_handoff"],
+    "the new agent's monitor wakes on it"
+  );
+  assert.deepEqual(ended(await runStatus(drain, dir)), ["r_handoff"], "the new agent's first drain lists it");
+  assert.equal((await runStatus(drain, dir)).stdout, "", "and then it is told, once, like any other");
 });
 
 test("two agent sessions on one state root receive only their own reviews", async () => {
@@ -857,16 +910,54 @@ test("with nothing waiting, a session full of old ended reviews drains to nothin
   assert.equal((await runStatus(DRAIN, dir)).stdout, "");
 });
 
-test("an ended review that kept work is listed once, and its items stay listed", async () => {
+test("an ended review that kept work stays listed until its items are answered, then once more", async () => {
+  // The agent must act on this ending across many drains: its context can be
+  // compacted, a large drain can be cut off before the last line, and it can
+  // crash mid-batch. So while the ended review still holds unanswered items,
+  // every drain says it ended. The drained mark is written only by a drain that
+  // shows the ending with nothing left in it.
   const dir = tempState();
-  seed(dir, "rendkept", [anItem("still waiting on this", record.STATE.READY)]);
+  const kept = anItem("still waiting on this", record.STATE.READY);
+  seed(dir, "rendkept", [kept]);
   endSeeded(dir, "rendkept");
 
   const first = await runStatus(DRAIN, dir);
   assert.deepEqual(endedIn(first), ["rendkept"]);
   const second = await runStatus(DRAIN, dir);
   assert.match(second.stdout, /still waiting on this/, "the unanswered item is redelivered as always");
-  assert.deepEqual(endedIn(second), [], "the ending is not");
+  assert.deepEqual(endedIn(second), ["rendkept"], "and so is the ending, while work is left in it");
+
+  logModule.createEventLog({ dir }).append("rendkept", [
+    protocol.newEvent({
+      event: protocol.EVENT.REPLY_FOLDED,
+      event_id: "ev_kept_answered",
+      review: "rendkept",
+      item: kept.id,
+      rev: kept.rev,
+      payload: {
+        accepted: true,
+        state: record.STATE.HANDLED,
+        reply: { status: "handled", agent: "claude", reason: null, text: null, files: [] }
+      }
+    })
+  ]);
+  const emptied = await runStatus(DRAIN, dir);
+  assert.deepEqual(endedIn(emptied), ["rendkept"], "the drain that finds it empty still says it ended");
+  assert.equal((await runStatus(DRAIN, dir)).stdout, "", "and after that, nothing");
+});
+
+test("an ended review's mark is written after the drain prints, so a failed print loses nothing", async () => {
+  const dir = tempState();
+  seed(dir, "rendcrash", [anItem("already answered", record.STATE.HANDLED)]);
+  endSeeded(dir, "rendcrash");
+
+  // A drain whose output never reaches the agent: its stdout throws.
+  await assert.rejects(status.run(DRAIN, {
+    stateDir: dir,
+    stdout: () => { throw new Error("pipe closed"); },
+    stderr: () => {}
+  }));
+  assert.deepEqual(endedIn(await runStatus(DRAIN, dir)), ["rendcrash"], "the next drain is still told");
 });
 
 test("the monitor and a hand drain share one ledger for ended reviews", async () => {
