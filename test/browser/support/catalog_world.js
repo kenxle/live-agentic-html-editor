@@ -20,25 +20,15 @@
 
 const fs = require("node:fs");
 const os = require("node:os");
-const net = require("node:net");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 
 const protocol = require("../../../src/shared/protocol.js");
+const { freePort, portInUse } = require("../../helpers/free_port.js");
 
 const REPO_ROOT = path.join(__dirname, "..", "..", "..");
 const CLI = path.join(REPO_ROOT, "bin", "lahe.js");
 
-function freePort() {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const port = server.address().port;
-      server.close(() => resolve(port));
-    });
-  });
-}
 
 function labelled(output, label) {
   const match = new RegExp("^\\s*" + label + "\\s+(\\S+)", "m").exec(output);
@@ -89,7 +79,7 @@ async function buildWorld(spec) {
   w.port = await freePort();
   if (w.port === protocol.DEFAULT_PORT) throw new Error("the free port came back as the product's own port");
   w.helperOrigin = "http://127.0.0.1:" + w.port;
-  const portArgs = ["--port", String(w.port)];
+  let portArgs = ["--port", String(w.port)];
 
   w.lahe = function (args) {
     return execFileSync(process.execPath, [CLI].concat(args), {
@@ -142,7 +132,18 @@ async function buildWorld(spec) {
     const extra = [];
     if (d.name) extra.push("--name", d.name);
     if (d.sessionOf) extra.push("--session", w.docs[d.sessionOf].session);
-    const output = w.lahe(["review", file].concat(portArgs, extra));
+    let output;
+    try {
+      output = w.lahe(["review", file].concat(portArgs, extra));
+    } catch (err) {
+      // The first review starts the helper. If another test took the free
+      // port first, retry once on a new one (test/helpers/free_port.js).
+      if (d !== all[0] || !(await portInUse(w.port))) throw err;
+      w.port = await freePort();
+      w.helperOrigin = "http://127.0.0.1:" + w.port;
+      portArgs = ["--port", String(w.port)];
+      output = w.lahe(["review", file].concat(portArgs, extra));
+    }
     const got = { session: labelled(output, "session"), review: labelled(output, "review"), open: labelled(output, "open"), file: file };
     if (!got.session || !got.review) throw new Error("lahe review printed no session or review:\n" + output);
     w.docs[d.key] = got;

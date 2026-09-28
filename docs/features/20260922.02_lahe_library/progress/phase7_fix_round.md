@@ -104,3 +104,75 @@ Branch `task/lib-fix-agent`. `npm run gate:unit`: lint passed; 1632 tests, 1630 
 - `test/fixtures/catalog_list.json` is generated (`LAHE_WRITE_CATALOG_LIST=1`). If Builder B's list changes collide, regenerate it after the merge instead of resolving by hand.
 - `catalog.list` now carries one absolute path, `state_dir`, when the state dir is not the default. The reader's list itself still has none.
 - Shared files touched locally: `catalog_reader.js` (candidate, kind rule, `server_root`, `origin`, `name_from_page`), `catalog_actions.js` (owner check, `state_dir`), `status.js` (describer fields), `library.js` (the `serve` verb).
+
+## Builder C result
+
+Every Builder C item is done, plus the page items the orchestrator added from the story walk and the design review. Branch `task/lib-fix-tests`, with `task/lib-fix-service` merged in.
+
+![The Library, light](../catalog_page_light.png)
+
+![The Library, dark](../catalog_page_dark.png)
+
+![A row's Hand to agent menu, open](../catalog_menu_light.png)
+
+![The confirm dialog, dark](../catalog_confirm_dark.png)
+
+![The Library at phone width](../catalog_page_phone.png)
+
+All five come from the page spec's screenshot test, run with `LAHE_SHOTS=1` on Chromium, after the spec passed.
+
+**Test counts**
+
+- `npm run gate:unit`: 1648 tests, 1646 pass, 0 fail, 2 todo (the older `anchor_cases.test.js` ones).
+- `catalog_page.spec.js`, Chromium: 18 passed, 1 skipped (the screenshot test, skipped unless `LAHE_SHOTS=1`).
+- `catalog_library.spec.js`, Chromium: 3 passed.
+- `catalog_cross_site.spec.js`: Chromium 2 passed, Firefox 2 passed, WebKit 2 passed.
+
+**The fix list**
+
+- **CR1, page side.** A click on Open marks the row as opening. Until the helper answers, the button shows busy and a second click sends nothing. Browser test: a double click, then one more click, sends one request and opens one tab.
+- **Expiry wording.** An expired row says what was lost and why:
+  - `timeout`: "Not picked up. <agent> didn't answer."
+  - `monitor_dead`: "Not picked up. <agent> stopped watching before it answered."
+  - `attach_changed`: "Not picked up. A different agent was attached before <agent> answered."
+  - A launch starts with "No new agent was launched." instead, and offers the hand-off message so the reader can start one by hand.
+- **T1.** New test: the helper's own sweep closes the reopened session, the Library lists, and the last `session close` prints "left running: the Library page polled it" while health still answers. It waits for the sweep's real tick, so it takes about 15 seconds.
+- **T2.** The worktree candidate's owner check is tested. The reader has no `uid` option and my edits stay out of service files, so the test swaps `process.getuid` for the length of the test. I proved it fails with the check removed.
+- **T3.** The end-to-end spec refreshes the stub agent's activity at the top of each test and before each hand-over click.
+- **T4.** Every "nothing was sent" check records requests with `page.on("request")` and runs one more poll before counting.
+- **T5.** The 501 allowances are gone. `catalog_auth.test.js` now builds a review that every handler accepts, and requires 200 from all four routes.
+- **T6.** Screenshots are written only with `LAHE_SHOTS=1`, and only on Chromium, in both specs.
+- **T7.** The queue test pins the boundary: a heartbeat exactly `HEARTBEAT_FRESH_MS` old is still fresh.
+- **T8.** With a torn last line, or a bad complete line, both `lahe status --json` and the reader's list still return the pending request.
+- **T9.** The top section's session ids are spelled out in the test.
+- **T10.** The cross-site control reads `catalog_seen_at` before the page loads and asserts it moved.
+- **T11.** New `test/helpers/free_port.js`. A helper start whose port another test took is retried once on a new port, but only when the old port really is held. The two reuse-old-port tests accept a new port only when a holder has the old one.
+- **T12.** A separate test parses the contract out of `docs/CONTRACTS.md` and compares it with the test's copy and the module. The restated array is untouched. I proved it fails on a one-word change to the doc.
+- **T13.** The token-leak scan now includes one successful Open, so the static server's records are scanned too.
+- **SEC3.** The other-port test registers the attacker's origin on a review, and checks that a review route's preflight is then approved. For each POST route it then waits for `refused preflight: catalog path` in the log.
+
+**Added by the orchestrator**
+
+- **Header.** When the attached session is closed, the header says "No agent attached". The view model reads `attached.closed`. **Builder B: the list does not send `closed` yet.** Until it does, a closed attached session still reads as "stopped watching".
+- **Hand to agent.** Each row shows Open, plus one "Hand to agent" menu that holds Pick this up and Launch.
+  - The menu is hidden where the Library's own agent already watches the session.
+  - On a dev-server row the menu is disabled, and the row says why.
+  - Escape closes the menu. A poll does not close it.
+- **Refusals.** A "couldn't take it" note clears once the agent that refused is no longer the attached, live agent.
+- **Pick this up answered with `request_id: null`.** The row says "<agent> already has it. Nothing was sent." It no longer says it is waiting.
+- **Watcher label.** When the watcher's name equals the card's title, the card says "watched by its own agent".
+- **Path line.** The line under a row's title shows only what the title and the card do not already say.
+- **Design.**
+  - Two status colors: attention (waiting on you, refused, needs an agent) and quiet. Every dot has a word beside it. "3 waiting" is plain text with an attention dot, so it no longer looks like a link.
+  - Open uses the rail's primary color, in light and dark.
+  - The dialog's backdrop is darker in both schemes. Its list keeps the bullet beside the text.
+  - At phone width the page does not scroll sideways, meta items wrap whole with no stray separators, and the chevron sits on the title's line. A browser test checks all three.
+
+**Changes from the brief**
+
+- The shared fixture `test/fixtures/catalog_list.json` is generated by the reader, so I did not edit it. It comes from Builder B's branch, whose regenerated copy carries `reason: "monitor_dead"`. The view-model tests set their own reasons on copies of it.
+- Design CSS lives in `src/service/catalog_page.js` (`PAGE_STYLE`), which is outside `src/layer/catalog/`. I changed only `PAGE_STYLE`. Builder A's content-policy change is in the same file but not in the same lines.
+
+**To delete at cleanup**
+
+- `node_modules` in this worktree: a symlink to the main checkout's, never committed.

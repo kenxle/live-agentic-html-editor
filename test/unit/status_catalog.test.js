@@ -19,6 +19,7 @@ const reviewsModule = require("../../src/service/reviews.js");
 const catalogRequests = require("../../src/service/catalog_requests.js");
 const status = require("../../src/cli/commands/status.js");
 const monitor = require("../../src/cli/commands/monitor.js");
+const catalogReader = require("../../src/service/catalog_reader.js");
 
 const C = protocol.CATALOG;
 const T0 = Date.parse("2026-09-28T16:00:00.000Z");
@@ -331,6 +332,41 @@ test("a worktree candidate outside its repository, hidden, symlinked out, or not
     assert.equal(byReview["r_wt_" + label].candidate, null, label);
   }
 });
+
+// T8: a torn queue file, the way a crash mid-append leaves it. The drain and
+// the Library's list both read the same file, and both must still see the
+// request that was written whole before the tear.
+for (const [label, tail] of [
+  ["a torn last line", '{"id":"cq_torn","at":"2026-09-28T16:0'],
+  ["a bad line ending in a newline", '{"id":"cq_torn","at":\n']
+]) {
+  test("with " + label + ", status --json and the reader's list both still return the pending request", async () => {
+    const w = world();
+    const request = pickup(w);
+    fs.appendFileSync(stateDir.catalogRequestsPath(w.dir), tail);
+
+    const out = await drain(w, QUIET);
+    assert.equal(out.code, protocol.CLI_EXIT.OK, out.stderr);
+    assert.ok(out.summary, "the drain printed something: " + out.text);
+    assert.deepEqual(out.summary.catalog_requests.map((e) => e.request), [request.id]);
+
+    const queue = catalogRequests.createQueue({ dir: w.dir });
+    // Wired the way the helper wires it (src/service/index.js).
+    const reader = catalogReader.createReader(Object.assign({
+      dir: w.dir,
+      pidAlive: () => true,
+      probe: async () => false
+    }, catalogReader.queueInputs(queue)));
+    const list = await reader.list(T0 + 1000);
+    const rows = [];
+    list.sessions.forEach((s) => s.reviews.forEach((r) => rows.push(r)));
+    const row = rows.filter((r) => r.id === "r_doc")[0];
+    assert.ok(row, "r_doc is listed");
+    assert.ok(row.request, "r_doc carries its request");
+    assert.equal(row.request.id, request.id);
+    assert.equal(row.request.state, "waiting");
+  });
+}
 
 test("CL6: the monitor's drain describes a request once; the second poll filters by the delivered log first and describes nothing", async () => {
   const w = world();

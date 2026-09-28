@@ -150,6 +150,32 @@ test("the contract is exported as the module's own constant and is frozen text",
   assert.equal(rf.CONTRACT.length, 52);
 });
 
+// T12: docs/CONTRACTS.md carries its own restated copy of the contract, and
+// nothing checked it. It is parsed out of the doc's JSON block and compared to
+// both the restated copy above and the module's constant, so a contract change
+// that misses the doc fails here.
+function contractFromDoc() {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const doc = fs.readFileSync(path.join(__dirname, "..", "..", "docs", "CONTRACTS.md"), "utf8");
+  const marker = "**The `contract` field, verbatim.**";
+  const at = doc.indexOf(marker);
+  assert.notEqual(at, -1, "CONTRACTS.md has the verbatim contract section");
+  const open = doc.indexOf("```json\n", at);
+  assert.notEqual(open, -1, "the section has a json block");
+  const start = open + "```json\n".length;
+  const end = doc.indexOf("\n```", start);
+  assert.notEqual(end, -1, "the json block is closed");
+  return JSON.parse("{" + doc.slice(start, end) + "}").contract;
+}
+
+test("docs/CONTRACTS.md restates the contract exactly (T12)", () => {
+  const fromDoc = contractFromDoc();
+  assert.ok(Array.isArray(fromDoc), "the doc's block is a contract array");
+  assert.deepEqual(fromDoc, CONTRACT_VERBATIM);
+  assert.deepEqual(fromDoc, rf.CONTRACT);
+});
+
 // ---------------------------------------------------------------------------
 // The field classification, flipped (D12)
 // ---------------------------------------------------------------------------

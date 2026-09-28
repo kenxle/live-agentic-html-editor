@@ -248,7 +248,17 @@
     if (!btn || btn.disabled) return;
     var id = btn.getAttribute("data-review");
     var what = btn.getAttribute("data-act");
-    if (what === "open" || what === "pickup" || what === "launch") act(id, what);
+    if (what === "open") act(id, what);
+    else if (what === "pickup" || what === "launch") {
+      state = VM.withMenu(state, null);
+      act(id, what);
+    } else if (what === "menu") {
+      if (btn.getAttribute("aria-expanded") === "true") update(VM.withMenu(state, null));
+      else {
+        focusKey(id + ":pickup");
+        update(VM.withMenu(state, id));
+      }
+    }
     else if (what === "star") star(id, btn.getAttribute("aria-pressed") !== "true");
     else if (what === "handoff") {
       focusKey(id + ":copy");
@@ -302,6 +312,11 @@
     });
   }
 
+  // "3 waiting": the attention dot, then the word. Plain text, not a link.
+  function waitingMark(text) {
+    return h("span", { class: "lib-waiting" }, [h("span", { class: "lib-dot", "aria-hidden": "true" }), text]);
+  }
+
   function renderRow(row, extra) {
     var main = h("div", { class: "lib-row-main" }, [
       h("p", { class: "lib-name", text: row.name }),
@@ -309,7 +324,7 @@
     ]);
 
     var facts = [];
-    if (row.counts.waiting) facts.push(h("span", { class: "lib-waiting", text: row.counts.waiting }));
+    if (row.counts.waiting) facts.push(waitingMark(row.counts.waiting));
     facts.push(h("span", { text: row.counts.comments }));
     if (row.counts.asOf) facts.push(h("span", { text: row.counts.asOf }));
     row.badges.forEach(function (b) {
@@ -381,11 +396,36 @@
       text: row.star.on ? "\u2605" : "\u2606"
     });
 
-    var acts = h("div", { class: "lib-acts" }, [
-      actionButton(row, "open", true),
-      actionButton(row, "pickup", false),
-      actionButton(row, "launch", false)
-    ]);
+    // Open is the one button a row shows at rest. Pick this up and Launch sit
+    // behind one Hand to agent menu, drawn only while it is open.
+    var actKids = [actionButton(row, "open", true)];
+    var hand = row.buttons.handTo;
+    if (!hand.hidden) {
+      var menuId = "lib-menu-" + row.id;
+      var menuWrap = h("div", { class: "lib-menu" }, [
+        button(hand.label, {
+          "data-act": "menu",
+          "data-review": row.id,
+          "data-key": row.id + ":menu",
+          "aria-haspopup": "true",
+          "aria-expanded": hand.expanded ? "true" : "false",
+          "aria-controls": hand.expanded ? menuId : null,
+          "aria-busy": hand.busy ? "true" : null,
+          title: hand.reason || null,
+          disabled: !hand.enabled
+        })
+      ]);
+      if (hand.expanded) {
+        menuWrap.appendChild(
+          h("div", { class: "lib-menu-list", id: menuId, role: "group", "aria-label": hand.label }, [
+            actionButton(row, "pickup", false),
+            actionButton(row, "launch", false)
+          ])
+        );
+      }
+      actKids.push(menuWrap);
+    }
+    var acts = h("div", { class: "lib-acts" }, actKids);
 
     var kids = [starBtn, main, acts];
     if (row.panel) {
@@ -422,7 +462,7 @@
         ? h("span", { class: "lib-card-watch" }, [h("span", { class: "lib-badge", "data-badge": "watching", text: card.watchText })])
         : h("span", { class: "lib-card-watch", text: card.watchText })
     );
-    if (card.waitingText) metaKids.push(h("span", { class: "lib-waiting", text: card.waitingText }));
+    if (card.waitingText) metaKids.push(waitingMark(card.waitingText));
     metaKids.push(h("span", { text: card.lastText }));
     var details = h("details", { class: "lib-card", "data-session": card.id, open: card.open }, [
       h("summary", { "data-key": "card:" + card.id }, [
@@ -506,7 +546,7 @@
     lastDialog = serial;
     var kids = [h("h2", { id: "lahe-catalog-confirm-title", text: dialog.title }), h("p", { text: dialog.body })];
     if (dialog.reviews.length) {
-      kids.push(h("ul", null, dialog.reviews.map(function (name) {
+      kids.push(h("ul", { class: "lib-dialog-list" }, dialog.reviews.map(function (name) {
         return h("li", { text: name });
       })));
     }
@@ -595,6 +635,12 @@
   // Escape closes a modal dialog by itself; the close lands here and means Cancel.
   els.dialog.addEventListener("close", function () {
     if (state.dialog) update(VM.withDialog(state, null));
+  });
+  // Escape closes an open Hand to agent menu and puts focus back on its button.
+  document.addEventListener("keydown", function (event) {
+    if (event.key !== "Escape" || !state.menu) return;
+    focusKey(state.menu + ":menu");
+    update(VM.withMenu(state, null));
   });
   els.search.addEventListener("input", function () {
     update(VM.withQuery(state, els.search.value));

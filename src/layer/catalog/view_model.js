@@ -47,11 +47,22 @@
     AGENT_STOPPED: "{agent} is attached but has stopped watching. Open still works; hand-overs give you a message to paste.",
     WAITING: "Waiting for {agent}.",
     ALREADY_WAITING: "Already waiting for {agent}.",
+    // The helper queued nothing: the attached agent already owns or watches
+    // the document (request_id: null).
+    ALREADY_HAS: "{agent} already has it. Nothing was sent.",
     DONE: "{agent}: {text}",
     REFUSED: "{agent} couldn't take it: {text}.",
     EXPIRED: "Not picked up. {agent} didn't answer.",
-    PANEL_NO_AGENT: "No agent is attached. Paste this hand-off message into any agent:",
-    PANEL_REFUSED: "Paste this hand-off message into a new agent:",
+    // Not in the Page Spec's table: the expired line carries a reason
+    // (catalog_requests.js EXPIRY_REASON), and a launch that expired is not a
+    // pick-up. The row names both, so the reader knows what to do next.
+    EXPIRED_PICKUP: "Not picked up.",
+    EXPIRED_LAUNCH: "No new agent was launched.",
+    EXPIRED_TIMEOUT: "{agent} didn't answer.",
+    EXPIRED_MONITOR_DEAD: "{agent} stopped watching before it answered.",
+    EXPIRED_ATTACH_CHANGED: "A different agent was attached before {agent} answered.",
+    PANEL_NO_AGENT: "No agent is attached. This is the same hand-off message the rail already copies. Paste it into any agent:",
+    PANEL_REFUSED: "This is the same hand-off message the rail already copies. Paste it into a new agent:",
     COPY: "Copy",
     COPIED: "Copied.",
     COPY_FAILED: "Couldn't copy. Select the message and copy it yourself.",
@@ -62,6 +73,12 @@
     OPEN: "Open",
     PICKUP: "Pick this up",
     LAUNCH: "Launch a new agent",
+    // Pick this up and Launch sit behind one menu per row, so Open is the
+    // only button a row shows at rest.
+    HAND_TO: "Hand to agent",
+    // An agent is told to refuse a dev-server hand-over (it cannot start
+    // someone's app), so the Library does not offer one.
+    DEV_SERVER_NO_HANDOFF: "An app's dev server serves this page, so no agent can take it from here. Start the dev server and open the page yourself.",
     SEARCH_PLACEHOLDER: "Search titles, files, folders, sessions",
     ALL_PROJECTS: "All projects",
     SECTION_TOP: "Unanswered comments, and starred ({n})",
@@ -75,6 +92,9 @@
     // every row of the card.
     WATCH_LIBRARY_AGENT: "watched by {agent}, the agent that opened this Library",
     WATCH_OTHER: "watched by {agent}",
+    // The watcher's name is the card's own title: a session watched by its
+    // own agent, often one launched for the document and named after it.
+    WATCH_OWN: "watched by its own agent",
     WATCH_NONE: "no agent watching",
     UNNAMED_SESSION: 'Unnamed session, started on "{name}"',
     // Not in the Page Spec: the reader's "legacy" group is lahe add reviews
@@ -160,6 +180,9 @@
   //              watched session (R12b)
   //   banner     {kind: "opening"|"opened", review, name, agent, requestId,
   //              watched} | null: what Open is doing
+  //   opening    {reviewId: true}: an Open sent and not yet answered. A
+  //              second click on that row sends nothing until it answers.
+  //   menu       reviewId | null: the row whose Hand to agent menu is open
   //   notes      {reviewId: {kind, text, tone, at, busy, action, requestId}}:
   //              what the page's own last action on a row came to
   //   starPending  {reviewId: desired}: a star sent and not yet answered
@@ -176,6 +199,8 @@
       panel: null,
       dialog: null,
       banner: null,
+      opening: {},
+      menu: null,
       notes: {},
       starPending: {},
       starOverride: {}
@@ -218,6 +243,11 @@
 
   function withExpanded(state, sessionId, open) {
     return assign({}, state, { expanded: withKey(state.expanded, sessionId, !!open) });
+  }
+
+  /** Open one row's Hand to agent menu, or close it with null. */
+  function withMenu(state, reviewId) {
+    return assign({}, state, { menu: reviewId || null });
   }
 
   function withPanel(state, reviewId, reason) {
@@ -308,6 +338,8 @@
 
   function agentHeader(list) {
     var a = list && list.attached;
+    // A closed attached session is no agent at all, not one that stopped.
+    if (a && a.closed === true) return { attached: false, text: TEXT.AGENT_NONE };
     if (a && a.session && a.watching !== false) {
       return { attached: true, text: fill(TEXT.AGENT_ATTACHED, { agent: agentLabel(a) }) };
     }
@@ -337,6 +369,7 @@
     var attached = list && list.attached;
     var agent = agentLabel(w);
     if (attached && attached.session && w.session === attached.session) return fill(TEXT.WATCH_LIBRARY_AGENT, { agent: agent });
+    if (agent === sessionTitle(session)) return TEXT.WATCH_OWN;
     return fill(TEXT.WATCH_OTHER, { agent: agent });
   }
 
@@ -356,12 +389,22 @@
     return fill(TEXT.UNNAMED_SESSION, { name: first ? first.display_name : session.id });
   }
 
-  function whereText(review) {
-    return [review.project, review.folder, review.file]
-      .filter(function (p) {
-        return typeof p === "string" && p !== "";
-      })
-      .join(" / ");
+  // The path line says only what the title and the card do not: the project
+  // is left out when the card shows exactly that one project, and a folder or
+  // file the title already names is left out.
+  function whereText(review, cardProjects) {
+    var name = String(review.display_name || review.title || "");
+    var parts = [];
+    var projectShown = !!(cardProjects && cardProjects.length === 1 && cardProjects[0] === review.project);
+    if (typeof review.project === "string" && review.project && !projectShown) parts.push(review.project);
+    var rest = [review.folder, review.file].filter(function (p) {
+      return typeof p === "string" && p !== "";
+    });
+    var said = rest.every(function (p) {
+      return name.indexOf(p) !== -1;
+    });
+    if (!said) parts = parts.concat(rest);
+    return parts.join(" / ");
   }
 
   // ---------------------------------------------------------------------------
@@ -383,6 +426,10 @@
       return { text: fill(TEXT.DONE, { agent: agent, text: q.text || "" }), tone: "ok", busy: false, copyHandoff: false };
     }
     if (q.state === "refused") {
+      // A refusal is about the agent that gave it. Once that agent is not the
+      // attached, live one, the note is history and is dropped.
+      var live = liveAgent(list);
+      if (!live || live.name !== q.by_name) return null;
       return {
         text: fill(TEXT.REFUSED, { agent: agent, text: withoutFinalPeriod(q.text) }),
         tone: "warn",
@@ -391,7 +438,17 @@
       };
     }
     if (q.state === "expired") {
-      return { text: fill(TEXT.EXPIRED, { agent: agent }), tone: "warn", busy: false, copyHandoff: false };
+      var launch = q.action === "launch";
+      var why = q.reason === "attach_changed"
+        ? TEXT.EXPIRED_ATTACH_CHANGED
+        : q.reason === "monitor_dead" ? TEXT.EXPIRED_MONITOR_DEAD : TEXT.EXPIRED_TIMEOUT;
+      return {
+        text: (launch ? TEXT.EXPIRED_LAUNCH : TEXT.EXPIRED_PICKUP) + " " + fill(why, { agent: agent }),
+        tone: "warn",
+        busy: false,
+        // A launch nobody ran can still be done by hand, from the message.
+        copyHandoff: launch
+      };
     }
     return null;
   }
@@ -425,11 +482,12 @@
   }
 
   // `cardWatching` is the watcher the row's card already names, or null when
-  // the row is shown outside a card (the missing section).
-  function buildRow(review, session, list, state, now, opts, cardWatching) {
+  // the row is shown outside a card (the missing section); `inCard` says which.
+  function buildRow(review, session, list, state, now, opts, cardWatching, inCard) {
     var agent = liveAgent(list);
     var missing = review.openable === "missing";
     var viaAgent = review.openable === "via-agent";
+    var devServer = review.kind === "dev-server";
     var note = pickNote(state.notes && state.notes[review.id], review, list);
     var busyAction = note && note.busy ? note.action : null;
     var starred = effectiveStar(review, state);
@@ -439,11 +497,23 @@
     if (missing) notices.push({ text: TEXT.MISSING, tone: "quiet" });
     if (!missing && review.kind === "worktree") notices.push({ text: TEXT.WORKTREE, tone: "info" });
     if (viaAgent && !agent) notices.push({ text: TEXT.NEEDS_AGENT, tone: "warn" });
+    if (devServer && !missing) notices.push({ text: TEXT.DEV_SERVER_NO_HANDOFF, tone: "quiet" });
 
+    var handEnabled = !missing && !devServer;
     var buttons = {
-      open: { label: TEXT.OPEN, enabled: !missing && !(viaAgent && !agent), busy: false },
-      pickup: { label: TEXT.PICKUP, enabled: !missing, busy: busyAction === "pickup" },
-      launch: { label: TEXT.LAUNCH, enabled: !missing, busy: busyAction === "launch" }
+      open: { label: TEXT.OPEN, enabled: !missing && !(viaAgent && !agent), busy: isOpening(state, review.id) },
+      pickup: { label: TEXT.PICKUP, enabled: handEnabled, busy: busyAction === "pickup" },
+      launch: { label: TEXT.LAUNCH, enabled: handEnabled, busy: busyAction === "launch" },
+      handTo: {
+        label: TEXT.HAND_TO,
+        // The attached agent already watches this session: there is nothing
+        // to hand it.
+        hidden: !!(agent && session.watching && session.watching.session === agent.session),
+        enabled: handEnabled,
+        reason: devServer && !missing ? TEXT.DEV_SERVER_NO_HANDOFF : null,
+        busy: busyAction === "pickup" || busyAction === "launch",
+        expanded: state.menu === review.id && handEnabled
+      }
     };
 
     var panel = null;
@@ -479,7 +549,7 @@
       id: review.id,
       session: session.id,
       name: review.display_name || review.title || review.id,
-      where: whereText(review),
+      where: whereText(review, inCard ? session.projects : null),
       lastText: "last " + formatTime(review.last, now, opts.timeZone),
       counts: {
         waiting: review.waiting > 0 ? review.waiting + " waiting" : null,
@@ -696,7 +766,7 @@
         lastText: "last " + formatTime(session.last, now, opts.timeZone),
         open: open,
         rows: visible.map(function (r) {
-          return buildRow(r, session, list, state, now, opts, session.watching || null);
+          return buildRow(r, session, list, state, now, opts, session.watching || null, true);
         })
       });
     });
@@ -720,7 +790,7 @@
               heading: fill(TEXT.MISSING_HEADING, { n: missingRows.length }),
               hideText: TEXT.HIDE,
               rows: missingRows.map(function (m) {
-                return buildRow(m.review, m.session, list, state, now, opts, null);
+                return buildRow(m.review, m.session, list, state, now, opts, null, false);
               })
             }
           : null
@@ -745,6 +815,10 @@
     return null;
   }
 
+  function isOpening(state, reviewId) {
+    return !!(state && state.opening && state.opening[reviewId]);
+  }
+
   function watchedByOther(session, agent) {
     return !!(session.watching && agent && session.watching.session !== agent.session);
   }
@@ -763,6 +837,8 @@
     options = options || {};
     var found = findReview(list, reviewId);
     if (!found || found.review.openable === "missing") return { kind: "none" };
+    // An Open on this row is still in flight: a second click sends nothing.
+    if (isOpening(state, reviewId)) return { kind: "none" };
     var review = found.review;
     var agent = liveAgent(list);
     var viaAgent = review.openable === "via-agent";
@@ -847,6 +923,7 @@
   function beginOpen(state, list, reviewId, options) {
     options = options || {};
     var out = clearRow(state, reviewId);
+    out.opening = withKey(state.opening, reviewId, true);
     var found = findReview(list, reviewId);
     var agent = liveAgent(list);
     if (!found || options.tab === false) return assign(out, { banner: null });
@@ -862,7 +939,7 @@
 
   function afterOpen(state, list, reviewId, result, now) {
     var opening = state.banner && state.banner.review === reviewId ? state.banner : null;
-    var out = assign({}, state, { banner: null });
+    var out = assign({}, state, { banner: null, opening: withKey(state.opening, reviewId, undefined) });
     if (!result || !result.ok) {
       if (result && result.urlRefused) return withNote(out, reviewId, { kind: "error", text: TEXT.URL_REFUSED, tone: "warn" }, now);
       return refused(out, list, reviewId, "open", result || { unreachable: true }, now);
@@ -910,6 +987,13 @@
     var out = clearRow(state, reviewId);
     if (!result || !result.ok) return refused(out, list, reviewId, action, result || { unreachable: true }, now);
     var agent = liveAgent(list);
+    if (result.body && result.body.request_id === null) {
+      return withNote(out, reviewId, {
+        kind: "has",
+        text: fill(TEXT.ALREADY_HAS, { agent: agent ? agent.name : "the agent" }),
+        tone: "ok"
+      }, now);
+    }
     return withNote(out, reviewId, {
       kind: "waiting",
       text: fill(TEXT.WAITING, { agent: agent ? agent.name : "the agent" }),
@@ -969,6 +1053,7 @@
     withShowMissing: withShowMissing,
     withExpanded: withExpanded,
     withPanel: withPanel,
+    withMenu: withMenu,
     withDialog: withDialog,
     withCopied: withCopied,
     popupBlocked: popupBlocked,

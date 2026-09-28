@@ -28,6 +28,9 @@ const reviewsModule = require("../../src/service/reviews.js");
 const agentSessions = require("../../src/service/agent_sessions.js");
 const staticServers = require("../../src/service/static_servers.js");
 const sessionCommand = require("../../src/cli/commands/session.js");
+const catalogStore = require("../../src/service/catalog_store.js");
+const { pollUntil } = require("../helpers/poll.js");
+const { onFreePort } = require("../helpers/free_port.js");
 
 const C = protocol.CATALOG;
 
@@ -35,16 +38,6 @@ function tempDir() {
   return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lahe-catalog-lifetime-")));
 }
 
-async function freePort() {
-  const server = net.createServer();
-  await new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
-  });
-  const port = server.address().port;
-  await new Promise((resolve) => server.close(resolve));
-  return port;
-}
 
 function raw(port, options) {
   return new Promise((resolve, reject) => {
@@ -103,12 +96,11 @@ async function close(dir, sessionId, nowMs) {
 /** One open agent session and a helper started for it, the way the CLI starts one. */
 async function started(t) {
   const dir = path.join(tempDir(), "state");
-  const port = await freePort();
-  assert.notEqual(port, protocol.DEFAULT_PORT);
   const store = agentSessions.createStore({ dir });
   store.create({ id: "s_last" });
   t.after(async () => { await sessionCommand.stopVerifiedHelper(dir).catch(() => {}); });
-  await sessionCommand.startHelper(dir, port);
+  const { port } = await onFreePort((p) => sessionCommand.startHelper(dir, p));
+  assert.notEqual(port, protocol.DEFAULT_PORT);
   return { dir, port, store };
 }
 
@@ -209,4 +201,45 @@ test("R10a: Open a closed review with no agent, close the last agent's own sessi
   assert.equal(posted.status, 200, posted.text);
   const onDisk = fs.readFileSync(stateDir.eventsPath(w.dir, "r_old"), "utf8");
   assert.match(onDisk, /ev_after_close/);
+});
+
+test("R10a, the Library's own rule: once the sweep closes the reopened session, a fresh Library poll alone keeps the helper up through the last close", async (t) => {
+  const w = await started(t);
+  const site = path.join(tempDir(), "site");
+  fs.mkdirSync(site);
+  fs.writeFileSync(path.join(site, "doc.html"), "<!doctype html><title>Synthetic doc</title><p>still here</p>");
+  w.store.create({ id: "s_old" });
+  const log = logModule.createEventLog({ dir: w.dir });
+  reviewsModule.createReviews({ dir: w.dir, log }).create({ id: "r_old", agent_session_id: "s_old", target_path: path.join(site, "doc.html") });
+  await staticServers.start({ dir: w.dir, sessionId: "s_old", root: site });
+  t.after(async () => { await staticServers.stopAll(w.dir, "s_old").catch(() => {}); });
+  await staticServers.stopAll(w.dir, "s_old");
+  w.store.close("s_old");
+
+  const opened = await libraryCall(w.port, "catalog.open", { review: "r_old", handoff: true });
+  assert.equal(opened.status, 200, opened.text);
+  assert.equal(w.store.read("s_old").closed_at, null, "Open reopened the session");
+
+  // Age the reopen past REOPENED_AUTOCLOSE_MS rather than waiting it out, then
+  // let the helper's own sweep (every POLL_MS, on its real clock) close it.
+  const store = catalogStore.createCatalogStore({ dir: w.dir });
+  const entry = store.read().data.reopened.s_old;
+  assert.ok(entry, "the Library recorded the reopen");
+  store.setReopened("s_old", {
+    at: new Date(Date.now() - C.REOPENED_AUTOCLOSE_MS - 60 * 1000).toISOString(),
+    handoff_rev: entry.handoff_rev
+  });
+  await pollUntil(() => !!w.store.read("s_old").closed_at, {
+    timeoutMs: C.POLL_MS * 3,
+    message: "the helper's sweep to close the quiet reopened session"
+  });
+
+  // Now s_last is the only open session, and nothing but the Library holds the
+  // helper: no reopened session, no held document window.
+  assert.equal(fs.existsSync(stateDir.windowsPath(w.dir)) && /r_old/.test(fs.readFileSync(stateDir.windowsPath(w.dir), "utf8")), false);
+  assert.equal((await libraryCall(w.port, "catalog.list")).status, 200);
+  const closed = await close(w.dir, "s_last", Date.now());
+  assert.equal(closed.code, protocol.CLI_EXIT.OK, closed.stderr);
+  assert.match(closed.stdout, /shared helper left running: the Library page polled it/);
+  assert.ok(await health(w.port), "health still answers");
 });
