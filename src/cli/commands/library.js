@@ -11,8 +11,22 @@
 //
 // ATTACHING. `--session <id>` writes catalog-attach.json, which only this
 // command writes: the Library hands "Pick this up" and "Launch a new agent" to
-// that session. The last agent to run it is attached. With no `--session` the
-// attach is left as it is and the command says who is attached.
+// that session. The last agent to run it is attached.
+//
+// NO `--session`: REUSE OR MINT. The agent asked to "open the lahe library"
+// often has no LAHE session, since only `lahe review` used to make one. So:
+//
+//   - the attached session is open    reuse it and leave the attach alone
+//   - nothing attached, or it closed  mint a new session and attach it
+//   - `--new-session`                 always mint and attach
+//
+// This is `lahe review`'s rule with the Library as the target: a target that
+// already belongs to a session is handed to that session, and `--new-session`
+// is the deliberate way out. It keeps a second run from piling up sessions. A
+// minted session owns no review, so it is not an empty review. Either way the
+// command prints the session's commands, the block `lahe review` prints. A
+// reused session may be another agent's, so `--name` names only a session this
+// call minted or one named with `--session`.
 //
 // ANSWERING. `lahe library answer` is the only CLI writer of
 // catalog-requests.jsonl, and the only line it writes is the answer. The
@@ -33,14 +47,19 @@ var EXIT = protocol.CLI_EXIT;
 var C = protocol.CATALOG;
 
 var USAGE = [
-  "usage: lahe library [--session <id>] [--json] [--port <n>] [--state-dir <path>]",
+  "usage: lahe library [--session <id> | --new-session] [--name <name>] [--json] [--port <n>] [--state-dir <path>]",
   "       lahe library answer <request-id> --session <id> --status done|refused --text \"...\" [--state-dir <path>]",
   "",
   "  lahe library           start the helper if it is not running, then print the Library's",
   "                         address. It never opens a browser: run `open` on the URL it prints.",
   "  --session <id>         attach this agent session: the Library hands its requests to it.",
-  "                         Without it, the attach is left as it is and the command says who it is.",
-  "  --json                 print {url, attached, helper_started} as one JSON line",
+  "                         Without it: the Library's attached session is reused when it is open;",
+  "                         otherwise a new agent session (no reviews) is started and attached.",
+  "                         Either way the session's monitor, drain and close commands are printed.",
+  "  --new-session          start and attach a new agent session even when one is attached.",
+  "  --name <name>          your host's name for this agent. Names a session this call started, or",
+  "                         the --session one; a reused session keeps its name.",
+  "  --json                 print {url, attached, helper_started, session, session_created} as one JSON line",
   "  --port <n>             the helper's port. Default " + protocol.DEFAULT_PORT,
   "",
   "  answer                 answer one request from the catalog_requests section of the drain.",
@@ -56,6 +75,8 @@ function parse(argv) {
     answer: false,
     id: null,
     session: null,
+    newSession: false,
+    name: null,
     status: null,
     text: null,
     json: false,
@@ -79,7 +100,10 @@ function parse(argv) {
       out.help = true;
     } else if (arg === "--json" && !out.answer) {
       out.json = true;
+    } else if (arg === "--new-session" && !out.answer) {
+      out.newSession = true;
     } else if (arg === "--session" || arg === "--state-dir" || arg === "--port" ||
+      (!out.answer && arg === "--name") ||
       (out.answer && (arg === "--status" || arg === "--text"))) {
       if (list[i + 1] === undefined) {
         out.error = arg + " needs a value";
@@ -87,6 +111,7 @@ function parse(argv) {
       }
       var value = String(list[(i += 1)]);
       if (arg === "--session") out.session = value;
+      if (arg === "--name") out.name = value;
       if (arg === "--state-dir") out.stateDir = value;
       if (arg === "--status") out.status = value;
       if (arg === "--text") out.text = value;
@@ -106,6 +131,10 @@ function parse(argv) {
   if (out.help || out.error) return out;
   if (out.session !== null && !protocol.isSafeId(out.session)) {
     out.error = "--session must be a safe id: " + String(protocol.SAFE_ID);
+    return out;
+  }
+  if (out.newSession && out.session !== null) {
+    out.error = "--new-session and --session are alternatives; pick one";
     return out;
   }
   if (out.answer) {
@@ -131,8 +160,22 @@ function readReady(dir) {
   }
 }
 
+/** The attached session when it is still open, or null. */
+function openAttachedSession(dir, store) {
+  var attach = catalogRequests.readAttachRecord(dir);
+  if (!attach) return null;
+  var session;
+  try {
+    session = store.read(attach.session);
+  } catch (error) {
+    return null;
+  }
+  if (!session || session.synthetic || session.closed_at) return null;
+  return attach.session;
+}
+
 function attachedLine(attached) {
-  if (!attached) return "no agent. Run lahe library --session <your session id> to attach one";
+  if (!attached) return "no agent. Run lahe library to attach one";
   var who = attached.name ? attached.name + " (" + attached.session + ")" : attached.session;
   return who + (attached.watching ? "" : ". Its monitor is not running, so it will not hear requests");
 }
@@ -146,11 +189,38 @@ async function runLibrary(args, opts, out, err) {
     err("lahe library: " + error.message + "\n");
     return EXIT.BAD_USAGE;
   }
+  var store = agentSessions.createStore({ dir: dir });
+  var sessionId = args.session;
+  var created = false;
+  var reused = false;
   if (args.session) {
     // Checked BEFORE the helper starts: attaching a session that does not exist
     // would leave the Library handing requests to nobody.
     try {
-      agentSessions.createStore({ dir: dir }).requireOpen(args.session);
+      store.requireOpen(args.session);
+      if (args.name !== null) store.setName(args.session, args.name);
+    } catch (error) {
+      err("lahe library: " + error.message + "\n");
+      return EXIT.BAD_USAGE;
+    }
+  } else {
+    try {
+      sessionId = args.newSession ? null : openAttachedSession(dir, store);
+      if (sessionId) {
+        reused = true;
+        if (args.name !== null) {
+          err(
+            "lahe library: --name was not applied, because the Library's attached session " + sessionId +
+              " was reused; to rename it, run: lahe session name " + sessionId + " " + JSON.stringify(args.name) + "\n"
+          );
+        }
+      } else {
+        sessionId = store.create(args.name === null ? {} : { name: args.name }).id;
+        created = true;
+      }
+      // The block printed below names the wake feed's path, so it has to exist
+      // before an agent copies that line.
+      store.wake.ensure(sessionId);
     } catch (error) {
       err("lahe library: " + error.message + "\n");
       return EXIT.BAD_USAGE;
@@ -166,6 +236,8 @@ async function runLibrary(args, opts, out, err) {
   try {
     started = await sessionCommand.startHelper(dir, port);
   } catch (error) {
+    // A session this call made and never handed out is closed again.
+    if (created) store.close(sessionId);
     err("lahe library: " + error.message + "\n");
     return EXIT.HELPER_UNREACHABLE;
   }
@@ -175,19 +247,34 @@ async function runLibrary(args, opts, out, err) {
     return EXIT.HELPER_UNREACHABLE;
   }
 
-  if (args.session) catalogRequests.writeAttach(dir, args.session, nowMs);
+  if (!reused) catalogRequests.writeAttach(dir, sessionId, nowMs);
   var url = "http://" + protocol.DEFAULT_HOST + ":" + ready.port + protocol.CATALOG_PAGE_PATH;
   var attached = catalogRequests.createQueue({ dir: dir }).readAttached(nowMs);
 
   if (args.json) {
-    out(JSON.stringify({ url: url, attached: attached, helper_started: started.started === true }) + "\n");
+    out(JSON.stringify({
+      url: url,
+      attached: attached,
+      helper_started: started.started === true,
+      session: sessionId,
+      session_created: created
+    }) + "\n");
     return EXIT.OK;
   }
+  var sessionLine = "";
+  if (created) sessionLine = "session   " + sessionId + "  (started for this agent)\n";
+  if (reused) {
+    sessionLine =
+      "session   " + sessionId + "  (reused: the Library's attached session. If it is not yours,\n" +
+      "            rerun with --new-session to start and attach your own)\n";
+  }
   out(
+    sessionLine +
     "Library   " + url + "\n" +
       "attached  " + attachedLine(attached) + "\n" +
       (started.keptForReviewer ? "helper    " + started.keptForReviewer + "\n" : "") +
-      "open it   open " + url + "\n"
+      "open it   open " + url + "\n" +
+      (args.session ? "" : agentSessions.commandBlock({ dir: dir, session: sessionId }))
   );
   return EXIT.OK;
 }

@@ -553,16 +553,23 @@ either is the human asking; nothing else is.
 **Open it** when they ask for "the lahe library":
 
 ```sh
-lahe library --session <your-session-id>
+lahe library --session <your-session-id>   # you already have a LAHE session
+lahe library --name "<your name>"          # you do not
 open <the URL it printed>
 ```
 
 - It starts the helper if it is not running, then prints the URL. It never
   opens a browser, so run `open` yourself and hand them the link too.
 - `--session` attaches you: the Library sends its requests to the last agent
-  that ran it with `--session`. The session must be open.
-- With no LAHE session of your own, run it without `--session`. Open and Star
-  still work. The two agent buttons offer the hand-off message instead.
+  attached. The session must be open.
+- With no LAHE session of your own, run it without `--session`. It starts a
+  new agent session for you (one with no reviews), attaches it, and prints
+  its session id and its monitor, drain and close commands, as `lahe review`
+  does. `--name` names it.
+- Run again without `--session`, it reuses the Library's attached session
+  while that session is open, so sessions do not pile up. It says so on the
+  `session` line. If that session is not yours, rerun with `--new-session`
+  to start and attach your own.
 - Then arm your monitor on your session as usual. A request expires if your
   monitor is not running, if another agent attaches, or after 30 minutes with
   no answer.
