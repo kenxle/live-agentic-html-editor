@@ -1,23 +1,29 @@
 # Progress: Free writing
 
-**Phase 3 and 4, Wireframe and Architecture.** The wireframes are ready for you to click through. The architecture is drafted and with its reviewers. One thing needs you now. Last updated 2026-09-28 17:26.
+**Phase 5, Plan.** You approved wireframe direction A. The architecture is reviewed and revised. The plan is being written. Two decisions are waiting on you. Last updated 2026-09-28 17:59.
 
-**Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html)
+**Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html) ([decision](wireframes/DECISION.md)) · [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html)
 
 ## Needs your attention
 
-- [ ] Click through the [wireframes](http://127.0.0.1:49513/index.html) and say which direction you like, and what feels wrong about the steps. There are three:
-  - **A. Block menu on the bar:** a "Paragraph" menu next to B and I, and a "+ Write here" line when you hover between blocks.
-  - **B. Type like Markdown:** no new buttons. Typing `# ` makes a header and `- ` makes a list, and you click any empty space to start writing.
-  - **C. Growing frame:** a "+" in the left margin beside every block, and a row of block-type buttons on the frame's bottom edge.
-  The plan's layout work waits on your pick.
+Both are on the [architecture page](http://127.0.0.1:65155/02_architecture_free_writing.html) under Open Questions. The plan is written with the recommended answer for each, and changes if you say otherwise.
+
+- [ ] **AQ1, Tiptap or Lahe's own editing code.** The recommendation is Lahe's own code, against your lean. A test put an existing block next to a Tiptap editor, which is exactly what one sitting does. In all three browsers:
+  - the caret could not cross between them
+  - a selection could not span both
+  - Backspace did not merge
+  - undo ran out of order
+  Lahe's own approach passed everything.
+- [ ] **AQ3, should the "is it really on the page" check always run for new text?** Today it only runs when the agent wrote nothing at all. Running it every time for new text would catch words that turned into markup in the source, and a header placed as a paragraph. It changes a standing rule, so it is your call. The recommendation is yes.
 
 ## Currently working on
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Architecture reviewer | Reviewing the architecture | 2026-09-28 17:26 | `main` (docs only) |
-| Security reviewer | Reviewing the architecture | 2026-09-28 17:26 | `main` (docs only) |
+| Manager reviewer | Checking the plan's parallel work and how it merges back together | 2026-09-28 17:59 | `main` (docs only) |
+| Code-lead reviewer | Checking what a builder would have to invent, across brief, architecture, and plan | 2026-09-28 17:59 | `main` (docs only) |
+| Testing reviewer | Checking whether the test list would catch real failures | 2026-09-28 17:59 | `main` (docs only) |
+| Design reviewer | Checking the plan's screens and words against direction A | 2026-09-28 17:59 | `main` (docs only) |
 
 ## Phases
 
@@ -26,9 +32,9 @@
 | 0 Setup | done | 2026-09-28 |
 | 1 Crucible | done | 2026-09-28 |
 | 2 Brief | done | 2026-09-28 |
-| 3 Wireframe | in progress | 2026-09-28 |
-| 4 Architecture | in progress | 2026-09-28 |
-| 5 Plan | not started | |
+| 3 Wireframe | done | 2026-09-28 |
+| 4 Architecture | done | 2026-09-28 |
+| 5 Plan | in progress | 2026-09-28 |
 | 6 Implement | not started | |
 | 7 Review | not started | |
 | 8 Ship and land | not started | |
@@ -50,6 +56,11 @@ None.
 
 ### Follow-ups
 
+- Board rows added from the architecture reviews and the reproduction, all older than this feature:
+  - `LAHE-static-server-host-check`
+  - `LAHE-markdown-link-schemes`
+  - `LAHE-anchor-markup-denylist`
+  - `LAHE-early-rebuild-no-reload`
 - `LAHE-rich-paste` on the board: keep formatting when pasting text written elsewhere. Out of this feature unless Tiptap brings it for free.
 
 ### Cleanup queue
@@ -67,6 +78,36 @@ Not shipped yet.
 ## Log
 
 Newest first.
+
+**2026-09-28 17:59.** The plan is drafted in three phases:
+- shared groundwork first
+- three parallel builds: the editor, the page reload, and the helper with `lahe write`
+- the rail and integration
+
+Four reviewers are on it now.
+
+**2026-09-28 17:51.** You approved wireframe direction A:
+- "B" lost on its insert style
+- "C" was too busy
+- Markdown shortcuts and hotkeys stay as extras
+
+The editing-area test found one approach that works in all three browsers: make the block's parent editable and refuse changes outside the sitting. The same test showed a Tiptap editor next to an existing block fails every check.
+
+The formatting reproduction confirmed all three cases:
+- the doubled header line
+- the lone paragraph losing its bold
+- a handled reply accepted for a bold edit the agent never made
+
+The architecture is revised with all of it. The plan is starting.
+
+**2026-09-28 17:38.** Both architecture reviews are back.
+
+The security review found three gaps:
+- the markup filter ran only in the browser
+- a symlink hole in the blank-document command
+- a notes file in the home folder could expose the whole folder
+
+The architect review found 21 issues, 8 of them serious. Its main point: the Tiptap question cannot be answered fairly until someone tests whether one editing area can span several blocks. That test and a reproduction of the formatting bugs are running now. The revision folds in everything else meanwhile.
 
 **2026-09-28 17:26.** The wireframes are built: three clickable directions, every link checked, all showing one sitting as one edit.
 
