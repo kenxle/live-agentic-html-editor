@@ -711,3 +711,17 @@ test("CX1: with every server answering, out of order, each row's served_url is i
   assert.equal(served, openableYes, "every openable row got a URL");
   assert.ok(served >= 2, "several rows served, got " + served);
 });
+
+test("CR5: origin events an Open's swap appends do not move a review's last; the newest other event's time is its last", async () => {
+  const { reader, installed } = setup();
+  const log = path.join(installed.dir, "reviews", "r_spec", "events.jsonl");
+  const events = fs.readFileSync(log, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line));
+  const newestTs = events.map((e) => e.ts).sort().pop();
+  const swapAt = new Date(installed.nowMs).toISOString();
+  const origin = (event, port) => JSON.stringify({ event, event_id: "ev_swap_" + port, ts: swapAt, review: "r_spec", payload: { origin: "http://127.0.0.1:" + port } });
+  fs.appendFileSync(log, origin("origin.registered", 5001) + "\n" + origin("origin.removed", 4321) + "\n");
+  fs.utimesSync(log, new Date(installed.nowMs), new Date(installed.nowMs));
+  const list = await reader.list(installed.nowMs);
+  assert.equal(row(list, "r_spec").last, newestTs);
+  assert.equal(reader.describeReview("r_spec", installed.nowMs).last, newestTs, "the log line's age reads the same last");
+});

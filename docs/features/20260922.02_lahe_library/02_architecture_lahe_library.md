@@ -143,7 +143,7 @@ One writer per file, so a star and an attach cannot overwrite each other.
 Rules the reader owns:
 
 - **`display_name`** is the title. When the title is missing, or shared with another row, it is `folder / file`.
-- **`last`** on a review is its newest event time; on a session, its newest review's.
+- **`last`** on a review is its newest event time; on a session, its newest review's. Origin events do not count: an Open's origin swap appends them to every review the restarted server serves, so a log that ends in them takes `last` from the newest other event, read from the log's tail (fix round CR5).
 - **`projects`:** the base name of the git top level of each review's target. For a worktree, the owning repository's name. No git repository means no project.
 - **`openable: yes`** when `static_servers.servesPath(...)` is true for a recorded server of the session. That counts mounts.
 - **`kind`** tells the agent how to re-serve a `via-agent` row.

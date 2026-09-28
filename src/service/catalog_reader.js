@@ -8,7 +8,9 @@
 //
 //   meta.json         the review's session, target, source and creation time
 //   review.json       title, pages, counts, ended_at
-//   events.jsonl      only its modified time (a review's `last`), unless the
+//   events.jsonl      its modified time (a review's `last`; when the log ends
+//                     in origin events, the newest other event's time, from
+//                     the tail only), unless the
 //                     log is newer than review.json and small enough to fold
 //                     here (REPROJECT_MAX_BYTES), in which case the one review
 //                     is projected in memory with the helper's own projection
@@ -150,6 +152,64 @@ function createReader(options) {
       if (!value || typeof value !== "object") throw new Error("not an object");
       return value;
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // A review's `last`, when its log ends in origin events
+  // ---------------------------------------------------------------------------
+
+  // Open's origin swap (fix round CR5) appends origin.registered and
+  // origin.removed to every review the restarted server serves, so the log's
+  // modified time would call a review nobody touched "worked on just now".
+  // When the log ENDS in origin events, `last` is the time of the newest event
+  // that is not one. Only the tail is read, so a large log stays unread.
+  var ORIGIN_EVENTS = [protocol.EVENT.ORIGIN_REGISTERED, protocol.EVENT.ORIGIN_REMOVED];
+  var TAIL_BYTES = 64 * 1024;
+  var tailCache = Object.create(null);
+
+  /** The newest non-origin event's time, or null to keep the modified time. */
+  function lastPastOriginEvents(file, stat) {
+    var key = stat.mtimeMs + ":" + stat.size;
+    var hit = tailCache[file];
+    if (hit && hit.key === key) return hit.value;
+    var value = null;
+    try {
+      var length = Math.min(stat.size, TAIL_BYTES);
+      var buf = Buffer.alloc(length);
+      var fd = fs.openSync(file, "r");
+      try {
+        fs.readSync(fd, buf, 0, length, stat.size - length);
+      } finally {
+        fs.closeSync(fd);
+      }
+      var lines = buf.toString("utf8").split("\n");
+      // A partial first line of a cut tail is never trusted.
+      if (length < stat.size) lines.shift();
+      var sawOrigin = false;
+      for (var i = lines.length - 1; i >= 0; i -= 1) {
+        if (!lines[i].trim()) continue;
+        var event;
+        try {
+          event = JSON.parse(lines[i]);
+        } catch (err) {
+          continue;
+        }
+        if (!event || typeof event !== "object") continue;
+        if (ORIGIN_EVENTS.indexOf(event.event) !== -1) {
+          sawOrigin = true;
+          continue;
+        }
+        if (sawOrigin) {
+          var ts = typeof event.ts === "string" ? Date.parse(event.ts) : NaN;
+          if (!Number.isNaN(ts)) value = ts;
+        }
+        break;
+      }
+    } catch (err) {
+      value = null;
+    }
+    tailCache[file] = { key: key, value: value };
+    return value;
   }
 
   // ---------------------------------------------------------------------------
@@ -424,6 +484,10 @@ function createReader(options) {
     var createdMs = meta && typeof meta.created_at === "string" ? Date.parse(meta.created_at) : NaN;
     info.createdMs = Number.isNaN(createdMs) ? null : createdMs;
     info.lastMs = eventsStat ? eventsStat.mtimeMs : info.createdMs !== null ? info.createdMs : 0;
+    if (eventsStat) {
+      var pastOrigins = lastPastOriginEvents(eventsFile, eventsStat);
+      if (pastOrigins !== null) info.lastMs = pastOrigins;
+    }
 
     var summary = null;
     var countsAsOf = null;

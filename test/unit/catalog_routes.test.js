@@ -543,10 +543,16 @@ const LOG_FIXTURE = path.join(__dirname, "..", "fixtures", "catalog_log.txt");
 test("a week of Library actions through the real routes writes the catalog lines committed as test/fixtures/catalog_log.txt", async (t) => {
   // Rerun with LAHE_WRITE_CATALOG_LOG=1 to rewrite the fixture after a format change.
   const w = await world(t, { attach: false });
-  // Each review's `last` is its log's modified time, pinned so every age is fixed.
+  // Each review's `last` is pinned so every age is fixed: its log's modified
+  // time, and (since a log that ends in origin events takes `last` from the
+  // newest other event) every event's own time. The rewrite keeps the file's
+  // length, since an ISO time is always the same width.
   const pin = (reviewId, isoTime) => {
     const at = new Date(isoTime);
-    fs.utimesSync(stateDir.eventsPath(w.dir, reviewId), at, at);
+    const file = stateDir.eventsPath(w.dir, reviewId);
+    const text = fs.readFileSync(file, "utf8").replace(/"ts":"[^"]*"/g, '"ts":"' + at.toISOString() + '"');
+    fs.writeFileSync(file, text);
+    fs.utimesSync(file, at, at);
   };
   pin("r_page", "2026-09-05T12:00:00.000Z");
   pin("r_new", "2026-09-20T12:00:00.000Z");
