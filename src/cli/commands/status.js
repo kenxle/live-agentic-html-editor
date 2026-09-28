@@ -1112,34 +1112,24 @@ async function run(argv, options) {
     // woken has to be able to run the drain and find out why.
     if (opts.markEndedDelivered && args.session && endedToReport.length > 0) {
       var deliveredPath = stateDirModule.endedDeliveredPath(dir, args.session);
-      var delivered = Object.create(null);
-      try {
-        if (fs.existsSync(deliveredPath)) {
-          fs.readFileSync(deliveredPath, "utf8").split("\n").forEach(function (line) {
-            var trimmed = line.trim();
-            if (trimmed) delivered[trimmed] = true;
-          });
-        }
-      } catch (readErr) {
-        err("lahe status: could not read " + deliveredPath + ": " + readErr.message + "\n");
+      var endedDelivered = readDelivered(deliveredPath);
+      if (endedDelivered.error) {
+        err("lahe status: " + endedDelivered.error + "\n");
         return EXIT.BAD_USAGE;
       }
-      var freshlyEnded = endedToReport.filter(function (entry) { return !delivered[entry.review]; });
-      if (freshlyEnded.length > 0) {
-        try {
-          stateDirModule.ensureAgentSessionDir(dir, args.session);
-          fs.appendFileSync(
-            deliveredPath,
-            freshlyEnded.map(function (entry) { return entry.review; }).join("\n") + "\n",
-            { mode: stateDirModule.FILE_MODE }
-          );
-        } catch (writeErr) {
-          // LOUD, like the seen file's own failures. A dedupe that silently
-          // broke here does not go quiet, it nags forever, and the agent pays
-          // a turn for each one.
-          err("lahe status: could not write " + deliveredPath + ": " + writeErr.message + "\n");
-          return EXIT.BAD_USAGE;
-        }
+      var freshlyEnded = endedToReport.filter(function (entry) { return !endedDelivered.keys[entry.review]; });
+      var endedWriteError = markDelivered(
+        dir,
+        args.session,
+        deliveredPath,
+        freshlyEnded.map(function (entry) { return entry.review; })
+      );
+      if (endedWriteError) {
+        // LOUD, like the seen file's own failures. A dedupe that silently
+        // broke here does not go quiet, it nags forever, and the agent pays a
+        // turn for each one.
+        err("lahe status: " + endedWriteError + "\n");
+        return EXIT.BAD_USAGE;
       }
       endedToReport = freshlyEnded;
     }
