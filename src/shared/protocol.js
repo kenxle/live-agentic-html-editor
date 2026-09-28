@@ -1296,7 +1296,6 @@
 
   // 45 seconds: three of the monitor's 15-second loops.
   MONITOR.HEARTBEAT_FRESH_MS = MONITOR.INTERVAL_SECONDS * MONITOR.FRESH_INTERVALS * 1000;
-  MONITOR.HEARTBEAT_FIELD.PRIMARY = "primary";
   // Three minutes. An agent mid-batch is editing files and rebuilding, not
   // running lahe commands, so the working window is much wider than the
   // heartbeat window.
