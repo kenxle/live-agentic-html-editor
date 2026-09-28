@@ -68,6 +68,7 @@ This is the one progress page for all of the memory, CPU, and token work. The me
 | 25. An edit whose words span several blocks still merges them into one when the reviewer presses Keep mine | ⬜ Not started. Older than the duplicate fix. Nothing is doubled and a reload restores the structure |
 | 26. Send only what changed in a draft (option d3 on the draft persistence page), with the shared parts stored once | ⬜ Not started. Approved 2026-09-22. It changes the log format, so it gets its own spec first |
 | 27. Three oversized records: an element pick saves the rest of the page as its "text after" context, an embedded image is stored three times, and a whole-page highlight | ⬜ Not started. Found on the draft persistence page |
+| 28. Browser test runs leave page servers running after they finish: on 2026-09-28, 9 servers with their state in temp folders were still up more than two hours later (56.9 MB), and 59 more belonged to test runs in progress (1,428.3 MB) | ⬜ Not started. The suite's teardown should stop every page server a test started, and a sweep at suite end should catch any it missed |
 ✅ done and live · 🔨 in progress · ⬜ not started
 
 ## Short answer
