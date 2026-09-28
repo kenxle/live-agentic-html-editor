@@ -961,6 +961,9 @@ root or a URL, and fields a route does not list are never read.
   then the session is reopened. So a server that cannot restart leaves the session closed, and a
   `catalog.json` that cannot take the record refuses the Open with `PROTO_CATALOG_UNREADABLE` before
   anything is reopened. Open on a session that is already open does not write `catalog.json`.
+  Only a start that threw clears the `reopened` record. A later step that throws (the origin swap)
+  is undone by the helper: it stops the server it started and closes the session it reopened. The
+  record stays, so the sweep clears it, or closes the session if that undo failed.
 - **`PROTO_NOT_OPENABLE` carries its reason in `error.detail`:** `missing`, `via-agent` (no recorded
   server covers it and no hand-over was asked), `unknown review`, `not owned by the current user, or
   not on disk`, or `the recorded server could not be restarted`.

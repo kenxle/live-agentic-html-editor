@@ -42,6 +42,7 @@ var stateDir = require("./state_dir.js");
 var agentSessions = require("./agent_sessions.js");
 var reviewsModule = require("./reviews.js");
 var catalogRequests = require("./catalog_requests.js");
+var staticServers = require("./static_servers.js");
 
 var C = protocol.CATALOG;
 var DAY_MS = 24 * 60 * 60 * 1000;
@@ -266,7 +267,11 @@ function createCatalogActions(options) {
         // leaves the session closed.
         restarted = await ops.reopenForCatalog(d.session, d.server, d.review);
       } catch (err) {
-        if (wasClosed) store.clearReopened(d.session);
+        // Only a start that threw left nothing behind. A later throw was
+        // undone inside the ops (the server it started stopped, the session
+        // closed again); the record stays so the sweep closes the session if
+        // that undo did not (adversary fixes).
+        if (wasClosed && err && err.stage === staticServers.REOPEN_STAGE.START) store.clearReopened(d.session);
         log("Library Open of review " + d.review + " could not restart its server: " + err.message, nowMs);
         return { ok: false, outcome: fail("PROTO_NOT_OPENABLE", "the recorded server could not be restarted") };
       }
