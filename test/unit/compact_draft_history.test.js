@@ -510,3 +510,124 @@ test("on the five scrubbed real logs, compaction drops drafts and the fold is un
   });
   assert.ok(droppedAnywhere > 0, "the real logs do carry superseded drafts");
 });
+
+// ---------------------------------------------------------------------------
+// Review round: a dropped event_id stays "seen", the backup outlives a late
+// failure, and an append that races the swap is not lost
+// ---------------------------------------------------------------------------
+
+const logModule = require("../../src/service/log.js");
+
+// The reviewer's case. The browser keeps unacknowledged events in its outbox
+// and re-posts them on load; a page closed mid-post never read the answer. If
+// a dropped draft's event_id is no longer "seen", the re-post lands as new and
+// the committed rev 2 falls back to a rev 1 draft the agent cannot see.
+test("re-posting a dropped event_id after compaction comes back as a duplicate, across a helper restart", () => {
+  const draft1 = content(itemOf("itm_p", { note: "hel" }));
+  const draft2 = content(itemOf("itm_p", { note: "hello world" }));
+  const draft3 = content(itemOf("itm_p", { rev: 2, note: "hello again" }));
+  const ready = content(itemOf("itm_p", { rev: 2, note: "hello again!", state: record.STATE.READY }));
+  const events = [reviewCreated(), created(itemOf("itm_p", { note: "h" })), draft1, draft2, draft3, ready];
+  const { dir, reviewDir } = stateDirWith(logText(events));
+
+  const report = compact.compactReview({ dir: dir, review: REVIEW, apply: true });
+  assert.equal(report.applied, true, JSON.stringify(report));
+  assert.equal(report.dropped, 3);
+
+  const idsFile = path.join(reviewDir, "events.jsonl.compacted-ids");
+  assert.ok(fs.existsSync(idsFile), "the dropped ids are written beside the log");
+  const listed = fs.readFileSync(idsFile, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  assert.deepEqual(listed.sort(), [draft1.event_id, draft2.event_id, draft3.event_id].sort());
+
+  // A fresh log instance is a helper restart: load() reads the file again.
+  [1, 2].forEach(function () {
+    const log = logModule.createEventLog({ dir: dir });
+    const answer = log.append(REVIEW, [draft2, ready]);
+    assert.deepEqual(answer.accepted, [], "nothing is appended again");
+    assert.deepEqual(answer.duplicates.sort(), [draft2.event_id, ready.event_id].sort());
+    const item = projection.itemsFrom(log.read(REVIEW))[0];
+    assert.equal(item.rev, 2);
+    assert.equal(item.state, record.STATE.READY);
+    assert.equal(item.note, "hello again!");
+  });
+});
+
+test("a failure after the swap keeps the backup and reports the review as applied", () => {
+  const text = logText(bloatedEvents());
+  const { dir, reviewDir, eventsPath } = stateDirWith(text);
+  const report = compact.compactReview({
+    dir: dir,
+    review: REVIEW,
+    apply: true,
+    hooks: {
+      afterSwap: function () {
+        throw new Error("simulated failure after the rename");
+      }
+    }
+  });
+  assert.equal(report.applied, true, "the log was swapped, so it was applied");
+  assert.match(report.reason, /check the log/);
+  const gz = path.join(reviewDir, "events.jsonl.pre-compact.gz");
+  assert.ok(fs.existsSync(gz), "the backup is never removed after the swap");
+  assert.ok(zlib.gunzipSync(fs.readFileSync(gz)).equals(Buffer.from(text)));
+  assert.ok(fs.existsSync(path.join(reviewDir, "events.jsonl.compacted-ids")), "the dropped ids stay too");
+  assert.ok(fs.readFileSync(eventsPath).length < Buffer.byteLength(text));
+});
+
+test("an append that races the swap is copied onto the new log", () => {
+  const text = logText(bloatedEvents());
+  const { dir, eventsPath } = stateDirWith(text);
+  const late1 = protocol.encodeEventLine(
+    Object.assign({}, created(itemOf("itm_late1", { note: "late one", state: record.STATE.READY })), { seq: 500 })
+  );
+  const late2 = protocol.encodeEventLine(
+    Object.assign({}, created(itemOf("itm_late2", { note: "late two", state: record.STATE.READY })), { seq: 501 })
+  );
+  let heldOpen = null;
+  const report = compact.compactReview({
+    dir: dir,
+    review: REVIEW,
+    apply: true,
+    hooks: {
+      // After the re-check and before the rename: `lahe add` appending by path,
+      // with no helper up to be refused.
+      beforeSwap: function () {
+        heldOpen = fs.openSync(eventsPath, "a");
+        fs.appendFileSync(eventsPath, late1);
+      },
+      // After the rename: a writer that opened the old file before the swap.
+      afterSwap: function () {
+        fs.writeSync(heldOpen, late2);
+        fs.closeSync(heldOpen);
+      }
+    }
+  });
+  assert.equal(report.applied, true, JSON.stringify(report));
+  assert.equal(report.reason, null);
+  const after = fs.readFileSync(eventsPath, "utf8");
+  assert.ok(after.endsWith(late1 + late2), "both late lines are on the new log, in order");
+  const ids = projection.itemsFrom(parse(after)).map((item) => item.id);
+  assert.ok(ids.includes("itm_late1") && ids.includes("itm_late2"));
+});
+
+test("the folder is fsynced after the backup rename and before the log swap", () => {
+  const text = logText(bloatedEvents());
+  const { dir } = stateDirWith(text);
+  const order = [];
+  const report = compact.compactReview({
+    dir: dir,
+    review: REVIEW,
+    apply: true,
+    hooks: {
+      step: function (name) {
+        order.push(name);
+      }
+    }
+  });
+  assert.equal(report.applied, true);
+  const backup = order.indexOf("backup renamed");
+  const synced = order.indexOf("folder synced", backup);
+  const swap = order.indexOf("log swapped");
+  assert.ok(backup !== -1 && synced !== -1 && swap !== -1, order.join(", "));
+  assert.ok(backup < synced && synced < swap, order.join(", "));
+});
