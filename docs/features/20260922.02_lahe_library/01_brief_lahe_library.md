@@ -62,7 +62,8 @@ The key design question, for the wireframe: **what is one row?** A document, a r
    - a name Ken would recognize
    - where the document lives
    - when it was last worked on
-   - how many comments are waiting
+   - how many comments are waiting, and the total
+   - whether the review was ended
    - whether it is being served now
    - whether an agent is watching it
 4. **Open** brings the document back with the rail on it, opens it in a new tab, and has an agent watching it by default, so Ken does not have to come back and ask. With no agent available, the document still opens and is readable, and the rail says no agent is watching.
@@ -83,7 +84,8 @@ The key design question, for the wireframe: **what is one row?** A document, a r
 
 - where the document lives (project folder)
 - when it was last worked on
-- how many comments are waiting on an agent
+- how many comments are waiting on an agent, and how many comments it has in total
+- whether the review was ended with the rail's end-review button
 - whether the document is being served now, which means Open will reuse it
 - whether an agent is watching it, and which one
 
