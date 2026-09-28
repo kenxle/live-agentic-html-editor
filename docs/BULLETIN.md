@@ -5,6 +5,13 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
+- [ ] @anyone 2026-09-28 LAHE-static-server-host-check -- **The page servers do not check the Host header, so a DNS-rebinding page could read review tokens out of served pages.** Found by the security review of the linked-docs rail change. True before that change; the change makes it reach linked pages too. The helper already checks Host (decision D11); the session static servers should refuse a Host that is not their own loopback address and port.
+
+- [ ] @anyone 2026-09-28 LAHE-linked-files-follow-ups -- **Three loose ends from the linked-docs rail code review, left out of that change on purpose.**
+  - A file keeps the linking review's editor after the hub drops the link, because the recorded list of linked files never shrinks.
+  - The helper and the CLI each read, change, and rewrite a static server's metadata file whole, so two writers at once can drop a recorded linked file. That page then shows read-only until the hub re-renders.
+  - The linked-file lookup runs on every reload poll (about once a second per open linked page) with no cache.
+
 - [ ] @ken 2026-09-28 LAHE-pitchhut-listing -- **Keep the PitchHut listing for Lahe up to date.** Ken claimed the project on PitchHut after they reached out: https://www.pitchhut.com/my-projects. It could bring traffic. Update the listing when the npm package or the Product Hunt launch lands, and link it from launch posts.
 
 - [ ] @anyone 2026-09-28 LAHE-idle-battery-cost -- **The battery drains on an idle machine with review tabs open.** Two causes measured: a visible review tab polls the helper once a second whether or not anything is happening, and page servers from finished agent sessions keep running (58 of them, 711 MB, on the day this was filed). Filed with the numbers as [issue 16](https://github.com/kenxle/live-agentic-html-editor/issues/16). Hub row 23 in `docs/features/20260916.05_memory_audit/MEMORY_AUDIT_20260916.md`.
