@@ -722,7 +722,11 @@
         // once: the record is a draft while the reviewer rewrites it, so its
         // state later says nothing about whether this is a first commit.
         wasCommitted: !!existing && isCommittedEdit(existing),
-        wasReady: !!existing && existing[record.FIELD.STATE] === record.STATE.READY,
+        // The state a rewording is withdrawn FROM, and restored TO when the
+        // wording matches again: ready, or not_handled (the agent said no and
+        // the reviewer is rewording it). Null for any other state, which
+        // typing leaves alone.
+        withdrawFrom: existing && withdrawable(existing) ? existing[record.FIELD.STATE] : null,
         opened: existing
           ? { text: existing[record.FIELD.AFTER], html: existing[record.FIELD.AFTER_HTML] }
           : before,
@@ -1014,8 +1018,14 @@
     // typing it back to the committed wording makes it ready again. Before this
     // the record stayed ready, so every keystroke posted item.ready and the
     // agent could read half-typed text as an instruction. A handled edit is
-    // never reopened here (itemFor skips it), and a not_handled one keeps its
-    // state, as it always has.
+    // never reopened here (itemFor skips it).
+    //
+    // A NOT_HANDLED EDIT IS REWORDED THE SAME WAY. It used to keep its state,
+    // so every pause posted it within the debounce and the helper rewrote
+    // review.json with the half-typed words each time (code review finding 5,
+    // spec 20260922.01). Now it withdraws to draft on the first changing
+    // keystroke, obeys the draft floor after that, and goes back to
+    // not_handled, same revision, reply kept, when the wording matches again.
     function captureTyping() {
       if (!session) return null;
       var after = capture(session.block);
@@ -1025,27 +1035,35 @@
       // keystroke that can be the withdrawal, and the record after the
       // assignment below always reads draft or ready, never which it just
       // came from.
-      var wasReadyBeforeThisKeystroke = item[record.FIELD.STATE] === record.STATE.READY;
+      var wasOutstandingBeforeThisKeystroke = withdrawable(item);
       var next = Object.assign({}, item);
       next[record.FIELD.AFTER] = after.text;
       next[record.FIELD.AFTER_HTML] = after.html;
       next[record.FIELD.UPDATED_AT] = record.nowIso();
-      if (session.wasReady) {
-        next[record.FIELD.STATE] = kindFor(session.opened, after).changed ? record.STATE.DRAFT : record.STATE.READY;
+      if (session.withdrawFrom) {
+        next[record.FIELD.STATE] = kindFor(session.opened, after).changed ? record.STATE.DRAFT : session.withdrawFrom;
       }
       // An item this page did not just create is content on a record the helper
       // already holds, whatever state it is in (sync.js eventTypeFor).
       var postOptions = session.wasNew ? null : { existing: true };
-      if (wasReadyBeforeThisKeystroke && next[record.FIELD.STATE] === record.STATE.DRAFT) {
-        // This is the keystroke that just took the edit off ready. Tell sync
-        // so it posts at once instead of waiting behind a floor left by a
-        // draft from before the edit was ever marked ready (review finding,
-        // spec 20260922.01 requirement 6).
+      if (wasOutstandingBeforeThisKeystroke && next[record.FIELD.STATE] === record.STATE.DRAFT) {
+        // This is the keystroke that just took the edit off ready (or off
+        // not_handled). Tell sync so it posts at once instead of waiting
+        // behind a floor left by an earlier draft (review finding, spec
+        // 20260922.01 requirement 6): the agent should stop seeing the old
+        // wording the moment the reviewer starts changing it.
         postOptions = Object.assign({}, postOptions || {}, { withdrawnFromReady: true });
       }
       persist(next, "typed", null, postOptions);
       positionFrame();
       return next;
+    }
+
+    // The states a rewording takes an edit out of: the ones in front of
+    // someone. Handled is not here: a handled edit is never reopened by typing.
+    function withdrawable(item) {
+      var state = item[record.FIELD.STATE];
+      return state === record.STATE.READY || state === record.STATE.NOT_HANDLED;
     }
 
     // Was this edit ever committed? Not "is it a draft right now": a committed
@@ -1162,11 +1180,12 @@
         // Reworded back to the page's own original words. That is not an edit
         // against the page, and it has always been left as captured rather
         // than committed; the one thing new is that the typing withdrew it, so
-        // it goes back to the state it opened in rather than stranding a
-        // draft nobody will see.
-        if (open.wasReady && record.isDraft(item)) {
+        // it goes back to the state it opened in (ready, or not_handled with
+        // the agent's reason still on it) rather than stranding a draft
+        // nobody will see.
+        if (open.withdrawFrom && record.isDraft(item)) {
           var restored = Object.assign({}, item);
-          restored[record.FIELD.STATE] = record.STATE.READY;
+          restored[record.FIELD.STATE] = open.withdrawFrom;
           restored[record.FIELD.UPDATED_AT] = record.nowIso();
           persist(restored, "typed", null, { existing: true });
         }

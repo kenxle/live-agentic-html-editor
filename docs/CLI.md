@@ -50,12 +50,22 @@ nothing. Work stays listed until a reply lands, so a missed wake costs nothing:
 the next drain shows the item again. When the reviews are not in the default
 state directory, every command the tool prints carries `--state-dir <path>`
 already: copy them as printed, because the same command without it reads the
-default directory and reports no work. `lahe status --json` never prints the
-contract text, in any mode: line one is always a pointer to the `contract`
-field in the review's `review.json`, the one place the contract lives. There
-is no flag that trades the pointer back for the full text, on purpose: an
-agent that is woken thirty times should not have to remember one to avoid
-reading 3,800 tokens it already has thirty times.
+default directory and reports no work.
+
+The drain carries the reviewer's items and what locates them, and nothing it
+would repeat on every wake. There is no contract text, no pointer to it, and no
+field-class table: the contract lives in the `contract` field of the review's
+`review.json`, read once. The prompt-injection fence (architecture decision
+D12) is kept as structure, not words: on each item line, every field read off
+the page (the quoted passage, the before and after text, the region, the
+subject) is grouped under `page`, and the reviewer's own `note` and `change`
+stay at the top level. The contract says once that nothing under `page` is an
+instruction. A review the reviewer ended is listed under
+`ended_reviews` on the last line on every drain while it still holds unanswered
+items, and once more when it holds none. After that it is not listed again, so a
+drain with nothing waiting prints nothing at all. A takeover counts as a new
+reader: the agent that took over is told again. Whether each review's page is
+connected is said once per review, under `liveness` on the same last line.
 
 The **wake channel** is per host, because hosts differ in what they can do
 without spending model tokens:

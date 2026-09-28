@@ -26,6 +26,10 @@
 //     agent's answer is dropped and the item is outstanding again. A record
 //     arriving at the SAME revision is the ordinary re-post of something the
 //     helper already knows, and it must not resurrect `ready` over `handled`.
+//     The one exception is the reviewer's withdrawal: a same-revision draft
+//     of a committed ready or not_handled item takes it to draft, and the
+//     helper keeps the agent's state and reply and restores them when the
+//     wording comes back. The browser's claimed state is never taken.
 //
 //  3. DRAFTS ARE NOT IN THE FILE (R7). A draft is the reviewer mid-sentence.
 //     They are durable in the log and they are on the reviewer's rail, and they
@@ -65,6 +69,13 @@ var F = record.FIELD;
 // The log, read back into items
 // ---------------------------------------------------------------------------
 
+// Has this record been committed before? Its applied-after history says so;
+// a draft from before its first commit has none.
+function wasCommitted(item) {
+  var history = item[F.AFTER_HISTORY];
+  return Array.isArray(history) && history.length > 0;
+}
+
 function recordFromEvent(event) {
   var carried = event.record;
   if (!carried || typeof carried !== "object") return null;
@@ -94,6 +105,10 @@ function createFold() {
     order: [],
     // id -> the revision the current reply answered. Rule 2 above reads it.
     replyRev: Object.create(null),
+    // id -> the state an answered item was in when the reviewer started
+    // rewording it at the same revision (see "A REWORDING TAKES IT OFF THE
+    // DESK" below). Present only while the item is withdrawn.
+    withdrawnFrom: Object.create(null),
     times: { started_at: null, ended_at: null, agent_session_id: "legacy" },
     sourcePath: null,
     seq: 0
@@ -117,6 +132,7 @@ function foldEvents(state, events, options) {
   var onDropped = typeof opts.onDropped === "function" ? opts.onDropped : null;
   var byId = state.byId;
   var replyRev = state.replyRev;
+  var withdrawnFrom = state.withdrawnFrom;
 
   (events || []).forEach(function (event) {
     var seq = event[protocol.EVENT_FIELD.SEQ];
@@ -161,14 +177,41 @@ function foldEvents(state, events, options) {
         // Same revision: the helper's lifecycle stands, the browser's content
         // is taken. This is D5's merge rule, on the helper's side of the wire.
         next[F.REPLY] = prev[F.REPLY];
-        next[F.STATE] = prev[F.STATE];
         // The unbacked handled claim is lifecycle, not content, so it travels
         // with the state rather than with the browser's record.
         next[F.HANDLED_NOT_ON_PAGE] = prev[F.HANDLED_NOT_ON_PAGE] === true;
+        // A REWORDING TAKES IT OFF THE DESK. The one lifecycle move the
+        // browser makes at the same revision as a reply is the reviewer's
+        // withdrawal: typing into an answered item that is still in front of
+        // someone (ready with a question, or not_handled) makes it a draft
+        // until they commit, which bumps the revision, or type the wording
+        // back, which restores the state it was withdrawn from. Without this
+        // the helper kept the old state and put the half-typed words in
+        // review.json on every draft post (spec 20260922.01, review finding
+        // 5). A handled item is never withdrawn: its state stands as before.
+        var id2 = next[F.ID];
+        var from = withdrawnFrom[id2] || prev[F.STATE];
+        // Only a record committed before counts: a first commit keeps revision
+        // one, so a late draft from before it (no history yet) is stale
+        // content, not a withdrawal.
+        if (
+          record.isDraft(next) &&
+          (from === record.STATE.READY || from === record.STATE.NOT_HANDLED) &&
+          wasCommitted(next)
+        ) {
+          withdrawnFrom[id2] = from;
+          next[F.STATE] = record.STATE.DRAFT;
+        } else {
+          // Restored, or an ordinary same-revision content write. The state
+          // is the helper's, never the browser's claim.
+          next[F.STATE] = from;
+          delete withdrawnFrom[id2];
+        }
       } else {
         next[F.REPLY] = null;
         next[F.HANDLED_NOT_ON_PAGE] = false;
         delete replyRev[next[F.ID]];
+        delete withdrawnFrom[next[F.ID]];
       }
       byId[next[F.ID]] = next;
       return;
@@ -178,6 +221,7 @@ function foldEvents(state, events, options) {
       if (!id || !byId[id]) return;
       delete byId[id];
       delete replyRev[id];
+      delete withdrawnFrom[id];
       state.order = state.order.filter(function (each) {
         return each !== id;
       });
@@ -195,6 +239,7 @@ function foldEvents(state, events, options) {
       reopened[F.HANDLED_NOT_ON_PAGE] = false;
       byId[id] = reopened;
       delete replyRev[id];
+      delete withdrawnFrom[id];
       return;
     }
 
@@ -213,6 +258,7 @@ function foldEvents(state, events, options) {
       applied[F.HANDLED_NOT_ON_PAGE] = event.handled_not_on_page === true;
       byId[id] = applied;
       replyRev[id] = item[F.REV];
+      delete withdrawnFrom[id];
       return;
     }
 

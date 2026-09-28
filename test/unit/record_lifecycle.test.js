@@ -394,6 +394,19 @@ test("reopening is a transition from handled back to ready, and it is the review
   assert.equal(lifecycle.canTransition(S.NOT_HANDLED, S.READY, R), true);
 });
 
+test("rewording takes a ready or not_handled item back to draft, and only the reviewer does it", () => {
+  const R = lifecycle.ACTOR.REVIEWER;
+  const A = lifecycle.ACTOR.AGENT;
+  const S = record.STATE;
+  assert.equal(lifecycle.canTransition(S.READY, S.DRAFT, R), true);
+  assert.equal(lifecycle.canTransition(S.NOT_HANDLED, S.DRAFT, R), true);
+  assert.equal(lifecycle.canTransition(S.DRAFT, S.NOT_HANDLED, R), true, "typing the refused wording back");
+  assert.equal(lifecycle.canTransition(S.HANDLED, S.DRAFT, R), false, "a handled edit is never withdrawn by typing");
+  assert.equal(lifecycle.canTransition(S.READY, S.DRAFT, A), false);
+  assert.equal(lifecycle.canTransition(S.NOT_HANDLED, S.DRAFT, A), false);
+  assert.equal(lifecycle.canTransition(S.DRAFT, S.NOT_HANDLED, A), false);
+});
+
 test("a handled item cannot be deleted, because it is the record that a fix landed", () => {
   const R = lifecycle.ACTOR.REVIEWER;
   assert.equal(lifecycle.canDelete(record.STATE.DRAFT, R), true);

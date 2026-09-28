@@ -61,11 +61,15 @@
   var browser = typeof window !== "undefined" && !!window.document;
   if (browser) {
     root.LAHE = root.LAHE || {};
-    root.LAHE.highlight = factory(root.LAHE.markers, root.LAHE.normalize);
+    root.LAHE.highlight = factory(root.LAHE.markers, root.LAHE.normalize, root.LAHE.anchor);
   } else {
-    module.exports = factory(require("../shared/markers.js"), require("../shared/normalize.js"));
+    module.exports = factory(
+      require("../shared/markers.js"),
+      require("../shared/normalize.js"),
+      require("./anchor.js")
+    );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, normalize) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, normalize, anchor) {
   "use strict";
 
   // The namespace. Every name the library registers starts with this, so a page
@@ -437,6 +441,47 @@
     return systemScheme(win);
   }
 
+  // How much bigger than the reviewer's own words a whole-element paint of a
+  // container may be. The same number, for the same reason, as comments.js's
+  // PAINT_MAX_TEXT_RATIO: a legitimate whole-element paint is about the size
+  // of what the reviewer chose (they picked the element, so its words ARE the
+  // quote), and the failure refused here is categorical, a one-line quote
+  // against a container of every paragraph on the page.
+  var WHOLE_PAINT_MAX_RATIO = 2;
+
+  /**
+   * Should this paint be refused because it covers far more than the
+   * reviewer's words?
+   *
+   * Only a range over the WHOLE contents of one element is judged, and only
+   * when the element is a container of two or more blocks with words. A single
+   * block is always a passage, however short the quote inside it: a reworded
+   * paragraph is still painted whole. A range the reviewer drew over their own
+   * words starts and ends inside text, and is never judged at all.
+   *
+   * The yardstick is the quote, not "is this the whole page". A <main> stops
+   * being the whole page the moment a header outside it has words, and it is
+   * still every paragraph a one-line comment should not wash
+   * (docs/features/20260928.03_oversized_records, cause 3, and its review).
+   *
+   * @param {Range} range
+   * @param {string|null|undefined} quote the item's own words; no quote, no
+   *   judgment (a changed-block mark, a jump's emphasis with nothing to compare)
+   */
+  function refusesWholePaint(range, quote) {
+    if (typeof quote !== "string" || !range) return false;
+    if (!anchor || typeof anchor.isContainerOfBlocks !== "function") return false;
+    var start = range.startContainer;
+    if (!start || start !== range.endContainer || start.nodeType !== 1) return false;
+    if (range.startOffset !== 0) return false;
+    var count = start.childNodes ? start.childNodes.length : 0;
+    if (range.endOffset !== count) return false;
+    if (!anchor.isContainerOfBlocks(start)) return false;
+    var have = normalize.normalizeText(anchor.wordsOf(start) || "").length;
+    var want = normalize.normalizeText(quote).length;
+    return have > want * WHOLE_PAINT_MAX_RATIO;
+  }
+
   function createHighlights(options) {
     var opts = options || {};
     var doc = opts.document || (typeof document !== "undefined" ? document : null);
@@ -544,12 +589,24 @@
      * @param {string} id    the record's id
      * @param {Range} range  a live Range over reviewed content
      * @param {string} [name] one of NAMES; defaults to the comment paint
+     * @param {string} [quote] the item's own words. When given, a paint over a
+     *   whole container far bigger than them is refused. See refusesWholePaint.
+     * @returns {Object|null} the painted entry, or null when refused. A refusal
+     *   also clears this item's earlier paint: the record now points somewhere
+     *   it may not be painted, and a paint left over from before is a wash in
+     *   the wrong place.
      */
-    function paint(id, range, name) {
+    function paint(id, range, name, quote) {
       requireSupport();
       if (!id) throw new TypeError("highlight.paint: an item id is required");
       if (!range || typeof range.cloneRange !== "function") {
         throw new TypeError("highlight.paint: a live Range is required");
+      }
+      // Refused, and said so with null: the record, the card and the agent's
+      // copy are untouched; only the wash is withheld.
+      if (refusesWholePaint(range, quote)) {
+        clear(id);
+        return null;
       }
       var which = NAMES.indexOf(name) === -1 ? NAME.COMMENT : name;
       ensureStylesheet();
@@ -602,15 +659,16 @@
      *
      * @param {Range} range a live Range over reviewed content
      * @param {number} [ms] how long to hold it; EMPHASIS_MS by default
+     * @param {string} [quote] the item's own words, judged as paint() does
      * @returns {Range|null} the range now emphasized, or null when there is none
      */
-    function emphasize(range, ms) {
+    function emphasize(range, ms, quote) {
       if (!range || typeof range.cloneRange !== "function") return null;
       if (!supported()) return null;
       // A second click replaces the first rather than stacking two washes and
       // two timers, so the last thing clicked is the thing lit.
       clearEmphasis();
-      paint(EMPHASIS_KEY, range, NAME.EMPHASIS);
+      if (!paint(EMPHASIS_KEY, range, NAME.EMPHASIS, quote)) return null;
       var g = global();
       var hold = typeof ms === "number" && ms > 0 ? ms : EMPHASIS_MS;
       if (g && typeof g.setTimeout === "function") {
@@ -683,7 +741,7 @@
       if (!supported()) return false;
       var id = changedKeyFor(key);
       clearChanged(key);
-      paint(id, range, NAME.CHANGED);
+      if (!paint(id, range, NAME.CHANGED)) return false;
       var hold = typeof ms === "number" && ms > 0 ? ms : CHANGED_MS;
       var g = global();
       if (!g || typeof g.setTimeout !== "function") return true;
@@ -925,6 +983,8 @@
   var shared = createHighlights();
 
   return {
+    refusesWholePaint: refusesWholePaint,
+    WHOLE_PAINT_MAX_RATIO: WHOLE_PAINT_MAX_RATIO,
     PREFIX: PREFIX,
     NAME: NAME,
     NAMES: NAMES,

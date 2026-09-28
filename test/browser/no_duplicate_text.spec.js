@@ -48,6 +48,17 @@ const THREE = "Claude: You are right. Let us do that.";
 const CURLY_ONE = "The builder's day is not over - it is just starting.";
 const CURLY_ONE_RENDERED = "The builder’s day is not over — it is just starting.";
 
+// The Intro paragraph with a link in it. Its words are ORIGINAL's, so the
+// record's before reads the same either way.
+const LINKED_ORIGINAL = "Runners come back [too fast](https://example.com/pace) after a layoff.";
+const LINK_HREF = "https://example.com/pace";
+// What the reviewer adds to the end of that paragraph, so its words change.
+const ADDED = " Slowly.";
+// The agent's own ending on the first paragraph, for the Keep mine case. It
+// keeps the paragraph's words so the record still finds its block: a rewrite
+// of the words is a lost record, not a clash.
+const AGENT_FIRST = "Runners come back too fast after a layoff. Mostly.";
+
 function markdownWith(paragraphs) {
   return ["# Debugging hell", "", "## Intro", ""]
     .concat(paragraphs.join("\n\n"))
@@ -245,6 +256,80 @@ test.describe("the reviewer's words land on the page once", () => {
     });
   }
 
+  /**
+   * Bold "Runners", italicize "layoff", add words to the end of the linked
+   * Intro paragraph, then type two paragraphs under it. The first paragraph
+   * then carries a bold, an italic and a link, and its words differ from the
+   * page's, so a page that carries the other two is missing exactly this one.
+   */
+  async function formatAndAppend(page, paragraphs) {
+    await openEdit(page);
+    for (const [word, command] of [["Runners", "bold"], ["layoff", "italic"]]) {
+      const applied = await page.evaluate(
+        ([sel, w, cmd]) => {
+          const el = document.querySelector(sel);
+          const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+          let node = walker.nextNode();
+          while (node && node.data.indexOf(w) === -1) node = walker.nextNode();
+          if (!node) return false;
+          const at = node.data.indexOf(w);
+          const range = document.createRange();
+          range.setStart(node, at);
+          range.setEnd(node, at + w.length);
+          const selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+          return window.__lahe.handle.editing.format(cmd).applied;
+        },
+        [INTRO_P, word, command]
+      );
+      expect(applied, "the " + command + " button did something").toBe(true);
+    }
+    await page.evaluate((sel) => {
+      const el = document.querySelector(sel);
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+      let last = null;
+      let node = walker.nextNode();
+      while (node) {
+        last = node;
+        node = walker.nextNode();
+      }
+      const range = document.createRange();
+      range.setStart(last, last.data.length);
+      range.collapse(true);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }, INTRO_P);
+    await page.keyboard.type(ADDED, { delay: 2 });
+    for (let i = 0; i < paragraphs.length; i += 1) {
+      await page.keyboard.press("Enter");
+      await page.keyboard.type(paragraphs[i], { delay: 2 });
+    }
+    await commitEdit(page);
+    return page.evaluate(() => {
+      const edit = window.__lahe.items().filter((item) => item.kind === "edit" && item.state !== "draft")[0];
+      return edit ? { id: edit.id, rev: edit.rev, after: edit.after, afterHtml: edit.after_html } : null;
+    });
+  }
+
+  /** The Intro paragraph's formatting, read off the live page. */
+  function introFormats(page) {
+    return page.evaluate(
+      ([sel]) => {
+        const el = document.querySelector(sel);
+        const link = el.querySelector("a");
+        return {
+          text: el.textContent.replace(/\s+/g, " ").trim(),
+          bold: Array.from(el.querySelectorAll("strong")).map((n) => n.textContent),
+          italic: Array.from(el.querySelectorAll("em")).map((n) => n.textContent),
+          link: link ? { href: link.getAttribute("href"), text: link.textContent } : null
+        };
+      },
+      [INTRO_P]
+    );
+  }
+
   function flagged(page, id) {
     return page.evaluate((itemId) => window.__lahe.flaggedIds().indexOf(itemId) !== -1, id);
   }
@@ -357,5 +442,73 @@ test.describe("the reviewer's words land on the page once", () => {
 
     expect(await timesOnPage(page, TWO), "the appended paragraph is on the page once").toBe(1);
     expect(await timesOnPage(page, ORIGINAL), "the unchanged paragraph is on the page once").toBe(1);
+  });
+
+  test("the one paragraph replay writes keeps its bold, italic and link", async ({ page }) => {
+    rebuild([LINKED_ORIGINAL]);
+    await page.goto(world.open);
+    await booted(page);
+
+    const edit = await formatAndAppend(page, [TWO, THREE]);
+    expect(edit.after).toBe([ORIGINAL + ADDED, TWO, THREE].join("\n\n"));
+    expect(edit.afterHtml, "the record's markup carries the formatting").toContain("<strong>Runners</strong>");
+
+    // The agent carried the two new paragraphs into the source and not the
+    // change to the first, so the page is missing that paragraph alone.
+    rebuild([LINKED_ORIGINAL, TWO, THREE]);
+    reply(edit.id, edit.rev);
+    await reloadAndSettle(page);
+    await reloadAndSettle(page);
+
+    const formats = await introFormats(page);
+    expect(formats.text, "the missing paragraph landed").toBe(ORIGINAL + ADDED);
+    expect(formats.bold, "with its bold").toEqual(["Runners"]);
+    expect(formats.italic, "with its italic").toEqual(["layoff"]);
+    expect(formats.link, "with its link").toEqual({ href: LINK_HREF, text: "too fast" });
+    expect(await timesOnPage(page, TWO), "the second paragraph is on the page once").toBe(1);
+    expect(await timesOnPage(page, THREE), "the third paragraph is on the page once").toBe(1);
+  });
+
+  test("Keep mine on the same shape keeps the bold, italic and link too", async ({ page }) => {
+    rebuild([LINKED_ORIGINAL]);
+    await page.goto(world.open);
+    await booted(page);
+
+    const edit = await formatAndAppend(page, [TWO, THREE]);
+
+    // The agent rewrote the first paragraph its own way and kept the other
+    // two, which is a clash for the reviewer to answer.
+    rebuild([AGENT_FIRST, TWO, THREE]);
+    reply(edit.id, edit.rev);
+    await reloadAndSettle(page);
+    await pollPage(page, (id) => window.__lahe.flaggedIds().indexOf(id) !== -1, edit.id, {
+      message: "the clash to be flagged"
+    });
+
+    await pollPage(
+      page,
+      (id) => {
+        const rail = window.__lahe.handle.rail;
+        rail.selectTab("edits");
+        const node = rail.cardNode(id);
+        const button = node ? node.querySelector('[data-lahe-conflict-choice="keep_mine"]') : null;
+        if (!button) return false;
+        button.click();
+        return true;
+      },
+      edit.id,
+      { message: "the Keep mine button to be on the card" }
+    );
+    await pollPage(page, (id) => window.__lahe.flaggedIds().indexOf(id) === -1, edit.id, {
+      message: "the press to answer the clash"
+    });
+
+    const formats = await introFormats(page);
+    expect(formats.text, "the reviewer's paragraph is back").toBe(ORIGINAL + ADDED);
+    expect(formats.bold, "with its bold").toEqual(["Runners"]);
+    expect(formats.italic, "with its italic").toEqual(["layoff"]);
+    expect(formats.link, "with its link").toEqual({ href: LINK_HREF, text: "too fast" });
+    expect(await timesOnPage(page, TWO), "the second paragraph is on the page once").toBe(1);
+    expect(await timesOnPage(page, THREE), "the third paragraph is on the page once").toBe(1);
   });
 });

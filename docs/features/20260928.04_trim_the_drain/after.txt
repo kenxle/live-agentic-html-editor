@@ -1,0 +1,18 @@
+measured: this branch
+{"state":"nothing waiting","total_per_run":[0,0,0],"items":0,"per_item":0,"per_drain":0,"repeated_rules":0,"liveness_per_item":0}
+{"state":"1 item waiting","total_per_run":[1237,1237,1237],"items":1,"per_item":868,"per_drain":369,"repeated_rules":0,"liveness_per_item":0}
+{"state":"10 items waiting","total_per_run":[9051,9051,9051],"items":10,"per_item":868,"per_drain":370,"repeated_rules":0,"liveness_per_item":0}
+{"state":"100 items waiting","total_per_run":[87263,87263,87263],"items":100,"per_item":869,"per_drain":371,"repeated_rules":0,"liveness_per_item":0}
+{"state":"1000 items waiting","total_per_run":[870265,870265,870265],"items":1000,"per_item":870,"per_drain":372,"repeated_rules":0,"liveness_per_item":0}
+{"state":"100 lost items waiting (a page restructure)","total_per_run":[93363,93363,93363],"items":100,"per_item":930,"per_drain":371,"repeated_rules":0,"liveness_per_item":0}
+{"state":"7 ended reviews, nothing waiting","total_per_run":[965,0,0],"items":0,"per_item":0,"per_drain":965,"repeated_rules":0,"liveness_per_item":0}
+
+| state | bytes, runs 1 / 2 / 3 | per item | per drain | repeated rule bytes per drain | liveness per item |
+| --- | --- | --- | --- | --- | --- |
+| nothing waiting | 0 / 0 / 0 | 0 | 0 | 0 | 0 |
+| 1 item waiting | 1237 / 1237 / 1237 | 868 | 369 | 0 | 0 |
+| 10 items waiting | 9051 / 9051 / 9051 | 868 | 370 | 0 | 0 |
+| 100 items waiting | 87263 / 87263 / 87263 | 869 | 371 | 0 | 0 |
+| 1000 items waiting | 870265 / 870265 / 870265 | 870 | 372 | 0 | 0 |
+| 100 lost items waiting (a page restructure) | 93363 / 93363 / 93363 | 930 | 371 | 0 | 0 |
+| 7 ended reviews, nothing waiting | 965 / 0 / 0 | 0 | 965 | 0 | 0 |

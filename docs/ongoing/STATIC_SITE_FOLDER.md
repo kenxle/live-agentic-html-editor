@@ -54,8 +54,12 @@ folders, served under `/.lahe-source/<hash>/` mounts. Spec:
 - A linked file with its own review in this session redirects to that review's
   page. Otherwise it carries the newest linking review's rail. A chain (hub
   links B, B links C) rides the hub's review.
-- Only recorded link targets get the rail, never their neighbours or anything
-  hidden. An `--only` review keeps its links read-only.
+- Only recorded link targets get the rail, never their neighbours. An `--only`
+  review keeps its links read-only.
+- Hidden (dot-prefixed) files get no special handling. The served folder and a
+  linked folder serve them like any other file, and a link to one translates
+  like any other link. What bounds a request is containment: a path, or a
+  symlink, that resolves outside the served folder or the mount is refused.
 - If the linking review is gone, which should not happen, the page says so and
   shows the `lahe review` command that would open one. Nothing is created.
 - The helper, not the page, names the file an item was made on: review.json's

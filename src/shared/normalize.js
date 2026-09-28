@@ -281,6 +281,66 @@
     return Object.prototype.hasOwnProperty.call(SAFE_SCHEMES, beforeColon.toLowerCase());
   }
 
+  // ---------------------------------------------------------------------------
+  // Embedded values: a data: URL is content, not a pointer to it
+  // ---------------------------------------------------------------------------
+  //
+  // An image written into the page as a data: URL carries the picture itself as
+  // text, often hundreds of kilobytes of it. A record stores such a value ONCE,
+  // whole, and refers to it everywhere else (docs/features/
+  // 20260928.03_oversized_records, cause 2). These two functions are the whole
+  // vocabulary for that: what counts as embedded, and the fixed-size name a
+  // comparison can use in place of the value.
+
+  function isEmbeddedValue(value) {
+    return typeof value === "string" && /^\s*data:/i.test(value);
+  }
+
+  /**
+   * A 64-bit digest of a string, as 16 hex characters. cyrb53's mixing (bryc,
+   * public domain) over both 32-bit lanes, kept whole rather than cut to 53
+   * bits. Pure arithmetic on UTF-16 code units, so the browser and Node agree
+   * on every value.
+   *
+   * It is a NAME for a value, never a check that two values are safe to treat
+   * as one for a write: the uniqueness predicate still decides that, over
+   * candidates found on the page.
+   */
+  function digestOf(value) {
+    var s = String(value);
+    var h1 = 0xdeadbeef;
+    var h2 = 0x41c6ce57;
+    for (var i = 0; i < s.length; i += 1) {
+      var ch = s.charCodeAt(i);
+      h1 = Math.imul(h1 ^ ch, 2654435761);
+      h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return hex8(h2 >>> 0) + hex8(h1 >>> 0);
+  }
+
+  function hex8(n) {
+    var out = n.toString(16);
+    while (out.length < 8) out = "0" + out;
+    return out;
+  }
+
+  /**
+   * The fixed-size stand-in for an embedded value inside a comparison key:
+   * `embedded:<media type>:<length>:<digest>`. The media type and the length
+   * are readable on their own ("image/png;base64", 171364), the digest tells
+   * two pictures of one size apart. A value that is not embedded is returned
+   * unchanged.
+   */
+  function embeddedName(value) {
+    if (!isEmbeddedValue(value)) return value;
+    var text = String(value).replace(/^\s+/, "");
+    var comma = text.indexOf(",");
+    var media = comma === -1 ? "" : text.slice(5, comma);
+    return "embedded:" + media + ":" + text.length + ":" + digestOf(text);
+  }
+
   function escapeAttrValue(value) {
     return String(value)
       .replace(/&/g, "&amp;")
@@ -704,6 +764,98 @@
     return reduce(html, [], true);
   }
 
+  /**
+   * A fragment of markup cut into its top-level paragraphs, each as markup.
+   *
+   * Replay needs this when it writes one paragraph of a multi-paragraph edit
+   * (the page already carries the others). The paragraph's bold, italic and
+   * links live in the record's after_html, and this finds that paragraph's
+   * share of it. The cuts are made only at the top level:
+   *
+   *   - a block element (<p>, <div>, <li> and the rest of BLOCK_TAGS) is one
+   *     paragraph, and its INNER markup is what comes back
+   *   - a <br> or an <hr> ends the loose inline run before it
+   *   - loose inline content between those is one paragraph
+   *
+   * Anything deeper is left inside its paragraph, so a block nested in an
+   * inline element, or a list inside a paragraph, stays whole and reads as
+   * more than one paragraph to the caller, which then refuses it. Whitespace
+   * runs are dropped. A run that holds markup but no words (an image alone)
+   * cannot be matched to a paragraph of text, so the answer is null.
+   *
+   * The markup goes through cleanMarkup first, so every piece is balanced and
+   * carries only what cleanMarkup lets through.
+   *
+   * @param {string} html
+   * @returns {string[]|null} one markup string per paragraph, or null when the
+   *   fragment does not cut cleanly
+   */
+  function topLevelBlocks(html) {
+    if (typeof html !== "string") return null;
+    var clean = cleanMarkup(html);
+    var out = [];
+    var run = "";
+    var depth = 0;
+    var blockStart = -1;
+    var failed = false;
+
+    function flush(piece) {
+      var markup = piece.trim();
+      if (!markup) return;
+      if (!normalizeText(textOf(markup))) {
+        failed = true;
+        return;
+      }
+      out.push(markup);
+    }
+
+    var i = 0;
+    while (i < clean.length) {
+      var lt = clean.indexOf("<", i);
+      var textEnd = lt === -1 ? clean.length : lt;
+      if (textEnd > i && blockStart === -1) run += clean.slice(i, textEnd);
+      if (lt === -1) break;
+      var tag = parseTag(clean, lt);
+      if (!tag) {
+        if (blockStart === -1) run += "<";
+        i = lt + 1;
+        continue;
+      }
+      i = tag.end;
+      var markup = clean.slice(lt, tag.end);
+      var isVoid = hasOwn(VOID_TAGS, tag.name) || tag.selfClosing;
+      if (depth === 0 && !tag.closing) {
+        if (tag.name === "br" || tag.name === "hr") {
+          flush(run);
+          run = "";
+          continue;
+        }
+        if (!isVoid && hasOwn(BLOCK_TAGS, tag.name)) {
+          flush(run);
+          run = "";
+          blockStart = tag.end;
+          depth = 1;
+          continue;
+        }
+      }
+      if (tag.closing) {
+        depth -= 1;
+        if (depth < 0) return null;
+        if (depth === 0 && blockStart !== -1) {
+          flush(clean.slice(blockStart, lt));
+          blockStart = -1;
+          continue;
+        }
+      } else if (!isVoid) {
+        depth += 1;
+      }
+      if (blockStart === -1) run += markup;
+    }
+    if (depth !== 0 || blockStart !== -1) return null;
+    flush(run);
+    return failed ? null : out;
+  }
+
   // ---------------------------------------------------------------------------
   // The two comparison modes (D7's format-only branch, D9's one normalizer)
   // ---------------------------------------------------------------------------
@@ -1075,6 +1227,7 @@
     normalizeBlockText: normalizeBlockText,
     blockTextEquals: blockTextEquals,
     blockText: blockText,
+    topLevelBlocks: topLevelBlocks,
     blockTextFromNode: blockTextFromNode,
     STRUCTURAL_TAGS: STRUCTURAL_TAGS,
     NOT_BOLD_TAG: NOT_BOLD_TAG,
@@ -1095,6 +1248,9 @@
     // the agent with the same escaping cleanMarkup uses, rather than spelling a
     // second one.
     escapeAttrValue: escapeAttrValue,
+    isEmbeddedValue: isEmbeddedValue,
+    digestOf: digestOf,
+    embeddedName: embeddedName,
     canonicalTarget: canonicalTarget,
     isLoopbackHost: isLoopbackHost,
     targetSlug: targetSlug,

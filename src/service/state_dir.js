@@ -270,17 +270,20 @@ function agentSessionPath(dir, sessionId) {
 }
 
 /**
- * Which ended reviews this session's monitor has already woken the agent for.
+ * Which ended reviews this session has already been told about.
  *
- * One review id per line, append-only. It exists because "the reviewer ended
+ * Append-only. A bare review id means the monitor woke on it; "<review>
+ * drained" means a drain printed it (see readEndedLedger in
+ * src/cli/commands/status.js). It exists because "the reviewer ended
  * this review" is a state and not an event: unlike an unanswered item, which
  * stops being reported the moment the agent answers it, ended_at is permanent.
  * A monitor that woke on it with no memory would wake on it again on every
  * relaunch, forever, and each of those relaunches costs a model turn for
  * nothing. That is the exact no-op wake loop the wake feed was built to end.
  *
- * Only `lahe monitor` writes it. An agent running the drain by hand is always
- * told, because an agent that just woke has to be able to find out why.
+ * The monitor and the drain share it. A monitor's mark does not hide the
+ * review from the agent's next drain, because an agent that just woke has to
+ * be able to find out why; the drain's mark hides it from everyone.
  */
 function endedDeliveredPath(dir, sessionId) {
   return resolveWithin(dir, [AGENT_SESSIONS_DIR, assertSafeReviewId(sessionId), "ended-delivered.log"]);

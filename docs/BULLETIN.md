@@ -5,6 +5,8 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
+- [ ] @anyone 2026-09-28 LAHE-fixture-specs-one-lane -- **Specs that only inject records still run in all three browsers at every checkpoint.** They test no engine behavior, so two of the three runs buy nothing and cost battery. Raised by the free-writing testing review (T28), rejected there because the lane rule is repo-wide. Proposal: tag such specs and run them in Chromium only on gate:all; needs Ken's okay since it changes the checkpoint rule in CLAUDE.md.
+
 - [ ] @anyone 2026-09-28 LAHE-early-rebuild-no-reload -- **A rebuild that lands in the first few seconds after a page load or commit never reloads the page.** The page reloads itself only once it has seen a file time from the helper, and that takes a few seconds. A rebuild written before then becomes the page's starting point (`src/layer/sync.js` `noteTargetMtime`). Found while reproducing the free-writing formatting cases; a real agent is rarely that fast, so it is rare. Fix: take the first file time at page load, before any commit.
 
 - [ ] @anyone 2026-09-28 LAHE-static-server-host-check -- **The page server does not check the Host header.** A website open in another tab could use DNS rebinding to read whatever the page server serves. Found by the security review of free writing (`docs/features/20260928.01_free_writing/02_architecture_free_writing_reviews.md`, SR4). It predates that feature. Fix: refuse requests whose Host is not the loopback address and port the server bound.
