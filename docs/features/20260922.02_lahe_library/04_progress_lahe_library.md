@@ -20,8 +20,8 @@ Nothing is running. Next: the architecture, then its two reviews.
 | 1 Crucible | done | 2026-09-22 |
 | 2 Brief | done | 2026-09-22 |
 | 3 Wireframe | done | 2026-09-28 |
-| 4 Architecture | in progress | 2026-09-28 |
-| 5 Plan | not started | |
+| 4 Architecture | done | 2026-09-28 |
+| 5 Plan | in progress | 2026-09-28 |
 | 6 Implement | not started | |
 | 7 Review | not started | |
 | 8 Ship and land | not started | |
