@@ -1,18 +1,23 @@
 # Progress: Free writing
 
-**Phase 3, Wireframe.** A builder is drawing three clickable wireframe directions. The architecture starts alongside it. Nothing is waiting on you. Last updated 2026-09-28 17:18.
+**Phase 3 and 4, Wireframe and Architecture.** The wireframes are ready for you to click through. The architecture is drafted and with its reviewers. One thing needs you now. Last updated 2026-09-28 17:26.
 
-**Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html)
+**Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html)
 
 ## Needs your attention
 
-Nothing is waiting on you.
+- [ ] Click through the [wireframes](http://127.0.0.1:49513/index.html) and say which direction you like, and what feels wrong about the steps. There are three:
+  - **A. Block menu on the bar:** a "Paragraph" menu next to B and I, and a "+ Write here" line when you hover between blocks.
+  - **B. Type like Markdown:** no new buttons. Typing `# ` makes a header and `- ` makes a list, and you click any empty space to start writing.
+  - **C. Growing frame:** a "+" in the left margin beside every block, and a row of block-type buttons on the frame's bottom edge.
+  The plan's layout work waits on your pick.
 
 ## Currently working on
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Wireframe builder | Three clickable directions for writing new text: a block menu on the bar, typing like Markdown, and a frame that grows as you write | 2026-09-28 17:18 | `main` (docs only) |
+| Architecture reviewer | Reviewing the architecture | 2026-09-28 17:26 | `main` (docs only) |
+| Security reviewer | Reviewing the architecture | 2026-09-28 17:26 | `main` (docs only) |
 
 ## Phases
 
@@ -22,7 +27,7 @@ Nothing is waiting on you.
 | 1 Crucible | done | 2026-09-28 |
 | 2 Brief | done | 2026-09-28 |
 | 3 Wireframe | in progress | 2026-09-28 |
-| 4 Architecture | not started | |
+| 4 Architecture | in progress | 2026-09-28 |
 | 5 Plan | not started | |
 | 6 Implement | not started | |
 | 7 Review | not started | |
@@ -62,6 +67,15 @@ Not shipped yet.
 ## Log
 
 Newest first.
+
+**2026-09-28 17:26.** The wireframes are built: three clickable directions, every link checked, all showing one sitting as one edit.
+
+The architecture is drafted from three research passes:
+- how editing works today
+- a Tiptap test build
+- how a blank document would start
+
+It recommends Lahe's own editing code over Tiptap, which goes against your lean. The architecture page lays out why for you to decide. The research also found the cause of the doubled header line: the new paragraph is nested inside the header. The architecture fixes that and the lone paragraph that loses its bold. The architecture and security reviewers are running.
 
 **2026-09-28 17:18.** Ken settled the last brief question: what the reviewer writes in one sitting is one edit, with no logic splitting new text out of it. He asked to finish the docs, so the architecture starts now alongside the wireframes.
 

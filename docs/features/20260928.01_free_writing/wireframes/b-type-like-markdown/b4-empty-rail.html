@@ -1,0 +1,170 @@
+<!doctype html>
+<!--
+DIRECTION B: TYPE LIKE MARKDOWN
+
+Why it puts what where:
+  No new controls anywhere. The bar is today's bar, with only its hint rewritten
+  to "# heading   - list   Esc to finish". Block type comes from what you type at
+  the start of a line: "# " turns the line into a heading, "- " into a list item,
+  live, the moment the space goes in. Starting new text is clicking empty space
+  between or below blocks: a caret lands there with ghost text "Write here".
+  This is the closest to "no new mode": nothing on screen changes except the hint.
+
+What it trades away against A and C:
+  Discoverability. Fast for Ken, invisible to someone who does not know Markdown.
+  The hint is the only teacher, and it only names two of the five block types
+  (## subheading and 1. numbered list are there but unlisted).
+  No way to change a block type with the mouse, which A and C both give.
+  Empty space is the start target, so a stray click in a gap starts writing.
+
+Signature element: the live conversion of "# " into a heading.
+
+Q7 (Enter at the end of an existing block): SETTLED by Ken. Whatever the reviewer
+writes in one sitting is one edit. Enter at the end of an existing block continues
+THAT edit, shown as the frame extending to cover the new lines. One rail card per
+sitting. No logic splits a sitting into separate items.
+
+THIS SCREEN (b4-empty-rail): Branch: empty rail on a brand-new notes document
+  The rail's empty state on a brand-new notes document.
+
+Wireframe rules: rough on purpose. System fonts, grey rules, one blue (#3c56a5) from the
+real edit frame. No JavaScript. Controls with a dotted underline are not wired.
+-->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>B: type like Markdown: Branch: empty rail on a brand-new notes document</title><style>
+:root{--blue:#3c56a5;--ink:#222;--soft:#666;--faint:#9a9a9a;--line:#d6d6d6;--wash:#f4f4f4}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:#fff}
+a{color:var(--blue)}
+.nw{text-decoration:underline dotted;text-underline-offset:3px;cursor:help}
+.strip{position:fixed;top:0;left:0;right:0;height:38px;z-index:50;display:flex;align-items:center;gap:14px;
+  padding:0 12px;background:var(--wash);border-bottom:1px solid #bbb;font-size:12px;white-space:nowrap}
+.strip .dir{color:var(--soft)}
+.strip .where{font-weight:600}
+.strip .spacer{flex:1}
+.strip details{position:relative}
+.strip summary{cursor:pointer;color:var(--blue)}
+.strip details ol{position:absolute;right:0;top:22px;margin:0;padding:8px 12px 8px 28px;background:#fff;
+  border:1px solid #bbb;box-shadow:0 4px 14px rgba(0,0,0,.12);line-height:1.8}
+.strip details li.here{font-weight:700}
+.stage{position:absolute;top:38px;left:0;right:300px;bottom:0;overflow:auto}
+body.railclosed .stage{right:34px}
+body.norail .stage{right:0}
+body.widerail .stage{right:420px}
+.anno{max-width:620px;margin:16px auto 0;padding:8px 12px;border:1px dashed #999;background:#fafafa;
+  font-size:12.5px;line-height:1.5;color:#444}
+.anno b{color:var(--ink)}
+.anno .go{display:inline-block;margin-top:4px;margin-right:10px;font-weight:600}
+.anno .branch{display:block;margin-top:4px}
+.anno code{background:#eee;padding:0 3px}
+.page{max-width:620px;margin:28px auto 160px;padding:0 10px;font-family:Georgia,"Times New Roman",serif;
+  font-size:17px;line-height:1.6;position:relative}
+.page h1{font-size:30px;line-height:1.2;margin:0 0 18px}
+.page h2{font-size:22px;line-height:1.3;margin:30px 0 8px}
+.page p{margin:0 0 14px}
+.page ul{margin:0 0 14px;padding-left:24px}
+.page .empty-doc{min-height:340px}
+.caret{display:inline-block;width:1.5px;height:1.05em;background:#111;vertical-align:text-bottom;margin:0 1px;
+  animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.ghost{color:#b3b3b3}
+/* the edit frame, from src/layer/editing.js */
+.frame{position:relative;border:1.5px solid var(--blue);border-radius:7px;background:rgba(60,86,165,.045);
+  box-shadow:0 0 0 4px rgba(60,86,165,.10);padding:6px 12px 2px;margin:56px -13px 18px}
+.frame.bottombar{margin:18px -13px 60px}
+.frame > :first-child{margin-top:0}
+.frame h2{margin-top:4px}
+.bar{position:absolute;top:-44px;left:-2px;display:flex;align-items:center;gap:8px;padding:5px 8px;
+  border-radius:7px;border:1px solid rgba(17,17,17,.12);background:#fff;box-shadow:0 4px 14px rgba(17,17,17,.12);
+  font:12px/1.4 system-ui,-apple-system,sans-serif;color:#111;white-space:nowrap;z-index:5}
+.frame.bottombar > .bar{top:auto;bottom:-46px}
+.bar .label{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--blue)}
+.bar .sep{width:1px;height:16px;background:rgba(17,17,17,.14)}
+.bar .btn{padding:2px 6px;border-radius:5px;color:#111;text-decoration:none}
+.bar a.btn{color:var(--blue);text-decoration:underline}
+.bar .btn.b{font-weight:700}
+.bar .btn.i{font-style:italic}
+.bar .hint{color:#777}
+.bar .hint a{color:var(--blue)}
+.bar .notice{color:#555;font-style:italic}
+.typemenu{position:relative;display:inline-block}
+.typemenu .current{border:1px solid #ccc;border-radius:5px;padding:2px 7px}
+.typemenu a.current{text-decoration:none;color:var(--blue);border-color:var(--blue)}
+.menu{position:absolute;top:26px;left:0;min-width:150px;background:#fff;border:1px solid #bbb;border-radius:6px;
+  box-shadow:0 6px 18px rgba(0,0,0,.14);padding:4px 0;z-index:9}
+.menu > *{display:block;padding:4px 12px;color:#111;text-decoration:none}
+.menu .on{background:var(--wash)}
+.menu a{color:var(--blue);text-decoration:underline;font-weight:600}
+.seg{display:inline-flex;border:1px solid #bbb;border-radius:5px;overflow:hidden}
+.seg > *{padding:2px 8px;border-right:1px solid #ccc;color:#111;text-decoration:none;min-width:26px;text-align:center}
+.seg > :last-child{border-right:0}
+.seg .on{background:var(--blue);color:#fff}
+.seg a{color:var(--blue);text-decoration:underline;font-weight:700}
+/* A: insertion line */
+.ins{position:relative;height:20px;margin:-10px 0;z-index:3;display:block;text-decoration:none}
+.ins::before{content:"";position:absolute;left:0;right:0;top:9px;border-top:1.5px solid var(--blue);opacity:0}
+.ins span{position:absolute;left:0;top:0;font:11px/18px system-ui,sans-serif;background:#fff;color:var(--blue);
+  padding:0 6px 0 0;opacity:0}
+.ins:hover::before,.ins:hover span,.ins.show::before,.ins.show span{opacity:1}
+.ins.show span{text-decoration:underline;font-weight:600}
+.pointer{font:11px system-ui,sans-serif;color:#555;position:absolute;right:0;top:0;background:#fff}
+/* B: clickable empty space */
+.gap{position:relative;display:block;height:22px;margin:-11px 0;z-index:3;text-decoration:none}
+.gap span{position:absolute;left:0;top:0;font-family:Georgia,serif;font-size:17px;line-height:22px;color:#b3b3b3;opacity:0}
+.gap:hover span,.gap.show span{opacity:1}
+.gap.show{outline:1px dotted #aaa;outline-offset:2px}
+/* C: gutter plus */
+.plusrow{position:relative;height:0}
+.plus{position:absolute;left:-40px;top:-14px;width:22px;height:22px;border:1px solid #bbb;border-radius:50%;
+  font:15px/20px system-ui,sans-serif;text-align:center;color:#777;background:#fff;text-decoration:none}
+a.plus{border-color:var(--blue);color:var(--blue);font-weight:700}
+/* committed, waiting on the agent */
+.pending{border-left:2px dashed #888;padding-left:12px;margin-left:-14px}
+.fixed{background:#ececec}
+/* terminal inset */
+.term{max-width:560px;margin:40px auto;background:#111;color:#e8e8e8;border-radius:6px;padding:14px 16px;
+  font:13px/1.6 ui-monospace,Menlo,monospace}
+.term .dim{color:#9a9a9a}
+.convert{display:flex;align-items:center;gap:14px;margin-top:8px;padding:8px;border:1px solid #ccc;background:#fff}
+.convert .src{font:15px ui-monospace,Menlo,monospace}
+.convert .dst{font:bold 20px Georgia,serif}
+/* rail */
+.rail{position:fixed;top:38px;right:0;bottom:0;width:300px;border-left:1px solid #bbb;background:#fafafa;
+  font-size:12.5px;padding:10px;overflow:auto}
+body.widerail .rail{width:420px}
+.railclosed-tab{position:fixed;top:38px;right:0;bottom:0;width:34px;border-left:1px solid #bbb;background:#fafafa;
+  writing-mode:vertical-rl;font-size:11.5px;color:#666;padding:12px 8px;letter-spacing:.04em}
+.rail .head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.rail .head b{font-size:13px}
+.rail .file{color:#777;font-family:ui-monospace,Menlo,monospace;font-size:11px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid #ccc;margin-bottom:10px}
+.tabs > *{padding:4px 8px;color:#666;text-decoration:none}
+.tabs .on{color:#111;font-weight:600;border-bottom:2px solid var(--blue)}
+.card{border:1px solid #ccc;border-radius:8px;background:#fff;padding:9px 10px;margin-bottom:10px}
+.card.waiting{border-color:var(--blue)}
+.card.asking{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue)}
+.card .top{display:flex;gap:6px;align-items:center;margin-bottom:6px}
+.card .kind{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#555}
+.card .pill{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:1px 7px;
+  border-radius:999px;background:var(--wash);color:#444}
+.card .pill.blue{background:rgba(60,86,165,.10);color:var(--blue)}
+.card .spacer{flex:1}
+.card .time{font-size:10px;color:#999}
+.card .quote{font-size:12px;color:#666;border-left:2px solid #ccc;padding-left:7px;margin-bottom:6px}
+.card .sum{font-size:13px;line-height:1.45}
+.card ol.blocks{margin:4px 0 0;padding-left:0;list-style:none;font-size:12.5px;line-height:1.5}
+.card ol.blocks li{display:flex;gap:6px}
+.card ol.blocks .t{flex:none;width:22px;color:#777;font-weight:700;text-align:center;border:1px solid #ddd;
+  border-radius:4px;font-size:10.5px;height:17px;line-height:15px;margin-top:1px}
+.card ol.blocks .x{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.agent{margin-top:8px;border-radius:7px;padding:8px 10px;background:var(--wash);font-size:12.5px;line-height:1.45}
+.agent .who{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#777;margin-bottom:3px}
+.agent.q{background:#fff;border:1.5px solid var(--blue)}
+.agent.q .who{color:var(--blue)}
+.acts{display:flex;gap:8px;margin-top:8px}
+.acts > *{border:1px solid #bbb;border-radius:7px;padding:3px 10px;font-size:12px;font-weight:600;text-decoration:none;background:#fff;color:#111}
+.acts a{border-color:var(--blue);color:var(--blue)}
+.emptyrail{border:1px dashed #bbb;border-radius:8px;padding:14px 12px;color:#555;line-height:1.5;background:#fff}
+.emptyrail .big{font-size:14px;color:#222;font-weight:600;margin-bottom:6px}
+.emptyrail .k{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;background:#eee;padding:0 3px}
+.foot{position:absolute;bottom:10px;left:10px;right:10px;font-size:11px;color:#888}
+</style></head><body class="widerail"><div class="strip"><a href="../index.html">All directions</a><span class="dir">B. Type like Markdown</span><span class="where">Branch: empty rail on a brand-new notes document</span><a href="b2b-notes-empty.html">Back to the empty notes page</a><a href="b2b-notes-empty.html">&larr; back</a><a href="b2b-notes-empty.html">next: Back to the empty page &rarr;</a><span class="spacer"></span><details><summary>All screens</summary><ol><li><a href="01-reading.html">Step 1 of 6: reading the draft</a></li><li><a href="02-edit-state.html">Step 2 of 6: see where new text can go</a></li><li><a href="03a-new-block.html">Step 3 of 6: start a new block</a></li><li><a href="03b-pick-heading.html">Step 3 of 6: turn it into a header</a></li><li><a href="03c-heading-typed.html">Step 3 of 6: type the header</a></li><li><a href="04-paragraphs-list.html">Step 4 of 6: two paragraphs and a list</a></li><li><a href="05-waiting.html">Step 5 of 6: left editing, the card waits on the agent</a></li><li><a href="06a-placed.html">Step 6 of 6: the agent placed it</a></li><li><a href="06b-question.html">Step 6 of 6: the agent asks about two small fixes</a></li><li><a href="06c-yes.html">Step 6 of 6: after Yes</a></li><li><a href="06d-keep-mine.html">Step 6 of 6: after Keep mine</a></li><li><a href="b1a-existing-edit.html">Branch: editing an existing paragraph</a></li><li><a href="b1b-existing-enter.html">Branch: Enter at the end of an existing paragraph</a></li><li><a href="b2a-notes-terminal.html">Branch: blank notes document, started from the terminal</a></li><li><a href="b2b-notes-empty.html">Branch: blank notes document, the empty page</a></li><li><a href="b2c-notes-typing.html">Branch: blank notes document, the first lines</a></li><li><a href="b3-reloaded.html">Branch: the page reloads mid-writing</a></li><li class="here"><a href="b4-empty-rail.html">Branch: empty rail on a brand-new notes document</a></li></ol></details></div><div class="stage"><div class="anno"><b>The empty rail.</b> The first thing a note-taker sees. It names the file the notes go to, says how to start in this direction's own terms, and says what the agent will and will not do. <br><a class="go" href="b2b-notes-empty.html">Back to the empty page</a></div><div class="page"><div class="empty-doc"></div></div></div><div class="rail"><div class="head"><b>Lahe</b><span class="file">notes/2026-09-28.md</span></div><div class="tabs"><span class="on">Active 0</span><span class="nw" title="not wired">Done 0</span><span class="nw" title="not wired">Edits</span></div><div class="emptyrail"><div class="big">Nothing written yet</div><p>Your notes go to <span class="k">notes/2026-09-28.md</span>.</p><p>Click anywhere on the page and type. <span class="k"># </span> makes a heading, <span class="k">- </span> a list.</p><p>Each time you stop writing, everything you wrote in that sitting becomes one card here, and the agent places it in the file.</p><p>The agent only places your words. It organizes the notes when you ask it to.</p></div></div></body></html>
