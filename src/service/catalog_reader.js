@@ -63,6 +63,11 @@ var HEARTBEAT = protocol.MONITOR.HEARTBEAT_FIELD;
 var PAGE_EXTENSIONS = [".html", ".htm", ".md", ".markdown"];
 var SINGLE_PAGE_EXTENSIONS = [".html", ".htm"];
 
+// A quote, a backslash or a control character in a candidate path: never
+// offered. The path is page-derived, and an agent hands it on.
+// eslint-disable-next-line no-control-regex
+var UNSAFE_PATH_CHARS = /['"`\\\u0000-\u001f\u007f-\u009f]/;
+
 // <repo>/.claude/worktrees/<name>/<rest>
 var WORKTREE = /^(.*)\/\.claude\/worktrees\/[^/]+(?:\/(.*))?$/;
 
@@ -234,6 +239,12 @@ function createReader(options) {
   function nameOf(sessionId) {
     var s = readSession(sessionId);
     return s.state === "ok" ? agentSessions.cleanName(s.value.name) : null;
+  }
+
+  /** Was the session's name read off a page's title? Then no hand-off carries it. */
+  function nameFromPage(sessionId) {
+    var s = readSession(sessionId);
+    return s.state === "ok" && !!agentSessions.cleanName(s.value.name) && s.value.name_source === agentSessions.NAME_SOURCE_PAGE;
   }
 
   /**
@@ -462,7 +473,10 @@ function createReader(options) {
   /**
    * The main repository's copy of a document whose worktree copy is gone, or
    * null. Every check must pass: under the repository by real path, no hidden
-   * segment, owned by the current user, and a page.
+   * segment, owned by the current user, a page by its REAL path's extension (a
+   * symlink `x.md` to a `.json` is not a page), and no quote or control
+   * character anywhere in it (the path is page-derived and an agent serves it).
+   * The real path is what is returned.
    */
   function worktreeCandidate(docPath) {
     if (typeof docPath !== "string" || !docPath || exists(docPath)) return null;
@@ -471,8 +485,8 @@ function createReader(options) {
     var repo = wt[1];
     var rest = wt[2];
     if (hasHiddenSegment(rest)) return null;
-    if (PAGE_EXTENSIONS.indexOf(path.extname(rest).toLowerCase()) === -1) return null;
     var candidate = path.join(repo, rest);
+    if (UNSAFE_PATH_CHARS.test(candidate)) return null;
     var realRepo;
     var realCandidate;
     try {
@@ -483,10 +497,12 @@ function createReader(options) {
     }
     if (realCandidate.indexOf(realRepo + path.sep) !== 0) return null;
     if (hasHiddenSegment(path.relative(realRepo, realCandidate))) return null;
+    if (UNSAFE_PATH_CHARS.test(realCandidate)) return null;
+    if (PAGE_EXTENSIONS.indexOf(path.extname(realCandidate).toLowerCase()) === -1) return null;
     var stat = statOrNull(realCandidate);
     if (!stat || !stat.isFile()) return null;
     if (typeof process.getuid === "function" && stat.uid !== process.getuid()) return null;
-    return candidate;
+    return realCandidate;
   }
 
   function pathHint(folderPath) {
@@ -598,7 +614,35 @@ function createReader(options) {
     info.servedPath = meta && typeof meta.target_path === "string" && meta.target_path ? meta.target_path : null;
     var source = meta && typeof meta.source_path === "string" && meta.source_path ? meta.source_path : null;
     info.docPath = source || info.servedPath;
+    info.origins = meta && Array.isArray(meta.origins)
+      ? meta.origins.filter(function (o) { return typeof o === "string" && /^https?:\/\//.test(o); })
+      : [];
     return info;
+  }
+
+  /**
+   * The review's dev server origin, or null. A registered http origin no static
+   * server record of this session serves (by port), on a target LAHE would not
+   * serve itself: a folder or a non-page file, or no target at all. A page file
+   * with no covering record is a static review whose record was lost.
+   */
+  function devServerOrigin(info, servers) {
+    if (info.servedPath) {
+      var stat = statOrNull(info.servedPath);
+      if (stat && stat.isFile() && PAGE_EXTENSIONS.indexOf(path.extname(info.servedPath).toLowerCase()) !== -1) return null;
+    }
+    var staticPorts = (servers.records || []).map(function (meta) { return String(meta.port); });
+    for (var i = 0; i < info.origins.length; i += 1) {
+      var port;
+      try {
+        var url = new URL(info.origins[i]);
+        port = url.port || (url.protocol === "https:" ? "443" : "80");
+      } catch (err) {
+        continue;
+      }
+      if (staticPorts.indexOf(port) === -1) return info.origins[i];
+    }
+    return null;
   }
 
   // ---------------------------------------------------------------------------
@@ -626,18 +670,26 @@ function createReader(options) {
     var kind;
     var openable;
     var candidate = null;
-    // A review no recorded server covers is served by something else: the
-    // app's own dev server. `lahe add` script-line reviews have no session.
+    var devOrigin = null;
+    var recordLost = false;
+    // dev-server only on a registered origin no static record serves. A
+    // review with no covering record and no such origin is a static review
+    // whose record was lost: static, and unreadable. `lahe add` script-line
+    // reviews have no session.
     if (info.sessionId === LEGACY) kind = "legacy";
     else if (covering) kind = "static";
-    else kind = "dev-server";
+    else if ((devOrigin = devServerOrigin(info, servers))) kind = "dev-server";
+    else {
+      kind = "static";
+      recordLost = true;
+    }
 
     if (!info.docPath) {
       // No path on record: a dev server named only by its origin, or a review
       // whose meta.json cannot be read, which has nothing left to open.
       openable = info.unreadable ? "missing" : "via-agent";
     } else if (docOnDisk) {
-      openable = kind === "static" ? "yes" : "via-agent";
+      openable = covering ? "yes" : "via-agent";
     } else {
       candidate = worktreeCandidate(info.docPath);
       if (candidate) {
@@ -648,10 +700,11 @@ function createReader(options) {
       }
     }
 
-    var unreadable = info.unreadable || sessionState === "bad" || (servers.bad && !covering);
+    var unreadable = info.unreadable || sessionState === "bad" || (servers.bad && !covering) || recordLost;
     return {
       info: info,
       kind: kind,
+      origin: kind === "dev-server" ? devOrigin : null,
       openable: openable,
       candidate: candidate,
       covering: covering,
@@ -890,6 +943,7 @@ function createReader(options) {
       return {
         id: s.id,
         name: s.state === "ok" ? nameOf(s.id) : null,
+        name_from_page: s.state === "ok" && nameFromPage(s.id),
         projects: projects.sort(),
         watching: watchingOf(s.id, nowMs),
         last: reviews.length ? reviews[0].last : null,
@@ -921,8 +975,8 @@ function createReader(options) {
    *   review's is its folder's). `path` is the document's own path on disk.
    *   `candidate` is the checked main-repository copy for a gone worktree.
    *   For Open (Library 2.1): `server` is the id of the recorded server that
-   *   covers the review's served file and `url_path` that file's path on it
-   *   (both null when none does); `served_path` is the file itself, `watching`
+   *   covers the review's served file, `server_root` that record's root, and
+   *   `url_path` that file's path on it (all null when none does); `served_path` is the file itself, `watching`
    *   the session's watcher as the list shows it, and `last` the review's own
    *   newest event time. `fold` is every review on the same row, this one
    *   included (just this one for a row that is not a fold), so Star can act
@@ -948,7 +1002,9 @@ function createReader(options) {
             kind: part.kind,
             openable: part.openable,
             candidate: part.candidate,
+            origin: part.origin,
             server: part.covering ? part.covering.meta.id : null,
+            server_root: part.covering && typeof part.covering.meta.root === "string" ? part.covering.meta.root : null,
             url_path: part.covering ? part.covering.urlPath : null,
             served_path: part.info.servedPath,
             watching: watchingOf(s.id, nowMs),

@@ -9,6 +9,7 @@
     {
       "id": "s_coach",
       "name": "coach activity",
+      "name_from_page": false,
       "projects": [
         "alpha",
         "beta"
@@ -181,6 +182,7 @@
     {
       "id": "s_dev",
       "name": "app dev",
+      "name_from_page": false,
       "projects": [
         "beta"
       ],
@@ -219,6 +221,7 @@
     {
       "id": "s_badsession",
       "name": null,
+      "name_from_page": false,
       "projects": [],
       "watching": null,
       "last": "2026-09-26T17:00:00.000Z",
@@ -250,6 +253,7 @@
     {
       "id": "s_ssbroken",
       "name": "broken server record",
+      "name_from_page": false,
       "projects": [],
       "watching": null,
       "last": "2026-09-26T17:00:00.000Z",
@@ -269,7 +273,7 @@
           "ended": false,
           "served_url": null,
           "openable": "via-agent",
-          "kind": "dev-server",
+          "kind": "static",
           "starred": false,
           "unreadable": true,
           "request": null,
@@ -281,6 +285,7 @@
     {
       "id": "s_ops",
       "name": "ops fixes",
+      "name_from_page": false,
       "projects": [
         "alpha"
       ],
@@ -476,6 +481,7 @@
     {
       "id": "s_old3",
       "name": null,
+      "name_from_page": false,
       "projects": [
         "alpha"
       ],
@@ -600,7 +606,7 @@
           "ended": false,
           "served_url": null,
           "openable": "missing",
-          "kind": "dev-server",
+          "kind": "static",
           "starred": false,
           "unreadable": true,
           "request": null,
@@ -656,6 +662,7 @@
     {
       "id": "legacy",
       "name": null,
+      "name_from_page": false,
       "projects": [],
       "watching": null,
       "last": "2026-09-09T16:00:00.000Z",

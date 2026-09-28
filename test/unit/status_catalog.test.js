@@ -84,7 +84,7 @@ test("a pending request for the drained session gets past --quiet with nothing e
   assert.equal(out.summary.catalog_requests.length, 1);
   const entry = out.summary.catalog_requests[0];
   assert.deepEqual(Object.keys(entry), [
-    "request", "action", "review", "session", "kind", "moves_with", "at", "title", "path", "candidate", "handoff"
+    "request", "action", "review", "session", "kind", "origin", "moves_with", "at", "title", "path", "candidate", "folder", "handoff"
   ]);
   assert.equal(entry.request, request.id);
   assert.equal(entry.action, "pickup");
@@ -93,15 +93,16 @@ test("a pending request for the drained session gets past --quiet with nothing e
   assert.equal(entry.at, request.at);
   assert.deepEqual(entry.moves_with, ["r_doc2", "r_doc3"], "the other reviews in the document's session");
   // Filled by default from the reader's describeReview (Library 2.1). r_doc
-  // names no file, so no recorded server covers it: an agent re-serves it.
-  assert.equal(entry.kind, "dev-server");
+  // names no file and no dev server origin, and no recorded server covers it:
+  // a static review whose record is gone, which an agent re-serves.
+  assert.equal(entry.kind, "static");
   assert.equal(entry.title, "r_doc", "no title and no file: the row's display name is the id");
   assert.equal(entry.path, null);
   assert.equal(entry.candidate, null);
   assert.equal(
     entry.handoff,
-    protocol.AGENT_LIVENESS.handoffMessage("s_doc", null, true),
-    "the rail's own hand-off message for the document's session, with the --state-dir note"
+    protocol.AGENT_LIVENESS.libraryHandoffMessage("s_doc", null, stateDir.flagFor(w.dir)),
+    "the Library's hand-off message for the document's session, with the real --state-dir"
   );
   // Line one is the field classes, which fence the page-text fields.
   assert.equal(out.lines[0].field_classes["catalog_requests[].title"], "data");
@@ -278,7 +279,7 @@ test("the drain names the document with the reader's display name, its path, and
   assert.equal(entry.review, "r_titled");
   assert.equal(entry.title, "Feature Brief: Synthetic");
   assert.equal(entry.path, doc);
-  assert.equal(entry.handoff, protocol.AGENT_LIVENESS.handoffMessage("s_doc", "coach activity", true));
+  assert.equal(entry.handoff, protocol.AGENT_LIVENESS.libraryHandoffMessage("s_doc", "coach activity", stateDir.flagFor(w.dir)));
 });
 
 test("a title holding the fence's closing marker and a newline stays one fenced catalog_requests entry", async () => {
