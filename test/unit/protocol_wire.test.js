@@ -176,6 +176,20 @@ test("health carries the service contract that fences a rebuilt rail from a stal
   assert.match(protocol.route("health").response, /service_contract/);
 });
 
+test("the current service contract says, in protocol.js, why an older helper must be replaced", () => {
+  // A bump with no reason is a number nobody can check against the code. Each
+  // one names what an older helper lacks.
+  const source = require("node:fs").readFileSync(require.resolve("../../src/shared/protocol.js"), "utf8");
+  const reason = new RegExp("^\\s*// " + protocol.SERVICE_CONTRACT + ": \\S", "m");
+  assert.match(source, reason, "protocol.js has a `// " + protocol.SERVICE_CONTRACT + ": ...` line above SERVICE_CONTRACT");
+});
+
+test("a helper from before the Library is replaced: the Library's routes raised the service contract past 13", () => {
+  // An older helper has no /catalog, does not replay origin.removed, and never
+  // reports catalog_seen_at, so `lahe library` would hand out a URL it 404s.
+  assert.ok(protocol.SERVICE_CONTRACT >= 14);
+});
+
 // ---------------------------------------------------------------------------
 // The request checks (D11)
 // ---------------------------------------------------------------------------

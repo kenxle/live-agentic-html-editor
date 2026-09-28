@@ -58,7 +58,12 @@
   // replacing one throws every open review page out of its own review, and
   // they leave no windows.json for a CLI command to ask whether anybody is
   // reviewing before it replaces them. They must be restarted.
-  var SERVICE_CONTRACT = 13;
+  // 14: older helpers have no Library routes (/catalog and its API), never
+  // replay origin.removed, run no reopened-session sweep, and report no
+  // catalog_seen_at, so `lahe library` would print a URL they answer with a
+  // 404 and a restarted static server's stale origins would come back. They
+  // must be restarted.
+  var SERVICE_CONTRACT = 14;
   var BASE = "/lahe/" + API_VERSION;
 
   // ---------------------------------------------------------------------------
