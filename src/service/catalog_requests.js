@@ -97,7 +97,7 @@ function readAttachRecord(dir) {
 
 /**
  * @param {{dir: string, writeExpired?: boolean, pidAlive?: function,
- *          log?: function(string)}} options
+ *          log?: function(string), readFile?: function}} options
  *   `pidAlive` is the liveness function's own seam, so a test can say which
  *   monitor pids are running. `log` gets one line per skipped torn line; the
  *   default is the helper log.
@@ -110,6 +110,8 @@ function createQueue(options) {
   var pidAlive = typeof opts.pidAlive === "function" ? opts.pidAlive : agentSessions.pidAlive;
   var store = agentSessions.createStore({ dir: dir });
   var log = typeof opts.log === "function" ? opts.log : defaultLog;
+  // Tests pass a counting readFile, as the reader's tests do.
+  var readFile = typeof opts.readFile === "function" ? opts.readFile : fs.readFileSync;
 
   function defaultLog(line) {
     try {
@@ -129,7 +131,7 @@ function createQueue(options) {
     var text;
     try {
       stateDir.assertNotSymlink(file);
-      text = fs.readFileSync(file, "utf8");
+      text = readFile(file, "utf8");
     } catch (err) {
       if (err.code === "ENOENT") return [];
       throw err;
@@ -347,11 +349,27 @@ function createQueue(options) {
    * for ANSWER_SHOWN_MS after it happened.
    */
   function requestFor(reviewId, nowMs) {
-    var latest = null;
+    return requestsAt(nowMs)(reviewId);
+  }
+
+  /**
+   * Every review's latest request at `nowMs`, from one read of the file.
+   * Returns a lookup, `(reviewId) => request or null`, with requestFor's answer
+   * for each review. The Library's list calls this once per poll rather than
+   * requestFor once per row, which re-read the whole file for every row.
+   */
+  function requestsAt(nowMs) {
+    var latest = Object.create(null);
     resolve(nowMs).forEach(function (entry) {
-      if (entry.request.review === reviewId) latest = entry;
+      latest[entry.request.review] = entry;
     });
-    if (!latest) return null;
+    return function (reviewId) {
+      var entry = Object.prototype.hasOwnProperty.call(latest, reviewId) ? latest[reviewId] : null;
+      return entry ? rowRequest(entry, nowMs) : null;
+    };
+  }
+
+  function rowRequest(latest, nowMs) {
     var out = {
       id: latest.request.id,
       action: latest.request.action,
@@ -401,6 +419,7 @@ function createQueue(options) {
     pending: pending,
     pendingFor: pendingFor,
     requestFor: requestFor,
+    requestsAt: requestsAt,
     readAttached: readAttached
   };
 }
