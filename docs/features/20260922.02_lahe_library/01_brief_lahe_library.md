@@ -31,7 +31,7 @@ The key design question, for the wireframe: **what is one row?** A document, a r
 
 ## Non-Goals
 
-- Keeping old addresses alive. A reopened document gets a new address, and that is fine.
+- Keeping old addresses alive. A reopened document can have a different port, that's not a big deal. If you can also keep the same port, that would be fine too.
 - Deleting or archiving. Every review stays on disk.
 - Starting LAHE at login. After a restart, an agent starts LAHE, and the Library works from then on.
 - Searching inside documents. Search covers what a row shows.
