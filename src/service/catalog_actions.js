@@ -91,6 +91,30 @@ function createCatalogActions(options) {
   // Shared steps
   // -------------------------------------------------------------------------
 
+  // ONE OPEN AT A TIME PER SERVER RECORD (fix round CR1). Two Opens on a
+  // closed session would each see the record stopped and each spawn a server:
+  // one is orphaned, and the second origin swap drops the first tab's origin.
+  // So the restart step runs in a chain per "<session> <server>", and the
+  // second Open finds the first one's server already up. `openingSessions`
+  // counts the Opens in flight per session, so the sweep never closes a
+  // session an Open is part way through bringing back.
+  var openChains = Object.create(null);
+  var openingSessions = Object.create(null);
+
+  function oneAtATime(sessionId, serverId, fn) {
+    var key = sessionId + " " + serverId;
+    var prior = openChains[key] || Promise.resolve();
+    openingSessions[sessionId] = (openingSessions[sessionId] || 0) + 1;
+    var run = prior.then(fn);
+    var tail = run.then(function () {}, function () {});
+    openChains[key] = tail;
+    return run.finally(function () {
+      if (openChains[key] === tail) delete openChains[key];
+      openingSessions[sessionId] -= 1;
+      if (openingSessions[sessionId] <= 0) delete openingSessions[sessionId];
+    });
+  }
+
   /** One `catalog` line, in the format protocol.js spells. */
   function logAction(action, described, nowMs) {
     var lastMs = described && described.last ? Date.parse(described.last) : NaN;
@@ -118,6 +142,17 @@ function createCatalogActions(options) {
    */
   function watchedByAnother(described, agent) {
     return !!(described.watching && agent && described.watching.session !== agent.session);
+  }
+
+  /**
+   * Does the attached agent already have this document (story walk)? It owns
+   * the document's session, or it is the one watching it. A pick-up would ask
+   * it for what it already has, so Open just opens.
+   */
+  function alreadyTheirs(described, agent) {
+    if (!agent) return false;
+    if (described.session === agent.session) return true;
+    return !!(described.watching && described.watching.session === agent.session);
   }
 
   /** Queue a request, turning the queue's refusal into a protocol code. */
@@ -197,38 +232,50 @@ function createCatalogActions(options) {
     var agent = handoff ? liveAgent(nowMs) : null;
     if (handoff && agent && watchedByAnother(d, agent) && !confirmed) return fail("PROTO_CONFIRM_NEEDED");
 
-    var before = sessions.read(d.session);
-    var wasClosed = !!(before && before.closed_at);
-    var reopened;
-    try {
-      reopened = await ops.reopenForCatalog(d.session, d.server);
-    } catch (err) {
-      log("Library Open of review " + d.review + " could not restart its server: " + err.message, nowMs);
-      return fail("PROTO_NOT_OPENABLE", "the recorded server could not be restarted");
-    }
-    if (wasClosed) {
-      // The Library reopened it, so the sweep may close it again once it goes
-      // quiet. A session that was already open is somebody else's.
-      var rev = agentSessions.handoffRev(sessions.read(d.session));
-      var saved = store.setReopened(d.session, { at: iso(nowMs), handoff_rev: rev });
-      if (!saved.ok) {
-        log("Library Open reopened session " + d.session + " but could not record it: " + saved.code, nowMs);
+    var restart = await oneAtATime(d.session, d.server, async function () {
+      var before = sessions.read(d.session);
+      var wasClosed = !!(before && before.closed_at);
+      if (wasClosed) {
+        // The Library is about to reopen it, so the sweep may close it again
+        // once it goes quiet. A session that was already open is somebody
+        // else's. RECORDED FIRST: a reopen the sweep cannot see is a session
+        // left open for good, so a catalog.json that cannot take the record
+        // refuses the Open before anything is reopened or started.
+        var saved = store.setReopened(d.session, { at: iso(nowMs), handoff_rev: agentSessions.handoffRev(before) });
+        if (!saved.ok) {
+          log("Library Open of review " + d.review + " refused: session " + d.session +
+            " is closed and its reopen could not be recorded: " + saved.code, nowMs);
+          return { ok: false, outcome: fail(saved.code || "PROTO_CATALOG_UNREADABLE") };
+        }
       }
-    }
+      var restarted;
+      try {
+        // Starts the server before it reopens the session, so a failed start
+        // leaves the session closed.
+        restarted = await ops.reopenForCatalog(d.session, d.server, d.review);
+      } catch (err) {
+        if (wasClosed) store.clearReopened(d.session);
+        log("Library Open of review " + d.review + " could not restart its server: " + err.message, nowMs);
+        return { ok: false, outcome: fail("PROTO_NOT_OPENABLE", "the recorded server could not be restarted") };
+      }
+      return { ok: true, value: restarted };
+    });
+    if (!restart.ok) return restart.outcome;
+    var reopened = restart.value;
 
     var requestId = null;
     var notAsked = null;
     if (handoff) {
       if (!agent) {
         notAsked = NOT_ASKED.NO_AGENT;
-      } else if (!(d.watching && d.watching.session === agent.session)) {
+      } else if (!alreadyTheirs(d, agent)) {
         var queued = enqueue(ACTION.PICKUP, d, agent, nowMs);
         if (queued.ok) requestId = queued.request.id;
         else if (queued.code === "PROTO_QUEUE_FULL") notAsked = NOT_ASKED.QUEUE_FULL;
         else if (queued.code === "PROTO_REQUEST_PENDING") notAsked = NOT_ASKED.REQUEST_PENDING;
         else notAsked = NOT_ASKED.NO_AGENT;
       }
-      // else the attached agent is already the one watching: nothing to ask.
+      // else the attached agent already owns or watches it: nothing to ask.
     }
     logAction(protocol.CATALOG_LOG.ACTION.OPEN, d, nowMs);
     return { status: 200, body: { url: reopened.origin + d.url_path, request_id: requestId, not_asked: notAsked } };
@@ -240,8 +287,14 @@ function createCatalogActions(options) {
     if (found.outcome) return found.outcome;
     if (typeof body.starred !== "boolean") return badRequest("starred must be true or false");
     var d = found.described;
-    var written = store.setStar(d.review, body.starred, iso(nowMs));
-    if (!written.ok) return fail(written.code || "PROTO_CATALOG_UNREADABLE");
+    // EVERY REVIEW IN THE FOLD (fix round CR2). The list shows a folded row as
+    // starred when any part is, so a star or unstar on the lead alone would
+    // stick the moment another part became the lead.
+    var ids = Array.isArray(d.fold) && d.fold.length ? d.fold : [d.review];
+    for (var i = 0; i < ids.length; i += 1) {
+      var written = store.setStar(ids[i], body.starred, iso(nowMs));
+      if (!written.ok) return fail(written.code || "PROTO_CATALOG_UNREADABLE");
+    }
     logAction(body.starred ? protocol.CATALOG_LOG.ACTION.STAR : protocol.CATALOG_LOG.ACTION.UNSTAR, d, nowMs);
     return { status: 200, body: { review: d.review, starred: body.starred } };
   }
@@ -258,8 +311,16 @@ function createCatalogActions(options) {
       return badRequest("action must be one of " + catalogRequests.ACTIONS.join(", "));
     }
     var d = found.described;
+    // A missing review has nothing an agent could open, so it is refused here
+    // exactly as Open refuses it.
+    if (d.openable === "missing") return fail("PROTO_NOT_OPENABLE", "missing");
     var agent = liveAgent(nowMs);
     if (!agent) return fail("PROTO_NO_AGENT");
+    // A pick-up of a served document the attached agent already has asks for
+    // nothing. A via-agent row still needs re-serving, so it is still asked.
+    if (action === ACTION.PICKUP && d.openable === "yes" && alreadyTheirs(d, agent)) {
+      return { status: 200, body: { request_id: null } };
+    }
     if (watchedByAnother(d, agent) && body.confirmed !== true) return fail("PROTO_CONFIRM_NEEDED");
     var queued = enqueue(action, d, agent, nowMs);
     if (!queued.ok) return fail(queued.code, queued.detail);
@@ -315,7 +376,7 @@ function createCatalogActions(options) {
    *   - a session reopened with `lahe session reopen` (it is not in the map)
    *   - a session taken over since (its handoff_rev moved past the recorded
    *     one); its entry is dropped, since it is an agent's now
-   *   - a session whose monitor is live
+   *   - a session whose monitor is live, or that an Open is bringing back
    *
    * A closed session's entry is cleared, whoever closed it.
    *
@@ -346,7 +407,8 @@ function createCatalogActions(options) {
         out.cleared.push(sessionId);
         continue;
       }
-      if (monitorLive(sessionId, session, nowMs)) {
+      if (openingSessions[sessionId] || monitorLive(sessionId, session, nowMs)) {
+        // An Open part way through bringing it back is activity too.
         out.kept.push(sessionId);
         continue;
       }

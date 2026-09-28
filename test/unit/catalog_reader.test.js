@@ -22,11 +22,16 @@ const fixture = require("../fixtures/catalog_state.js");
 const LIST_FIXTURE = path.join(__dirname, "..", "fixtures", "catalog_list.json");
 const MINUTE = 60 * 1000;
 
-// What 1.4's request queue would hand the reader for the fixture: one request
-// in each state, plus an answer older than ANSWER_SHOWN_MS that must not show.
+// What 1.4's request queue hands the reader for the fixture, in its own shape
+// (by_name already filled): one request in each state, plus an answer older
+// than ANSWER_SHOWN_MS that must not show.
 function fixtureRequests(nowMs) {
   const at = (msAgo) => new Date(nowMs - msAgo).toISOString();
-  return {
+  const named = (requests) => {
+    Object.keys(requests).forEach((id) => { requests[id].by_name = "document index"; });
+    return requests;
+  };
+  return named({
     r_brief: { id: "cq_waiting1", action: "pickup", at: at(2 * MINUTE), for: "s_index", state: "waiting" },
     r_spec: {
       id: "cq_done1", action: "pickup", at: at(40 * MINUTE), for: "s_index", state: "done",
@@ -36,12 +41,12 @@ function fixtureRequests(nowMs) {
       id: "cq_refused1", action: "launch", at: at(60 * MINUTE), for: "s_index", state: "refused",
       by: "s_index", text: "I can't open a terminal here.", answered_at: at(58 * MINUTE)
     },
-    r_wt_gone: { id: "cq_expired1", action: "pickup", at: at(90 * MINUTE), for: "s_index", state: "expired" },
+    r_wt_gone: { id: "cq_expired1", action: "pickup", at: at(90 * MINUTE), for: "s_index", state: "expired", reason: "monitor_dead" },
     r_legacy: {
       id: "cq_old1", action: "pickup", at: at(2 * 24 * 60 * MINUTE), for: "s_index", state: "done",
       by: "s_index", text: "long ago", answered_at: at(2 * 24 * 60 * MINUTE - MINUTE)
     }
-  };
+  });
 }
 
 function setup(overrides) {
@@ -58,7 +63,7 @@ function setup(overrides) {
       },
       pidAlive: () => true,
       probe: async (meta) => meta.id === "ss_beta",
-      attachment: () => ({ session: "s_index", at: new Date(installed.nowMs - 5 * MINUTE).toISOString() }),
+      attachment: () => ({ session: "s_index", name: "document index", at: new Date(installed.nowMs - 5 * MINUTE).toISOString(), watching: true }),
       requestFor: (reviewId) => requests[reviewId] || null
     },
     overrides || {}
@@ -464,25 +469,40 @@ test("attached names the attached session and whether its monitor is live", asyn
   assert.deepEqual(list.attached, { session: "s_index", name: "document index", watching: true });
 });
 
+/** A reader wired to the real queue over the fixture, as the helper wires it. */
+function queueReader(installed) {
+  const catalogRequests = require("../../src/service/catalog_requests.js");
+  const queue = catalogRequests.createQueue({ dir: installed.dir, pidAlive: () => true, log: () => {} });
+  return catalogReader.createReader(Object.assign({
+    dir: installed.dir, home: installed.home, pidAlive: () => true, probe: async () => false
+  }, catalogReader.queueInputs(queue)));
+}
+
 test("attached: the later of two attaches wins", async () => {
-  let attach = { session: "s_coach", at: "2026-09-28T15:50:00.000Z" };
-  const { reader, installed } = setup({ attachment: () => attach });
+  const catalogRequests = require("../../src/service/catalog_requests.js");
+  const installed = fixture.install();
+  const reader = queueReader(installed);
+  catalogRequests.writeAttach(installed.dir, "s_coach", Date.parse("2026-09-28T15:50:00.000Z"));
   assert.equal((await reader.list(installed.nowMs)).attached.session, "s_coach");
-  attach = { session: "s_index", at: "2026-09-28T15:55:00.000Z" };
+  catalogRequests.writeAttach(installed.dir, "s_index", Date.parse("2026-09-28T15:55:00.000Z"));
   assert.equal((await reader.list(installed.nowMs)).attached.session, "s_index");
 });
 
 test("attached: a stale heartbeat gives watching false", async () => {
-  const { reader, installed } = setup({ attachment: () => ({ session: "s_old3", at: "2026-09-28T15:50:00.000Z" }) });
-  const list = await reader.list(installed.nowMs);
+  const catalogRequests = require("../../src/service/catalog_requests.js");
+  const installed = fixture.install();
+  catalogRequests.writeAttach(installed.dir, "s_old3", Date.parse("2026-09-28T15:50:00.000Z"));
+  const list = await queueReader(installed).list(installed.nowMs);
   assert.deepEqual(list.attached, { session: "s_old3", name: null, watching: false });
 });
 
 test("attached: an attach with nothing on disk behind it is no agent", async () => {
-  const { reader, installed } = setup({ attachment: () => ({ session: "s_ghost", at: "2026-09-28T15:50:00.000Z" }) });
+  const catalogRequests = require("../../src/service/catalog_requests.js");
+  const installed = fixture.install();
+  const reader = queueReader(installed);
+  assert.equal((await reader.list(installed.nowMs)).attached, null, "no attach at all");
+  catalogRequests.writeAttach(installed.dir, "s_ghost", Date.parse("2026-09-28T15:50:00.000Z"));
   assert.equal((await reader.list(installed.nowMs)).attached, null);
-  const none = setup({ attachment: () => null });
-  assert.equal((await none.reader.list(none.installed.nowMs)).attached, null);
 });
 
 // --- requests -----------------------------------------------------------------
@@ -501,7 +521,7 @@ test("request carries the latest request on the review with the agent's name", a
 
 test("an answer stays on its row until ANSWER_SHOWN_MS, and not at it", async () => {
   const answeredAt = "2026-09-28T15:00:00.000Z";
-  const request = { id: "cq_a", action: "pickup", at: "2026-09-28T14:59:00.000Z", for: "s_index", state: "done", by: "s_index", text: "ok", answered_at: answeredAt };
+  const request = { id: "cq_a", action: "pickup", at: "2026-09-28T14:59:00.000Z", state: "done", by_name: "document index", text: "ok", answered_at: answeredAt };
   const { reader } = setup({ requestFor: (id) => (id === "r_brief" ? request : null) });
   const limit = Date.parse(answeredAt) + protocol.CATALOG.ANSWER_SHOWN_MS;
   assert.notEqual(row(await reader.list(limit - 1), "r_brief").request, null);
@@ -532,7 +552,7 @@ test("wired to 1.4's real queue: attached comes from readAttached and each row's
   assert.deepEqual(list.attached, { session: "s_index", name: "document index", watching: true });
   assert.deepEqual(row(list, "r_brief").request, {
     id: waiting.request.id, action: "pickup", at: waiting.request.at, state: "waiting",
-    by_name: "document index", text: null, answered_at: null
+    by_name: "document index", text: null, answered_at: null, reason: null
   });
   const answered = row(list, "r_spec").request;
   assert.equal(answered.state, "done");
@@ -668,4 +688,77 @@ test("the committed list fixture covers every row kind and state the page draws"
   assert.ok(all.some((r) => r.counts_as_of && r.counts_as_of < r.last), "stale counts");
   assert.ok(list.sessions.some((s) => s.watching && s.watching.session !== s.id), "watched by another agent");
   assert.ok(list.sessions.some((s) => s.name === null), "unnamed session");
+});
+
+// --- fix round (phase 7) -----------------------------------------------------
+
+test("CX1: with every server answering, out of order, each row's served_url is its own server's port and path", async () => {
+  // Every probe answers true, and later probes answer first, so a callback
+  // that closed over a shared `row` or `cover` would write one row's URL onto
+  // another.
+  const installed = fixture.install();
+  // Every record running, so several rows are probed in the one list.
+  const sessionsRoot = path.join(installed.dir, "agent-sessions");
+  fs.readdirSync(sessionsRoot).forEach((sessionId) => {
+    const serversDir = path.join(sessionsRoot, sessionId, "static-servers");
+    if (!fs.existsSync(serversDir)) return;
+    fs.readdirSync(serversDir).forEach((name) => {
+      const file = path.join(serversDir, name);
+      let meta;
+      try { meta = JSON.parse(fs.readFileSync(file, "utf8")); } catch (err) { return; }
+      if (!meta || typeof meta !== "object") return;
+      meta.stopped_at = null;
+      fs.writeFileSync(file, JSON.stringify(meta, null, 2) + "\n");
+    });
+  });
+  const waits = [];
+  const probe = (meta) => new Promise((resolve) => { waits.push(() => resolve(true)); });
+  const reader = catalogReader.createReader({ dir: installed.dir, home: installed.home, pidAlive: () => true, probe });
+  const pending = reader.list(installed.nowMs);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(waits.length >= 2, "at least two rows are probed, got " + waits.length);
+  waits.slice().reverse().forEach((go) => go());
+  const list = await pending;
+  let served = 0;
+  rows(list).forEach((r) => {
+    if (!r.served_url) return;
+    served += 1;
+    const d = reader.describeReview(r.id, installed.nowMs);
+    const record = staticServers.list(installed.dir, r.session_id).find((m) => m.id === d.server);
+    assert.equal(r.served_url, "http://127.0.0.1:" + record.port + d.url_path, r.id);
+  });
+  const openableYes = rows(list).filter((r) => r.openable === "yes").length;
+  assert.equal(served, openableYes, "every openable row got a URL");
+  assert.ok(served >= 2, "several rows served, got " + served);
+});
+
+test("CR5: origin events an Open's swap appends do not move a review's last; the newest other event's time is its last", async () => {
+  const { reader, installed } = setup();
+  const log = path.join(installed.dir, "reviews", "r_spec", "events.jsonl");
+  const events = fs.readFileSync(log, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line));
+  const newestTs = events.map((e) => e.ts).sort().pop();
+  const swapAt = new Date(installed.nowMs).toISOString();
+  const origin = (event, port) => JSON.stringify({ event, event_id: "ev_swap_" + port, ts: swapAt, review: "r_spec", payload: { origin: "http://127.0.0.1:" + port } });
+  fs.appendFileSync(log, origin("origin.registered", 5001) + "\n" + origin("origin.removed", 4321) + "\n");
+  fs.utimesSync(log, new Date(installed.nowMs), new Date(installed.nowMs));
+  const list = await reader.list(installed.nowMs);
+  assert.equal(row(list, "r_spec").last, newestTs);
+  assert.equal(reader.describeReview("r_spec", installed.nowMs).last, newestTs, "the log line's age reads the same last");
+});
+
+test("an expired request's reason reaches the list, so the page can word attach_changed and a dead monitor apart", async () => {
+  const catalogRequests = require("../../src/service/catalog_requests.js");
+  const installed = fixture.install();
+  const now = installed.nowMs;
+  require("../../src/service/agent_sessions.js").createStore({ dir: installed.dir }).reopen("s_index");
+  catalogRequests.writeAttach(installed.dir, "s_index", now - 5 * MINUTE);
+  const queue = catalogRequests.createQueue({ dir: installed.dir, writeExpired: true, pidAlive: () => true, log: () => {} });
+  queue.append({ action: "launch", review: "r_brief", session: "s_coach", for: "s_index" }, now - 2 * MINUTE);
+  catalogRequests.writeAttach(installed.dir, "s_coach", now - MINUTE);
+  const reader = catalogReader.createReader(Object.assign({
+    dir: installed.dir, home: installed.home, pidAlive: () => true, probe: async () => false
+  }, catalogReader.queueInputs(queue)));
+  const list = await reader.list(now);
+  assert.equal(row(list, "r_brief").request.state, "expired");
+  assert.equal(row(list, "r_brief").request.reason, "attach_changed");
 });

@@ -493,7 +493,7 @@ async function serve(options) {
         deps
       );
     } catch (err) {
-      var status = err.code === "NOT_IMPLEMENTED" ? 501 : 500;
+      var status = 500;
       log.helperLog("route " + route.name + " failed: " + err.message + " [request " + requestId + "]");
       respond(res, status, protocol.errorBody("PROTO_BAD_REQUEST", err.message, requestId, null), checked.origin, requestId);
       return;
@@ -559,7 +559,7 @@ async function serve(options) {
         deps
       );
     } catch (err) {
-      var status = err.code === "NOT_IMPLEMENTED" ? 501 : 500;
+      var status = 500;
       log.helperLog("route " + route.name + " failed: " + err.message + " [request " + requestId + "]");
       respondCatalogJson(res, status, protocol.errorBody("PROTO_BAD_REQUEST", err.message, requestId, null), requestId);
       return;

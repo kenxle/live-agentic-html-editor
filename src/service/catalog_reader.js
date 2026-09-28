@@ -8,24 +8,26 @@
 //
 //   meta.json         the review's session, target, source and creation time
 //   review.json       title, pages, counts, ended_at
-//   events.jsonl      only its modified time (a review's `last`), unless the
+//   events.jsonl      its modified time (a review's `last`; when the log ends
+//                     in origin events, the newest other event's time, from
+//                     the tail only), unless the
 //                     log is newer than review.json and small enough to fold
 //                     here (REPROJECT_MAX_BYTES), in which case the one review
 //                     is projected in memory with the helper's own projection
 //   session.json      the session's name
-//   monitor.json      who is watching, through agent_sessions.livenessFrom
+//   monitor.json      who is watching, through agent_sessions.livenessFrom,
+//   activity.json     with the recent-command stamp the request queue counts
 //   ss_*.json         whether Open can restart a server for the review, and
 //                     (with a probe) whether one is serving it right now
 //   catalog.json      stars, through catalog_store
 //
 // Two inputs come from the request queue (Library 1.4) and are passed in, so
-// this module never reads catalog-attach.json or catalog-requests.jsonl itself:
-// `attachment(now)` returns the attach record ({session, at}, or 1.4's
-// readAttached with its own `watching`) or null, and `requestFor(reviewId,
-// now)` returns the latest request on a review (1.4's shape, with `by_name`
-// already filled, or a bare record with `by` and `for`) or null. The helper
-// also passes `requestsAt(now)`, the same answers from one read of the queue,
-// so a list reads catalog-requests.jsonl once rather than once per row.
+// this module never reads catalog-attach.json or catalog-requests.jsonl itself.
+// They are always the queue's own (queueInputs below): `attachment(now)` is
+// readAttached, with its own `watching`, and `requestFor(reviewId, now)` the
+// latest request on a review, with `by_name` already filled. The helper also
+// passes `requestsAt(now)`, the same answers from one read of the queue, so a
+// list reads catalog-requests.jsonl once rather than once per row.
 //
 // ONE CORRUPT FILE DEGRADES ONE ROW. Every read is caught and turned into
 // `unreadable: true` on the row it belongs to; the rest of the list returns.
@@ -153,6 +155,64 @@ function createReader(options) {
   }
 
   // ---------------------------------------------------------------------------
+  // A review's `last`, when its log ends in origin events
+  // ---------------------------------------------------------------------------
+
+  // Open's origin swap (fix round CR5) appends origin.registered and
+  // origin.removed to every review the restarted server serves, so the log's
+  // modified time would call a review nobody touched "worked on just now".
+  // When the log ENDS in origin events, `last` is the time of the newest event
+  // that is not one. Only the tail is read, so a large log stays unread.
+  var ORIGIN_EVENTS = [protocol.EVENT.ORIGIN_REGISTERED, protocol.EVENT.ORIGIN_REMOVED];
+  var TAIL_BYTES = 64 * 1024;
+  var tailCache = Object.create(null);
+
+  /** The newest non-origin event's time, or null to keep the modified time. */
+  function lastPastOriginEvents(file, stat) {
+    var key = stat.mtimeMs + ":" + stat.size;
+    var hit = tailCache[file];
+    if (hit && hit.key === key) return hit.value;
+    var value = null;
+    try {
+      var length = Math.min(stat.size, TAIL_BYTES);
+      var buf = Buffer.alloc(length);
+      var fd = fs.openSync(file, "r");
+      try {
+        fs.readSync(fd, buf, 0, length, stat.size - length);
+      } finally {
+        fs.closeSync(fd);
+      }
+      var lines = buf.toString("utf8").split("\n");
+      // A partial first line of a cut tail is never trusted.
+      if (length < stat.size) lines.shift();
+      var sawOrigin = false;
+      for (var i = lines.length - 1; i >= 0; i -= 1) {
+        if (!lines[i].trim()) continue;
+        var event;
+        try {
+          event = JSON.parse(lines[i]);
+        } catch (err) {
+          continue;
+        }
+        if (!event || typeof event !== "object") continue;
+        if (ORIGIN_EVENTS.indexOf(event.event) !== -1) {
+          sawOrigin = true;
+          continue;
+        }
+        if (sawOrigin) {
+          var ts = typeof event.ts === "string" ? Date.parse(event.ts) : NaN;
+          if (!Number.isNaN(ts)) value = ts;
+        }
+        break;
+      }
+    } catch (err) {
+      value = null;
+    }
+    tailCache[file] = { key: key, value: value };
+    return value;
+  }
+
+  // ---------------------------------------------------------------------------
   // Sessions, heartbeats and servers
   // ---------------------------------------------------------------------------
 
@@ -176,37 +236,61 @@ function createReader(options) {
     return s.state === "ok" ? agentSessions.cleanName(s.value.name) : null;
   }
 
-  /** Is this session's monitor live? Read only through livenessFrom. */
+  /**
+   * Is an agent listening on this session? Read only through livenessFrom,
+   * with the same inputs the request queue uses (fix round CL2): a fresh
+   * heartbeat on this handoff rev whose pid is alive, OR a lahe command in the
+   * last few minutes. The second matters because `lahe monitor` exits when it
+   * wakes on work, so a heartbeat alone reads "nobody" exactly while the agent
+   * is working a batch. `beat` is the heartbeat record, stale or not, for its
+   * `primary`.
+   */
   function monitorLive(sessionId, nowMs) {
     if (sessionId === LEGACY || !protocol.isSafeId(sessionId)) return { live: false, beat: null };
     var beat = null;
+    var activity = null;
     try {
       var got = cachedJson(stateDir.monitorPath(dir, sessionId));
       beat = got.state === "ok" ? got.value : null;
     } catch (err) {
       beat = null;
     }
-    if (!beat) return { live: false, beat: null };
+    try {
+      var act = cachedJson(stateDir.activityPath(dir, sessionId));
+      activity = act.state === "ok" ? act.value : null;
+    } catch (err) {
+      activity = null;
+    }
+    if (!beat && !activity) return { live: false, beat: null };
     var s = readSession(sessionId);
     var liveness = agentSessions.livenessFrom({
       session: s.state === "ok" ? s.value : null,
       monitor: beat,
-      activity: null,
+      activity: activity,
       listening: null,
       nowMs: nowMs,
       pidAlive: pidAlive
     });
-    // With no activity and no feed answer, `listening` is true only for a
-    // fresh heartbeat, on this handoff rev, whose pid is alive.
     return { live: liveness[protocol.AGENT_LIVENESS.FIELD.LISTENING] === true, beat: beat };
   }
 
   function watchingOf(sessionId, nowMs) {
     var m = monitorLive(sessionId, nowMs);
-    if (!m.live) return null;
-    var primary = m.beat[HEARTBEAT.PRIMARY];
+    var primary = m.beat ? m.beat[HEARTBEAT.PRIMARY] : null;
     var who = typeof primary === "string" && protocol.isSafeId(primary) ? primary : sessionId;
-    return { session: who, name: nameOf(who) };
+    if (m.live) return { session: who, name: nameOf(who) };
+    // WATCHED THROUGH ANOTHER SESSION'S MONITOR (story walk). An agent that
+    // took this session over watches it from its own multi-session monitor,
+    // and that monitor exits to work a batch. Right after the agent answers,
+    // this session's heartbeat is stale, but the agent named as `primary` is
+    // listening on its own session: it is still the one watching. Only for a
+    // heartbeat on this session's current handoff rev, so a takeover since
+    // does not count.
+    if (who === sessionId || !m.beat) return null;
+    var own = readSession(sessionId);
+    var rev = own.state === "ok" ? agentSessions.handoffRev(own.value) : 0;
+    if (m.beat[HEARTBEAT.HANDOFF_REV] !== rev) return null;
+    return monitorLive(who, nowMs).live ? { session: who, name: nameOf(who) } : null;
   }
 
   /**
@@ -263,6 +347,64 @@ function createReader(options) {
       }
     });
     return best;
+  }
+
+  /**
+   * The URL path Open lands on for a FOLDER review (story walk). The coverage
+   * rule gives a folder its server root, `/`, and a folder of pages with no
+   * index.html answers that with "not found". So: the page the review's
+   * comments are on, when it is a page in that folder, else the entry page
+   * `lahe review <folder>` opens (static_servers.folderEntryPage). A single
+   * page's path is returned as it is.
+   */
+  function openPathOf(info, covering) {
+    if (!covering || !info.servedPath) return covering ? covering.urlPath : null;
+    var stat = statOrNull(info.servedPath);
+    if (!stat || !stat.isDirectory()) return covering.urlPath;
+    var folder = info.servedPath;
+    var pages = info.summary && Array.isArray(info.summary.pages) ? info.summary.pages : [];
+    for (var i = 0; i < pages.length; i += 1) {
+      var file = pageFileIn(folder, pages[i] && pages[i].path);
+      var onServer = file ? staticServers.coveragePath(covering.meta, file) : null;
+      if (onServer) return onServer;
+    }
+    var entry = staticServers.folderEntryPage(folder);
+    var entryPath = entry ? staticServers.coveragePath(covering.meta, path.join(folder, entry)) : null;
+    return entryPath || covering.urlPath;
+  }
+
+  /**
+   * A page's recorded URL path as a file in `folder`, or null. The path is
+   * page-derived, so it must be plain: rooted, no dot or hidden segment, no
+   * backslash or control character, and an existing .html or .htm file under
+   * the folder by real path.
+   */
+  function pageFileIn(folder, urlPath) {
+    if (typeof urlPath !== "string" || urlPath.charAt(0) !== "/" || /[\\\u0000-\u001f\u007f]/.test(urlPath)) return null;
+    var segments = [];
+    var raw = urlPath.split("?")[0].split("#")[0].split("/").filter(function (seg) { return seg.length > 0; });
+    for (var i = 0; i < raw.length; i += 1) {
+      var seg;
+      try {
+        seg = decodeURIComponent(raw[i]);
+      } catch (err) {
+        return null;
+      }
+      if (!seg || seg.charAt(0) === "." || /[\/\\\u0000-\u001f\u007f]/.test(seg)) return null;
+      segments.push(seg);
+    }
+    if (!segments.length) return null;
+    if (SINGLE_PAGE_EXTENSIONS.indexOf(path.extname(segments[segments.length - 1]).toLowerCase()) === -1) return null;
+    var file = path.join.apply(path, [folder].concat(segments));
+    try {
+      var realFolder = fs.realpathSync(folder);
+      var realFile = fs.realpathSync(file);
+      if (realFile.indexOf(realFolder + path.sep) !== 0) return null;
+      if (!fs.statSync(realFile).isFile()) return null;
+    } catch (err) {
+      return null;
+    }
+    return file;
   }
 
   // ---------------------------------------------------------------------------
@@ -424,6 +566,10 @@ function createReader(options) {
     var createdMs = meta && typeof meta.created_at === "string" ? Date.parse(meta.created_at) : NaN;
     info.createdMs = Number.isNaN(createdMs) ? null : createdMs;
     info.lastMs = eventsStat ? eventsStat.mtimeMs : info.createdMs !== null ? info.createdMs : 0;
+    if (eventsStat) {
+      var pastOrigins = lastPastOriginEvents(eventsFile, eventsStat);
+      if (pastOrigins !== null) info.lastMs = pastOrigins;
+    }
 
     var summary = null;
     var countsAsOf = null;
@@ -476,6 +622,7 @@ function createReader(options) {
   function placeRow(info, sessionState, servers) {
     var docOnDisk = exists(info.docPath);
     var covering = info.servedPath && info.sessionId !== LEGACY ? coveringRecord(servers.records, info.servedPath) : null;
+    if (covering) covering = { meta: covering.meta, urlPath: openPathOf(info, covering) };
     var kind;
     var openable;
     var candidate = null;
@@ -635,32 +782,30 @@ function createReader(options) {
     if ((r.state === "done" || r.state === "refused") && answered) {
       if (nowMs - Date.parse(answered) >= CATALOG.ANSWER_SHOWN_MS) return null;
     }
-    // Two shapes arrive here. The queue's own requestFor (Library 1.4) has
-    // already named the agent (`by_name`, its name or its id); a bare request
-    // record carries the session ids (`by`, `for`) and is named here.
-    var byName = typeof r.by_name === "string" && r.by_name ? r.by_name : null;
-    var who = typeof r.by === "string" && r.by ? r.by : typeof r.for === "string" ? r.for : null;
+    // The queue's requestsAt (Library 1.4) has already named the agent
+    // (`by_name`, its name or its id).
     return {
       id: r.id,
       action: r.action,
       at: r.at,
       state: r.state,
-      by_name: byName || (who ? nameOf(who) || who : null),
+      by_name: typeof r.by_name === "string" && r.by_name ? r.by_name : null,
       text: typeof r.text === "string" ? r.text : null,
-      answered_at: answered
+      answered_at: answered,
+      // Why an expired request expired (attach_changed, monitor_dead,
+      // timeout), so the page can say which; null in every other state.
+      reason: r.state === "expired" && typeof r.reason === "string" ? r.reason : null
     };
   }
 
   function attachedOf(nowMs) {
     var a = attachment(nowMs);
     if (!a || typeof a.session !== "string" || !protocol.isSafeId(a.session) || a.session === LEGACY) return null;
-    if (readSession(a.session).state === "missing") return null;
-    // The queue's readAttached (Library 1.4) answers `watching` with the same
-    // liveness rule it uses to hand out and expire requests, which also counts
-    // a closed session as not listening. Taking its answer keeps the header
-    // and Open from disagreeing; a bare attach record is judged here.
-    var watching = typeof a.watching === "boolean" ? a.watching : monitorLive(a.session, nowMs).live;
-    return { session: a.session, name: nameOf(a.session), watching: watching };
+    // The queue's readAttached (Library 1.4) answers null for an attach with no
+    // session behind it, and `watching` with the same liveness rule it uses to
+    // hand out and expire requests. Taking its answer keeps the header and
+    // Open from disagreeing.
+    return { session: a.session, name: nameOf(a.session), watching: a.watching === true };
   }
 
   function rowOut(row, nowMs, servedUrl, lookup) {
@@ -771,7 +916,7 @@ function createReader(options) {
    * @returns {{review: string, session: string, display_name: string, title: string|null,
    *            path: string|null, kind: string, openable: string, candidate: string|null,
    *            server: string|null, url_path: string|null, served_path: string|null,
-   *            watching: object|null, last: string}|null}
+   *            watching: object|null, last: string, fold: string[]}|null}
    *   `display_name` is the name of the row the review shows on (a folded
    *   review's is its folder's). `path` is the document's own path on disk.
    *   `candidate` is the checked main-repository copy for a gone worktree.
@@ -779,7 +924,9 @@ function createReader(options) {
    *   covers the review's served file and `url_path` that file's path on it
    *   (both null when none does); `served_path` is the file itself, `watching`
    *   the session's watcher as the list shows it, and `last` the review's own
-   *   newest event time.
+   *   newest event time. `fold` is every review on the same row, this one
+   *   included (just this one for a row that is not a fold), so Star can act
+   *   on the whole row the way the list reads it.
    */
   function describeReview(reviewId, now) {
     if (!protocol.isSafeId(reviewId)) return null;
@@ -805,7 +952,8 @@ function createReader(options) {
             url_path: part.covering ? part.covering.urlPath : null,
             served_path: part.info.servedPath,
             watching: watchingOf(s.id, nowMs),
-            last: iso(part.info.lastMs)
+            last: iso(part.info.lastMs),
+            fold: row.parts.map(function (p) { return p.info.id; }).sort()
           };
         }
       }

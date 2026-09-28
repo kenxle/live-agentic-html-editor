@@ -82,7 +82,7 @@ All in `protocol.CATALOG`, each with its value:
   "reopened": { "<session-id>": { "at": "2026-09-28T16:21:00Z", "handoff_rev": 4 } } }
 ```
 
-A corrupt `catalog.json` is never overwritten: a star is refused with `PROTO_CATALOG_UNREADABLE`, and the list shows no stars with a notice.
+A corrupt `catalog.json` is never overwritten: a star is refused with `PROTO_CATALOG_UNREADABLE`, and the list shows no stars with a notice. An Open that would reopen a closed session is refused the same way, because a reopen the sweep cannot see would leave that session open for good (fix round CX2 and CR4).
 
 **`<state>/catalog-attach.json`**, written only by the CLI (`lahe library --session`):
 
@@ -108,7 +108,7 @@ One writer per file, so a star and an attach cannot overwrite each other.
 - A request expires when the attached session id changes to a different one, when the `for` session's monitor is dead, or after `REQUEST_EXPIRY_MS` unanswered. Re-attaching the same session id is not a change.
 - Expiry is worked out on each read from `now`. The helper appends the `expired` line the first time it sees one, so the file stays the single record.
 - An answered or expired request no longer counts toward one-per-review or `QUEUE_CAP`.
-- A torn last line is skipped with a helper log line. The list and the drain still work.
+- A torn last line is skipped with a helper log line, logged once rather than on every poll. The list and the drain still work.
 
 **The Library token** is minted in memory at each helper start and never written to disk. It exists only inside the served page.
 
@@ -132,7 +132,8 @@ One writer per file, so a star and an attach cannot overwrite each other.
       "openable": "yes" | "via-agent" | "missing", "kind": "static" | "dev-server" | "legacy" | "worktree",
       "starred": false, "unreadable": false,
       "request": { "id": "cq_...", "action": "pickup", "at": "...", "state": "waiting" | "done" | "refused" | "expired",
-                   "by_name": "document index", "text": "...", "answered_at": "..." },
+                   "by_name": "document index", "text": "...", "answered_at": "...",
+                   "reason": null | "attach_changed" | "monitor_dead" | "timeout" },
       "pages": [{ "title": "...", "path": "/..." }],
       "folded_from": ["r_...", "r_..."]
     }]
@@ -143,13 +144,14 @@ One writer per file, so a star and an attach cannot overwrite each other.
 Rules the reader owns:
 
 - **`display_name`** is the title. When the title is missing, or shared with another row, it is `folder / file`.
-- **`last`** on a review is its newest event time; on a session, its newest review's.
+- **`last`** on a review is its newest event time; on a session, its newest review's. Origin events do not count: an Open's origin swap appends them to every review the restarted server serves, so a log that ends in them takes `last` from the newest other event, read from the log's tail (fix round CR5).
 - **`projects`:** the base name of the git top level of each review's target. For a worktree, the owning repository's name. No git repository means no project.
 - **`openable: yes`** when `static_servers.servesPath(...)` is true for a recorded server of the session. That counts mounts.
 - **`kind`** tells the agent how to re-serve a `via-agent` row.
 - **`watching`** is null or `{session, name}`, taken from the `primary` field of the session's `monitor.json` heartbeat. So a session picked up by another agent names that agent.
+- **Who counts as watching** is the rule the request queue uses, read through `livenessFrom` with the session's activity stamp: a fresh heartbeat on the current handoff rev whose pid is alive, or a lahe command in the last few minutes. `lahe monitor` exits when it wakes on work, so a heartbeat alone would read "nobody is watching" exactly while that agent works a batch, and Open would skip the "another agent is watching" confirm step then (fix round CL2). With no heartbeat on disk, the session names itself. A session watched from another session's multi-session monitor (its heartbeat names that session as `primary`, on its current handoff rev) counts as watched while that primary session is listening by the same rule, so the card does not say "no agent" right after the agent answers.
 - **`attached.watching`** is false when the attached session's monitor is dead. An attach with no session on disk behind it reads as no agent.
-- **`request`** is the latest request on that review. An answer stays until the next request on the review, or `ANSWER_SHOWN_MS`.
+- **`request`** is the latest request on that review. An answer stays until the next request on the review, or `ANSWER_SHOWN_MS`. `reason` is why an expired request expired, and null in every other state.
 - **`pages[].path`** is a URL path on the review's server. Page rows are informational; they have no Open of their own.
 - **`unreadable: true`** marks a row whose `review.json`, `meta.json`, `session.json` or `ss_*.json` is corrupt. That row degrades; the rest of the list returns.
 - **Probes:** `served_url` and `watching` need HTTP probes. The reader runs them in parallel, caches each result for one `POLL_MS`, and skips `ss_` records with `stopped_at` set.
@@ -199,7 +201,8 @@ sequenceDiagram
   K->>K: click Open: tab = open about:blank, tab.opener = null
   K->>H: POST catalog.open {review, handoff, confirmed}
   H->>H: route checks; review has a recorded server
-  H->>S: reopenForCatalog: reopen the session if closed, restart that server (old port if free)
+  H->>H: session closed? record it in the reopened map first
+  H->>S: reopenForCatalog: restart that server (old port if free), then reopen the session if closed
   H->>H: register the new origin, append origin.removed for this server's old ports
   H-->>K: {url, request_id, not_asked}
   K->>K: url is loopback http? tab.location = url, else close the tab and show why
@@ -211,6 +214,8 @@ sequenceDiagram
 ```
 
 - **Already served (R10):** the helper returns the live URL and starts nothing.
+- **A folder review** opens on the page its comments are on, when that is a page in the folder, else on the page `lahe review <folder>` opens (`index.html`, then `index.htm`, then the first page by name). Never the bare server root, which a folder with no index answers with "not found". The list's `served_url` is the same page.
+- **The attached agent already has it:** when the attached agent owns the document's session, or is the one watching it, Open just opens and queues nothing, and a Pick up of a served row answers `{request_id: null}` with nothing queued. A via-agent row's pick-up is still queued, since it needs re-serving.
 - **Another agent is watching (R12b):** the page asks first, naming that agent and the other reviews in its session. "Move the session" sends `handoff: true, confirmed: true`. "Just open it to read" sends `handoff: false` and queues nothing. The helper refuses an unconfirmed hand-over on a watched session with `PROTO_CONFIRM_NEEDED`.
 - **No agent attached (R14):** Open still opens and reads, with `not_asked: "no_agent"`. The document's rail shows its existing "no agent listening" state and its existing hand-off message. The rail never carries the Library token.
 - **Queue full:** Open still opens, with `not_asked: "queue_full"`, and the row says no agent was asked.
@@ -219,16 +224,16 @@ sequenceDiagram
   - **legacy** (`lahe add` script-line reviews, recovered as session "legacy"): there is no session to take over, so the agent runs `lahe review <path>` in its own session.
   - **worktree:** see below.
 - **Worktree fallback (R9):** when the recorded root is gone and sits under `<repo>/.claude/worktrees/<name>/`, the row says "The worktree is gone. An agent will open the main repository's copy, which may differ from what you reviewed." The request carries only the review id. The drain derives and checks the candidate (see the drain section). The agent serves it with `lahe review`, so the path goes through the CLI's own checks.
-- **Missing:** Open is refused with `PROTO_NOT_OPENABLE`, reason `missing`.
+- **Missing:** Open is refused with `PROTO_NOT_OPENABLE`, reason `missing`. So is a Pick up or Launch request on a missing row.
 - **Folded rows:** Open targets the newest review in the fold.
 
 ### Stale origins
 
-On a new port, the helper registers `http://127.0.0.1:<new>` and `http://localhost:<new>` on the review. It then appends `origin.removed` for the loopback origins of this same `ss_` server's earlier ports, and only those. It never removes a non-loopback origin, a dev-server origin, or an origin from another server.
+On a new port, the helper registers `http://127.0.0.1:<new>` and `http://localhost:<new>` on the review, and on every review of the session that server serves by `static_servers.coveragePath`, the same rule that makes a row openable, mounts included (fix round CL3). It then appends `origin.removed` for the loopback origins of this same `ss_` server's earlier ports, and only those. It never removes a non-loopback origin, a dev-server origin, or an origin from another server.
 
 ### Star
 
-`POST catalog.star {review, starred}`. The helper writes `catalog.json` and answers. The row changes when the answer comes back. A failed star puts the row back and says why. No agent.
+`POST catalog.star {review, starred}`. The helper writes `catalog.json` and answers. On a folded row it stars or unstars every review in the fold, since the list shows the row starred when any of them is (fix round CR2). The row changes when the answer comes back. A failed star puts the row back and says why. No agent.
 
 ### Launch a new agent
 
@@ -284,6 +289,9 @@ flowchart TD
   - a session reopened with `lahe session reopen` (it is not in the map)
   - a session taken over since (its `handoff_rev` moved past the recorded one)
   - a session whose monitor is live
+  - a session an Open is part way through bringing back
+
+  The helper runs Open's restart step one at a time per server record (fix round CR1), so two Opens of a closed session start one server and both answer on its port.
 
   After a close, it clears the session's `reopened` entry.
 - **After a helper restart,** the old token is refused. On `PROTO_UNAUTHORIZED` the page stops polling and shows "LAHE restarted, reload this page." Reloading fetches a fresh token.

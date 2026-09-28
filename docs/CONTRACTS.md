@@ -935,12 +935,12 @@ with no file bytes. An allowlisted file not on disk yet is a 404 too.
 | Code | Status | When |
 |---|---|---|
 | `PROTO_CROSS_SITE` | 403 | The `Sec-Fetch-Site` check fails, or a preflight names a catalog path |
-| `PROTO_NOT_OPENABLE` | 409 | Open on a missing row or one with no recorded server; carries a `reason` |
+| `PROTO_NOT_OPENABLE` | 409 | Open on a missing row or one with no recorded server, or a request on a missing row; carries a `reason` |
 | `PROTO_REQUEST_PENDING` | 409 | The review already has a pending request |
 | `PROTO_QUEUE_FULL` | 429 | `CATALOG.QUEUE_CAP` pending requests reached |
 | `PROTO_NO_AGENT` | 409 | No attached agent, or its monitor is dead |
 | `PROTO_CONFIRM_NEEDED` | 409 | A hand-over on a watched session without `confirmed` |
-| `PROTO_CATALOG_UNREADABLE` | 500 | `catalog.json` is corrupt |
+| `PROTO_CATALOG_UNREADABLE` | 500 | `catalog.json` is corrupt: a Star, or an Open that would reopen a closed session |
 
 **What the API routes answer** (`src/service/catalog_actions.js`). Nothing in a body names a file, a
 root or a URL, and fields a route does not list are never read.
@@ -949,16 +949,24 @@ root or a URL, and fields a route does not list are never read.
 |---|---|---|
 | `catalog.list` | none | the list response (architecture, "The list response"), plus `notice`. Marks `catalog_seen_at` |
 | `catalog.open` | `{review, handoff, confirmed}` | `{url, request_id, not_asked}` |
-| `catalog.star` | `{review, starred}`, `starred` a boolean | `{review, starred}` |
+| `catalog.star` | `{review, starred}`, `starred` a boolean | `{review, starred}`. On a folded row every review in the fold is starred or unstarred |
 | `catalog.request` | `{review, action, confirmed}`, `action` `pickup` or `launch` | `{request_id}` |
 
 - **Open restarts only the recorded server that covers the review's recorded file**
   (`static_servers.coveragePath`, the rule `servesPath` uses too) and answers with that server's own
   loopback origin plus the file's path on it. A served review starts nothing. A review whose session was
-  closed is reopened and recorded in `catalog.json`'s `reopened` map for the sweep.
+  closed is recorded in `catalog.json`'s `reopened` map for the sweep first, then its server is started,
+  then the session is reopened. So a server that cannot restart leaves the session closed, and a
+  `catalog.json` that cannot take the record refuses the Open with `PROTO_CATALOG_UNREADABLE` before
+  anything is reopened. Open on a session that is already open does not write `catalog.json`.
 - **`PROTO_NOT_OPENABLE` carries its reason in `error.detail`:** `missing`, `via-agent` (no recorded
   server covers it and no hand-over was asked), `unknown review`, `not owned by the current user`, or
   `the recorded server could not be restarted`.
+- **A folder review opens on a page, never the bare root:** the page its comments are on when that is a
+  page in the folder, else the page `lahe review <folder>` opens. `served_url` in the list is the same page.
+- **Nothing is asked of an agent that already has the document.** When the attached agent owns the
+  document's session or is watching it, Open queues nothing, and a `pickup` request on a served row answers
+  `{request_id: null}` with nothing queued.
 - **A `via-agent` row's Open is its pick-up.** With `handoff` and a live attached agent it queues one and
   answers `url: null`; with no live agent it is `PROTO_NO_AGENT`.
 - **`not_asked`** says why an Open that opened asked no agent: `no_agent`, `queue_full`, or
@@ -973,7 +981,11 @@ root or a URL, and fields a route does not list are never read.
 the helper stays) each session the Library reopened once nothing has happened in it for
 `CATALOG.REOPENED_AUTOCLOSE_MS`: not the reopen itself, and no held window of any of its reviews. It
 leaves alone a session reopened with `lahe session reopen` (not in the map), one taken over since (its
-`handoff_rev` moved; the entry is dropped), and one whose monitor is live.
+`handoff_rev` moved; the entry is dropped), one whose monitor is live, and one an Open is part way
+through bringing back.
+
+**One Open at a time per server record.** The helper runs Open's restart step in a chain per session
+and server, so two Opens of a closed session start one server, and both answer on its recorded port.
 
 **Residual risk, stated.** The Library token is readable by any script running on the Library page
 itself. That page runs only the helper's own scripts under `script-src 'self'` and renders page-derived

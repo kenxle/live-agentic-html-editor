@@ -286,3 +286,18 @@ test("lahe library answer needs its id, --session, --status and --text", async (
   }
   assert.equal(w.queue.requestFor("r_doc", Date.now()).state, "waiting");
 });
+
+test("lahe library closes the session it just created when service.json names no port", async (t) => {
+  const dir = tempDir();
+  const real = sessionCommand.startHelper;
+  // A helper that says it is up but never wrote a port.
+  sessionCommand.startHelper = async () => ({ started: false });
+  t.after(() => { sessionCommand.startHelper = real; });
+  const out = await run(["--state-dir", dir, "--json"]);
+  assert.equal(out.code, protocol.CLI_EXIT.HELPER_UNREACHABLE, out.stderr);
+  const store = agentSessions.createStore({ dir });
+  const made = store.list();
+  assert.equal(made.length, 1, "the one session the call made");
+  assert.ok(made[0].closed_at, "closed again, since it was never handed out");
+  assert.equal(fs.existsSync(stateDir.catalogAttachPath(dir)), false, "nothing attached");
+});

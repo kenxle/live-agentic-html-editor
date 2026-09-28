@@ -202,6 +202,8 @@ async function runLibrary(args, opts, out, err) {
   }
   var ready = readReady(dir);
   if (!ready || !Number.isInteger(ready.port)) {
+    // The same as a failed start: a session this call made is closed again.
+    if (created) store.close(sessionId);
     err("lahe library: the helper is up but " + stateDir.readyPath(dir) + " names no port\n");
     return EXIT.HELPER_UNREACHABLE;
   }

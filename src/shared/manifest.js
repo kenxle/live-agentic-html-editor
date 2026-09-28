@@ -245,8 +245,7 @@ var NON_BUNDLE_FILES = [
   { path: "src/service/rebuild.js", owner: "3A", why: "re-renders a Markdown review's page when the source moves, so no agent has to remember to" },
   { path: "src/service/handled_check.js", owner: "3A", why: "is a handled claim true on the built page; the one thing that stops an item retiring on a claim" },
 
-  // --- the Library (docs/features/20260922.02_lahe_library). Planned until
-  // each task lands its file; a builder flips `planned` off on its own lines.
+  // --- the Library (docs/features/20260922.02_lahe_library).
   {
     path: "src/service/catalog_reader.js",
     owner: "Library 1.1",
@@ -269,7 +268,7 @@ var NON_BUNDLE_FILES = [
   },
   {
     path: "src/service/catalog_page.js",
-    owner: "Library 1.2 (2.2 writes the template body)",
+    owner: "Library 1.2 and 2.2",
     why: "the Library page's HTML template, with the token in its meta tag"
   },
 
@@ -299,7 +298,7 @@ var CATALOG_PAGE = [
   },
   {
     path: "src/layer/catalog/page.js",
-    owner: "Library 2.2 (1.2 lands a placeholder)",
+    owner: "Library 2.2",
     why: "the Library page script: token from the meta tag, the poll, rendering with textContent, Open's tab sequence"
   }
 ];

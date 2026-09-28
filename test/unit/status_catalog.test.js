@@ -330,3 +330,20 @@ test("a worktree candidate outside its repository, hidden, symlinked out, or not
     assert.equal(byReview["r_wt_" + label].candidate, null, label);
   }
 });
+
+test("CL6: the monitor's drain describes a request once; the second poll filters by the delivered log first and describes nothing", async () => {
+  const w = world();
+  pickup(w);
+  let described = 0;
+  const mark = {
+    markEndedDelivered: true,
+    suppressActivityTouch: true,
+    describeRequest: () => { described += 1; return { kind: "static", title: "t", path: null, candidate: null, handoff: "h" }; }
+  };
+  const first = await drain(w, QUIET, mark);
+  assert.equal(first.summary.catalog_requests.length, 1);
+  assert.equal(described, 1);
+  const second = await drain(w, QUIET, mark);
+  assert.equal(second.text, "");
+  assert.equal(described, 1, "the describe step is not called on the second poll");
+});

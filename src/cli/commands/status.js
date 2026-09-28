@@ -547,9 +547,13 @@ function movesWith(dir, request) {
  * the drain names none), at `nowMs`. The CLI's queue computes expiry and
  * writes nothing: only the helper records an expired line.
  */
-function catalogEntries(dir, sessionId, nowMs, describe) {
+function catalogEntries(dir, sessionId, nowMs, describe, keep) {
   var queue = catalogRequestsModule.createQueue({ dir: dir });
   var pending = sessionId ? queue.pendingFor(sessionId, nowMs) : queue.pending(nowMs);
+  // Filtered BEFORE anything is described (fix round CL6): describing scans
+  // the state dir, and the monitor polls every few seconds while a request it
+  // already delivered waits for the agent to answer it.
+  if (typeof keep === "function") pending = pending.filter(keep);
   var describer = typeof describe === "function" ? describe : readerDescriber(dir, nowMs);
   return pending.map(function (request) {
     var described = describer(request, { dir: dir }) || {};
@@ -584,42 +588,54 @@ function printableEntry(entry) {
 }
 
 /**
+ * The keys a delivered log holds, one per line.
+ *
+ * @returns {{keys: Object<string, true>, error: string|null}}
+ */
+function readDelivered(file) {
+  var keys = Object.create(null);
+  try {
+    if (fs.existsSync(file)) {
+      fs.readFileSync(file, "utf8").split("\n").forEach(function (line) {
+        var trimmed = line.trim();
+        if (trimmed) keys[trimmed] = true;
+      });
+    }
+  } catch (readErr) {
+    return { keys: keys, error: "could not read " + file + ": " + readErr.message };
+  }
+  return { keys: keys, error: null };
+}
+
+/**
+ * Record `keys` in a delivered log. The one writer for both delivered logs,
+ * ended-delivered.log and catalog-delivered.log.
+ *
+ * LOUD ON FAILURE: a dedupe that silently broke does not go quiet, it nags
+ * forever, and the agent pays a turn for each one.
+ *
+ * @returns {string|null} the error, or null when written
+ */
+function markDelivered(dir, sessionId, file, keys) {
+  if (keys.length === 0) return null;
+  try {
+    stateDirModule.ensureAgentSessionDir(dir, sessionId);
+    stateDirModule.appendLine(file, keys.join("\n") + "\n");
+  } catch (writeErr) {
+    return "could not write " + file + ": " + writeErr.message;
+  }
+  return null;
+}
+
+/**
  * ONCE PER REQUEST PER HANDOFF REV, FOR THE MONITOR ONLY. A pending request
  * stays pending while the agent works it, so a monitor that woke on it with no
  * memory would wake on it again on every relaunch. catalog-delivered.log keeps
  * "<request-id> <handoff_rev>" per delivery; a takeover bumps the rev, so the
  * agent that owns the session now is woken for it again.
- *
- * @returns {{entries: object[], error: string|null}} the entries not yet
- *   delivered at this rev, now recorded as delivered
  */
-function markCatalogDelivered(dir, sessionId, rev, entries) {
-  if (entries.length === 0) return { entries: [], error: null };
-  var deliveredPath = stateDirModule.catalogDeliveredPath(dir, sessionId);
-  var delivered = Object.create(null);
-  try {
-    if (fs.existsSync(deliveredPath)) {
-      fs.readFileSync(deliveredPath, "utf8").split("\n").forEach(function (line) {
-        var trimmed = line.trim();
-        if (trimmed) delivered[trimmed] = true;
-      });
-    }
-  } catch (readErr) {
-    return { entries: [], error: "could not read " + deliveredPath + ": " + readErr.message };
-  }
-  var fresh = entries.filter(function (entry) { return !delivered[entry.request + " " + rev]; });
-  if (fresh.length === 0) return { entries: [], error: null };
-  try {
-    stateDirModule.ensureAgentSessionDir(dir, sessionId);
-    stateDirModule.appendLine(
-      deliveredPath,
-      fresh.map(function (entry) { return entry.request + " " + rev; }).join("\n") + "\n"
-    );
-  } catch (writeErr) {
-    // LOUD, like ended-delivered.log: a dedupe that silently broke nags forever.
-    return { entries: [], error: "could not write " + deliveredPath + ": " + writeErr.message };
-  }
-  return { entries: fresh, error: null };
+function catalogDeliveredKey(requestId, rev) {
+  return requestId + " " + rev;
 }
 
 /** The human lines for pending requests. */
@@ -733,28 +749,48 @@ async function run(argv, options) {
 
   // The Library's pending requests for this drain. Read before the reviews, so
   // a session that owns no review still hears about a request it is `for`.
+  // The monitor's drain reports only the requests not yet delivered at this
+  // rev, and records them; every other drain lists every pending one. The
+  // delivered log is read first, so only fresh requests are described.
+  var monitorDrain = !!(opts.markEndedDelivered && args.session);
+  var catalogRev = 0;
+  var catalogDelivered = { keys: Object.create(null), error: null };
+  if (monitorDrain) {
+    try {
+      catalogRev = agentSessionsModule.handoffRev(agentSessionsModule.createStore({ dir: dir }).read(args.session));
+    } catch (error) {
+      catalogRev = 0;
+    }
+    catalogDelivered = readDelivered(stateDirModule.catalogDeliveredPath(dir, args.session));
+  }
   var catalogPending;
   try {
-    catalogPending = catalogEntries(dir, args.session, nowMs, opts.describeRequest);
+    catalogPending = catalogDelivered.error ? [] : catalogEntries(
+      dir,
+      args.session,
+      nowMs,
+      opts.describeRequest,
+      monitorDrain
+        ? function (request) { return !catalogDelivered.keys[catalogDeliveredKey(request.id, catalogRev)]; }
+        : null
+    );
   } catch (error) {
     err("lahe status: could not read the Library's requests: " + error.message + "\n");
     catalogPending = [];
   }
 
-  /**
-   * The catalog entries this output reports. The monitor's drain reports only
-   * those not yet delivered at this rev, and records them; every other drain
-   * lists every pending one.
-   */
+  /** The catalog entries this output reports, recorded as delivered on the monitor's drain. */
   function catalogToReport() {
-    if (!(opts.markEndedDelivered && args.session)) return { entries: catalogPending, error: null };
-    var rev = 0;
-    try {
-      rev = agentSessionsModule.handoffRev(agentSessionsModule.createStore({ dir: dir }).read(args.session));
-    } catch (error) {
-      rev = 0;
-    }
-    var marked = markCatalogDelivered(dir, args.session, rev, catalogPending);
+    if (!monitorDrain) return { entries: catalogPending, error: null };
+    if (catalogDelivered.error) return { entries: [], error: catalogDelivered.error };
+    var writeError = markDelivered(
+      dir,
+      args.session,
+      stateDirModule.catalogDeliveredPath(dir, args.session),
+      catalogPending.map(function (entry) { return catalogDeliveredKey(entry.request, catalogRev); })
+    );
+    if (writeError) return { entries: [], error: writeError };
+    var marked = { entries: catalogPending, error: null };
     if (marked.entries.length > 0) {
       // THE MONITOR IS ABOUT TO EXIT ON THIS, and it takes its heartbeat down
       // as it does. The request's expiry reads "is the agent listening" through
@@ -1076,34 +1112,24 @@ async function run(argv, options) {
     // woken has to be able to run the drain and find out why.
     if (opts.markEndedDelivered && args.session && endedToReport.length > 0) {
       var deliveredPath = stateDirModule.endedDeliveredPath(dir, args.session);
-      var delivered = Object.create(null);
-      try {
-        if (fs.existsSync(deliveredPath)) {
-          fs.readFileSync(deliveredPath, "utf8").split("\n").forEach(function (line) {
-            var trimmed = line.trim();
-            if (trimmed) delivered[trimmed] = true;
-          });
-        }
-      } catch (readErr) {
-        err("lahe status: could not read " + deliveredPath + ": " + readErr.message + "\n");
+      var endedDelivered = readDelivered(deliveredPath);
+      if (endedDelivered.error) {
+        err("lahe status: " + endedDelivered.error + "\n");
         return EXIT.BAD_USAGE;
       }
-      var freshlyEnded = endedToReport.filter(function (entry) { return !delivered[entry.review]; });
-      if (freshlyEnded.length > 0) {
-        try {
-          stateDirModule.ensureAgentSessionDir(dir, args.session);
-          fs.appendFileSync(
-            deliveredPath,
-            freshlyEnded.map(function (entry) { return entry.review; }).join("\n") + "\n",
-            { mode: stateDirModule.FILE_MODE }
-          );
-        } catch (writeErr) {
-          // LOUD, like the seen file's own failures. A dedupe that silently
-          // broke here does not go quiet, it nags forever, and the agent pays
-          // a turn for each one.
-          err("lahe status: could not write " + deliveredPath + ": " + writeErr.message + "\n");
-          return EXIT.BAD_USAGE;
-        }
+      var freshlyEnded = endedToReport.filter(function (entry) { return !endedDelivered.keys[entry.review]; });
+      var endedWriteError = markDelivered(
+        dir,
+        args.session,
+        deliveredPath,
+        freshlyEnded.map(function (entry) { return entry.review; })
+      );
+      if (endedWriteError) {
+        // LOUD, like the seen file's own failures. A dedupe that silently
+        // broke here does not go quiet, it nags forever, and the agent pays a
+        // turn for each one.
+        err("lahe status: " + endedWriteError + "\n");
+        return EXIT.BAD_USAGE;
       }
       endedToReport = freshlyEnded;
     }

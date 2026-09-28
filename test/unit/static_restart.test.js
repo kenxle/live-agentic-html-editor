@@ -276,7 +276,7 @@ test("removeOrigin refuses anything but a plain loopback http origin", () => {
 // reopenForCatalog and closeQuiet
 // ---------------------------------------------------------------------------
 
-test("reopenForCatalog reopens a closed session before it restarts the server", async (t) => {
+test("reopenForCatalog restarts the server and reopens a closed session", async (t) => {
   const f = await fixture();
   t.after(async () => { await staticServers.stopAll(f.state, f.sessionId); });
   await f.ops.closeQuiet(f.sessionId);
@@ -365,4 +365,25 @@ test("a port another server of the session is on now keeps its origins, even if 
   const result = await f.ops.reopenForCatalog(f.sessionId, f.first.meta.id);
   assert.deepEqual(result.removed, []);
   loopback(other.meta.port).forEach((origin) => assert.equal(postFrom(f.reviews, f.review.id, origin).ok, true, origin));
+});
+
+test("CL3: reopenForCatalog registers the new origin on a review served through one of the server's mounts, by the one coverage rule", async (t) => {
+  const f = await fixture();
+  t.after(async () => { await staticServers.stopAll(f.state, f.sessionId); });
+  const mountDir = fs.realpathSync(tempDir("lahe-restart-mount-"));
+  const figure = path.join(mountDir, "figure.html");
+  fs.writeFileSync(figure, "<!doctype html><p>mounted</p>");
+  f.reviews.create({ id: "r_mounted", origins: [], target_path: figure, agent_session_id: f.sessionId });
+  await staticServers.stopAll(f.state, f.sessionId);
+  const record = staticServers.list(f.state, f.sessionId)[0];
+  record.mounts = { "/.lahe-source/abc123/": mountDir };
+  fs.writeFileSync(stateDirModule.staticServerPath(f.state, f.sessionId, record.id), JSON.stringify(record, null, 2) + "\n");
+  assert.notEqual(staticServers.coveragePath(record, figure), null, "the coverage rule covers it through the mount");
+
+  const result = await f.ops.reopenForCatalog(f.sessionId, record.id, "r_mounted");
+  assert.ok(result.reviews.includes("r_mounted"), "the mounted review is one this server serves");
+  assert.ok(result.reviews.includes(f.review.id), "and so is the root's own review");
+  loopback(result.server.port).forEach((origin) => {
+    assert.ok(f.reviews.get("r_mounted").origins.includes(origin), origin + " is registered on the mounted review");
+  });
 });
