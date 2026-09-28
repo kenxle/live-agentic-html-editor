@@ -1,0 +1,10 @@
+measured: /Users/kennethstclair/Documents/workspace/live-agentic-html-editor/.claude/worktrees/trim-the-drain
+{"state":"nothing waiting","bytes_per_run":[0,0,0]}
+{"state":"one item waiting","bytes_per_run":[1958,1958,1958]}
+{"state":"seven ended reviews, nothing waiting","bytes_per_run":[1796,1796,1796]}
+
+| state | run 1 | run 2 | run 3 |
+| --- | --- | --- | --- |
+| nothing waiting | 0 | 0 | 0 |
+| one item waiting | 1958 | 1958 | 1958 |
+| seven ended reviews, nothing waiting | 1796 | 1796 | 1796 |

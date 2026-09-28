@@ -122,10 +122,64 @@ test("the work the monitor prints carries no contract block", async () => {
   assert.equal(code, protocol.CLI_EXIT.OK);
   const printed = stdout.join("");
   assert.match(printed, /fix the footer/, "the work still gets through");
-  assert.match(printed, /"contract_in":"review\.json"/, "with the pointer in its place");
+  assert.equal(printed.includes("contract_in"), false, "and no pointer line: the item lines are the work");
+  assert.equal(printed.includes("field_classes"), false, "and no field-class table");
+  assert.ok(
+    printed.includes(JSON.stringify(reviewFormat.DRAIN_FENCE_FIELD) + ":" + JSON.stringify(reviewFormat.DRAIN_FENCE)),
+    "the item line carries the D12 fence itself"
+  );
   reviewFormat.CONTRACT.forEach((clause) => {
     assert.equal(printed.includes(clause), false, "a contract clause reached the monitor: " + clause);
   });
+});
+
+test("the real monitor wakes once on an ended review, and the drain it hands over still says why", async () => {
+  // Runs the real status command, because the point is that the monitor and a
+  // hand drain share one ledger, not that a stub forwards a string.
+  const dir = tempDir();
+  const sessions = agentSessions.createStore({ dir: dir });
+  sessions.create({ id: "s_ended" });
+  const log = logModule.createEventLog({ dir: dir });
+  const reviews = reviewsModule.createReviews({ dir: dir, log: log });
+  reviews.create({ id: "r_ended", agent_session_id: "s_ended" });
+  log.append("r_ended", [
+    protocol.newEvent({ event: protocol.EVENT.REVIEW_ARCHIVED, event_id: "ev_end_r_ended", review: "r_ended" })
+  ]);
+
+  const woke = [];
+  const code = await monitor.run(["--session", "s_ended", "--state-dir", dir], {
+    stdout: (text) => woke.push(text),
+    stderr: () => {},
+    wait: async () => {}
+  });
+  assert.equal(code, protocol.CLI_EXIT.OK);
+  assert.match(woke.join(""), /"ended_reviews":\[\{"review":"r_ended"/, "the monitor wakes on the ending");
+
+  // The relaunched monitor stays quiet. The session is closed on its first
+  // idle wait, which is the only way this loop ends when nothing is printed.
+  const relaunched = [];
+  const again = await monitor.run(["--session", "s_ended", "--state-dir", dir], {
+    stdout: (text) => relaunched.push(text),
+    stderr: () => {},
+    wait: async () => { sessions.close("s_ended"); }
+  });
+  assert.equal(again, protocol.CLI_EXIT.SESSION_CLOSED);
+  assert.equal(relaunched.join(""), "", "a relaunch does not wake on the same ending");
+
+  // The agent's own drain, by hand: told once, then silent. The session was
+  // closed only to end that loop, and a closed session refuses a drain, so
+  // reopen it first.
+  sessions.reopen("s_ended");
+  const status = require("../../src/cli/commands/status.js");
+  const drain = async () => {
+    const out = [];
+    await status.run(["--session", "s_ended", "--json", "--quiet"], {
+      stateDir: dir, stdout: (t) => out.push(t), stderr: () => {}
+    });
+    return out.join("");
+  };
+  assert.match(await drain(), /"review":"r_ended"/, "the woken agent's first drain says which review ended");
+  assert.equal(await drain(), "", "and its next drain prints nothing");
 });
 
 test("a closed session exits with SESSION_CLOSED off the real session record", async () => {
