@@ -36,6 +36,7 @@ var USAGE = [
   "  status  print what is open right now, and whether the page is still connected",
   "  reply   write one correctly encoded reply line into your reply file",
   "  monitor watch locally for session work, print it, and exit (zero-token no-ops)",
+  "  library print the Library's address and attach your session; answer its requests",
   "",
   "Run `lahe <command> --help` for a command's own options."
 ].join("\n");
@@ -52,7 +53,8 @@ var COMMANDS = {
   add: function () { return require("./commands/add.js"); },
   status: function () { return require("./commands/status.js"); },
   reply: function () { return require("./commands/reply.js"); },
-  monitor: function () { return require("./commands/monitor.js"); }
+  monitor: function () { return require("./commands/monitor.js"); },
+  library: function () { return require("./commands/library.js"); }
 };
 
 var COMMAND_NAMES = Object.keys(COMMANDS);

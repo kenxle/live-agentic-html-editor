@@ -26,6 +26,9 @@ lahe skill; after that a plain sentence works:
 | `lahe status [--session <id>] [--review <id>] [--json]` | What is open right now. Agent monitors must name their session; plain global status is only a human diagnostic |
 | `lahe reply --review <id> --item <itm> --rev <n> --status handled\|not_handled\|question` | Write one reply. Add `--text` or `--reason` for what you want to say, `--file <path>` per file you changed, `--needs-see` when the reviewer should read it, `--agent <name>` for the card and the per-agent file. The command encodes the JSON, so a newline or a quote in your answer cannot split the line |
 | `lahe monitor --session <id>` | Poll locally without model wakeups, print unanswered session work, and exit |
+| `lahe monitor --session <id> --session <other>` | Watch several sessions with one monitor. The first is the primary. A session that closes or is taken over is dropped with a line and the rest are still watched |
+| `lahe library [--session <id>] [--json]` | Start the helper if needed and print the Library's address, the helper's own origin plus `/catalog`. It never opens a browser: run `open` on the URL. `--session` attaches your session, so the Library hands its requests to you |
+| `lahe library answer <request-id> --session <id> --status done\|refused --text "..."` | Answer one request from the drain's `catalog_requests` section. The text shows on the Library row |
 | `lahe session list [--json]` | Read-only: every agent session on this machine, open ones first, with its handoff revision, reviews owned, unanswered items, whether anything is listening to it, and when the agent last replied. This is how you find a session id |
 | `lahe session close <id>` | Close an agent workstream, stop its static servers, and keep all review history. The final close also stops the shared helper |
 | `lahe session reopen <id>` | Reopen the workstream and restart its helper and static servers |
