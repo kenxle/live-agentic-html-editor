@@ -344,6 +344,24 @@ test("describeReview gives the display name, the document's path, and a checked 
   assert.equal(reader.describeReview("r_nope", installed.nowMs), null);
 });
 
+test("describeReview also names what Open needs: the covering server, the URL path on it, the served file, who is watching, and last", async () => {
+  const { reader, installed } = setup();
+  const brief = reader.describeReview("r_brief", installed.nowMs);
+  assert.equal(brief.session, "s_coach");
+  assert.equal(brief.openable, "yes");
+  assert.equal(brief.server, "ss_alphadocs");
+  assert.equal(brief.url_path, "/brief.html");
+  assert.equal(brief.served_path, path.join(installed.home, "projects/alpha/docs/brief.html"));
+  assert.deepEqual(brief.watching, { session: "s_coach", name: "coach activity" });
+  assert.equal(brief.last, "2026-09-28T15:40:00.000Z");
+  const mounted = reader.describeReview("r_mounted", installed.nowMs);
+  assert.match(mounted.url_path, /^\/\.lahe-source\/[a-f0-9]+\/figure\.html$/);
+  const dev = reader.describeReview("r_dev", installed.nowMs);
+  assert.equal(dev.server, null);
+  assert.equal(dev.url_path, null);
+  assert.equal(dev.watching, null);
+});
+
 test("a worktree candidate that is hidden, symlinked out of its repository, or not a page is null", async () => {
   const { installed } = setup();
   const alpha = path.join(installed.home, "projects/alpha");

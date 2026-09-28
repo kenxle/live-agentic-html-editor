@@ -758,14 +758,22 @@ function createReader(options) {
    * @param {string} reviewId
    * @param {number|string} [now]
    * @returns {{review: string, session: string, display_name: string, title: string|null,
-   *            path: string|null, kind: string, openable: string, candidate: string|null}|null}
+   *            path: string|null, kind: string, openable: string, candidate: string|null,
+   *            server: string|null, url_path: string|null, served_path: string|null,
+   *            watching: object|null, last: string}|null}
    *   `display_name` is the name of the row the review shows on (a folded
    *   review's is its folder's). `path` is the document's own path on disk.
    *   `candidate` is the checked main-repository copy for a gone worktree.
+   *   For Open (Library 2.1): `server` is the id of the recorded server that
+   *   covers the review's served file and `url_path` that file's path on it
+   *   (both null when none does); `served_path` is the file itself, `watching`
+   *   the session's watcher as the list shows it, and `last` the review's own
+   *   newest event time.
    */
   function describeReview(reviewId, now) {
     if (!protocol.isSafeId(reviewId)) return null;
-    var scanned = scan(toMs(now));
+    var nowMs = toMs(now);
+    var scanned = scan(nowMs);
     for (var i = 0; i < scanned.sessions.length; i += 1) {
       var s = scanned.sessions[i];
       for (var j = 0; j < s.rows.length; j += 1) {
@@ -781,7 +789,12 @@ function createReader(options) {
             path: part.info.docPath,
             kind: part.kind,
             openable: part.openable,
-            candidate: part.candidate
+            candidate: part.candidate,
+            server: part.covering ? part.covering.meta.id : null,
+            url_path: part.covering ? part.covering.urlPath : null,
+            served_path: part.info.servedPath,
+            watching: watchingOf(s.id, nowMs),
+            last: iso(part.info.lastMs)
           };
         }
       }
