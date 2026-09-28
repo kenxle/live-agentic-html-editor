@@ -1,8 +1,8 @@
 # Progress: Free writing
 
-**Phase 2, Brief.** The brief is reviewed and served for your read. Four questions need your answers on the brief page. Last updated 2026-09-28 15:41.
+**Phase 2, Brief.** The brief is reviewed and served for your read. Four questions need your answers on the brief page. Last updated 2026-09-28 17:00.
 
-**Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](00_crucible.md) · [Brief](01_brief_free_writing.md)
+**Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html)
 
 ## Needs your attention
 
@@ -60,6 +60,8 @@ Not shipped yet.
 ## Log
 
 Newest first.
+
+**2026-09-28 17:00.** The brief and crucible are now built with the feature-forge document builder, so the callout boxes render. The Docs links above point at the built pages; the earlier Markdown renders are retired.
 
 **2026-09-28 15:41.** PM review returned eleven findings, all accepted: two blockers (the formatting bug had no reproduction and missed a board row; the brief pre-decided record shape and gesture), six important, three minor. Brief rewritten, clarity pass applied, served for Ken.
 

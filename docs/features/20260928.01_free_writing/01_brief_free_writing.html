@@ -1,0 +1,1599 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Feature Brief: Free writing</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%94%A8</text></svg>">
+  <!--
+    St. Clair AI document style for forge docs.
+
+    The palette, type and spacing values below are copied from the St. Clair
+    system tokens (live-agentic-html-editor/vendor/stclair-doc-style/
+    system-tokens.css). This header does NOT link LAHE's ./.lahe-doc-style.css
+    bundle, on purpose: that bundle's document.css styles bare elements and a
+    generic .callout (an ink fill with white text) and puts padding on every body
+    child, and all three collide with the forge structure. So the page is
+    self-contained and reads the same whether or not LAHE is serving it.
+
+    The fonts are the one thing taken from LAHE: it serves the three vendored
+    faces at ./.lahe-fonts/<file>.woff2 from every folder. When that fails, each
+    stack falls back to system-ui and a platform monospace.
+
+    House rules this file keeps: no pills, no shadows, no gradients, no all caps
+    labels, no single-side coloured borders. Colour comes from tints and dots.
+  -->
+  <style>
+    @font-face {
+      font-family: "Schibsted Grotesk"; font-style: normal; font-weight: 500 700; font-display: swap;
+      src: url("./.lahe-fonts/schibsted-grotesk-variable.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "Hanken Grotesk"; font-style: normal; font-weight: 400 600; font-display: swap;
+      src: url("./.lahe-fonts/hanken-grotesk-variable.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "JetBrains Mono"; font-style: normal; font-weight: 400 500; font-display: swap;
+      src: url("./.lahe-fonts/jetbrains-mono-variable.woff2") format("woff2");
+    }
+
+    :root {
+      color-scheme: light dark;
+
+      /* St. Clair palette (raw names and values from system-tokens.css) */
+      --white: #ffffff;
+      --paper: #f7f7f5;
+      --ink: #1f1e1a;
+      --ink-soft: #55534b;
+      --ink-faint: #6b6860;
+      --rule: #dcdad6;
+      --purple: #46188c;
+      --purple-tint: #f1ebfa;
+      --link: #6d28d9;
+      --cobalt: #0760c7;
+      --cobalt-tint: #e6effc;
+      --sage-fill: #8fb5a0;
+      --sage: #637a63;
+      --sage-tint: #e7f1ed;
+
+      --font-display: "Schibsted Grotesk", "Hanken Grotesk", system-ui, sans-serif;
+      --font-body: "Hanken Grotesk", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+      --r: 4px;
+
+      /* Forge roles. Prefixed --ff- so none of them can collide with a St. Clair
+         token of the same name if the two ever share a page. Dark mode repoints
+         these and nothing else. */
+      --ff-bg: var(--white);
+      --ff-fg: var(--ink);
+      --ff-soft: var(--ink-soft);
+      --ff-faint: var(--ink-faint);
+      --ff-rule: var(--rule);
+      --ff-divider: var(--ink);
+      --ff-link: var(--link);
+      --ff-accent: var(--cobalt);
+      --ff-panel: var(--paper);
+      --ff-code-bg: var(--cobalt-tint);
+      --ff-bullet: var(--sage);
+      --ff-hl-kw: var(--cobalt);
+      --ff-hl-str: var(--sage);
+      --ff-hl-num: var(--purple);
+
+      /* Callouts: a tint, a dot and a label colour each. */
+      --ff-req-bg: var(--cobalt-tint);      --ff-req-dot: var(--cobalt);    --ff-req-label: var(--cobalt);
+      --ff-nongoal-bg: var(--paper);        --ff-nongoal-dot: var(--ink-faint); --ff-nongoal-label: var(--ink-faint);
+      --ff-metric-bg: var(--sage-tint);     --ff-metric-dot: var(--sage);   --ff-metric-label: var(--ink-soft);
+      --ff-question-bg: var(--purple-tint); --ff-question-dot: var(--purple); --ff-question-label: var(--purple);
+      --ff-suggest-bg: var(--white);        --ff-suggest-dot: var(--sage);  --ff-suggest-label: var(--sage);
+      --ff-flag-bg: var(--ink);             --ff-flag-fg: var(--white);     --ff-flag-dot: var(--sage-fill);
+
+      /* Disposition verdicts */
+      --ff-accepted: var(--sage);
+      --ff-rejected: var(--purple);
+      --ff-deferred: var(--cobalt);
+    }
+
+    /* Dark: the St. Clair on-ink values. Body text is full white on ink, as the
+       system decides; tints are the accent mixed into the ink ground. */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ff-bg: var(--ink);
+        --ff-fg: var(--white);
+        --ff-soft: #d9d7d1;   /* --ink-soft-ondark */
+        --ff-faint: #b3b0a8;  /* --ink-faint-ondark */
+        --ff-rule: #4a4842;   /* --rule-ondark */
+        --ff-divider: var(--white);
+        --ff-link: var(--sage-fill);
+        --ff-accent: color-mix(in srgb, var(--cobalt) 45%, var(--white));
+        --ff-panel: color-mix(in srgb, var(--white) 6%, var(--ink));
+        --ff-code-bg: color-mix(in srgb, var(--cobalt) 22%, var(--ink));
+        --ff-bullet: var(--sage-fill);
+        --ff-hl-kw: color-mix(in srgb, var(--cobalt) 40%, var(--white));
+        --ff-hl-str: var(--sage-fill);
+        --ff-hl-num: color-mix(in srgb, var(--purple) 30%, var(--white));
+
+        --ff-req-bg: color-mix(in srgb, var(--cobalt) 22%, var(--ink));
+        --ff-req-dot: color-mix(in srgb, var(--cobalt) 45%, var(--white));
+        --ff-req-label: color-mix(in srgb, var(--cobalt) 35%, var(--white));
+        --ff-nongoal-bg: color-mix(in srgb, var(--white) 6%, var(--ink));
+        --ff-nongoal-dot: #b3b0a8; --ff-nongoal-label: #b3b0a8;
+        --ff-metric-bg: color-mix(in srgb, var(--sage) 30%, var(--ink));
+        --ff-metric-dot: var(--sage-fill); --ff-metric-label: var(--sage-fill);
+        --ff-question-bg: color-mix(in srgb, var(--purple) 45%, var(--ink));
+        --ff-question-dot: color-mix(in srgb, var(--purple) 30%, var(--white));
+        --ff-question-label: color-mix(in srgb, var(--purple) 25%, var(--white));
+        --ff-suggest-bg: var(--ink);
+        --ff-suggest-dot: var(--sage-fill); --ff-suggest-label: var(--sage-fill);
+        --ff-flag-bg: var(--paper); --ff-flag-fg: var(--ink); --ff-flag-dot: var(--sage);
+
+        --ff-accepted: var(--sage-fill);
+        --ff-rejected: color-mix(in srgb, var(--purple) 30%, var(--white));
+        --ff-deferred: color-mix(in srgb, var(--cobalt) 40%, var(--white));
+      }
+    }
+
+    /* Pandoc's own default styles load before this block. The rules marked
+       "pandoc" below undo the ones that fight this look: black table rules,
+       a block-level table, auto hyphens, italic h5/h6, and a:visited in
+       near-black, which outranks a plain a rule. */
+    html { scroll-behavior: smooth; -webkit-print-color-adjust: exact; print-color-adjust: exact; background: var(--ff-bg); }
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: var(--font-body);
+      font-size: 17px;
+      line-height: 1.65;
+      color: var(--ff-fg);
+      background: var(--ff-bg);
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 56px 28px 104px;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      hyphens: manual;   /* pandoc */
+    }
+
+    /* Title block (pandoc emits <header id="title-block-header">) */
+    header#title-block-header { padding-bottom: 8px; margin-bottom: 0; text-align: left; }
+    header#title-block-header h1.title {
+      font-family: var(--font-display);
+      font-size: clamp(34px, 4.6vw, 52px);
+      font-weight: 600;
+      margin: 0 0 12px;
+      letter-spacing: -0.012em;
+      line-height: 1.1;
+    }
+    header#title-block-header p.subtitle,
+    header#title-block-header p.author,
+    header#title-block-header p.date {
+      font-size: 20px;
+      line-height: 1.55;
+      color: var(--ff-soft);
+      margin: 0;
+    }
+
+    /* Cross-doc nav (injected by the build before the TOC). A plain line:
+       "Docs  Crucible · Brief · Architecture", the current doc in ink. */
+    .doc-nav {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 4px 0;
+      margin: 20px 0 8px;
+      padding: 12px 0;
+      border-top: 1px solid var(--ff-rule);
+      border-bottom: 1px solid var(--ff-rule);
+      font-size: 15px;
+    }
+    .doc-nav .doc-nav-label {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      margin-right: 14px;
+    }
+    .doc-nav a {
+      color: var(--ff-link);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+      border: 0;
+      background: none;
+      padding: 0;
+    }
+    .doc-nav a + a::before {
+      content: "\00B7";
+      display: inline-block;
+      color: var(--ff-faint);
+      margin: 0 10px;
+      text-decoration: none;
+    }
+    .doc-nav a:hover { background: none; text-decoration-thickness: 2px; }
+    .doc-nav a:visited { color: var(--ff-link); }
+    .doc-nav a.current, .doc-nav a.current:visited {
+      color: var(--ff-fg);
+      font-weight: 600;
+      text-decoration: none;
+      cursor: default;
+    }
+
+    /* TOC (pandoc emits <nav id="TOC">) */
+    nav#TOC {
+      margin: 28px 0 44px;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    nav#TOC::before {
+      content: "Contents";
+      display: block;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+      border-bottom: 2px solid var(--ff-divider);
+    }
+    nav#TOC ul { list-style: none; padding-left: 0; margin: 0; }
+    nav#TOC ul ul { padding-left: 18px; margin-top: 4px; }
+    nav#TOC li { margin-bottom: 4px; }
+    nav#TOC li::marker { content: none; }
+    nav#TOC a, nav#TOC a:visited { color: var(--ff-fg); text-decoration: none; border: 0; }
+    nav#TOC a:hover { color: var(--ff-link); text-decoration: underline; background: none; }
+
+    /* Headings: Schibsted at display weight, sentence case. An h2 hangs under a
+       full-width ink rule, the St. Clair section head. */
+    h1, h2, h3, h4, h5, h6 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      line-height: 1.15;
+      letter-spacing: -0.012em;
+      color: var(--ff-fg);
+    }
+    h2 {
+      font-size: clamp(25px, 3vw, 32px);
+      margin: 64px 0 18px;
+      padding-top: 12px;
+      border-top: 2px solid var(--ff-divider);
+    }
+    h3 { font-size: clamp(19px, 2vw, 23px); margin: 40px 0 12px; }
+    h4 { font-size: 18px; margin: 28px 0 8px; }
+    h5, h6 { font-size: 17px; margin: 24px 0 8px; font-style: normal; font-weight: 600; }   /* pandoc */
+    h6 { color: var(--ff-soft); }
+
+    p { margin: 0 0 18px; }
+    p, li, td, dd { overflow-wrap: anywhere; }
+
+    a {
+      color: var(--ff-link);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+    a:visited { color: var(--ff-link); }   /* pandoc */
+    a:hover { text-decoration-thickness: 2px; }
+    :focus-visible { outline: 2px solid var(--ff-link); outline-offset: 3px; border-radius: var(--r); }
+
+    strong { color: inherit; font-weight: 700; }
+
+    ul, ol { margin: 0 0 18px; padding-left: 1.6em; }
+    li { margin: 0 0 8px; line-height: 1.55; }
+    li > p { margin-bottom: 8px; }
+    ul > li::marker { color: var(--ff-bullet); }
+    .callout ul > li::marker { color: var(--ff-dot); }
+    ol > li::marker { color: var(--ff-fg); font-weight: 600; }
+    li > ul, li > ol { margin-top: 8px; }
+
+    /* Callout boxes (from ::: callout-* fenced divs). A tint holding the text,
+       and a label row generated by CSS: a dot in the callout's colour, then the
+       label in the display face. */
+    .callout {
+      border-radius: var(--r);
+      padding: 16px 22px 18px;
+      margin: 18px 0;
+      background: var(--ff-panel);
+      color: var(--ff-fg);
+      line-height: 1.6;
+    }
+    .callout > :first-child { margin-top: 0; }
+    .callout > :last-child { margin-bottom: 0; }
+    .callout::before {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      line-height: 1.4;
+      margin-bottom: 6px;
+      padding-left: 16px;   /* room for the dot, which ::after draws */
+    }
+    .callout { position: relative; }
+    .callout::after {
+      content: "";
+      position: absolute;
+      left: 22px;
+      top: 23px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--ff-dot, var(--ff-faint));
+    }
+    .callout-req      { background: var(--ff-req-bg);      --ff-dot: var(--ff-req-dot); }
+    .callout-req::before      { content: "Requirement";   color: var(--ff-req-label); }
+    .callout-nongoal  { background: var(--ff-nongoal-bg);  --ff-dot: var(--ff-nongoal-dot); border: 1px solid var(--ff-rule); }
+    .callout-nongoal::before  { content: "Non-goals";     color: var(--ff-nongoal-label); }
+    .callout-metric   { background: var(--ff-metric-bg);   --ff-dot: var(--ff-metric-dot); }
+    .callout-metric::before   { content: "Metrics";       color: var(--ff-metric-label); }
+    .callout-question { background: var(--ff-question-bg); --ff-dot: var(--ff-question-dot); }
+    .callout-question::before { content: "Open question"; color: var(--ff-question-label); }
+    .callout-suggest  { background: var(--ff-suggest-bg);  --ff-dot: var(--ff-suggest-dot); border: 1px solid var(--ff-suggest-dot); }
+    .callout-suggest::before  { content: "Suggestion";    color: var(--ff-suggest-label); }
+    .callout-flag     { background: var(--ff-flag-bg);     --ff-dot: var(--ff-flag-dot); color: var(--ff-flag-fg); }
+    .callout-flag::before     { content: "Red flag";      color: var(--ff-flag-fg); }
+    .callout-flag a, .callout-flag strong, .callout-flag code { color: inherit; }
+    .callout-flag code { background: color-mix(in srgb, currentColor 14%, transparent); }
+    /* The nongoal and suggest boxes carry a 1px border, so their dot moves with it. */
+    .callout-nongoal::after, .callout-suggest::after { left: 21px; top: 22px; }
+
+    /* Reviews section: the _reviews.md files are merged into the HTML below this
+       divider (they stay separate files on disk for agents). The build writes
+       the divider with an inline red rule; this repaints it in the house ink. */
+    hr.reviews-divider {
+      border: 0 !important;
+      border-top: 2px solid var(--ff-divider) !important;
+      margin: 88px 0 6px !important;
+      display: block !important;
+    }
+    hr.reviews-divider + * { margin-top: 0; }
+    .reviews-banner {
+      border-top: 1px solid var(--ff-divider);
+      padding: 14px 0 0;
+      margin: 0 0 32px;
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--ff-soft);
+    }
+    .reviews-banner::before {
+      display: block;
+      content: "Reviews, full prose";
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: clamp(25px, 3vw, 32px);
+      line-height: 1.15;
+      letter-spacing: -0.012em;
+      color: var(--ff-fg);
+      margin-bottom: 8px;
+    }
+    /* Jump target for spec -> review-detail links; offset so the heading clears. */
+    .finding-anchor { display: inline-block; scroll-margin-top: 1.5rem; }
+    td a[href^="#"] { font-weight: 600; }
+
+    /* Inline xref deep-dive (from ::: xref fenced div) */
+    .xref {
+      font-size: 15px;
+      background: var(--ff-code-bg);
+      border-radius: var(--r);
+      padding: 10px 16px;
+      margin: 0 0 18px;
+      color: var(--ff-soft);
+      line-height: 1.5;
+    }
+    .xref::before {
+      content: "\21B3  See";
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-accent);
+      margin-right: 8px;
+    }
+    .xref > * { display: inline; margin: 0; }
+    .xref a, .xref a:visited { font-weight: 600; color: var(--ff-fg); }
+
+    /* Tables: the St. Clair naked ruled table. A 2px rule under the head,
+       hairlines between rows, no box, no tint, no shadow. The build wraps every
+       table in .table-scroll; the scrolling itself lives in
+       shared-assets/doc_fixes.css. */
+    .table-scroll { margin: 24px 0 32px; }
+    .table-scroll table { margin: 0; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 24px 0 32px;
+      font-size: 15px;
+      line-height: 1.5;
+      background: none;
+      display: table;   /* pandoc sets block; .table-scroll does the scrolling */
+    }
+    tbody { border: 0; }   /* pandoc */
+    th { border-top: 0; }  /* pandoc */
+    thead th {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      text-align: left;
+      padding: 0 16px 10px 0;
+      border-bottom: 2px solid var(--ff-divider);
+      vertical-align: bottom;
+    }
+    tbody td {
+      padding: 12px 16px 12px 0;
+      border-bottom: 1px solid var(--ff-rule);
+      vertical-align: top;
+    }
+    td:last-child, th:last-child { padding-right: 0; }
+    /* A short id column ("RF 12", "T3") stays on one line beside wide prose. */
+    tbody td:first-child { min-width: 3.4em; }
+    tbody tr:nth-child(even) { background: none; }
+    td > :first-child { margin-top: 0; }
+    td > :last-child { margin-bottom: 0; }
+
+    /* Disposition verdicts rendered by the build (Accepted/Rejected/Deferred).
+       A dot and the word, in the verdict's colour. */
+    td .accepted, span.accepted,
+    td .rejected, span.rejected,
+    td .deferred, span.deferred {
+      font-family: var(--font-display);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    td .accepted::before, span.accepted::before,
+    td .rejected::before, span.rejected::before,
+    td .deferred::before, span.deferred::before {
+      content: "";
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      margin-right: 7px;
+      vertical-align: 0.12em;
+    }
+    td .accepted, span.accepted { color: var(--ff-accepted); }
+    td .rejected, span.rejected { color: var(--ff-rejected); }
+    td .deferred, span.deferred { color: var(--ff-deferred); }
+
+    /* Inline + block code: JetBrains Mono on the cobalt tint, ink text.
+       Ligatures off, so an arrow in code reads as the two characters it is. */
+    code, pre {
+      font-family: var(--font-mono);
+      font-variant-ligatures: none;
+      font-feature-settings: "liga" 0, "calt" 0;
+    }
+    code {
+      font-size: 0.86em;
+      background: var(--ff-code-bg);
+      color: var(--ff-fg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+    }
+    pre {
+      font-size: 14px;
+      background: var(--ff-code-bg);
+      color: var(--ff-fg);
+      padding: 18px 24px;
+      border-radius: var(--r);
+      overflow-x: auto;
+      margin: 0 0 24px;
+      line-height: 1.55;
+      /* Wrap long lines instead of forcing a horizontal scroll (readability). */
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+    /* A code chip inside a tinted callout would vanish into the tint. */
+    .callout code { background: color-mix(in srgb, currentColor 9%, transparent); }
+
+    /* Highlighted blocks: pandoc wraps them in div.sourceCode and paints its
+       own transparent ground and a green-and-teal palette. Repaint both in the
+       St. Clair accents. */
+    div.sourceCode { margin: 0 0 24px; }
+    div.sourceCode > pre.sourceCode { background: var(--ff-code-bg); margin: 0; }
+    pre.sourceCode code span.kw, pre.sourceCode code span.cf, pre.sourceCode code span.im,
+    pre.sourceCode code span.op, pre.sourceCode code span.bu { color: var(--ff-hl-kw); font-weight: 500; }
+    pre.sourceCode code span.st, pre.sourceCode code span.ch, pre.sourceCode code span.ss,
+    pre.sourceCode code span.vs, pre.sourceCode code span.sc { color: var(--ff-hl-str); }
+    pre.sourceCode code span.dv, pre.sourceCode code span.fl, pre.sourceCode code span.bn,
+    pre.sourceCode code span.cn, pre.sourceCode code span.dt { color: var(--ff-hl-num); }
+    pre.sourceCode code span.co, pre.sourceCode code span.an, pre.sourceCode code span.cv,
+    pre.sourceCode code span.do, pre.sourceCode code span.in { color: var(--ff-soft); font-style: normal; font-weight: 400; }
+    pre.sourceCode code span.fu, pre.sourceCode code span.va, pre.sourceCode code span.at,
+    pre.sourceCode code span.ot { color: inherit; font-weight: 400; }
+
+    /* Mermaid blocks: pandoc renders ```mermaid as <pre class="mermaid">; the
+       Mermaid script replaces the text with SVG. It is a figure, not code: no
+       tint, a hairline frame, centred. Mermaid source must not wrap before the
+       script swaps it for SVG. */
+    pre.mermaid {
+      white-space: pre;
+      background: none;
+      border: 1px solid var(--ff-rule);
+      border-radius: var(--r);
+      padding: 24px;
+      text-align: center;
+      color: var(--ff-fg);
+      font-family: var(--font-body);
+    }
+    pre.mermaid svg { max-width: 100%; height: auto; }
+
+    blockquote {
+      margin: 18px 0;
+      padding: 2px 0 2px 18px;
+      border-left: 3px solid var(--ff-rule);
+      color: var(--ff-soft);
+    }
+    blockquote p:last-child { margin-bottom: 0; }
+
+    hr { border: none; border-top: 1px solid var(--ff-rule); margin: 44px 0; }
+    hr:has(+ h2) { display: none; }
+
+    img { max-width: 100%; height: auto; }
+
+    /* Task-list checkboxes from "- [ ]" lists */
+    ul.task-list { list-style: none; padding-left: 4px; }
+    ul.task-list li input[type="checkbox"] { margin-right: 8px; accent-color: var(--cobalt); }
+
+    @page { size: letter; margin: 0.7in 0.65in; }
+    @media (max-width: 620px) {
+      body { padding: 32px 16px 64px; font-size: 16px; }
+      .callout { padding: 14px 16px 16px; }
+      .callout::after { left: 16px; top: 22px; }
+      table { font-size: 14px; }
+    }
+    @media print {
+      :root { color-scheme: light; }
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      html, body { background: #fff; color: var(--ink); }
+      body { max-width: 100%; font-size: 11pt; padding: 0; }
+      .doc-nav { display: none; }
+      a { color: var(--ink); }
+      .callout, table, pre, blockquote { break-inside: avoid; }
+      h2, h3 { break-after: avoid; }
+    }
+  </style>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark ? "dark" : "neutral",
+      securityLevel: "loose",
+      themeVariables: { fontFamily: '"Hanken Grotesk", system-ui, sans-serif' },
+    });
+    /* Pandoc emits ```mermaid blocks as <pre class="mermaid"><code>…</code></pre> with the
+       diagram source HTML-entity-encoded. Mermaid 10 reads innerHTML, so it sees the literal
+       <code> tag and &quot;/&gt; entities and throws syntax errors. Flatten each block to a
+       single decoded text node first (textContent decodes entities and drops the wrapper),
+       then render. Same fix as the personal-repo report builds (commit d525c50 there). */
+    function renderMermaid() {
+      document.querySelectorAll("pre.mermaid").forEach(function (el) {
+        if (!el.dataset.mflattened) {
+          el.textContent = el.textContent;
+          el.dataset.mflattened = "1";
+        }
+      });
+      mermaid.run({ querySelector: "pre.mermaid" });
+    }
+    if (document.readyState === "loading") {
+      window.addEventListener("DOMContentLoaded", renderMermaid);
+    } else {
+      renderMermaid();
+    }
+  </script>
+
+  <!-- The review comment module and the shared document fixes are injected here
+       at build time from ~/.claude/skills/shared-assets/ (comment_module.html +
+       doc_fixes.css) by shared_assets.resolve_header(). Do not paste a copy back
+       into this file. -->
+  <style>
+  /* Shared document fixes: one source for both document builds.
+
+     Injected at build time alongside comment_module.html, in place of the
+     <!-- SHARED_ASSETS --> placeholder in each pandoc header. Because it lands
+     last in <head>, these rules win over the same-specificity rules earlier in a
+     header without needing !important.
+
+     Keep this file to fixes that are true for every document we build. Anything
+     that depends on a skill's own look (colors, radius, shadow) belongs in that
+     skill's header. */
+
+  /* --- Tables: never spill past the reading column (plan Task 4.3, defect 1) ---
+     Two halves to the fix, and both are needed.
+     1. A wide table scrolls inside its wrapper. Both builds wrap every table in
+        <div class="table-scroll">.
+     2. Long unbroken strings (URLs, tokens, absolute paths) wrap instead of
+        setting a min-content width that forces the table wider than the page.
+        Without this the table is simply wider than the wrapper and the text is
+        cut off at the wrapper edge. */
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+  .table-scroll > table { margin: 0; }
+  table { max-width: 100%; }
+  thead th, tbody td { overflow-wrap: anywhere; word-break: break-word; }
+  thead th code, tbody td code,
+  thead th a, tbody td a { overflow-wrap: anywhere; word-break: break-word; }
+
+  /* Print/PDF has no scrollbars, so show the whole table and let it shrink. */
+  @media print {
+    .table-scroll { overflow: visible; }
+  }
+
+  /* --- Charts: never let a chart set the page width (plan Task 4.3, defect 2) ---
+     The label-truncation fix itself is Plotly's automargin, applied in the
+     report header's render script. This is the CSS guard next to it: a chart
+     that computes a wider layout than its column stays inside the column
+     instead of pushing the whole page sideways. */
+  figure.plotly-chart,
+  figure.plotly-chart > div,
+  figure.chart svg,
+  figure.plotly-chart .main-svg { max-width: 100%; }
+
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Feature Brief: Free writing</h1>
+</header>
+
+<div class="doc-nav"><span class="doc-nav-label">Docs</span><a href="00_crucible.html">Crucible</a><a href="01_brief_free_writing.html" class="current">Brief</a><a href="02_architecture_free_writing.html">Architecture</a><a href="03_plan_free_writing.html">Plan</a><a href="04_progress_free_writing.md">Progress</a></div>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#context" id="toc-context">Context</a></li>
+<li><a href="#goal--problem" id="toc-goal--problem">Goal /
+Problem</a></li>
+<li><a href="#non-goals" id="toc-non-goals">Non-Goals</a></li>
+<li><a href="#user--context" id="toc-user--context">User &amp;
+Context</a></li>
+<li><a href="#user-stories" id="toc-user-stories">User Stories</a></li>
+<li><a href="#solution-outline" id="toc-solution-outline">Solution
+Outline</a></li>
+<li><a href="#requirements" id="toc-requirements">Requirements</a></li>
+<li><a href="#ai-behavior" id="toc-ai-behavior">AI Behavior</a></li>
+<li><a href="#success-metrics" id="toc-success-metrics">Success
+Metrics</a></li>
+<li><a href="#ux-notes" id="toc-ux-notes">UX Notes</a></li>
+<li><a href="#analytics--logging" id="toc-analytics--logging">Analytics
+/ Logging</a></li>
+<li><a href="#rollout--flags" id="toc-rollout--flags">Rollout /
+Flags</a></li>
+<li><a href="#open-questions" id="toc-open-questions">Open
+Questions</a></li>
+<li><a href="#pm-review" id="toc-pm-review">PM Review</a></li>
+<li><a href="#reviews-free-writing-brief"
+id="toc-reviews-free-writing-brief">Reviews: Free writing brief</a>
+<ul>
+<li><a href="#pm-review-round-1" id="toc-pm-review-round-1">PM Review
+(Round 1)</a></li>
+</ul></li>
+</ul>
+</nav>
+<h2 id="context">Context</h2>
+<p>Lahe is a co-authoring tool. A reviewer reads a page an agent
+produced, comments on it, and edits text in place. Editing an existing
+block works well for small changes. What is missing is the other half of
+co-authoring: the reviewer writing their own text.</p>
+<p>Today the only way to add text is to open an existing block for
+editing, press Enter at its end, and keep typing. The new paragraphs are
+recorded as a change to that neighbor block. There is no way to make a
+header, and no way to start on an empty page. To add an introduction,
+Ken asks the agent for a placeholder header and edits it when it
+arrives.</p>
+<p>Prior work: the crucible in this folder (<code>00_crucible.md</code>)
+and the questions page Ken answered
+(<code>00_crucible_questions.md</code>). The original Lahe brief's
+editing requirements assume the text already exists. One formatting bug
+is already on the board as
+<code>LAHE-lone-paragraph-loses-markup</code>: a paragraph written on
+its own loses its bold and italic when the page already carries the rest
+of the edit. It is recorded in
+<code>docs/features/20260922.08_no_duplicate_text/NOTES.md</code>. This
+feature absorbs that row.</p>
+<pre class="mermaid"><code>flowchart LR
+  A[Want to add an intro] --&gt; B[Ask the agent for a placeholder header]
+  B --&gt; C[Wait for the rebuild]
+  C --&gt; D[Open the placeholder for editing]
+  D --&gt; E[Replace the sample text]
+  E --&gt; F[Press Enter at the end and type the paragraphs]
+  F --&gt; G[Agent receives one edit of the placeholder block]</code></pre>
+<h2 id="goal--problem">Goal / Problem</h2>
+<p>Let a reviewer write new text on a Lahe page the way they edit
+existing text. That means:</p>
+<ul>
+<li>no asking the agent for a place to type</li>
+<li>headers as well as paragraphs</li>
+<li>new text reaches the agent as new text</li>
+</ul>
+<p>Cover three jobs:</p>
+<ol type="1">
+<li><strong>Writing to publish.</strong> Blog posts and articles,
+written by hand, with the agent proofreading afterward.</li>
+<li><strong>Writing notes.</strong> A blank document the reviewer can
+type into and look back at, with the agent organizing it later when
+asked.</li>
+<li><strong>Editing.</strong> Word-for-word and formatting changes that
+stay exactly as made.</li>
+</ol>
+<h2 id="non-goals">Non-Goals</h2>
+<div class="callout callout-nongoal">
+<ul>
+<li>A new mode. Writing must feel like the edit mode the reviewer
+already has.</li>
+<li>An editor library added to <code>dependencies</code>. The
+zero-runtime-dependency rule holds. A vendored file is allowed.</li>
+<li>Tables, images, or links in the first cut. Lists are open in Q4 (are
+lists in the first cut?).</li>
+<li>Agent-written text. The reviewer writes; the agent proofreads and
+suggests.</li>
+<li>A change to how comments work.</li>
+<li>Mobile. The job happens on a laptop.</li>
+</ul>
+</div>
+<h2 id="user--context">User &amp; Context</h2>
+<p>Ken today, and later anyone co-writing a document with an agent. No
+defined ideal customer yet.</p>
+<p>The scene is a document on a laptop with the rest of Lahe running.
+The agent may be working at the same time, so the page can reload while
+the reviewer is typing. The reviewer is writing one of:</p>
+<ul>
+<li>several paragraphs</li>
+<li>a section with its own header</li>
+<li>a blank page of notes, from the first line</li>
+</ul>
+<h2 id="user-stories">User Stories</h2>
+<ul>
+<li><strong>As a writer publishing a post</strong>, I want to add a
+header and several paragraphs anywhere on the page so that I can draft
+my own section without asking the agent for a placeholder.</li>
+<li><strong>As a writer publishing a post</strong>, I want the agent to
+proofread what I wrote and suggest fixes so that I get a second read
+without losing my wording.</li>
+<li><strong>As someone taking notes</strong>, I want to open a blank
+document and start typing so that I can see what I have already written
+instead of scrolling a chat log.</li>
+<li><strong>As someone taking notes</strong>, I want the agent to
+organize my notes afterward when I ask so that the raw page becomes a
+usable document.</li>
+<li><strong>As an editor</strong>, I want a bold or italic change to
+reach the agent correctly and stay on the page so that formatting edits
+are not lost or misread.</li>
+<li><strong>As any reviewer</strong>, I want the agent to know which
+text is new and where it goes so that it lands in the right place in the
+source.</li>
+</ul>
+<h2 id="solution-outline">Solution Outline</h2>
+<p>The reviewer starts writing the way they start an edit today, and can
+do it where there is no text yet. They make paragraphs and headers
+themselves. The new blocks look like the rest of the page while they
+write. The agent can tell new text from a change to existing text, and
+knows where it belongs.</p>
+<p>A blank document can be started from the command line and served like
+any other review, so notes begin on an empty page with the rail already
+there.</p>
+<p>Bold and italic changes to existing text arrive at the agent as the
+reviewer made them and survive the rebuild.</p>
+<p>After a long hand-written block lands, the agent proofreads it and
+offers suggestions on the card. It does not change the reviewer's words
+unless asked.</p>
+<p>The wireframe and the architecture decide:</p>
+<ul>
+<li>how the reviewer gets into writing</li>
+<li>what they see while writing</li>
+<li>how the record is shaped</li>
+</ul>
+<h2 id="requirements">Requirements</h2>
+<h3 id="writing-new-text">Writing new text</h3>
+<div class="callout callout-req">
+<p><strong>R1:</strong> A reviewer can write new text where none exists.
+No existing block is needed to start. That covers:</p>
+<ul>
+<li>after any block</li>
+<li>at the end of the page</li>
+<li>on an empty page</li>
+</ul>
+</div>
+<div class="callout callout-req">
+<p><strong>R2:</strong> Starting to write feels like the edit the
+reviewer already knows. There is no new mode to learn.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R3:</strong> The reviewer can make paragraphs and headers
+themselves, without asking the agent.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R4:</strong> New blocks use the page's own styling, while
+writing and after commit. That means:</p>
+<ul>
+<li>spacing</li>
+<li>type</li>
+<li>header sizes</li>
+</ul>
+</div>
+<div class="callout callout-req">
+<p><strong>R5:</strong> New text is saved as the reviewer types, the
+same as an edit draft today. It survives a reload and a repaint of the
+page. After a reload, the unfinished section is still there to keep
+writing.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R6:</strong> The words stay as typed. Nothing rewrites them
+on the page, in the record, or in the source. The renderer's typography
+(curly quotes, dashes) is not a rewrite.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R7:</strong> A page reload while the reviewer is writing does
+not:</p>
+<ul>
+<li>move the cursor</li>
+<li>hide what they have written</li>
+<li>show their new text twice</li>
+</ul>
+</div>
+<h3 id="reaching-the-agent">Reaching the agent</h3>
+<div class="callout callout-req">
+<p><strong>R8:</strong> The agent can tell new text apart from a change
+to existing text. For new text it also knows:</p>
+<ul>
+<li>where on the page it goes</li>
+<li>which lines are headers</li>
+<li>any bold or italic inside them</li>
+</ul>
+</div>
+<div class="callout callout-req">
+<p><strong>R9:</strong> The agent contract and the skill say how to
+place new text in the source, for HTML and for Markdown, and how to
+reply. An agent that reads only <code>review.json</code> has everything
+it needs.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R10:</strong> A <code>handled</code> reply for new text is
+checked against the built page the same way a hand edit is. The words
+must be on the page before the item is closed.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R11:</strong> After the agent places a hand-written block
+longer than a threshold, it replies with proofreading suggestions as a
+question on the card and leaves the words unchanged. The threshold is a
+number the plan sets.</p>
+</div>
+<h3 id="a-blank-document">A blank document</h3>
+<div class="callout callout-req">
+<p><strong>R12:</strong> A reviewer can start a blank document from the
+command line and have it served with the rail, so notes begin on an
+empty page.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R13:</strong> Notes end up in a source file on disk that the
+reviewer named, so the reviewer owns the file. Who writes that file, and
+whether notes work with no agent attached, is Q3 (who writes the notes
+file).</p>
+</div>
+<h3 id="formatting-edits">Formatting edits</h3>
+<div class="callout callout-req">
+<p><strong>R14:</strong> A bold or italic change to existing text:</p>
+<ul>
+<li>reaches the agent as the reviewer made it</li>
+<li>is applied to the source</li>
+<li>is still on the page after the rebuild</li>
+</ul>
+<p>Known cases that must pass:</p>
+<ul>
+<li>a paragraph written on its own loses its bold and italic (board row
+<code>LAHE-lone-paragraph-loses-markup</code>)</li>
+<li>text put under a header breaks the formatting (Ken, questions page
+Q5; not yet reproduced)</li>
+<li>bold two words in a Markdown page, commit, rebuild (the crucible's
+assignment)</li>
+</ul>
+</div>
+<h3 id="undo-and-delete">Undo and delete</h3>
+<div class="callout callout-req">
+<p><strong>R15:</strong> The reviewer can undo new text like any other
+edit. Undo removes the text from the page. If the agent already placed
+it, undo also asks the agent to take it back out.</p>
+</div>
+<h2 id="ai-behavior">AI Behavior</h2>
+<ul>
+<li>After a hand-written block longer than the R11 threshold
+(proofreading) lands, the agent offers suggestions on the card as a
+question. It changes the reviewer's words only when the reviewer says
+yes.</li>
+<li>On a notes document, the agent organizes only when asked. Unasked,
+it places the text and stops.</li>
+<li>The agent does not write prose in a region the reviewer wrote.
+Suggestions go on the card; the source keeps the reviewer's words.</li>
+<li>When the agent cannot tell where new text belongs, it asks.</li>
+</ul>
+<h2 id="success-metrics">Success Metrics</h2>
+<div class="callout callout-metric">
+<ul>
+<li>Over the next posts Ken writes in Lahe, zero asks to the agent for a
+placeholder header or section.</li>
+<li>Notes for a session live on a Lahe page, not in the terminal, and
+Ken reads them back from the page.</li>
+<li>Every case in the R14 list (bold and italic edits) passes: the edit
+reaches the source and is on the page after the rebuild.</li>
+<li>On every new-text item, the agent's placement matches what Ken wrote
+block for block, header included.</li>
+</ul>
+</div>
+<h2 id="ux-notes">UX Notes</h2>
+<p>The wireframe phase decides what the reviewer sees, within R2 (feels
+like today's edit) and R4 (new blocks match the page). Screenshots ship
+with the build, light and dark.</p>
+<h2 id="analytics--logging">Analytics / Logging</h2>
+<p>Every new-text item is an event in the review log like any other
+item. No new analytics.</p>
+<h2 id="rollout--flags">Rollout / Flags</h2>
+<p>None. The contract text changes. Existing reviews keep working, since
+an old page has no new-text items. An agent on an older copy of the
+skill either can still act on new text or is told to update. The
+architecture decides which.</p>
+<h2 id="open-questions">Open Questions</h2>
+<div class="callout callout-question">
+<p><span id="open-questions-q1" class="finding-anchor"></span><strong>Q1:</strong> Tiptap (a vendored editor library) or Lahe's own
+editing code as the engine for new writing? Architecture decides, after
+a spike. The brief holds either way.</p>
+</div>
+<div class="callout callout-question">
+<p><span id="open-questions-q2" class="finding-anchor"></span><strong>Q2:</strong> Are there formatting failures beyond the three
+cases in R14 (bold and italic edits)? The under-a-header case still
+needs a reproduction.</p>
+</div>
+<div class="callout callout-question">
+<p><span id="open-questions-q3" class="finding-anchor"></span><strong>Q3 (Ken):</strong> On a blank notes document, who writes the
+file? Two options:</p>
+<ul>
+<li>The agent places each paragraph, as it does for any new text. Notes
+then depend on an agent being attached and awake.</li>
+<li>The tool writes the file itself as you type, and an agent organizes
+only when asked. Notes then work with no agent. The agent's placement
+rules and the handled check (R10) would not apply to them.</li>
+</ul>
+</div>
+<div class="callout callout-question">
+<p><span id="open-questions-q4" class="finding-anchor"></span><strong>Q4 (Ken):</strong> Are lists in the first cut? Notes are
+mostly lists, and your chosen approach included them. Or are they a
+follow-up?</p>
+</div>
+<div class="callout callout-question">
+<p><span id="open-questions-q5" class="finding-anchor"></span><strong>Q5 (Ken):</strong> Pasting a draft written elsewhere: in
+scope, or a non-goal for now?</p>
+</div>
+<div class="callout callout-question">
+<p><span id="open-questions-q6" class="finding-anchor"></span><strong>Q6 (Ken):</strong> You said larger edits to existing text are
+also lacking. What fails today? Without a case, this stays out of scope
+with a follow-up row.</p>
+</div>
+<div class="callout callout-question">
+<p><span id="open-questions-q7" class="finding-anchor"></span><strong>Q7 (wireframe):</strong> When a reviewer is editing an
+existing block and presses Enter at its end, is the new paragraph part
+of that edit or new text? One consistent rule, and the reviewer should
+be able to see which it is.</p>
+</div>
+<h2 id="pm-review">PM Review</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RF1</td>
+<td>R13 stated before its reproduction; missed the board row and the
+under-a-header case</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Now R14 with three named cases; board row absorbed; Q2 narrowed to
+unknown causes</td>
+</tr>
+<tr>
+<td>RF2</td>
+<td>Brief pre-decided one record per sitting, header by keyboard, and
+the item shape</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R2, R3, R7, R8 rewritten as outcomes; "in one sitting" and the
+record-kind line removed</td>
+</tr>
+<tr>
+<td>RF3</td>
+<td>Proofreading had no requirement; Q3 reopened a settled trigger</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Now R11; threshold left to the plan</td>
+</tr>
+<tr>
+<td>RF4</td>
+<td>Notes: who writes the file, and does it work with no agent</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Q3 for Ken, with both options and their cost; R13 depends on it</td>
+</tr>
+<tr>
+<td>RF5</td>
+<td>Enter at the end of an existing block: same edit or new text?</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Q7 for the wireframe; metric reworded</td>
+</tr>
+<tr>
+<td>RF6</td>
+<td>No requirement for a rebuild landing mid-writing</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Now R7</td>
+</tr>
+<tr>
+<td>RF7</td>
+<td>Metrics were one-off demos</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Rewritten against the status-quo costs</td>
+</tr>
+<tr>
+<td>RF8</td>
+<td>Lists cut silently; paste and larger edits unsaid</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Q4, Q5, Q6 for Ken</td>
+</tr>
+<tr>
+<td>RF9</td>
+<td>"Word for word" fails on renderer typography</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R6 carve-out</td>
+</tr>
+<tr>
+<td>RF10</td>
+<td>Tiptap said three times; old agents not covered in Rollout</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Goal paragraph cut; Rollout line added</td>
+</tr>
+<tr>
+<td>RF11</td>
+<td>R5 overstated draft saving</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R5 reworded to match today's saving and to say what a reload
+shows</td>
+</tr>
+</tbody>
+</table></div>
+<hr class="reviews-divider" style="margin:4.5rem 0 1.5rem;border:0;border-top:3px solid #b0463b">
+
+<div class="reviews-banner">
+<p>The sections below are the full verbatim persona + human reviews for
+this document. They live in a separate <code>_reviews.md</code> file (so
+agents read the lean spec), merged here for review.</p>
+</div>
+<h1 id="reviews-free-writing-brief">Reviews: Free writing brief</h1>
+<p>Brief under review: <code>01_brief_free_writing.md</code>. Inputs
+read: the accepted crucible, the questions page with Ken's answers,
+<code>CLAUDE.md</code>, the diagrams index plus item lifecycle, replay
+branches, protected region and finding the region,
+<code>skills/lahe/SKILL.md</code>, <code>docs/CONTRACTS.md</code>, and
+the board (<code>docs/BULLETIN.md</code>).</p>
+<h2 id="pm-review-round-1">PM Review (Round 1)</h2>
+<p>Findings ranked worst first. Two blockers, six important, three
+minor.</p>
+<h3
+id="rf1-the-formatting-bug-requirement-is-stated-before-its-own-gate-and-ignores-a-bug-already-on-the-board">RF1.
+The formatting-bug requirement is stated before its own gate, and
+ignores a bug already on the board</h3>
+<ul>
+<li>severity: blocker</li>
+<li>kind: defect</li>
+<li>where: R13 (bold or italic reaches the agent and survives the
+rebuild), Q2 (what is the formatting bug), Success Metrics bullet 3</li>
+<li>what: The crucible says "the brief cannot state the requirement
+until we know" what the bug is, and the brief states R13 anyway, with Q2
+admitting the reproduction has not been done.</li>
+<li>why: R13 is not testable as written. "Ten bold or italic edits in a
+row" with no named cases will pass on ten easy edits and miss the real
+one. Worse, part of the answer already exists and the brief does not
+cite it: board row <code>LAHE-lone-paragraph-loses-markup</code> (a
+paragraph written on its own loses its bold and italic when the page
+already carries the rest of the edit; recorded in
+<code>docs/features/20260922.08_no_duplicate_text/NOTES.md</code>). Ken
+also named a second failure in the questions page, Q5: "Putting text
+under a header often breaks the formatting in buggy ways." Neither is in
+the brief. Building R13 without them means the feature ships and the
+known bug stays open on the board as a duplicate.</li>
+<li>fix: Cite the board row and the NOTES file as the first known cause,
+and say the row is absorbed by this feature (or say why not). Add the
+under-a-header failure as a second reproduction case. Rewrite the
+success metric as a named list of cases (lone paragraph with bold, text
+under a header, bold two words in a Markdown page per the crucible
+assignment) that each reach the source and survive the rebuild. Keep Q2
+open only for causes not yet found.</li>
+</ul>
+<h3
+id="rf2-the-brief-pre-decides-design-that-ken-left-to-the-wireframe-and-architecture">RF2.
+The brief pre-decides design that Ken left to the wireframe and
+architecture</h3>
+<ul>
+<li>severity: blocker</li>
+<li>kind: defect</li>
+<li>where: Solution Outline; R3 (Enter makes a paragraph, header without
+leaving the keyboard); R7 and R8 (new text as its own item, carrying
+block structure); Rollout ("The record shape gains a new item
+kind")</li>
+<li>what: The crucible closes with "everything else, including the
+gesture, what the bar shows, how a sitting is bounded, and how the
+record is shaped, is for the brief and the architecture," and the brief
+decides three of those four.</li>
+<li>why: Each one narrows the wireframe and architecture before they
+start. Specifically:
+<ul>
+<li>"What they write in one sitting reaches the agent as new text"
+(Solution Outline) and R7 decide one record per sitting. Approach A in
+the crucible was one record per block. That choice is open.</li>
+<li>R3 "without leaving the keyboard" decides that a header is a
+keyboard action. The crucible offered "a <code>#</code> prefix or a bar
+button." That is the wireframe's call.</li>
+<li>R8 says what the item carries. Rollout says the record "gains a new
+item kind." Both are record shape, which is architecture.</li>
+<li>R2 "the same gesture family as entering an edit" is a design phrase,
+not a product outcome.</li>
+</ul></li>
+<li>fix: Rewrite each as the outcome the reviewer or agent sees. R2:
+"Starting to write feels like the edit the reviewer already knows; no
+new mode to learn." R3: "The reviewer can make a header themselves,
+without asking the agent." R7: "The agent can tell new text apart from a
+change to existing text, and knows where it goes." Drop R8 into R7 as
+"including which lines are headers and any bold or italic." Drop the
+record-kind sentence from Rollout. Remove "in one sitting"
+everywhere.</li>
+</ul>
+<h3
+id="rf3-proofreading-is-a-requirement-ken-agreed-to-and-the-brief-files-it-as-behavior-plus-an-open-question">RF3.
+Proofreading is a requirement Ken agreed to, and the brief files it as
+behavior plus an open question</h3>
+<ul>
+<li>severity: important</li>
+<li>kind: defect</li>
+<li>where: AI Behavior bullet 1; Q3 (is proofreading triggered by
+length, by asking, or always)</li>
+<li>what: Ken's premise 6 answer is "on longer blocks the agent should
+proofread and offer suggestions," so the trigger is decided, but the
+brief has no numbered requirement for it and Q3 reopens the trigger as
+if he had not answered.</li>
+<li>why: A requirement that lives only in AI Behavior has no test and no
+home in the contract. R9 says the contract tells the agent how to place
+text; nothing says it tells the agent to proofread. Since the contract
+in <code>review.json</code> is the only text an agent is guaranteed to
+read (per <code>CLAUDE.md</code>), a proofread rule that is not a
+requirement never reaches the agent. "Longer than a short paragraph" is
+also untestable.</li>
+<li>fix: Add R15: "After the agent places a hand-written block above a
+length threshold, it replies with proofreading suggestions as a question
+on the card, and leaves the words unchanged." Say the threshold is a
+number the plan sets, with a proposed default. Narrow Q3 to the
+threshold only, since Ken already chose "longer blocks."</li>
+</ul>
+<h3
+id="rf4-the-blank-notes-document-has-two-owners-for-the-file-and-no-answer-on-whether-it-needs-an-agent">RF4.
+The blank notes document has two owners for the file, and no answer on
+whether it needs an agent</h3>
+<ul>
+<li>severity: important</li>
+<li>kind: defect</li>
+<li>where: R11 (start a blank document from the command line), R12 (text
+saved to a source file the reviewer named), R9 and R10 (the agent places
+new text and is checked on it)</li>
+<li>what: R12 says typed text is saved to the file, while R7 through R10
+say the agent receives an item and places the text in the source. The
+brief does not say which one is true for notes.</li>
+<li>why: This is a product decision, not architecture. If the agent
+writes the file, every paragraph of notes is a round trip through an
+agent, and notes stop landing the moment the agent is busy or gone. If
+the tool writes the file, the agent's placement rules and the handled
+check do not apply to notes, and R12 needs to say so. Ken's notes job is
+"see what I already wrote and look back at it often." That job is met by
+the page, not the file, but "a file the reviewer owns" is a promise the
+brief makes and has to be able to keep with no agent watching.</li>
+<li>fix: State it: does a blank notes document work with no agent
+attached, and who is responsible for the file matching the page? If the
+answer is not known, make it an open question for Ken, with the two
+options and what each costs him, and mark R12 as depending on it.</li>
+</ul>
+<h3
+id="rf5-the-brief-does-not-say-what-happens-to-todays-enter-at-the-end-behavior">RF5.
+The brief does not say what happens to today's Enter-at-the-end
+behavior</h3>
+<ul>
+<li>severity: important</li>
+<li>kind: defect</li>
+<li>where: Context paragraph 2; R1 (write after any block); R7 (not
+recorded as a change to a neighboring block); Success Metrics bullet
+4</li>
+<li>what: Today, Enter at the end of an existing block during an edit
+adds paragraphs to that block's edit. The brief calls this the problem
+and then never says whether that path changes, stays, or becomes new
+text.</li>
+<li>why: This is the seam between "feels like the edit mode I have" and
+"new text is its own item." If both paths exist, the reviewer has two
+ways to add a paragraph after a block that produce different records,
+and metric 4 ("no new-text item arrives as a change to a neighboring
+block") can never be judged because a reviewer extending a paragraph is
+doing exactly that on purpose. Ken's premise 3 answer ("follow the same
+logic a line break already uses inside a block") points at one
+consistent rule, not two.</li>
+<li>fix: Add one requirement or one open question for the wireframe:
+when a reviewer is editing an existing block and presses Enter at its
+end, is the new paragraph part of that edit or new text? Say what the
+reviewer sees either way. Reword metric 4 to match.</li>
+</ul>
+<h3 id="rf6-a-page-rebuild-mid-writing-has-no-requirement">RF6. A page
+rebuild mid-writing has no requirement</h3>
+<ul>
+<li>severity: important</li>
+<li>kind: risk</li>
+<li>where: User &amp; Context ("the page can reload while the reviewer
+is typing"); R5 (every keystroke saved)</li>
+<li>what: The brief names the risk in User &amp; Context and the
+crucible names it as approach B's main risk (a multi-block region is new
+ground for protection and replay), but no requirement says what the
+reviewer experiences when the agent's rebuild lands while they are
+writing several paragraphs.</li>
+<li>why: R5 covers the words surviving. It does not cover the caret
+staying put, the half-written section staying on screen, or a section
+the agent already placed not appearing twice after the reload. Today's
+protection guards one block (see
+<code>docs/diagrams/protected_region.md</code>). For a writer
+mid-section, losing the cursor position is the failure they will notice
+first, and it is not in the brief.</li>
+<li>fix: Add a headline requirement: "A page reload while the reviewer
+is writing does not move the cursor, hide what they have written, or
+show their new text twice." Leave how to the architecture.</li>
+</ul>
+<h3
+id="rf7-success-metrics-are-demos-not-measures-and-none-tracks-the-status-quo-cost">RF7.
+Success metrics are demos, not measures, and none tracks the status quo
+cost</h3>
+<ul>
+<li>severity: important</li>
+<li>kind: defect</li>
+<li>where: Success Metrics</li>
+<li>what: Bullets 1 and 2 describe one successful run, bullet 3 is an
+arbitrary count with no cases (see RF1), and bullet 4 restates R7.</li>
+<li>why: The crucible names the cost of doing nothing in two lines: a
+round trip to the agent before every blog post, and notes in the
+terminal that cannot be looked back at. Neither appears as a metric, so
+the brief cannot say whether the feature paid off.</li>
+<li>fix: Replace with metrics tied to the status quo:
+<ul>
+<li>Over the next N posts Ken writes in Lahe, zero asks to the agent for
+a placeholder header or section.</li>
+<li>Notes for a session live on a Lahe page, not in the terminal, and
+Ken reads them back from the page.</li>
+<li>Every case in the R13 reproduction list passes.</li>
+<li>The agent's placement matches what he wrote block for block, header
+included, on every new-text item, not once.</li>
+</ul></li>
+</ul>
+<h3
+id="rf8-lists-are-cut-silently-and-paste-and-larger-edits-are-neither-in-nor-out">RF8.
+Lists are cut silently, and paste and "larger edits" are neither in nor
+out</h3>
+<ul>
+<li>severity: important</li>
+<li>kind: risk</li>
+<li>where: Non-Goals ("Not lists, tables, images, or links in the first
+cut"); Goal / Problem bullet 3 ("Editing")</li>
+<li>what: The crucible's approach B, which Ken chose, includes
+"<code>-</code> makes a list." The brief drops lists to a non-goal
+without a decision recorded from Ken. Two other likely scope questions
+are not mentioned at all.</li>
+<li>why: Notes are mostly lists. A notes document with no bullets may
+fail the notes job on day one, and the brief presents that as settled.
+Separately: pasting a draft written elsewhere is the first thing a
+writer publishing a post will try, and the brief says nothing about it.
+And Ken's premise 1 caveat ("larger edits are also lacking") is in the
+Goal as a third job and then has no requirement and no non-goal.</li>
+<li>fix: Move lists to an open question for Ken: in for notes, or a
+follow-up. Add paste to the requirements or the non-goals, whichever Ken
+wants; do not leave it unsaid. Either give "larger edits" a requirement
+(what "larger" means, and what fails today) or move it to non-goals with
+a pointer to a follow-up.</li>
+</ul>
+<h3
+id="rf9-word-for-word-collides-with-the-markdown-renderers-typography">RF9.
+"Word for word" collides with the Markdown renderer's typography</h3>
+<ul>
+<li>severity: minor</li>
+<li>kind: defect</li>
+<li>where: R6 (words kept exactly as typed; nothing rewrites them on the
+page, in the record, or in the source)</li>
+<li>what: A Markdown rebuild already turns straight quotes into curly
+ones, and the replay compare reads past that on purpose
+(<code>docs/diagrams/replay_branches.md</code>, the split compare
+note).</li>
+<li>why: As written, R6 fails on the first rebuild of any page with a
+quote mark in it, and the test that proves R6 will be argued over.</li>
+<li>fix: "The words stay as typed. The renderer's typography (curly
+quotes, dashes) is not a rewrite."</li>
+</ul>
+<h3
+id="rf10-the-tiptap-question-appears-three-times-and-rollout-carries-an-agent-compatibility-gap">RF10.
+The Tiptap question appears three times, and Rollout carries an
+agent-compatibility gap</h3>
+<ul>
+<li>severity: minor</li>
+<li>kind: taste</li>
+<li>where: Goal / Problem last paragraph; Non-Goals bullet 2; Q1;
+Rollout</li>
+<li>what: The engine question is stated in the Goal, the Non-Goals, and
+Q1. Rollout says old pages are unaffected but not old agents.</li>
+<li>why: Three mentions make the engine look like the feature. And an
+agent running an older copy of the skill will meet a new item shape;
+"existing reviews keep working" does not cover that reader.</li>
+<li>fix: Keep Q1 and the zero-dependency non-goal; cut the Goal
+paragraph. Add one line to Rollout: an agent on the old skill sees new
+text as something it can still act on, or is told to update. How is for
+the architecture.</li>
+</ul>
+<h3 id="rf11-r5-promises-more-than-the-tool-does-today">RF11. R5
+promises more than the tool does today</h3>
+<ul>
+<li>severity: minor</li>
+<li>kind: defect</li>
+<li>where: R5 (every keystroke of new text is saved; a reload, a page
+repaint, or a helper restart loses nothing)</li>
+<li>what: Drafts are saved to browser storage on every keystroke and to
+the helper at most every 10 seconds
+(<code>docs/diagrams/item_lifecycle.md</code>), so "a helper restart
+loses nothing" holds only through the browser copy.</li>
+<li>why: The requirement reads as an absolute and will be tested as one.
+It also does not say what a writer sees after a reload: is the
+unfinished section still open for typing, or committed?</li>
+<li>fix: "New text is saved as the reviewer types, the same as an edit
+draft today, and survives a reload and a page repaint. After a reload,
+the unfinished section is still there to keep writing."</li>
+</ul>
+<h3 id="disposition-table-for-the-brief-writer">Disposition table for
+the brief writer</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Severity</th>
+<th>One line</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RF1</td>
+<td>blocker</td>
+<td>R13 is stated before its reproduction and misses the board row
+<code>LAHE-lone-paragraph-loses-markup</code> and the under-a-header
+failure Ken named</td>
+</tr>
+<tr>
+<td>RF2</td>
+<td>blocker</td>
+<td>One record per sitting, header by keyboard, and the item shape are
+decided in the brief; Ken left them to wireframe and architecture</td>
+</tr>
+<tr>
+<td>RF3</td>
+<td>important</td>
+<td>Proofreading has no requirement, and Q3 reopens a trigger Ken
+already chose</td>
+</tr>
+<tr>
+<td>RF4</td>
+<td>important</td>
+<td>Notes: who writes the file, and does it work with no agent
+attached</td>
+</tr>
+<tr>
+<td>RF5</td>
+<td>important</td>
+<td>Enter at the end of an existing block: same edit, or new text? Not
+said</td>
+</tr>
+<tr>
+<td>RF6</td>
+<td>important</td>
+<td>No requirement for what a writer sees when the page rebuilds
+mid-section</td>
+</tr>
+<tr>
+<td>RF7</td>
+<td>important</td>
+<td>Metrics are one-off demos; none tracks the placeholder round trip or
+terminal notes</td>
+</tr>
+<tr>
+<td>RF8</td>
+<td>important</td>
+<td>Lists cut without Ken's call; paste and "larger edits" neither in
+nor out</td>
+</tr>
+<tr>
+<td>RF9</td>
+<td>minor</td>
+<td>R6 "word for word" fails on the renderer's curly quotes</td>
+</tr>
+<tr>
+<td>RF10</td>
+<td>minor</td>
+<td>Tiptap said three times; Rollout skips agents on the old skill</td>
+</tr>
+<tr>
+<td>RF11</td>
+<td>minor</td>
+<td>R5 overstates draft saving and skips what a reload shows</td>
+</tr>
+</tbody>
+</table></div>
+</body>
+</html>
