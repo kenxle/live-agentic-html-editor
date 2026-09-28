@@ -897,6 +897,8 @@ the users sees in the editor.</li>
 <li>An editor library added to <code>dependencies</code>. The
 zero-runtime-dependency rule holds. A vendored file is allowed.</li>
 <li>Tables, images, or links in the first cut.</li>
+<li>Keeping rich formatting from a paste, unless the editor engine gives
+it for free. Board row <code>LAHE-rich-paste</code>.</li>
 <li>Agent-written text. The reviewer writes; the agent proofreads and
 suggests.</li>
 <li>A change to how comments work.</li>
@@ -1120,10 +1122,6 @@ cases in R14 (bold and italic edits)? The header case now has steps; the
 architecture confirms whether the agent's rebuild plays a part.</p>
 </div>
 <div class="callout callout-question">
-<p><span id="open-questions-q5" class="finding-anchor"></span><strong>Q5 (Ken):</strong> Pasting a draft written elsewhere: in
-scope, or a non-goal for now?</p>
-</div>
-<div class="callout callout-question">
 <p><span id="open-questions-q6" class="finding-anchor"></span><strong>Q6 (Ken):</strong> You said larger edits to existing text are
 also lacking. What fails today? Without a case, this stays out of scope
 with a follow-up row.</p>
@@ -1141,6 +1139,10 @@ other new text. Lahe is an agentic editor, so notes with no agent
 attached are not a design case.</li>
 <li><strong>Lists:</strong> in the first cut, alongside paragraphs and
 headers.</li>
+<li><strong>Pasting with its formatting:</strong> not in this feature.
+If Tiptap brings it for free, keep it. Otherwise the architecture notes
+what it would cost, and it waits on board row
+<code>LAHE-rich-paste</code>.</li>
 </ul>
 <h2 id="pm-review">PM Review</h2>
 <div class="table-scroll"><table>
@@ -1204,7 +1206,8 @@ Decisions</td>
 <td>RF8</td>
 <td>Lists cut silently; paste and larger edits unsaid</td>
 <td><span class="accepted">Accepted</span></td>
-<td>Put to Ken as Q4, Q5, Q6. Lists: in the first cut</td>
+<td>Put to Ken as Q4, Q5, Q6. Lists: in the first cut. Rich paste: out,
+to the board</td>
 </tr>
 <tr>
 <td>RF9</td>

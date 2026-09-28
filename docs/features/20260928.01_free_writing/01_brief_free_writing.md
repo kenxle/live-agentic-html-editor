@@ -38,6 +38,7 @@ Cover three jobs:
 - A new mode. While the existing edit mode can be updated, there should not be a difference between edit and write new, in terms of what the users sees in the editor.
 - An editor library added to `dependencies`. The zero-runtime-dependency rule holds. A vendored file is allowed.
 - Tables, images, or links in the first cut.
+- Keeping rich formatting from a paste, unless the editor engine gives it for free. Board row `LAHE-rich-paste`.
 - Agent-written text. The reviewer writes; the agent proofreads and suggests.
 - A change to how comments work.
 - Mobile. The job happens on a laptop.
@@ -209,10 +210,6 @@ None. The contract text changes. Existing reviews keep working, since an old pag
 :::
 
 ::: callout-question
-**Q5 (Ken):** Pasting a draft written elsewhere: in scope, or a non-goal for now?
-:::
-
-::: callout-question
 **Q6 (Ken):** You said larger edits to existing text are also lacking. What fails today? Without a case, this stays out of scope with a follow-up row.
 :::
 
@@ -224,6 +221,7 @@ None. The contract text changes. Existing reviews keep working, since an old pag
 
 - **Who writes the notes file:** the agent, like any other new text. Lahe is an agentic editor, so notes with no agent attached are not a design case.
 - **Lists:** in the first cut, alongside paragraphs and headers.
+- **Pasting with its formatting:** not in this feature. If Tiptap brings it for free, keep it. Otherwise the architecture notes what it would cost, and it waits on board row `LAHE-rich-paste`.
 
 ## PM Review
 
@@ -236,7 +234,7 @@ None. The contract text changes. Existing reviews keep working, since an old pag
 | RF5 | Enter at the end of an existing block: same edit or new text? | Accepted | Q7 for the wireframe; metric reworded |
 | RF6 | No requirement for a rebuild landing mid-writing | Accepted | Now R7 |
 | RF7 | Metrics were one-off demos | Accepted | Rewritten against the status-quo costs |
-| RF8 | Lists cut silently; paste and larger edits unsaid | Accepted | Put to Ken as Q4, Q5, Q6. Lists: in the first cut |
+| RF8 | Lists cut silently; paste and larger edits unsaid | Accepted | Put to Ken as Q4, Q5, Q6. Lists: in the first cut. Rich paste: out, to the board |
 | RF9 | "Word for word" fails on renderer typography | Accepted | R6 carve-out |
 | RF10 | Tiptap said three times; old agents not covered in Rollout | Accepted | Goal paragraph cut; Rollout line added |
 | RF11 | R5 overstated draft saving | Accepted | R5 reworded to match today's saving and to say what a reload shows |

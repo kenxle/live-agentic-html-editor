@@ -5,6 +5,8 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
+- [ ] @anyone 2026-09-28 LAHE-rich-paste -- **Keep bold, italic, headers, and lists when a reviewer pastes text written elsewhere.** Out of scope for free writing (`docs/features/20260928.01_free_writing/`). If the Tiptap engine brings it for free, that feature keeps it and this row closes. Otherwise the free-writing architecture records what it would cost, and Ken decides from there.
+
 - [ ] @anyone 2026-09-28 LAHE-main-gate-red-rail-hold -- **Main's CI gate is red, and has been on every main run since 2026-09-23.** On the latest main run (10006e3) the one failure is `test/browser/rail_hold.spec.js:202`, "a held item is invisible to review.json, the wake feed, and the overdue clock": the helper's unanswered count moved while an item was held. It passes locally. Every PR's gate fails on it too (PR #17 did), so "merge only on a green gate" cannot be met until it is fixed.
 
 - [ ] @anyone 2026-09-28 LAHE-render-forge-structure -- **Teach LAHE's Markdown renderer the feature-forge structure, so it is code again and not something each agent hand-writes.** The forge's old HTML build made the nav bar (Crucible, Brief, Architecture, Plan, Wireframes, Progress), the callout boxes (`::: callout-req` and friends), and the reviews section automatic, which is why those docs were consistent. LAHE's renderer shows Markdown as written: it ignores `:::` blocks and has no feature-folder nav, so agents drop or improvise them. Ken wants the structure kept and the St. Clair AI style on top. Related: the forge build's own stylesheet is being moved to the St. Clair style now.
