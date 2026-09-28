@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+895dc1c12546
+ * version 0.2.0+267ced5eebaf
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+895dc1c12546";
+  g.LAHE.version = "0.2.0+267ced5eebaf";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -6449,6 +6449,18 @@
     return "lahe session takeover " + String(sessionId) + stateDirFlag(stateDirPath);
   }
 
+  /**
+   * The one spelling of the command that brings a document's page back: the
+   * session's page server, started again if the helper stopped it because no
+   * window was open (src/service/idle_servers.js). Same state-directory rule.
+   *
+   * @param {string} target the document as the agent named it (the Markdown
+   *   source for a rendered page)
+   */
+  function reviewCommand(target, sessionId, stateDirPath) {
+    return "lahe review " + shellWord(target) + " --session " + String(sessionId) + stateDirFlag(stateDirPath);
+  }
+
   // ---------------------------------------------------------------------------
   // Monitor liveness: what the rail is allowed to claim about an agent
   // ---------------------------------------------------------------------------
@@ -6820,6 +6832,7 @@
     drainCommand: drainCommand,
     monitorCommand: monitorCommand,
     takeoverCommand: takeoverCommand,
+    reviewCommand: reviewCommand,
 
     MONITOR: MONITOR,
     AGENT_LIVENESS: AGENT_LIVENESS
@@ -37766,7 +37779,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+895dc1c12546";
+  var VERSION = "0.2.0+267ced5eebaf";
 
   var protocol = ns.protocol;
   var record = ns.record;
