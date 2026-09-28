@@ -75,7 +75,7 @@ The key design question, for the wireframe: **what is one row?** A document, a r
 
 ### Listing
 
-**R1.** The Library lists every review on disk, with none deleted or hidden permanently.
+**R1.** The Library lists every review on disk.
 
 **R2.** Each row shows a name Ken would recognize: the page title when there is one. When the title is missing or shared with another row, the row also shows the folder and file name.
 
