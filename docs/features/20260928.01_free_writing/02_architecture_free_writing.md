@@ -194,7 +194,8 @@ A new `h2` typed mid-section shows with the page's `h2` styling but without the 
 - **Enter** at the end of a block makes a new `p` after it. Enter in the middle splits the block into two siblings; the tail is marked `from_anchor`. Enter in an empty list item ends the list.
 - **Shift-Enter** stays a line break.
 - **Markdown-style shortcuts** at the start of a block: `# `, `## `, and `### ` make h2, h3, and h4. `- ` or `* ` makes a bulleted list and `1. ` a numbered one.
-- **The bar's block-type control**, if the wireframe keeps it, does the same work. The shortcuts and the control share one function per block type.
+- **The bar's block-type menu** (wireframe direction A, which Ken approved) sits before B and I and names the caret's block in plain words: Paragraph, Heading, Subheading, Bulleted list, Numbered list. Keyboard shortcuts for each type are in too, since Ken wants hotkeys and buttons as much as Markdown typing. The plan picks the keys. The menu, the hotkeys, and the Markdown shortcuts share one function per block type.
+- **Starting in empty space** (direction A): in edit state, hovering between two blocks or below the last one shows a thin "+ Write here" line. Clicking it opens a session anchored on the block above, with an empty first block ready for typing.
 - **Headers:** the reviewer's first level is h2, because h1 is the page title.
 - **Nesting:** no nested lists and no indent in this cut.
 - **One engine:** every block change is written by the layer, the way breaks are today. All three browsers produce the same structure.
