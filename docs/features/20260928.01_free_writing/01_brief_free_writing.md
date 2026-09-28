@@ -201,7 +201,7 @@ None. The contract text changes. Existing reviews keep working, since an old pag
 ## Open Questions
 
 ::: callout-question
-**Q1:** Tiptap (a vendored editor library) or Lahe's own editing code as the engine for new writing? Architecture decides, after a spike. The brief holds either way.
+**Q1:** Tiptap (a vendored editor library) or Lahe's own editing code as the engine for new writing? Ken leans toward Tiptap: it should bring a lot of editing features for free, if it can be made to fit. The architecture tests that fit with a spike and makes the call. The brief holds either way.
 :::
 
 ::: callout-question
