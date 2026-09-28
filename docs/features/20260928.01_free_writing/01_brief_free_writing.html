@@ -861,13 +861,13 @@ its own loses its bold and italic when the page already carries the rest
 of the edit. It is recorded in
 <code>docs/features/20260922.08_no_duplicate_text/NOTES.md</code>. This
 feature absorbs that row.</p>
-<pre class="mermaid"><code>flowchart LR
+<pre class="mermaid"><code>flowchart TD
   A[Want to add an intro] --&gt; B[Ask the agent for a placeholder header]
   B --&gt; C[Wait for the rebuild]
   C --&gt; D[Open the placeholder for editing]
   D --&gt; E[Replace the sample text]
-  E --&gt; F[Press Enter at the end and type the paragraphs]
-  F --&gt; G[Agent receives one edit of the placeholder block]</code></pre>
+  E --&gt; F[Press Enter at the end and type]
+  F --&gt; G[Agent gets it as one edit of the placeholder]</code></pre>
 <h2 id="goal--problem">Goal / Problem</h2>
 <p>Let a reviewer write new text on a Lahe page the way they edit
 existing text. That means:</p>

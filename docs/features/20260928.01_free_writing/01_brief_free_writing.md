@@ -9,13 +9,13 @@ Today the only way to add text is to open an existing block for editing, press E
 Prior work: the crucible in this folder (`00_crucible.md`) and the questions page Ken answered (`00_crucible_questions.md`). The original Lahe brief's editing requirements assume the text already exists. One formatting bug is already on the board as `LAHE-lone-paragraph-loses-markup`: a paragraph written on its own loses its bold and italic when the page already carries the rest of the edit. It is recorded in `docs/features/20260922.08_no_duplicate_text/NOTES.md`. This feature absorbs that row.
 
 ```mermaid
-flowchart LR
+flowchart TD
   A[Want to add an intro] --> B[Ask the agent for a placeholder header]
   B --> C[Wait for the rebuild]
   C --> D[Open the placeholder for editing]
   D --> E[Replace the sample text]
-  E --> F[Press Enter at the end and type the paragraphs]
-  F --> G[Agent receives one edit of the placeholder block]
+  E --> F[Press Enter at the end and type]
+  F --> G[Agent gets it as one edit of the placeholder]
 ```
 
 ## Goal / Problem
