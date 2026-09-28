@@ -669,3 +669,45 @@ test("the committed list fixture covers every row kind and state the page draws"
   assert.ok(list.sessions.some((s) => s.watching && s.watching.session !== s.id), "watched by another agent");
   assert.ok(list.sessions.some((s) => s.name === null), "unnamed session");
 });
+
+// --- fix round (phase 7) -----------------------------------------------------
+
+test("CX1: with every server answering, out of order, each row's served_url is its own server's port and path", async () => {
+  // Every probe answers true, and later probes answer first, so a callback
+  // that closed over a shared `row` or `cover` would write one row's URL onto
+  // another.
+  const installed = fixture.install();
+  // Every record running, so several rows are probed in the one list.
+  const sessionsRoot = path.join(installed.dir, "agent-sessions");
+  fs.readdirSync(sessionsRoot).forEach((sessionId) => {
+    const serversDir = path.join(sessionsRoot, sessionId, "static-servers");
+    if (!fs.existsSync(serversDir)) return;
+    fs.readdirSync(serversDir).forEach((name) => {
+      const file = path.join(serversDir, name);
+      let meta;
+      try { meta = JSON.parse(fs.readFileSync(file, "utf8")); } catch (err) { return; }
+      if (!meta || typeof meta !== "object") return;
+      meta.stopped_at = null;
+      fs.writeFileSync(file, JSON.stringify(meta, null, 2) + "\n");
+    });
+  });
+  const waits = [];
+  const probe = (meta) => new Promise((resolve) => { waits.push(() => resolve(true)); });
+  const reader = catalogReader.createReader({ dir: installed.dir, home: installed.home, pidAlive: () => true, probe });
+  const pending = reader.list(installed.nowMs);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(waits.length >= 2, "at least two rows are probed, got " + waits.length);
+  waits.slice().reverse().forEach((go) => go());
+  const list = await pending;
+  let served = 0;
+  rows(list).forEach((r) => {
+    if (!r.served_url) return;
+    served += 1;
+    const d = reader.describeReview(r.id, installed.nowMs);
+    const record = staticServers.list(installed.dir, r.session_id).find((m) => m.id === d.server);
+    assert.equal(r.served_url, "http://127.0.0.1:" + record.port + d.url_path, r.id);
+  });
+  const openableYes = rows(list).filter((r) => r.openable === "yes").length;
+  assert.equal(served, openableYes, "every openable row got a URL");
+  assert.ok(served >= 2, "several rows served, got " + served);
+});
