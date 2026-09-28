@@ -2,7 +2,7 @@
 
 ## Status
 
-**Built and reviewed. Waiting on its final CI run, then it merges.** Last updated 2026-09-28 16:52.
+**Shipped. PR #17 merged to main as c2fd735 after its CI run passed.** Last updated 2026-09-28 16:52. It takes effect on this machine after the helper restarts.
 
 - PR: [#17](https://github.com/kenxle/live-agentic-html-editor/pull/17).
 - Reviews: code review found nothing real; the security review's three findings are fixed with tests.
