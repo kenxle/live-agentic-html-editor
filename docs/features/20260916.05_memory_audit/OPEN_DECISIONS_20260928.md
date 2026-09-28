@@ -1,39 +1,31 @@
-# What I need from you on the open items
+# What I still need from you
 
-**Short version:** five calls are yours. Seven more items need nothing from you, and I'd start them as soon as you say go. One needs a spec before anything else.
+**Short version:** one go, two quick confirms, and one read. Everything else you already decided.
 
-Answer on the cards. A word per bullet is enough.
+## Still open
 
-## Your calls
+1. **Go on the seven ready items?** Each has an obvious right answer or one you already gave. Say go and I start them all, in parallel, each with its own tests and one code review.
+   - **Trim the drain** to only the comments, and stop it repeating every ended review. You decided this on 2026-09-16.
+   - **A refused edit being reworded** stops going to the helper at typing speed.
+   - **A page cannot tell the agent which file to edit.** Found in the linked-docs security review.
+   - **Bold or italic survives** when LAHE writes one paragraph of your edit on its own.
+   - **The "handled" check looks at the item**, not the whole review. Today one write anywhere disarms it for every item.
+   - **The three oversized records**, using the direction you set: the element's opening tag, stored once, never truncated.
+   - **Delete the old browser copy** the draft fix left behind.
 
-1. **How slow can a quiet tab be?** This is the battery fix (GitHub issue 16). An open review tab asks the helper for news every second. The fix is to slow down when nothing is happening and speed back up the moment you type or an agent replies. The cost: while a review is quiet, an agent's reply can take longer to appear. My recommendation is up to 15 seconds after a minute of quiet, and back to instant as soon as anything moves. Say a different number if 15 feels wrong.
+2. **Stop the servers, or close the whole session?** You said to close a session once no browser window is open on its pages. I plan to stop its page servers but leave the session open, because closing a session tells its agent to stop watching for good. Reopening the page through the agent or the doc index brings the server back either way. Confirm, or tell me to close the whole session.
 
-2. **Stop page servers nobody is using?** 58 were running from finished sessions, holding 711 MB. My recommendation: a page server stops itself after an hour with no page requests, and starts again the moment you open its link. Nothing is lost; the review history stays on disk.
+3. **Hidden files next to a linked document.** Hidden files stay served in any folder you open for review. The one place they are refused is a folder a document merely links to, which you never chose to open. Keep that refusal, or drop it too?
 
-3. **Close agent sessions that have gone quiet?** Separate from the servers. My recommendation: a session with no agent activity for 7 days closes itself, with history kept. You can reopen any of them.
+4. **A read, not a decision:** the subagent pool proposal on the memory audit hub (item 13). It keeps a few helpers warm instead of starting a fresh one for every medium-size job.
 
-4. **Old logs: 654 MB on disk.** Nothing in them is ever deleted, per your no-truncation rule. The choice is between compressing reviews that ended more than 30 days ago (they shrink a lot and stay readable), or leaving them alone. My recommendation is compress.
+## Needs a spec before code
 
-5. **Hidden files inside the folder under review.** A page server hands out a hidden file like `.env` if it sits in the reviewed folder. My recommendation: refuse every hidden file and folder except `.well-known/`, which some sites legitimately need.
+- **Send only what changed in a draft.** You approved it. It changes how the log is written, so I will bring you a spec first.
 
-Also waiting on your read, not a yes or no: **the subagent pool proposal** on the memory audit hub (item 13, keeping a few helpers warm instead of starting fresh ones each time).
+## Decided today, and building
 
-## Ready to build, nothing needed from you
-
-These are fixes with an obvious right answer, or ones you already decided.
-
-- **Trim the drain.** You decided on 2026-09-16 that it carries only the comments. It also stops repeating every ended review on each run.
-- **A refused edit being reworded** no longer goes to the helper at typing speed.
-- **A page cannot tell the agent which file to edit.** Found in the linked-docs security review. The page can only report what it is, never name a file.
-- **Bold or italic survives** when LAHE writes one paragraph of your edit on its own.
-- **The handled check looks at the item, not the whole review.** Today one write anywhere disarms it for every item in the review.
-- **The three oversized records**: the rest of the page saved as context, an embedded image stored three times, and a highlight that covers the whole page. You already set the direction: use the element's opening tag, store it once, and never truncate.
-- **Delete the old browser copy** that the draft fix left behind, in the next release.
-
-## Needs a spec first
-
-- **Send only what changed in a draft.** You approved it. It changes how the log is written, so the spec comes before the code.
-
-## Left alone unless it bites
-
-- **Keep mine on an edit that spans several blocks** merges them into one. Nothing is doubled, and a reload restores the structure.
+- **The tab you are looking at** stays at full speed. **Unfocused or hidden tabs** stop checking and send a "still open" heartbeat every 5 minutes. Coming back checks at once. Closing says goodbye. Typing never triggers extra work.
+- **Old logs:** drop only the draft snapshots that a later copy of the same comment replaced. That is 625.3 MB of 699.9 MB. Each review's summary is proven identical before its file is swapped, and a compressed copy of each original is kept until cleanup.
+- **Hidden files** in a folder you open for review stay served.
+- **Keep mine on an edit spanning several blocks** stays as is unless it bites.
