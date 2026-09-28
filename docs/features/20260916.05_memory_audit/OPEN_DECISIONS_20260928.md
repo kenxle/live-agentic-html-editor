@@ -1,36 +1,39 @@
 # What I still need from you
 
-**Short version:** three leftovers that need a go, two quick calls, and one read. Everything else you already decided.
+**Short version:** one time slot, three small calls, two goes, and one read.
 
 ## Still open
 
-1. **Three leftovers from this week's code reviews.** These came from reviewers, not from you, so here is what each one means. Say go on any of them.
-   - **The browser keeps two copies of your comments.** Last week's typing fix changed how the browser stores comments: one entry per comment instead of the whole list rewritten on every keystroke. For safety it kept each review's old whole-list copy too, so every existing review is stored twice. This deletes the old copy once the new one holds everything.
-   - **A page can tell the agent which file to edit.** Any page carrying a review's key can send a note saying "the source file is X". The agent trusts it. A script inside a reviewed page, such as an analytics tag, could point the agent at a different file. The fix: only the command line may say where the source is, never the page.
-   - **The "done" check covers the whole review, not each edit.** When an agent says an edit is done but changed nothing, LAHE keeps the edit open. But it asks whether anything in the document changed, not whether that edit did. So an agent that fixes one of five edits and says done to all five slips four past it. The fix asks per edit.
+1. **When can I stop LAHE for a minute to trim the old logs?** The trimmer is built, reviewed twice and tested on a copy of your data: 734 million bytes down to 79 million, with nothing you committed touched. To run it, the helper and every page server have to be stopped, including other agents' open sessions, and started again after. Open review pages lose their connection for that minute. Tell me a time, or "now".
 
-2. **Hidden files next to a linked document.** Hidden files stay served in any folder you open for review. The one place they are refused is a folder a document merely links to, which you never chose to open. Keep that refusal, or drop it too?
+2. **The banner an agent sees on every wake.** Each time an agent is woken it gets: "LAHE ACTION REQUIRED: do not end this turn or report that work is ready. Handle every item below now, rebuild and verify visible output, append replies, drain status until empty, then relaunch..." It exists because agents, Codex especially, used to announce that work had arrived and stop without doing it. It is also instruction text repeated on every wake, which is what you asked us to avoid. The reviewer's suggestion: cut it to "LAHE ACTION REQUIRED: handle these now, do not end the turn." plus the two commands the agent needs. Cut it, or keep it?
 
-3. **A read, not a decision:** the subagent pool proposal on the memory audit hub (item 13). It keeps a few helpers warm instead of starting a fresh one for every medium-size job.
+3. **Five old records store an embedded image three times.** New records no longer do this. Those five can be rewritten safely to store the image once. Every other old oversized record is mostly draft snapshots, which the log trim removes. Rewrite the five, or leave them?
 
-4. **A page visible next to the terminal.** The quiet-tab change is built. It cuts an unfocused tab from 3,960 requests an hour to 12. The catch: a review page you can see beside the terminal, but have not clicked into, counts as unfocused, so a reply only appears once you click into it. Two ways to go:
-   - **Keep it as built.** Click the page to see replies.
-   - **A middle speed for a visible page.** A page you can see but have not clicked checks every 15 seconds, and only a hidden page goes fully quiet. That costs about 240 requests an hour per visible page instead of 12.
+4. **Selecting across the whole page.** That used to paint the entire page as the comment's spot. Now such a pick is marked as lost rather than painting everything. The alternative is to turn it into a note about the page as a whole. Which do you want?
+
+5. **Two goes.** Both came out of this week's reviews.
+   - **The browser keeps a second, old copy of your comments** from before last week's fix. Nothing writes to it any more. This deletes it the next time you open each review.
+   - **A page can tell the agent which file to edit.** The fix makes the helper refuse that from a browser, so only the lahe command can name the file.
+
+6. **A read, not a decision:** the subagent pool proposal on the memory audit hub (item 13).
+
+## A correction
+
+I told you a page you can see but have not clicked would cost about 240 requests an hour. The builder measured it: 600 an hour, because the liveness line refreshes too. Background tabs drop from 720 to 12 an hour, and the page you are working in is unchanged.
 
 ## Needs a spec before code
 
 - **Send only what changed in a draft.** You approved it. It changes how the log is written, so I will bring you a spec first.
 
-## Decided today, and building
+## Decided today
 
-- **Trim what agents re-read on every check**, holding to your rule that nothing instruction-like repeats.
-- **Rewording an edit the agent refused** stops sending every pause to the helper.
-- **Bold and italic survive** when LAHE writes one paragraph of your edit on its own.
-
-- **Page servers stop** once no browser window is open on any of a session's pages, after a two minute grace. The session stays open so its agent keeps watching.
-- **The three oversized records** are being fixed, and the old ones measured before any cleanup.
-
-- **The tab you are looking at** stays at full speed. **Unfocused or hidden tabs** stop checking and send a "still open" heartbeat every 5 minutes. Coming back checks at once. Closing says goodbye. Typing never triggers extra work.
-- **Old logs:** drop only the draft snapshots that a later copy of the same comment replaced. That is 625.3 MB of 699.9 MB. Each review's summary is proven identical before its file is swapped, and a compressed copy of each original is kept until cleanup.
-- **Hidden files** in a folder you open for review stay served.
+- **Quiet tabs:** full speed in the tab you are in, every 15 seconds for a page you can see but have not clicked, a 5 minute heartbeat for background tabs and other desktops. In its last review.
+- **Page servers stop** once no browser window is open on a session's pages, after a two minute grace. Builds after quiet tabs.
+- **What agents re-read on every check** is trimmed. At 1,000 items a check drops from 1,045,909 bytes to 870,265, and no rule text repeats. In the final test run.
+- **Rewording a refused edit** stops sending every pause. In the final test run.
+- **Bold and italic survive** when LAHE writes one paragraph on its own. In the final test run.
+- **Hidden files** are treated like any other file everywhere. In the final test run.
+- **The "done" check works per edit.** Building.
+- **The three oversized records** are fixed for new records. In review.
 - **Keep mine on an edit spanning several blocks** stays as is unless it bites.
