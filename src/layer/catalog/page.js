@@ -205,7 +205,9 @@
           tab.location.href = url;
         } else {
           tab.close();
-          if (result.ok) result = { ok: false, urlRefused: true };
+          // url: null is an answer, not a bad address: no server could be
+          // restarted and a pick-up was queued for the agent instead.
+          if (result.ok && url !== null && url !== undefined) result = { ok: false, urlRefused: true };
         }
       }
       update(VM.afterOpen(state, list, reviewId, result, now()));

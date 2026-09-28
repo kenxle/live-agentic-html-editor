@@ -921,3 +921,26 @@ test("a row that offers the hand-off message labels its button", () => {
   const view = build(freshList(), okState());
   assert.equal(row(view, "r_notes").handoffLabel, "Copy the hand-off message");
 });
+
+// ---------------------------------------------------------------------------
+// Open's answers from the real routes (Task 2.1)
+// ---------------------------------------------------------------------------
+
+test("Open with a request already waiting opens, and says the agent is already asked", () => {
+  const list = freshList();
+  let state = vm.beginOpen(okState(), list, "r_stale", { handoff: true });
+  state = vm.afterOpen(state, list, "r_stale", { ok: true, body: { url: "http://127.0.0.1:5000/stale.html", request_id: null, not_asked: "request_pending" } }, NOW);
+  const view = build(list, state);
+  assert.equal(view.banner.text, '"Stale Projection" is open in a new tab.');
+  assert.equal(row(view, "r_stale").note.text, "Already waiting for document index.");
+});
+
+test("Open on a servable row that no server could restart waits for the agent instead", () => {
+  const list = freshList();
+  let state = vm.beginOpen(okState(), list, "r_stale", { handoff: true });
+  state = vm.afterOpen(state, list, "r_stale", { ok: true, body: { url: null, request_id: "cq_s", not_asked: null } }, NOW);
+  const view = build(list, state);
+  assert.equal(view.banner, null, "no tab opened, so no banner says one did");
+  assert.equal(row(view, "r_stale").note.text, "Waiting for document index.");
+  assert.equal(row(view, "r_stale").note.busy, true);
+});

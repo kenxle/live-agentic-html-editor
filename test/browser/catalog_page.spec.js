@@ -176,6 +176,20 @@ test.describe("the Library page", () => {
     );
   });
 
+  test("Open answered with no URL closes the blank tab and shows the row waiting for the agent", async ({ page, context }) => {
+    await routeCatalog(page, {
+      list: freshList,
+      answers: { "catalog.open": () => ({ status: 200, body: { url: null, request_id: "cq_s", not_asked: null } }) }
+    });
+    await openLibrary(page, helper);
+    const tabPromise = context.waitForEvent("page");
+    await rowLocator(page, "r_stale").locator('[data-act="open"]').click();
+    const tab = await tabPromise;
+    if (!tab.isClosed()) await tab.waitForEvent("close");
+    await expect(rowLocator(page, "r_stale").locator(".lib-note-text")).toHaveText("Waiting for document index.");
+    await expect(page.locator("#lahe-catalog-banner")).toHaveText("");
+  });
+
   test("a watched session asks before a hand-over, naming the agent and the other reviews", async ({ page }) => {
     const calls = await routeCatalog(page, {
       list: freshList,

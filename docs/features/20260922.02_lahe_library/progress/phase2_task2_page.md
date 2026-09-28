@@ -1,9 +1,9 @@
 # Phase 2, Task 2.2: the Library page
 
-**Summary.** The Library page is built: a pure view model with 93 unit tests, the page script, the template body and its style, and a browser spec of 11 tests. It is built against `test/fixtures/catalog_list.json` because Task 2.1's routes still answer 501. Results:
+**Summary.** The Library page is built: a pure view model with 95 unit tests, the page script, the template body and its style, and a browser spec of 12 tests. It is built against `test/fixtures/catalog_list.json` because Task 2.1's routes still answer 501. Results:
 
-- `npm run gate:unit`: 1544 tests, 1542 pass, 0 fail, 2 todo. Both todos are older tests in `anchor_cases.test.js`.
-- `npx playwright test test/browser/catalog_page.spec.js`: 11 passed (Chromium).
+- `npm run gate:unit`: 1546 tests, 1544 pass, 0 fail, 2 todo. Both todos are older tests in `anchor_cases.test.js`.
+- `npx playwright test test/browser/catalog_page.spec.js`: 12 passed (Chromium).
 
 Branch `task/lib-page`, off `feat/lahe_library` at `6c872d7`.
 
@@ -36,8 +36,8 @@ Both screenshots come from the spec's last test, in the same run as the tests th
   - `PAGE_STYLE`, an inline `<style>` for the page's own look, in light and dark
   - The head's meta tag, the stylesheet link, and the headers are unchanged.
 - **`src/shared/manifest.js`**: `planned` is off for `view_model.js`.
-- **`test/unit/catalog_view_model.test.js`** (new, 93 tests). It covers every item under "View model (2.2)" in the Test List, plus the extra states the page needed.
-- **`test/browser/catalog_page.spec.js`** (new, 11 tests). It covers every item under "Page in the browser (2.2)", plus:
+- **`test/unit/catalog_view_model.test.js`** (new, 95 tests). It covers every item under "View model (2.2)" in the Test List, plus the extra states the page needed.
+- **`test/browser/catalog_page.spec.js`** (new, 12 tests). It covers every item under "Page in the browser (2.2)", plus:
   - a URL-refusal test
   - a Cancel and Escape test
   - a star test
@@ -100,13 +100,16 @@ Both screenshots come from the spec's last test, in the same run as the tests th
 - **The house column rule outranks a single class.** Its specificity is (0,2,0), so the `<dialog>` picked up the page column's width and gutter. The style doubles the dialog's class to win.
 - **One test expectation was wrong while the code was right.** A search for "old-pages" also shows the whole of `s_old3`, because that unnamed card is titled after `old-pages / p5.html`. I fixed the test, not the rule.
 
+## Matching Task 2.1's real Open answers
+
+The orchestrator passed on two answer shapes from 2.1's `catalog_actions.js`. The page now handles both:
+
+- **`url: null` with a `request_id` on a servable row.** No server could be restarted, so the helper queued a pick-up instead. The page closes the blank tab, shows no "open in a new tab" banner, and shows the row as waiting for the agent. Before this fix, the page treated the null as a bad address and said so. The new browser test failed against the old code and passes against the new.
+- **`not_asked: "request_pending"`.** The tab opens, the banner says only that it is open, and the row says "Already waiting for `<agent>`."
+
 ## Follow-ups
 
-- **Task 2.1:** the page expects these shapes:
-  - `catalog.list` returns `{attached, notice, sessions}`
-  - `catalog.open` returns `{url, request_id, not_asked}`, with `url: null` for a via-agent Open
-  - `catalog.request` returns `{request_id}`
-  - errors use the usual `{error: {code, message, remedy}}` shape
+- **After 2.1 merges:** run this spec once on the integrated branch. The list stub passes a real 200 through as the fixture, so it should stay green.
 - **Task 3.2:** once the routes are real, run the end-to-end spec against the real list rather than the fixture. This spec keeps working either way.
 - **Possible:** have the list report whether a `--state-dir` flag is needed, so the Library's hand-off message matches the rail's exactly (deviation 3).
 - **Design pass for Ken:** every row repeats "agent watching: <name>", as the Page Spec asks. It is quiet, but a card with seven rows says it seven times. The card could carry the name once instead.

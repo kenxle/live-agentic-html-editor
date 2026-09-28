@@ -855,7 +855,16 @@
     var name = found ? found.review.display_name || reviewId : reviewId;
     if (body.not_asked === "queue_full") return withNote(out, reviewId, { kind: "opened", text: TEXT.OPENED_QUEUE_FULL, tone: "warn" }, now);
     if (body.not_asked === "no_agent") return withNote(out, reviewId, { kind: "opened", text: TEXT.OPENED_NO_AGENT, tone: "warn" }, now);
+    if (body.not_asked === "request_pending" && body.url) {
+      // The review already had a request waiting: the tab opened, and nobody
+      // was asked a second time.
+      var pendingAgent = (found && found.review.request && found.review.request.by_name) || (agent && agent.name) || "the agent";
+      out = withNote(out, reviewId, { kind: "already", text: fill(TEXT.ALREADY_WAITING, { agent: pendingAgent }), tone: "info" }, now);
+      return assign(out, { banner: { kind: "opened", review: reviewId, name: name, agent: null, requestId: null, watched: false } });
+    }
     if (!body.url) {
+      // No server could be restarted, so the helper queued a pick-up for the
+      // attached agent instead. page.js has already closed the blank tab.
       if (!body.request_id) return out;
       return withNote(out, reviewId, {
         kind: "waiting",
