@@ -544,8 +544,15 @@ information handed to an agent editing the source with the reviewer's words in f
 **`subject`** is what the reviewer pointed at, when they pointed at a whole element rather than at a
 passage of text (D9, the element anchor). It is `{tag, src, alt, html, near}`, and it is null for a
 comment on text. `src` is the attribute **as the page author wrote it**, not the resolved absolute
-URL, because the source file is what the agent edits. `html` is the **opening tag only**. All of it
-is text off the page, so it is data and it is bounded, exactly like `quote`.
+URL, because the source file is what the agent edits. `html` is the **opening tag only**, plus the
+element's child `<source>` tags for a `<video>`, `<audio>` or `<picture>`. All of it is text off the
+page, so it is data and it is bounded, exactly like `quote`.
+In the stored record (not in review.json), an embedded `src` (a `data:` URL) is kept once, whole,
+in `context.subject.src`. The stored `html` carries the pointer `src="lahe:subject.src"` in its
+place, and the region's signature carries a fixed-size name for it. `record.subjectHtmlOf` puts the
+value back, so the projected `html` is the same full tag it always was. A record stored before
+2026-09-28 carries the whole tag and reads unchanged. See
+`docs/features/20260928.03_oversized_records/NOTES.md`.
 `BEFORE_MAX` (2000), `CONTEXT_MAX` (400), `REPLY_TEXT_MAX` (20000, for the agent's own text and
 reason, which are the reviewer's reading and not a locating hint) and `TRUNCATION_MARKER` are named
 constants, and the bound is **visible in the value**, so an agent cannot mistake a cut-off passage

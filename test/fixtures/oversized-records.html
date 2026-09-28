@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Oversized records</title>
+  <style>
+    body { font: 16px/1.5 system-ui, sans-serif; margin: 2rem; }
+    img { display: block; width: 240px; height: 120px; background: #e8ecf2; }
+  </style>
+</head>
+<body>
+  <!--
+    The three oversized records, reduced to what produced them
+    (docs/features/20260928.03_oversized_records).
+
+    A report inside one <main>, the way a rendered report is laid out:
+      - a heading whose words appear again below it, so a paint that cannot
+        narrow to the heading's own words falls back to its whole region
+      - an inline diagram whose label the text walk never reaches
+      - an image whose src the spec replaces with a large data: URL
+      - two long appendices after it all
+  -->
+  <main>
+    <section id="report">
+    <h2 id="open">Still open</h2>
+    <p id="p1">This paragraph says Still open again, so the heading's words are on the page twice.</p>
+    <p id="p2">The paragraph before the diagram.</p>
+    <pre id="diagram" class="mermaid"><svg xmlns="http://www.w3.org/2000/svg" width="240" height="60" aria-label="Draft flow"><g><foreignObject x="0" y="0" width="240" height="60"><div xmlns="http://www.w3.org/1999/xhtml"><span id="label">Draft generated</span></div></foreignObject></g></svg></pre>
+    <p id="p3">The paragraph after the diagram.</p>
+    <figure id="figure">
+      <img id="embedded" src="placeholder.png" alt="Embedded chart" />
+      <figcaption>An embedded chart</figcaption>
+    </figure>
+    </section>
+    <section id="appendix-1">
+      <h2>Appendix 1: State of the Art</h2>
+      <p>Appendix one runs long. Every word of it is page text that has nothing to do with the diagram above, and none of it belongs in a record about that diagram.</p>
+    </section>
+    <section id="appendix-2">
+      <h2>Appendix 2: Methods</h2>
+      <p>Appendix two runs long as well, and it is the end of the page.</p>
+    </section>
+  </main>
+</body>
+</html>
