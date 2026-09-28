@@ -1105,7 +1105,10 @@ for tests, the way `LAHE_STATE_DIR` moves the state directory); hidden
 (dot-prefixed) locations below home are refused; and one render may mount at most
 16 distinct directories. A link failing any rule renders as a non-clickable span
 titled `local file, open it on disk: <path>` rather than a link to a 404. There
-is no custom protocol handler.
+is no custom protocol handler. A link that leaves the documentation (an
+external URL, or a protocol-relative `//host` link) opens in a new tab; a link
+we render ourselves, an in-page anchor, and `mailto:`/`tel:` links stay as they
+were, all in the same tab.
 
 That renderer has single-source semantics. A document assembled from several
 inputs remains build output and must travel through its canonical build. Review

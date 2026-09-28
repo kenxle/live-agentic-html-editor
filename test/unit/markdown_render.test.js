@@ -41,7 +41,8 @@ test("Markdown rendering preserves block structure, applies reading styles, and 
   assert.doesNotMatch(html, /<li>Prior bullet[\s\S]*The main agent acts[\s\S]*<\/li>/);
   assert.match(html, /<summary>Document metadata<\/summary>/);
   assert.match(html, /src="\/\.lahe-source\/[a-f0-9]+\/assets\/diagram\.png"/);
-  assert.match(html, /href="https:\/\/example\.com"/);
+  assert.match(html, /<a href="https:\/\/example\.com" target="_blank" rel="noopener noreferrer">/,
+    "a link leaving the documentation opens in a new tab");
   // The document style is inlined rather than linked, so a rendered artifact
   // moved off the helper still looks right. These two tokens stand in for the
   // whole vendored bundle: the first is from system-tokens.css, the second is
@@ -60,6 +61,32 @@ test("Markdown rendering preserves block structure, applies reading styles, and 
   assert.match(html, /mermaid\.initialize\(\{[^)]*"securityLevel":"strict"/);
   assert.match(html, /"theme":"base"/, "diagrams draw in the document palette, not Mermaid's own");
   assert.match(html, /<pre><code class="language-js">const untouched = true;<\/code><\/pre>/);
+});
+
+test("a link out of the documentation opens in a new tab; a link that stays inside it does not", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-markdown-newtab-"));
+  const source = path.join(root, "DOC.md");
+  fs.writeFileSync(path.join(root, "SIBLING.md"), "# Sibling\n");
+  fs.writeFileSync(source, [
+    "# Doc",
+    "",
+    "- [Outside](https://example.com/page)",
+    "- [Sibling doc](SIBLING.md)",
+    "- [Section](#doc)",
+    "- [Email](mailto:someone@example.com)",
+    "- [Protocol relative](//example.com/page)"
+  ].join("\n"));
+
+  const html = markdown.render(source);
+  assert.match(html, /<a href="https:\/\/example\.com\/page" target="_blank" rel="noopener noreferrer">Outside<\/a>/,
+    "an http link leaving the documentation opens in a new tab");
+  assert.match(html, /<a href="[^"]*SIBLING\.md">Sibling doc<\/a>/,
+    "a link to a sibling document we render stays in the same tab");
+  assert.match(html, /<a href="#doc">Section<\/a>/, "an in-page anchor stays in the same tab");
+  assert.match(html, /<a href="mailto:someone@example\.com">Email<\/a>/,
+    "a mailto link gets no target, since it hands off to another app");
+  assert.match(html, /<a href="\/\/example\.com\/page" target="_blank" rel="noopener noreferrer">Protocol relative<\/a>/,
+    "a protocol-relative link is outside the documentation, so it opens in a new tab");
 });
 
 // The page shape. It is the same shape build_styled_doc.py builds in the
@@ -136,8 +163,9 @@ test("a heading keeps its inline markup, and a document with no H1 still gets a 
     "",
     "## The `render` function and [the doc](https://example.com)"
   ]);
-  assert.match(withMarkup, /<h2>The <code>render<\/code> function and <a href="https:\/\/example\.com">the doc<\/a><\/h2>/,
-    "a code span or a link in an H2 survives into the sheet head");
+  assert.match(withMarkup,
+    /<h2>The <code>render<\/code> function and <a href="https:\/\/example\.com" target="_blank" rel="noopener noreferrer">the doc<\/a><\/h2>/,
+    "a code span or a link in an H2 survives into the sheet head, and still opens in a new tab");
 
   const noTitle = renderSource("lahe-markdown-notitle-", ["Just a paragraph.", "", "## A section", "", "Text."]);
   assert.match(noTitle, /<div class="hero">\s*<h1>DOC\.md<\/h1>/,
