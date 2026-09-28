@@ -47,6 +47,7 @@
 
 | Pass | Dispatched | Red after evaluation | Note |
 |---|---|---|---|
+| 2 | Everything merged | Open on a folder review; the page contradicting itself; redundant hand-over requests; design polish | Story walk: 4 of 8 stories green, 3 partial, 1 red. Five reviews: 2 security and about 20 correctness findings. All in one fix round now. |
 | 1 | Phase 1 tasks 1.1 to 1.4 | not evaluated yet | Merged at 6c872d7, unit gate 1449 pass, 0 fail. Evaluators run after Phase 2. |
 
 ### Changes from plan
@@ -71,6 +72,7 @@ Not shipped yet.
 
 ## Log
 
+- **2026-09-28 18:27.** Story walk on a test copy: browsing, starring, getting a closed tab back, and coming back after a restart all work. Open on a folder of pages (like these forge docs) landed on "not found", and the page sometimes said an agent was watching in one spot and not in another. Both are in the fix round, with a design pass: fewer status colors, the rail's button color, and one "Hand to agent" menu per row instead of three buttons. Screenshots of the walk are in the `eval/` folder (not committed; they show real document names).
 - **2026-09-28 17:39.** The Library page is built. First look, from the page's own browser test (fixture data, not your real records):
 
   ![The Library, light](catalog_page_light.png)
