@@ -83,6 +83,21 @@ the page is missing, and never a block this record does not own.
 
 ![The same page, each paragraph once](once_after.png)
 
+## The one paragraph keeps its formatting (2026-09-28)
+
+A write of one piece used to go in as plain text, so bold, italic, links or
+code inside that paragraph were dropped. It now carries that paragraph's own
+markup, on the ordinary pass and on "Keep mine" alike.
+
+- `normalize.topLevelBlocks` cuts the record's `after_html` at its top level:
+  each block element is one paragraph, a `<br>` or `<hr>` ends a loose run,
+  and a loose run of inline content between them is one paragraph.
+- `pieceMarkup` in `src/layer/replay.js` uses the cut only when it gives
+  exactly one paragraph per piece of the after text, each with that piece's
+  words. Then the missing paragraph's markup is what `writeRegion` writes.
+- The write still goes only into the block the record owns, and a paragraph
+  the page already has is still never written again.
+
 ## Known limits
 
 Two, both narrower than the bug and both left as their own change.
@@ -92,12 +107,14 @@ all. "Keep mine" on such a record still writes the whole after into that
 container, which flattens the page's own blocks inside it. That is older than
 this branch and it is a flatten rather than a duplicate.
 
-A write of one piece goes in as plain text. So when the reviewer had bold or
-italic in the first paragraph of a multi-paragraph edit, and the page already
-carries the rest, that paragraph comes back in plain type. The record's markup
-carries every paragraph of the after, which is exactly what must not be written
-here, so the trade is the emphasis rather than a duplicate. The words are
-right; the bold is not.
+When the record's `after_html` does not cut cleanly into the same paragraphs as
+its text, the one paragraph is still written as plain text. Examples: a list or
+a block nested inside a bold, a paragraph that is an image with no words, or
+markup that is a wording behind the text. The same holds when the paragraph's
+share of the markup is itself a block or holds a `<br>` (a first paragraph that
+sat in `<ul><li>` or `<blockquote><h2>`): writing it into the anchored `<p>`
+would put a bullet or a heading inside the paragraph. Picking which part of such markup is
+this paragraph would be a guess, so the words land and the formatting does not.
 
 ## Tests
 
@@ -122,6 +139,17 @@ right; the bold is not.
     with the message on the card
   - the same with four paragraphs and only the last missing
   - a write the page's blocks would double is refused and flagged
+- The formatting fix, each red before it:
+  - `test/unit/replay_pass.test.js`: the missing paragraph keeps its bold,
+    italic and link; one `<p>` per paragraph or `<br>` breaks cut the same
+    way; "Keep mine" keeps the formatting too. A fourth case, markup that does
+    not cut cleanly, falls back to plain text (green before and after).
+  - `test/unit/normalize.test.js`: `topLevelBlocks` cuts and refusals.
+  - `test/browser/no_duplicate_text.spec.js`: the real walk for both the
+    ordinary pass and "Keep mine", with a bold, an italic and a link.
+  - `npm run gate:unit`: 1352 passed, 0 failed. Browser, `--workers=1`:
+    `no_duplicate_text` 8 passed; `split_not_conflict`, `keep_mine_live_page`,
+    `formatting_survives`, `italic_sticks`, `replay_branches` 19 passed.
 - `npm run gate:unit`: 1284 passed, 0 failed.
 - Browser, `--workers=1`, 39 passed: `split_not_conflict`, `replay_branches`,
   `replay_human_and_agent`, `conflict_toast`, `italic_sticks`, `inline_reword`,

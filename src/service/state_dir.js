@@ -21,6 +21,13 @@
 //                            (D5). 0600
 //     reviews/<review-id>/                                             (0700)
 //       events.jsonl         append-only, one JSON line per event. 0600
+//       events.jsonl.compacted-ids
+//                            event_ids scripts/compact_draft_history.js took
+//                            out of the log, one JSON string per line. The log
+//                            reader counts them as already seen, so a browser
+//                            re-posting one is answered as a duplicate
+//       events.jsonl.pre-compact.gz
+//                            that script's copy of the log before it ran
 //       review.json          the projection the agent reads (3A writes it)
 //       meta.json            the review's token and its registered origins. 0600
 //       replies*.jsonl       what agents append (3A reads them)
@@ -50,6 +57,7 @@ var FILES = {
   ready: "service.json",
   helperLog: "helper.log",
   events: "events.jsonl",
+  compactedIds: "events.jsonl.compacted-ids",
   review: "review.json",
   meta: "meta.json",
   windows: "windows.json"
@@ -262,17 +270,20 @@ function agentSessionPath(dir, sessionId) {
 }
 
 /**
- * Which ended reviews this session's monitor has already woken the agent for.
+ * Which ended reviews this session has already been told about.
  *
- * One review id per line, append-only. It exists because "the reviewer ended
+ * Append-only. A bare review id means the monitor woke on it; "<review>
+ * drained" means a drain printed it (see readEndedLedger in
+ * src/cli/commands/status.js). It exists because "the reviewer ended
  * this review" is a state and not an event: unlike an unanswered item, which
  * stops being reported the moment the agent answers it, ended_at is permanent.
  * A monitor that woke on it with no memory would wake on it again on every
  * relaunch, forever, and each of those relaunches costs a model turn for
  * nothing. That is the exact no-op wake loop the wake feed was built to end.
  *
- * Only `lahe monitor` writes it. An agent running the drain by hand is always
- * told, because an agent that just woke has to be able to find out why.
+ * The monitor and the drain share it. A monitor's mark does not hide the
+ * review from the agent's next drain, because an agent that just woke has to
+ * be able to find out why; the drain's mark hides it from everyone.
  */
 function endedDeliveredPath(dir, sessionId) {
   return resolveWithin(dir, [AGENT_SESSIONS_DIR, assertSafeReviewId(sessionId), "ended-delivered.log"]);
@@ -344,6 +355,14 @@ function reviewDir(dir, reviewId) {
 
 function eventsPath(dir, reviewId) {
   return resolveWithin(dir, [REVIEWS_DIR, assertSafeReviewId(reviewId), FILES.events]);
+}
+
+/**
+ * The event_ids a compaction took out of this review's log (see FILES above).
+ * The log reader loads them into its "already seen" set.
+ */
+function compactedIdsPath(dir, reviewId) {
+  return resolveWithin(dir, [REVIEWS_DIR, assertSafeReviewId(reviewId), FILES.compactedIds]);
 }
 
 function reviewJsonPath(dir, reviewId) {
@@ -436,6 +455,7 @@ module.exports = {
   ensureReviewArtifactsRoot: ensureReviewArtifactsRoot,
   reviewDir: reviewDir,
   eventsPath: eventsPath,
+  compactedIdsPath: compactedIdsPath,
   reviewJsonPath: reviewJsonPath,
   metaPath: metaPath,
   replyFilePath: replyFilePath,

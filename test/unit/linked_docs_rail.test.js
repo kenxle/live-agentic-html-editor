@@ -11,7 +11,8 @@
 //  - a document some reviewed page links to: the linking review's rail
 //    (requirement 2), and nothing is written to the review store (requirement 3)
 //  - never another agent session's review (requirement 4)
-//  - nothing for a file no page linked to, or anything hidden (requirement 5)
+//  - no rail for a file no page linked to (requirement 5); a hidden file is
+//    served like any other file
 //  - the helper, not the page, names the file an item was made on
 //    (requirement 6), and the reload stats that file (requirement 7)
 
@@ -206,9 +207,11 @@ test("an HTML file in a mounted folder that no page linked to gets no rail", asy
   assert.equal(res.body.indexOf("data-lahe-review"), -1);
 });
 
-test("a hidden file under a mount is refused, and so is a path out of it", async (t) => {
+test("a hidden file under a mount is served like any other, and a path out of it is refused", async (t) => {
   const f = await fixture(t);
-  assert.equal((await request(f.server.meta, f.prefix + ".env")).status, 404);
+  const hidden = await request(f.server.meta, f.prefix + ".env");
+  assert.equal(hidden.status, 200);
+  assert.equal(hidden.body, "SECRET=1\n");
   assert.equal((await request(f.server.meta, f.prefix + "..%2F..%2Fetc%2Fpasswd")).status, 403);
 });
 
@@ -317,6 +320,11 @@ test("a linked page's path maps to the real file through the mount table", async
     staticServers.linkedFileForPage(f.state, f.sessionId, "r_hub", encodeURI(f.prefix + "doc.html")),
     path.join(f.linked, "doc.html")
   );
+  // A hidden page is a page like any other.
+  const hiddenPage = path.join(fs.realpathSync(f.linked), ".notes.md");
+  fs.writeFileSync(hiddenPage, "# Hidden notes\n");
+  staticServers.recordLinks(f.state, f.sessionId, f.server.meta.id, "r_hub", [hiddenPage]);
+  assert.equal(staticServers.linkedFileForPage(f.state, f.sessionId, "r_hub", f.prefix + ".notes.md"), hiddenPage);
 });
 
 test("a page path the mount table cannot vouch for names no file", async (t) => {

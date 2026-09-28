@@ -1,6 +1,6 @@
 # Progress: Free writing
 
-**Phase 5, Plan.** You approved wireframe direction A. The architecture is reviewed and revised. The plan is being written. Two decisions are waiting on you. Last updated 2026-09-28 17:51.
+**Phase 5, Plan.** You approved wireframe direction A. The architecture is reviewed and revised. The plan is being written. Two decisions are waiting on you. Last updated 2026-09-28 18:10.
 
 **Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html) ([decision](wireframes/DECISION.md)) · [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html)
 
@@ -20,7 +20,7 @@ Both are on the [architecture page](http://127.0.0.1:65155/02_architecture_free_
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Plan | Breaking the architecture into build tasks, with a test list | 2026-09-28 17:51 | `main` (docs only) |
+| Plan revision | Folding in the four plan reviews, with the blocker fixes already decided | 2026-09-28 18:10 | `main` (docs only) |
 
 ## Phases
 
@@ -75,6 +75,24 @@ Not shipped yet.
 ## Log
 
 Newest first.
+
+**2026-09-28 18:10.** All four plan reviews are back, with about 105 findings. The blockers, and how each is being fixed:
+- **Undoing new text:** it had no way to stay undone after a reload. The take-back now names the blocks to remove.
+- **Empty notes page:** nobody put text back on it after a reload. The page container is now only the starting point.
+- **`lahe write` serving one page:** the fix needs server code no builder owned. The helper-and-command builder now owns it.
+- **Accepting proofreading fixes:** your original words would have reopened the item. The fixes now become your own reword of the card.
+- **"+ Write here":** it could not be reached. It now shows whenever an edit is open.
+- **A conflict above new text:** it could discard the new section. The conflict card now keeps it.
+- **The final phase:** it lacked the required review of the merged code. A review round is added.
+
+The reviewers also found three other branches with unfinished work in the same files. The plan now checks those with you before any builder starts.
+
+**2026-09-28 17:59.** The plan is drafted in three phases:
+- shared groundwork first
+- three parallel builds: the editor, the page reload, and the helper with `lahe write`
+- the rail and integration
+
+Four reviewers are on it now.
 
 **2026-09-28 17:51.** You approved wireframe direction A:
 - "B" lost on its insert style

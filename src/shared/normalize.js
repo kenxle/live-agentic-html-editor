@@ -764,6 +764,98 @@
     return reduce(html, [], true);
   }
 
+  /**
+   * A fragment of markup cut into its top-level paragraphs, each as markup.
+   *
+   * Replay needs this when it writes one paragraph of a multi-paragraph edit
+   * (the page already carries the others). The paragraph's bold, italic and
+   * links live in the record's after_html, and this finds that paragraph's
+   * share of it. The cuts are made only at the top level:
+   *
+   *   - a block element (<p>, <div>, <li> and the rest of BLOCK_TAGS) is one
+   *     paragraph, and its INNER markup is what comes back
+   *   - a <br> or an <hr> ends the loose inline run before it
+   *   - loose inline content between those is one paragraph
+   *
+   * Anything deeper is left inside its paragraph, so a block nested in an
+   * inline element, or a list inside a paragraph, stays whole and reads as
+   * more than one paragraph to the caller, which then refuses it. Whitespace
+   * runs are dropped. A run that holds markup but no words (an image alone)
+   * cannot be matched to a paragraph of text, so the answer is null.
+   *
+   * The markup goes through cleanMarkup first, so every piece is balanced and
+   * carries only what cleanMarkup lets through.
+   *
+   * @param {string} html
+   * @returns {string[]|null} one markup string per paragraph, or null when the
+   *   fragment does not cut cleanly
+   */
+  function topLevelBlocks(html) {
+    if (typeof html !== "string") return null;
+    var clean = cleanMarkup(html);
+    var out = [];
+    var run = "";
+    var depth = 0;
+    var blockStart = -1;
+    var failed = false;
+
+    function flush(piece) {
+      var markup = piece.trim();
+      if (!markup) return;
+      if (!normalizeText(textOf(markup))) {
+        failed = true;
+        return;
+      }
+      out.push(markup);
+    }
+
+    var i = 0;
+    while (i < clean.length) {
+      var lt = clean.indexOf("<", i);
+      var textEnd = lt === -1 ? clean.length : lt;
+      if (textEnd > i && blockStart === -1) run += clean.slice(i, textEnd);
+      if (lt === -1) break;
+      var tag = parseTag(clean, lt);
+      if (!tag) {
+        if (blockStart === -1) run += "<";
+        i = lt + 1;
+        continue;
+      }
+      i = tag.end;
+      var markup = clean.slice(lt, tag.end);
+      var isVoid = hasOwn(VOID_TAGS, tag.name) || tag.selfClosing;
+      if (depth === 0 && !tag.closing) {
+        if (tag.name === "br" || tag.name === "hr") {
+          flush(run);
+          run = "";
+          continue;
+        }
+        if (!isVoid && hasOwn(BLOCK_TAGS, tag.name)) {
+          flush(run);
+          run = "";
+          blockStart = tag.end;
+          depth = 1;
+          continue;
+        }
+      }
+      if (tag.closing) {
+        depth -= 1;
+        if (depth < 0) return null;
+        if (depth === 0 && blockStart !== -1) {
+          flush(clean.slice(blockStart, lt));
+          blockStart = -1;
+          continue;
+        }
+      } else if (!isVoid) {
+        depth += 1;
+      }
+      if (blockStart === -1) run += markup;
+    }
+    if (depth !== 0 || blockStart !== -1) return null;
+    flush(run);
+    return failed ? null : out;
+  }
+
   // ---------------------------------------------------------------------------
   // The two comparison modes (D7's format-only branch, D9's one normalizer)
   // ---------------------------------------------------------------------------
@@ -1135,6 +1227,7 @@
     normalizeBlockText: normalizeBlockText,
     blockTextEquals: blockTextEquals,
     blockText: blockText,
+    topLevelBlocks: topLevelBlocks,
     blockTextFromNode: blockTextFromNode,
     STRUCTURAL_TAGS: STRUCTURAL_TAGS,
     NOT_BOLD_TAG: NOT_BOLD_TAG,

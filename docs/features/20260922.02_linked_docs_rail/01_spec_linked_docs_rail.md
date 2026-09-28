@@ -23,7 +23,7 @@ Your rule is that anything our own server serves gets the editor. The security r
 
    So there is no borrowing, and no silent read-only page. If a linked page finds no review where it expected one, it says so on the page: this document has no review, which should not happen. It offers to open one, and opens it only when Ken asks. That is not the automatic per-click enrollment requirement 3 forbids.
 
-Separately, and not a narrowing: a linked document that already has its own review now takes you to that review's page, instead of opening a copy with its key. You get your earlier comments that way. It also found a leak that exists today, where hidden files like `.env` in a linked folder can be fetched from the page server. That is being fixed now on its own, without waiting for this spec.
+Separately, and not a narrowing: a linked document that already has its own review now takes you to that review's page, instead of opening a copy with its key. You get your earlier comments that way. It also found that hidden files like `.env` in a linked folder could be fetched from the page server. That was refused for a while, then undone on 2026-09-28: hidden files get no special handling anywhere in LAHE, so they can be reviewed like other files.
 
 ## Problem
 
@@ -43,8 +43,8 @@ Separately, and not a narrowing: a linked document that already has its own revi
 2. **A linked document with no review in this session opens with the review of the page that linked to it.** This is the same rule a folder review already uses for pages nobody recorded: no new review, no write to the review store. The item records the linked document's real path on disk, so the agent knows which file to edit. "The page that linked to it" means a review that registered this mount (see Approach). If every one of them is `--only`, the page stays read-only. If none of them exists in this session (reviews are never deleted, so this means something went wrong), the page says so plainly, and offers a button that opens a review for this document only when Ken clicks it. It never falls back to "any newest review on this server", and never creates a review on its own.
 3. **Nothing is created by a click.** No new review, no new meta.json, no enrollment. Ken restated this on 2026-09-28 as a hard rule: the empty reviews an earlier round created still make usage numbers hard to read. The 2026-09-16 lesson stands: per-page enrollment made 166 reviews that never got a comment.
 4. **Another agent session's review never answers.** A linked document that has a review only in another session gets the linking page's review from this session, never the other session's token.
-5. **The existing mount limits stay, and the serve side is made to match them.** The link rules today: only documents the rendered page links to, inside the home folder, no hidden folders, at most 16 auto mounts per server. But a mount serves the linked file's whole folder, with its subfolders and its hidden files (`/.lahe-source/<hash>/.env` is answered today). So "only documents the page links to" is true of the link, not of what the server hands out. Before the rail goes on:
-   - Refuse any path under a mount with a hidden segment (the same rule `markdown_links.js` applies to the link).
+5. **The existing mount limits stay, and the serve side is made to match them.** The link rules today: only documents the rendered page links to, inside the home folder, at most 16 auto mounts per server. A mount serves the linked file's whole folder, with its subfolders. So "only documents the page links to" is true of the link, not of what the server hands out. Before the rail goes on:
+   - Hidden (dot-prefixed) files and folders get no special handling, in a link or under a mount. Settled 2026-09-28: they are served and linked like any other file. An earlier round refused them under a mount; that refusal is gone.
    - Put the rail only on files a render actually translated a link to. Record those real paths with the mount. Other HTML in a mounted folder is served as it is today, with no rail.
    - A review opened with `--only` keeps its linked documents read-only, as today.
 6. **The agent can act on it.** An item made on a linked page names the source file on disk, not the `/.lahe-source/` URL, in `review.json` and in the drain. An edit made there lands in the right file when the agent edits and replies. **The helper works out that path; the page never supplies it.** The helper maps the item's page path through this session's static server mount table (read off disk, the same way the static server does), checks the result is inside the mount's folder by real path, and records it. A path in a request body is never used as the file to edit. This is a change to what `review.json` says, so the contract text, `docs/CONTRACTS.md`, the copy in `test/unit/review_format.test.js`, the skill, and the dist bundle change together.
@@ -70,7 +70,7 @@ Security: the key (token) that lets a page send comments now reaches linked docu
 ## Tasks
 
 1. `static_servers.js`: when a mount registers, remember which review's render registered it, and the real paths of the files it translated links to. Both registration paths (render and `registerMount`), merged like `auto_mounts`. Tests: a mount registered by review A records A; a mount registered by two reviews keeps both and the newest wins; a `lahe review` run after a render keeps the render's record.
-2. `static_servers.js` `renderMarkdown` and the HTML path: for a request under a mount, refuse hidden segments; if a review in this session records this file, redirect to that review's page; else, if the file is a recorded link target, inject the registering review's rail; else serve plain. Tests: requirement 1 redirect, requirement 2 case, other-session review ignored (requirement 4), `--only` stays read-only (requirement 5), registering review gone gives read-only, an unlinked HTML sibling in the mounted folder gets no rail, `/.lahe-source/<hash>/.env` refused, a file outside the mount limits still refused.
+2. `static_servers.js` `renderMarkdown` and the HTML path: for a request under a mount, if a review in this session records this file, redirect to that review's page; else, if the file is a recorded link target, inject the registering review's rail; else serve plain. Tests: requirement 1 redirect, requirement 2 case, other-session review ignored (requirement 4), `--only` stays read-only (requirement 5), registering review gone gives read-only, an unlinked HTML sibling in the mounted folder gets no rail, `/.lahe-source/<hash>/.env` served like any other file, a file outside the mount limits still refused.
 3. The helper maps an item's page path to the real file through the mount table (requirement 6). Tests: an item made on a linked Markdown page shows the source path in `review.json` and in `lahe status --json`; a page path naming a mount prefix the server does not hold, or `..` out of a mount, records no file.
 4. Reload on source change for linked pages (requirement 7), or a written note of what it would take.
 5. Docs: `docs/ongoing/STATIC_SITE_FOLDER.md` (the rule now reaches linked documents), `docs/CLI.md` where `--only` is described, and the skill if an agent's steps change. A browser spec clicking from a reviewed page to a linked one and leaving a comment, with a screenshot of the rail on the linked page.
@@ -82,7 +82,7 @@ Security: the key (token) that lets a page send comments now reaches linked docu
 - [ ] No review, meta.json, or enrollment is created by a click.
 - [ ] Another session's review is never used.
 - [ ] `--only` reviews keep linked documents read-only.
-- [ ] A hidden file under a mount is refused, and an HTML file in a mounted folder that no page linked to gets no rail.
+- [ ] A hidden file under a mount is served like any other file, and an HTML file in a mounted folder that no page linked to gets no rail.
 - [ ] The file named on an item comes from the helper's mount lookup, never from the request body.
 - [ ] The drain names the source file for an item made on a linked page.
 - [ ] `npm run gate:unit` green; the named browser spec green; screenshot on this page.
@@ -104,7 +104,7 @@ The screenshot is from the browser spec's own run: the hub's rail on the draft s
   - `registerMount` merges it from disk, and a restart keeps it.
   - A request under a mount goes through `serveLinked`. A document with its own review in this session gets a 302 to that review's page on its live server. Otherwise a recorded link target gets the newest linking review's rail. Anything else is served as before.
   - `--only` linking reviews keep links read-only. A linking review missing from the session gives the note, one log line, and nothing created.
-  - `linkedFileForPage` maps an item's page path to the real file. It checks the mount, containment by real path, no hidden segment, is a file, and that this review is recorded against that file.
+  - `linkedFileForPage` maps an item's page path to the real file. It checks the mount, containment by real path, is a file, and that this review is recorded against that file.
 - `src/cli/commands/review.js`: after `add` has made the review, records its render's links against it (`recordedReviewFor`).
 - `src/service/rebuild.js`: the helper's re-render records the links the new render has.
 - `src/shared/review_format.js` and `src/service/projection.js`: a page under `/.lahe-source/` gets `linked_file` and `source_hint` from the helper's lookup. The page's own claim is ignored, and an unmapped page reads as unknown. Every other page carries `linked_file: null`. One contract line added.
@@ -150,5 +150,5 @@ Left for the board, not this round: `linked_files` never shrinks when a link is 
 
 ## Security review, 2026-09-22
 
-Accepted the reuse design, with four changes: redirect to a document's own review instead of injecting its token; make the serve side of a mount match its link rules (no hidden files, rail only on linked files); the helper, not the page, names the file to edit; the reload uses that same mapping and never heals.
+Accepted the reuse design, with four changes: redirect to a document's own review instead of injecting its token; make the serve side of a mount match its link rules (no hidden files, rail only on linked files; the hidden-file part was undone on 2026-09-28); the helper, not the page, names the file to edit; the reload uses that same mapping and never heals.
 Rejected "Markdown only" as protection that does nothing, since every served page shares one origin; the `review.write` source-hint gap is recorded as its own row rather than fixed here.

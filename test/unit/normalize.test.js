@@ -478,3 +478,21 @@ test("emphasisRuns reads which words are bold and italic, and nothing else", () 
   // A marker around no words is not something to report.
   assert.deepEqual(n.emphasisRuns("a <em> </em>b"), []);
 });
+
+test("topLevelBlocks: cuts markup at its top-level paragraphs, and refuses what does not cut cleanly", () => {
+  const { topLevelBlocks } = require("../../src/shared/normalize.js");
+  assert.deepEqual(topLevelBlocks("One <b>bold</b>.<p>Two.</p><p>Three <a href=\"https://e.com\">x</a>.</p>"), [
+    "One <strong>bold</strong>.",
+    "Two.",
+    'Three <a href="https://e.com">x</a>.'
+  ]);
+  assert.deepEqual(topLevelBlocks("One.<br><br>Two <em>it</em>."), ["One.", "Two <em>it</em>."]);
+  assert.deepEqual(topLevelBlocks("<p>One.</p>\n  <p>Two.</p>"), ["One.", "Two."], "whitespace between blocks is not a paragraph");
+  assert.deepEqual(
+    topLevelBlocks("<strong>One.<p>Two.</p></strong>"),
+    ["<strong>One.<p>Two.</p></strong>"],
+    "a block inside an inline element stays whole"
+  );
+  assert.equal(topLevelBlocks('One.<p><img src="a.png"></p>'), null, "markup with no words is not a paragraph");
+  assert.equal(topLevelBlocks(null), null);
+});

@@ -1587,3 +1587,107 @@ test("duplicate: a write the page's own blocks would double does not happen", ()
 // The other half, that a live page which does NOT carry the split still takes
 // the reviewer's typed break, is a write, and the simulated DOM here cannot be
 // written breaks into. `test/browser/paragraph_break.spec.js` is where it runs.
+
+// ---------------------------------------------------------------------------
+// The one paragraph written keeps its formatting
+// ---------------------------------------------------------------------------
+//
+// When the page already carries some of the reviewer's paragraphs, replay
+// writes only the one the page is missing. That write used to go in as plain
+// text, so the bold, italic and link inside that paragraph were dropped. The
+// markup for that one paragraph is now taken from the record's after_html,
+// but only when after_html splits into the same paragraphs as the text.
+
+const FORMATTED_FIRST = 'First <strong>bold</strong> <em>italic</em> <a href="https://example.com/x">link</a>.';
+const FORMATTED_AFTER = "First bold italic link.\n\nSecond paragraph.\n\nThird paragraph.";
+
+function formattedSplitEdit(before, afterHtml) {
+  return Object.assign(splitEdit(before, FORMATTED_AFTER), { after_html: afterHtml });
+}
+
+test("formatting: the missing paragraph is written with its bold, italic and link", () => {
+  // The shape Enter makes: the first paragraph's words loose in the block,
+  // then one <p> per paragraph typed after it.
+  const item = formattedSplitEdit(
+    "Old first line.",
+    FORMATTED_FIRST + "<p>Second paragraph.</p><p>Third paragraph.</p>"
+  );
+  const page = pageOf(["A heading line.", "Old first line.", "Second paragraph.", "Third paragraph.", "The end."]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+
+  const ran = runOne(anchoredItem, page.root);
+
+  assert.equal(ran.result.branch, replay.BRANCH.REAPPLY);
+  assert.equal(replay.counters.regionsWroteMissingPiece, 1);
+  assert.equal(page.blocks[1].innerHTML, FORMATTED_FIRST, "the paragraph carries all three formats");
+  assert.deepEqual(
+    page.blocks.map((b) => b.textContent),
+    ["A heading line.", "First bold italic link.", "Second paragraph.", "Third paragraph.", "The end."],
+    "and nothing is doubled"
+  );
+
+  // The write settles: the next pass reads the split as applied.
+  replay.runPass(replay.REASON.MUTATION, { root: page.root, items: [anchoredItem], cards: fakeCards() });
+  assert.equal(replay.counters.regionsWritten, 1, "idempotent once the paragraph is back");
+});
+
+test("formatting: one <p> per paragraph, or <br> breaks, split the same way", () => {
+  const shapes = [
+    "<p>" + FORMATTED_FIRST + "</p><p>Second paragraph.</p><p>Third paragraph.</p>",
+    FORMATTED_FIRST + "<br><br>Second paragraph.<br><br>Third paragraph."
+  ];
+  shapes.forEach(function (html) {
+    const item = formattedSplitEdit("Old first line.", html);
+    const page = pageOf(["Old first line.", "Second paragraph.", "Third paragraph."]);
+    const anchoredItem = anchored(item, page.blocks[0], page.root);
+    runOne(anchoredItem, page.root);
+    assert.equal(page.blocks[0].innerHTML, FORMATTED_FIRST, "split from: " + html);
+  });
+});
+
+test("formatting: markup that does not split into the same paragraphs falls back to plain text", () => {
+  const cases = [
+    // A paragraph nested inside the first one's emphasis: the top level has
+    // two pieces, not three.
+    "<strong>First bold italic link.<p>Second paragraph.</p></strong><p>Third paragraph.</p>",
+    // Markup whose words are not the record's words any more.
+    FORMATTED_FIRST.replace("First", "Earlier") + "<p>Second paragraph.</p><p>Third paragraph.</p>",
+    // A paragraph the text has and the markup does not.
+    FORMATTED_FIRST + "<p>Second paragraph.</p>",
+    // The first paragraph sits in a wrapper, so its share of the markup is a
+    // block of its own: a bullet or a heading written inside the paragraph.
+    "<ul><li>First bold italic link.</li></ul><p>Second paragraph.</p><p>Third paragraph.</p>",
+    "<blockquote><h2>First bold italic link.</h2></blockquote><p>Second paragraph.</p><p>Third paragraph.</p>"
+  ];
+  cases.forEach(function (html) {
+    const item = formattedSplitEdit("Old first line.", html);
+    const page = pageOf(["Old first line.", "Second paragraph.", "Third paragraph."]);
+    const anchoredItem = anchored(item, page.blocks[0], page.root);
+    runOne(anchoredItem, page.root);
+    assert.equal(page.blocks[0].textContent, "First bold italic link.", "the words land: " + html);
+    assert.equal(page.blocks[0].innerHTML, "First bold italic link.", "as plain text, never guessed markup: " + html);
+    assert.equal(page.blocks[1].textContent, "Second paragraph.");
+  });
+});
+
+test("formatting: Keep mine writes the missing paragraph with its formatting too", () => {
+  const item = formattedSplitEdit(
+    "Before words.",
+    FORMATTED_FIRST + "<p>Second paragraph.</p><p>Third paragraph.</p>"
+  );
+  const page = pageOf(["A heading line.", "The agent's own line.", "Second paragraph.", "Third paragraph.", "The end."]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+
+  const first = runOne(anchoredItem, page.root);
+  assert.equal(first.result.branch, replay.BRANCH.CONTENT_CHANGED, "the clash is raised");
+
+  replay.configure({ root: page.root, items: [anchoredItem], cards: first.cards, persist: function () {} });
+  const answered = replay.resolveConflict(item.id, "keep_mine");
+
+  assert.equal(answered.resolved, true, answered.reason || "");
+  assert.equal(page.blocks[1].innerHTML, FORMATTED_FIRST, "the press keeps the bold, italic and link");
+  assert.deepEqual(
+    page.blocks.map((b) => b.textContent),
+    ["A heading line.", "First bold italic link.", "Second paragraph.", "Third paragraph.", "The end."]
+  );
+});

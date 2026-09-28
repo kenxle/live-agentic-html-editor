@@ -296,29 +296,6 @@ async function restartAll(dir, sessionId) {
   return started;
 }
 
-/**
- * Does `candidate`, relative to `base`, cross a dotfile segment?
- *
- * Used only for mount requests (see isMount in runServer): the mount rule in
- * markdown_links.js already refuses a hidden LOCATION when a link is
- * translated, and this is the matching check at serve time, so a hidden file
- * or folder already inside a mounted directory (e.g. `.env`, `.git/config`)
- * is refused too, whether it was requested by its own name or reached
- * through a normally-named symlink (call this once for the requested path
- * and once for its realpath).
- *
- * @param {string} base the mount's own root (never itself dot-prefixed: the
- *   mount prefix regex only matches a hex id)
- * @param {string} candidate an absolute path under `base`
- * @returns {boolean}
- */
-function hasHiddenSegment(base, candidate) {
-  if (candidate === base) return false;
-  return path.relative(base, candidate).split(path.sep).some(function (segment) {
-    return segment.length > 0 && segment.charAt(0) === ".";
-  });
-}
-
 function send(res, status, body, type) {
   res.writeHead(status, {
     "cache-control": "no-store",
@@ -740,8 +717,8 @@ function linkingReview(dir, sessionId, serverFile, realFile) {
  * THE HELPER WORKS THIS OUT; THE PAGE NEVER SUPPLIES IT. The page path is
  * mapped through this session's static server mount tables, read off disk the
  * same way the server reads them. The result must sit inside the mount's folder
- * by real path, cross no hidden segment, be a file, and be one this very review
- * put its rail on (linked_files). Anything else names no file.
+ * by real path, be a file, and be one this very review put its rail on
+ * (linked_files). Anything else names no file.
  *
  * @param {string} dir the state directory
  * @param {string} sessionId the review's own agent session
@@ -773,7 +750,6 @@ function linkedFileForPage(dir, sessionId, reviewId, pagePath) {
     if (!withinDir(candidate, base) || candidate === base) return false;
     var real = realOrNull(candidate);
     if (!real || !withinDir(real, base)) return false;
-    if (hasHiddenSegment(base, candidate) || hasHiddenSegment(base, real)) return false;
     try { if (!fs.statSync(real).isFile()) return false; } catch (err) { return false; }
     // Only a page. A linked script or data file is served as bytes, carries
     // no rail, and is never named as the file to edit.
@@ -1040,23 +1016,6 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
       }
       var real = fs.realpathSync(candidate);
       if (real !== servingRoot && real.indexOf(servingRoot + path.sep) !== 0) return send(res, 403, "forbidden\n");
-      // A MOUNT REFUSES ANYTHING HIDDEN. markdown_links.js already refuses a
-      // hidden LOCATION when a link is translated into a mount in the first
-      // place, but this handler used to serve any path under an already-
-      // mounted folder, hidden or not. Checked on both the path as requested
-      // (candidate) and its realpath (real), so a normally-named symlink that
-      // resolves to a hidden file or folder is refused the same as the literal
-      // path would be. The mount's OWN root is never itself dot-prefixed (the
-      // prefix regex above only matches a hex id), so this never fires for the
-      // mount root itself, only for a segment under it.
-      //
-      // The server's OWN root (isMount false) is intentionally unchanged: see
-      // the fallback for .lahe-doc-style.css, .lahe-fonts/, and the Mermaid
-      // runtime below, which resolve to a packaged copy for a mount request
-      // too, never to a real file on disk, so they are unaffected by this.
-      if (isMount && (hasHiddenSegment(servingRoot, candidate) || hasHiddenSegment(servingRoot, real))) {
-        return send(res, 404, "not found\n");
-      }
       if (!stat.isFile()) return send(res, 404, "not found\n");
     } catch (err) {
       // Three files a page may ask for beside itself that the served directory
