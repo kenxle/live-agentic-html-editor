@@ -1,23 +1,603 @@
-// The Library page script. PLACEHOLDER from Library Task 1.2; Task 2.2 replaces
-// this file whole (the poll, the view model, rendering, Open's tab sequence).
+// The Library page script.
+//
+// Owner: Library 2.2. Plan: docs/features/20260922.02_lahe_library/03_plan_lahe_library.md,
+// Task 2.2. Architecture: 02_architecture_lahe_library.md, "Open" and "Helper
+// lifetime (R10a)".
 //
 // Served raw from src/ by catalog.asset, never bundled into dist/. It runs
 // under script-src 'self', so it reads the Library token from the page's meta
-// tag, and every name (the meta name, header names, route paths) from
-// protocol.js, which the page loads first.
+// tag, and every name (the meta name, header names, route paths, POLL_MS) from
+// protocol.js, which the page loads first. Every wording and every rule lives
+// in view_model.js; this file owns only the network, the DOM, and the order
+// things happen in.
+//
+// THREE RULES THIS FILE KEEPS:
+//
+//  1. TEXT ONLY. Every string from the list (titles, file names, answers) goes
+//     into the DOM through textContent or a plain attribute. Nothing here ever
+//     assigns HTML.
+//  2. OPEN'S TAB SEQUENCE. A click opens about:blank synchronously (a pop-up
+//     must come from the click itself), sets its opener to null, and only then
+//     asks the helper. The tab is sent to the answer's URL only if the view
+//     model's check passes (loopback http:), and closed otherwise.
+//  3. HONEST TIMING. The page polls every POLL_MS whether or not its tab is
+//     visible (the helper counts a recent poll as a reason to stay up), polls
+//     again right after each of its own actions, and stops for good on a 401:
+//     the helper restarted and only a reload brings a working token.
+//
+// window.__laheCatalogPollNow() polls at once and resolves after the render,
+// so browser tests never wait out a 15 second poll.
 //
 // Browser-only.
 
 (function () {
   "use strict";
+
   var protocol = window.LAHE && window.LAHE.protocol;
-  var status = document.getElementById("lahe-catalog-status");
-  if (!protocol) {
-    if (status) status.textContent = "The Library could not load its protocol file.";
+  var VM = window.LAHE && window.LAHE.catalogViewModel;
+  var statusLine = document.getElementById("lahe-catalog-status");
+  if (!protocol || !VM) {
+    if (statusLine) statusLine.textContent = "The Library could not load its scripts. Reload this page.";
     return;
   }
   var meta = document.querySelector('meta[name="' + protocol.CATALOG_TOKEN_META + '"]');
-  if (status) {
-    status.textContent = meta && meta.content ? "The Library page is being built." : "The Library token is missing. Reload this page.";
+  var token = meta && meta.getAttribute("content");
+  if (!token) {
+    if (statusLine) statusLine.textContent = "The Library token is missing. Reload this page.";
+    return;
   }
+
+  var ROUTE = {
+    list: protocol.route("catalog.list"),
+    open: protocol.route("catalog.open"),
+    star: protocol.route("catalog.star"),
+    request: protocol.route("catalog.request")
+  };
+
+  var els = {
+    agent: document.getElementById("lahe-catalog-agent"),
+    search: document.getElementById("lahe-catalog-search"),
+    project: document.getElementById("lahe-catalog-project"),
+    banner: document.getElementById("lahe-catalog-banner"),
+    main: document.getElementById("lahe-catalog-main"),
+    dialog: document.getElementById("lahe-catalog-confirm")
+  };
+
+  var list = null;
+  var state = VM.initialState();
+  var lastRendered = null;
+  var timer = null;
+
+  // ---------------------------------------------------------------------------
+  // Network
+  // ---------------------------------------------------------------------------
+
+  function headers(json) {
+    var h = {};
+    h[protocol.HEADER.CLIENT] = protocol.CLIENT_CATALOG;
+    h[protocol.HEADER.TOKEN] = token;
+    if (json) h[protocol.HEADER.CONTENT_TYPE] = protocol.JSON_CONTENT_TYPE;
+    return h;
+  }
+
+  // Every call resolves to the view model's result shape and never throws:
+  // {ok: true, body} | {ok: false, status, error} | {ok: false, unreachable: true}.
+  function call(route, body) {
+    var init = {
+      method: route.method,
+      headers: headers(route.method !== "GET"),
+      credentials: "same-origin",
+      cache: "no-store"
+    };
+    if (route.method !== "GET") init.body = JSON.stringify(body || {});
+    return fetch(route.path, init).then(
+      function (res) {
+        return res.text().then(function (text) {
+          var parsed = null;
+          try {
+            parsed = text ? JSON.parse(text) : null;
+          } catch (err) {
+            parsed = null;
+          }
+          if (res.ok) return { ok: true, status: res.status, body: parsed || {} };
+          return { ok: false, status: res.status, error: (parsed && parsed.error) || null };
+        });
+      },
+      function () {
+        return { ok: false, unreachable: true };
+      }
+    );
+  }
+
+  var polling = null;
+
+  function poll() {
+    if (!VM.shouldPoll(state)) return Promise.resolve();
+    if (polling) return polling;
+    polling = call(ROUTE.list).then(function (result) {
+      polling = null;
+      if (result.ok && result.body && Array.isArray(result.body.sessions)) {
+        list = result.body;
+        state = VM.afterList(VM.withFetch(state, { ok: true }), list);
+      } else if (result.ok) {
+        state = VM.withFetch(state, { ok: false, status: 500, error: { message: "The helper sent a list the page cannot read." } });
+      } else {
+        state = VM.withFetch(state, result);
+      }
+      if (!VM.shouldPoll(state)) stopPolling();
+      render();
+    });
+    return polling;
+  }
+
+  function stopPolling() {
+    if (timer !== null) clearInterval(timer);
+    timer = null;
+  }
+
+  window.__laheCatalogPollNow = function () {
+    return poll().then(function () {
+      render();
+    });
+  };
+
+  // ---------------------------------------------------------------------------
+  // Actions
+  // ---------------------------------------------------------------------------
+
+  function update(next) {
+    state = next;
+    render();
+  }
+
+  function now() {
+    return Date.now();
+  }
+
+  function act(reviewId, action, options) {
+    var d = VM.decide(list, state, reviewId, action, options || {});
+    if (d.kind === "none") return;
+    if (d.kind === "handoff") {
+      focusKey(reviewId + ":copy");
+      update(VM.withDialog(VM.withPanel(state, reviewId, d.reason), null));
+      return;
+    }
+    if (d.kind === "already") {
+      update(VM.withNote(state, reviewId, d.note, now()));
+      return;
+    }
+    if (d.kind === "confirm") {
+      update(VM.withDialog(state, reviewId, d.action));
+      return;
+    }
+    update(VM.withDialog(state, null));
+    if (d.kind === "request") {
+      call(ROUTE.request, d.body).then(function (result) {
+        update(VM.afterRequest(state, list, reviewId, d.body.action, result, now()));
+        poll();
+      });
+      return;
+    }
+    if (d.kind === "open") openReview(reviewId, d);
+  }
+
+  function openReview(reviewId, d) {
+    var tab = null;
+    if (d.tab) {
+      // Synchronously, inside the click: a tab opened after an await is a
+      // pop-up the browser blocks.
+      tab = window.open("about:blank", "_blank");
+      if (!tab) {
+        update(VM.popupBlocked(state, reviewId, now()));
+        return;
+      }
+      try {
+        tab.opener = null;
+      } catch (err) {
+        // A browser that refuses the assignment already gave no opener.
+      }
+    }
+    update(VM.beginOpen(state, list, reviewId, { handoff: d.body.handoff, tab: d.tab }));
+    call(ROUTE.open, d.body).then(function (result) {
+      var url = result.ok && result.body ? result.body.url : null;
+      if (tab) {
+        if (result.ok && VM.isLoopbackHttpUrl(url)) {
+          tab.location.href = url;
+        } else {
+          tab.close();
+          // url: null is an answer, not a bad address: no server could be
+          // restarted and a pick-up was queued for the agent instead.
+          if (result.ok && url !== null && url !== undefined) result = { ok: false, urlRefused: true };
+        }
+      }
+      update(VM.afterOpen(state, list, reviewId, result, now()));
+      poll();
+    });
+  }
+
+  function star(reviewId, desired) {
+    update(VM.beginStar(state, reviewId, desired));
+    call(ROUTE.star, { review: reviewId, starred: desired }).then(function (result) {
+      update(VM.afterStar(state, reviewId, desired, result, now()));
+      poll();
+    });
+  }
+
+  function copyHandoff(reviewId, message) {
+    var done = function (ok) {
+      update(VM.withCopied(state, reviewId, ok));
+    };
+    if (!navigator.clipboard || !navigator.clipboard.writeText) {
+      done(false);
+      return;
+    }
+    navigator.clipboard.writeText(message).then(
+      function () {
+        done(true);
+      },
+      function () {
+        done(false);
+      }
+    );
+  }
+
+  // One listener for every button the list draws. Buttons carry data-act and
+  // data-review; nothing is bound per row, so a re-render leaks nothing.
+  function onClick(event) {
+    var btn = event.target.closest ? event.target.closest("[data-act]") : null;
+    if (!btn || btn.disabled) return;
+    var id = btn.getAttribute("data-review");
+    var what = btn.getAttribute("data-act");
+    if (what === "open" || what === "pickup" || what === "launch") act(id, what);
+    else if (what === "star") star(id, btn.getAttribute("aria-pressed") !== "true");
+    else if (what === "handoff") {
+      focusKey(id + ":copy");
+      update(VM.withPanel(state, id, btn.getAttribute("data-reason") || "no_agent"));
+    } else if (what === "copy") copyHandoff(id, btn.getAttribute("data-message") || "");
+    else if (what === "close-panel") update(VM.withPanel(state, null));
+    else if (what === "show-missing") update(VM.withShowMissing(state, true));
+    else if (what === "hide-missing") update(VM.withShowMissing(state, false));
+    else if (what === "reload") window.location.reload();
+    else if (what === "move") act(id, btn.getAttribute("data-action"), { confirmed: true });
+    else if (what === "read") act(id, "open", { read: true });
+    else if (what === "cancel") update(VM.withDialog(state, null));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Rendering
+  // ---------------------------------------------------------------------------
+
+  // Build an element. Text goes in through textContent, attributes through
+  // setAttribute; there is no path to HTML.
+  function h(tag, attrs, children) {
+    var node = document.createElement(tag);
+    if (attrs) {
+      Object.keys(attrs).forEach(function (k) {
+        var v = attrs[k];
+        if (v === null || v === undefined || v === false) return;
+        if (k === "text") node.textContent = String(v);
+        else node.setAttribute(k, v === true ? "" : String(v));
+      });
+    }
+    (children || []).forEach(function (child) {
+      if (child === null || child === undefined) return;
+      node.appendChild(typeof child === "string" ? document.createTextNode(child) : child);
+    });
+    return node;
+  }
+
+  function button(label, attrs) {
+    return h("button", Object.assign({ type: "button", class: "lib-btn", text: label }, attrs || {}));
+  }
+
+  function actionButton(row, key, primary) {
+    var b = row.buttons[key];
+    return button(b.label, {
+      "data-act": key,
+      "data-review": row.id,
+      "data-key": row.id + ":" + key,
+      "data-primary": primary ? "true" : null,
+      "aria-busy": b.busy ? "true" : null,
+      disabled: !b.enabled
+    });
+  }
+
+  function renderRow(row, extra) {
+    var main = h("div", { class: "lib-row-main" }, [
+      h("p", { class: "lib-name", text: row.name }),
+      h("p", { class: "lib-where", text: [row.where, extra, row.lastText].filter(Boolean).join(" \u00b7 ") })
+    ]);
+
+    var facts = [];
+    if (row.counts.waiting) facts.push(h("span", { class: "lib-waiting", text: row.counts.waiting }));
+    facts.push(h("span", { text: row.counts.comments }));
+    if (row.counts.asOf) facts.push(h("span", { text: row.counts.asOf }));
+    row.badges.forEach(function (b) {
+      var kind = b.indexOf("agent watching") === 0 ? "watching" : b === "being served now" ? "served" : "ended";
+      facts.push(h("span", { class: "lib-badge", "data-badge": kind, text: b }));
+    });
+    if (row.folded) facts.push(h("span", { text: row.folded }));
+    main.appendChild(h("div", { class: "lib-facts" }, facts));
+
+    if (row.pages.length) {
+      main.appendChild(
+        h(
+          "ul",
+          { class: "lib-pages", "aria-label": "Pages" },
+          row.pages.map(function (p) {
+            return h("li", null, [h("span", { text: p.title }), p.title !== p.path ? h("span", { class: "lib-path", text: p.path }) : null]);
+          })
+        )
+      );
+    }
+
+    row.notices.forEach(function (n) {
+      main.appendChild(h("p", { class: "lib-line", "data-tone": n.tone, text: n.text }));
+    });
+
+    if (row.note) {
+      var noteKids = [h("span", { class: "lib-mark", "aria-hidden": "true" }), h("span", { class: "lib-note-text", text: row.note.text })];
+      if (row.note.copyHandoff) {
+        noteKids.push(
+          button(row.handoffLabel, {
+            "data-act": "handoff",
+            "data-reason": "refused",
+            "data-review": row.id,
+            "data-key": row.id + ":handoff",
+            "data-quiet": "true"
+          })
+        );
+      }
+      main.appendChild(
+        h("p", { class: "lib-note", "data-tone": row.note.tone, "data-busy": row.note.busy ? "true" : "false" }, noteKids)
+      );
+    }
+
+    if (row.offerHandoff) {
+      main.appendChild(
+        h("p", { class: "lib-line" }, [
+          button(row.handoffLabel, {
+            "data-act": "handoff",
+            "data-reason": "no_agent",
+            "data-review": row.id,
+            "data-key": row.id + ":handoff",
+            "data-quiet": "true"
+          })
+        ])
+      );
+    }
+
+    var starBtn = h("button", {
+      type: "button",
+      class: "lib-star",
+      "data-act": "star",
+      "data-review": row.id,
+      "data-key": row.id + ":star",
+      "aria-pressed": row.star.on ? "true" : "false",
+      "aria-label": row.star.label,
+      title: row.star.label,
+      "aria-busy": row.star.pending ? "true" : null,
+      disabled: !row.star.enabled || row.star.pending,
+      text: row.star.on ? "\u2605" : "\u2606"
+    });
+
+    var acts = h("div", { class: "lib-acts" }, [
+      actionButton(row, "open", true),
+      actionButton(row, "pickup", false),
+      actionButton(row, "launch", false)
+    ]);
+
+    var kids = [starBtn, main, acts];
+    if (row.panel) {
+      kids.push(
+        h("div", { class: "lib-panel", role: "region", "aria-label": row.handoffLabel }, [
+          h("p", { text: row.panel.intro }),
+          h("pre", { text: row.panel.message }),
+          h("div", { class: "lib-panel-acts" }, [
+            button(row.panel.copyLabel, {
+              "data-act": "copy",
+              "data-review": row.id,
+              "data-key": row.id + ":copy",
+              "data-message": row.panel.message,
+              "data-primary": "true"
+            }),
+            button(row.panel.closeLabel, { "data-act": "close-panel", "data-review": row.id, "data-key": row.id + ":close" }),
+            row.panel.copyStatus ? h("span", { class: "lib-copy-status", role: "status", text: row.panel.copyStatus }) : null
+          ])
+        ])
+      );
+    }
+    return h("li", { "data-review": row.id }, [h("div", { class: "lib-row" }, kids)]);
+  }
+
+  function renderCard(card) {
+    var metaKids = card.projects.map(function (p) {
+      return h("span", { class: "lib-project", text: p });
+    });
+    metaKids.push(h("span", { text: card.reviewsText }));
+    metaKids.push(h("span", { text: card.watchText }));
+    if (card.waitingText) metaKids.push(h("span", { class: "lib-waiting", text: card.waitingText }));
+    metaKids.push(h("span", { text: card.lastText }));
+    var details = h("details", { class: "lib-card", "data-session": card.id, open: card.open }, [
+      h("summary", { "data-key": "card:" + card.id }, [
+        h("span", { class: "lib-chev", "aria-hidden": "true" }),
+        h("span", { class: "lib-card-title", text: card.title }),
+        h("span", { class: "lib-card-meta" }, metaKids)
+      ]),
+      h("ul", { class: "lib-rows" }, card.rows.map(function (r) {
+        return renderRow(r, null);
+      }))
+    ]);
+    details.addEventListener("toggle", function () {
+      if (details.open !== card.open) update(VM.withExpanded(state, card.id, details.open));
+    });
+    return details;
+  }
+
+  function renderMain(view) {
+    var kids = [];
+    if (view.notice) kids.push(h("p", { class: "lib-notice", text: view.notice }));
+    if (view.loading) kids.push(h("p", { class: "lib-quiet", id: "lahe-catalog-status", text: view.loading }));
+    if (view.empty) kids.push(h("p", { class: "lib-quiet", "data-state": "empty", text: view.empty }));
+    if (view.noMatches) kids.push(h("p", { class: "lib-quiet", "data-state": "no-matches", text: view.noMatches }));
+    view.sections.forEach(function (section) {
+      kids.push(
+        h("section", { class: "lib-section", "data-section": section.id }, [h("h2", { text: section.heading })].concat(section.cards.map(renderCard)))
+      );
+    });
+    if (view.missing) {
+      if (view.missing.section) {
+        var sec = view.missing.section;
+        kids.push(
+          h("section", { class: "lib-section lib-missing", "data-section": "missing" }, [
+            h("div", { class: "lib-section-head" }, [
+              h("h2", { text: sec.heading }),
+              button(sec.hideText, { "data-act": "hide-missing", "data-key": "missing:toggle", "data-quiet": "true" })
+            ]),
+            h("ul", { class: "lib-rows" }, sec.rows.map(function (r) {
+              return renderRow(r, r.sessionText);
+            }))
+          ])
+        );
+      } else {
+        kids.push(
+          h("p", { class: "lib-missing-toggle" }, [
+            button(view.missing.toggleText, { "data-act": "show-missing", "data-key": "missing:toggle", "data-quiet": "true" })
+          ])
+        );
+      }
+    }
+    els.main.replaceChildren.apply(els.main, kids);
+  }
+
+  function renderBanner(banner) {
+    if (!banner) {
+      els.banner.replaceChildren();
+      return;
+    }
+    var kids = [h("p", { text: banner.text })];
+    if (banner.action === "reload") kids.push(button(banner.actionLabel, { "data-act": "reload", "data-key": "banner:reload", "data-primary": "true" }));
+    var existing = els.banner.firstChild;
+    // The same banner, re-rendered, keeps its node so its arrival animation
+    // plays once, when the state it reports actually changes.
+    if (existing && existing.getAttribute("data-text") === banner.text) return;
+    els.banner.replaceChildren(h("div", { class: "lib-banner-box", "data-tone": banner.tone, "data-text": banner.text }, kids));
+  }
+
+  var lastDialog = null;
+  function renderDialog(dialog) {
+    var el = els.dialog;
+    var serial = dialog ? JSON.stringify(dialog) : null;
+    if (!dialog) {
+      lastDialog = null;
+      if (el.open) el.close();
+      el.replaceChildren();
+      return;
+    }
+    // A poll while the dialog is up must not rebuild it under the reader's
+    // focus.
+    if (serial === lastDialog && el.open) return;
+    lastDialog = serial;
+    var kids = [h("h2", { id: "lahe-catalog-confirm-title", text: dialog.title }), h("p", { text: dialog.body })];
+    if (dialog.reviews.length) {
+      kids.push(h("ul", null, dialog.reviews.map(function (name) {
+        return h("li", { text: name });
+      })));
+    }
+    kids.push(
+      h("div", { class: "lib-dialog-acts" }, dialog.buttons.map(function (b) {
+        return button(b.label, {
+          "data-act": b.id,
+          "data-review": dialog.review,
+          "data-action": dialog.action,
+          "data-key": "dialog:" + b.id,
+          "data-primary": b.id === "move" ? "true" : null,
+          "data-quiet": b.id === "cancel" ? "true" : null
+        });
+      }))
+    );
+    el.replaceChildren.apply(el, kids);
+    if (!el.open) el.showModal();
+    var first = el.querySelector('[data-act="move"]');
+    if (first) first.focus();
+  }
+
+  function renderProjects(projects) {
+    var current = Array.prototype.map.call(els.project.options, function (o) {
+      return o.value + "\u0000" + o.textContent;
+    }).join("\u0001");
+    var wanted = projects.options.map(function (o) {
+      return o.value + "\u0000" + o.label;
+    }).join("\u0001");
+    if (current !== wanted) {
+      els.project.replaceChildren.apply(
+        els.project,
+        projects.options.map(function (o) {
+          return h("option", { value: o.value, text: o.label });
+        })
+      );
+    }
+    els.project.value = projects.value;
+    els.project.hidden = projects.options.length <= 1;
+  }
+
+  var pendingFocus = null;
+  function focusKey(key) {
+    pendingFocus = key;
+  }
+
+  function render() {
+    var view = VM.build(list, state, now(), {});
+    var serial = JSON.stringify(view);
+    if (serial === lastRendered && pendingFocus === null) return;
+    lastRendered = serial;
+
+    var active = document.activeElement;
+    var activeKey = active && active.getAttribute ? active.getAttribute("data-key") : null;
+
+    els.agent.textContent = view.agent.text;
+    els.agent.setAttribute("data-attached", view.agent.attached ? "true" : "false");
+    els.search.placeholder = view.search.placeholder;
+    if (els.search.value !== view.search.value) els.search.value = view.search.value;
+    renderProjects(view.projects);
+    renderBanner(view.banner);
+    renderMain(view);
+    renderDialog(view.dialog);
+
+    // A re-render replaces the list's nodes, so the reader's focus is put back
+    // on the same control by key: a keyboard user is not thrown to the top of
+    // the page every POLL_MS.
+    var key = pendingFocus || activeKey;
+    pendingFocus = null;
+    if (key && !(view.dialog && els.dialog.open)) {
+      var target = els.main.querySelector('[data-key="' + cssEscape(key) + '"]') || els.banner.querySelector('[data-key="' + cssEscape(key) + '"]');
+      if (target && target !== document.activeElement) target.focus();
+    }
+  }
+
+  function cssEscape(value) {
+    return window.CSS && CSS.escape ? CSS.escape(value) : String(value).replace(/["\\]/g, "\\$&");
+  }
+
+  // ---------------------------------------------------------------------------
+  // Boot
+  // ---------------------------------------------------------------------------
+
+  els.main.addEventListener("click", onClick);
+  els.banner.addEventListener("click", onClick);
+  els.dialog.addEventListener("click", onClick);
+  // Escape closes a modal dialog by itself; the close lands here and means Cancel.
+  els.dialog.addEventListener("close", function () {
+    if (state.dialog) update(VM.withDialog(state, null));
+  });
+  els.search.addEventListener("input", function () {
+    update(VM.withQuery(state, els.search.value));
+  });
+  els.project.addEventListener("change", function () {
+    update(VM.withProject(state, els.project.value));
+  });
+
+  render();
+  poll();
+  timer = setInterval(poll, protocol.CATALOG.POLL_MS);
 })();
