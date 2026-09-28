@@ -1111,9 +1111,9 @@ way, so chains of documents work.
 The path-safety rules on that translation: real paths decide, so a symlink
 pointing out of the home directory is refused even from inside it; nothing
 outside the home directory is ever mounted (`LAHE_HOME_DIR` moves that boundary
-for tests, the way `LAHE_STATE_DIR` moves the state directory); hidden
-(dot-prefixed) locations below home are refused; and one render may mount at most
-16 distinct directories. A link failing any rule renders as a non-clickable span
+for tests, the way `LAHE_STATE_DIR` moves the state directory); and one render
+may mount at most 16 distinct directories. Hidden (dot-prefixed) locations get
+no special handling: they translate and serve like any other file. A link failing any rule renders as a non-clickable span
 titled `local file, open it on disk: <path>` rather than a link to a 404. There
 is no custom protocol handler. A link that leaves the documentation (an
 external URL, or a protocol-relative `//host` link) opens in a new tab; a link
