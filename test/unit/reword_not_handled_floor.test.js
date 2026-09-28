@@ -377,3 +377,130 @@ test("a draft post at the same revision as a handled reply leaves it handled", (
   const got = projection.project(REVIEW, events, { generated_at: "2026-09-28T00:00:00.000Z" });
   assert.equal(got.pages[0].items[0].state, "handled", "the helper's lifecycle stands for a handled item");
 });
+
+// ---------------------------------------------------------------------------
+// Code review round: late replies, the scope of the helper's withdrawal rule,
+// and a draft from before the first commit
+// ---------------------------------------------------------------------------
+
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const logModule = require("../../src/service/log.js");
+const stateDir = require("../../src/service/state_dir.js");
+const replies = require("../../src/service/replies.js");
+
+let helperEventCounter = 0;
+function helperRig(options) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-refused-"));
+  const log = logModule.createEventLog({ dir: dir });
+  stateDir.ensureReviewDir(dir, REVIEW);
+  const folder = replies.createReplyFolder(Object.assign({ dir: dir, log: log }, options || {}));
+  const lines = Object.create(null);
+  return {
+    log,
+    folder,
+    post(item, type) {
+      helperEventCounter += 1;
+      log.append(REVIEW, [
+        protocol.newEvent({
+          event: type,
+          event_id: "evt_helper_" + helperEventCounter,
+          review: REVIEW,
+          item: item.id,
+          rev: item.rev,
+          page_path: item.page_path,
+          page_title: item.page_title,
+          page_seq: item.page_seq,
+          payload: { draft: record.isDraft(item), record: item }
+        })
+      ]);
+    },
+    reply(file, fields) {
+      lines[file] = (lines[file] || "") + JSON.stringify(fields) + "\n";
+      fs.writeFileSync(stateDir.replyFilePath(dir, REVIEW, file), lines[file], { mode: 0o600 });
+      return folder.fold(REVIEW);
+    },
+    item(id) {
+      return projection.itemsFrom(log.read(REVIEW)).find((each) => each.id === id);
+    }
+  };
+}
+
+// A committed hand edit (it has history), as the browser holds it after commit.
+function committedRecord() {
+  return record.newItem({
+    kind: record.KIND.EDIT,
+    state: record.STATE.READY,
+    before: "Warm up for ten minutes.",
+    after: "Warm up for fifteen minutes.",
+    change: "ten to fifteen",
+    page_origin: PAGE.origin,
+    page_path: PAGE.path,
+    page_title: PAGE.title,
+    page_seq: 1
+  });
+}
+
+function withdrawn(item, typed) {
+  return Object.assign({}, item, { state: record.STATE.DRAFT, after: typed });
+}
+
+for (const late of [
+  { status: "handled", pageShows: () => true, label: "a late handled reply" },
+  { status: "handled", pageShows: () => false, label: "a late handled reply the page does not show" },
+  { status: "not_handled", pageShows: null, label: "a late not_handled reply" },
+  { status: "question", pageShows: null, label: "a late question" }
+]) {
+  test(late.label + " naming the same revision is refused while the refused edit is withdrawn", () => {
+    const h = helperRig(late.pageShows ? { pageShows: late.pageShows } : {});
+    const item = committedRecord();
+    h.post(item, protocol.EVENT.ITEM_READY);
+    const first = h.reply("replies-claude.jsonl", { item: item.id, rev: 1, status: "not_handled", agent: "claude", reason: REASON });
+    assert.equal(first.accepted.length, 1);
+    h.post(withdrawn(item, "Warm up for fifteen minutes, then"), protocol.EVENT.ITEM_CONTENT);
+    assert.equal(h.item(item.id).state, "draft", "the withdrawal landed");
+
+    const second = h.reply("replies-codex.jsonl", {
+      item: item.id,
+      rev: 1,
+      status: late.status,
+      agent: "codex",
+      reason: late.status === "not_handled" ? "no" : undefined,
+      text: late.status === "question" ? "which one?" : undefined
+    });
+    assert.equal(second.accepted.length, 0, "an agent never answers a draft");
+    assert.equal(second.refused.length, 1);
+    const now = h.item(item.id);
+    assert.equal(now.state, "draft", "the draft stays a draft");
+    assert.equal(now.reply.reason, REASON, "the first answer is still the one on the card");
+  });
+}
+
+test("a ready edit carrying a question is withdrawn by rewording and restored by typing it back", () => {
+  const h = helperRig();
+  const item = committedRecord();
+  h.post(item, protocol.EVENT.ITEM_READY);
+  h.reply("replies.jsonl", { item: item.id, rev: 1, status: "question", agent: "claude", text: "Fifteen or twenty?" });
+  assert.equal(h.item(item.id).state, "ready", "a question leaves it ready");
+
+  h.post(withdrawn(item, "Warm up for fifteen minutes, or"), protocol.EVENT.ITEM_CONTENT);
+  assert.equal(h.item(item.id).state, "draft", "rewording takes it off the agent's desk");
+
+  h.post(Object.assign({}, item), protocol.EVENT.ITEM_CONTENT);
+  const back = h.item(item.id);
+  assert.equal(back.state, "ready", "typed back: ready again");
+  assert.equal(back.reply.text, "Fifteen or twenty?", "and the question is still on it");
+});
+
+test("a draft from before the first commit is not read as a withdrawal", () => {
+  const h = helperRig();
+  const committed = committedRecord();
+  // The same edit as a draft, before it was ever committed: no history.
+  const early = Object.assign({}, committed, { state: record.STATE.DRAFT, after: "Warm up for fif", after_history: [] });
+  h.post(committed, protocol.EVENT.ITEM_READY);
+  h.reply("replies.jsonl", { item: committed.id, rev: 1, status: "not_handled", agent: "claude", reason: REASON });
+  // The stale draft arrives late.
+  h.post(early, protocol.EVENT.ITEM_CONTENT);
+  assert.equal(h.item(committed.id).state, "not_handled", "the agent's answer stands");
+});

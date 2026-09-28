@@ -26,6 +26,10 @@
 //     agent's answer is dropped and the item is outstanding again. A record
 //     arriving at the SAME revision is the ordinary re-post of something the
 //     helper already knows, and it must not resurrect `ready` over `handled`.
+//     The one exception is the reviewer's withdrawal: a same-revision draft
+//     of a committed ready or not_handled item takes it to draft, and the
+//     helper keeps the agent's state and reply and restores them when the
+//     wording comes back. The browser's claimed state is never taken.
 //
 //  3. DRAFTS ARE NOT IN THE FILE (R7). A draft is the reviewer mid-sentence.
 //     They are durable in the log and they are on the reviewer's rail, and they
@@ -64,6 +68,13 @@ var F = record.FIELD;
 // ---------------------------------------------------------------------------
 // The log, read back into items
 // ---------------------------------------------------------------------------
+
+// Has this record been committed before? Its applied-after history says so;
+// a draft from before its first commit has none.
+function wasCommitted(item) {
+  var history = item[F.AFTER_HISTORY];
+  return Array.isArray(history) && history.length > 0;
+}
 
 function recordFromEvent(event) {
   var carried = event.record;
@@ -180,7 +191,14 @@ function foldEvents(state, events, options) {
         // 5). A handled item is never withdrawn: its state stands as before.
         var id2 = next[F.ID];
         var from = withdrawnFrom[id2] || prev[F.STATE];
-        if (record.isDraft(next) && (from === record.STATE.READY || from === record.STATE.NOT_HANDLED)) {
+        // Only a record committed before counts: a first commit keeps revision
+        // one, so a late draft from before it (no history yet) is stale
+        // content, not a withdrawal.
+        if (
+          record.isDraft(next) &&
+          (from === record.STATE.READY || from === record.STATE.NOT_HANDLED) &&
+          wasCommitted(next)
+        ) {
           withdrawnFrom[id2] = from;
           next[F.STATE] = record.STATE.DRAFT;
         } else {

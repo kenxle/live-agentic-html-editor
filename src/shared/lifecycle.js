@@ -230,6 +230,17 @@
           "; the reviewer reworded it, so it stays outstanding"
       };
     }
+    // AN AGENT NEVER ANSWERS A DRAFT, not even with a question. A draft at a
+    // revision an agent has seen is the reviewer rewording it (withdrawn from
+    // ready or not_handled), and a late or rival reply to the old wording must
+    // not move it out or put the half-typed words in front of anyone.
+    if (record.isDraft(item)) {
+      return {
+        accepted: false,
+        state: item[FIELD.STATE],
+        refusal: "the item is a draft (the reviewer is still writing or rewording it); only a ready item is actionable"
+      };
+    }
     // A question leaves the item exactly where it is. It is the loudest thing
     // on the card, and it is not a state change.
     if (r.status === record.REPLY_STATUS.QUESTION) {
