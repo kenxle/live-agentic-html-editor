@@ -15,6 +15,7 @@ lahe skill; after that a plain sentence works:
 | --- | --- |
 | `lahe review path/to/page.html` | Start a review and isolated agent session: starts or reuses its static server and the shared helper, then prints one URL plus the wake, monitor, drain, and close commands. It writes NOTHING into the page's folder: the server puts the script line into each response instead |
 | `lahe review path/to/folder` | A folder of HTML pages that is itself the document: serves the whole folder, mints ONE review for it, and opens `index.html` (else the first page in name order). The folder needs at least one `.html` file of its own; one with none is still the dev-server row |
+| `lahe review path/to/notes.md` | A Markdown file that is the whole document: LAHE renders it to HTML in its own state directory and puts the review on that render. Your `.md` is never written to. The agent edits the `.md` and replies; it does not rerun anything, because the helper notices the source is newer and renders again by itself. In the rendered page, a link that leaves the documentation opens in a new tab, and a link to another local `.md` opens as another rendered page in the same tab, read-only |
 | `lahe review ... --only` | Keep this review to the page it was given. The default is the opposite: our server serves the page's whole folder and the rail follows the reviewer onto every HTML page in it, including pages added later, so a link or a typed filename never lands them somewhere they cannot comment. Use `--only` when that folder holds files nobody asked to review, a Downloads folder or a Desktop. It cannot be undone on a review afterwards. `lahe review` prints the served `root`, which is the line that tells you whether you want this |
 | `lahe review another.html --session <id>` | Add a later document to the same agent workstream without receiving another agent's comments |
 | `lahe add path/to/project --origin http://localhost:3000` | Dev-server variant: edits nothing, prints a commented snippet that you must wrap in your framework's development-only conditional |
@@ -135,7 +136,14 @@ a frame) cannot fight the real window over the review; `data-lahe-frames="allow"
 on the script tag opts a genuinely embedded document back in.
 
 **If the page is build output**, an agent should rebuild before it reports an
-item handled: `handled` is supposed to mean your page shows the change. It does
+item handled: `handled` is supposed to mean your page shows the change. That is
+now checked rather than taken on trust. When an agent says handled for one of
+your own hand edits, and nothing in the source or the page has been written
+since you typed those words, the helper looks for your words in the built page.
+If they are not there, the item stays on your card and on the agent's list, and
+the card says the change has not reached your page. An agent that did real work
+is never second-guessed on its wording; the one thing this catches is an agent
+answering handled having changed nothing. It does
 not have to re-run `lahe add` afterwards, and on the served path there is nothing
 for a rebuild to strip: the script line lives in the response, not in the file,
 so a rebuild that rewrites the whole page cannot take the rail with it. The
