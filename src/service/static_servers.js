@@ -263,27 +263,15 @@ function loopbackOrigins(port) {
 }
 
 /**
- * Is `target` this server's own root or under it? Mounts are left out on
- * purpose: a mounted folder is read-only linked documents, never a review.
- */
-function underServerRoot(meta, target) {
-  if (typeof target !== "string" || !target) return false;
-  var resolved = path.resolve(target);
-  var real = resolved;
-  try { real = fs.realpathSync(resolved); } catch (err) { /* the plain path still answers */ }
-  return [meta.root, meta.logical_root].some(function (base) {
-    if (typeof base !== "string" || !base) return false;
-    return [resolved, real].some(function (candidate) {
-      return candidate === base || candidate.indexOf(base + path.sep) === 0;
-    });
-  });
-}
-
-/**
  * The reviews of `sessionId` that `meta`'s server serves, read off disk: a
- * review whose recorded target (a page or a folder) is under the server's root.
+ * review with a recorded target (a page or a folder) that coveragePath covers
+ * on that server, mounts included. ONE COVERAGE RULE (fix round CL3): the
+ * reader decides a review is openable through this same rule, so the reviews
+ * whose origins a restart swaps are exactly the ones Open can land on.
+ * `alsoReview`, the review Open asked for, is always in the answer when it
+ * belongs to the session.
  */
-function reviewsServedBy(dir, sessionId, meta) {
+function reviewsServedBy(dir, sessionId, meta, alsoReview) {
   var root;
   try { root = stateDir.reviewsRoot(dir); } catch (err) { return []; }
   if (!fs.existsSync(root)) return [];
@@ -293,9 +281,10 @@ function reviewsServedBy(dir, sessionId, meta) {
     .filter(function (reviewId) {
       var recorded = readJson(stateDir.metaPath(dir, reviewId));
       if (!recorded || recorded.agent_session_id !== sessionId) return false;
+      if (reviewId === alsoReview) return true;
       var targets = Array.isArray(recorded.target_paths) ? recorded.target_paths.slice() : [];
       if (typeof recorded.target_path === "string") targets.push(recorded.target_path);
-      return targets.some(function (target) { return underServerRoot(meta, target); });
+      return targets.some(function (target) { return coveragePath(meta, target) !== null; });
     })
     .sort();
 }
@@ -323,7 +312,8 @@ function createCatalogOps(options) {
   /**
    * Bring back `sessionId`'s one recorded server `serverId` (old port first),
    * then reopen the session if it is closed, register that server's origins on every review
-   * it serves, and remove the loopback origins of its EARLIER ports from those
+   * it serves (by coveragePath, mounts included, plus `reviewId`, the review
+   * Open asked for), and remove the loopback origins of its EARLIER ports from those
    * same reviews. Nothing else is removed: not a dev server's origin, not a
    * non-loopback one, not a port another server of this session is on now.
    *
@@ -333,7 +323,7 @@ function createCatalogOps(options) {
    * @returns {Promise<{server: object, started: boolean, origin: string,
    *   reviews: string[], registered: string[], removed: string[]}>}
    */
-  async function reopenForCatalog(sessionId, serverId) {
+  async function reopenForCatalog(sessionId, serverId, reviewId) {
     var session = sessions.read(sessionId);
     if (!session || session.synthetic) throw new Error("unknown agent session " + JSON.stringify(sessionId));
     var record = list(dir, sessionId).filter(function (meta) { return meta.id === serverId; })[0];
@@ -359,7 +349,7 @@ function createCatalogOps(options) {
       loopbackOrigins(port).forEach(function (origin) { stale.push(origin); });
     });
 
-    var served = reviewsServedBy(dir, sessionId, server);
+    var served = reviewsServedBy(dir, sessionId, server, reviewId);
     var registered = [];
     var removed = [];
     served.forEach(function (reviewId) {

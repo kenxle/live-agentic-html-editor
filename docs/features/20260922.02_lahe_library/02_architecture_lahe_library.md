@@ -226,7 +226,7 @@ sequenceDiagram
 
 ### Stale origins
 
-On a new port, the helper registers `http://127.0.0.1:<new>` and `http://localhost:<new>` on the review. It then appends `origin.removed` for the loopback origins of this same `ss_` server's earlier ports, and only those. It never removes a non-loopback origin, a dev-server origin, or an origin from another server.
+On a new port, the helper registers `http://127.0.0.1:<new>` and `http://localhost:<new>` on the review, and on every review of the session that server serves by `static_servers.coveragePath`, the same rule that makes a row openable, mounts included (fix round CL3). It then appends `origin.removed` for the loopback origins of this same `ss_` server's earlier ports, and only those. It never removes a non-loopback origin, a dev-server origin, or an origin from another server.
 
 ### Star
 

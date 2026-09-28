@@ -241,7 +241,7 @@ function createCatalogActions(options) {
       try {
         // Starts the server before it reopens the session, so a failed start
         // leaves the session closed.
-        restarted = await ops.reopenForCatalog(d.session, d.server);
+        restarted = await ops.reopenForCatalog(d.session, d.server, d.review);
       } catch (err) {
         if (wasClosed) store.clearReopened(d.session);
         log("Library Open of review " + d.review + " could not restart its server: " + err.message, nowMs);
