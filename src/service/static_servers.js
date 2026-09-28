@@ -46,6 +46,56 @@ var LIBRARY_PREFIX = "/.lahe-library/";
 // until the session is reopened.
 var IDLE_REASON = "no window open";
 var CLOSED_REASON = "session closed";
+
+// Test seams, empty in the product. afterStopWait runs between a stopped
+// server's process dying and stopOne writing its record, which is the gap a
+// second starter can land in.
+var hooks = { afterStopWait: null };
+
+// ONE STARTER PER SERVER, ACROSS PROCESSES. The helper (a window coming back)
+// and `lahe review` can both find the same server stopped and start it at the
+// same moment. Two spawns race for one record: one lands on the old port, the
+// other falls back to a random one, and whichever record loses is an orphan
+// nothing will ever stop. So start() holds an exclusive lock file beside the
+// record (`ss_<id>.json.lock`, which list() never reads) for as long as it
+// decides and spawns. A lock older than START_LOCK_STALE_MS belongs to a
+// starter that died, and is taken over: it is longer than start()'s own ten
+// second wait for a server to come up, so a live starter never loses its lock.
+var START_LOCK_STALE_MS = 20 * 1000;
+var START_LOCK_WAIT_MS = 25 * 1000;
+
+function lockPath(file) {
+  return file + ".lock";
+}
+
+async function withServerLock(file, task) {
+  var lock = lockPath(file);
+  var deadline = Date.now() + START_LOCK_WAIT_MS;
+  for (;;) {
+    try {
+      var fd = fs.openSync(lock, "wx", 0o600);
+      try { fs.writeSync(fd, process.pid + " " + new Date().toISOString() + "\n"); } finally { fs.closeSync(fd); }
+      break;
+    } catch (err) {
+      if (err.code !== "EEXIST") throw err;
+    }
+    var age = null;
+    try { age = Date.now() - fs.statSync(lock).mtimeMs; } catch (err) { continue; }
+    if (age > START_LOCK_STALE_MS) {
+      try { fs.unlinkSync(lock); } catch (err) { /* another waiter took it over first */ }
+      continue;
+    }
+    if (Date.now() > deadline) {
+      throw new Error("another process is still starting or stopping the static server " + path.basename(file) + "; try again");
+    }
+    await delay(50);
+  }
+  try {
+    return await task();
+  } finally {
+    try { fs.unlinkSync(lock); } catch (err) { /* already gone: a stale takeover */ }
+  }
+}
 var LIBRARY_PATH = LIBRARY_PREFIX + heal.BUNDLE_BASENAME;
 
 var MIME = {
@@ -240,6 +290,13 @@ async function start(options) {
   var root = fs.realpathSync(path.resolve(options.root));
   var id = serverId(root);
   var file = stateDir.staticServerPath(dir, sessionId, id);
+  stateDir.ensureStaticServersRoot(dir, sessionId);
+  return withServerLock(file, function () {
+    return startLocked(options, dir, sessionId, root, logicalRoot, id, file);
+  });
+}
+
+async function startLocked(options, dir, sessionId, root, logicalRoot, id, file) {
   var existing = readJson(file);
   if (fs.existsSync(file) && !existing) throw new Error("static server metadata is corrupt: " + file);
   if (existing && existing.root === root && await isExactServer(existing)) {
@@ -288,27 +345,43 @@ async function stopOne(dir, sessionId, meta, reason) {
   if (meta.stopped_at) {
     // A session closed after the sweep stopped its servers. The record says
     // so, or a window claiming later would read "idle" and start it again.
-    if (why === CLOSED_REASON && meta.stop_reason === IDLE_REASON) {
-      meta.stop_reason = CLOSED_REASON;
-      writeMeta(dir, sessionId, meta);
-    }
+    if (why === CLOSED_REASON && meta.stop_reason === IDLE_REASON) await markStopped(dir, sessionId, meta, CLOSED_REASON);
     return false;
   }
   var exact = await isExactServer(meta);
   if (!exact) {
-    meta.stopped_at = new Date().toISOString();
-    meta.stop_reason = why === IDLE_REASON ? IDLE_REASON : "already down";
-    writeMeta(dir, sessionId, meta);
+    await markStopped(dir, sessionId, meta, why === IDLE_REASON ? IDLE_REASON : "already down");
     return false;
   }
   try { process.kill(meta.pid, "SIGTERM"); }
   catch (err) { if (err.code !== "ESRCH") throw err; }
   var stopped = await waitFor(async function () { return !(await isExactServer(meta)); }, 10000);
   if (!stopped) throw new Error("static review server " + meta.id + " did not stop within 10 seconds");
-  meta.stopped_at = new Date().toISOString();
-  meta.stop_reason = why;
-  writeMeta(dir, sessionId, meta);
+  if (typeof hooks.afterStopWait === "function") await hooks.afterStopWait();
+  markStopped(dir, sessionId, meta, why);
   return true;
+}
+
+/**
+ * Write `meta` back as stopped, but only while the record on disk still names
+ * that same process. Stopping takes a moment, and a starter (a window coming
+ * back, `lahe review`) can start the server again in it. Writing the old record
+ * over the new one would call the new process stopped, so a session close
+ * would never stop it and the next start would take a random port. Under the
+ * start lock, so a start cannot land between the read and the write.
+ *
+ * @returns {Promise<boolean>} whether the record was written
+ */
+function markStopped(dir, sessionId, meta, reason) {
+  var file = stateDir.staticServerPath(dir, sessionId, meta.id);
+  return withServerLock(file, async function () {
+    var onDisk = readJson(file);
+    if (onDisk && onDisk.instance !== meta.instance) return false;
+    meta.stopped_at = new Date().toISOString();
+    meta.stop_reason = reason;
+    writeMeta(dir, sessionId, meta);
+    return true;
+  });
 }
 
 /**
@@ -1210,6 +1283,8 @@ module.exports = {
   SCHEMA: SCHEMA,
   LIBRARY_PATH: LIBRARY_PATH,
   IDLE_REASON: IDLE_REASON,
+  _hooks: hooks,
+  START_LOCK_STALE_MS: START_LOCK_STALE_MS,
   CLOSED_REASON: CLOSED_REASON,
   noteLinkGiven: noteLinkGiven,
   servesPath: servesPath,

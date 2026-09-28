@@ -442,6 +442,16 @@ function numberOr(value, fallback) {
 // ---------------------------------------------------------------------------
 
 /** Which agent session owns this review, or null when nothing can say. */
+function ownerSessionOf(request, deps) {
+  if (!deps.reviews || typeof deps.reviews.get !== "function") return null;
+  var held = deps.reviews.get(request.review);
+  var owner = held && typeof held.agent_session_id === "string" ? held.agent_session_id : null;
+  // "legacy" is the synthetic id for reviews made before sessions existed. It
+  // has no directory and therefore no feed and no heartbeat.
+  if (!owner || owner === "legacy" || !protocol.isSafeId(owner)) return null;
+  return owner;
+}
+
 /** Tell the idle sweep a window of this review was active. Never throws. */
 function noteWindow(deps, reviewId) {
   if (!deps.idleServers || typeof deps.idleServers.windowActivity !== "function") return;
@@ -451,16 +461,6 @@ function noteWindow(deps, reviewId) {
   } catch (err) {
     // The claim's answer matters more than the server bookkeeping.
   }
-}
-
-function ownerSessionOf(request, deps) {
-  if (!deps.reviews || typeof deps.reviews.get !== "function") return null;
-  var held = deps.reviews.get(request.review);
-  var owner = held && typeof held.agent_session_id === "string" ? held.agent_session_id : null;
-  // "legacy" is the synthetic id for reviews made before sessions existed. It
-  // has no directory and therefore no feed and no heartbeat.
-  if (!owner || owner === "legacy" || !protocol.isSafeId(owner)) return null;
-  return owner;
 }
 
 /**

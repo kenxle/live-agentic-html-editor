@@ -169,6 +169,13 @@ function createIdleServers(options) {
           logicalRoot: typeof meta.logical_root === "string" ? meta.logical_root : null,
           preferredPort: meta.port
         });
+        // The session may have closed while the server came up. A close is
+        // final until a reopen, so the server goes down again, as closed.
+        if (!isOpenSession(sessionId)) {
+          await staticServers.stopOne(dir, sessionId, result.meta, staticServers.CLOSED_REASON);
+          say("agent session " + sessionId + " closed while its page server " + meta.id + " was coming back; stopped it again");
+          return started;
+        }
         if (result.started) started += 1;
         if (result.meta.port !== meta.port) {
           say(
@@ -211,16 +218,28 @@ function createIdleServers(options) {
     var list;
     try { list = agentSessions.openSessions(); } catch (err) { return 0; }
     var pending = [];
+    // What this sweep saw. Anything else is forgotten below, so the two maps
+    // track only running servers and the sessions that own them.
+    var seenSessions = Object.create(null);
+    var seenInstances = Object.create(null);
     list.forEach(function (session) {
       var id = session.id;
       var running = serversOf(id).filter(function (meta) { return !meta.stopped_at; });
       if (!running.length) return;
+      seenSessions[id] = true;
+      running.forEach(function (meta) { seenInstances[meta.id + ":" + meta.instance] = true; });
       if (open[id]) {
         lastOpen[id] = at;
         graceStart(id, running, at);
         return;
       }
       if (at - graceStart(id, running, at) >= graceMs) pending.push(stopIdle(id));
+    });
+    Object.keys(firstSeen).forEach(function (key) {
+      if (!seenInstances[key]) delete firstSeen[key];
+    });
+    Object.keys(lastOpen).forEach(function (id) {
+      if (!seenSessions[id]) delete lastOpen[id];
     });
     var counts = await Promise.all(pending);
     return counts.reduce(function (sum, n) { return sum + (n || 0); }, 0);
@@ -255,7 +274,13 @@ function createIdleServers(options) {
     timer = null;
   }
 
+  /** How much the sweep remembers. For tests. */
+  function tracked() {
+    return { instances: Object.keys(firstSeen).length, sessions: Object.keys(lastOpen).length };
+  }
+
   return {
+    _tracked: tracked,
     sweep: sweep,
     windowActivity: windowActivity,
     settled: settled,

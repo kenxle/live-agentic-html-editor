@@ -374,3 +374,121 @@ test("lahe status says the server is stopped and names the command that restarts
     "the state directory rides along, since this one is not the default"
   );
 });
+
+// ---------------------------------------------------------------------------
+// Review fixes: races between the helper and the CLI over one server.
+// ---------------------------------------------------------------------------
+
+test("a stop never overwrites the record of a server started after its kill", async (t) => {
+  const w = world(t);
+  const a = await w.session("s_race_stop");
+  const old = staticServers.list(w.dir, a.id)[0];
+  let fresh = null;
+  // Between the old process dying and the stop writing its record, a
+  // returning window (or `lahe review`) starts the server again.
+  staticServers._hooks.afterStopWait = async function () {
+    staticServers._hooks.afterStopWait = null;
+    fresh = await staticServers.start({ dir: w.dir, sessionId: a.id, root: a.root });
+  };
+  t.after(() => { staticServers._hooks.afterStopWait = null; });
+
+  assert.equal(await staticServers.stopOne(w.dir, a.id, old, staticServers.IDLE_REASON), true);
+  assert.ok(fresh && fresh.started, "the new server started in the gap");
+  const record = staticServers.list(w.dir, a.id)[0];
+  assert.equal(record.instance, fresh.meta.instance, "the record still names the new server");
+  assert.equal(record.stopped_at, null, "and does not call it stopped");
+  assert.equal(await staticServers.isExactServer(record), true, "the new server answers");
+
+  // So a session close still finds it and stops it.
+  assert.equal(await staticServers.stopAll(w.dir, a.id), 1);
+  assert.equal(await staticServers.isExactServer(fresh.meta), false);
+});
+
+test("two starts of one stopped server at once yield one server", async (t) => {
+  const w = world(t);
+  const a = await w.session("s_race_start");
+  const old = staticServers.list(w.dir, a.id)[0];
+  await staticServers.stopOne(w.dir, a.id, old, staticServers.IDLE_REASON);
+
+  const spec = { dir: w.dir, sessionId: a.id, root: a.root, preferredPort: old.port };
+  const [one, two] = await Promise.all([staticServers.start(spec), staticServers.start(spec)]);
+  assert.equal([one, two].filter((r) => r.started).length, 1, "exactly one of them started a process");
+  assert.equal(one.meta.instance, two.meta.instance, "both answer with the same server");
+  assert.equal(one.meta.port, old.port, "on the old port");
+  const record = staticServers.list(w.dir, a.id)[0];
+  assert.equal(record.instance, one.meta.instance);
+  assert.equal(await staticServers.isExactServer(record), true);
+  assert.equal(fs.existsSync(stateDirModule.staticServerPath(w.dir, a.id, old.id) + ".lock"), false, "the lock is released");
+});
+
+test("a stale start lock is taken over, and a failed start releases its lock", async (t) => {
+  const w = world(t);
+  const a = await w.session("s_lock_stale");
+  const old = staticServers.list(w.dir, a.id)[0];
+  await staticServers.stopOne(w.dir, a.id, old, staticServers.IDLE_REASON);
+  const lock = stateDirModule.staticServerPath(w.dir, a.id, old.id) + ".lock";
+  fs.writeFileSync(lock, "a crashed starter");
+  const past = new Date(Date.now() - staticServers.START_LOCK_STALE_MS - 1000);
+  fs.utimesSync(lock, past, past);
+  const back = await staticServers.start({ dir: w.dir, sessionId: a.id, root: a.root });
+  assert.equal(back.started, true, "a lock older than the stale limit does not block a start");
+  assert.equal(fs.existsSync(lock), false);
+
+  // A start that fails inside the lock (corrupt metadata) still releases it.
+  const other = tempDir("lahe-idle-corrupt-");
+  const otherFile = stateDirModule.staticServerPath(w.dir, a.id, staticServers.serverId(fs.realpathSync(other)));
+  fs.writeFileSync(otherFile, "not json");
+  await assert.rejects(staticServers.start({ dir: w.dir, sessionId: a.id, root: other }), /corrupt/);
+  assert.equal(fs.existsSync(otherFile + ".lock"), false, "the failed start released its lock");
+});
+
+test("a restart that finds the session closed when it lands stops the server again, as closed", async (t) => {
+  const w = world(t);
+  const a = await w.session("s_close_mid_restart");
+  const secret = openWindow(w, a.review, "win-1");
+  await w.sweeper.sweep();
+  goodbye(w, a.review, secret);
+  w.advance(GRACE_MS + 1000);
+  await w.sweeper.sweep();
+  assert.equal(w.running(a.id).length, 0);
+
+  const original = staticServers.start;
+  staticServers.start = async function (spec) {
+    const result = await original(spec);
+    w.sessions.close(a.id);
+    return result;
+  };
+  t.after(() => { staticServers.start = original; });
+
+  openWindow(w, a.review, "win-2");
+  await w.sweeper.settled();
+  assert.equal(w.running(a.id).length, 0, "nothing runs for a closed session");
+  assert.equal(staticServers.list(w.dir, a.id)[0].stop_reason, staticServers.CLOSED_REASON);
+});
+
+test("the sweep forgets servers and sessions it no longer sees", async (t) => {
+  const w = world(t);
+  const a = await w.session("s_forget");
+  const secret = openWindow(w, a.review, "win-1");
+  await w.sweeper.sweep();
+  let tracked = w.sweeper._tracked();
+  assert.equal(tracked.instances, 1);
+  assert.equal(tracked.sessions, 1);
+
+  // The server restarts as a new instance: the old instance is dropped.
+  const old = staticServers.list(w.dir, a.id)[0];
+  await staticServers.stopOne(w.dir, a.id, old);
+  await staticServers.start({ dir: w.dir, sessionId: a.id, root: a.root });
+  w.advance(1000);
+  beat(w, a.review, "win-1", secret);
+  await w.sweeper.sweep();
+  assert.equal(w.sweeper._tracked().instances, 1, "only the running instance is remembered");
+
+  // The session's servers all stop: nothing about it is kept.
+  await staticServers.stopAll(w.dir, a.id);
+  goodbye(w, a.review, secret);
+  await w.sweeper.sweep();
+  tracked = w.sweeper._tracked();
+  assert.equal(tracked.instances, 0);
+  assert.equal(tracked.sessions, 0);
+});

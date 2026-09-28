@@ -119,10 +119,19 @@ Then `npm run gate:unit`, and the browser specs covering sessions, takeover, win
   - Docs: `docs/CONTRACTS.md`, `docs/CLI.md`, `docs/ongoing/SESSION_OWNERSHIP.md`, `docs/diagrams/session_ownership.md`.
   - Not changed: the skill and the review contract. `lahe status` says what to run, so an agent that reads it is told.
 
+- 2026-09-28: review round. Main (with quiet tab polling) merged first; the status conflict keeps both `stopped_servers` and main's per-review `liveness` map. Five fixes, each with a test that failed first:
+  1. A stop re-reads the server's record under the lock and writes "stopped" only if the record still names the process it stopped. Before, a server started again in the gap between the kill and the write was marked stopped and orphaned.
+  2. `start()` holds an exclusive lock file per server (`ss_<id>.json.lock`), so the helper and `lahe review` starting the same server at once get one server. The lock is released on success and failure, and a lock older than 20 seconds is taken over.
+  3. A restart that lands after the session closed stops the server again, as closed.
+  4. The sweep forgets server instances and sessions it no longer sees.
+  5. `noteWindow` moved below `ownerSessionOf` in `routes.js`, so each doc comment sits over its own function.
+  - `npm run gate:unit`: 1,478 tests, 1,476 pass, 0 fail, 2 todo. The 13 browser specs: 35 passed, 0 failed.
+
 ## Known limits
 
 - If the old port is taken when a server comes back, it gets a new port. `lahe review` registers the new origin and prints the new link. A restart from a returning window only logs it, and that window's old address stays dead.
 - A server that `lahe review` reuses at the exact moment the sweep stops it can hand out a link that is already dead. The window is the few milliseconds of the stop itself, because the stop re-checks `link_given_at` just before it acts.
+- Two waiters that both find the same stale lock can race to take it over. It needs a starter to have died holding the lock and two more to arrive together more than 20 seconds later.
 
 ## To delete at cleanup
 

@@ -1206,7 +1206,10 @@ wake feed. `lahe review <document> --session <id>` starts the server again, on
 its old port when that port is free, and a window of the session that claims
 or beats while its servers are stopped this way starts them again too. A
 session close relabels an idle stop `session closed`, and nothing restarts
-those until the session is reopened. An idle-stopped server still counts as
+those until the session is reopened. Starting and marking a server stopped both
+hold a lock file beside its record (`ss_<id>.json.lock`, stale after 20
+seconds), so the helper and `lahe review` never start one server twice, and a
+stop never writes over the record of a server started again in the meantime. An idle-stopped server still counts as
 serving its page for the healer, so no script line is written into the
 reviewer's file while it is down. `lahe status` prints a `server    stopped`
 line with the restart command, and `--json` adds `stopped_servers` (review,
