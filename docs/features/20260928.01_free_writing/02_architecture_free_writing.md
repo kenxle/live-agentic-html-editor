@@ -41,7 +41,7 @@ flowchart LR
   - The doubled line under a header: Enter nests the new `<p>` inside the `<h2>`. Replay's check for text that is already there looks only at the next sibling element. In a Lahe Markdown render that sibling is the "Section 1" label, not the paragraph. Replay then rewrites the header's inner HTML with the nested paragraph, so the new text shows twice.
   - The lone paragraph that loses its bold (board row `LAHE-lone-paragraph-loses-markup`): replay writes a missing split piece as plain text. It also stops checking formatting once the split is found.
   - Both go away when new blocks are separate siblings with their own markup, and replay reads blocks in document order.
-- **The third brief R14 case** (bold two words on a Markdown page, commit, rebuild): see the placeholder row in Failure Modes.
+- **The third brief R14 case** (bold two words on a Markdown page, commit, rebuild): reproduced on the real tool. It works when the agent does the work. When the agent changes nothing and replies handled, the reply is accepted and the bold is lost. The cause is that the handled check only accepts `edit` records, so a formatting-only record is never checked. See Failure Modes and AQ3.
 
 ## Components / Modules Touched
 
@@ -359,7 +359,8 @@ New lines, in the contract and every copy of it:
 | A paste from another page | Plain text only. Its blocks, styles, and hidden text do not reach the page structure or the record's tags. |
 | A forged or hand-written record | The helper refuses it if any block fails `cleanBlock` or it is over the ceiling. Replay and undo run `cleanBlock` again before writing, so a record that reached browser storage some other way still writes nothing unsafe. |
 | An old multi-paragraph record | Today's replay path, unchanged. |
-| Bold two words on a Markdown page, commit, rebuild (third brief R14 case) | **Placeholder: a separate agent is reproducing this case now. Its result and cause go here.** |
+| Bold two words on a Markdown page, commit, rebuild (third brief R14 case) | Reproduced end to end. With a correct agent the bold reaches the source and survives the rebuild. With an agent that changes nothing, `handled` is accepted, replay stops re-applying, and the bold disappears while the card says handled. Fix: the handled check also covers formatting-only records, comparing the block's markup on the built page for the `strong` and `em` the record asked for. |
+| An edit whose bold paragraph is the one the agent left out | Found alongside case 1. The bold paragraph never appears, replay counts the record as lost, and no flag is raised. The insert path's per-block matching covers it: a missing block is inserted with its own markup. |
 
 ## Security & Privacy Notes
 
@@ -441,6 +442,7 @@ New lines, in the contract and every copy of it:
 - **The proposal:** for `new_blocks`, run it every time and compare each block's visible words on the built page. Brief R6 allows no rewording of new text, so the reason for skipping the check does not apply.
 - **What it would catch:** words that turned into markup or template code in the source vanish from the visible page, and this is the one check that sees that. It would also catch a header placed as a paragraph at reply time, not only at the next page load.
 - **Why it is your call:** it changes a standing rule, that an agent that did real work is never second-guessed on its wording.
+- **Related, found by reproduction:** a formatting-only edit (bold two words) is never checked today. An agent that changed nothing can reply handled and the bold is lost. Covering formatting-only records is in this feature either way, because brief R14 (bold and italic survive the rebuild) requires it.
 :::
 
 ## Architect Review
@@ -465,7 +467,7 @@ New lines, in the contract and every copy of it:
 | AR16 | The Markdown notes anchor is a title not in the file | Accepted | File-name title marked as chrome; empty page uses the empty-container rung with `start_of_container` |
 | AR17 | "Next content block" matches wrappers | Accepted | Walk defined over leaf blocks from `BLOCK_TAGS`; separate `WRITABLE_BLOCK_TAGS` named |
 | AR18 | A Markdown shortcut should be its own undo step | Accepted | Shortcut is its own history step; test added |
-| AR19 | The third R14 case has no analysis | Accepted | Marked placeholder row in Failure Modes; a separate agent is reproducing it |
+| AR19 | The third R14 case has no analysis | Accepted | Reproduced on the real tool; the handled check now covers formatting-only records (Failure Modes, AQ3) |
 | AR20 | Who runs `lahe write`, and which session owns it | Accepted | Agent or reviewer, same session rules and output as `lahe review` |
 | AR21 | Cut `placement` and the empty-container rule | Rejected | The empty Markdown notes page needs it (AR16) |
 
