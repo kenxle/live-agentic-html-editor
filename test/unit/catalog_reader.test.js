@@ -390,6 +390,31 @@ test("a worktree candidate that is hidden, symlinked out of its repository, or n
   }
 });
 
+test("a worktree candidate owned by another user is null, and the row is missing (T2)", async (t) => {
+  if (typeof process.getuid !== "function") {
+    t.skip("no file owners on this platform");
+    return;
+  }
+  const { installed } = setup();
+  const realGetuid = process.getuid;
+  // The reader has no uid option, so the check's own source of "the current
+  // user" is swapped for one that owns nothing in the fixture. The candidate
+  // file itself is untouched: it still exists, under the repository, a page.
+  process.getuid = () => realGetuid.call(process) + 1;
+  try {
+    const reader = catalogReader.createReader({ dir: installed.dir, home: installed.home, pidAlive: () => true, probe: async () => false });
+    assert.equal(reader.describeReview("r_wt_gone", installed.nowMs).candidate, null);
+    const list = await reader.list(installed.nowMs);
+    assert.equal(row(list, "r_wt_gone").openable, "missing");
+  } finally {
+    process.getuid = realGetuid;
+  }
+  // The same fixture with the real owner has a candidate, so the null above is
+  // the owner check and nothing else.
+  const reader = catalogReader.createReader({ dir: installed.dir, home: installed.home, pidAlive: () => true, probe: async () => false });
+  assert.equal(reader.describeReview("r_wt_gone", installed.nowMs).candidate, path.join(installed.home, "projects/alpha/docs/brief.html"));
+});
+
 // --- probes ------------------------------------------------------------------
 
 test("served_url is set only when the recorded server answers its exact-identity probe; stopped records are skipped and a probe is not repeated within one POLL_MS", async (t) => {

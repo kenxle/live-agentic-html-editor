@@ -192,11 +192,11 @@ test("the top section holds exactly the cards with a waiting or starred review",
   // s_coach: r_brief waits and is starred. s_dev: r_dev waits. s_ops: r_old4
   // and r_old2 wait (r_wt_gone waits too). s_old3: r_stale and r_big wait.
   // legacy: r_legacy waits. s_badsession and s_ssbroken have neither.
-  const expected = list.sessions
-    .filter((s) => s.reviews.some((r) => r.openable !== "missing" && (r.waiting > 0 || r.starred)))
-    .map((s) => s.id);
+  // Spelled out, not worked out from the fixture: a rule copied from the code
+  // under test would agree with a wrong rule.
+  const expected = ["s_coach", "s_dev", "s_ops", "s_old3", "legacy"];
   assert.deepEqual(cardIds(top), expected);
-  assert.equal(top.heading, "Unanswered comments, and starred (" + expected.length + ")");
+  assert.equal(top.heading, "Unanswered comments, and starred (5)");
   assert.equal(top.cards.every((c) => c.open), true, "the top section's cards are open");
 });
 

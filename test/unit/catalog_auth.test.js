@@ -23,6 +23,11 @@ const protocol = require("../../src/shared/protocol.js");
 const service = require("../../src/service/index.js");
 const stateDirModule = require("../../src/service/state_dir.js");
 const markdown = require("../../src/service/markdown.js");
+const logModule = require("../../src/service/log.js");
+const reviewsModule = require("../../src/service/reviews.js");
+const agentSessions = require("../../src/service/agent_sessions.js");
+const staticServers = require("../../src/service/static_servers.js");
+const catalogRequests = require("../../src/service/catalog_requests.js");
 
 const REPO_ROOT = path.join(__dirname, "..", "..");
 const REVIEW = "review-cat-1";
@@ -47,6 +52,42 @@ async function startHelper(dir) {
     origins: [OTHER_LOOPBACK],
     quiet: true
   });
+}
+
+/**
+ * A helper whose REVIEW every handler accepts, so a request that passes the
+ * checks gets 200: the review's page is served by a real static server, its
+ * session is on disk, and an attached agent has a live monitor, so Open,
+ * Star and a pick-up all succeed.
+ */
+async function startOpenableHelper(t) {
+  const root = fs.realpathSync(tempDir());
+  const dir = path.join(root, "state");
+  const site = path.join(root, "site");
+  fs.mkdirSync(site);
+  const page = path.join(site, "page.html");
+  fs.writeFileSync(page, "<!doctype html><title>Auth page</title><p>body</p>");
+  const store = agentSessions.createStore({ dir });
+  store.create({ id: "s_doc", name: "doc session" });
+  store.create({ id: "s_agent", name: "library agent" });
+  const log = logModule.createEventLog({ dir });
+  const reviews = reviewsModule.createReviews({ dir, log });
+  reviews.create({ id: REVIEW, agent_session_id: "s_doc", target_path: page });
+  const served = await staticServers.start({ dir, sessionId: "s_doc", root: site });
+  reviews.registerOrigin(REVIEW, "http://127.0.0.1:" + served.meta.port);
+  reviews.registerOrigin(REVIEW, "http://localhost:" + served.meta.port);
+  t.after(async () => {
+    await staticServers.stopAll(dir, "s_doc").catch(() => {});
+  });
+  const now = Date.now();
+  catalogRequests.writeAttach(dir, "s_agent", now);
+  store.writeMonitor("s_agent", {
+    pid: process.pid,
+    handoff_rev: agentSessions.handoffRev(store.read("s_agent")),
+    at: new Date(now).toISOString(),
+    primary: true
+  });
+  return service.serve({ port: 0, stateDir: dir, quiet: true });
 }
 
 /** One raw request. Headers are sent exactly as given: no Host is added. */
@@ -116,9 +157,16 @@ function callApi(port, token, r, extra) {
     method: r.method,
     path: r.path,
     headers: apiHeaders(port, token, r, extra),
-    body: r.method === "POST" ? JSON.stringify({ review: REVIEW }) : undefined
+    body: r.method === "POST" ? JSON.stringify(VALID_BODY[r.name]) : undefined
   });
 }
+
+// A body each handler accepts, so a request that passes the checks gets 200.
+const VALID_BODY = {
+  "catalog.open": { review: REVIEW, handoff: false, confirmed: false },
+  "catalog.star": { review: REVIEW, starred: true },
+  "catalog.request": { review: REVIEW, action: "pickup", confirmed: false }
+};
 
 function tokenFromPage(html) {
   const re = new RegExp('<meta name="' + protocol.CATALOG_TOKEN_META + '" content="([^"]*)"');
@@ -198,16 +246,16 @@ test("catalog.page and catalog.asset refuse same-site, cross-site, a missing Sec
 // ---------------------------------------------------------------------------
 
 /**
- * Did this answer come from the route's handler rather than the check block?
- * A check refusal always names its check; a handler's own answer never does.
- * (The handlers themselves are tested in catalog_routes.test.js.)
+ * Did this answer come from the route's handler, and did the handler accept
+ * it? Every route is wired, so a request that passes the checks with a valid
+ * body gets 200. (The handlers themselves are tested in catalog_routes.test.js.)
  */
 function reachedHandler(res) {
-  return res.status !== 501 && !(res.json && res.json.error && res.json.error.check);
+  return res.status === 200;
 }
 
-test("catalog.list, open, star and request pass the checks with the Library token and reach their handlers", async () => {
-  const helper = await startHelper();
+test("catalog.list, open, star and request pass the checks with the Library token and reach their handlers", async (t) => {
+  const helper = await startOpenableHelper(t);
   try {
     const token = await libraryToken(helper.port);
     for (const r of API_ROUTES) {
@@ -250,8 +298,8 @@ test("the API routes refuse cross-site, same-site, a missing Sec-Fetch-Site, a m
   }
 });
 
-test("the POSTs refuse text/plain, a missing Origin, Origin null, another port, and localhost against a 127.0.0.1 Host", async () => {
-  const helper = await startHelper();
+test("the POSTs refuse text/plain, a missing Origin, Origin null, another port, and localhost against a 127.0.0.1 Host", async (t) => {
+  const helper = await startOpenableHelper(t);
   const port = helper.port;
   try {
     const token = await libraryToken(port);
