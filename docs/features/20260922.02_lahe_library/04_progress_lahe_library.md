@@ -1,8 +1,8 @@
 # Progress: LAHE Library
 
-**Phase 4, Architecture.** Wireframe direction chosen: B, nested (agent session, then reviews, then documents), as you described it. The architecture is being written. Nothing is waiting on you. Last updated 2026-09-28 16:11.
+**Phase 4, Architecture.** The architecture is written and both reviews are folded in. The plan is next. Nothing is waiting on you. Last updated 2026-09-28 16:33.
 
-**Docs:** [Crucible](http://127.0.0.1:54705/00_crucible.html) · [Brief](http://127.0.0.1:54705/01_brief_lahe_library.html) · [Wireframes](http://127.0.0.1:54705/wireframes/index.html) · [Ideas page](http://127.0.0.1:55480/DOCUMENT_INDEX_IDEAS-b09cd11f2a84063f.html)
+**Docs:** [Crucible](http://127.0.0.1:54705/00_crucible.html) · [Brief](http://127.0.0.1:54705/01_brief_lahe_library.html) · [Wireframes](http://127.0.0.1:54705/wireframes/index.html) · [Architecture](http://127.0.0.1:54705/02_architecture_lahe_library.html) · [Ideas page](http://127.0.0.1:55480/DOCUMENT_INDEX_IDEAS-b09cd11f2a84063f.html)
 
 ## Needs your attention
 
@@ -59,6 +59,7 @@ Not shipped yet.
 
 ## Log
 
+- **2026-09-28 16:33.** Architecture reviewed: the architect found 4 blockers and security found 4, all accepted. The biggest change: handing a document to an agent no longer goes through a comment in an inbox review (a page could have forged it, and it would never have reached the agent). It is now a queue only the helper writes, shown to the agent as its own section of the drain. Open only restarts servers a review already had, and anything else goes through an agent. The Library's address is `/catalog`, because "library" already means the in-page script in this code.
 - **2026-09-28 16:17.** The forge doc template now uses the St. Clair AI style; only its stylesheet changed, and new builds pick it up. The brief and crucible are rebuilt with it.
 
   ![Brief requirements, light](style_requirements_light.png)

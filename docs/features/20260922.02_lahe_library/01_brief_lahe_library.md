@@ -136,7 +136,7 @@ The key design question, for the wireframe: **what is one row?** A document, a r
 :::
 
 ::: callout-req
-**R10b.** When no agent is watching a document opened from the Library, its rail says so and keeps Ken's comments. It offers Pick this up, and a prompt Ken can paste into any agent.
+**R10b.** When no agent is watching a document opened from the Library, its rail says so and keeps Ken's comments, and offers the hand-off message the rail already has. Pick this up lives on the Library, not on the rail.
 :::
 
 ::: callout-req
@@ -272,3 +272,4 @@ No flag. The Library reads records that already exist, so it works on the full h
 | RF15 | R5 in internal history, presumes row answer | Accepted | R5 reworded |
 | RF16 | Rollout compatibility note is build detail | Accepted | Cut |
 | RF17 | Search leaves out session name | Accepted | R6 covers everything a row shows |
+| Arch | Rail must never carry the Library's key (architecture security review RF10) | Accepted | R10b: the rail offers its existing hand-off message; Pick this up stays on the Library |

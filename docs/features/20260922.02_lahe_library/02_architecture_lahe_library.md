@@ -2,165 +2,245 @@
 
 ## Summary
 
-The helper gains its first HTML page: the Library, served at a fixed address on the helper's own port, `http://127.0.0.1:7817/library`. It lists every review from the records already on disk, grouped agent session, then review, then pages (wireframe B). Open and Star act directly through three new helper routes, checked the same way every other route is (decision D11), with one new credential: a Library token that only the Library page carries. Handing a document to an agent is not a new channel. `lahe library --session <id>` attaches an agent session to the Library and gives it one ordinary review, the Library inbox. Each hand-over or launch request becomes a normal comment item in that inbox, so the agent is woken, drains it, acts, and replies exactly as it does for any comment today.
+The helper serves one new page, the Library, at a fixed address on its own port: `http://127.0.0.1:7817/catalog`. The page lists every review from records already on disk, grouped agent session, then review, then pages (wireframe B), with each session's project shown as a label and a project filter. Open and Star act directly through helper routes that only the Library page can call. Open restarts the servers a review already had, it never serves a path the helper did not serve before. Handing a document to an agent, or launching a new one, is a request the helper writes to a queue only it can write. The attached agent sees that queue in its normal drain, the same way it sees an ended review today, acts on it, and answers. The page shows the answer on the row.
 
 ```mermaid
 flowchart TD
-  K["Ken's browser: the Library page<br/>127.0.0.1:7817/library"] -->|"GET list, POST open / star<br/>(Library token + D11 checks)"| H["Helper"]
-  H -->|"reads, never folds logs"| D[("State dir:<br/>meta.json, review.json,<br/>session.json, ss_*.json,<br/>library.json")]
-  H -->|"Open: restart the review's<br/>session servers, return its URL"| S["Session static server"]
-  S -->|"the document, with its rail"| T["New tab"]
-  H -->|"hand-over / launch request:<br/>an item.ready in the Library inbox"| I["Library inbox review<br/>(owned by the attached session)"]
-  I -->|"wake, drain"| A["Attached agent"]
-  A -->|"lahe session takeover,<br/>or launch a new agent"| X["Document's own session"]
-  A -->|"reply on the item"| I
-  I -->|"reply shows on the row"| K
+  K["Library page<br/>127.0.0.1:7817/catalog"] -->|"list, open, star, request<br/>Library token + same-origin checks"| H["Helper"]
+  H -->|"reads files, never folds a large log"| D[("State dir:<br/>meta.json, review.json, session.json,<br/>ss_*.json, catalog.json")]
+  H -->|"Open: restart this review's recorded server,<br/>register its new origin"| S["Session static server"]
+  S -->|"the document with its rail"| T["New tab"]
+  H -->|"Pick this up / Launch:<br/>append to the request queue"| Q[("catalog-requests.jsonl<br/>helper-written only")]
+  Q -->|"shows in the drain as<br/>catalog_requests"| A["Attached agent"]
+  A -->|"lahe session takeover,<br/>or launch a new agent"| X["The document's session"]
+  A -->|"lahe library answer"| Q
+  Q -->|"row shows who took it"| K
 ```
 
 ## Analysis of Existing Structure
 
-- **Everything the Library lists already exists on disk.** `meta.json` has the target, session and creation time. The last-written `review.json` has page titles, counts per state, and `ended_at`. `session.json` has the name. The session's `static-servers/ss_*.json` say what is being served, and `monitor.json` plus the liveness check say whether an agent is watching. Projection is lazy now, so the Library reads these files and never folds an `events.jsonl`.
-- **The helper serves only JSON and the layer bundle today.** No route returns HTML, and every mutating route needs a per-review token. A page that acts on all reviews fits neither of the two auth classes (`NONE`, `REVIEW_TOKEN`), so the Library adds a third.
-- **Reopening a closed session and its servers already exists** (`lahe session reopen`, `staticServers.restartAll`), and so does moving a session to another agent (`lahe session takeover`, with the `handoff_rev` fence). The Library calls the first in-process and asks an agent to run the second.
-- **The helper stops when the last session closes.** Nothing keeps it up for an open page. The Library is the first page that must outlive every session.
-- **Name collision.** The codebase already calls the in-page script "the library" (`library.get`, `/.lahe-library/lahe-layer.js`). The user-facing name stays Library; code, routes and files use `catalog` so the two never meet in a grep.
+- **The list needs no new data.** `meta.json` has target, session and creation time. The last-written `review.json` has titles, counts and `ended_at`. `session.json` has the name. `ss_*.json` records say what a session served and from where. `monitor.json` and the liveness check say whether an agent is watching.
+- **The helper serves JSON and the layer bundle, nothing else.** Its one raw-response function sends `Access-Control-Allow-Origin: *`, so the Library page cannot go through it.
+- **Every mutating route needs a per-review token today** (D11). A page that acts across all reviews needs its own credential, which is an amendment to D11.
+- **Reopening and taking over already exist** (`lahe session reopen`, `lahe session takeover` with its `handoff_rev` fence). A restarted static server gets a new random port, and nothing registers that port as an allowed origin.
+- **The helper stops when the last session closes.** The Library is the first page that must outlive every session.
+- **The drain already carries a helper-authored list besides items:** `ended_reviews`. Catalog requests follow that precedent, so no item or `review.json` field changes.
+- **`lahe monitor` watches one session.** After a pick-up the agent owns two.
+- **Name collision.** This codebase already calls the in-page script "the library". The user-facing name stays Library. Code, routes, files and the URL path use `catalog`.
 
 ## Components / Modules Touched
 
-- **Shared protocol:** three new routes and one new auth class, `CATALOG_TOKEN`. The route table and the order of D11's checks stay where they are.
-- **Helper routes:** `catalog.page` (GET, the HTML), `catalog.list` (GET, JSON), `catalog.open`, `catalog.star`, `catalog.request` (POST each).
-- **Catalog reader (new, service):** builds the list from the files above, with an mtime-keyed cache so a refresh re-reads only what changed. Owns the folding rule for old per-page reviews and the worktree fallback.
-- **Catalog page (new, layer-side asset, not part of the rail bundle):** a static HTML page plus a small script, styled with the St. Clair document style the helper already serves.
-- **State dir:** one new file, `catalog.json` (stars, the attached session, the Library token), written with the existing write-beside-and-rename helper.
-- **CLI:** new `lahe library [--session <id>]`. `session close` learns one exception (Helper lifetime, below).
-- **Static servers:** `restartAll` gains a single-session, single-root form so Open restarts only what it needs.
-- **Skill and contract:** how an agent opens the Library, and how it handles the two inbox item kinds. Per the repo rule, the skill, the contract text, `docs/CONTRACTS.md`, the copy in `test/unit/review_format.test.js`, and the dist bundle change together.
+- **Shared protocol:** new routes `catalog.page`, `catalog.asset`, `catalog.list`, `catalog.open`, `catalog.star`, `catalog.request`, and a new auth class `CATALOG_TOKEN`. Header names come from `protocol.js`, like every other route.
+- **Service, catalog reader (new):** builds the list from files, with an mtime cache. Owns folding old per-page reviews, the project label, and the missing and worktree rules.
+- **Service, catalog routes and request queue (new):** Open, Star, the request queue and its expiry.
+- **Service, static servers:** restart one recorded server by id, try its old port first, and register the resulting origin on the review, replacing that review's stale loopback origins. Also closes the open board row LAHE-static-server-host-check: every static server refuses a Host that is not its own loopback address and port, because the Library keeps more of them alive.
+- **Service, helper lifetime:** remembers when the Library page last polled.
+- **Layer, catalog page (new, not part of the rail bundle):** an HTML template plus one script file, served by the helper. It gets its own list in `src/shared/manifest.js`.
+- **CLI:** new `lahe library [--session <id>]` and `lahe library answer`. `lahe monitor` accepts `--session` more than once. `lahe status` prints `catalog_requests` for the sessions it drains. `session close` checks the Library before stopping the helper.
+- **Docs and contract:** a D11 amendment in `docs/CONTRACTS.md`. The skill, the contract text, the copy in `test/unit/review_format.test.js`, and the dist bundle change together for the new drain section.
 
 ## Data / State Changes
 
-`<state>/catalog.json`, owner-only, like `service.json`:
+**`<state>/catalog.json`**, written only by the helper, with the existing write-beside-and-rename:
+
+```json
+{ "schema": 1, "stars": { "<review-id>": "2026-09-28T16:20:00Z" }, "reopened": { "<session-id>": "2026-09-28T16:21:00Z" } }
+```
+
+**`<state>/catalog-attach.json`**, written only by the CLI (`lahe library --session`):
+
+```json
+{ "schema": 1, "session": "s_...", "at": "2026-09-28T16:02:00Z" }
+```
+
+One writer per file, so a star and an attach cannot overwrite each other.
+
+**`<state>/catalog-requests.jsonl`**, append-only, written only by the helper and by `lahe library answer`:
+
+```json
+{ "id": "cq_...", "at": "...", "action": "pickup" | "launch", "review": "r_...", "session": "s_...", "for": "s_<attached>" }
+{ "id": "cq_...", "answered_at": "...", "by": "s_<attached>", "status": "done" | "refused", "text": "..." }
+```
+
+A request holds ids only. No text from a page reaches it. The drain adds the title and path as data fields, fenced like any other page-derived text. A request expires when the attached session changes, when its monitor has been dead past the liveness threshold, or after 30 minutes unanswered. The row then goes back to normal and says it was not picked up.
+
+**The Library token** is minted in memory at each helper start and never written to disk. It exists only inside the served page.
+
+**The list response** (`catalog.list`), one entry per session:
 
 ```json
 {
-  "schema": 1,
-  "token": "<random, minted on first run>",
-  "stars": { "<review-id>": "2026-09-28T16:20:00Z" },
-  "attached": { "session": "s_...", "inbox_review": "r_...", "at": "2026-09-28T16:02:00Z" },
-  "page_seen_at": "2026-09-28T16:21:04Z"
+  "attached": { "session": "s_...", "name": "document index", "watching": true },
+  "sessions": [{
+    "id": "s_...", "name": "coach activity", "projects": ["steady-thread"],
+    "watching": false, "last": "2026-09-28T15:40:00Z",
+    "reviews": [{
+      "id": "r_...", "title": "Feature Brief: Coach Activity", "file": "01_brief.md", "folder": "...",
+      "path_hint": "~/Documents/workspace/steady-thread/...", "waiting": 3, "total": 9,
+      "counts_as_of": "2026-09-28T15:40:00Z", "ended": false, "served_url": null,
+      "openable": "yes" | "via-agent" | "missing", "starred": false,
+      "pending_request": null, "pages": [{ "title": "...", "path": "/..." }],
+      "folded_from": ["r_...", "r_..."]
+    }]
+  }]
 }
 ```
 
-- Stars are keyed by review id. For a folded row (several old per-page reviews shown as one), the star is on the newest review in the fold.
-- `attached` is the last session that ran `lahe library --session`. The page shows its name before any click (R12a).
-- The Library inbox is an ordinary review owned by the attached session. Its target is the Library page itself, so its items read naturally in `review.json` and in the drain. One inbox per attached session, reused across runs, so the no-empty-reviews rule holds.
-
-Each hand-over or launch request is one item in that inbox:
-
-```json
-{
-  "kind": "comment",
-  "note": "Pick up \"Startup Studio, Class 2\" and watch it for comments.",
-  "catalog_request": { "action": "pickup" | "launch", "review": "r_...", "session": "s_..." }
-}
-```
-
-`note` is written by the helper from a fixed template and the stored title. `catalog_request` is the structured part the agent acts on; the review and session ids in it come from the helper's own records, never from the request body beyond the review id it validates.
+`openable` is `via-agent` for reviews Open cannot restart itself (below). The page does search, the project filter, and the "unanswered comments, and starred" section on the client from this one response.
 
 ## Key Flows
 
-### Open (the default path)
-
-Open reopens and hands over in one click (R8). The new tab is opened synchronously in the click handler and pointed at the URL when the helper answers, so the browser does not treat it as a popup.
+### Open
 
 ```mermaid
 sequenceDiagram
-  participant K as Ken (Library page)
+  participant K as Library page
   participant H as Helper
   participant S as Static server
-  participant I as Library inbox
+  participant Q as Request queue
   participant A as Attached agent
-  K->>K: click Open (blank tab opens now)
+  K->>K: click Open, open a blank tab now (noopener)
   K->>H: POST catalog.open {review}
-  H->>H: check D11 + Library token, review exists, file or worktree fallback exists
-  H->>S: reopen the session if closed, restart its server for this root if down
-  H-->>K: {url} and whether it is the main-repo copy
+  H->>H: token, same-origin, exact Origin; review has a recorded server
+  H->>S: reopen the session if closed; restart that server (old port if free)
+  H->>H: register the server's origin on the review, drop stale loopback ones
+  H-->>K: {url} (loopback http only)
   K->>K: point the tab at url
-  H->>I: item.ready "pick up <title>" (only if an agent is attached and none is watching the document)
-  I->>A: wake, drain
-  A->>A: lahe session takeover <doc session>
-  A->>I: reply handled "watching <title>"
-  I-->>K: row shows who is watching
+  H->>Q: pickup request, only if an agent is attached and none is watching
+  Q->>A: shows in the next drain
+  A->>A: lahe session takeover <doc session>, adds it to its monitor
+  A->>Q: lahe library answer: done, "watching <title>"
+  Q-->>K: row: watched by <agent>
 ```
 
-- **Already being served (R10):** the helper returns the live URL and starts nothing.
-- **Another agent is watching (R12b):** the page asks first, names that agent and lists the other reviews in its session. Confirming sends the same Open with `force_handover`.
-- **No agent attached (R14):** Open still opens the document. No inbox item is made. The row and the document's rail both say no agent is watching, and offer the rail's existing hand-off message.
+- **Already served (R10):** the helper returns the live URL and starts nothing.
+- **Another agent is watching (R12b):** the page asks first, naming that agent and the other reviews in its session. "Just open it to read" opens with no request.
+- **No agent attached (R14):** Open still opens and reads. No request is queued. The document's rail shows its existing "no agent listening" state and its existing hand-off message. The rail never carries the Library token.
+- **What Open can restart itself:** a review whose session has an `ss_*.json` record whose root contains the review's page. That record was written by `lahe review` or the helper, never by a page, so Open serves nothing new. Everything else is `via-agent`: its Open button queues a pick-up and the agent re-serves it with `lahe review`. That covers dev-server reviews, legacy `lahe add` script-line reviews, and the worktree fallback.
+- **Worktree fallback (R9):** when the recorded root is gone and sits under `<repo>/.claude/worktrees/<name>/`, the row says "the worktree is gone; an agent will open the main-repo copy". The pick-up request carries the candidate path, checked by the helper: under the repo by real path, no hidden segment, owned by Ken, a page. The agent serves it with `lahe review`, so the path goes through the CLI's own checks.
+- **Folded rows:** Open targets the newest review in the fold.
 
 ### Star
 
-`POST catalog.star {review, starred}` writes `catalog.json` and returns the new state. Instant, no agent.
+`POST catalog.star {review, starred}`. The helper writes `catalog.json` and answers. No agent.
 
 ### Launch a new agent
 
-Same shape as the hand-over: an inbox item with `action: "launch"`. The attached agent opens a new terminal window running its host with the takeover prompt, and names the new session after the document (R13). Open Question 1 asks whether the helper should also be able to launch directly, with no agent in between (the brief's Open Question 5).
+Queues a `launch` request. The attached agent opens a new Terminal window running its own host's command line (`claude` for Claude Code, `codex` for Codex) with the takeover prompt, then answers with where it launched. A host with no command line answers `refused` with the paste-in hand-off message. The new session is named after the document (R13).
 
 ### Reaching the Library
 
 ```mermaid
 flowchart TD
-  C["Ken: 'open the lahe library'"] --> L["agent runs lahe library --session <its id>"]
+  C["Ken: open the lahe library"] --> L["agent: lahe library --session its-id"]
   L --> H1{"helper up?"}
   H1 -->|"no"| St["start it"]
-  H1 -->|"yes"| At
-  St --> At["attach this session, reuse or mint its inbox review"]
-  At --> P["print and open http://127.0.0.1:7817/library"]
-  P --> M["agent arms its monitor on the session as usual"]
+  H1 -->|"yes"| At["write catalog-attach.json"]
+  St --> At
+  At --> P["print http://127.0.0.1:7817/catalog"]
+  P --> M["agent arms its monitor as usual"]
 ```
 
 ### Helper lifetime (R10a)
 
-The Library page polls `catalog.list` every few seconds while visible and updates `page_seen_at`. `lahe session close` on the last open session leaves the helper running when `page_seen_at` is recent, and the helper stops itself once no session is open and the page has been silent for a minute. Documents opened from the Library keep the helper up the ordinary way, because Open reopens their session.
+The page polls `catalog.list` every 15 seconds whether or not its tab is visible, and the helper keeps the last poll time in memory. `lahe session close` on the last open session asks the helper for that time (through `health`) and leaves the helper running if the Library polled in the last two minutes or any document window is still held. There is no self-stop timer: the helper then stops at the next close that finds everything quiet, or at a restart. A session the Library reopened with no agent is closed again by the helper once none of its windows has been held for 30 minutes and no agent took it over, so reopened sessions do not pile up.
 
 ## Alternatives Considered
 
-- **The Library as an ordinary LAHE review (crucible Approach A):** acting through comments only. Rejected by Ken: Open and Star must act directly.
-- **A per-review token on every row:** the page would carry every review's token, which is exactly the "one page holds all the keys" risk D11 was written to avoid. One Library token that can do only three things (list, open, star) and can never post to a review is smaller.
-- **Stable per-review addresses on the helper port (`/r/<id>/`):** old tabs would come back on their own. Rejected for now: it means the helper serves every review's files, which moves serving out of session-owned static servers. Ken is fine with a new port or the old one.
-- **A new "hand-over" channel from page to agent:** a separate queue, wake type and reply shape. Rejected: a wake line with nothing to drain is the no-op token burn the monitor rules exist to stop. An inbox item reuses the wake, drain, reply and liveness machinery unchanged.
-- **The helper runs `lahe session takeover` itself on Pick this up:** it would fence the old agent with no new agent actually listening, leaving a session nobody watches. Only an agent that will then watch should take a session over.
+- **The Library as an ordinary LAHE review (crucible Approach A).** Rejected by Ken: Open and Star must act directly.
+- **A per-review token on every row.** The page would hold every review's key, the "one page holds all the keys" risk D11 exists to avoid. One Library token that cannot post to any review is smaller.
+- **Hand-over requests as comment items in an inbox review.** The first draft. Rejected in review: `review.json` only writes known item fields, so the request would never reach the agent without changing the frozen format; any page holding a review token could forge the same field; and the note would carry a page-set title into the field agents treat as Ken's own words. A helper-only queue shown as its own drain section has none of these problems.
+- **Stable per-review addresses on the helper port.** Old tabs would come back on their own, but the helper would then serve every review's files, moving serving out of session-owned servers. Ken is fine with a new port.
+- **The helper runs the takeover itself on Pick this up.** It would fence the old agent with no new one listening. Only an agent that will watch should take a session over.
+- **Open serves the worktree fallback itself.** The helper would serve a path it never served, from a record any page can edit. Handing it to an agent sends the path through the CLI's checks instead.
+- **Launch from the page directly (brief Open Question 5).** Deferred, see Open Questions.
 
 ## Failure Modes / Edge Cases
 
-- **Old per-page reviews (R5).** Within one session, reviews created before 2026-09-17 whose targets are single HTML files in the same folder fold into one row, titled from the folder, with the pages listed under it. Nothing on disk changes.
-- **`review.json` never written.** About 200 reviews never recorded a page title because no page ever connected. The row falls back to the file name (R2). The reader never folds a log to fill the gap.
-- **Worktree fallback (R9, R19).** Only when the recorded file is gone and its path sits under `<repo>/.claude/worktrees/<name>/`. The candidate is `<repo>/<rest>`, resolved by real path, must exist, must not be hidden, and must be a page. Open then starts a server rooted at the main-repo folder for the same review and says so on the page. Any other path is refused.
-- **Origin after a restart.** A restarted server has a new port. The rail registers its loopback origin on load, which the helper accepts. A test proves a reopened document's rail can post a comment.
-- **Double click (R12c).** `catalog.request` refuses a second open request for the same review while its inbox item is unanswered, and the row shows "waiting for <agent>".
-- **Attached agent went away.** The page reads the attached session's liveness on every poll. A dead monitor flips the page to the no-agent state before Ken clicks, not after.
-- **Two agents ran `lahe library`.** The last one is attached. The page shows its name, so Ken sees who will receive the work.
+- **Old per-page reviews (R5).** Within one session, reviews created before 2026-09-17 whose targets are single HTML files in the same folder fold into one row titled from the folder. Nothing on disk changes.
+- **No `review.json`, or a stale one.** A review that never recorded a title shows its file name (R2). When a review's `events.jsonl` is newer than its `review.json` and small enough, the reader re-projects that one review; otherwise it shows the counts with their `counts_as_of` time. It never folds a large log to fill a row.
+- **Double click (R12c).** One pending request per review. The page disables the button and shows "waiting for <agent>".
+- **Pending requests are capped** at five across the Library, so a leaked token cannot queue a launch for every review.
+- **Attached agent goes away.** The page shows the no-agent state on its next poll. Pending requests for that agent expire.
+- **Two agents ran `lahe library`.** The last one is attached, and the page names it before any click.
 
 ## Security & Privacy Notes
 
-- **The Library token** lives in `catalog.json` (0600) and in the page the helper serves. The page is served only to a request whose Host is the helper itself, so a DNS-rebinding page cannot read it. Every catalog POST also needs the custom header, the JSON content type, and an Origin equal to the helper's own origin. A cross-site form or link can reach none of them.
-- **What the token can do:** list, open (restart a server for a review that already exists, or its checked worktree counterpart), star, and file a fixed-template request in the inbox. It cannot write to any review's events, read comment text, or name a file.
-- **The inbox note is helper-written.** No user text from the request reaches it. Titles in it come from `review.json` and are fenced like any other page-derived text in the contract.
-- **Launching programs** is only through an agent in v1. The direct path in Open Question 1 would be the first time a web click starts a process, and gets its own security review before it is built.
+This amends D11: one new credential, the Library token, that can list, open (restart recorded servers only), star, and queue a request. It cannot post to a review, read comment text, or name a file to serve.
+
+- **Serving the page:** no CORS headers on any catalog route, `Content-Security-Policy` with `script-src 'self'` and `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`. The script is a separate file, never inline.
+- **Every catalog request** needs the Host check, `Sec-Fetch-Site: same-origin`, the custom header, and the token. POSTs also need JSON and an Origin exactly equal to the helper's own. The preflight handler never approves a catalog route.
+- **The page renders page-derived text** (titles, file names) with `textContent` only.
+- **Open** only accepts a loopback `http:` URL back from the helper, and opens it with no opener.
+- **Files Open or a fallback serve** must be owned by the current user.
+- **Static servers get the Host check** (board row LAHE-static-server-host-check), since the Library keeps more of them running.
+- **Launching is only through an agent in v1,** which runs in its normal permission mode.
 
 ## Test Strategy
 
-- **Unit:** the reader (grouping, folding, fallback titles, missing and worktree rules, watching and served flags) against a fixture state dir, including one review with no `review.json`. The three routes: each D11 check refuses (wrong Host, missing header, wrong content type, foreign Origin, wrong token), a review token cannot call a catalog route, and the catalog token cannot call a review route. Stars survive a helper restart. The inbox item shape and the double-click refusal. Helper lifetime: the last close with a fresh `page_seen_at` leaves the helper up, and it stops after the quiet minute.
-- **Browser (one named spec):** open the Library, click Open on a closed review, land on the document with its rail, post a comment, see the row show waiting and then answered by a stub agent. Screenshot in light and dark.
-- **The contract copies** stay identical, checked by the existing review-format test.
+- **Unit:**
+  - the reader: grouping, folding, fallback titles, missing and worktree rows, `openable`, counts freshness
+  - each catalog route refuses a wrong Host, missing header, wrong content type, foreign Origin, cross-site `Sec-Fetch-Site`, and a wrong token
+  - a review token cannot call a catalog route, and the Library token cannot call a review route
+  - the page response carries no CORS header and does carry the frame and script policies
+  - Open refuses a review with no recorded server and never serves a path outside a recorded root
+  - a restarted server's origin is registered and stale loopback origins are dropped
+  - request queue: ids only, one pending per review, the cap, expiry on detach and on dead monitor
+  - the drain prints `catalog_requests` with the title fenced as data
+  - `lahe monitor` with two `--session` flags wakes on either
+  - helper lifetime: the last close with a recent Library poll leaves the helper up
+  - static servers refuse a foreign Host
+- **Browser, one named spec:** open the Library, Open a closed review, land on the document with its rail, post a comment, then see a stub agent's answer on the row. Screenshots in light and dark.
+- **Contract copies** stay identical, checked by the existing review-format test.
 
 ## Open Questions
 
-1. **Direct launch (brief Open Question 5).** v1 launches a new agent only through the attached agent. Should the helper also launch one directly when no agent is attached? It would run one fixed command (a new Terminal window running `claude` with the takeover prompt), macOS only, off unless a line in `user.env` turns it on, and it gets its own security review. Recommendation: build v1 without it and decide once the inbox path is in use.
-2. **The name in code.** The UI says Library. Code and routes say `catalog`, because "library" already means the in-page script everywhere in this repo. Fine?
+1. **Direct launch (brief Open Question 5).** v1 launches only through the attached agent. A direct path would be the helper running one fixed program, macOS only, turned on by a line in `user.env`, started with no shell, the prompt passed as an argument, ids checked, the agent in normal permission mode, and a log line per launch. It needs its own security review. Recommendation: build v1 without it.
+2. **The name in code.** The page says Library; code and the URL say `catalog`, because "library" already means the in-page script in this repo. Fine?
 
 ## Architect Review
 
-Pending.
+| # | Finding | Disposition | Rationale |
+|---|---------|-------------|-----------|
+| RF1 | `catalog_request` never reaches the agent | Accepted | Inbox items replaced by a helper-only queue shown as its own drain section |
+| RF2 | One monitor, two sessions after a pick-up | Accepted | `lahe monitor` takes `--session` more than once |
+| RF3 | Restarted port never registered as an origin | Accepted | Helper tries the old port, registers the new origin, drops stale ones |
+| RF4 | Worktree copy served with no rail | Accepted | Fallback goes through an agent and `lahe review` |
+| RF5 | Background tab lets the helper stop | Accepted | Poll continues when hidden |
+| RF6 | Reopened sessions pile up | Accepted | Helper closes a Library-reopened session after 30 quiet minutes |
+| RF7 | Simpler lifetime rule | Accepted | Last-poll time in memory, checked on close, no self-stop timer |
+| RF8 | `catalog.json` has two writers | Accepted | Attach moved to its own CLI-written file |
+| RF9 | A dead agent blocks a row forever | Accepted | Requests expire |
+| RF10 | No Open path for legacy and dev-server reviews | Accepted | `openable: via-agent` |
+| RF11 | Rail Pick this up has no design | Accepted | Rail keeps its existing hand-off message only |
+| RF12 | Launch app and hosts unsettled | Accepted | Terminal, `claude` or `codex`, else refused with the message |
+| RF13 | No list response shape | Accepted | Shape defined |
+| RF14 | Counts can be stale | Accepted | Small reviews re-projected, else shown with their time |
+| RF15 | Share the append-project-wake steps | Cut | No helper-made items remain |
+| RF16 | Inbox reviews listed as rows | Cut | No inbox reviews remain |
+| RF17 | Analytics script missing | Accepted | Log lines here; the counting script is a plan task |
+| RF18 | Helper does not serve the doc style | Accepted | `catalog.asset` serves the style bundle and fonts |
+| RF19 | Page folder and manifest entry | Accepted | Own manifest list, header names from `protocol.js` |
+| RF20 | Internal contradictions | Accepted | Rewritten |
+| RF21 | Folded row Open target undefined | Accepted | Newest review in the fold |
+| RF22 | D11 needs a written amendment | Accepted | In `docs/CONTRACTS.md` |
 
 ## Security Review
 
-Pending.
+| # | Finding | Disposition | Rationale |
+|---|---------|-------------|-----------|
+| RF1 | Raw response sends a wildcard CORS header | Accepted | Catalog routes send no CORS headers |
+| RF2 | Page can be framed for clickjacking | Accepted | `frame-ancestors 'none'` and `X-Frame-Options: DENY` |
+| RF3 | `target_path` is writable by any token holder | Accepted | Open restarts only recorded servers; never serves `target_path` |
+| RF4 | A page can forge `catalog_request` on an item | Accepted | No item field; helper-only queue |
+| RF5 | Page-set title in the agent's instruction field | Accepted | Requests carry ids; titles are fenced data |
+| RF6 | Worktree fallback rules loose | Accepted | Fallback goes through the agent and the CLI's checks |
+| RF7 | More live static servers without a Host check | Accepted | Host check on static servers is part of this feature; quiet reopened sessions close |
+| RF8 | Origin check cannot work for GET | Accepted | `Sec-Fetch-Site: same-origin`; exact Origin on POST; no preflight approval |
+| RF9 | No limit on queued requests | Accepted | One per review, five in total |
+| RF10 | Rail must never carry the Library token | Accepted | Rail keeps its existing hand-off message |
+| RF11 | 0600 token file protects nothing | Accepted | Token is in memory, minted per helper start |
+| RF12 | Row text could run script | Accepted | `textContent` and a strict script policy |
+| RF13 | Opened tab can rewrite the Library tab | Accepted | Opened with no opener; loopback URLs only |
+| RF14 | Files in shared folders | Accepted | Owner check |
+| RF15 | Direct launch needs its own design | Deferred | Open Question 1 |
