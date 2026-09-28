@@ -1,6 +1,6 @@
 # Progress: LAHE Library
 
-**Phase 6, Implement.** You cleared the design, and the plan's three reviews are folded in. The shared names are in (commit 000c40b), and Phase 1 is merged (1449 unit tests pass). Phases 1 and 2 are merged: the helper side and the page both work (1585 unit tests pass). Three close-out builders are working. Nothing is waiting on you. Last updated 2026-09-28 17:39.
+**Phase 6, Implement.** You cleared the design, and the plan's three reviews are folded in. The shared names are in (commit 000c40b), and Phase 1 is merged (1449 unit tests pass). Phases 1 and 2 are merged: the helper side and the page both work (1585 unit tests pass). Two close-out builders are still working (agent docs, browser tests); the count script and the page fixes are merged. Nothing is waiting on you. Last updated 2026-09-28 17:46.
 
 **Docs:** [Crucible](http://127.0.0.1:54705/00_crucible.html) · [Brief](http://127.0.0.1:54705/01_brief_lahe_library.html) · [Wireframes](http://127.0.0.1:54705/wireframes/index.html) · [Architecture](http://127.0.0.1:54705/02_architecture_lahe_library.html) · [Plan](http://127.0.0.1:54705/03_plan_lahe_library.html) · [Ideas page](http://127.0.0.1:55480/DOCUMENT_INDEX_IDEAS-b09cd11f2a84063f.html)
 
@@ -14,7 +14,6 @@ Nothing is waiting on you.
 |---|---|---|---|
 | Builder 3.1 + 3.4 | Agent instructions, the contract, the CLI docs, and the diagrams | 2026-09-28 17:39 | `task/lib-docs` |
 | Builder 3.2 | End-to-end and cross-site browser tests, and screenshots of an opened document | 2026-09-28 17:39 | `task/lib-e2e` |
-| Builder 3.3 + fixes | The count script; name the watching agent once per session card instead of on every row; read the request file once per refresh | 2026-09-28 17:39 | `task/lib-fixes` |
 
 ## Phases
 
@@ -40,6 +39,7 @@ Nothing is waiting on you.
 | 0 | 1 | shared names | done | commit 000c40b | Routes, auth class, error codes, constants and manifest entries landed; unit gate green. |
 | 1 | 1 | list reader and star store | merged | `task/lib-reader`, progress/phase1_task1_reader.md | Builds the Library's list from records on disk, folds old per-page reviews, and never reads a large log. A corrupt stars file is refused, never overwritten. 1366 unit tests pass. One rule is copied from the server code for now; step 2.1 moves it to one place. |
 | 1 | 2 | auth and page serving | merged | `task/lib-auth`, progress/phase1_task2_auth.md | The Library's key lives only in the page; every Library request passes the same-site checks; the page and its files are served with no cross-site access. It also closed an old gap: a page on another local port could get preflight approval for any path. 1330 unit tests pass. |
+| 3 | 3 | count script and fixes | merged | `task/lib-fixes`, progress/phase3_task3_script_and_fixes.md | The count script works on the fixture log. The session card now names the watching agent once. The request file is read once per refresh, not once per row. |
 | 2 | 2 | the Library page | merged | `task/lib-page`, progress/phase2_task2_page.md | The page, built on wireframe B, with every state unit-tested and 12 browser tests passing. Screenshots below. |
 | 2 | 1 | wiring and lifetime | merged | `task/lib-wiring`, progress/phase2_task1_wiring.md | List, Open, Star and hand-over requests work end to end on the helper; LAHE stays up while the Library is open; quiet reopened sessions close again. The copied server rule now lives in one place. The helper's version number went up, so an older running helper gets replaced. |
 | 1 | 4 | request queue and CLI | merged | `task/lib-queue`, progress/phase1_task4_queue.md | The queue that hands a document to an agent, its place in the agent's drain, `lahe library`, and a monitor that watches several sessions. 1373 unit tests pass. |
@@ -53,11 +53,11 @@ Nothing is waiting on you.
 
 ### Changes from plan
 
-None.
+- The session card says "watched by <agent>" instead of the Page Spec's unnamed "an agent is watching", and rows no longer repeat it.
+- The count script writes its CSV to a file (`--csv`) and its summary to the terminal.
 
 ### Follow-ups
 
-- The reader re-reads the request file once per row on every poll; read it once per list.
 
 ### Cleanup queue
 
