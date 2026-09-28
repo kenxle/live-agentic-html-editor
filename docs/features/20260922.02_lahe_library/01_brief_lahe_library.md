@@ -93,6 +93,8 @@ The key design question, for the wireframe: **what is one row?** A document, a r
 
 **R4a.** The default view separates documents that need Ken (waiting comments, starred) from documents that don't.
 
+**R5.** Before Sep 16, LAHE wrongly gave each page in a folder its own review. The Library shows those old reviews together, the way LAHE records a folder today.
+
 **R6.** Search filters rows by everything a row shows (title, file name, folder, agent session name), across all documents regardless of age.
 
 **R7.** A document is missing only when its file is gone and, for a deleted worktree, the same file is also gone from the main repository (R9). Missing documents are hidden by default, with a way to show them. On a missing row, Open is unavailable and says why. Star still works.
@@ -172,7 +174,7 @@ No flag. The Library reads records that already exist, so it works on the full h
 
 ## Open Questions
 
-1. What is one row: a document, a review, or an agent session? Settled in the wireframe, on real data. Part of it: before Sep 16, LAHE gave each page in a folder its own review, so the answer decides whether those old reviews show as one row or many.
+1. What is one row: a document, a review, or an agent session? Settled in the wireframe, on real data.
 
 2. How does the default view keep the volume manageable (a recent window, grouping by day, collapsing)? Settled in the wireframe.
 
