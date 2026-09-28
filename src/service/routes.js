@@ -377,7 +377,10 @@ var HANDLERS = {
       // Possession proof of the CURRENT holder. The route passes it through; the
       // registry decides. A refusal returns no secret and no holder id.
       session_secret: typeof body.session_secret === "string" ? body.session_secret : undefined,
-      takeover: body.takeover === true
+      takeover: body.takeover === true,
+      // Nobody is looking at this window, so its heartbeat is about to slow
+      // down. A boolean and nothing else; the registry owns what it buys.
+      quiet: body.quiet === true
     });
     return {
       status: outcome.granted ? 200 : protocol.statusFor("PROTO_SECOND_WINDOW"),

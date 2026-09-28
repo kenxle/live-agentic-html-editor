@@ -65,6 +65,32 @@ var TOKEN_BYTES = 32;
 var HEARTBEAT_SECONDS = 10;
 var STALE_AFTER_MS = 30 * 1000;
 
+// A QUIET HOLDER (spec 20260928.01). A page whose window has lost focus stops
+// polling and only says "still open" every QUIET_HEARTBEAT_SECONDS, and it
+// says `quiet: true` on the claim before it slows down. The helper gives such
+// a holder the longer window: the five minute beat, plus a minute because
+// Chrome wakes a long-hidden tab's timers only once a minute, plus the same 30
+// seconds of slack a focused holder gets. The page can only say yes or no;
+// the numbers are the helper's.
+//
+// What it costs: a tab that crashes or is force-quit while unfocused holds its
+// review for up to QUIET_STALE_AFTER_MS before another window takes it on its
+// own. Closing the tab still frees it at once (the goodbye), and "Review here
+// instead" still takes it at once.
+var QUIET_HEARTBEAT_SECONDS = 300;
+var QUIET_STALE_AFTER_MS = 390 * 1000;
+
+function staleAfterFor(holder) {
+  return holder && holder.quiet === true ? QUIET_STALE_AFTER_MS : STALE_AFTER_MS;
+}
+
+/** "30 seconds", or "7 minutes" for anything two minutes or longer. */
+function waitPhrase(ms) {
+  var seconds = Math.ceil(ms / 1000);
+  if (seconds < 120) return seconds + " seconds";
+  return Math.ceil(seconds / 60) + " minutes";
+}
+
 // THE SESSION TABLE OUTLIVES THE PROCESS. It used to be memory only, and the
 // helper is replaced whenever the code on disk is newer than the running
 // process, which on a working day is several times an hour. Each replacement
@@ -1013,6 +1039,7 @@ function createReviews(options) {
         since: holder.since,
         since_ms: holder.since_ms,
         last_seen: holder.last_seen,
+        quiet: holder.quiet === true,
         deposed_secret: holder.deposed_secret || null
       };
     });
@@ -1054,7 +1081,7 @@ function createReviews(options) {
       if (!holder || typeof holder.session_secret !== "string" || !holder.session_secret) return;
       if (typeof holder.last_seen !== "number") return;
       if (!protocol.isSafeId(id)) return;
-      if (at - holder.last_seen > STALE_AFTER_MS) {
+      if (at - holder.last_seen > staleAfterFor(holder)) {
         dropped += 1;
         return;
       }
@@ -1064,14 +1091,14 @@ function createReviews(options) {
         since: holder.since || new Date(holder.last_seen).toISOString(),
         since_ms: typeof holder.since_ms === "number" ? holder.since_ms : holder.last_seen,
         last_seen: holder.last_seen,
+        quiet: holder.quiet === true,
         deposed_secret: typeof holder.deposed_secret === "string" ? holder.deposed_secret : null
       };
       restored += 1;
     });
     if (restored || dropped) {
       log.helperLog(
-        "window sessions restored: " + restored + " still live, " + dropped + " already quiet longer than " +
-          Math.ceil(STALE_AFTER_MS / 1000) + " seconds"
+        "window sessions restored: " + restored + " still live, " + dropped + " already past their staleness window"
       );
     }
     return sessions;
@@ -1109,7 +1136,7 @@ function createReviews(options) {
   }
 
   function holderIsStale(holder) {
-    return clock() - holder.last_seen > STALE_AFTER_MS;
+    return clock() - holder.last_seen > staleAfterFor(holder);
   }
 
   /**
@@ -1136,12 +1163,16 @@ function createReviews(options) {
     }
     var holder = sessions[reviewId] || null;
     var at = clock();
+    // Only ever a boolean. The page says whether nobody is looking; how long
+    // that buys is the helper's number (QUIET_STALE_AFTER_MS).
+    var quiet = req.quiet === true;
 
     if (holder && secretsMatch(holder.session_secret, req.session_secret)) {
       // The holder proving it is still there, with the secret only it was given.
       // This is the heartbeat, and it is the ONLY thing recognized as the holder.
       holder.last_seen = at;
       holder.window_id = windowId;
+      holder.quiet = quiet;
       saveSessions();
       return granted(holder, false, null);
     }
@@ -1157,6 +1188,7 @@ function createReviews(options) {
         since: new Date(at).toISOString(),
         since_ms: at,
         last_seen: at,
+        quiet: quiet,
         deposed_secret: null
       };
       saveSessions();
@@ -1182,8 +1214,8 @@ function createReviews(options) {
         : "this review is already open in another window, which has been holding it " +
           heldForPhrase(holder) +
           ". Close that window, or wait " +
-          Math.ceil(STALE_AFTER_MS / 1000) +
-          " seconds after it stops responding and this one takes over.";
+          waitPhrase(staleAfterFor(holder)) +
+          " after it stops responding and this one takes over.";
       log.helperLog(
         "review " + reviewId + ": refused window " + windowId +
           (deposed ? " (it was deposed by an explicit Review-here-instead)" : " (holder still alive)")
@@ -1192,6 +1224,7 @@ function createReviews(options) {
         granted: false,
         since: holder.since,
         heartbeat_seconds: HEARTBEAT_SECONDS,
+        quiet_heartbeat_seconds: QUIET_HEARTBEAT_SECONDS,
         reason: reason,
         deposed: deposed,
         took_over: false
@@ -1210,8 +1243,7 @@ function createReviews(options) {
           windowId +
           (holderIsStale(holder)
             ? " took over from a holder whose heartbeat had been quiet for more than " +
-              Math.ceil(STALE_AFTER_MS / 1000) +
-              " seconds"
+              waitPhrase(staleAfterFor(holder))
             : " took over on an explicit Review-here-instead")
       );
     }
@@ -1223,6 +1255,7 @@ function createReviews(options) {
       // measures elapsed time against. `since` is the wire field and stays ISO.
       since_ms: at,
       last_seen: at,
+      quiet: quiet,
       // Only an EXPLICIT takeover records this. A holder that simply went quiet
       // was not deposed by anyone, and its page, if it comes back, should be
       // told the ordinary ambiguous refusal and given time to sort itself out.
@@ -1271,6 +1304,7 @@ function createReviews(options) {
       granted: true,
       since: holder.since,
       heartbeat_seconds: HEARTBEAT_SECONDS,
+      quiet_heartbeat_seconds: QUIET_HEARTBEAT_SECONDS,
       reason: reason,
       took_over: !!tookOver,
       // The holder's own secret, handed back to the holder only. The heartbeat
@@ -1315,6 +1349,8 @@ function createReviews(options) {
   return {
     HEARTBEAT_SECONDS: HEARTBEAT_SECONDS,
     STALE_AFTER_MS: STALE_AFTER_MS,
+    QUIET_HEARTBEAT_SECONDS: QUIET_HEARTBEAT_SECONDS,
+    QUIET_STALE_AFTER_MS: QUIET_STALE_AFTER_MS,
     LIVE_WINDOW_MS: LIVE_WINDOW_MS,
     RESCAN_INTERVAL_MS: RESCAN_INTERVAL_MS,
     RESCAN_TRACKED_MAX: RESCAN_TRACKED_MAX,
@@ -1420,6 +1456,8 @@ module.exports = {
   TOKEN_BYTES: TOKEN_BYTES,
   HEARTBEAT_SECONDS: HEARTBEAT_SECONDS,
   STALE_AFTER_MS: STALE_AFTER_MS,
+  QUIET_HEARTBEAT_SECONDS: QUIET_HEARTBEAT_SECONDS,
+  QUIET_STALE_AFTER_MS: QUIET_STALE_AFTER_MS,
   LIVE_WINDOW_MS: LIVE_WINDOW_MS,
   RESCAN_INTERVAL_MS: RESCAN_INTERVAL_MS,
   RESCAN_TRACKED_MAX: RESCAN_TRACKED_MAX,
