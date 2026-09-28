@@ -446,7 +446,8 @@ async function run(argv, options) {
             "review " + args.fromReview + " belongs to agent session " + described.session + ", not " + args.id
           );
         }
-        newName = described.display_name;
+        // A page title can run long: cut it where a word ends, not mid-word.
+        newName = sessions.fitName(described.display_name);
       }
       var renamed = store.setName(args.id, newName, args.fromReview ? { source: sessions.NAME_SOURCE_PAGE } : undefined);
       out(

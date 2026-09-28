@@ -1380,7 +1380,8 @@ lahe library answer <request-id> --session <id> --status done|refused --text "..
 
 `lahe session name <id> --from-review <review>` names a session after that review's display name, as
 the Library shows it. The CLI reads the name itself, so a page-set title never passes through a shell
-command. The review must belong to the named session. The session record gets `name_source: "page"`,
+command. The review must belong to the named session. A title longer than 80 characters is cut where
+a word ends and closed with an ellipsis, still within 80. The session record gets `name_source: "page"`,
 and no hand-off message carries a page-sourced name: not the drain's `handoff`, not the Library's
 copy panel (its list marks the session `name_from_page: true`), not the rail's banner. A hand-off is
 a new agent's first prompt, and a page must not be able to write into it. A name set any other way

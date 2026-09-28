@@ -111,3 +111,37 @@ test("the rail's liveness says the name came from a page, so its hand-off leaves
   w.store.setName("s_doc", "coach activity");
   assert.equal(w.store.liveness("s_doc", { nowMs: T0 })[protocol.AGENT_LIVENESS.FIELD.NAME_FROM_PAGE], false);
 });
+
+// A long page title becomes a session name at a word boundary, with an
+// ellipsis, still within NAME_MAX characters: never "...for Ed".
+test("--from-review cuts a long title at a word boundary with an ellipsis, within NAME_MAX", async () => {
+  const dir = tempDir();
+  agentSessions.createStore({ dir }).create({ id: "s_long" });
+  const doc = path.join(tempDir(), "doc.html");
+  fs.writeFileSync(doc, "<p>doc</p>");
+  const log = logModule.createEventLog({ dir });
+  reviewsModule.createReviews({ dir, log }).create({ id: "r_long", agent_session_id: "s_long", target_path: doc });
+  const title = "Feature Brief: Coach Activity Summaries, Weekly Digest Emails, and Reminder Scheduling for Editors";
+  assert.ok(Array.from(title).length > agentSessions.NAME_MAX, "the title is longer than a name may be");
+  const reviewJson = stateDir.reviewJsonPath(dir, "r_long");
+  fs.writeFileSync(reviewJson, JSON.stringify({ review: {}, pages: [{ title, path: "/doc.html", items: [] }] }));
+  const later = new Date(Date.now() + 60 * 1000);
+  fs.utimesSync(reviewJson, later, later);
+  const named = await runSession(["name", "s_long", "--from-review", "r_long", "--state-dir", dir]);
+  assert.equal(named.code, protocol.CLI_EXIT.OK, named.stderr);
+  const name = agentSessions.createStore({ dir }).read("s_long").name;
+  assert.ok(Array.from(name).length <= agentSessions.NAME_MAX, name);
+  assert.ok(name.endsWith("…"), name);
+  const kept = name.slice(0, -1);
+  assert.ok(title.startsWith(kept), "a prefix of the title: " + name);
+  assert.ok(title.charAt(kept.length) === " ", "cut where a word ends: " + name);
+  assert.equal(/[\s,:;]$/.test(kept), false, "no dangling space or punctuation before the ellipsis: " + name);
+});
+
+test("a title that fits is kept whole, with no ellipsis", () => {
+  assert.equal(agentSessions.fitName("Short Title"), "Short Title");
+  const one = "x".repeat(agentSessions.NAME_MAX + 10);
+  const cut = agentSessions.fitName(one);
+  assert.equal(Array.from(cut).length, agentSessions.NAME_MAX, "one long word is cut hard, ellipsis included");
+  assert.ok(cut.endsWith("…"));
+});

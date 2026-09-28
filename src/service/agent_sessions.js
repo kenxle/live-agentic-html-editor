@@ -40,6 +40,15 @@ var NAME_MAX = 80;
  * @returns {string|null} null for anything that is not a non-blank string
  */
 function cleanName(value) {
+  var stripped = stripName(value);
+  if (!stripped) return null;
+  var chars = Array.from(stripped);
+  if (chars.length > NAME_MAX) stripped = chars.slice(0, NAME_MAX).join("").trim();
+  return stripped || null;
+}
+
+/** cleanName without the length cap: trimmed, with the unsafe characters out. */
+function stripName(value) {
   if (typeof value !== "string") return null;
   // eslint-disable-next-line no-control-regex
   // Control characters, and the invisible ones that can make a name read as
@@ -49,10 +58,29 @@ function cleanName(value) {
   var stripped = value
     .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]/g, "")
     .trim();
-  if (!stripped) return null;
-  var chars = Array.from(stripped);
-  if (chars.length > NAME_MAX) stripped = chars.slice(0, NAME_MAX).join("").trim();
   return stripped || null;
+}
+
+/**
+ * A long text made into a name: cleaned, then, when it runs past NAME_MAX,
+ * cut where a word ends and closed with an ellipsis, still within NAME_MAX
+ * characters. One word longer than that is cut hard. For a name read off a
+ * page title, which cleanName alone would stop mid-word.
+ *
+ * @param {*} value
+ * @returns {string|null}
+ */
+function fitName(value) {
+  var full = stripName(typeof value === "string" ? value.replace(/\s+/g, " ") : value);
+  if (!full) return null;
+  var chars = Array.from(full);
+  if (chars.length <= NAME_MAX) return full;
+  var room = chars.slice(0, NAME_MAX - 1).join("");
+  // At the space just past `room`, or back to room's last space. One word
+  // with no space in it is cut hard.
+  var atWord = chars[NAME_MAX - 1] === " " ? room : room.replace(/\s+\S*$/, "");
+  var kept = atWord.replace(/[\s,:;.\-]+$/, "") || room.trim();
+  return kept + "\u2026";
 }
 
 // Where a name came from. "page" marks a name read off a document's own title
@@ -599,6 +627,7 @@ module.exports = {
   NAME_MAX: NAME_MAX,
   NAME_SOURCE_PAGE: NAME_SOURCE_PAGE,
   cleanName: cleanName,
+  fitName: fitName,
   handoffName: handoffName,
   mintId: mintId,
   handoffRev: handoffRev,
