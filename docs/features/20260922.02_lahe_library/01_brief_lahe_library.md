@@ -65,7 +65,7 @@ The key design question, for the wireframe: **what is one row?** A document, a r
    - how many comments are waiting
    - whether it is being served now
    - whether an agent is watching it
-4. **Open** brings the document back at a new address with the rail on it, and opens it in a new tab. No agent is needed to read it.
+4. **Open** brings the document back with the rail on it, and opens it in a new tab. No agent is needed to read it.
 5. **Star** marks it. Starred documents stay easy to find however old they get.
 6. **Pick this up** tells the agent attached to the Library to take the document over, so comments on it get answered.
 7. **Launch a new agent** asks that agent to start a fresh one on the document.
