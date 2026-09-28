@@ -35,7 +35,7 @@ Cover three jobs:
 ## Non-Goals
 
 ::: callout-nongoal
-- A new mode. Writing must feel like the edit mode the reviewer already has.
+- A new mode. While the existing edit mode can be updated, there should not be a difference between edit and write new, in terms of what the users sees in the editor.
 - An editor library added to `dependencies`. The zero-runtime-dependency rule holds. A vendored file is allowed.
 - Tables, images, or links in the first cut. Lists are open in Q4 (are lists in the first cut?).
 - Agent-written text. The reviewer writes; the agent proofreads and suggests.
