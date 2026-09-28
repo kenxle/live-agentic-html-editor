@@ -4,6 +4,8 @@ Written 2026-09-21. An analysis, not a change. No code was touched.
 
 Part of the [performance and token work](MEMORY_AUDIT_20260916.md), which links every document from it.
 
+**Status, 2026-09-28.** The fix shipped on 2026-09-22: [Stop writing unsent drafts so often](../20260922.01_draft_write_cost/01_spec_draft_write_cost.md), with measured before-and-after numbers on that page. So the costs measured below are the OLD costs, kept as the record of why the change was made. Three things this page describes are no longer true: the browser saves one comment per keystroke in that comment's own storage key rather than rewriting the whole list; a draft reaches the helper at most once every 10 seconds rather than about once a second; and a draft save no longer rewrites `review.json` at all. What still stands: the browser copy alone covers every failure R1 names, the helper copy is never read back into the page, and the three oversized-record bugs are still open.
+
 ## Summary
 
 1. A draft (a comment or edit the reviewer has not sent yet) is saved in the browser on every keystroke, and sent to the helper about once a second while the reviewer types.

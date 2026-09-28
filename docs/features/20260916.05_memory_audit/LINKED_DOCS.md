@@ -26,3 +26,14 @@ Links to documents in another agent's session stay read-only either way. Session
 - Build 2 as well, after a security review of the spec?
 
 Until then, the spec's own page with the editor is: http://127.0.0.1:56458/01_spec_draft_write_cost-1f5f8917884b9ad3.html
+
+## Where this stands, 2026-09-28
+
+Both calls above are answered, and the work is specified but not built.
+
+- Ken said yes to 1 and yes to 2, and added a rule of his own: no empty reviews.
+- The spec is `docs/features/20260922.02_linked_docs_rail/01_spec_linked_docs_rail.md` on branch `linked-docs-rail`. It is not on main.
+- It has been through a security review. Two findings from that review are their own rows: `source_hint` from a browser (hub row 19) and the page server's own folder still serving hidden files (hub row 21, board row `LAHE-server-root-hidden-files`).
+- Board row: `LAHE-linked-docs-rail`.
+
+The last line above names a page address from the day this was written. Those addresses die with the helper that served them; it is kept only as the record of what was open at the time.

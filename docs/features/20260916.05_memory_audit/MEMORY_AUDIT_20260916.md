@@ -8,11 +8,18 @@ This page is the hub. Start here; everything else is one click away.
 
 **Open questions, waiting on you**
 
-- [Stop writing unsent drafts so often](../20260922.01_draft_write_cost/01_spec_draft_write_cost.md): the spec from your decisions. Approved, building.
-- [Where unsent comments are saved, and what it costs](DRAFT_PERSISTENCE.md): drafts are 79% of what gets written, plus three oversized-record bugs (the rest of the page saved as "text after", embedded images saved three times, the whole-page highlight). Needs your read before any change.
+- [Keeping the editor when you follow a link](LINKED_DOCS.md): the spec is written and security-reviewed on branch `linked-docs-rail`, and you settled both calls in it on 2026-09-28. Nothing is built yet. Board row `LAHE-linked-docs-rail`.
 
 **Shipped, with their specs**
 
+- [Stop writing unsent drafts so often](../20260922.01_draft_write_cost/01_spec_draft_write_cost.md): shipped 2026-09-22, with before-and-after numbers on the spec page.
+- [Where unsent comments are saved, and what it costs](DRAFT_PERSISTENCE.md): the analysis the draft fix came from. Drafts were 79% of what got written. The three oversized-record bugs it found are still open.
+- [An edit sticks to the paragraph, not the italic inside it](../20260922.03_italic_sticks/NOTES.md)
+- [A clash with the page raises a toast that stays until it is dealt with](../20260922.04_conflict_toast/01_spec_conflict_toast.md)
+- [An edit the source carries as several paragraphs counts as applied](../20260922.06_split_not_conflict/NOTES.md), and [a write never says the reviewer's words twice](../20260922.08_no_duplicate_text/NOTES.md)
+- [An agent that is thinking is not an empty chair](../20260922.07_calm_liveness/NOTES.md)
+- [The helper re-renders a Markdown review itself, and checks a handled claim](../20260923.01_rebuild_not_the_agents_job/01_spec_rebuild_not_the_agents_job.md)
+- [An item an agent is shown is current, whatever its card's age](../20260923.02_no_stale_excuse/01_spec_no_stale_excuse.md)
 - [One message per pause, not per keystroke](../../ongoing/OUTBOX_COALESCING.md): the design note for the first fix.
 - [The drain stops repeating the agent instructions](../20260916.02_contract_once/01_spec_contract_once.md)
 - [The helper stops re-reading every log](../20260916.03_helper_lazy_projection/01_spec_lazy_projection.md)
@@ -51,7 +58,7 @@ This is the one progress page for all of the memory, CPU, and token work. The me
 | 15. After the draft fix ships, each existing review keeps its old whole-list copy in browser storage beside the new per-comment copies, so storage doubles until the old copy is deleted | ⬜ Not started. Delete the old copy in the release after the draft fix, then drop the code that merges it |
 | 16. Rewording an edit the agent marked not handled still sends every pause to the helper and rewrites review.json at typing speed | ⬜ Not started. Found in the draft fix's code review. Fix: treat it like rewording a ready edit |
 | 17. The drain never goes quiet once a session has an ended review: a run by hand lists every ended review in the session (seven in one session here, the oldest from 2026-09-16) plus the field table, every time, although the docs say it prints nothing when nothing waits | ⬜ Not started. Only the monitor marks an ended review as delivered. Fold into 11 (trim the drain) |
-| 18. Following a link to a document in another folder drops the editor | 🔨 [Spec](../20260922.02_linked_docs_rail/01_spec_linked_docs_rail.md) written and security-reviewed, on branch `linked-docs-rail`, waiting on your read |
+| 18. Following a link to a document in another folder drops the editor | 🔨 Spec written and security-reviewed on branch `linked-docs-rail`, as `docs/features/20260922.02_linked_docs_rail/01_spec_linked_docs_rail.md` there; it is not on main, so there is nothing to link to from here. Ken settled both open calls in the spec on 2026-09-28. Not built. Board row `LAHE-linked-docs-rail` |
 | 19. Any page holding a review's key can tell the agent which file is the source (`source_hint`), so a hostile script on a served page could point the agent at the wrong file | ⬜ Not started. Found in the linked-docs security review. Fix: refuse that field when the request comes from a browser |
 | 20. A linked folder's hidden files (like `.env`) can be fetched from the local page server | ✅ Fixed on main (e4346f1). Page servers already running keep the old code until they restart |
 | 21. The page server's own folder also serves hidden files, such as a `.env` inside the folder under review | ⬜ Not started. Found while fixing 20. Needs a decision: a reviewed folder may legitimately serve something like `.well-known/` |
