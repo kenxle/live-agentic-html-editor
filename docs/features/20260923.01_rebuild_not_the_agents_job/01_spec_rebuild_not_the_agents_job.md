@@ -176,32 +176,52 @@ where "are these words there" is the question the reviewer is actually asking.
 | A tool round, `record.toolRoundOf` | A page-check reopen is the tool asking for one specific thing, usually carrying a `data-lahe-id` into the source, and the browser's page check has already formed its own opinion about what is on the page. Two checks arguing means the reviewer's item never closes. |
 | An item whose `after` is empty or blank | Nothing to look for, so every page fails. |
 
-**And the condition: nothing moved.** Even for a checked shape, the words are
-only allowed to convict when nothing in the source or the page has been written
-since the reviewer committed that wording. An agent that touched either one did
-something, and grading whether it is the RIGHT something is the browser's page
-check, which has the reviewer's live page in front of it and its own
-once-per-reopen and cooldown guards.
+**And the condition: the passage was left alone.** Even for a checked shape, the
+words only convict when one of two things says the item's own passage was never
+touched:
 
-This is what makes the check safe rather than merely narrow. Without it, an
-agent that applied the change in its own words was held open forever, which is
-`test/browser/reverted_edit.spec.js` and was a real regression. With it, the
-check catches the one thing it was built for: the agent that answered handled
-having changed nothing at all.
+1. **Nothing was written.** No file the review is built from, source or page,
+   was written since the reviewer committed that wording. This covers the whole
+   review, so it catches an agent that did nothing at all, whatever the item's
+   shape.
+2. **The before is still there.** The item's `before` is on the built page as
+   whole blocks, exactly once, found with the same entity decoding and
+   typography folding as the after. This one is per item.
 
-**The condition covers a REVIEW where nothing moved, not an ITEM where nothing
-moved, and that is a real gap.** Every file the review is built from is stat'ed,
-so one write anywhere disarms the check for every item in that review. An agent
-that fixes item one and then replies handled to items one through five is
-unguarded on two through five, because the file it wrote for item one is newer
-than all of them. That is exactly the batch shape the reported failure arrived
-in, so the check is weakest in the situation that produced it: it catches an
-agent that did nothing at all, and not an agent that did some of it.
+An agent that changed the passage, in any words, has removed its `before`, so
+neither witness speaks and the reply stands. Grading whether it is the RIGHT
+change is the browser's page check, which has the reviewer's live page in front
+of it and its own once-per-reopen and cooldown guards.
 
-Narrowing it to the passage an item points at would mean resolving a record's
-region inside a source file, which is the anchor engine's job and is not
-something the helper can do from a path and a modification time. If this gap is
-worth closing, that is the shape of the work, and it is bigger than this change.
+When the before is found, an after that sits wholly inside it does not count as
+the change. A reviewer who trimmed words from a paragraph has an after the
+untouched paragraph already contains, and plain containment used to pass it.
+
+**Per edit, not per review.** The nothing-written gate alone covered the REVIEW,
+so one write anywhere disarmed it for every item. An agent that fixed item one
+and replied handled to items one through five slipped two through five past it.
+The before test closes that: each item is judged on its own passage.
+
+**Whole blocks, not a substring.** An edit is made on one block, and `before` is
+that block's text. Matching it as whole blocks is what keeps an agent's own
+wording safe. An agent that kept the reviewer's old sentence and added one of
+its own has changed the block, and a substring test would say it had not.
+
+**Why the nothing-written gate is kept.** When nothing at all was written, the
+agent changed nothing, and that holds for the shapes the before test cannot
+place. It never second-guesses real work, because it only speaks when there was
+none.
+
+| Shape, once something was written | Checked on its passage? |
+| --- | --- |
+| An ordinary edit whose before is on the page once | Yes: held if the after is not on the page outside that passage |
+| A passage the agent changed, in any words | No: the before is gone, the reply stands |
+| A before found twice on the page | No: ambiguous, and the check never guesses (D9) |
+| A before the reviewer's page recorded as not unique (`region.ref.text_unique: false`) | No: once the agent changes the right twin, the other still looks untouched |
+| A short before (a word or two) | Only as a whole block. A heading "Summary" left alone is held; one the agent expanded to "Summary of findings" is not. A short before that recurs as a block is the twice case |
+| An insertion (empty before) | No: there is no passage to find. Only the nothing-written gate can hold it |
+| An addition: the after holds the whole before (the reviewer only added words, split a paragraph, or changed typography) | No: an agent can do the work and leave the old block exactly as it was, putting the new words beside it in its own wording (`test/browser/reverted_edit.spec.js`). Only the nothing-written gate can hold it, and that gate looks for an after of several paragraphs paragraph by paragraph, so a split nobody made is held |
+| Revert, tool round, delete, format-only, blank after | No, as in the table above: never checked at all |
 
 ## What this costs, and where it is weak
 
@@ -219,14 +239,38 @@ render off the route and let the poll report the old mtime until it lands, not
 to make it a watcher.
 
 **The check is containment, so a short `after` gets little protection.** The
-test is "are these words in the page", which means a one-word edit, or a
-sentence the page already contained somewhere else, passes whether or not the
-agent did anything. The nothing-moved condition above carries most of the
-weight here: an agent that wrote nothing is caught whatever its `after` says. That is deliberate: the alternative is an equality test,
-which fails every time the agent legitimately reflows a paragraph or applies
-the same change in three places. The check exists to catch the agent that
-changed nothing at all, which is the reported failure, and it does. It is not a
-proof that the right change was made in the right place.
+test is "are these words in the page", so a one-word after, or a sentence the
+page already held somewhere else, passes whether or not the agent did anything.
+The before test does not change that: it decides WHETHER the words are asked,
+not how strictly. The alternative is an equality test, which fails every time
+the agent legitimately reflows a paragraph or applies the same change in three
+places. The check catches an agent that left a passage alone and said it did
+not. It is not a proof that the right change was made in the right place.
+
+**An agent that leaves the old block alone and writes its replacement elsewhere
+is held.** For an edit that replaced words, the reviewer's block still standing
+as it was is read as untouched, even if the agent put its version in a new
+paragraph beside it. The agent keeps the `not_handled` way out below. Additions
+are exempt from this for the reason in the table.
+
+**Any change to the same paragraph retires the item.** The before test only asks
+whether the reviewer's paragraph is still there as it was. A change made there
+for a different reason (a second edit in the same paragraph, a nearby typo fix)
+removes it just the same, and the reply stands. This fails in the safe
+direction: the item is let go, never held on a guess.
+
+**Pure additions fall back to the review-wide gate.** An addition cannot be
+judged on its own passage (see the table), so it has only the nothing-written
+gate. An agent that fixes one item and answers handled to five additions slips
+the other four through. Narrowing it would mean grading whether the agent's
+words beside the old paragraph are the reviewer's words, which is
+second-guessing the agent's wording.
+
+**The before test assumes the page's blocks are the reviewer's blocks.** It
+reads the built file, split on block tags. A page whose text is built by script
+in the browser, or whose blocks nest differently from what the reviewer
+edited, will not match, and a passage that cannot be found is treated as
+changed. That fails toward letting the reply stand.
 
 **And a false negative has a way out.** Some `after` texts genuinely cannot
 appear on the page as written: a renderer eats a character, or the agent carried
@@ -250,6 +294,7 @@ decides. Without that clause the agent would wake on the same item forever.
 | T9 | Screenshot | done |
 | T10 | Review round: card clock, merge with main, the not_handled way out, wording, log once | done |
 | T11 | Full-suite round: narrow the check to the shapes and the condition where it means something | done |
+| T12 | Per-edit check: the item's before, still on the page once, holds it open even after a write elsewhere | done |
 
 ## Acceptance criteria
 
@@ -270,6 +315,14 @@ decides. Without that clause the agent would wake on the same item forever.
 | A13 | A page-check reopen is never checked | unit: "a page-check reopen is never checked" |
 | A14 | An empty after, a delete and a format-only record are never checked | unit: "an empty after is never checked", "a delete and a format-only record are never checked" |
 | A15 | An agent that did real work in its own words is not second-guessed | unit: "an agent that rewrote the page in its own words is not second-guessed" |
+| A16 | Five edits, one fixed, five handled replies: four held, one retired | unit: "five edits, one fixed, five handled replies" |
+| A17 | Rewording the passage in the agent's own words retires | unit: "an agent that rewords the passage in its own words retires" |
+| A18 | A kept sentence plus the agent's own is not held | unit: "the passage is whole blocks, not a substring" |
+| A19 | A before found twice, or recorded as not unique, passes | unit: "a before found twice", "a before that was on the page twice" |
+| A20 | A short before is judged as a whole block | unit: "a short before is judged as a whole block" |
+| A21 | A trim is held when the passage is untouched; an applied split, a typography-only edit and an addition done the agent's way pass | unit: "a reviewer who trimmed words", "a reviewer who split a paragraph", "differ only in typography", "a reviewer who only added words" |
+| A22 | An insertion is held only by the nothing-written gate | unit: "an insertion has no passage to find" |
+| A23 | A paragraph split nobody made is held | unit: "a split nobody made is held" |
 
 ## Progress
 
@@ -296,6 +349,18 @@ main is merged in. Both branches touched the outstanding-item printer, the
 contract array and its restated copy, and both changes are kept: main's sentence
 about an item being current whatever its card's age, and this branch's two about
 a checked handled reply.
+
+Per-edit round (T12), on branch `handled-check-per-edit`:
+
+- `npm run gate:unit`: green, 0 fail.
+- Red first: the five-edit, short-heading and trim tests failed before the
+  change; the addition test failed against the first draft of it, which is why
+  additions are exempt.
+- Browser, `--workers=1`: `rebuild_not_the_agents_job`, `reverted_edit`,
+  `undo_reaches_helper`, `agent_replies`: 25 passed. The ten other specs that
+  answer handled to a hand edit (`ac3_walk`, `card_click_jump`, `cp2_mid`,
+  `edits_tab`, `formatting_survives`, `graceful_failure`, `italic_sticks`,
+  `present_mode`, `no_duplicate_text`, `rail_design`): 46 passed.
 
 Not done, and deliberately:
 
