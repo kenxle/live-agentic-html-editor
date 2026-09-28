@@ -58,6 +58,19 @@ async function requestFor(reviewId, action) {
   });
 }
 
+// The stub agent counts as listening because its drain stamps its activity,
+// and that stamp ages. Each test, and each hand-over click, refreshes it first,
+// so a slow run earlier in the file cannot leave the agent looking gone.
+function refreshStubAgent() {
+  world.drainRequests();
+}
+
+// Screenshots are written only on request (LAHE_SHOTS=1) and only on Chromium,
+// so an ordinary run never rewrites a committed image.
+function shotsWanted(browserName) {
+  return process.env.LAHE_SHOTS === "1" && browserName === "chromium";
+}
+
 async function openLibrary(page) {
   await page.goto(world.libraryUrl);
   await pollPage(page, () => !!document.querySelector("#lahe-catalog-main .lib-section"), undefined, {
@@ -150,8 +163,10 @@ test.describe("the Library, end to end, with a stub agent on the real CLI", () =
 
   test("Open a closed review: the document lands in a new tab with its rail, takes a comment, and the stub agent's answer shows", async ({
     page,
-    context
+    context,
+    browserName
   }) => {
+    refreshStubAgent();
     await openLibrary(page);
     await expect(page.locator("#lahe-catalog-agent")).toHaveText(fill(T.AGENT_ATTACHED, { agent: AGENT_NAME }));
 
@@ -160,6 +175,7 @@ test.describe("the Library, end to end, with a stub agent on the real CLI", () =
     const name = "closed / brief.html";
     await expect(row(page, world.docs.closed.review).locator(".lib-name")).toHaveText(name);
     const tabPromise = context.waitForEvent("page");
+    refreshStubAgent();
     await row(page, world.docs.closed.review).locator('[data-act="open"]').click();
     const tab = await tabPromise;
     await pollUntil(() => /^http:\/\/127\.0\.0\.1:\d+\/brief\.html$/.test(tab.url()), {
@@ -200,20 +216,24 @@ test.describe("the Library, end to end, with a stub agent on the real CLI", () =
 
     // Screenshots of the document as the Library opened it, rail and comment
     // on screen, in the same run as the assertions above.
-    await tab.bringToFront();
-    await tab.evaluate(() => document.fonts.ready);
-    await tab.emulateMedia({ colorScheme: "light" });
-    await tab.screenshot({ path: path.join(SHOTS, "catalog_opened_doc_light.png") });
-    await tab.emulateMedia({ colorScheme: "dark" });
-    await tab.screenshot({ path: path.join(SHOTS, "catalog_opened_doc_dark.png") });
+    if (shotsWanted(browserName)) {
+      await tab.bringToFront();
+      await tab.evaluate(() => document.fonts.ready);
+      await tab.emulateMedia({ colorScheme: "light" });
+      await tab.screenshot({ path: path.join(SHOTS, "catalog_opened_doc_light.png") });
+      await tab.emulateMedia({ colorScheme: "dark" });
+      await tab.screenshot({ path: path.join(SHOTS, "catalog_opened_doc_dark.png") });
+    }
     await tab.close();
   });
 
   test("Pick this up: the stub agent reads the request from lahe status, answers with lahe library answer, and the row shows it", async ({
     page
   }) => {
+    refreshStubAgent();
     await openLibrary(page);
     const target = row(page, world.docs.pick.review);
+    refreshStubAgent();
     await target.locator('[data-act="pickup"]').click();
     await expect(target.locator(".lib-note-text")).toHaveText(fill(T.WAITING, { agent: AGENT_NAME }));
 
@@ -225,6 +245,7 @@ test.describe("the Library, end to end, with a stub agent on the real CLI", () =
     expect(req.handoff).toContain(world.docs.pick.session);
 
     // A second click while it waits sends nothing and says so.
+    refreshStubAgent();
     await target.locator('[data-act="pickup"]').click();
     await expect(target.locator(".lib-note-text")).toHaveText(fill(T.ALREADY_WAITING, { agent: AGENT_NAME }));
     expect(world.drainRequests().filter((r) => r.review === world.docs.pick.review)).toHaveLength(1);
@@ -241,8 +262,10 @@ test.describe("the Library, end to end, with a stub agent on the real CLI", () =
   test("a watched session asks first; Move the session queues the pick-up, and the stub agent's answer shows", async ({
     page
   }) => {
+    refreshStubAgent();
     await openLibrary(page);
     const target = row(page, world.docs.watched.review);
+    refreshStubAgent();
     await target.locator('[data-act="pickup"]').click();
 
     const dialog = page.locator("#lahe-catalog-confirm");
@@ -254,6 +277,7 @@ test.describe("the Library, end to end, with a stub agent on the real CLI", () =
     await expect(dialog.locator("li")).toHaveText(["watched2 / figure.html"]);
     expect(world.drainRequests().filter((r) => r.review === world.docs.watched.review), "nothing is queued before the reader decides").toHaveLength(0);
 
+    refreshStubAgent();
     await dialog.locator('[data-act="move"]').click();
     await expect(dialog).toBeHidden();
     await expect(target.locator(".lib-note-text")).toHaveText(fill(T.WAITING, { agent: AGENT_NAME }));

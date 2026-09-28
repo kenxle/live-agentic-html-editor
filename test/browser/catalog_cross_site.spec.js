@@ -103,6 +103,12 @@ function noteSentValues(from) {
   test.info().annotations.push({ type: "sec-fetch-site sent", description: JSON.stringify(sent) });
 }
 
+/** How many preflights for a catalog path the helper refused from `origin`. */
+function catalogPreflightRefusals(origin) {
+  const needle = "refused preflight: catalog path, origin " + JSON.stringify(origin);
+  return world.helperLog().split(needle).length - 1;
+}
+
 /** Run one attempt, then wait for the helper to log its refusal. */
 async function refusedOnce(routeName, attempt) {
   const before = refusals(routeName).length;
@@ -250,6 +256,7 @@ function frameLibrary(page, url) {
 // -----------------------------------------------------------------------------
 
 async function attackFrom(page, attackerUrl) {
+  const attackerOrigin = new URL(attackerUrl).origin;
   await page.goto(attackerUrl);
   await expect(page.locator("#attacker-title")).toHaveText("Not your app");
 
@@ -261,8 +268,14 @@ async function attackFrom(page, attackerUrl) {
     const body = forgedBody(name);
     const url = urlOf(name);
     // cors with the real token: the preflight is never approved, so the POST
-    // itself is never sent and the page learns nothing.
+    // itself is never sent and the page learns nothing. The refusal is the
+    // catalog-path rule, which holds even for an origin a review registered.
+    const preflightsBefore = catalogPreflightRefusals(attackerOrigin);
     expect(await corsFetch(page, url, "POST", body), name + " cors").toBe("threw:TypeError");
+    await pollUntil(() => catalogPreflightRefusals(attackerOrigin) > preflightsBefore, {
+      message: "the helper to log `refused preflight: catalog path` for " + name,
+      describe: () => ({ log: world.helperLog().slice(-2000) })
+    });
     const opaque = await refusedOnce(name, () => noCorsFetch(page, url, "POST", body));
     expect(opaque, name + " no-cors is opaque").toBe("type:opaque body:");
     await refusedOnce(name, () => beacon(page, url, body));
@@ -305,12 +318,17 @@ async function attackFrom(page, attackerUrl) {
 async function libraryStillWorks(context, starDoc) {
   const page = await context.newPage();
   const before = snapshot();
+  // Read before the page loads: the second test runs after the first test's
+  // control already listed, so "not null" alone would prove nothing there.
+  const seenBefore = await seenAt();
   try {
     await page.goto(world.libraryUrl);
     await pollPage(page, () => !!document.querySelector("#lahe-catalog-main .lib-section"), undefined, {
       message: "the real Library to list on this lane"
     });
-    expect(await seenAt(), "the Library's own list was authenticated").not.toBe(null);
+    const seenAfter = await seenAt();
+    expect(seenAfter, "the Library's own list was authenticated").not.toBe(null);
+    expect(seenAfter, "and it moved catalog_seen_at").not.toBe(seenBefore);
 
     const row = page.locator('li[data-review="' + world.docs[starDoc].review + '"]').first();
     await row.locator('[data-act="star"]').click();
@@ -365,6 +383,21 @@ test.describe("the Library's actions from another origin", () => {
     attackerServer
   }) => {
     expect(attackerServer.origin).not.toBe(world.helperOrigin);
+    // SEC3: the attacker's origin is one a review registered, the way a
+    // document on its own static server is. The catalog routes still refuse
+    // its preflight, by the catalog-path rule.
+    world.lahe([
+      "review", world.docs.target.file,
+      "--session", world.docs.target.session,
+      "--origin", attackerServer.origin,
+      "--port", String(world.port)
+    ]);
+    // Proof it is registered: a review route's preflight from it is approved.
+    const reviewPreflight = await fetch(world.helperOrigin + protocol.route("events.append").path, {
+      method: "OPTIONS",
+      headers: { origin: attackerServer.origin, "access-control-request-method": "POST" }
+    });
+    expect(reviewPreflight.status, "the attacker's origin is registered on a review").toBe(204);
     await attackFrom(page, attackerServer.urlFor("attacker.html"));
     await libraryStillWorks(context, "controlB");
   });
