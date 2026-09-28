@@ -138,6 +138,22 @@ test.describe("the Library page", () => {
     if (helper) await helper.stop();
   });
 
+  test("the browser applies the inline style under the page's content policy, with no violation", async ({ page }) => {
+    // The policy allows the one inline <style> by its hash. The unit test pins
+    // the hash against the rendered style; this checks a real browser agrees.
+    await page.addInitScript(() => {
+      window.__cspViolations = [];
+      document.addEventListener("securitypolicyviolation", (e) => {
+        window.__cspViolations.push(e.violatedDirective + " " + (e.blockedURI || "inline"));
+      });
+    });
+    await routeCatalog(page, { list: () => freshList() });
+    await openLibrary(page, helper);
+    const primary = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--lib-primary").trim());
+    expect(primary, "the inline style's custom property is set, so the style ran").toBe("#3c56a5");
+    expect(await page.evaluate(() => window.__cspViolations)).toEqual([]);
+  });
+
   test("row text containing HTML renders as text", async ({ page }) => {
     const hostile = '<img src=x onerror="window.__pwned=1"><b>bold</b>';
     const list = freshList();
