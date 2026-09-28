@@ -95,11 +95,11 @@ The wireframe and the architecture decide:
 :::
 
 ::: callout-req
-**R3:** The reviewer can make paragraphs, headers, and lists themselves, without asking the agent.
+**R3:** The reviewer can make paragraphs, headers, and lists themselves, without asking the agent. This holds while editing an existing block as well as while writing new text.
 :::
 
 ::: callout-req
-**R4:** New blocks use the page's own styling, while writing and after commit. That means:
+**R4:** New blocks, and blocks the reviewer splits or reshapes while editing, use the page's own styling, while writing and after commit. That means:
 - spacing
 - type
 - header sizes
@@ -210,10 +210,6 @@ None. The contract text changes. Existing reviews keep working, since an old pag
 :::
 
 ::: callout-question
-**Q6 (Ken):** You said larger edits to existing text are also lacking. What fails today? Without a case, this stays out of scope with a follow-up row.
-:::
-
-::: callout-question
 **Q7 (wireframe):** When a reviewer is editing an existing block and presses Enter at its end, is the new paragraph part of that edit or new text? One consistent rule, and the reviewer should be able to see which it is.
 :::
 
@@ -222,6 +218,7 @@ None. The contract text changes. Existing reviews keep working, since an old pag
 - **Who writes the notes file:** the agent, like any other new text. Lahe is an agentic editor, so notes with no agent attached are not a design case.
 - **Lists:** in the first cut, alongside paragraphs and headers.
 - **Pasting with its formatting:** not in this feature. If Tiptap brings it for free, keep it. Otherwise the architecture notes what it would cost, and it waits on board row `LAHE-rich-paste`.
+- **Larger edits to existing text:** they fail the same way new writing does: new lines, headers, and basic formatting. So the same requirements cover them (R3, making paragraphs, headers, and lists; R4, matching the page's styling; R14, bold and italic surviving). No separate row.
 
 ## PM Review
 
@@ -234,7 +231,7 @@ None. The contract text changes. Existing reviews keep working, since an old pag
 | RF5 | Enter at the end of an existing block: same edit or new text? | Accepted | Q7 for the wireframe; metric reworded |
 | RF6 | No requirement for a rebuild landing mid-writing | Accepted | Now R7 |
 | RF7 | Metrics were one-off demos | Accepted | Rewritten against the status-quo costs |
-| RF8 | Lists cut silently; paste and larger edits unsaid | Accepted | Put to Ken as Q4, Q5, Q6. Lists: in the first cut. Rich paste: out, to the board |
+| RF8 | Lists cut silently; paste and larger edits unsaid | Accepted | Put to Ken as Q4, Q5, Q6. Lists: in. Rich paste: out, to the board. Larger edits: same failures, folded into R3 and R4 |
 | RF9 | "Word for word" fails on renderer typography | Accepted | R6 carve-out |
 | RF10 | Tiptap said three times; old agents not covered in Rollout | Accepted | Goal paragraph cut; Rollout line added |
 | RF11 | R5 overstated draft saving | Accepted | R5 reworded to match today's saving and to say what a reload shows |
