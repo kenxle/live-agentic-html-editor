@@ -148,7 +148,7 @@ Rules the reader owns:
 - **`openable: yes`** when `static_servers.servesPath(...)` is true for a recorded server of the session. That counts mounts.
 - **`kind`** tells the agent how to re-serve a `via-agent` row.
 - **`watching`** is null or `{session, name}`, taken from the `primary` field of the session's `monitor.json` heartbeat. So a session picked up by another agent names that agent.
-- **Who counts as watching** is the rule the request queue uses, read through `livenessFrom` with the session's activity stamp: a fresh heartbeat on the current handoff rev whose pid is alive, or a lahe command in the last few minutes. `lahe monitor` exits when it wakes on work, so a heartbeat alone would read "nobody is watching" exactly while that agent works a batch, and Open would skip the "another agent is watching" confirm step then (fix round CL2). With no heartbeat on disk, the session names itself.
+- **Who counts as watching** is the rule the request queue uses, read through `livenessFrom` with the session's activity stamp: a fresh heartbeat on the current handoff rev whose pid is alive, or a lahe command in the last few minutes. `lahe monitor` exits when it wakes on work, so a heartbeat alone would read "nobody is watching" exactly while that agent works a batch, and Open would skip the "another agent is watching" confirm step then (fix round CL2). With no heartbeat on disk, the session names itself. A session watched from another session's multi-session monitor (its heartbeat names that session as `primary`, on its current handoff rev) counts as watched while that primary session is listening by the same rule, so the card does not say "no agent" right after the agent answers.
 - **`attached.watching`** is false when the attached session's monitor is dead. An attach with no session on disk behind it reads as no agent.
 - **`request`** is the latest request on that review. An answer stays until the next request on the review, or `ANSWER_SHOWN_MS`.
 - **`pages[].path`** is a URL path on the review's server. Page rows are informational; they have no Open of their own.
@@ -213,6 +213,8 @@ sequenceDiagram
 ```
 
 - **Already served (R10):** the helper returns the live URL and starts nothing.
+- **A folder review** opens on the page its comments are on, when that is a page in the folder, else on the page `lahe review <folder>` opens (`index.html`, then `index.htm`, then the first page by name). Never the bare server root, which a folder with no index answers with "not found". The list's `served_url` is the same page.
+- **The attached agent already has it:** when the attached agent owns the document's session, or is the one watching it, Open just opens and queues nothing, and a Pick up of a served row answers `{request_id: null}` with nothing queued. A via-agent row's pick-up is still queued, since it needs re-serving.
 - **Another agent is watching (R12b):** the page asks first, naming that agent and the other reviews in its session. "Move the session" sends `handoff: true, confirmed: true`. "Just open it to read" sends `handoff: false` and queues nothing. The helper refuses an unconfirmed hand-over on a watched session with `PROTO_CONFIRM_NEEDED`.
 - **No agent attached (R14):** Open still opens and reads, with `not_asked: "no_agent"`. The document's rail shows its existing "no agent listening" state and its existing hand-off message. The rail never carries the Library token.
 - **Queue full:** Open still opens, with `not_asked: "queue_full"`, and the row says no agent was asked.

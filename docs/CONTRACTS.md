@@ -962,6 +962,11 @@ root or a URL, and fields a route does not list are never read.
 - **`PROTO_NOT_OPENABLE` carries its reason in `error.detail`:** `missing`, `via-agent` (no recorded
   server covers it and no hand-over was asked), `unknown review`, `not owned by the current user`, or
   `the recorded server could not be restarted`.
+- **A folder review opens on a page, never the bare root:** the page its comments are on when that is a
+  page in the folder, else the page `lahe review <folder>` opens. `served_url` in the list is the same page.
+- **Nothing is asked of an agent that already has the document.** When the attached agent owns the
+  document's session or is watching it, Open queues nothing, and a `pickup` request on a served row answers
+  `{request_id: null}` with nothing queued.
 - **A `via-agent` row's Open is its pick-up.** With `handoff` and a live attached agent it queues one and
   answers `url: null`; with no live agent it is `PROTO_NO_AGENT`.
 - **`not_asked`** says why an Open that opened asked no agent: `no_agent`, `queue_full`, or

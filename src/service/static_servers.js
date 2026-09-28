@@ -262,6 +262,53 @@ function loopbackOrigins(port) {
   return ["http://" + HOST + ":" + port, "http://localhost:" + port];
 }
 
+// The pages `lahe review <folder>` serves and opens, spelled here so the CLI
+// and the helper's Open agree (src/cli/commands/add.js uses these).
+var PAGE_EXTENSIONS = [".html", ".htm"];
+
+/**
+ * The `.html` and `.htm` files directly in a directory, in name order.
+ *
+ * The folder's OWN pages, not a recursive walk. The served root and the open
+ * link have to agree, and `lahe review <folder>` roots its server at the folder
+ * itself: a lone page three directories down would be served at a URL nobody
+ * would guess, and a project checkout that happens to hold a built HTML file
+ * somewhere would stop being the app-in-dev row it has always been.
+ *
+ * @param {string} dirPath
+ * @returns {string[]} file names, byte order, so two runs pick the same page
+ */
+function folderPages(dirPath) {
+  var entries;
+  try {
+    entries = fs.readdirSync(dirPath, { withFileTypes: true });
+  } catch (err) {
+    return [];
+  }
+  return entries
+    .filter(function (entry) {
+      return entry.isFile() && PAGE_EXTENSIONS.indexOf(path.extname(entry.name).toLowerCase()) !== -1;
+    })
+    .map(function (entry) { return entry.name; })
+    .sort();
+}
+
+/**
+ * The page `lahe review <folder>` prints as the open link: `index.html` when the
+ * folder has one, then `index.htm`, else the first page in name order. Null when
+ * the folder holds no pages at all.
+ *
+ * @param {string} dirPath
+ * @returns {string|null}
+ */
+function folderEntryPage(dirPath) {
+  var pages = folderPages(dirPath);
+  if (pages.length === 0) return null;
+  if (pages.indexOf("index.html") !== -1) return "index.html";
+  if (pages.indexOf("index.htm") !== -1) return "index.htm";
+  return pages[0];
+}
+
 /**
  * The reviews of `sessionId` that `meta`'s server serves, read off disk: a
  * review with a recorded target (a page or a folder) that coveragePath covers
@@ -1088,6 +1135,8 @@ module.exports = {
   stopAll: stopAll,
   restartAll: restartAll,
   createCatalogOps: createCatalogOps,
+  folderPages: folderPages,
+  folderEntryPage: folderEntryPage,
   hostIsOwn: hostIsOwn,
   runServer: runServer
 };

@@ -277,10 +277,21 @@ function createReader(options) {
 
   function watchingOf(sessionId, nowMs) {
     var m = monitorLive(sessionId, nowMs);
-    if (!m.live) return null;
     var primary = m.beat ? m.beat[HEARTBEAT.PRIMARY] : null;
     var who = typeof primary === "string" && protocol.isSafeId(primary) ? primary : sessionId;
-    return { session: who, name: nameOf(who) };
+    if (m.live) return { session: who, name: nameOf(who) };
+    // WATCHED THROUGH ANOTHER SESSION'S MONITOR (story walk). An agent that
+    // took this session over watches it from its own multi-session monitor,
+    // and that monitor exits to work a batch. Right after the agent answers,
+    // this session's heartbeat is stale, but the agent named as `primary` is
+    // listening on its own session: it is still the one watching. Only for a
+    // heartbeat on this session's current handoff rev, so a takeover since
+    // does not count.
+    if (who === sessionId || !m.beat) return null;
+    var own = readSession(sessionId);
+    var rev = own.state === "ok" ? agentSessions.handoffRev(own.value) : 0;
+    if (m.beat[HEARTBEAT.HANDOFF_REV] !== rev) return null;
+    return monitorLive(who, nowMs).live ? { session: who, name: nameOf(who) } : null;
   }
 
   /**
@@ -337,6 +348,64 @@ function createReader(options) {
       }
     });
     return best;
+  }
+
+  /**
+   * The URL path Open lands on for a FOLDER review (story walk). The coverage
+   * rule gives a folder its server root, `/`, and a folder of pages with no
+   * index.html answers that with "not found". So: the page the review's
+   * comments are on, when it is a page in that folder, else the entry page
+   * `lahe review <folder>` opens (static_servers.folderEntryPage). A single
+   * page's path is returned as it is.
+   */
+  function openPathOf(info, covering) {
+    if (!covering || !info.servedPath) return covering ? covering.urlPath : null;
+    var stat = statOrNull(info.servedPath);
+    if (!stat || !stat.isDirectory()) return covering.urlPath;
+    var folder = info.servedPath;
+    var pages = info.summary && Array.isArray(info.summary.pages) ? info.summary.pages : [];
+    for (var i = 0; i < pages.length; i += 1) {
+      var file = pageFileIn(folder, pages[i] && pages[i].path);
+      var onServer = file ? staticServers.coveragePath(covering.meta, file) : null;
+      if (onServer) return onServer;
+    }
+    var entry = staticServers.folderEntryPage(folder);
+    var entryPath = entry ? staticServers.coveragePath(covering.meta, path.join(folder, entry)) : null;
+    return entryPath || covering.urlPath;
+  }
+
+  /**
+   * A page's recorded URL path as a file in `folder`, or null. The path is
+   * page-derived, so it must be plain: rooted, no dot or hidden segment, no
+   * backslash or control character, and an existing .html or .htm file under
+   * the folder by real path.
+   */
+  function pageFileIn(folder, urlPath) {
+    if (typeof urlPath !== "string" || urlPath.charAt(0) !== "/" || /[\\\u0000-\u001f\u007f]/.test(urlPath)) return null;
+    var segments = [];
+    var raw = urlPath.split("?")[0].split("#")[0].split("/").filter(function (seg) { return seg.length > 0; });
+    for (var i = 0; i < raw.length; i += 1) {
+      var seg;
+      try {
+        seg = decodeURIComponent(raw[i]);
+      } catch (err) {
+        return null;
+      }
+      if (!seg || seg.charAt(0) === "." || /[\/\\\u0000-\u001f\u007f]/.test(seg)) return null;
+      segments.push(seg);
+    }
+    if (!segments.length) return null;
+    if (SINGLE_PAGE_EXTENSIONS.indexOf(path.extname(segments[segments.length - 1]).toLowerCase()) === -1) return null;
+    var file = path.join.apply(path, [folder].concat(segments));
+    try {
+      var realFolder = fs.realpathSync(folder);
+      var realFile = fs.realpathSync(file);
+      if (realFile.indexOf(realFolder + path.sep) !== 0) return null;
+      if (!fs.statSync(realFile).isFile()) return null;
+    } catch (err) {
+      return null;
+    }
+    return file;
   }
 
   // ---------------------------------------------------------------------------
@@ -554,6 +623,7 @@ function createReader(options) {
   function placeRow(info, sessionState, servers) {
     var docOnDisk = exists(info.docPath);
     var covering = info.servedPath && info.sessionId !== LEGACY ? coveringRecord(servers.records, info.servedPath) : null;
+    if (covering) covering = { meta: covering.meta, urlPath: openPathOf(info, covering) };
     var kind;
     var openable;
     var candidate = null;

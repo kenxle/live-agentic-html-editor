@@ -144,6 +144,17 @@ function createCatalogActions(options) {
     return !!(described.watching && agent && described.watching.session !== agent.session);
   }
 
+  /**
+   * Does the attached agent already have this document (story walk)? It owns
+   * the document's session, or it is the one watching it. A pick-up would ask
+   * it for what it already has, so Open just opens.
+   */
+  function alreadyTheirs(described, agent) {
+    if (!agent) return false;
+    if (described.session === agent.session) return true;
+    return !!(described.watching && described.watching.session === agent.session);
+  }
+
   /** Queue a request, turning the queue's refusal into a protocol code. */
   function enqueue(action, described, agent, nowMs) {
     var appended = queue.append(
@@ -257,14 +268,14 @@ function createCatalogActions(options) {
     if (handoff) {
       if (!agent) {
         notAsked = NOT_ASKED.NO_AGENT;
-      } else if (!(d.watching && d.watching.session === agent.session)) {
+      } else if (!alreadyTheirs(d, agent)) {
         var queued = enqueue(ACTION.PICKUP, d, agent, nowMs);
         if (queued.ok) requestId = queued.request.id;
         else if (queued.code === "PROTO_QUEUE_FULL") notAsked = NOT_ASKED.QUEUE_FULL;
         else if (queued.code === "PROTO_REQUEST_PENDING") notAsked = NOT_ASKED.REQUEST_PENDING;
         else notAsked = NOT_ASKED.NO_AGENT;
       }
-      // else the attached agent is already the one watching: nothing to ask.
+      // else the attached agent already owns or watches it: nothing to ask.
     }
     logAction(protocol.CATALOG_LOG.ACTION.OPEN, d, nowMs);
     return { status: 200, body: { url: reopened.origin + d.url_path, request_id: requestId, not_asked: notAsked } };
@@ -305,6 +316,11 @@ function createCatalogActions(options) {
     if (d.openable === "missing") return fail("PROTO_NOT_OPENABLE", "missing");
     var agent = liveAgent(nowMs);
     if (!agent) return fail("PROTO_NO_AGENT");
+    // A pick-up of a served document the attached agent already has asks for
+    // nothing. A via-agent row still needs re-serving, so it is still asked.
+    if (action === ACTION.PICKUP && d.openable === "yes" && alreadyTheirs(d, agent)) {
+      return { status: 200, body: { request_id: null } };
+    }
     if (watchedByAnother(d, agent) && body.confirmed !== true) return fail("PROTO_CONFIRM_NEEDED");
     var queued = enqueue(action, d, agent, nowMs);
     if (!queued.ok) return fail(queued.code, queued.detail);
