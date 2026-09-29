@@ -628,6 +628,8 @@ test.describe("the Library page", () => {
     // a minute ago, so the card and the confirm dialog say "working".
     list.sessions.find((x) => x.id === "s_coach").watching.state = "working";
     list.sessions.find((x) => x.id === "s_coach").watching.last_active = "2026-09-28T15:58:00.000Z";
+    // A renamed row, so the picture shows the reviewer's name over the original.
+    reviewIn(list, "r_spec").custom_name = "Beta spec, second pass";
     await routeCatalog(page, { list: () => list });
     await openLibrary(page, helper);
     await page.locator("#lahe-catalog-main").waitFor();

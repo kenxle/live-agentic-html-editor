@@ -193,6 +193,33 @@ var HANDLERS = {
       };
     }
 
+    // ADOPTION (LAHE Library, phase 8). A review from before sessions is taken
+    // into an agent session, and only when the reviewer's own Library click
+    // queued a pick-up of THIS review for THAT session. The review token is
+    // readable by scripts on the reviewed page, so the pending request is
+    // what keeps a page from moving itself into some agent's drain. A review
+    // with a real session is never adopted.
+    var adoptedInto = null;
+    if (body.adopt_session !== undefined) {
+      var into = body.adopt_session;
+      var queue = deps.catalogQueue;
+      var asked = !!queue && protocol.isSafeId(into) && queue.pendingFor(into, deps.now ? deps.now() : Date.now()).some(function (r) {
+        return r.review === request.review && r.action === "pickup";
+      });
+      var owner = held ? held.agent_session_id : null;
+      if (!asked || (owner !== "legacy" && owner !== into)) {
+        return {
+          status: 409,
+          error: {
+            code: "PROTO_BAD_REQUEST",
+            detail: "refused adopt_session: only a review from before sessions, with a Library pick-up pending for that session"
+          }
+        };
+      }
+      deps.reviews.adopt(request.review, into);
+      adoptedInto = into;
+    }
+
     var applied = [];
     origins.forEach(function (origin) {
       deps.reviews.registerOrigin(request.review, origin);
@@ -246,6 +273,7 @@ var HANDLERS = {
         recorded_source: recordedSource,
         recorded_paths: recordedPaths,
         only_recorded_pages: isolated,
+        adopted_into: adoptedInto,
         seq: deps.log.currentSeq(request.review)
       }
     };

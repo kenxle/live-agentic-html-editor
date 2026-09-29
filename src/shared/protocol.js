@@ -725,7 +725,7 @@
   // serve`: a legacy review has no session, so it is served as a fresh review
   // and its comments stay where they are.
   function CATALOG_LEGACY_NOTE(reviewId) {
-    return "Serving it starts a new review in your session. The old comments stay on the old review, " + reviewId + ".";
+    return "It belongs to no session. Serving it takes review " + reviewId + " into your session, with its old comments; drain it for any still waiting.";
   }
 
   // ---------------------------------------------------------------------------
@@ -771,13 +771,17 @@
     ITEM_REOPENED: "item.reopened",
     REPLY_FOLDED: "reply.folded",
     REPLY_REJECTED: "reply.rejected",
-    REVIEW_ARCHIVED: "review.archived"
+    REVIEW_ARCHIVED: "review.archived",
+    // {agent_session_id}. A review from before sessions (owner "legacy") was
+    // taken into an agent session, once, by a Library pick-up. It belongs to
+    // that session from here on. A review with a real session is never adopted.
+    REVIEW_ADOPTED: "review.adopted"
   };
   // The Library's `last` is the time inside the newest event that is work on
   // the document, by the reviewer or the agent. These are not: an Open's
   // origin swap, and a reviewer's visit. Compaction rewrites the log without
   // adding an event, so the file's modified time is never read for `last`.
-  CATALOG.NOT_WORK_EVENTS = [EVENT.ORIGIN_REGISTERED, EVENT.ORIGIN_REMOVED, EVENT.PAGE_VISITED];
+  CATALOG.NOT_WORK_EVENTS = [EVENT.ORIGIN_REGISTERED, EVENT.ORIGIN_REMOVED, EVENT.PAGE_VISITED, EVENT.REVIEW_ADOPTED];
 
 
   // Closed. The projector, the merge rule, and reply folding all switch on this
