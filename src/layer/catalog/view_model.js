@@ -88,7 +88,8 @@
     ALL_PROJECTS: "All projects",
     SECTION_TOP: "Unanswered comments, and starred ({n})",
     SECTION_WEEK: "This week ({n})",
-    SECTION_OLDER: "Older than a week: {reviews}. Search reaches all of them.",
+    SECTION_OLDER: "Older than a week: {reviews}",
+    SECTION_OLDER_NOTE: "Search reaches all of them.",
     SHOW_MISSING: "Show {n} missing",
     MISSING_HEADING: "Missing ({n}). Neither the file nor a main-repo copy exists.",
     HIDE: "Hide",
@@ -305,6 +306,16 @@
     return withNote(back, reviewId, { kind: "error", text: fill(TEXT.RENAME_FAILED, { why: withoutFinalPeriod(why) }), tone: "warn" }, now);
   }
 
+  // A session's rename shares the review rename's state, keyed apart.
+  var SESSION_KEY = "session:";
+
+  function sessionCustomName(session, state) {
+    var o = state.nameOverride || {};
+    var key = SESSION_KEY + session.id;
+    if (Object.prototype.hasOwnProperty.call(o, key)) return o[key];
+    return typeof session.custom_name === "string" && session.custom_name ? session.custom_name : null;
+  }
+
   /** The name the reviewer gave, after any rename in flight; null for none. */
   function customName(review, state) {
     var o = state.nameOverride || {};
@@ -364,6 +375,12 @@
     });
     var names = assign({}, state.nameOverride);
     Object.keys(names).forEach(function (id) {
+      if (id.indexOf(SESSION_KEY) === 0) {
+        var sid = id.slice(SESSION_KEY.length);
+        var s = ((list && list.sessions) || []).filter(function (x) { return x.id === sid; })[0];
+        if (!s || (s.custom_name || null) === names[id]) delete names[id];
+        return;
+      }
       var found = findReview(list, id);
       if (!found || (found.review.custom_name || null) === names[id]) delete names[id];
     });
@@ -822,7 +839,12 @@
   }
 
   function sessionHaystack(session) {
-    return [session.name, sessionTitle(session)].join("\n").toLowerCase();
+    return [session.custom_name, session.name, sessionTitle(session)]
+      .filter(function (v) {
+        return typeof v === "string";
+      })
+      .join("\n")
+      .toLowerCase();
   }
 
   function rowHaystack(review) {
@@ -967,21 +989,36 @@
       });
       if (!visible.length) return;
 
-      var needsYou = visible.some(function (r) {
+      // THE TOP SECTION HOLDS ONLY WHAT NEEDS YOU (round 2). A session with a
+      // waiting or starred review shows those reviews there, under its header,
+      // and its other reviews in the time section their own newest time says.
+      var needs = visible.filter(function (r) {
         return r.waiting > 0 || effectiveStar(r, state);
       });
-      var recent = now - Date.parse(session.last) < weekMs;
-      var bucket = needsYou ? top : recent ? week : older;
-      var defaultOpen = bucket !== older;
+      var others = visible.filter(function (r) {
+        return needs.indexOf(r) === -1;
+      });
+      if (needs.length) top.push(makeCard(session, needs, session.id, true));
+      if (others.length) {
+        var othersLast = others.reduce(function (m, r) {
+          return !m || Date.parse(r.last) > Date.parse(m) ? r.last : m;
+        }, null);
+        var bucket = now - Date.parse(othersLast) < weekMs ? week : older;
+        if (bucket === older) olderReviews += others.length;
+        var restId = needs.length ? session.id + ":earlier" : session.id;
+        bucket.push(makeCard(session, others, restId, bucket !== older, othersLast));
+      }
+    });
+
+    function makeCard(session, visible, cardId, defaultOpen, lastAt) {
       var open = searching
         ? true
-        : Object.prototype.hasOwnProperty.call(state.expanded || {}, session.id)
-          ? state.expanded[session.id]
+        : Object.prototype.hasOwnProperty.call(state.expanded || {}, cardId)
+          ? state.expanded[cardId]
           : defaultOpen;
       var waiting = visible.reduce(function (sum, r) {
         return sum + (r.waiting || 0);
       }, 0);
-      if (bucket === older) olderReviews += visible.length;
       var rows = visible.map(function (r) {
         return buildRow(r, session, list, state, now, opts, session.watching || null, true);
       });
@@ -989,7 +1026,7 @@
       // A long card shows its newest few. A row the reader needs (waiting,
       // starred) or is acting on stays shown; search shows every match.
       var more = null;
-      var cardOpenAll = !!(state.cardMore && state.cardMore[session.id]);
+      var cardOpenAll = !!(state.cardMore && state.cardMore[cardId]);
       if (!searching && rows.length > CARD_ROWS_SHOWN) {
         var hidden = 0;
         if (!cardOpenAll) {
@@ -1003,22 +1040,33 @@
         if (cardOpenAll) more = { text: TEXT.SHOW_FEWER, expanded: true };
         else if (hidden > 0) more = { text: fill(TEXT.SHOW_MORE, { n: hidden }), expanded: false };
       }
-      bucket.push({
-        id: session.id,
-        title: sessionTitle(session),
+      var original = sessionTitle(session);
+      var renamed = sessionCustomName(session, state);
+      if (renamed === original) renamed = null;
+      var renameKey = SESSION_KEY + session.id;
+      var at = lastAt || session.last;
+      return {
+        id: cardId,
+        session: session.id,
+        title: renamed || original,
+        originalTitle: renamed ? original : null,
+        // A pre-session card is ours, not a session: it has no name to change.
+        rename: isLegacy(session)
+          ? null
+          : { editing: state.renaming === renameKey, value: renamed || original, label: TEXT.RENAME, original: original },
         projects: (session.projects || []).slice(),
         reviewsText: plural(visible.length, "review", "reviews"),
         watchText: watchText(session, list, now, opts, false),
         watched: !!session.watching,
         waitingText: waiting > 0 ? waiting + " waiting" : null,
-        lastText: "last " + formatTime(session.last, now, opts.timeZone),
+        lastText: "last " + formatTime(at, now, opts.timeZone),
         open: open,
-        lastAt: session.last,
+        lastAt: at,
         notes: notes,
         more: more,
         rows: rows
-      });
-    });
+      };
+    }
 
     // Cards sort by their newest activity, so a pre-session card split off
     // the one list slots in by its own reviews' times.
@@ -1036,6 +1084,7 @@
       view.sections.push({
         id: "older",
         heading: fill(TEXT.SECTION_OLDER, { reviews: plural(olderReviews, "review", "reviews") }),
+        subtitle: TEXT.SECTION_OLDER_NOTE,
         cards: older
       });
     }

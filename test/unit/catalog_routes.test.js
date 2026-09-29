@@ -947,3 +947,21 @@ test("rename: the reviewer's name never reaches the drain or a hand-off message"
   assert.equal(drained.indexOf(marker), -1, "no rename text in the drain");
   assert.equal(fs.readFileSync(path.join(w.dir, "catalog-requests.jsonl"), "utf8").indexOf(marker), -1);
 });
+
+test("rename a session: the list carries its new name beside the original, and it never reaches the drain", async (t) => {
+  const w = await world(t);
+  const marker = "SESSION-RENAME-MARKER";
+  const res = await api(w, "catalog.rename", { session: "s_doc", name: marker });
+  assert.equal(res.status, 200, res.text);
+  assert.deepEqual(res.json, { session: "s_doc", name: marker });
+  const s = (await api(w, "catalog.list")).json.sessions.find((x) => x.id === "s_doc");
+  assert.equal(s.custom_name, marker);
+  assert.equal(s.name, "doc session");
+  catalogRequests.writeAttach(w.dir, "s_agent", T0 - MINUTE);
+  assert.equal((await api(w, "catalog.request", { review: "r_page", action: "pickup", confirmed: true })).status, 200);
+  const lines = [];
+  await statusCmd.run(["--session", "s_agent", "--json", "--state-dir", w.dir], { stdout: (x) => lines.push(x), stderr: () => {}, now: T0 });
+  assert.equal(lines.join("").indexOf(marker), -1);
+  assert.notEqual((await api(w, "catalog.rename", { session: "s_nope", name: "x" })).status, 200, "an unknown session is refused");
+  assert.equal((await api(w, "catalog.rename", { session: "s_doc", review: "r_page", name: "x" })).status, 400, "one of review or session");
+});

@@ -261,9 +261,9 @@ test.describe("the Library page", () => {
     await expect(dialog.locator("h2")).toHaveText("Another agent is on this session.");
     await expect(dialog.locator("p")).toHaveText([
       "Its own agent is listening. 3 comments are waiting.",
-      '"shared / figure.html" belongs to session "coach activity". Handing it to document index moves the whole session and stops the other agent. These reviews move with it:'
+      '"Figure" belongs to session "coach activity". Handing it to document index moves the whole session and stops the other agent. These reviews move with it:'
     ]);
-    await expect(dialog.locator("li")).toHaveText(["Feature Brief: Coach Activity", "specs / spec.html", "Coach Notes", "Deleted Page"]);
+    await expect(dialog.locator("li")).toHaveText(["Feature Brief: Coach Activity", "Shared Title", "Coach Notes", "Deleted Page"]);
     await expect(dialog.locator("button")).toHaveText(["Move the session", "Just open it to read", "Cancel"]);
     await expectNothingSent(page, sent, "nothing is sent before the reader decides");
 
@@ -433,7 +433,8 @@ test.describe("the Library page", () => {
   test("a watched card names its agent once, on its summary line, and its rows do not repeat it", async ({ page }) => {
     await routeCatalog(page, { list: freshList });
     await openLibrary(page, helper);
-    const coach = page.locator('details[data-session="s_coach"]');
+    // The card of s_coach's reviews that do not wait: several rows.
+    const coach = page.locator('details[data-session="s_coach:earlier"]');
     // Its watcher is itself, so the card does not repeat its own title.
     await expect(coach.locator("summary .lib-card-watch")).toHaveText("its own agent is listening");
     await expect(coach.locator('summary .lib-badge[data-badge="watching"]')).toHaveCount(1);
@@ -564,7 +565,7 @@ test.describe("the Library page", () => {
     expect(style.before).toBe("none");
   });
 
-  test("rename: Rename opens a field, Enter saves and shows both names, Escape sends nothing", async ({ page }) => {
+  test("rename: a click on the name opens a field, Enter saves and shows both names, Escape sends nothing", async ({ page }) => {
     const list = freshList();
     const calls = await routeCatalog(page, {
       list: () => list,
@@ -575,7 +576,9 @@ test.describe("the Library page", () => {
     });
     await openLibrary(page, helper);
     const brief = rowLocator(page, "r_brief");
-    await brief.locator('[data-act="rename"]').click();
+    await expect(page.locator('[data-act="rename"].lib-btn')).toHaveCount(0);
+    await expect(brief.locator('button.lib-name')).toHaveAttribute("aria-label", "Rename: Feature Brief: Coach Activity");
+    await brief.locator("button.lib-name").click();
     const input = brief.locator(".lib-rename-input");
     await expect(input).toBeFocused();
     await input.fill("Coach brief v2");
@@ -583,21 +586,66 @@ test.describe("the Library page", () => {
     await expect.poll(() => calls.filter((c) => c.name === "catalog.rename").map((c) => c.body)).toEqual([{ review: "r_brief", name: "Coach brief v2" }]);
     await expect(brief.locator(".lib-name")).toHaveText("Coach brief v2");
     await expect(brief.locator(".lib-original")).toHaveText("Feature Brief: Coach Activity");
-    await expect(brief.locator('[data-act="rename"]')).toBeFocused();
+    await expect(brief.locator("button.lib-name")).toBeFocused();
 
     const sent = recordActions(page);
     const spec = rowLocator(page, "r_spec");
-    await spec.locator(".lib-name").dblclick();
+    await spec.locator("button.lib-name").focus();
+    await page.keyboard.press("Enter");
     await expect(spec.locator(".lib-rename-input")).toBeFocused();
     await page.keyboard.type("nope");
     await page.keyboard.press("Escape");
     await expect(spec.locator(".lib-rename-input")).toHaveCount(0);
-    await expect(spec.locator(".lib-name")).toHaveText("specs / spec.html");
+    await expect(spec.locator(".lib-name")).toHaveText("Shared Title");
     await expectNothingSent(page, sent);
+  });
+
+  test("rename a session: a click on the card's name edits it; the card keeps its fold and shows the original under it", async ({ page }) => {
+    const list = freshList();
+    const calls = await routeCatalog(page, {
+      list: () => list,
+      answers: { "catalog.rename": (body) => {
+        list.sessions.find((x) => x.id === body.session).custom_name = body.name.trim() || null;
+        return { status: 200, body: { session: body.session, name: body.name.trim() || null } };
+      } }
+    });
+    await openLibrary(page, helper);
+    const old3 = page.locator('details[data-session="s_old3"]');
+    const wasOpen = await old3.evaluate((el) => el.open);
+    await old3.locator(".lib-card-name").click();
+    const input = old3.locator(".lib-rename-input");
+    await expect(input).toBeFocused();
+    await input.fill("Old loose pages");
+    await input.press("Enter");
+    await expect.poll(() => calls.filter((c) => c.name === "catalog.rename").map((c) => c.body)).toEqual([{ session: "s_old3", name: "Old loose pages" }]);
+    await expect(old3.locator(".lib-card-name")).toHaveText("Old loose pages");
+    await expect(old3.locator(".lib-card-original")).toHaveText('Unnamed session, started on "Page Five"');
+    expect(await old3.evaluate((el) => el.open)).toBe(wasOpen);
+  });
+
+  test("the Hand to agent menu floats: opening it does not change the buttons' width", async ({ page }) => {
+    await routeCatalog(page, { list: freshList });
+    await openLibrary(page, helper);
+    const r = rowLocator(page, "r_stale");
+    const before = await r.locator('[data-act="open"]').boundingBox();
+    await r.locator('[data-act="menu"]').click();
+    await expect(r.locator('[data-act="pickup"]')).toBeVisible();
+    const after = await r.locator('[data-act="open"]').boundingBox();
+    expect(after.width).toBe(before.width);
+  });
+
+  test("the older section's 'Search reaches all of them' is a subtitle, not a heading", async ({ page }) => {
+    await routeCatalog(page, { list: freshList });
+    await openLibrary(page, helper);
+    const older = page.locator('[data-section="older"]');
+    await expect(older.locator("h2")).toHaveText(/^Older than a week: \d+ reviews?$/);
+    await expect(older.locator(".lib-section-sub")).toHaveText("Search reaches all of them.");
   });
 
   test("long lists collapse: a card's Show N more and a review's N pages open from the keyboard", async ({ page }) => {
     const list = freshList();
+    // Nothing on s_ops waits, so its six reviews are one card.
+    list.sessions.find((x) => x.id === "s_ops").reviews.forEach((r) => { r.waiting = 0; r.starred = false; });
     reviewIn(list, "r_brief").pages = [
       { title: "One", path: "/one.html" }, { title: "Two", path: "/two.html" }, { title: "Three", path: "/three.html" }
     ];

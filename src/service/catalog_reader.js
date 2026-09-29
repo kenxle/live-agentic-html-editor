@@ -1039,6 +1039,10 @@ function createReader(options) {
       if (Object.prototype.hasOwnProperty.call(names, row.lead.info.id)) row.customName = String(names[row.lead.info.id]);
     });
 
+    var sessionNames = starsRead.ok ? starsRead.data.session_names || {} : {};
+    sessions.forEach(function (s) {
+      s.customName = Object.prototype.hasOwnProperty.call(sessionNames, s.id) ? String(sessionNames[s.id]) : null;
+    });
     return { sessions: sessions, notice: starsRead.ok ? null : starsRead.code, nowMs: nowMs };
   }
 
@@ -1242,6 +1246,9 @@ function createReader(options) {
         id: s.id,
         name: s.state === "ok" ? nameOf(s.id) : null,
         name_from_page: s.state === "ok" && nameFromPage(s.id),
+        // The reviewer's rename of the card, or null. List only: every
+        // hand-off keeps session.json's own name.
+        custom_name: s.customName || null,
         projects: projects.sort(),
         watching: watchingOf(s.id, nowMs),
         away: awayOf(s.id, nowMs),

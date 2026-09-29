@@ -217,8 +217,9 @@ test("this week holds every other card active in the last DEFAULT_VIEW_DAYS, ope
   reviewIn(list, "r_brief").starred = false;
   const view = build(list, okState());
   const week = view.sections.filter((s) => s.id === "week")[0];
-  assert.deepEqual(cardIds(week), ["s_coach", "s_badsession", "s_ssbroken"]);
-  assert.equal(week.heading, "This week (3)");
+  // s_ops's reviews that do not wait sit here too, as its "earlier" card.
+  assert.deepEqual(cardIds(week), ["s_coach", "s_badsession", "s_ssbroken", "s_ops:earlier"]);
+  assert.equal(week.heading, "This week (4)");
   assert.equal(week.cards.every((c) => c.open), true);
 });
 
@@ -227,11 +228,14 @@ test("older cards are collapsed, each opens on its own, and the heading counts t
   sessionIn(list, "legacy").reviews[0].waiting = 0;
   const view = build(list, okState());
   const older = view.sections.filter((s) => s.id === "older")[0];
-  assert.deepEqual(cardIds(older), ["legacy"]);
-  assert.equal(older.heading, "Older than a week: 1 review. Search reaches all of them.");
-  assert.equal(older.cards[0].open, false);
+  assert.deepEqual(cardIds(older), ["s_old3:earlier", "legacy"]);
+  assert.equal(older.heading, "Older than a week: 5 reviews");
+  assert.equal(older.subtitle, "Search reaches all of them.");
+  assert.equal(older.cards.every((c) => !c.open), true);
   const expanded = build(list, vm.withExpanded(okState(), "legacy", true));
-  assert.equal(expanded.sections.filter((s) => s.id === "older")[0].cards[0].open, true);
+  const again = expanded.sections.filter((s) => s.id === "older")[0].cards;
+  assert.equal(again.filter((c) => c.id === "legacy")[0].open, true);
+  assert.equal(again.filter((c) => c.id === "s_old3:earlier")[0].open, false);
 });
 
 test("the week boundary: a session exactly DEFAULT_VIEW_DAYS old is older, one minute newer is this week", () => {
@@ -261,8 +265,8 @@ test("a named card shows its name, projects, review count, watcher, waiting and 
   const c = card(build(freshList(), okState()), "s_coach");
   assert.equal(c.title, "coach activity");
   assert.deepEqual(c.projects, ["alpha", "beta"]);
-  // r_deleted is missing, so it is not one of the card's visible reviews.
-  assert.equal(c.reviewsText, "4 reviews");
+  // In the top section it holds only r_brief; r_deleted is missing.
+  assert.equal(c.reviewsText, "1 review");
   assert.equal(c.watchText, "its own agent is listening", "its watcher is itself, so its name is not repeated");
   assert.equal(c.waitingText, "3 waiting");
   assert.equal(c.lastText, "last 3:40 PM");
@@ -339,7 +343,7 @@ test("badges: review ended and being served now; a row in its own card does not 
 });
 
 test("a watched card names its agent once: on the card, and on none of its rows", () => {
-  const c = card(build(freshList(), okState()), "s_coach");
+  const c = card(build(freshList(), okState()), "s_coach:earlier");
   assert.equal(c.watched, true, "the card carries the watching mark the rows used to");
   assert.equal(card(build(freshList(), okState()), "s_badsession").watched, false);
   assert.ok(c.rows.length > 1, "the card has several rows");
@@ -462,11 +466,12 @@ test("search matches a file name", () => {
 test("search matches a folder, across all ages", () => {
   const view = build(freshList(), vm.withQuery(okState(), "old-pages"));
   // s_ops's matching rows only, dated Sep 13 to Sep 20.
-  assert.deepEqual(card(view, "s_ops").rows.map((r) => r.id), ["r_old4", "r_old2", "r_oldfolder"]);
+  assert.deepEqual(card(view, "s_ops").rows.map((r) => r.id), ["r_old4", "r_old2"]);
+  assert.deepEqual(card(view, "s_ops:earlier").rows.map((r) => r.id), ["r_oldfolder"]);
   // s_old3 has no name; its card is titled after "Page Five", so only its
   // row in old-pages matches, by its path.
   assert.deepEqual(card(view, "s_old3").rows.map((r) => r.id), ["r_s3page"]);
-  assert.deepEqual(allCards(view).map((c) => c.id).sort(), ["s_old3", "s_ops"]);
+  assert.deepEqual(allCards(view).map((c) => c.id).sort(), ["s_old3", "s_ops", "s_ops:earlier"]);
 });
 
 test("search matching a session name shows that whole card", () => {
@@ -503,7 +508,7 @@ test("the project filter lists every project and keeps only cards with that labe
   assert.deepEqual(view.projects.options.map((o) => o.value), ["", "alpha", "beta"]);
   assert.equal(view.projects.options[0].label, "All projects");
   const beta = build(list, vm.withProject(okState(), "beta"));
-  assert.deepEqual(allCards(beta).map((c) => c.id).sort(), ["s_coach", "s_dev"]);
+  assert.deepEqual(allCards(beta).map((c) => c.id).sort(), ["s_coach", "s_coach:earlier", "s_dev"]);
 });
 
 // ---------------------------------------------------------------------------
@@ -531,11 +536,10 @@ test("a 7-day fixture of 120 reviews: every one is in an open card, with no sear
   sessions.sort((a, b) => Date.parse(b.last) - Date.parse(a.last));
   const collapsed = build({ attached: null, notice: null, sessions }, okState());
   allCards(collapsed).forEach((c) => {
-    assert.ok(c.rows.length >= vm.CARD_ROWS_SHOWN, c.id);
-    assert.equal(c.more.expanded, false);
+    assert.ok(c.rows.length <= vm.CARD_ROWS_SHOWN || c.rows.some((r) => r.counts.waiting), c.id);
   });
   let state = okState();
-  sessions.forEach((x) => { state = vm.withCardMore(state, x.id, true); });
+  allCards(collapsed).forEach((c) => { state = vm.withCardMore(state, c.id, true); });
   const view = build({ attached: null, notice: null, sessions }, state);
   const reachable = [];
   allCards(view).forEach((c) => {
@@ -1352,22 +1356,28 @@ test("phase 8: a review's page list is collapsed to a count, and opens on reques
   assert.equal(row(build(list, okState()), "r_spec").pagesToggle, null, "one page: nothing to collapse");
 });
 
+function opsAtRest() {
+  const list = freshList();
+  sessionIn(list, "s_ops").reviews.forEach((r) => { r.waiting = 0; r.starred = false; });
+  return list;
+}
+
 test("phase 8: a card with many reviews shows its newest few and a Show N more toggle", () => {
-  const c = card(build(freshList(), okState()), "s_ops");
+  const c = card(build(opsAtRest(), okState()), "s_ops");
   assert.equal(c.rows.length, vm.CARD_ROWS_SHOWN);
   assert.deepEqual(c.more, { text: "Show 1 more", expanded: false });
-  const all = card(build(freshList(), vm.withCardMore(okState(), "s_ops", true)), "s_ops");
+  const all = card(build(opsAtRest(), vm.withCardMore(okState(), "s_ops", true)), "s_ops");
   assert.equal(all.rows.length, 6);
   assert.deepEqual(all.more, { text: "Show fewer", expanded: true });
   assert.equal(card(build(freshList(), okState()), "s_coach").more, null, "4 reviews: no toggle");
 });
 
 test("phase 8: a collapsed card still shows a starred or waiting row past the first few, and search shows all", () => {
-  const list = freshList();
-  reviewIn(list, "r_oldfolder").starred = true;
-  const c = card(build(list, okState()), "s_ops");
-  assert.ok(c.rows.some((r) => r.id === "r_oldfolder"));
-  const searched = card(build(freshList(), vm.withQuery(okState(), "alpha")), "s_ops");
+  const list = opsAtRest();
+  reviewIn(list, "r_oldfolder").waiting = 1;
+  // It waits, so it is in the top section's s_ops card; the rest collapse below.
+  assert.ok(card(build(list, okState()), "s_ops").rows.some((r) => r.id === "r_oldfolder"));
+  const searched = card(build(opsAtRest(), vm.withQuery(okState(), "alpha")), "s_ops");
   assert.equal(searched.more, null);
 });
 
@@ -1471,4 +1481,39 @@ test("round 2: the page list names each page's real path, never an internal one"
   ];
   const r = row(build(list, vm.withPagesOpen(okState(), "r_brief", true)), "r_brief");
   assert.deepEqual(r.pages.map((p) => p.path), ["docs/04_progress.md", "docs/wireframes/index.html", "x.html"]);
+});
+
+test("round 2: a renamed session shows its new name, the original small under it, and search finds either", () => {
+  const list = freshList();
+  sessionIn(list, "s_old3").custom_name = "Old loose pages";
+  const c = card(build(list, okState()), "s_old3");
+  assert.equal(c.title, "Old loose pages");
+  assert.equal(c.originalTitle, 'Unnamed session, started on "Page Five"');
+  assert.deepEqual(c.rename, { editing: false, value: "Old loose pages", label: "Rename", original: 'Unnamed session, started on "Page Five"' });
+  assert.ok(allCards(build(list, vm.withQuery(okState(), "loose pages"))).some((x) => x.id === "s_old3"));
+  const editing = card(build(list, vm.withRenaming(okState(), "session:s_old3")), "s_old3");
+  assert.equal(editing.rename.editing, true);
+  let state = vm.beginRename(okState(), "session:s_old3", "Loose");
+  assert.equal(card(build(freshList(), state), "s_old3").title, "Loose");
+});
+
+test("round 2: the top section holds only the waiting and starred reviews; the session's others sit in the time sections", () => {
+  const view = build(freshList(), okState());
+  const top = view.sections.filter((s) => s.id === "top")[0];
+  const coachTop = top.cards.filter((c) => c.session === "s_coach")[0];
+  assert.deepEqual(coachTop.rows.map((r) => r.id), ["r_brief"], "r_brief waits and is starred; the rest do not");
+  const rest = allCards(view).filter((c) => c.session === "s_coach" && c !== coachTop);
+  assert.equal(rest.length, 1);
+  assert.deepEqual(rest[0].rows.map((r) => r.id).sort(), ["r_mounted", "r_notes", "r_spec"]);
+  assert.notEqual(rest[0].id, coachTop.id, "each card has its own id");
+  assert.equal(rest[0].title, coachTop.title, "both carry the session's header");
+});
+
+test("round 2: the older section's heading is a heading, and 'Search reaches all of them' is its subtitle", () => {
+  const list = freshList();
+  const view = build(list, okState());
+  const older = view.sections.filter((s) => s.id === "older")[0];
+  assert.ok(older, "the fixture has older cards");
+  assert.doesNotMatch(older.heading, /Search/);
+  assert.equal(older.subtitle, "Search reaches all of them.");
 });
