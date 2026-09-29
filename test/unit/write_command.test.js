@@ -291,3 +291,8 @@ test("a one-page server restarted from its record, as the idle sweep does, is st
   assert.equal((await get(origin + "/sibling.html")).status, 404);
   await assert.rejects(staticServers.registerMount(r.state, sessionId, again.meta, "/.lahe-source/abc/", folder), /no mounts/);
 });
+
+test("write.js exists, so the manifest no longer lists it as planned", () => {
+  const manifest = require("../../src/shared/manifest.js");
+  assert.equal(manifest.plannedFiles().some((entry) => entry.path === "src/cli/commands/write.js"), false);
+});

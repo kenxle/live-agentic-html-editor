@@ -324,12 +324,11 @@ function leavesOf(pages) {
  * label between two blocks is not a leaf and does not fail the match. A run
  * never takes the several-paragraph path (splitStarts), which would.
  */
-// A Markdown renderer with smart punctuation turns "--" into a dash, and
-// normalize.foldTypography folds the dash to "-" but leaves "--" as typed.
-// Folding a run of hyphens to one here makes both sides agree. It is applied
-// to both sides, so it can never make them disagree.
+// A Markdown renderer with smart punctuation turns "--" into a dash;
+// normalize.foldTypography (under blockWords) folds both to "-", so the two
+// sides agree here with no fold of this file's own.
 function runWordsOf(entry) {
-  return { words: normalize.blockWords(entry && entry.html).replace(/-{2,}/g, "-") };
+  return { words: normalize.blockWords(entry && entry.html) };
 }
 
 function runOnPage(pageLeaves, runBlocks) {

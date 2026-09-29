@@ -170,3 +170,16 @@ test("the held run's line counts the blocks and names the anchor's type", () => 
   );
   assert.equal(replay.TAKE_THEIRS_RUN_LABEL, "Take the page's, keep my new text");
 });
+
+test("a block typed with -- and rendered with a dash is not missing", () => {
+  const item = handled(named("worked example"));
+  item.new_blocks = item.new_blocks.map((b) => (b.tag === "p" ? Object.assign({}, b, { html: b.html.replace("every</strong> time", "every</strong> time -- then") }) : b));
+  const page = WORKED_PAGE.replace("every</strong> time", "every</strong> time — then");
+  assert.equal(check(item, page), null);
+});
+
+test("a handled block the agent added words to reopens as undone", () => {
+  const item = handled(named("worked example"));
+  const page = WORKED_PAGE.replace("time zqxcanary</p>", "time zqxcanary. The agent added this sentence.</p>");
+  assert.equal(check(item, page), replay.PAGE_CHECK_REASON.REVERTED);
+});

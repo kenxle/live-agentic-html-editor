@@ -10,6 +10,7 @@
 //
 //   leafWalk        normalize.leafBlocks, over live elements
 //   runElementsFor  normalize.matchRun, over the leaves after the insert point
+//   runClashFor     normalize.runClash, over the same leaves
 //   writeBlock      normalize.cleanBlock, then built from constants
 //
 // Nothing here writes a string from a record into the page as markup. A block
@@ -235,7 +236,7 @@
    * @param {Element} anchor the resolved anchor (the container, for a container anchor)
    * @returns {{start: {parent: Node, before: Node|null}, blocks: Array<{index: number, status: string, elements: Element[]}>}}
    */
-  function runElementsFor(rec, doc, anchor) {
+  function runWalk(rec, doc, anchor) {
     var r = rec || {};
     var list = Array.isArray(r.remove_blocks) && r.remove_blocks.length ? r.remove_blocks : Array.isArray(r.new_blocks) ? r.new_blocks : [];
     var start = r.placement === "start_of_container" ? startPointIn(anchor) : insertPointAfter(anchor);
@@ -244,7 +245,14 @@
     var described = leaves.map(function (el) {
       return { tag: tagOf(el), html: normalize.cleanMarkup(el.innerHTML), words: wordsOf(el) };
     });
-    var matched = normalize.matchRun(list, described);
+    return { list: list, start: start, leaves: leaves, described: described };
+  }
+
+  function runElementsFor(rec, doc, anchor) {
+    var walk = runWalk(rec, doc, anchor);
+    var start = walk.start;
+    var leaves = walk.leaves;
+    var matched = normalize.matchRun(walk.list, walk.described);
     return {
       start: start,
       blocks: matched.map(function (m) {
@@ -257,6 +265,21 @@
         };
       })
     };
+  }
+
+  /**
+   * The live twin of normalize.runClash: the leaf after the insert point that
+   * holds a run block's words plus words the reviewer never typed. A take-back
+   * never clashes (it only removes blocks found one to one).
+   *
+   * @returns {{index: number, blocks: number, element: Element}|null}
+   */
+  function runClashFor(rec, doc, anchor) {
+    if (rec && Array.isArray(rec.remove_blocks) && rec.remove_blocks.length) return null;
+    var walk = runWalk(rec, doc, anchor);
+    var clash = normalize.runClash(walk.list, walk.described);
+    if (!clash) return null;
+    return { index: clash.index, blocks: clash.blocks, element: walk.leaves[clash.leaf] };
   }
 
   function writableTag(tag) {
@@ -332,6 +355,7 @@
     canHoldRun: canHoldRun,
     isContainerAnchor: isContainerAnchor,
     runElementsFor: runElementsFor,
+    runClashFor: runClashFor,
     writeBlock: writeBlock,
     swapTag: swapTag
   };
