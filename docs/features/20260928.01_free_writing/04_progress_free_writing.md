@@ -1,6 +1,6 @@
 # Progress: Free writing
 
-**Phase 6, Implement.** The shared pieces are built and verified. Three builders now work in parallel: editing, replay, and the helper. Nothing is blocked on you. Last updated 2026-09-29 13:58.
+**Phase 6, Implement.** All three Phase 2 branches are merged, and the unit gate is green. Two builders are running: one on integration fixes, one on the rail cards. Nothing is blocked on you. Last updated 2026-09-29 14:28.
 
 **Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html) ([decision](wireframes/DECISION.md)) · [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html) · [Plan](http://127.0.0.1:65155/03_plan_free_writing.html)
 
@@ -12,7 +12,8 @@
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Editing builder (2A) | Writing new text on the page: the editing area, block types, the menu and hotkeys, "+ Write here", blank pages, undo, and protection during reloads | 2026-09-29 13:37 | `free-writing-2a` |
+| Fix builder | Five integration fixes. The main one: flag it on the card when the agent adds words to a paragraph you wrote | 2026-09-29 14:28 | `free-writing-fix` |
+| Rail builder | The cards for new text: waiting, placed, proofreading with its two buttons, refused, and the notes page's empty tab | 2026-09-29 14:28 | `free-writing-rail` |
 
 ## Phases
 
@@ -35,8 +36,9 @@
 
 | Phase | Workstream | Tasks | Status | Detail | Outcome |
 |---|---|---|---|---|---|
-| 2 | replay (2B) | 2.5 to 2.7 | done, waiting to merge | [detail](../../../.claude/worktrees/free-writing-2b/docs/features/20260928.01_free_writing/progress/phase2_workstream_replay.md) | Unit gate: 1619 of 1621 passed, 0 failed, 2 to-do. 53 new browser tests and 40 existing replay tests passed in Chromium. Four screenshots, light and dark. |
-| 2 | helper (2C) | 2.8 to 2.12 | done, waiting to merge | [detail](../../../.claude/worktrees/free-writing-2c/docs/features/20260928.01_free_writing/progress/phase2_workstream_helper.md) | Unit gate: 1645 of 1647 passed, 0 failed, 2 to-do. Built: the check on arrival, always checking new text, `lahe write` with its own one-page server, `lahe reply --proofread`. |
+| 2 | editing (2A) | 2.1 to 2.4 | merged | [detail](../../../.claude/worktrees/free-writing-2a/docs/features/20260928.01_free_writing/progress/phase2_workstream_editing.md) | Unit gate green. 98 browser tests passed in Chromium; Firefox and WebKit also ran. 22 screenshots. |
+| 2 | replay (2B) | 2.5 to 2.7 | merged | [detail](../../../.claude/worktrees/free-writing-2b/docs/features/20260928.01_free_writing/progress/phase2_workstream_replay.md) | Unit gate: 1619 of 1621 passed, 0 failed, 2 to-do. 53 new browser tests and 40 existing replay tests passed in Chromium. Four screenshots, light and dark. |
+| 2 | helper (2C) | 2.8 to 2.12 | merged | [detail](../../../.claude/worktrees/free-writing-2c/docs/features/20260928.01_free_writing/progress/phase2_workstream_helper.md) | Unit gate: 1645 of 1647 passed, 0 failed, 2 to-do. Built: the check on arrival, always checking new text, `lahe write` with its own one-page server, `lahe reply --proofread`. |
 | 1 | kernel | 1.1 to 1.6 | done | [detail](progress/phase1_workstream_kernel.md) | Seven commits. The unit gate passed 1601 of 1604 with 2 to-do. One timing test failed under full-suite load; alone, it runs the same on the branch and on main. |
 
 ### Loop passes
@@ -45,7 +47,7 @@ No passes yet.
 
 ### Changes from plan
 
-None.
+- **Words the agent adds to your new paragraph:** the architecture counted your words as placed even when the agent added a sentence to your paragraph. Per the brief's R6 (your words stay as typed), that is now flagged on the card, with Keep mine and Take the page's. Decided at merge.
 
 ### Follow-ups
 
@@ -62,7 +64,10 @@ Nothing queued.
 
 ### Test results
 
-No test run yet.
+- 2026-09-29 14:28, merged branch: unit gate 1677 passed, 0 failed, 2 to-do.
+- Affected browser specs, once, in Chromium: 187 of 191 passed.
+  - Three header and bold-edit tests are marked as expected failures, and they now pass. That is good news, and the marks are coming off.
+  - One split-paragraph test shows a real gap: when the agent adds a sentence to your paragraph, it is no longer flagged. The fix builder has it.
 
 ### Ship
 
@@ -71,6 +76,12 @@ Not shipped yet.
 ## Log
 
 Newest first.
+
+**2026-09-29 14:28.** The three Phase 2 branches merged with no conflicts, and the unit gate is green. The affected browser tests ran once:
+- The header line no longer doubles, and a bold edit the agent never made is no longer accepted as handled. Both came from the editing and replay work together.
+- One gap was found and is being fixed: flagging extra words the agent adds to your paragraph.
+
+The rail builder started in parallel.
 
 **2026-09-29 13:58.** The replay builder (2B) returned green. The header case still shows as an expected failure until the editing builder's typing change merges. The conflict card keeps your new text, and choosing "take the page's" still places it.
 
