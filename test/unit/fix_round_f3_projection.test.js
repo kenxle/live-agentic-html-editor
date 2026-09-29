@@ -131,3 +131,38 @@ test("the export names block types with the menu's labels from gestures", () => 
   const text = format.renderText({ id: "rev_f3", items: [item] });
   assert.ok(text.indexOf(gestures.blockTypeLabel("h3") + ": Sub zqxcanary") !== -1, text);
 });
+
+// --- ADV 6 / design call 8: a drain line carries a run's words at most twice --
+
+const status = require("../../src/cli/commands/status.js");
+
+function countOf(haystack, needle) {
+  let n = 0;
+  let at = haystack.indexOf(needle);
+  while (at !== -1) {
+    n += 1;
+    at = haystack.indexOf(needle, at + needle.length);
+  }
+  return n;
+}
+
+test("a run's words appear at most twice on a drain line, and review.json keeps them whole", () => {
+  const words = [];
+  for (let i = 0; i < 400; i += 1) words.push("w" + i);
+  words.push("zqxlastword");
+  const item = fx().runItem({ new_blocks: [{ tag: "p", html: words.join(" ") }] });
+  const projected = project([item])[0];
+  assert.ok(projected.after_full.indexOf("zqxlastword") !== -1, "review.json keeps after_full whole");
+  assert.ok(projected.after_html.indexOf("zqxlastword") !== -1, "review.json keeps after_html whole");
+  const line = JSON.stringify(status.drainLine({ review: "rev_f3" }, projected));
+  assert.ok(countOf(line, "zqxlastword") <= 2, "seen " + countOf(line, "zqxlastword") + " times");
+  assert.ok(countOf(line, "zqxlastword") >= 1);
+});
+
+test("an ordinary edit's drain line is unchanged", () => {
+  const edit = fx().edit();
+  const projected = project([edit])[0];
+  const line = status.drainLine({ review: "rev_f3" }, projected);
+  assert.equal(line.page.after_full, projected.after_full);
+  assert.equal(line.page.after_html, projected.after_html);
+});
