@@ -5,6 +5,10 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
+- [ ] @anyone 2026-09-29 LAHE-oversized-image-firefox -- **`test/browser/oversized_records.spec.js:101` fails in Firefox every time, on main too.** "an embedded image is stored once, whole" expects the embedded image's data to be over 100000 characters; Firefox encodes the same test image smaller (70394). Passes on Chromium and WebKit. Found by the Library feature's release run; checked on plain main at 32fe22b. Make the test build an image whose size does not depend on the browser's encoder.
+
+- [ ] @anyone 2026-09-29 LAHE-lint-duplicate-functions -- **Lint misses a function declared twice in one file.** `node --check` accepts it, Playwright's parser refuses it, so it only surfaces when the browser suite loads the file. A merge of two branches that each added `validPort` to `static_servers.js` hit this. Add a duplicate-declaration check to `scripts/lint.js`.
+
 - [ ] @anyone 2026-09-28 LAHE-title-recorded-late -- **A page's title is only recorded once someone comments on it.** `review.json` gets page titles from items, so a page that was opened but never commented on has no title, and the Library shows it by folder and file name instead of a name Ken would recognize. Found walking the Library feature. Record the title when a page first connects.
 
 - [ ] @ken 2026-09-29 LAHE-tiptap-later -- **Discuss a Tiptap integration after free writing ships.** Free writing uses Lahe's own editing code (architecture AQ1). Tiptap failed where it meets an existing block (caret, selection, Backspace, undo), but brings rich paste, mature undo, and IME handling. Open question from Ken: how hard would it be to adjust Tiptap's source to span existing blocks, and what else would it bring. Evidence: `docs/features/20260928.01_free_writing/02_architecture_free_writing.md` AQ1 and the two spike results it cites.
