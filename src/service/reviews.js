@@ -281,6 +281,7 @@ function createReviews(options) {
           source_path: typeof parsed.source_path === "string" ? parsed.source_path : null,
           agent_session_id: typeof parsed.agent_session_id === "string" ? parsed.agent_session_id : "legacy",
           only_recorded_pages: parsed.only_recorded_pages === true,
+          notes: parsed.notes === true,
           created_at: parsed.created_at || new Date().toISOString()
         };
       } else {
@@ -428,6 +429,7 @@ function createReviews(options) {
       source_path: typeof parsed.source_path === "string" ? parsed.source_path : null,
       agent_session_id: typeof parsed.agent_session_id === "string" ? parsed.agent_session_id : "legacy",
       only_recorded_pages: parsed.only_recorded_pages === true,
+      notes: parsed.notes === true,
       created_at: parsed.created_at || new Date().toISOString()
     };
     log.helperLog("review " + reviewId + " learned from disk without a restart");
@@ -516,6 +518,11 @@ function createReviews(options) {
       // meta.json and refuses to borrow this review for a page it never
       // recorded (src/service/static_servers.js).
       only_recorded_pages: spec.only_recorded_pages === true,
+      // `lahe write`: a notes review, whose long sittings are not proofread
+      // (docs/features/20260928.01_free_writing, plan PQ3). Set when the review
+      // is created and never after: it rides the created event, which is what
+      // the projection folds, so meta.json and review.json cannot disagree.
+      notes: spec.notes === true,
       created_at: new Date().toISOString()
     };
     reviews[id] = review;
@@ -531,7 +538,9 @@ function createReviews(options) {
         // instead of orphaning the whole review's edits (NEW-3). events.jsonl is
         // owner-only, the same class of secret as meta.json; the no-token rule is
         // about the diagnostic helper.log, not the source-of-truth log.
-        payload: { token: review.token, agent_session_id: review.agent_session_id }
+        payload: review.notes
+          ? { token: review.token, agent_session_id: review.agent_session_id, notes: true }
+          : { token: review.token, agent_session_id: review.agent_session_id }
       })
     ]);
     log.helperLog("review " + id + " created");
@@ -616,6 +625,19 @@ function createReviews(options) {
     persist(review);
     log.helperLog("review " + reviewId + " is limited to the pages it recorded (--only)");
     return true;
+  }
+
+  /**
+   * Is this a notes review? A review.write carrying `notes: true`
+   * (protocol.acceptsNotesFlag) asks this. The marker is set only when the
+   * review is created, so a review that is not one stays as it is: `lahe
+   * write` mints a new review rather than turn an existing one into notes.
+   *
+   * @returns {boolean}
+   */
+  function isNotes(reviewId) {
+    var review = get(reviewId);
+    return !!review && review.notes === true;
   }
 
   function recordPaths(reviewId, paths) {
@@ -1388,6 +1410,7 @@ function createReviews(options) {
     registerOrigin: registerOrigin,
     recordPaths: recordPaths,
     isolate: isolate,
+    isNotes: isNotes,
     touch: touch,
     lastSeenAt: lastSeenAt,
     targetMtime: targetMtime,

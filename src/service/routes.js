@@ -233,6 +233,14 @@ var HANDLERS = {
       recordedSource = true;
     }
 
+    // `lahe write`'s notes marker, the same way: accepted only as true
+    // (protocol.acceptsNotesFlag), and it can never widen anything. It is set
+    // when a review is created, so here it only reports whether this one is.
+    var notes = false;
+    if (protocol.acceptsNotesFlag(body) && typeof deps.reviews.isNotes === "function") {
+      notes = deps.reviews.isNotes(request.review);
+    }
+
     return {
       status: 200,
       body: {
@@ -240,6 +248,7 @@ var HANDLERS = {
         recorded_source: recordedSource,
         recorded_paths: recordedPaths,
         only_recorded_pages: isolated,
+        notes: notes,
         seq: deps.log.currentSeq(request.review)
       }
     };

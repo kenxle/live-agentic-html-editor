@@ -31,6 +31,7 @@ var USAGE = [
   "",
   "  serve   run the local helper on 127.0.0.1:" + protocol.DEFAULT_PORT + " (configurable with --port)",
   "  review  start or continue a document review in an isolated agent session",
+  "  write   open a Markdown file for notes on a blank page (creates it when it is new)",
   "  session list the agent sessions on this machine, or close, reopen, or take one over",
   "  add     add the library to a page and mint that review's token",
   "  status  print what is open right now, and whether the page is still connected",
@@ -48,6 +49,7 @@ var USAGE = [
 var COMMANDS = {
   serve: function () { return require("./commands/serve.js"); },
   review: function () { return require("./commands/review.js"); },
+  write: function () { return require("./commands/write.js"); },
   session: function () { return require("./commands/session.js"); },
   add: function () { return require("./commands/add.js"); },
   status: function () { return require("./commands/status.js"); },

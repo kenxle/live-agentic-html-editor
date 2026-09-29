@@ -233,6 +233,10 @@ function parseArgs(argv) {
         options.isNew = true;
       } else if (name === "--only") {
         options.only = true;
+      } else if (name === "--notes") {
+        // Internal, like --under-review: only `lahe write` passes it, and only
+        // on a run that mints a new review (see review.js runNotes).
+        options.notes = true;
       } else if (name === "--remove") {
         options.remove = true;
       } else if (name === "--origin") {
@@ -1189,7 +1193,8 @@ async function run(argv) {
       target_path: pathWrites.target_path,
       source_path: pathWrites.source_path,
       agent_session_id: agentSessionId,
-      only_recorded_pages: options.only
+      only_recorded_pages: options.only,
+      notes: options.notes === true
     };
     if (reuseId) spec.id = reuseId;
     review = reviews.create(spec);
@@ -1254,7 +1259,8 @@ async function run(argv) {
       // Only ever sent as true. The route refuses the other direction on
       // purpose (src/shared/protocol.js), so there is nothing to send for a run
       // without the flag.
-      only_recorded_pages: options.only ? true : undefined
+      only_recorded_pages: options.only ? true : undefined,
+      notes: options.notes ? true : undefined
     });
     if (!handedToHelper) {
       // The helper is up and would not take the writes. Only now is a restart

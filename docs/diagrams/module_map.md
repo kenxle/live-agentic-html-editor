@@ -36,7 +36,7 @@ flowchart TD
 
     subgraph CLI["cli slash - the command surface"]
         CLI_INDEX["index.js<br/>the command dispatcher"]
-        CLI_CMDS["serve, review, session,<br/>add, status, reply, monitor,<br/>write (planned)"]
+        CLI_CMDS["serve, review, session,<br/>add, status, reply, monitor,<br/>write: notes on a blank page,<br/>on its own one-page server"]
         CLI_INDEX --> CLI_CMDS
     end
 
