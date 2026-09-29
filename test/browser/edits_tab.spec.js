@@ -352,3 +352,273 @@ test.describe("3D: the Edits tab", () => {
     expect(await page.evaluate(() => window.__laheEdits.exportTitle())).toMatch(/export/i);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Free writing: the edits row and the card show new blocks (plan Task 3.2)
+// ---------------------------------------------------------------------------
+//
+// Every run here is TYPED through the real editing surface on a free-writing
+// fixture, with the helper down. What the card and the row say is read off the
+// rail's own nodes, which a spec can reach through the rail's API even though
+// the root is closed.
+
+const fw = require("./support/free_writing_page");
+const refusingHelper = require("./support/refusing_helper");
+
+const ANCHOR_WORDS = "Then I tried asking for one paragraph at a time, which kept the chat short.";
+
+/** The worked example after #p1 on blog.html: a heading, two paragraphs, a three-item list. */
+async function typeWorkedRun(page) {
+  await page.evaluate((t) => {
+    document.getElementById("p1").textContent = t;
+  }, ANCHOR_WORDS);
+  await fw.openEdit(page, "#p1");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("# What the chat window cost me", { delay: 2 });
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Every draft came back as a wall of text in a scrolling pane.", { delay: 1 });
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("The draft also lost its shape, and I could not see it whole.", { delay: 1 });
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("- Twenty minutes to find the sentence", { delay: 1 });
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("A second round trip for every fix", { delay: 1 });
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("No record of what I had asked for", { delay: 1 });
+  await fw.commitByEsc(page);
+  return fw.onlyEdit(page);
+}
+
+/** What the run's row and card say, read off the rail's own nodes. */
+function runCard(page, id) {
+  return page.evaluate((itemId) => {
+    const rail = window.__lahe.rail;
+    const card = rail.cardNode(itemId);
+    if (!card) return null;
+    const row = card.querySelector("[data-lahe-edit-row]");
+    const text = (sel) => {
+      const n = row && row.querySelector(sel);
+      return n ? n.textContent : null;
+    };
+    const shown = (n) => !!n && n.getClientRects().length > 0;
+    const blocks = row ? Array.from(row.querySelectorAll("[data-lahe-run-block]")) : [];
+    return {
+      first: text("[data-lahe-run-first]"),
+      second: text("[data-lahe-run-second]"),
+      blocks: blocks.map((b) => ({
+        label: b.querySelector("[data-lahe-run-label]").textContent,
+        words: b.querySelector("[data-lahe-run-words]").textContent,
+        moved: b.getAttribute("data-lahe-run-block") === "moved"
+      })),
+      listShown: blocks.length ? shown(blocks[0]) : false,
+      pairShown: shown(row && row.querySelector(".lahe-edits__pair")),
+      folded: card.getAttribute("data-lahe-collapsed") === "true",
+      line: (card.querySelector(".card__linetext") || {}).textContent || null,
+      state: (card.querySelector(".card__state") || {}).textContent || null,
+      stateAttr: (card.querySelector(".card__state") || { getAttribute: () => null }).getAttribute("data-state"),
+      badges: Array.from(card.querySelectorAll(".card__badges .badge")).map((b) => b.textContent)
+    };
+  }, id);
+}
+
+/** pollPage, then the value the page function answered with. */
+async function pollValue(page, fn, arg, options) {
+  await pollPage(page, fn, arg, options);
+  return page.evaluate(fn, arg);
+}
+
+async function openRail(page, tab) {
+  await page.evaluate((t) => {
+    window.__lahe.rail.collapse(false);
+    window.__lahe.rail.selectTab(t);
+  }, tab || "edits");
+}
+
+test.describe("free writing: the edits row and the card show new blocks", () => {
+  let server;
+
+  test.beforeAll(async () => {
+    server = await startStaticServer({ root: REPO_ROOT, label: "rail-run" });
+  });
+
+  test.afterAll(async () => {
+    await server.close();
+  });
+
+  test("a run leads with the two-line summary, and lists each block's type under the disclosure", async ({ page }) => {
+    await fw.openFixture(page, server, "blog.html");
+    const item = await typeWorkedRun(page);
+    await openRail(page);
+
+    const card = await runCard(page, item.id);
+    expect(card.first).toBe("New text after 'Then I tried asking for one...'");
+    expect(card.second).toBe("A heading, 'What the chat window cost me', then 2 paragraphs and a 3-item list.");
+    expect(card.blocks.map((b) => b.label)).toEqual(["Heading", "Paragraph", "Paragraph", "Bulleted list"]);
+    expect(card.blocks[1].words).toBe("Every draft came back as a wall of text in a scrolling pane.");
+    expect(card.blocks.some((b) => b.moved), "nothing in this run was moved").toBe(false);
+    expect(card.listShown, "the block list is shown on an open card").toBe(true);
+    expect(card.pairShown, "an unchanged anchor draws no before-and-after pair").toBe(false);
+
+    // The row as data says the same.
+    const row = await page.evaluate((id) => window.__lahe.handle.editsTab().rows().find((r) => r.id === id), item.id);
+    expect(row.run.first).toBe(card.first);
+    expect(row.run.second).toBe(card.second);
+
+    // Folded, the card is one line, and it is the first line of the summary.
+    await page.evaluate((id) => window.__lahe.rail.setCardCollapsed(id, true), item.id);
+    const folded = await runCard(page, item.id);
+    expect(folded.folded).toBe(true);
+    expect(folded.line).toBe(card.first);
+    expect(folded.listShown, "the block list sits under the disclosure").toBe(false);
+  });
+
+  test("a split tail is labelled as moved, not added", async ({ page }) => {
+    const words = "First half of the thought. Second half of the thought.";
+    await fw.openFixture(page, server, "blog.html");
+    await page.evaluate((t) => {
+      document.getElementById("p1").textContent = t;
+    }, words);
+    await fw.openEdit(page, "#p1", words.indexOf("Second"));
+    await page.keyboard.press("Enter");
+    await fw.caretToEndOfSession(page);
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("A line typed after the split.", { delay: 2 });
+    await fw.commitByEsc(page);
+    const item = await fw.onlyEdit(page);
+    await openRail(page);
+
+    const card = await runCard(page, item.id);
+    expect(card.first).toBe("Edit of 'First half of the thought. Second...' plus new text");
+    expect(card.second).toBe("A paragraph moved out of it, then a paragraph.");
+    expect(card.blocks.map((b) => [b.label, b.moved])).toEqual([
+      ["Paragraph, moved", true],
+      ["Paragraph", false]
+    ]);
+    expect(card.pairShown, "the anchor changed, so its before-and-after is drawn").toBe(true);
+  });
+
+  test("a committed run's new text wears the changed-text wash", async ({ page }) => {
+    await fw.openFixture(page, server, "blog.html");
+    const item = await typeWorkedRun(page);
+    const keys = await pollValue(
+      page,
+      (id) => {
+        const got = window.__lahe.handle.changedBlocks().filter((k) => k.indexOf("run:" + id + ":") === 0);
+        return got.length ? got : null;
+      },
+      item.id,
+      { message: "the commit to wash the run's new blocks" }
+    );
+    expect(keys.sort()).toEqual([0, 1, 2, 3].map((i) => "run:" + item.id + ":" + i));
+  });
+
+  test("both replay notes show on the card", async ({ page }) => {
+    await fw.openFixture(page, server, "blog.html");
+    const item = await typeWorkedRun(page);
+
+    // The agent placed the heading as a paragraph, and put the first paragraph
+    // at the end of the post instead of after the heading.
+    await page.evaluate(() => {
+      const h = document.querySelector("#p1 + h2");
+      const p = document.createElement("p");
+      p.textContent = h.textContent;
+      h.replaceWith(p);
+      const moved = Array.from(document.querySelectorAll("#post p")).find((el) =>
+        el.textContent.startsWith("Every draft came back")
+      );
+      document.getElementById("post").appendChild(moved);
+    });
+    await page.evaluate(() => window.__lahe.replayNow());
+    await openRail(page);
+
+    const card = await pollValue(
+      page,
+      (id) => {
+        const codes = window.__lahe.rail.cardBadges(id).map((b) => b.code);
+        return codes.indexOf("REPLAY_RUN_WRONG_TAG") !== -1 && codes.indexOf("REPLAY_RUN_PLACED_ELSEWHERE") !== -1
+          ? codes
+          : null;
+      },
+      item.id,
+      { message: "replay to put both notes on the card" }
+    );
+    expect(card.length).toBeGreaterThanOrEqual(2);
+    const drawn = await runCard(page, item.id);
+    expect(drawn.badges).toContain(
+      "The agent placed 'What the chat window cost me' as a paragraph. You wrote a heading, so Lahe sent it back."
+    );
+    expect(drawn.badges).toContain(
+      "'Every draft came back as a...' is already further down the page, so Lahe did not add it again."
+    );
+  });
+
+  test("a run the helper refused says so on the card, and is never shown as sent", async ({ page }) => {
+    await refusingHelper.install(page, "http://127.0.0.1:1");
+    await fw.openFixture(page, server, "blog.html");
+    const item = await typeWorkedRun(page);
+    await openRail(page);
+
+    const card = await pollValue(
+      page,
+      (id) => {
+        const got = window.__lahe.rail.cardBadges(id).find((b) => b.code === "RUN_EVENT_REFUSED");
+        return got || null;
+      },
+      item.id,
+      { message: "the helper's refusal to reach the card" }
+    );
+    expect(card.detail.helper_code).toBe("RUN_BLOCK_REFUSED");
+    const drawn = await runCard(page, item.id);
+    expect(drawn.badges).toContain(
+      "The helper refused this edit, so the agent has not seen it. Your words are still on this page."
+    );
+    expect(drawn.state, "the state chip never says the edit was sent").toBe("Not sent");
+    expect(drawn.stateAttr).toBe("refused");
+  });
+
+  test("an empty notes page shows the pinned lines on both tabs, with the file name", async ({ page }) => {
+    await fw.openFixture(page, server, "empty_notes.html");
+    for (const tab of ["active", "edits"]) {
+      await openRail(page, tab);
+      const lines = await pollValue(
+        page,
+        (t) => {
+          const pane = window.__lahe.rail.tabBody(t);
+          const empty = pane.querySelector(".empty");
+          if (!empty || empty.getClientRects().length === 0) return null;
+          return Array.from(empty.querySelectorAll("[data-lahe-empty-line]")).map((n) => n.textContent);
+        },
+        tab,
+        { message: "the empty-page lines to show on the " + tab + " tab" }
+      );
+      expect(lines).toEqual([
+        "Nothing written yet",
+        "Start typing. Your notes go to empty_notes.md.",
+        "Each time you stop writing, everything you wrote in that sitting becomes one card here, and the agent places it in the file.",
+        "The agent only places your words. It organizes the notes when you ask it to."
+      ]);
+    }
+  });
+
+  test("an empty HTML page shows the lines without a file name", async ({ page }) => {
+    await fw.openFixture(page, server, "test/fixtures/rail-empty-page.html");
+    await openRail(page, "active");
+    const lines = await pollValue(
+      page,
+      () => {
+        const empty = window.__lahe.rail.tabBody("active").querySelector(".empty");
+        const got = empty ? Array.from(empty.querySelectorAll("[data-lahe-empty-line]")).map((n) => n.textContent) : [];
+        return got.length ? got : null;
+      },
+      undefined,
+      { message: "the empty-page lines on an HTML page" }
+    );
+    expect(lines[1]).toBe("Start typing.");
+  });
+
+  test("a page with content keeps the ordinary empty lines", async ({ page }) => {
+    await fw.openFixture(page, server, "blog.html");
+    const text = await page.evaluate(() => window.__lahe.rail.tabBody("edits").querySelector(".empty").textContent);
+    expect(text).toBe("No hand edits yet.");
+  });
+});

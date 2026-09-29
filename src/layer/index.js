@@ -507,8 +507,16 @@
         sync: function () {
           return sync;
         },
-        onContinued: function () {
+        onContinued: function (next) {
           tab.refresh();
+          // "Use the fixes" is the reviewer's reword of a placed run at a new
+          // revision, and the page has to show the fixed words: replay's
+          // branch three rewrites the placed blocks in place. Only a run
+          // record; every other continuation leaves the page as it is.
+          if (next && ns.record.isRunRecord(next)) {
+            refreshItems();
+            ns.replay.schedule(ns.replay.REASON.REPLY, { immediate: true });
+          }
         },
         isReadOnly: function () {
           return readOnlyActive;
@@ -630,6 +638,13 @@
       onLimit: function (text) {
         rail.setLimitNote(text);
       },
+      // The helper refused a run event (record.validateRun), so the agent has
+      // not seen it. The refusal lives in sync; the card asks for it through
+      // the source set below and repaints now, so a refused item is never shown
+      // as sent (free writing, plan Task 3.2).
+      onItemRefused: function (itemId) {
+        rail.refreshCard(itemId);
+      },
       onRefused: function (info) {
         enterReadOnly(info);
       },
@@ -673,6 +688,10 @@
       onPageChanged: function () {
         rail.setStatusLine(ns.overlay.STATUS.PAGE_RELOADING);
       }
+    });
+
+    rail.setRefusalSource(function (itemId) {
+      return sync && typeof sync.refusalFor === "function" ? sync.refusalFor(itemId) : null;
     });
 
     // The refusal panel's "Review here instead" button (finding 12), through the

@@ -400,7 +400,7 @@ function createReplyFolder(options) {
    * text is carried as data (D12) and is never rendered as markup anywhere.
    */
     function writeFold(reviewId, file, line, reply, outcome) {
-    appendEvent(reviewId, {
+    var event = {
       event: protocol.EVENT.REPLY_FOLDED,
       event_id: foldEventId(reviewId, file, line),
       item: reply[protocol.REPLY_FIELD.ITEM],
@@ -427,7 +427,17 @@ function createReplyFolder(options) {
           user_needs_to_see_reply: reply[protocol.REPLY_FIELD.NEEDS_SEE] === true
         }
       }
-    });
+    };
+    // A proofread question carries its fixes to the rail, which offers them as
+    // the reviewer's "Use the fixes" (free writing, plan Task 3.3). Only on a
+    // reply that has them, so every other fold is byte for byte as before.
+    if (reply[protocol.REPLY_FIELD.PROOFREAD] === true) {
+      event.payload.reply.proofread = true;
+      event.payload.reply.suggestions = (reply[protocol.REPLY_FIELD.SUGGESTIONS] || []).map(function (sg) {
+        return { block: sg.block, from: sg.from, to: sg.to };
+      });
+    }
+    appendEvent(reviewId, event);
   }
 
   return {
