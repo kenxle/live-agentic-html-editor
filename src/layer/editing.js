@@ -1298,12 +1298,15 @@
       return el;
     }
 
+    // Any block tag in normalize.BLOCK_TAGS, opening.
+    var OLD_SHAPE_TAG = new RegExp("<(" + Object.keys(normalize.BLOCK_TAGS).join("|") + ")[\\s>]", "i");
+
     // A record from before free writing: no run fields, and markup that
     // nests blocks inside the edited element. Reopening it keeps today's
     // single-element session and break rule.
     function isOldShape(item) {
       if (!item || record.hasRunFields(item)) return false;
-      return /<(p|div|h[1-6]|ul|ol|li|blockquote|pre)[\s>]/i.test(String(item[record.FIELD.AFTER_HTML] || ""));
+      return OLD_SHAPE_TAG.test(String(item[record.FIELD.AFTER_HTML] || ""));
     }
 
     // The outstanding run record one of whose run blocks is `el`, with its

@@ -108,3 +108,19 @@ test("between measurements, RUN_BYTES_FACTOR covers each byte typed", () => {
   const real = editing.runRecordBytes(item, more, false);
   assert.ok(measured + typed * editing.RUN_BYTES_FACTOR >= real, "projected " + (measured + typed * editing.RUN_BYTES_FACTOR) + " under " + real);
 });
+
+// ---- code_lead 20: a shape spelled once --------------------------------------
+
+test("the F1 layer files read placement names and block tags from src/shared, not their own copies", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const read = (f) => fs.readFileSync(path.join(__dirname, "../../src/layer", f), "utf8");
+  for (const f of ["anchor.js", "editing.js", "protect.js"]) {
+    const code = read(f)
+      .split("\n")
+      .filter((line) => !/^\s*(\/\/|\*)/.test(line))
+      .join("\n");
+    assert.equal(/["']start_of_container["']|["']after_anchor["']/.test(code), false, f + " spells a placement");
+  }
+  assert.equal(/\(p\|div\|h\[1-6\]/.test(read("editing.js")), false, "isOldShape repeats BLOCK_TAGS");
+});

@@ -17,11 +17,16 @@
 | CL 15 | Undo could remove a page block the reviewer never wrote | Fixed. Undo removes the blocks this page remembers for the record, plus the run as found only from its first block, with no leaf skipped. | spec "the run's first block is gone" |
 | SR 7 | The protect restore rebuilt run blocks from raw markup | Fixed. Run blocks go through `blocks.writeBlock` on `normalize.cleanMarkup` output. A block it refuses (a split tail holding a link) and the anchor are cleaned with `cleanMarkup`. | spec "the restore rebuilds run blocks through the allowlist" |
 | ADV 1, design call 5 | Undo after a proofread question dropped the record silently | Fixed. `lifecycle.undoTakesBack(item)` is true for a handled item and for a ready or draft item with any agent reply. Undo then raises the take-back. Because the original is still actionable, it is removed from the review; the take-back carries everything the agent needs. | unit "undo takes back a ready item the agent already replied to", spec "a ready run with a proofread question" |
+| CL 20 (F1's files) | A shape spelled in several places | Fixed where the shared table exists. `anchor.js` reads `record.PLACEMENT.START_OF_CONTAINER`. `editing.js` builds `isOldShape`'s pattern from `normalize.BLOCK_TAGS`. Block type names in `editing.js` already come from `gestures.BLOCK_TYPES`. Two need F2 (below). | unit "the F1 layer files read placement names and block tags from src/shared" |
 | SR 1 (F2's request) | Undo wrote `before_html` raw on its fallback path | Fixed. It goes through `normalize.cleanMarkup`, as replay's `writeAnchor` does. | spec "a before_html the run allowlist refuses is cleaned" |
 
 ## Needs another group
 
-- **F3:** carry the notes flag to the layer, and in `index.js` pass it to `createEditing({ notes: ... })`, or call `editing.setNotes(true)` when the helper's answer arrives. Nothing else in F1 depends on how the flag travels.
+- **F3:** F3 passes the flag as the `createEditing` option `notes` (from the script tag's `data-lahe-notes="true"`). This branch reads `opts.notes === true`, so the two sides meet at merge with no further change.
+- **F2 (CL 20):** two tables in F1 files can fold only once `normalize.js` exports them:
+  - `editing.js` `INLINE_KEEP` repeats normalize's `INLINE_ALLOWED`, which is not exported.
+  - "first six words" (`editing.js` `firstWords`) needs a shared `normalize.firstWords`.
+  - `anchor.js` `CONTAINER_TAGS` repeats `blocks.isContainerAnchor`, which takes an element, not a tag. A tag-level export from `blocks.js` would let it fold.
 - **F4:** these six tests expect the empty notes page to open by itself. They need the fixture set-up to carry the notes flag once F3 exposes it:
   - `free_writing_capture.spec.js` "start_of_container, on the empty notes page"
   - `free_writing_empty.spec.js` "the empty notes page opens ready..."
@@ -41,12 +46,13 @@
 
 | Command | Result |
 |---|---|
-| `npm run gate:unit` (final) | 1716 tests, 1714 pass, 0 fail, 2 todo |
+| `npm run gate:unit` (final) | 1717 tests, 1715 pass, 0 fail, 2 todo |
 | `node --test test/unit/free_writing_f1_fixes.test.js` before the fix | 4 fail |
 | `npx playwright test test/browser/f1_editing_fixes.spec.js --project=chromium` before the fixes | 10 failed, each on its own assertion |
 | the same, final | 11 passed |
 | F1 spec plus free_writing host, types, undo, repaint, capture, empty, seams, and paragraph_break, editing_undo, protection_layers, no_duplicate_text, split_not_conflict, inline_reword, reword_rev, formatting_survives, editing_change_intent, reverted_edit, edits_undo_rows (Chromium) | 162 passed, 6 failed: the six notes-flag tests above |
 | after the SR 1 fix: F1 spec, free_writing_undo, editing_undo (Chromium) | 21 passed |
+| after CL 20: F1 spec, anchor_engine, free_writing host, empty, undo, inline_reword, reword_rev, editing_undo, replay_old_records (Chromium) | 81 passed, 3 failed: notes-flag tests above |
 
 All browser runs were after `node scripts/build-layer.js`. The full suite was not run.
 
