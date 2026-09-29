@@ -4018,8 +4018,12 @@
         if (built) {
           while (el.firstChild) el.removeChild(el.firstChild);
           while (built.firstChild) el.appendChild(built.firstChild);
-        } else if (typeof beforeHtml === "string") el.innerHTML = beforeHtml;
-        else el.textContent = String(item[record.FIELD.BEFORE] || "");
+        } else if (typeof beforeHtml === "string") {
+          // The anchor is the page's own block and may hold what the run
+          // allowlist refuses (a link). It is cleaned, never written raw, the
+          // same as replay's writeAnchor (security 1).
+          el.innerHTML = normalize.cleanMarkup(beforeHtml);
+        } else el.textContent = String(item[record.FIELD.BEFORE] || "");
       });
       return { element: el, reason: null };
     }

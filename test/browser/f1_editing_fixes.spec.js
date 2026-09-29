@@ -215,6 +215,37 @@ test.describe("F1: undo removes only the reviewer's own blocks (CL 15)", () => {
   });
 });
 
+test.describe("F1: undo writes the anchor's before_html through cleanMarkup (SR 1, from F2)", () => {
+  test("a before_html the run allowlist refuses is cleaned, not written raw", async ({ page }) => {
+    await fw.openFixture(page, server, "blog.html");
+    await fw.openEdit(page, "#p1");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("A run block zqxsr1", { delay: 2 });
+    await fw.commitByEsc(page);
+    const item = await fw.onlyEdit(page);
+    const out = await page.evaluate((id) => {
+      const h = window.__lahe.handle;
+      const it = h.store.readItem(h.review, id);
+      // A link makes blocks.writeBlock refuse, so undo takes the fallback.
+      h.store.write(h.review, Object.assign({}, it, {
+        before_html: 'Read <a href="#x" onmouseover="window.__bad=1">this</a> <img src="x" onerror="window.__bad=2">now.'
+      }));
+      const res = h.editing.undo(id);
+      const p1 = document.getElementById("p1");
+      return {
+        reverted: res.reverted,
+        handlers: p1.querySelectorAll("[onmouseover], [onerror]").length,
+        link: !!p1.querySelector("a"),
+        text: p1.textContent
+      };
+    }, item.id);
+    expect(out.reverted).toBe(true);
+    expect(out.handlers).toBe(0);
+    expect(out.link, "the page's own link survives the clean").toBe(true);
+    expect(out.text).toBe("Read this now.");
+  });
+});
+
 test.describe("F1: session undo keeps only what each step changed (CL 11)", () => {
   test("fifty steps over a long run hold about one copy of the run, not fifty", async ({ page }) => {
     await fw.openFixture(page, server, "blog.html");
