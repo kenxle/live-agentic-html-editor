@@ -168,7 +168,7 @@ test("a heading keeps its inline markup, and a document with no H1 still gets a 
     "a code span or a link in an H2 survives into the sheet head, and still opens in a new tab");
 
   const noTitle = renderSource("lahe-markdown-notitle-", ["Just a paragraph.", "", "## A section", "", "Text."]);
-  assert.match(noTitle, /<div class="hero">\s*<h1>DOC\.md<\/h1>/,
+  assert.match(noTitle, /<div class="hero">\s*<h1 data-lahe-file-title="file-name">DOC\.md<\/h1>/,
     "with no H1 the hero falls back to the title the renderer already computes");
   assert.match(noTitle, /<div class="hero">[\s\S]*<p>Just a paragraph\.<\/p>/,
     "content before the H1 goes into the lede rather than vanishing");
@@ -206,4 +206,43 @@ test("the document style is one bundle, and a written artifact carries its own f
   for (const name of markdown.FONT_ASSETS) {
     assert.equal(fs.existsSync(path.join(fontDir, name)), true, name + " is copied beside the artifact");
   }
+});
+
+// ---------------------------------------------------------------------------
+// Free writing (plan Task 2.11): a title taken from the file name is chrome
+// ---------------------------------------------------------------------------
+
+const markers = require("../../src/shared/markers.js");
+const FILE_TITLE = markers.FILE_TITLE_ATTR + '="' + markers.FILE_TITLE_VALUE + '"';
+
+function renderText(name, text) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-md-title-"));
+  const source = path.join(root, name);
+  fs.writeFileSync(source, text);
+  return markdown.render(source);
+}
+
+test("an empty Markdown file marks its file-name title as chrome", () => {
+  const html = renderText("notes.md", "");
+  assert.ok(html.indexOf("<h1 " + FILE_TITLE + ">notes.md</h1>") !== -1);
+});
+
+test("a Markdown file with no # heading marks its file-name title", () => {
+  const html = renderText("plain.md", "Just a paragraph.\n\n## A section\n\nMore.\n");
+  assert.ok(html.indexOf(FILE_TITLE) !== -1);
+  assert.equal(html.split(FILE_TITLE).length, 2, "only the hero title carries it");
+});
+
+test("a Markdown file with a # heading does not carry the marker", () => {
+  const html = renderText("titled.md", "# A real title\n\nWords.\n");
+  assert.equal(html.indexOf(markers.FILE_TITLE_ATTR), -1);
+  assert.ok(html.indexOf("<h1>A real title</h1>") !== -1);
+});
+
+test("the rendered empty file matches the empty-notes fixture, ids aside", () => {
+  const fixtures = path.join(__dirname, "..", "fixtures", "free_writing");
+  const expected = fs.readFileSync(path.join(fixtures, "empty_notes.html"), "utf8");
+  const html = renderText("empty_notes.md", fs.readFileSync(path.join(fixtures, "empty_notes.md"), "utf8"));
+  const ids = (s) => s.replace(/\sid="[^"]*"/g, "").trim();
+  assert.equal(ids(html), ids(expected));
 });
