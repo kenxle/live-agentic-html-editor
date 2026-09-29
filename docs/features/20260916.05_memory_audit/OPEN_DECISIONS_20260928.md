@@ -4,19 +4,21 @@
 
 ## Still open
 
-1. **When can I stop LAHE for a minute to trim the old logs?** The trimmer is built, reviewed twice and tested on a copy of your data: 734 million bytes down to 79 million, with nothing you committed touched. To run it, the helper and every page server have to be stopped, including other agents' open sessions, and started again after. Open review pages lose their connection for that minute. Tell me a time, or "now".
+1. **The banner an agent sees on every wake.** Each time an agent is woken it gets: "LAHE ACTION REQUIRED: do not end this turn or report that work is ready. Handle every item below now, rebuild and verify visible output, append replies, drain status until empty, then relaunch..." It exists because agents, Codex especially, used to announce that work had arrived and stop without doing it. It is also instruction text repeated on every wake. The suggestion: cut it to "LAHE ACTION REQUIRED: handle these now, do not end the turn." plus the two commands the agent needs. Cut it, or keep it? The auto-answer work below may make this moot for Claude.
 
-2. **The banner an agent sees on every wake.** Each time an agent is woken it gets: "LAHE ACTION REQUIRED: do not end this turn or report that work is ready. Handle every item below now, rebuild and verify visible output, append replies, drain status until empty, then relaunch..." It exists because agents, Codex especially, used to announce that work had arrived and stop without doing it. It is also instruction text repeated on every wake, which is what you asked us to avoid. The reviewer's suggestion: cut it to "LAHE ACTION REQUIRED: handle these now, do not end the turn." plus the two commands the agent needs. Cut it, or keep it?
+2. **Two goes, both small.**
+   - **The browser keeps an old copy of your comments** from before last week's fix. Nothing writes to it; the page only reads it once on load. This deletes it the next time you open each review. No other agent has done it.
+   - **A page can tell the agent which file to edit.** The helper still accepts a "the source is X" note from anything holding a review's key. The fix makes it refuse that from a browser. No other agent has done it.
 
-3. **Five old records store an embedded image three times.** New records no longer do this. Those five can be rewritten safely to store the image once. Every other old oversized record is mostly draft snapshots, which the log trim removes. Rewrite the five, or leave them?
+3. **A read, not a decision:** the subagent pool proposal on the memory audit hub (item 13).
 
-4. **Selecting across the whole page.** That used to paint the entire page as the comment's spot. Now such a pick is marked as lost rather than painting everything. The alternative is to turn it into a note about the page as a whole. Which do you want?
+4. **Coming to you when finished, not yet:** the full doc set for auto-answer, the headless LAHE agent. Crucible, brief, wireframes and a real test run are done; the architecture is being written, then the plan. You asked not to be stopped until all of it is written.
 
-5. **Two goes.** Both came out of this week's reviews.
-   - **The browser keeps a second, old copy of your comments** from before last week's fix. Nothing writes to it any more. This deletes it the next time you open each review.
-   - **A page can tell the agent which file to edit.** The fix makes the helper refuse that from a browser, so only the lahe command can name the file.
+## Done since this page was written
 
-6. **A read, not a decision:** the subagent pool proposal on the memory audit hub (item 13).
+- **The old logs are trimmed:** 735 million bytes down to 77 million, with only the helper paused for 33 seconds. The five image records store their image once.
+- **Selecting the whole page** highlights the whole page again. A selection has to cover 90% of what it sits in to count as whole. Merging now.
+- **A visible page you have not clicked** makes 132 requests an hour, down from 600.
 
 ## A correction
 
